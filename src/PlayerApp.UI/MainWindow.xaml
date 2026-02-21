@@ -1,0 +1,14 @@
+<Window
+  x:Class="PlayerApp.UI.MainWindow"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  Title="PlayerApp">
+	<Grid>
+		<MediaPlayerElement x:Name="Player" AreTransportControlsEnabled="True" Stretch="Uniform" />
+		<Canvas x:Name="SubtitleOverlay" IsHitTestVisible="False" />
+		<StackPanel Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="8">
+			<TextBlock x:Name="HardwareStatus" Margin="8" />
+			<Button x:Name="ModelManagerButton" Content="Models" Margin="8" Click="ModelManagerButton_Click"/>
+		</StackPanel>
+	</Grid>
+</Window>
