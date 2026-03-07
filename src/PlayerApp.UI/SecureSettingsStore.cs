@@ -11,6 +11,12 @@ internal static class SecureSettingsStore
         "PlayerApp");
 
     private static readonly string OpenAiApiKeyPath = Path.Combine(SettingsDirectory, "openai-api-key.bin");
+    private static readonly string GoogleTranslateApiKeyPath = Path.Combine(SettingsDirectory, "google-translate-api-key.bin");
+    private static readonly string DeepLApiKeyPath = Path.Combine(SettingsDirectory, "deepl-api-key.bin");
+    private static readonly string MicrosoftTranslatorApiKeyPath = Path.Combine(SettingsDirectory, "microsoft-translator-api-key.bin");
+    private static readonly string MicrosoftTranslatorRegionPath = Path.Combine(SettingsDirectory, "microsoft-translator-region.txt");
+    private static readonly string SubtitleModelPath = Path.Combine(SettingsDirectory, "subtitle-model.txt");
+    private static readonly string TranslationModelPath = Path.Combine(SettingsDirectory, "translation-model.txt");
 
     public static string? GetOpenAiApiKey()
     {
@@ -40,5 +46,121 @@ internal static class SecureSettingsStore
         var bytes = Encoding.UTF8.GetBytes(apiKey.Trim());
         var protectedBytes = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
         File.WriteAllBytes(OpenAiApiKeyPath, protectedBytes);
+    }
+
+    public static string? GetGoogleTranslateApiKey()
+    {
+        return ReadProtectedString(GoogleTranslateApiKeyPath);
+    }
+
+    public static void SaveGoogleTranslateApiKey(string apiKey)
+    {
+        SaveProtectedString(GoogleTranslateApiKeyPath, apiKey);
+    }
+
+    public static string? GetDeepLApiKey()
+    {
+        return ReadProtectedString(DeepLApiKeyPath);
+    }
+
+    public static void SaveDeepLApiKey(string apiKey)
+    {
+        SaveProtectedString(DeepLApiKeyPath, apiKey);
+    }
+
+    public static string? GetMicrosoftTranslatorApiKey()
+    {
+        return ReadProtectedString(MicrosoftTranslatorApiKeyPath);
+    }
+
+    public static void SaveMicrosoftTranslatorApiKey(string apiKey)
+    {
+        SaveProtectedString(MicrosoftTranslatorApiKeyPath, apiKey);
+    }
+
+    public static string? GetMicrosoftTranslatorRegion()
+    {
+        return ReadPlaintextSetting(MicrosoftTranslatorRegionPath);
+    }
+
+    public static void SaveMicrosoftTranslatorRegion(string region)
+    {
+        SavePlaintextSetting(MicrosoftTranslatorRegionPath, region);
+    }
+
+    public static string? GetSubtitleModelKey()
+    {
+        return ReadPlaintextSetting(SubtitleModelPath);
+    }
+
+    public static void SaveSubtitleModelKey(string modelKey)
+    {
+        SavePlaintextSetting(SubtitleModelPath, modelKey);
+    }
+
+    public static string? GetTranslationModelKey()
+    {
+        return ReadPlaintextSetting(TranslationModelPath);
+    }
+
+    public static void SaveTranslationModelKey(string modelKey)
+    {
+        SavePlaintextSetting(TranslationModelPath, modelKey);
+    }
+
+    private static string? ReadPlaintextSetting(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            var value = File.ReadAllText(path).Trim();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void SavePlaintextSetting(string path, string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        Directory.CreateDirectory(SettingsDirectory);
+        File.WriteAllText(path, value.Trim());
+    }
+
+    private static string? ReadProtectedString(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            var protectedBytes = File.ReadAllBytes(path);
+            var bytes = ProtectedData.Unprotect(protectedBytes, null, DataProtectionScope.CurrentUser);
+            var value = Encoding.UTF8.GetString(bytes).Trim();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void SaveProtectedString(string path, string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        Directory.CreateDirectory(SettingsDirectory);
+        var bytes = Encoding.UTF8.GetBytes(value.Trim());
+        var protectedBytes = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+        File.WriteAllBytes(path, protectedBytes);
     }
 }

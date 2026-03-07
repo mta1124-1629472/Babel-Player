@@ -1,16 +1,29 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
 namespace PlayerApp.Core;
 
+public enum CloudTranslationProvider
+{
+    None,
+    OpenAi,
+    Google,
+    DeepL,
+    MicrosoftTranslator
+}
+
+public sealed record CloudTranslationOptions(
+    CloudTranslationProvider Provider,
+    string ApiKey,
+    string? Model = null,
+    string? Region = null);
+
 public class MtService
 {
-    private static readonly HttpClient HttpClient = new()
-    {
-        BaseAddress = new Uri("https://api.openai.com/v1/")
-    };
+    private static readonly HttpClient HttpClient = new();
 
     private readonly Dictionary<string, string> _phrasebook = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -32,38 +45,46 @@ public class MtService
     };
 
     private readonly ConcurrentDictionary<string, Task<string>> _pendingTranslations = new(StringComparer.Ordinal);
-    private string? _openAiApiKey;
-    private string _cloudModel = "gpt-5-mini";
+    private CloudTranslationOptions? _cloudOptions;
 
     public string LoadedModelPath { get; private set; } = string.Empty;
-    public bool UseCloudTranslation => !string.IsNullOrWhiteSpace(_openAiApiKey);
+    public bool UseCloudTranslation => _cloudOptions is not null && !string.IsNullOrWhiteSpace(_cloudOptions.ApiKey);
+    public CloudTranslationProvider CloudProvider => _cloudOptions?.Provider ?? CloudTranslationProvider.None;
 
     public void LoadModel(string modelPath)
     {
         LoadedModelPath = modelPath;
     }
 
-    public void ConfigureCloud(string? apiKey, string? model)
+    public void ConfigureCloud(CloudTranslationOptions? options)
     {
-        _openAiApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
-        if (!string.IsNullOrWhiteSpace(model))
-        {
-            _cloudModel = model.Trim();
-        }
+        _cloudOptions = string.IsNullOrWhiteSpace(options?.ApiKey)
+            ? null
+            : options with { ApiKey = options.ApiKey.Trim() };
     }
 
     public static async Task ValidateApiKeyAsync(string apiKey, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "models");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.openai.com/v1/models");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
 
         using var response = await HttpClient.SendAsync(request, cancellationToken);
-        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException($"OpenAI API key validation failed: {(int)response.StatusCode} {response.ReasonPhrase}.");
+        }
+    }
+
+    public static async Task ValidateTranslationProviderAsync(CloudTranslationOptions options, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var result = await TranslateBatchWithProviderAsync(options, ["hola"], "en", cancellationToken);
+        if (result.Count != 1 || string.IsNullOrWhiteSpace(result[0]))
+        {
+            throw new InvalidOperationException("Translation provider validation returned no result.");
         }
     }
 
@@ -102,12 +123,13 @@ public class MtService
             return Task.FromResult(normalized);
         }
 
-        if (!UseCloudTranslation)
+        if (!UseCloudTranslation || _cloudOptions is null)
         {
             return Task.FromResult(Translate(normalized));
         }
 
-        return _pendingTranslations.GetOrAdd(normalized, _ => TranslateWithCloudCoreAsync(normalized, cancellationToken));
+        var cacheKey = $"{_cloudOptions.Provider}:{_cloudOptions.Model}:{normalized}";
+        return _pendingTranslations.GetOrAdd(cacheKey, _ => TranslateWithCloudCoreAsync(cacheKey, normalized, _cloudOptions, cancellationToken));
     }
 
     public async Task<IReadOnlyList<string>> TranslateBatchAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken)
@@ -117,7 +139,7 @@ public class MtService
             return Array.Empty<string>();
         }
 
-        if (!UseCloudTranslation)
+        if (!UseCloudTranslation || _cloudOptions is null)
         {
             return texts.Select(Translate).ToList();
         }
@@ -128,12 +150,49 @@ public class MtService
             return normalizedTexts;
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "responses");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _openAiApiKey);
+        return await TranslateBatchWithProviderAsync(_cloudOptions, normalizedTexts, "en", cancellationToken);
+    }
+
+    private async Task<string> TranslateWithCloudCoreAsync(string cacheKey, string text, CloudTranslationOptions options, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var translated = await TranslateBatchWithProviderAsync(options, [text], "en", cancellationToken);
+            return translated[0];
+        }
+        finally
+        {
+            _pendingTranslations.TryRemove(cacheKey, out _);
+        }
+    }
+
+    private static Task<IReadOnlyList<string>> TranslateBatchWithProviderAsync(
+        CloudTranslationOptions options,
+        IReadOnlyList<string> texts,
+        string targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        return options.Provider switch
+        {
+            CloudTranslationProvider.OpenAi => TranslateWithOpenAiBatchAsync(options, texts, cancellationToken),
+            CloudTranslationProvider.Google => TranslateWithGoogleBatchAsync(options, texts, targetLanguage, cancellationToken),
+            CloudTranslationProvider.DeepL => TranslateWithDeepLBatchAsync(options, texts, cancellationToken),
+            CloudTranslationProvider.MicrosoftTranslator => TranslateWithMicrosoftBatchAsync(options, texts, targetLanguage, cancellationToken),
+            _ => Task.FromResult<IReadOnlyList<string>>(texts.ToList())
+        };
+    }
+
+    private static async Task<IReadOnlyList<string>> TranslateWithOpenAiBatchAsync(
+        CloudTranslationOptions options,
+        IReadOnlyList<string> texts,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
 
         var payload = new
         {
-            model = _cloudModel,
+            model = string.IsNullOrWhiteSpace(options.Model) ? "gpt-5-mini" : options.Model,
             store = false,
             input = new object[]
             {
@@ -157,7 +216,7 @@ public class MtService
                         new
                         {
                             type = "input_text",
-                            text = JsonSerializer.Serialize(normalizedTexts)
+                            text = JsonSerializer.Serialize(texts)
                         }
                     }
                 }
@@ -170,7 +229,7 @@ public class MtService
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"OpenAI translation failed: {(int)response.StatusCode} {response.ReasonPhrase}.");
+            throw new InvalidOperationException($"OpenAI translation failed: {(int)response.StatusCode} {response.ReasonPhrase}. {responseBody}");
         }
 
         using var document = JsonDocument.Parse(responseBody);
@@ -182,7 +241,7 @@ public class MtService
         try
         {
             var translated = JsonSerializer.Deserialize<List<string>>(outputText);
-            if (translated is null || translated.Count != normalizedTexts.Count)
+            if (translated is null || translated.Count != texts.Count)
             {
                 throw new InvalidOperationException("OpenAI translation returned an unexpected batch size.");
             }
@@ -195,67 +254,131 @@ public class MtService
         }
     }
 
-    private async Task<string> TranslateWithCloudCoreAsync(string text, CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<string>> TranslateWithGoogleBatchAsync(
+        CloudTranslationOptions options,
+        IReadOnlyList<string> texts,
+        string targetLanguage,
+        CancellationToken cancellationToken)
     {
-        try
+        var uri = $"https://translation.googleapis.com/language/translate/v2?key={Uri.EscapeDataString(options.ApiKey)}";
+        var formPairs = new List<KeyValuePair<string, string>>
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, "responses");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _openAiApiKey);
+            new("target", targetLanguage),
+            new("format", "text")
+        };
 
-            var payload = new
-            {
-                model = _cloudModel,
-                store = false,
-                input = new object[]
-                {
-                    new
-                    {
-                        role = "system",
-                        content = new object[]
-                        {
-                            new
-                            {
-                                type = "input_text",
-                                text = "Translate subtitle text into natural English. Preserve line breaks. Return only the translated subtitle text with no notes or commentary."
-                            }
-                        }
-                    },
-                    new
-                    {
-                        role = "user",
-                        content = new object[]
-                        {
-                            new
-                            {
-                                type = "input_text",
-                                text
-                            }
-                        }
-                    }
-                }
-            };
+        formPairs.AddRange(texts.Select(text => new KeyValuePair<string, string>("q", text)));
 
-            request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-            using var response = await HttpClient.SendAsync(request, cancellationToken);
-            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new InvalidOperationException($"OpenAI translation failed: {(int)response.StatusCode} {response.ReasonPhrase}. {responseBody}");
-            }
-
-            using var document = JsonDocument.Parse(responseBody);
-            if (TryGetOutputText(document.RootElement, out var translated))
-            {
-                return translated;
-            }
-
-            throw new InvalidOperationException("OpenAI translation returned no output text.");
-        }
-        finally
+        using var request = new HttpRequestMessage(HttpMethod.Post, uri)
         {
-            _pendingTranslations.TryRemove(text, out _);
+            Content = new FormUrlEncodedContent(formPairs)
+        };
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"Google Translate failed: {(int)response.StatusCode} {response.ReasonPhrase}. {responseBody}");
         }
+
+        using var document = JsonDocument.Parse(responseBody);
+        var translations = document.RootElement
+            .GetProperty("data")
+            .GetProperty("translations")
+            .EnumerateArray()
+            .Select(item => WebUtility.HtmlDecode(item.GetProperty("translatedText").GetString() ?? string.Empty))
+            .ToList();
+
+        if (translations.Count != texts.Count)
+        {
+            throw new InvalidOperationException("Google Translate returned an unexpected batch size.");
+        }
+
+        return translations;
+    }
+
+    private static async Task<IReadOnlyList<string>> TranslateWithDeepLBatchAsync(
+        CloudTranslationOptions options,
+        IReadOnlyList<string> texts,
+        CancellationToken cancellationToken)
+    {
+        var baseUri = options.ApiKey.EndsWith(":fx", StringComparison.OrdinalIgnoreCase)
+            ? "https://api-free.deepl.com/v2/translate"
+            : "https://api.deepl.com/v2/translate";
+
+        var formPairs = new List<KeyValuePair<string, string>>
+        {
+            new("target_lang", "EN")
+        };
+
+        formPairs.AddRange(texts.Select(text => new KeyValuePair<string, string>("text", text)));
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, baseUri)
+        {
+            Content = new FormUrlEncodedContent(formPairs)
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("DeepL-Auth-Key", options.ApiKey);
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"DeepL translation failed: {(int)response.StatusCode} {response.ReasonPhrase}. {responseBody}");
+        }
+
+        using var document = JsonDocument.Parse(responseBody);
+        var translations = document.RootElement
+            .GetProperty("translations")
+            .EnumerateArray()
+            .Select(item => item.GetProperty("text").GetString() ?? string.Empty)
+            .ToList();
+
+        if (translations.Count != texts.Count)
+        {
+            throw new InvalidOperationException("DeepL translation returned an unexpected batch size.");
+        }
+
+        return translations;
+    }
+
+    private static async Task<IReadOnlyList<string>> TranslateWithMicrosoftBatchAsync(
+        CloudTranslationOptions options,
+        IReadOnlyList<string> texts,
+        string targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(options.Region))
+        {
+            throw new InvalidOperationException("Microsoft Translator requires a region.");
+        }
+
+        var uri = $"https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to={Uri.EscapeDataString(targetLanguage)}";
+        using var request = new HttpRequestMessage(HttpMethod.Post, uri);
+        request.Headers.Add("Ocp-Apim-Subscription-Key", options.ApiKey);
+        request.Headers.Add("Ocp-Apim-Subscription-Region", options.Region.Trim());
+
+        var body = texts.Select(text => new Dictionary<string, string> { ["Text"] = text }).ToList();
+        request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"Microsoft Translator failed: {(int)response.StatusCode} {response.ReasonPhrase}. {responseBody}");
+        }
+
+        using var document = JsonDocument.Parse(responseBody);
+        var translations = document.RootElement
+            .EnumerateArray()
+            .Select(item => item.GetProperty("translations")[0].GetProperty("text").GetString() ?? string.Empty)
+            .ToList();
+
+        if (translations.Count != texts.Count)
+        {
+            throw new InvalidOperationException("Microsoft Translator returned an unexpected batch size.");
+        }
+
+        return translations;
     }
 
     private static bool TryGetOutputText(JsonElement root, out string text)

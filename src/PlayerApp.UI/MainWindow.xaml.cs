@@ -49,6 +49,11 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        _selectedSubtitleModelKey = GetPersistedSubtitleModelKey();
+        _selectedTranslationModelKey = GetPersistedTranslationModelKey();
+        UpdateSubtitleModelMenuChecks();
+        UpdateTranslationModelMenuChecks();
+
         HardwareStatusText.Text = HardwareDetector.GetSummary();
         PlaybackStatusText.Text = "Ready";
         _sessionOpenAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? SecureSettingsStore.GetOpenAiApiKey();
@@ -634,14 +639,15 @@ public partial class MainWindow : Window
     private void ConfigureTranslator()
     {
         var selectedTranslationModel = GetSelectedTranslationModel();
-        _translator.ConfigureCloud(
-            selectedTranslationModel.Provider == TranslationProvider.Cloud ? _sessionOpenAiApiKey : null,
-            selectedTranslationModel.Provider == TranslationProvider.Cloud ? selectedTranslationModel.CloudModel : null);
+        _translator.ConfigureCloud(GetCloudTranslationOptions(selectedTranslationModel));
     }
 
     private string? PromptForApiKey()
     {
-        var dialog = new ApiKeyPromptWindow
+        var dialog = new ApiKeyPromptWindow(
+            "OpenAI API Key",
+            "Enter an OpenAI API key. This key is used for cloud subtitle transcription and OpenAI translation, and it is saved securely for future sessions.",
+            "Use Key")
         {
             Owner = this
         };
@@ -650,6 +656,225 @@ public partial class MainWindow : Window
         return accepted == true && !string.IsNullOrWhiteSpace(dialog.ApiKey)
             ? dialog.ApiKey.Trim()
             : null;
+    }
+
+    private async void SetGoogleTranslateApiKeyMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await PromptAndSaveGoogleTranslateCredentialsAsync();
+    }
+
+    private async void SetDeepLApiKeyMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await PromptAndSaveDeepLCredentialsAsync();
+    }
+
+    private async void SetMicrosoftTranslatorCredentialsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await PromptAndSaveMicrosoftTranslatorCredentialsAsync();
+    }
+
+    private string? PromptForSingleSecret(string title, string message, string buttonText)
+    {
+        var dialog = new ApiKeyPromptWindow(title, message, buttonText)
+        {
+            Owner = this
+        };
+
+        var accepted = dialog.ShowDialog();
+        return accepted == true && !string.IsNullOrWhiteSpace(dialog.ApiKey)
+            ? dialog.ApiKey.Trim()
+            : null;
+    }
+
+    private CloudTranslationOptions? PromptForMicrosoftTranslatorCredentials()
+    {
+        var dialog = new ApiKeyWithRegionPromptWindow(
+            "Microsoft Translator Credentials",
+            "Enter the Microsoft Translator API key and Azure region. Both values are required and are saved for future sessions.",
+            "Save Credentials")
+        {
+            Owner = this
+        };
+
+        return dialog.ShowDialog() == true
+            ? new CloudTranslationOptions(
+                CloudTranslationProvider.MicrosoftTranslator,
+                dialog.ApiKey.Trim(),
+                null,
+                dialog.Region.Trim())
+            : null;
+    }
+
+    private async Task<bool> SaveCloudTranslationCredentialsAsync(
+        CloudTranslationOptions options,
+        string providerLabel,
+        Action<CloudTranslationOptions> persist)
+    {
+        try
+        {
+            PlaybackStatusText.Text = $"Validating {providerLabel} credentials...";
+            await MtService.ValidateTranslationProviderAsync(options, CancellationToken.None);
+            persist(options);
+            if (MapToCloudTranslationProvider(GetSelectedTranslationModel().Provider) == options.Provider)
+            {
+                ConfigureTranslator();
+            }
+
+            PlaybackStatusText.Text = $"{providerLabel} credentials saved and verified.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            PlaybackStatusText.Text = ex.Message;
+            MessageBox.Show(this, ex.Message, $"Invalid {providerLabel} Credentials", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+    }
+
+    private async Task<bool> PromptAndSaveGoogleTranslateCredentialsAsync()
+    {
+        var apiKey = PromptForSingleSecret(
+            "Google Translate API Key",
+            "Enter a Google Cloud Translation API key. This is used for the Google Translate translation model and is saved securely for future sessions.",
+            "Save Key");
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return false;
+        }
+
+        return await SaveCloudTranslationCredentialsAsync(
+            new CloudTranslationOptions(CloudTranslationProvider.Google, apiKey),
+            "Google Translate",
+            options => SecureSettingsStore.SaveGoogleTranslateApiKey(options.ApiKey));
+    }
+
+    private async Task<bool> PromptAndSaveDeepLCredentialsAsync()
+    {
+        var apiKey = PromptForSingleSecret(
+            "DeepL API Key",
+            "Enter a DeepL API key. The app auto-detects free versus pro endpoints from the key and saves it securely for future sessions.",
+            "Save Key");
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return false;
+        }
+
+        return await SaveCloudTranslationCredentialsAsync(
+            new CloudTranslationOptions(CloudTranslationProvider.DeepL, apiKey),
+            "DeepL",
+            options => SecureSettingsStore.SaveDeepLApiKey(options.ApiKey));
+    }
+
+    private async Task<bool> PromptAndSaveMicrosoftTranslatorCredentialsAsync()
+    {
+        var credentials = PromptForMicrosoftTranslatorCredentials();
+        if (credentials is null)
+        {
+            return false;
+        }
+
+        return await SaveCloudTranslationCredentialsAsync(
+            credentials,
+            "Microsoft Translator",
+            options =>
+            {
+                SecureSettingsStore.SaveMicrosoftTranslatorApiKey(options.ApiKey);
+                SecureSettingsStore.SaveMicrosoftTranslatorRegion(options.Region ?? string.Empty);
+            });
+    }
+
+    private CloudTranslationOptions? GetCloudTranslationOptions(TranslationModelSelection selection)
+    {
+        return selection.Provider switch
+        {
+            TranslationProvider.OpenAi when !string.IsNullOrWhiteSpace(_sessionOpenAiApiKey)
+                => new CloudTranslationOptions(CloudTranslationProvider.OpenAi, _sessionOpenAiApiKey!, selection.CloudModel),
+            TranslationProvider.Google => GetGoogleCloudTranslationOptions(),
+            TranslationProvider.DeepL => GetDeepLCloudTranslationOptions(),
+            TranslationProvider.MicrosoftTranslator => GetMicrosoftCloudTranslationOptions(),
+            _ => null
+        };
+    }
+
+    private static CloudTranslationProvider MapToCloudTranslationProvider(TranslationProvider provider)
+    {
+        return provider switch
+        {
+            TranslationProvider.OpenAi => CloudTranslationProvider.OpenAi,
+            TranslationProvider.Google => CloudTranslationProvider.Google,
+            TranslationProvider.DeepL => CloudTranslationProvider.DeepL,
+            TranslationProvider.MicrosoftTranslator => CloudTranslationProvider.MicrosoftTranslator,
+            _ => CloudTranslationProvider.None
+        };
+    }
+
+    private static CloudTranslationOptions? GetGoogleCloudTranslationOptions()
+    {
+        var apiKey = Environment.GetEnvironmentVariable("GOOGLE_TRANSLATE_API_KEY")
+            ?? Environment.GetEnvironmentVariable("GOOGLE_CLOUD_TRANSLATE_API_KEY")
+            ?? SecureSettingsStore.GetGoogleTranslateApiKey();
+        return string.IsNullOrWhiteSpace(apiKey)
+            ? null
+            : new CloudTranslationOptions(CloudTranslationProvider.Google, apiKey.Trim());
+    }
+
+    private static CloudTranslationOptions? GetDeepLCloudTranslationOptions()
+    {
+        var apiKey = Environment.GetEnvironmentVariable("DEEPL_API_KEY")
+            ?? SecureSettingsStore.GetDeepLApiKey();
+        return string.IsNullOrWhiteSpace(apiKey)
+            ? null
+            : new CloudTranslationOptions(CloudTranslationProvider.DeepL, apiKey.Trim());
+    }
+
+    private static CloudTranslationOptions? GetMicrosoftCloudTranslationOptions()
+    {
+        var apiKey = Environment.GetEnvironmentVariable("MICROSOFT_TRANSLATOR_API_KEY")
+            ?? Environment.GetEnvironmentVariable("AZURE_TRANSLATOR_KEY")
+            ?? SecureSettingsStore.GetMicrosoftTranslatorApiKey();
+        var region = Environment.GetEnvironmentVariable("MICROSOFT_TRANSLATOR_REGION")
+            ?? Environment.GetEnvironmentVariable("AZURE_TRANSLATOR_REGION")
+            ?? SecureSettingsStore.GetMicrosoftTranslatorRegion();
+
+        return string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(region)
+            ? null
+            : new CloudTranslationOptions(CloudTranslationProvider.MicrosoftTranslator, apiKey.Trim(), null, region.Trim());
+    }
+
+    private async Task<bool> EnsureTranslationProviderCredentialsAsync(TranslationProvider provider)
+    {
+        switch (provider)
+        {
+            case TranslationProvider.Local:
+                return true;
+            case TranslationProvider.OpenAi:
+                return await EnsureOpenAiApiKeyAsync();
+            case TranslationProvider.Google:
+                if (GetGoogleCloudTranslationOptions() is not null)
+                {
+                    return true;
+                }
+
+                return await PromptAndSaveGoogleTranslateCredentialsAsync();
+            case TranslationProvider.DeepL:
+                if (GetDeepLCloudTranslationOptions() is not null)
+                {
+                    return true;
+                }
+
+                return await PromptAndSaveDeepLCredentialsAsync();
+            case TranslationProvider.MicrosoftTranslator:
+                if (GetMicrosoftCloudTranslationOptions() is not null)
+                {
+                    return true;
+                }
+
+                return await PromptAndSaveMicrosoftTranslatorCredentialsAsync();
+            default:
+                return false;
+        }
     }
 
     private async Task TranslateCueAsync(SubtitleCue cue, CancellationToken cancellationToken)
@@ -809,7 +1034,7 @@ public partial class MainWindow : Window
         {
             if (ShouldDisableCloudForError(ex))
             {
-                if (GetSelectedTranslationModel().Provider == TranslationProvider.Cloud)
+                if (GetSelectedTranslationModel().Provider != TranslationProvider.Local)
                 {
                     _selectedTranslationModelKey = DefaultTranslationModelKey;
                     UpdateTranslationModelMenuChecks();
@@ -822,7 +1047,7 @@ public partial class MainWindow : Window
                 }
 
                 ConfigureTranslator();
-                PlaybackStatusText.Text = "Cloud models were disabled after an OpenAI quota or rate-limit error.";
+                PlaybackStatusText.Text = "Cloud models were disabled after a quota or rate-limit error.";
                 return;
             }
 
@@ -1001,6 +1226,7 @@ public partial class MainWindow : Window
         }
 
         _selectedSubtitleModelKey = modelKey;
+        SecureSettingsStore.SaveSubtitleModelKey(modelKey);
         UpdateSubtitleModelMenuChecks();
         await ReprocessCurrentSubtitlesForTranscriptionModelAsync(selection);
     }
@@ -1009,7 +1235,7 @@ public partial class MainWindow : Window
     {
         var previousModelKey = _selectedTranslationModelKey;
         var selection = GetTranslationModel(modelKey);
-        if (selection.Provider == TranslationProvider.Cloud && !await EnsureOpenAiApiKeyAsync())
+        if (selection.Provider != TranslationProvider.Local && !await EnsureTranslationProviderCredentialsAsync(selection.Provider))
         {
             UpdateTranslationModelMenuChecks(previousModelKey);
             PlaybackStatusText.Text = "Cloud translation model selection canceled.";
@@ -1017,6 +1243,7 @@ public partial class MainWindow : Window
         }
 
         _selectedTranslationModelKey = modelKey;
+        SecureSettingsStore.SaveTranslationModelKey(modelKey);
         ConfigureTranslator();
         UpdateTranslationModelMenuChecks();
         await ReprocessCurrentSubtitlesForTranslationSettingsAsync();
@@ -1179,7 +1406,10 @@ public partial class MainWindow : Window
         var items = new[]
         {
             TranslationModelLocalBasicMenuItem,
-            TranslationModelCloudGpt5MiniMenuItem
+            TranslationModelCloudOpenAiMenuItem,
+            TranslationModelCloudGoogleMenuItem,
+            TranslationModelCloudDeepLMenuItem,
+            TranslationModelCloudMicrosoftMenuItem
         };
 
         foreach (var item in items)
@@ -1194,6 +1424,14 @@ public partial class MainWindow : Window
     private TranscriptionModelSelection GetSelectedTranscriptionModel()
     {
         return GetTranscriptionModel(_selectedSubtitleModelKey);
+    }
+
+    private static string GetPersistedSubtitleModelKey()
+    {
+        var savedKey = SecureSettingsStore.GetSubtitleModelKey();
+        return savedKey is "local:tiny" or "local:base" or "local:small" or "cloud:gpt-4o-mini-transcribe" or "cloud:gpt-4o-transcribe" or "cloud:whisper-1"
+            ? savedKey
+            : DefaultSubtitleModelKey;
     }
 
     private static TranscriptionModelSelection GetTranscriptionModel(string modelKey)
@@ -1215,11 +1453,22 @@ public partial class MainWindow : Window
         return GetTranslationModel(_selectedTranslationModelKey);
     }
 
+    private static string GetPersistedTranslationModelKey()
+    {
+        var savedKey = SecureSettingsStore.GetTranslationModelKey();
+        return savedKey is "local:basic" or "cloud:gpt-5-mini" or "cloud:google-translate" or "cloud:deepl" or "cloud:microsoft-translator"
+            ? savedKey
+            : DefaultTranslationModelKey;
+    }
+
     private static TranslationModelSelection GetTranslationModel(string modelKey)
     {
         return modelKey switch
         {
-            "cloud:gpt-5-mini" => new TranslationModelSelection(modelKey, "cloud GPT-5 mini", TranslationProvider.Cloud, "gpt-5-mini"),
+            "cloud:gpt-5-mini" => new TranslationModelSelection(modelKey, "cloud OpenAI GPT-5 mini", TranslationProvider.OpenAi, "gpt-5-mini"),
+            "cloud:google-translate" => new TranslationModelSelection(modelKey, "cloud Google Translate", TranslationProvider.Google, null),
+            "cloud:deepl" => new TranslationModelSelection(modelKey, "cloud DeepL API", TranslationProvider.DeepL, null),
+            "cloud:microsoft-translator" => new TranslationModelSelection(modelKey, "cloud Microsoft Translator", TranslationProvider.MicrosoftTranslator, null),
             _ => new TranslationModelSelection(DefaultTranslationModelKey, "local basic fallback", TranslationProvider.Local, null)
         };
     }
@@ -1314,7 +1563,10 @@ internal enum TranscriptionProvider
 internal enum TranslationProvider
 {
     Local,
-    Cloud
+    OpenAi,
+    Google,
+    DeepL,
+    MicrosoftTranslator
 }
 
 internal sealed record TranscriptionModelSelection(
@@ -1334,9 +1586,9 @@ internal sealed class ApiKeyPromptWindow : Window
 {
     private readonly PasswordBox _apiKeyBox;
 
-    public ApiKeyPromptWindow()
+    public ApiKeyPromptWindow(string title, string message, string submitButtonText)
     {
-        Title = "OpenAI API Key";
+        Title = title;
         Width = 440;
         Height = 190;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -1354,7 +1606,7 @@ internal sealed class ApiKeyPromptWindow : Window
 
         var text = new TextBlock
         {
-            Text = "Enter an OpenAI API key for cloud subtitle generation. The key is saved securely for future sessions.",
+            Text = message,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 12)
         };
@@ -1382,7 +1634,7 @@ internal sealed class ApiKeyPromptWindow : Window
 
         var okButton = new Button
         {
-            Content = "Use Key",
+            Content = submitButtonText,
             MinWidth = 84,
             IsDefault = true
         };
@@ -1410,6 +1662,118 @@ internal sealed class ApiKeyPromptWindow : Window
     }
 
     public string ApiKey => _apiKeyBox.Password;
+}
+
+internal sealed class ApiKeyWithRegionPromptWindow : Window
+{
+    private readonly PasswordBox _apiKeyBox;
+    private readonly TextBox _regionBox;
+
+    public ApiKeyWithRegionPromptWindow(string title, string message, string submitButtonText)
+    {
+        Title = title;
+        Width = 460;
+        Height = 250;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        ResizeMode = ResizeMode.NoResize;
+        Background = System.Windows.Media.Brushes.White;
+
+        var root = new Grid
+        {
+            Margin = new Thickness(16)
+        };
+
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var text = new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 12)
+        };
+        Grid.SetRow(text, 0);
+
+        var apiKeyLabel = new TextBlock
+        {
+            Text = "API Key",
+            Margin = new Thickness(0, 0, 0, 6),
+            FontWeight = FontWeights.SemiBold
+        };
+        Grid.SetRow(apiKeyLabel, 1);
+
+        _apiKeyBox = new PasswordBox
+        {
+            Margin = new Thickness(0, 0, 0, 10)
+        };
+        Grid.SetRow(_apiKeyBox, 2);
+
+        var regionLabel = new TextBlock
+        {
+            Text = "Azure Region",
+            Margin = new Thickness(0, 0, 0, 6),
+            FontWeight = FontWeights.SemiBold
+        };
+        Grid.SetRow(regionLabel, 3);
+
+        _regionBox = new TextBox
+        {
+            Margin = new Thickness(0, 0, 0, 14)
+        };
+        Grid.SetRow(_regionBox, 4);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+
+        var cancelButton = new Button
+        {
+            Content = "Cancel",
+            MinWidth = 84,
+            Margin = new Thickness(0, 0, 8, 0),
+            IsCancel = true
+        };
+
+        var okButton = new Button
+        {
+            Content = submitButtonText,
+            MinWidth = 110,
+            IsDefault = true
+        };
+        okButton.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(_apiKeyBox.Password) || string.IsNullOrWhiteSpace(_regionBox.Text))
+            {
+                MessageBox.Show(this, "Enter both the API key and Azure region, or cancel.", "Credentials Required", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            DialogResult = true;
+            Close();
+        };
+
+        buttons.Children.Add(cancelButton);
+        buttons.Children.Add(okButton);
+        Grid.SetRow(buttons, 5);
+
+        root.Children.Add(text);
+        root.Children.Add(apiKeyLabel);
+        root.Children.Add(_apiKeyBox);
+        root.Children.Add(regionLabel);
+        root.Children.Add(_regionBox);
+        root.Children.Add(buttons);
+
+        Content = root;
+    }
+
+    public string ApiKey => _apiKeyBox.Password;
+    public string Region => _regionBox.Text;
 }
 
 internal enum SubtitlePipelineSource
