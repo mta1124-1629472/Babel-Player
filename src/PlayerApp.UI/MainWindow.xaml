@@ -15,41 +15,232 @@
 
         <Border Grid.Row="0" Padding="8" CornerRadius="8" Background="#1C1C1C">
             <StackPanel Orientation="Horizontal">
-                <Button Name="OpenVideoButton" Content="Open Video" Padding="12,6" Margin="0,0,8,0" Click="OpenVideoButton_Click" />
-                <Button Name="PlayPauseButton" Content="Pause" Padding="12,6" Margin="0,0,8,0" Click="PlayPauseButton_Click" />
-                <Button Name="OpenSubtitlesButton" Content="Open Subtitles" Padding="12,6" Margin="0,0,8,0" Click="OpenSubtitlesButton_Click" />
-                <Button Name="ExportButton" Content="Export EN SRT" Padding="12,6" Margin="0,0,16,0" Click="ExportButton_Click" />
-                <CheckBox Name="UseCloudTranscriptionCheckBox"
-                          Content="Use cloud transcription"
-                          Foreground="#D7D7D7"
-                          VerticalAlignment="Center"
-                          Margin="0,0,16,0" />
+                <Menu Background="#1C1C1C" Foreground="#F3F3F3" Margin="0,0,16,0" VerticalAlignment="Center">
+                    <MenuItem Header="Subtitles">
+                        <MenuItem Name="ShowSubtitlesMenuItem"
+                                  Header="Show Subtitles"
+                                  Foreground="#111111"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Checked="ShowSubtitlesMenuItem_Checked"
+                                  Unchecked="ShowSubtitlesMenuItem_Unchecked" />
+                        <Separator />
+                        <MenuItem Header="Open Subtitles" Foreground="#111111" Click="OpenSubtitlesButton_Click" />
+                        <Separator />
+                        <MenuItem Header="Transcription Model" Foreground="#111111">
+                            <MenuItem Name="SubtitleModelLocalTinyMenuItem"
+                                      Header="Local: Tiny (fastest)"
+                                      Foreground="#111111"
+                                      Tag="local:tiny"
+                                      IsCheckable="True"
+                                      Click="SubtitleModelMenuItem_Click" />
+                            <MenuItem Name="SubtitleModelLocalBaseMenuItem"
+                                      Header="Local: Base (faster)"
+                                      Foreground="#111111"
+                                      Tag="local:base"
+                                      IsCheckable="True"
+                                      IsChecked="True"
+                                      Click="SubtitleModelMenuItem_Click" />
+                            <MenuItem Name="SubtitleModelLocalSmallMenuItem"
+                                      Header="Local: Small (better quality)"
+                                      Foreground="#111111"
+                                      Tag="local:small"
+                                      IsCheckable="True"
+                                      Click="SubtitleModelMenuItem_Click" />
+                            <Separator />
+                            <MenuItem Name="SubtitleModelCloudMiniMenuItem"
+                                      Header="Cloud: GPT-4o Mini Transcribe (faster)"
+                                      Foreground="#111111"
+                                      Tag="cloud:gpt-4o-mini-transcribe"
+                                      IsCheckable="True"
+                                      Click="SubtitleModelMenuItem_Click" />
+                            <MenuItem Name="SubtitleModelCloudGpt4oMenuItem"
+                                      Header="Cloud: GPT-4o Transcribe"
+                                      Foreground="#111111"
+                                      Tag="cloud:gpt-4o-transcribe"
+                                      IsCheckable="True"
+                                      Click="SubtitleModelMenuItem_Click" />
+                            <MenuItem Name="SubtitleModelCloudWhisperMenuItem"
+                                      Header="Cloud: Whisper-1"
+                                      Foreground="#111111"
+                                      Tag="cloud:whisper-1"
+                                      IsCheckable="True"
+                                      Click="SubtitleModelMenuItem_Click" />
+                        </MenuItem>
+                        <MenuItem Header="Set OpenAI API Key" Foreground="#111111" Click="SetOpenAiApiKeyMenuItem_Click" />
+                    </MenuItem>
+                    <MenuItem Header="Translation">
+                        <MenuItem Name="EnableTranslationForCurrentVideoMenuItem"
+                                  Header="Translate Current Video"
+                                  Foreground="#111111"
+                                  IsCheckable="True"
+                                  IsChecked="False"
+                                  Checked="EnableTranslationForCurrentVideoMenuItem_Checked"
+                                  Unchecked="EnableTranslationForCurrentVideoMenuItem_Unchecked" />
+                        <MenuItem Header="Target Language" Foreground="#111111">
+                            <MenuItem Name="TranslateTargetEnglishMenuItem"
+                                      Header="English"
+                                      Foreground="#111111"
+                                      IsCheckable="True"
+                                      IsChecked="True"
+                                      Click="TranslateTargetEnglishMenuItem_Click" />
+                        </MenuItem>
+                        <MenuItem Header="Auto-Translate Videos Not In" Foreground="#111111">
+                            <MenuItem Name="AutoTranslateNonEnglishMenuItem"
+                                      Header="English"
+                                      Foreground="#111111"
+                                      IsCheckable="True"
+                                      IsChecked="False"
+                                      Checked="AutoTranslateNonEnglishMenuItem_Checked"
+                                      Unchecked="AutoTranslateNonEnglishMenuItem_Unchecked" />
+                        </MenuItem>
+                        <Separator />
+                        <MenuItem Header="Translation Model" Foreground="#111111">
+                            <MenuItem Name="TranslationModelLocalBasicMenuItem"
+                                      Header="Local: Basic Fallback (fastest)"
+                                      Foreground="#111111"
+                                      Tag="local:basic"
+                                      IsCheckable="True"
+                                      IsChecked="True"
+                                      Click="TranslationModelMenuItem_Click" />
+                            <MenuItem Name="TranslationModelCloudGpt5MiniMenuItem"
+                                      Header="Cloud: GPT-5 Mini"
+                                      Foreground="#111111"
+                                      Tag="cloud:gpt-5-mini"
+                                      IsCheckable="True"
+                                      Click="TranslationModelMenuItem_Click" />
+                        </MenuItem>
+                        <MenuItem Header="Set OpenAI API Key" Foreground="#111111" Click="SetOpenAiApiKeyMenuItem_Click" />
+                        <Separator />
+                        <MenuItem Header="Export EN SRT" Foreground="#111111" Click="ExportButton_Click" />
+                    </MenuItem>
+                </Menu>
                 <TextBlock Name="HardwareStatusText" Foreground="#F3F3F3" VerticalAlignment="Center" Margin="0,0,14,0" />
                 <TextBlock Text="|" Foreground="#AFAFAF" VerticalAlignment="Center" Margin="0,0,14,0" />
                 <TextBlock Name="PlaybackStatusText" Foreground="#D0D0D0" VerticalAlignment="Center" />
             </StackPanel>
         </Border>
 
-        <Grid Grid.Row="1" Margin="0,10,0,0" Background="Black">
+        <Grid Name="PlaybackSurface"
+              Grid.Row="1"
+              Margin="0,10,0,0"
+              Background="Black"
+              MouseEnter="PlaybackSurface_MouseEnter"
+              MouseLeave="PlaybackSurface_MouseLeave">
             <MediaElement Name="Player"
                           LoadedBehavior="Manual"
                           UnloadedBehavior="Manual"
                           Stretch="Uniform" />
 
-            <Border VerticalAlignment="Bottom"
-                    HorizontalAlignment="Center"
-                    Margin="16"
-                    MaxWidth="1000"
-                    Padding="16,10"
-                    CornerRadius="8"
-                    Background="#C0000000">
-                <TextBlock Name="SubtitleText"
-                           Foreground="White"
-                           FontSize="26"
-                           TextAlignment="Center"
-                           TextWrapping="Wrap"
-                           Text="Open a local video. PlayerApp will auto-generate local captions if no .srt is found." />
-            </Border>
+            <StackPanel VerticalAlignment="Bottom"
+                        HorizontalAlignment="Center"
+                        Margin="16"
+                        MaxWidth="1000">
+                <Border Name="SubtitleOverlayContainer"
+                        Margin="0,0,0,12"
+                        Padding="16,10"
+                        CornerRadius="8"
+                        Background="#C0000000">
+                    <TextBlock Name="SubtitleText"
+                               Foreground="White"
+                               FontSize="26"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Text="Open a local video. PlayerApp will auto-generate local captions if no .srt is found." />
+                </Border>
+
+                <Border Name="TransportPanel"
+                        Padding="18,14"
+                        CornerRadius="12"
+                        Background="#D9151515">
+                    <Grid Width="920">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Name="CurrentTimeText"
+                                       Grid.Column="0"
+                                       Margin="0,0,10,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="#F3F3F3"
+                                       Text="00:00" />
+
+                            <Slider Name="ProgressSlider"
+                                    Grid.Column="1"
+                                    Minimum="0"
+                                    Maximum="1"
+                                    SmallChange="1"
+                                    LargeChange="10"
+                                    VerticalAlignment="Center"
+                                    PreviewMouseLeftButtonDown="ProgressSlider_PreviewMouseLeftButtonDown"
+                                    PreviewMouseLeftButtonUp="ProgressSlider_PreviewMouseLeftButtonUp"
+                                    ValueChanged="ProgressSlider_ValueChanged" />
+
+                            <TextBlock Name="DurationText"
+                                       Grid.Column="2"
+                                       Margin="10,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="#F3F3F3"
+                                       Text="00:00" />
+                        </Grid>
+
+                        <StackPanel Grid.Row="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Center">
+                            <Button Name="OpenVideoButton"
+                                    Content="Open"
+                                    Padding="14,8"
+                                    Margin="0,0,10,0"
+                                    Click="OpenVideoButton_Click" />
+                            <Button Name="FullscreenButton"
+                                    Content="⛶"
+                                    Width="44"
+                                    Height="40"
+                                    Padding="12,8"
+                                    Margin="0,0,10,0"
+                                    Click="FullscreenButton_Click" />
+                            <Button Name="RewindButton"
+                                    Content="⏪"
+                                    Padding="14,8"
+                                    Margin="0,0,10,0"
+                                    Click="RewindButton_Click" />
+                            <Button Name="PlayPauseButton"
+                                    Content="⏸"
+                                    Width="56"
+                                    Height="40"
+                                    Padding="20,8"
+                                    Margin="0,0,10,0"
+                                    Click="PlayPauseButton_Click" />
+                            <Button Name="FastForwardButton"
+                                    Content="⏩"
+                                    Padding="14,8"
+                                    Margin="0,0,10,0"
+                                    Click="FastForwardButton_Click" />
+                            <TextBlock Text="🔊"
+                                       VerticalAlignment="Center"
+                                       Foreground="#F3F3F3"
+                                       Margin="4,0,8,0" />
+                            <Slider Name="VolumeSlider"
+                                    Width="110"
+                                    Minimum="0"
+                                    Maximum="1"
+                                    Value="0.8"
+                                    TickFrequency="0.1"
+                                    IsSnapToTickEnabled="False"
+                                    VerticalAlignment="Center"
+                                    ValueChanged="VolumeSlider_ValueChanged" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>

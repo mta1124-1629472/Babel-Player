@@ -2,6 +2,8 @@ using NAudio.Wave;
 using System.Net.Http.Headers;
 using System.Speech.Recognition;
 using System.Text.Json;
+using Whisper.net;
+using Whisper.net.Ggml;
 
 namespace PlayerApp.Core;
 
@@ -16,6 +18,8 @@ public sealed class CaptionGenerationOptions
     public CaptionTranscriptionMode Mode { get; init; } = CaptionTranscriptionMode.Local;
     public string? LanguageHint { get; init; }
     public string? OpenAiApiKey { get; init; }
+    public GgmlType? LocalModelType { get; init; }
+    public string? CloudModel { get; init; }
 }
 
 public class TranscriptChunk
@@ -32,6 +36,10 @@ public class AsrService
     {
         BaseAddress = new Uri("https://api.openai.com/v1/")
     };
+
+    private static readonly SemaphoreSlim WhisperFactoryGate = new(1, 1);
+    private static WhisperFactory? _whisperFactory;
+    private static string? _whisperModelPath;
 
     public event Action<TranscriptChunk>? OnFinal;
 
@@ -58,12 +66,125 @@ public class AsrService
                 }
             }
 
-            return await RunOnStaThreadAsync(() => TranscribeLocally(extractedWavePath, options.LanguageHint, cancellationToken), cancellationToken);
+            return await TranscribeLocallyAsync(extractedWavePath, options.LocalModelType ?? GgmlType.Base, options.LanguageHint, cancellationToken);
         }
         finally
         {
             TryDeleteFile(extractedWavePath);
         }
+    }
+
+    private async Task<IReadOnlyList<SubtitleCue>> TranscribeLocallyAsync(string wavePath, GgmlType localModelType, string? languageHint, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await TranscribeWithWhisperAsync(wavePath, localModelType, languageHint, cancellationToken);
+        }
+        catch when (!cancellationToken.IsCancellationRequested)
+        {
+            return await RunOnStaThreadAsync(() => TranscribeWithWindowsSpeech(wavePath, languageHint, cancellationToken), cancellationToken);
+        }
+    }
+
+    private async Task<IReadOnlyList<SubtitleCue>> TranscribeWithWhisperAsync(string wavePath, GgmlType localModelType, string? languageHint, CancellationToken cancellationToken)
+    {
+        var factory = await GetWhisperFactoryAsync(localModelType, cancellationToken);
+        using var audioStream = File.OpenRead(wavePath);
+        var builder = factory.CreateBuilder()
+            .WithNoContext()
+            .SplitOnWord();
+
+        if (string.IsNullOrWhiteSpace(languageHint))
+        {
+            builder.WithLanguageDetection();
+        }
+        else
+        {
+            builder.WithLanguage(NormalizeWhisperLanguage(languageHint));
+        }
+
+        using var processor = builder.Build();
+
+        var cues = new List<SubtitleCue>();
+
+        await foreach (var segment in processor.ProcessAsync(audioStream, cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var text = segment.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            var cue = new SubtitleCue
+            {
+                Start = segment.Start,
+                End = segment.End,
+                SourceText = text,
+                SourceLanguage = string.IsNullOrWhiteSpace(segment.Language) ? LanguageDetector.Detect(text) : segment.Language
+            };
+
+            cues.Add(cue);
+            PublishFinalChunk(cue);
+        }
+
+        return cues;
+    }
+
+    private static readonly Dictionary<GgmlType, WhisperFactory> WhisperFactories = [];
+
+    private static async Task<WhisperFactory> GetWhisperFactoryAsync(GgmlType localModelType, CancellationToken cancellationToken)
+    {
+        if (WhisperFactories.TryGetValue(localModelType, out var existingFactory))
+        {
+            return existingFactory;
+        }
+
+        await WhisperFactoryGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (WhisperFactories.TryGetValue(localModelType, out existingFactory))
+            {
+                return existingFactory;
+            }
+
+            var asrModelsDirectory = ModelManager.GetAsrModelsDirectory();
+            _whisperModelPath = Path.Combine(asrModelsDirectory, $"ggml-{localModelType.ToString().ToLowerInvariant()}-q5_0.bin");
+            if (!File.Exists(_whisperModelPath))
+            {
+                await using var modelStream = await WhisperGgmlDownloader.Default.GetGgmlModelAsync(
+                    localModelType,
+                    QuantizationType.Q5_0,
+                    cancellationToken);
+                await using var fileStream = File.Create(_whisperModelPath);
+                await modelStream.CopyToAsync(fileStream, cancellationToken);
+            }
+
+            var factory = WhisperFactory.FromPath(_whisperModelPath);
+            WhisperFactories[localModelType] = factory;
+            return factory;
+        }
+        finally
+        {
+            WhisperFactoryGate.Release();
+        }
+    }
+
+    private static string NormalizeWhisperLanguage(string? languageHint)
+    {
+        if (string.IsNullOrWhiteSpace(languageHint))
+        {
+            return "auto";
+        }
+
+        var normalized = languageHint.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "en-us" => "en",
+            "en-gb" => "en",
+            _ => normalized
+        };
     }
 
     private static async Task<T> RunOnStaThreadAsync<T>(Func<T> work, CancellationToken cancellationToken)
@@ -90,11 +211,11 @@ public class AsrService
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        await using var _ = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
+        using var _ = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
         return await completion.Task;
     }
 
-    private IReadOnlyList<SubtitleCue> TranscribeLocally(string wavePath, string? languageHint, CancellationToken cancellationToken)
+    private IReadOnlyList<SubtitleCue> TranscribeWithWindowsSpeech(string wavePath, string? languageHint, CancellationToken cancellationToken)
     {
         var recognizerInfo = SelectRecognizer(languageHint);
         using var recognizer = new SpeechRecognitionEngine(recognizerInfo);
@@ -120,12 +241,14 @@ public class AsrService
 
             var start = args.Result.Audio.AudioPosition;
             var end = start + args.Result.Audio.Duration;
+            var text = args.Result.Text.Trim();
 
             var cue = new SubtitleCue
             {
                 Start = start,
                 End = end,
-                Text = args.Result.Text.Trim()
+                SourceText = text,
+                SourceLanguage = LanguageDetector.Detect(text)
             };
 
             cues.Add(cue);
@@ -179,7 +302,7 @@ public class AsrService
                 audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
 
                 form.Add(audioContent, "file", Path.GetFileName(chunk.Path));
-                form.Add(new StringContent("whisper-1"), "model");
+                form.Add(new StringContent(options.CloudModel ?? "gpt-4o-mini-transcribe"), "model");
                 form.Add(new StringContent("verbose_json"), "response_format");
                 form.Add(new StringContent("segment"), "timestamp_granularities[]");
 
@@ -194,7 +317,7 @@ public class AsrService
                 var payload = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (!response.IsSuccessStatusCode)
                 {
-                    throw new InvalidOperationException($"Cloud transcription failed: {(int)response.StatusCode} {response.ReasonPhrase}. {payload}");
+                    throw new InvalidOperationException($"Cloud subtitle generation failed: {(int)response.StatusCode} {response.ReasonPhrase}.");
                 }
 
                 using var document = JsonDocument.Parse(payload);
@@ -218,7 +341,8 @@ public class AsrService
                     {
                         Start = start,
                         End = end,
-                        Text = text
+                        SourceText = text,
+                        SourceLanguage = LanguageDetector.Detect(text)
                     };
 
                     cues.Add(cue);
@@ -242,7 +366,7 @@ public class AsrService
         var installed = SpeechRecognitionEngine.InstalledRecognizers().ToList();
         if (installed.Count == 0)
         {
-            throw new InvalidOperationException("No Windows speech recognition engine is installed. Install an offline speech language pack or enable cloud transcription.");
+            throw new InvalidOperationException("No Windows speech recognition engine is installed and Whisper local transcription was unavailable.");
         }
 
         if (!string.IsNullOrWhiteSpace(languageHint))
@@ -325,7 +449,7 @@ public class AsrService
     {
         var chunk = new TranscriptChunk
         {
-            Text = cue.Text,
+            Text = cue.SourceText,
             StartTimeSec = cue.Start.TotalSeconds,
             EndTimeSec = cue.End.TotalSeconds,
             IsFinal = true

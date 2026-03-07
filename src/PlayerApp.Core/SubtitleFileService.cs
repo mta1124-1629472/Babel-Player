@@ -48,7 +48,7 @@ public static class SubtitleFileService
             {
                 Start = start,
                 End = end,
-                Text = text
+                SourceText = text
             });
         }
 

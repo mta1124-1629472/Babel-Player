@@ -67,7 +67,7 @@ public class SubtitleManager
     {
         lock (_sync)
         {
-            var existingIndex = _cues.FindIndex(c => c.Start == cue.Start && c.End == cue.End && string.Equals(c.Text, cue.Text, StringComparison.Ordinal));
+            var existingIndex = _cues.FindIndex(c => c.Start == cue.Start && c.End == cue.End && string.Equals(c.SourceText, cue.SourceText, StringComparison.Ordinal));
             if (existingIndex >= 0)
             {
                 _cues[existingIndex] = cue;
@@ -107,7 +107,7 @@ public class SubtitleManager
             var cue = snapshot[idx];
             sb.AppendLine((idx + 1).ToString(CultureInfo.InvariantCulture));
             sb.AppendLine($"{FormatTime(cue.Start)} --> {FormatTime(cue.End)}");
-            sb.AppendLine(cue.TranslatedText ?? cue.Text);
+            sb.AppendLine(cue.DisplayText);
             sb.AppendLine();
         }
 
