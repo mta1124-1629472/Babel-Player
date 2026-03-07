@@ -1,18 +1,13 @@
-using Microsoft.UI.Xaml;
+﻿using System.Configuration;
+using System.Data;
+using System.Windows;
 
-namespace PlayerApp.UI
+namespace PlayerApp.UI;
+
+/// <summary>
+/// Interaction logic for App.xaml
+/// </summary>
+public partial class App : Application
 {
-	public partial class App : Application
-	{
-		public App()
-		{
-			this.InitializeComponent();
-		}
-
-		protected override void OnLaunched(LaunchActivatedEventArgs args)
-		{
-			var window = new MainWindow();
-			window.Activate();
-		}
-	}
 }
+

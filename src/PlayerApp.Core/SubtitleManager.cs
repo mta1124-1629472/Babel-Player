@@ -1,46 +1,126 @@
+using System.Globalization;
 using System.Text;
 
-namespace PlayerApp.Core
+namespace PlayerApp.Core;
+
+public class SubtitleManager
 {
-	public class SubtitleManager
-	{
-		private List<(TranscriptChunk chunk, string english)> _finalized = new();
-		private object _overlay; // Keep as object - no WinUI ref needed
+    private readonly List<SubtitleCue> _cues = [];
+    private readonly object _sync = new();
 
-		public SubtitleManager(object overlay)
-		{
-			_overlay = overlay;
-		}
+    public void Clear()
+    {
+        lock (_sync)
+        {
+            _cues.Clear();
+        }
+    }
 
-		public void ShowInterim(TranscriptChunk chunk)
-		{
-			// UI rendering happens in MainWindow.xaml.cs, not here
-		}
+    public bool HasCues
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _cues.Count > 0;
+            }
+        }
+    }
 
-		public void CommitFinal(TranscriptChunk chunk, string english)
-		{
-			_finalized.Add((chunk, english));
-		}
+    public int CueCount
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _cues.Count;
+            }
+        }
+    }
 
-		public void ExportSrt(string path)
-		{
-			var sb = new StringBuilder();
-			int idx = 1;
-			foreach (var (chunk, text) in _finalized)
-			{
-				sb.AppendLine(idx.ToString());
-				sb.AppendLine($"{FormatTime(chunk.StartTimeSec)} --> {FormatTime(chunk.EndTimeSec)}");
-				sb.AppendLine(text);
-				sb.AppendLine();
-				idx++;
-			}
-			File.WriteAllText(path, sb.ToString());
-		}
+    public IReadOnlyList<SubtitleCue> Cues
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _cues.ToList();
+            }
+        }
+    }
 
-		private string FormatTime(double seconds)
-		{
-			var ts = System.TimeSpan.FromSeconds(seconds);
-			return ts.ToString(@"hh\:mm\:ss\,fff");
-		}
-	}
+    public void LoadSrt(string path)
+    {
+        LoadCues(SubtitleFileService.ParseSrt(path));
+    }
+
+    public void LoadCues(IEnumerable<SubtitleCue> cues)
+    {
+        lock (_sync)
+        {
+            _cues.Clear();
+            _cues.AddRange(cues.OrderBy(c => c.Start));
+        }
+    }
+
+    public void AddCue(SubtitleCue cue)
+    {
+        lock (_sync)
+        {
+            var existingIndex = _cues.FindIndex(c => c.Start == cue.Start && c.End == cue.End && string.Equals(c.Text, cue.Text, StringComparison.Ordinal));
+            if (existingIndex >= 0)
+            {
+                _cues[existingIndex] = cue;
+            }
+            else
+            {
+                _cues.Add(cue);
+                _cues.Sort((left, right) => left.Start.CompareTo(right.Start));
+            }
+        }
+    }
+
+    public SubtitleCue? GetCueAt(TimeSpan position)
+    {
+        lock (_sync)
+        {
+            return _cues.FirstOrDefault(c => position >= c.Start && position <= c.End);
+        }
+    }
+
+    public void CommitTranslation(SubtitleCue cue, string english)
+    {
+        cue.TranslatedText = english;
+    }
+
+    public void ExportSrt(string path)
+    {
+        List<SubtitleCue> snapshot;
+        lock (_sync)
+        {
+            snapshot = _cues.ToList();
+        }
+
+        var sb = new StringBuilder();
+        for (var idx = 0; idx < snapshot.Count; idx++)
+        {
+            var cue = snapshot[idx];
+            sb.AppendLine((idx + 1).ToString(CultureInfo.InvariantCulture));
+            sb.AppendLine($"{FormatTime(cue.Start)} --> {FormatTime(cue.End)}");
+            sb.AppendLine(cue.TranslatedText ?? cue.Text);
+            sb.AppendLine();
+        }
+
+        File.WriteAllText(path, sb.ToString());
+    }
+
+    public void ExportTranslatedSrt(string path)
+    {
+        ExportSrt(path);
+    }
+
+    private static string FormatTime(TimeSpan value)
+    {
+        return value.ToString(@"hh\:mm\:ss\,fff", CultureInfo.InvariantCulture);
+    }
 }

@@ -1,11 +1,18 @@
-# PlayerApp (Starter)
+# PlayerApp
 
-Offline real-time speech→English translation video player (starter scaffold).
+PlayerApp is a local video player for Windows that shows **real-time translated subtitles**.
 
-## What this repo contains
-- WinUI 3 minimal player UI
-- Core service stubs for audio capture, ASR, MT, model manager, and subtitles
-- Model manifest template and download script
+## What works now
+- Open and play local videos (`.mp4`, `.mkv`, `.mov`, `.avi`, `.webm`)
+- Load a local `.srt` subtitle track
+- Detect subtitle language with lightweight heuristics
+- Generate local translated subtitle text (offline fallback MT service)
+- Render translated subtitle cues in sync with the active playback position
+- Export translated subtitles to a new `.srt`
 
-## How to run
-See docs/INSTALL.md
+## Architecture
+- `PlayerApp.UI`: WinUI 3 desktop app and player UI
+- `PlayerApp.Core`: language detection, translation service, subtitle parsing/timeline/export, and hardware summary
+
+## Quick start
+See `docs/INSTALL.md`.

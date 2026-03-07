@@ -1,14 +1,55 @@
-<Window
-  x:Class="PlayerApp.UI.MainWindow"
-  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-  Title="PlayerApp">
-	<Grid>
-		<MediaPlayerElement x:Name="Player" AreTransportControlsEnabled="True" Stretch="Uniform" />
-		<Canvas x:Name="SubtitleOverlay" IsHitTestVisible="False" />
-		<StackPanel Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="8">
-			<TextBlock x:Name="HardwareStatus" Margin="8" />
-			<Button x:Name="ModelManagerButton" Content="Models" Margin="8" Click="ModelManagerButton_Click"/>
-		</StackPanel>
-	</Grid>
+<Window x:Class="PlayerApp.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PlayerApp - Local Subtitle Translator"
+        Width="1280"
+        Height="760"
+        MinWidth="960"
+        MinHeight="600"
+        Background="#111111">
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Padding="8" CornerRadius="8" Background="#1C1C1C">
+            <StackPanel Orientation="Horizontal">
+                <Button Name="OpenVideoButton" Content="Open Video" Padding="12,6" Margin="0,0,8,0" Click="OpenVideoButton_Click" />
+                <Button Name="PlayPauseButton" Content="Pause" Padding="12,6" Margin="0,0,8,0" Click="PlayPauseButton_Click" />
+                <Button Name="OpenSubtitlesButton" Content="Open Subtitles" Padding="12,6" Margin="0,0,8,0" Click="OpenSubtitlesButton_Click" />
+                <Button Name="ExportButton" Content="Export EN SRT" Padding="12,6" Margin="0,0,16,0" Click="ExportButton_Click" />
+                <CheckBox Name="UseCloudTranscriptionCheckBox"
+                          Content="Use cloud transcription"
+                          Foreground="#D7D7D7"
+                          VerticalAlignment="Center"
+                          Margin="0,0,16,0" />
+                <TextBlock Name="HardwareStatusText" Foreground="#F3F3F3" VerticalAlignment="Center" Margin="0,0,14,0" />
+                <TextBlock Text="|" Foreground="#AFAFAF" VerticalAlignment="Center" Margin="0,0,14,0" />
+                <TextBlock Name="PlaybackStatusText" Foreground="#D0D0D0" VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="0,10,0,0" Background="Black">
+            <MediaElement Name="Player"
+                          LoadedBehavior="Manual"
+                          UnloadedBehavior="Manual"
+                          Stretch="Uniform" />
+
+            <Border VerticalAlignment="Bottom"
+                    HorizontalAlignment="Center"
+                    Margin="16"
+                    MaxWidth="1000"
+                    Padding="16,10"
+                    CornerRadius="8"
+                    Background="#C0000000">
+                <TextBlock Name="SubtitleText"
+                           Foreground="White"
+                           FontSize="26"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           Text="Open a local video. PlayerApp will auto-generate local captions if no .srt is found." />
+            </Border>
+        </Grid>
+    </Grid>
 </Window>

@@ -4,8 +4,10 @@ namespace PlayerApp.Core
 	{
 		public static string GetSummary()
 		{
-			// Minimal placeholder: detect GPU vendor, DirectML/CUDA availability, CPU cores, AVX support.
-			return "GPU: Unknown; CPU: Unknown; Profile: Balanced";
+			var cpu = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? Environment.MachineName;
+			var cores = Environment.ProcessorCount;
+			var profile = cores >= 8 ? "High" : cores >= 4 ? "Balanced" : "Power Saver";
+			return $"CPU: {cpu}; Cores: {cores}; Inference Profile: {profile}";
 		}
 	}
 }

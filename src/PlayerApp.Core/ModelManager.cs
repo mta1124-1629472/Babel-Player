@@ -1,14 +1,19 @@
 namespace PlayerApp.Core
 {
-	public static class ModelManager
-	{
-		public static async Task<string> EnsureModelForLanguageAsync(string languageCode)
-		{
-			// Check model_manifest.json and local model store.
-			// If model missing, prompt user and download (not implemented here).
-			// Return local model path.
-			await Task.CompletedTask;
-			return $"%LOCALAPPDATA%/PlayerApp/models/mt_{languageCode}_en.onnx";
-		}
-	}
+    public static class ModelManager
+    {
+        public static Task<string> EnsureModelForLanguageAsync(string languageCode)
+        {
+            var normalized = string.IsNullOrWhiteSpace(languageCode) ? "und" : languageCode.Trim().ToLowerInvariant();
+            var modelsRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "PlayerApp",
+                "models");
+
+            Directory.CreateDirectory(modelsRoot);
+
+            var modelPath = Path.Combine(modelsRoot, $"mt_{normalized}_en.onnx");
+            return Task.FromResult(modelPath);
+        }
+    }
 }
