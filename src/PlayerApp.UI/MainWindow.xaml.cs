@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using PlayerApp.Core;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -13,7 +14,6 @@ public partial class MainWindow : Window
 {
     private const string DefaultLocalSpeechCulture = "en-US";
     private const string DefaultSubtitleModelKey = "local:base";
-    private const string DefaultTranslationModelKey = "local:basic";
     private readonly SubtitleManager _subtitleManager = new();
     private readonly MtService _translator = new();
     private readonly DispatcherTimer _subtitleTimer = new();
@@ -37,11 +37,10 @@ public partial class MainWindow : Window
     private string? _overlayStatusText;
     private string _captionGenerationModeLabel = "local";
     private string _selectedSubtitleModelKey = DefaultSubtitleModelKey;
-    private string _selectedTranslationModelKey = DefaultTranslationModelKey;
+    private string? _selectedTranslationModelKey;
     private string _translationTargetLanguage = "en";
     private string _autoTranslatePreferredSourceLanguage = "en";
     private int _activeCaptionGenerationId;
-    private string _loadedTranslationLanguage = "en";
     private string _currentSourceLanguage = "und";
     private SubtitlePipelineSource _subtitleSource = SubtitlePipelineSource.None;
 
@@ -51,12 +50,15 @@ public partial class MainWindow : Window
 
         _selectedSubtitleModelKey = GetPersistedSubtitleModelKey();
         _selectedTranslationModelKey = GetPersistedTranslationModelKey();
+        _autoTranslateVideosOutsidePreferredLanguage = SecureSettingsStore.GetAutoTranslateEnabled();
         UpdateSubtitleModelMenuChecks();
         UpdateTranslationModelMenuChecks();
+        UpdateAutoTranslateMenuChecks();
 
         HardwareStatusText.Text = HardwareDetector.GetSummary();
         PlaybackStatusText.Text = "Ready";
         _sessionOpenAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? SecureSettingsStore.GetOpenAiApiKey();
+        _translator.OnLocalRuntimeStatus += HandleLocalTranslationRuntimeStatus;
         ConfigureTranslator();
         Player.Volume = 0.8;
 
@@ -245,11 +247,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        _loadedTranslationLanguage = "en";
         _currentSourceLanguage = ApplySourceLanguageToCues(_subtitleManager.Cues);
         ApplyAutomaticTranslationPreferenceIfNeeded();
-        var sample = string.Join(" ", _subtitleManager.Cues.Take(3).Select(c => c.SourceText));
-        EnsureTranslationModelLoaded(sample);
 
         PlaybackStatusText.Text = autoLoaded
             ? $"Loaded sidecar subtitles: {Path.GetFileName(path)} ({_subtitleManager.CueCount} cues)."
@@ -268,7 +267,6 @@ public partial class MainWindow : Window
     {
         CancelCaptionGeneration();
         _subtitleManager.Clear();
-        _loadedTranslationLanguage = "en";
         _currentSourceLanguage = "und";
         InitializeTranslationPreferencesForNewVideo();
         _subtitleSource = SubtitlePipelineSource.Generated;
@@ -307,6 +305,7 @@ public partial class MainWindow : Window
 
         var asrService = new AsrService();
         asrService.OnFinal += chunk => HandleRecognizedChunk(chunk, generationId);
+        asrService.OnModelTransferProgress += progress => HandleSubtitleModelTransferProgress(progress, generationId);
 
         try
         {
@@ -501,24 +500,33 @@ public partial class MainWindow : Window
         });
     }
 
-    private void EnsureTranslationModelLoaded(string text)
+    private bool HasSelectedTranslationModel()
     {
-        if (_translator.UseCloudTranslation)
+        return !string.IsNullOrWhiteSpace(_selectedTranslationModelKey);
+    }
+
+    private void PublishLocalTranslationPreparationStatus()
+    {
+        if (!HasSelectedTranslationModel())
         {
             return;
         }
 
-        var language = LanguageDetector.Detect(text);
-        if (string.Equals(language, _loadedTranslationLanguage, StringComparison.OrdinalIgnoreCase))
+        var selection = GetSelectedTranslationModel();
+        string? message = selection.Provider switch
         {
-            return;
-        }
+            TranslationProvider.LocalHyMt15_1_8B => "Starting HY-MT1.5 1.8B local translation. First use may download and load the model through llama.cpp.",
+            TranslationProvider.LocalHyMt15_7B => "Starting HY-MT1.5 7B local translation. First use may download and load the model through llama.cpp.",
+            _ => null
+        };
 
-        var modelPath = ModelManager.EnsureModelForLanguageAsync(language).GetAwaiter().GetResult();
-        lock (_translationSync)
+        if (!string.IsNullOrWhiteSpace(message) && string.IsNullOrWhiteSpace(_overlayStatusText))
         {
-            _translator.LoadModel(modelPath);
-            _loadedTranslationLanguage = language;
+            Dispatcher.Invoke(() =>
+            {
+                PlaybackStatusText.Text = message;
+                SetOverlayStatus(message);
+            });
         }
     }
 
@@ -638,7 +646,15 @@ public partial class MainWindow : Window
 
     private void ConfigureTranslator()
     {
+        if (!HasSelectedTranslationModel())
+        {
+            _translator.ConfigureLocal(new LocalTranslationOptions(OfflineTranslationModel.None));
+            _translator.ConfigureCloud(null);
+            return;
+        }
+
         var selectedTranslationModel = GetSelectedTranslationModel();
+        _translator.ConfigureLocal(GetLocalTranslationOptions(selectedTranslationModel));
         _translator.ConfigureCloud(GetCloudTranslationOptions(selectedTranslationModel));
     }
 
@@ -671,6 +687,20 @@ public partial class MainWindow : Window
     private async void SetMicrosoftTranslatorCredentialsMenuItem_Click(object sender, RoutedEventArgs e)
     {
         await PromptAndSaveMicrosoftTranslatorCredentialsAsync();
+    }
+
+    private void SetLlamaCppServerPathMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var path = PromptForLlamaCppServerPath();
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        SecureSettingsStore.SaveLlamaCppServerPath(path);
+        SecureSettingsStore.SaveLlamaCppRuntimeSource("manual");
+        ConfigureTranslator();
+        PlaybackStatusText.Text = $"Saved llama.cpp server path: {Path.GetFileName(path)}";
     }
 
     private string? PromptForSingleSecret(string title, string message, string buttonText)
@@ -798,6 +828,19 @@ public partial class MainWindow : Window
         };
     }
 
+    private static LocalTranslationOptions GetLocalTranslationOptions(TranslationModelSelection selection)
+    {
+        var llamaServerPath = Environment.GetEnvironmentVariable("LLAMA_SERVER_PATH")
+            ?? SecureSettingsStore.GetLlamaCppServerPath();
+
+        return selection.Provider switch
+        {
+            TranslationProvider.LocalHyMt15_1_8B => new LocalTranslationOptions(OfflineTranslationModel.HyMt15_1_8B, llamaServerPath),
+            TranslationProvider.LocalHyMt15_7B => new LocalTranslationOptions(OfflineTranslationModel.HyMt15_7B, llamaServerPath),
+            _ => new LocalTranslationOptions(OfflineTranslationModel.None)
+        };
+    }
+
     private static CloudTranslationProvider MapToCloudTranslationProvider(TranslationProvider provider)
     {
         return provider switch
@@ -847,8 +890,13 @@ public partial class MainWindow : Window
     {
         switch (provider)
         {
-            case TranslationProvider.Local:
-                return true;
+            case TranslationProvider.LocalHyMt15_1_8B:
+            case TranslationProvider.LocalHyMt15_7B:
+                if (TryResolveLlamaCppServerPath() is not null)
+                {
+                    return true;
+                }
+                return await EnsureLlamaCppRuntimeAsync();
             case TranslationProvider.OpenAi:
                 return await EnsureOpenAiApiKeyAsync();
             case TranslationProvider.Google:
@@ -874,6 +922,117 @@ public partial class MainWindow : Window
                 return await PromptAndSaveMicrosoftTranslatorCredentialsAsync();
             default:
                 return false;
+        }
+    }
+
+    private static string? TryResolveLlamaCppServerPath()
+    {
+        var configuredPath = Environment.GetEnvironmentVariable("LLAMA_SERVER_PATH");
+        if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
+        {
+            return configuredPath;
+        }
+
+        configuredPath = SecureSettingsStore.GetLlamaCppServerPath();
+        if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
+        {
+            return configuredPath;
+        }
+
+        var installedPath = LlamaCppRuntimeInstaller.GetInstalledServerPath();
+        if (File.Exists(installedPath))
+        {
+            return installedPath;
+        }
+
+        var pathValue = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(pathValue))
+        {
+            return null;
+        }
+
+        foreach (var segment in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var exePath = Path.Combine(segment, "llama-server.exe");
+            if (File.Exists(exePath))
+            {
+                return exePath;
+            }
+
+            var noExtensionPath = Path.Combine(segment, "llama-server");
+            if (File.Exists(noExtensionPath))
+            {
+                return noExtensionPath;
+            }
+        }
+
+        return null;
+    }
+
+    private string? PromptForLlamaCppServerPath()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "llama.cpp server|llama-server.exe;llama-server|Executable files|*.exe|All files|*.*",
+            Title = "Choose llama-server"
+        };
+
+        return dialog.ShowDialog(this) == true ? dialog.FileName : null;
+    }
+
+    private async Task<bool> EnsureLlamaCppRuntimeAsync()
+    {
+        var setupWindow = new LlamaCppBootstrapWindow
+        {
+            Owner = this
+        };
+
+        _ = setupWindow.ShowDialog();
+        switch (setupWindow.Choice)
+        {
+            case LlamaCppBootstrapChoice.InstallAutomatically:
+                return await InstallLlamaCppRuntimeAsync();
+            case LlamaCppBootstrapChoice.ChooseExisting:
+            {
+                var selectedPath = PromptForLlamaCppServerPath();
+                if (string.IsNullOrWhiteSpace(selectedPath) || !File.Exists(selectedPath))
+                {
+                    return false;
+                }
+
+                SecureSettingsStore.SaveLlamaCppServerPath(selectedPath);
+                SecureSettingsStore.SaveLlamaCppRuntimeSource("manual");
+                ConfigureTranslator();
+                PlaybackStatusText.Text = $"Using llama.cpp runtime: {Path.GetFileName(selectedPath)}";
+                return true;
+            }
+            case LlamaCppBootstrapChoice.OpenOfficialDownloadPage:
+                OpenExternalLink(LlamaCppRuntimeInstaller.ReleasePageUrl);
+                PlaybackStatusText.Text = "Opened the official llama.cpp release page.";
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private async Task<bool> InstallLlamaCppRuntimeAsync()
+    {
+        try
+        {
+            var serverPath = await LlamaCppRuntimeInstaller.InstallAsync(HandleLlamaRuntimeInstallProgress, CancellationToken.None);
+            SecureSettingsStore.SaveLlamaCppServerPath(serverPath);
+            SecureSettingsStore.SaveLlamaCppRuntimeVersion(LlamaCppRuntimeInstaller.RuntimeVersion);
+            SecureSettingsStore.SaveLlamaCppRuntimeSource(LlamaCppRuntimeInstaller.RuntimeSource);
+            ConfigureTranslator();
+            PlaybackStatusText.Text = "llama.cpp runtime is ready.";
+            SetOverlayStatus("llama.cpp runtime is ready.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            PlaybackStatusText.Text = $"llama.cpp runtime install failed: {ex.Message}";
+            SetOverlayStatus("llama.cpp runtime install failed.");
+            return false;
         }
     }
 
@@ -915,7 +1074,7 @@ public partial class MainWindow : Window
 
         try
         {
-            EnsureTranslationModelLoaded(cue.SourceText);
+            PublishLocalTranslationPreparationStatus();
             var translated = await _translator.TranslateAsync(cue.SourceText, cancellationToken);
 
             lock (_translationSync)
@@ -1034,10 +1193,9 @@ public partial class MainWindow : Window
         {
             if (ShouldDisableCloudForError(ex))
             {
-                if (GetSelectedTranslationModel().Provider != TranslationProvider.Local)
+                if (IsCloudTranslationProvider(GetSelectedTranslationModel().Provider))
                 {
-                    _selectedTranslationModelKey = DefaultTranslationModelKey;
-                    UpdateTranslationModelMenuChecks();
+                    ClearSelectedTranslationModel();
                 }
 
                 if (GetSelectedTranscriptionModel().Provider == TranscriptionProvider.Cloud)
@@ -1061,6 +1219,14 @@ public partial class MainWindow : Window
         return message.Contains("429", StringComparison.OrdinalIgnoreCase)
             || message.Contains("quota", StringComparison.OrdinalIgnoreCase)
             || message.Contains("rate", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCloudTranslationProvider(TranslationProvider provider)
+    {
+        return provider is TranslationProvider.OpenAi
+            or TranslationProvider.Google
+            or TranslationProvider.DeepL
+            or TranslationProvider.MicrosoftTranslator;
     }
 
     private void ProgressSlider_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1191,6 +1357,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!HasSelectedTranslationModel())
+        {
+            PlaybackStatusText.Text = "Select a translation model first.";
+            SetTranslationEnabledForCurrentVideo(false, reprocessExistingCues: false);
+            return;
+        }
+
         _isTranslationEnabledForCurrentVideo = true;
         _currentVideoTranslationPreferenceLocked = true;
         await ReprocessCurrentSubtitlesForTranslationSettingsAsync();
@@ -1235,10 +1408,10 @@ public partial class MainWindow : Window
     {
         var previousModelKey = _selectedTranslationModelKey;
         var selection = GetTranslationModel(modelKey);
-        if (selection.Provider != TranslationProvider.Local && !await EnsureTranslationProviderCredentialsAsync(selection.Provider))
+        if (selection.Provider == TranslationProvider.None || !await EnsureTranslationProviderCredentialsAsync(selection.Provider))
         {
             UpdateTranslationModelMenuChecks(previousModelKey);
-            PlaybackStatusText.Text = "Cloud translation model selection canceled.";
+            PlaybackStatusText.Text = "Translation model selection canceled.";
             return;
         }
 
@@ -1246,7 +1419,56 @@ public partial class MainWindow : Window
         SecureSettingsStore.SaveTranslationModelKey(modelKey);
         ConfigureTranslator();
         UpdateTranslationModelMenuChecks();
+        if (selection.Provider is TranslationProvider.LocalHyMt15_1_8B or TranslationProvider.LocalHyMt15_7B)
+        {
+            var warmedUp = await WarmupSelectedLocalTranslationRuntimeAsync(selection);
+            if (!warmedUp)
+            {
+                _selectedTranslationModelKey = previousModelKey;
+                if (string.IsNullOrWhiteSpace(previousModelKey))
+                {
+                    SecureSettingsStore.ClearTranslationModelKey();
+                }
+                else
+                {
+                    SecureSettingsStore.SaveTranslationModelKey(previousModelKey);
+                }
+
+                ConfigureTranslator();
+                UpdateTranslationModelMenuChecks(previousModelKey);
+                return;
+            }
+        }
+
+        _currentVideoTranslationPreferenceLocked = true;
+        SetTranslationEnabledForCurrentVideo(true, reprocessExistingCues: false);
         await ReprocessCurrentSubtitlesForTranslationSettingsAsync();
+    }
+
+    private async Task<bool> WarmupSelectedLocalTranslationRuntimeAsync(TranslationModelSelection selection)
+    {
+        try
+        {
+            PlaybackStatusText.Text = $"Preparing {selection.DisplayName}.";
+            SetOverlayStatus($"Preparing {selection.DisplayName}.");
+            await _translator.WarmupLocalRuntimeAsync(CancellationToken.None);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            PlaybackStatusText.Text = ex.Message;
+            SetOverlayStatus("Local translation model setup failed.");
+            return false;
+        }
+    }
+
+    private void ClearSelectedTranslationModel()
+    {
+        _selectedTranslationModelKey = null;
+        SecureSettingsStore.ClearTranslationModelKey();
+        ConfigureTranslator();
+        UpdateTranslationModelMenuChecks();
+        SetTranslationEnabledForCurrentVideo(false, reprocessExistingCues: false);
     }
 
     private async Task<bool> EnsureOpenAiApiKeyAsync()
@@ -1267,7 +1489,24 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!HasSelectedTranslationModel())
+        {
+            PlaybackStatusText.Text = "Select a translation model before enabling auto-translate.";
+            _suppressTranslationMenuEvents = true;
+            try
+            {
+                AutoTranslateNonEnglishMenuItem.IsChecked = false;
+            }
+            finally
+            {
+                _suppressTranslationMenuEvents = false;
+            }
+
+            return;
+        }
+
         _autoTranslateVideosOutsidePreferredLanguage = true;
+        SecureSettingsStore.SaveAutoTranslateEnabled(true);
         _autoTranslatePreferredSourceLanguage = "en";
         _currentVideoTranslationPreferenceLocked = false;
         ApplyAutomaticTranslationPreferenceIfNeeded();
@@ -1282,6 +1521,7 @@ public partial class MainWindow : Window
         }
 
         _autoTranslateVideosOutsidePreferredLanguage = false;
+        SecureSettingsStore.SaveAutoTranslateEnabled(false);
         _currentVideoTranslationPreferenceLocked = false;
         ApplyAutomaticTranslationPreferenceIfNeeded();
         await ReprocessCurrentSubtitlesForTranslationSettingsAsync();
@@ -1301,6 +1541,95 @@ public partial class MainWindow : Window
     {
         _overlayStatusText = text;
         RefreshSubtitleOverlay();
+    }
+
+    private void HandleSubtitleModelTransferProgress(ModelTransferProgress progress, int generationId)
+    {
+        if (generationId != _activeCaptionGenerationId)
+        {
+            return;
+        }
+
+        var message = FormatSubtitleModelTransferStatus(progress);
+        Dispatcher.Invoke(() =>
+        {
+            PlaybackStatusText.Text = message;
+            SetOverlayStatus(message);
+        });
+    }
+
+    private void HandleLocalTranslationRuntimeStatus(LocalTranslationRuntimeStatus status)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            PlaybackStatusText.Text = status.Message;
+            SetOverlayStatus(status.Message);
+        });
+    }
+
+    private void HandleLlamaRuntimeInstallProgress(RuntimeInstallProgress progress)
+    {
+        var message = progress.Stage switch
+        {
+            "downloading" => progress.ProgressRatio is double ratio
+                ? $"Downloading llama.cpp runtime... {ratio:P0} ({FormatBytes(progress.BytesTransferred)} / {FormatBytes(progress.TotalBytes ?? 0)})."
+                : $"Downloading llama.cpp runtime... {FormatBytes(progress.BytesTransferred)}.",
+            "extracting" => progress.ProgressRatio is double ratio
+                ? $"Extracting llama.cpp runtime... {ratio:P0} ({progress.ItemsCompleted ?? 0} / {progress.TotalItems ?? 0})."
+                : "Extracting llama.cpp runtime...",
+            "ready" => "llama.cpp runtime is ready.",
+            _ => "Preparing llama.cpp runtime..."
+        };
+
+        Dispatcher.Invoke(() =>
+        {
+            PlaybackStatusText.Text = message;
+            SetOverlayStatus(message);
+        });
+    }
+
+    private static string FormatSubtitleModelTransferStatus(ModelTransferProgress progress)
+    {
+        var modelName = progress.ModelLabel switch
+        {
+            "TinyEn" => "local Tiny.en",
+            "BaseEn" => "local Base.en",
+            "SmallEn" => "local Small.en",
+            _ => progress.ModelLabel
+        };
+
+        return progress.Stage switch
+        {
+            "downloading" => progress.ProgressRatio is double ratio
+                ? $"Downloading {modelName} for subtitles... {ratio:P0} ({FormatBytes(progress.BytesTransferred)} / {FormatBytes(progress.TotalBytes ?? 0)})."
+                : $"Downloading {modelName} for subtitles... {FormatBytes(progress.BytesTransferred)}.",
+            "loading" => $"Loading {modelName} for subtitles...",
+            "ready" => $"{modelName} is ready. Generating captions...",
+            _ => $"Preparing {modelName} for subtitles..."
+        };
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB"];
+        double value = bytes;
+        var unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.Length - 1)
+        {
+            value /= 1024;
+            unitIndex++;
+        }
+
+        return $"{value:0.#} {units[unitIndex]}";
+    }
+
+    private static void OpenExternalLink(string url)
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = url,
+            UseShellExecute = true
+        });
     }
 
     private void PlaybackSurface_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
@@ -1405,7 +1734,8 @@ public partial class MainWindow : Window
         selectedKey ??= _selectedTranslationModelKey;
         var items = new[]
         {
-            TranslationModelLocalBasicMenuItem,
+            TranslationModelLocalHyMt18BMenuItem,
+            TranslationModelLocalHyMt7BMenuItem,
             TranslationModelCloudOpenAiMenuItem,
             TranslationModelCloudGoogleMenuItem,
             TranslationModelCloudDeepLMenuItem,
@@ -1418,6 +1748,22 @@ public partial class MainWindow : Window
             {
                 item.IsChecked = string.Equals(key, selectedKey, StringComparison.Ordinal);
             }
+        }
+    }
+
+    private void UpdateAutoTranslateMenuChecks()
+    {
+        _suppressTranslationMenuEvents = true;
+        try
+        {
+            if (AutoTranslateNonEnglishMenuItem is not null)
+            {
+                AutoTranslateNonEnglishMenuItem.IsChecked = _autoTranslateVideosOutsidePreferredLanguage;
+            }
+        }
+        finally
+        {
+            _suppressTranslationMenuEvents = false;
         }
     }
 
@@ -1453,23 +1799,66 @@ public partial class MainWindow : Window
         return GetTranslationModel(_selectedTranslationModelKey);
     }
 
-    private static string GetPersistedTranslationModelKey()
+    private static string? GetPersistedTranslationModelKey()
     {
         var savedKey = SecureSettingsStore.GetTranslationModelKey();
-        return savedKey is "local:basic" or "cloud:gpt-5-mini" or "cloud:google-translate" or "cloud:deepl" or "cloud:microsoft-translator"
-            ? savedKey
-            : DefaultTranslationModelKey;
+        if (savedKey is not "local:hymt-1.8b" and not "local:hymt-7b" and not "cloud:gpt-5-mini" and not "cloud:google-translate" and not "cloud:deepl" and not "cloud:microsoft-translator")
+        {
+            return null;
+        }
+
+        var selection = GetTranslationModel(savedKey);
+        if (selection.Provider is TranslationProvider.OpenAi or TranslationProvider.Google or TranslationProvider.DeepL or TranslationProvider.MicrosoftTranslator)
+        {
+            return HasConfiguredTranslationProvider(selection.Provider) ? savedKey : null;
+        }
+
+        if (selection.Provider is TranslationProvider.LocalHyMt15_1_8B or TranslationProvider.LocalHyMt15_7B)
+        {
+            return TryResolveLlamaCppServerPath() is not null ? savedKey : null;
+        }
+
+        return null;
     }
 
-    private static TranslationModelSelection GetTranslationModel(string modelKey)
+    private static TranslationModelSelection GetTranslationModel(string? modelKey)
     {
         return modelKey switch
         {
+            "local:hymt-1.8b" => new TranslationModelSelection(modelKey, "local HY-MT1.5 1.8B", TranslationProvider.LocalHyMt15_1_8B, null),
+            "local:hymt-7b" => new TranslationModelSelection(modelKey, "local HY-MT1.5 7B", TranslationProvider.LocalHyMt15_7B, null),
             "cloud:gpt-5-mini" => new TranslationModelSelection(modelKey, "cloud OpenAI GPT-5 mini", TranslationProvider.OpenAi, "gpt-5-mini"),
             "cloud:google-translate" => new TranslationModelSelection(modelKey, "cloud Google Translate", TranslationProvider.Google, null),
             "cloud:deepl" => new TranslationModelSelection(modelKey, "cloud DeepL API", TranslationProvider.DeepL, null),
             "cloud:microsoft-translator" => new TranslationModelSelection(modelKey, "cloud Microsoft Translator", TranslationProvider.MicrosoftTranslator, null),
-            _ => new TranslationModelSelection(DefaultTranslationModelKey, "local basic fallback", TranslationProvider.Local, null)
+            _ => new TranslationModelSelection(string.Empty, "No translation model", TranslationProvider.None, null)
+        };
+    }
+
+    private static bool HasConfiguredTranslationProvider(TranslationProvider provider)
+    {
+        return provider switch
+        {
+            TranslationProvider.None => false,
+            TranslationProvider.LocalHyMt15_1_8B => TryResolveLlamaCppServerPath() is not null,
+            TranslationProvider.LocalHyMt15_7B => TryResolveLlamaCppServerPath() is not null,
+            TranslationProvider.OpenAi => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? SecureSettingsStore.GetOpenAiApiKey()),
+            TranslationProvider.Google => !string.IsNullOrWhiteSpace(
+                Environment.GetEnvironmentVariable("GOOGLE_TRANSLATE_API_KEY")
+                ?? Environment.GetEnvironmentVariable("GOOGLE_CLOUD_TRANSLATE_API_KEY")
+                ?? SecureSettingsStore.GetGoogleTranslateApiKey()),
+            TranslationProvider.DeepL => !string.IsNullOrWhiteSpace(
+                Environment.GetEnvironmentVariable("DEEPL_API_KEY")
+                ?? SecureSettingsStore.GetDeepLApiKey()),
+            TranslationProvider.MicrosoftTranslator => !string.IsNullOrWhiteSpace(
+                    Environment.GetEnvironmentVariable("MICROSOFT_TRANSLATOR_API_KEY")
+                    ?? Environment.GetEnvironmentVariable("AZURE_TRANSLATOR_KEY")
+                    ?? SecureSettingsStore.GetMicrosoftTranslatorApiKey())
+                && !string.IsNullOrWhiteSpace(
+                    Environment.GetEnvironmentVariable("MICROSOFT_TRANSLATOR_REGION")
+                    ?? Environment.GetEnvironmentVariable("AZURE_TRANSLATOR_REGION")
+                    ?? SecureSettingsStore.GetMicrosoftTranslatorRegion()),
+            _ => false
         };
     }
 
@@ -1487,6 +1876,12 @@ public partial class MainWindow : Window
         }
 
         if (!_autoTranslateVideosOutsidePreferredLanguage)
+        {
+            SetTranslationEnabledForCurrentVideo(false, reprocessExistingCues: false);
+            return;
+        }
+
+        if (!HasSelectedTranslationModel())
         {
             SetTranslationEnabledForCurrentVideo(false, reprocessExistingCues: false);
             return;
@@ -1562,7 +1957,9 @@ internal enum TranscriptionProvider
 
 internal enum TranslationProvider
 {
-    Local,
+    None,
+    LocalHyMt15_1_8B,
+    LocalHyMt15_7B,
     OpenAi,
     Google,
     DeepL,
@@ -1783,3 +2180,4 @@ internal enum SubtitlePipelineSource
     Manual,
     Generated
 }
+

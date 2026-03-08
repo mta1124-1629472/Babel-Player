@@ -359,11 +359,15 @@
                             </MenuItem>
                             <Separator />
                             <MenuItem Header="Translation Model">
-                                <MenuItem Name="TranslationModelLocalBasicMenuItem"
-                                          Header="Local: Basic Fallback (fastest)"
-                                          Tag="local:basic"
+                                <MenuItem Name="TranslationModelLocalHyMt18BMenuItem"
+                                          Header="Local: HY-MT1.5 1.8B"
+                                          Tag="local:hymt-1.8b"
                                           IsCheckable="True"
-                                          IsChecked="True"
+                                          Click="TranslationModelMenuItem_Click" />
+                                <MenuItem Name="TranslationModelLocalHyMt7BMenuItem"
+                                          Header="Local: HY-MT1.5 7B"
+                                          Tag="local:hymt-7b"
+                                          IsCheckable="True"
                                           Click="TranslationModelMenuItem_Click" />
                                 <MenuItem Name="TranslationModelCloudOpenAiMenuItem"
                                           Header="Cloud: OpenAI GPT-5 Mini"
@@ -386,6 +390,7 @@
                                           IsCheckable="True"
                                           Click="TranslationModelMenuItem_Click" />
                             </MenuItem>
+                            <MenuItem Header="Set llama.cpp Server Path" Click="SetLlamaCppServerPathMenuItem_Click" />
                             <MenuItem Header="Set OpenAI API Key" Click="SetOpenAiApiKeyMenuItem_Click" />
                             <MenuItem Header="Set Google Translate API Key" Click="SetGoogleTranslateApiKeyMenuItem_Click" />
                             <MenuItem Header="Set DeepL API Key" Click="SetDeepLApiKeyMenuItem_Click" />

@@ -15,8 +15,18 @@ internal static class SecureSettingsStore
     private static readonly string DeepLApiKeyPath = Path.Combine(SettingsDirectory, "deepl-api-key.bin");
     private static readonly string MicrosoftTranslatorApiKeyPath = Path.Combine(SettingsDirectory, "microsoft-translator-api-key.bin");
     private static readonly string MicrosoftTranslatorRegionPath = Path.Combine(SettingsDirectory, "microsoft-translator-region.txt");
+    private static readonly string LlamaCppServerPath = Path.Combine(SettingsDirectory, "llama-server-path.txt");
+    private static readonly string LlamaCppRuntimeVersionPath = Path.Combine(SettingsDirectory, "llama-runtime-version.txt");
+    private static readonly string LlamaCppRuntimeSourcePath = Path.Combine(SettingsDirectory, "llama-runtime-source.txt");
     private static readonly string SubtitleModelPath = Path.Combine(SettingsDirectory, "subtitle-model.txt");
     private static readonly string TranslationModelPath = Path.Combine(SettingsDirectory, "translation-model.txt");
+    private static readonly string AutoTranslateEnabledPath = Path.Combine(SettingsDirectory, "auto-translate-enabled.txt");
+
+    public static string GetAppDataDirectory()
+    {
+        Directory.CreateDirectory(SettingsDirectory);
+        return SettingsDirectory;
+    }
 
     public static string? GetOpenAiApiKey()
     {
@@ -88,6 +98,36 @@ internal static class SecureSettingsStore
         SavePlaintextSetting(MicrosoftTranslatorRegionPath, region);
     }
 
+    public static string? GetLlamaCppServerPath()
+    {
+        return ReadPlaintextSetting(LlamaCppServerPath);
+    }
+
+    public static void SaveLlamaCppServerPath(string path)
+    {
+        SavePlaintextSetting(LlamaCppServerPath, path);
+    }
+
+    public static string? GetLlamaCppRuntimeVersion()
+    {
+        return ReadPlaintextSetting(LlamaCppRuntimeVersionPath);
+    }
+
+    public static void SaveLlamaCppRuntimeVersion(string version)
+    {
+        SavePlaintextSetting(LlamaCppRuntimeVersionPath, version);
+    }
+
+    public static string? GetLlamaCppRuntimeSource()
+    {
+        return ReadPlaintextSetting(LlamaCppRuntimeSourcePath);
+    }
+
+    public static void SaveLlamaCppRuntimeSource(string source)
+    {
+        SavePlaintextSetting(LlamaCppRuntimeSourcePath, source);
+    }
+
     public static string? GetSubtitleModelKey()
     {
         return ReadPlaintextSetting(SubtitleModelPath);
@@ -106,6 +146,22 @@ internal static class SecureSettingsStore
     public static void SaveTranslationModelKey(string modelKey)
     {
         SavePlaintextSetting(TranslationModelPath, modelKey);
+    }
+
+    public static void ClearTranslationModelKey()
+    {
+        TryDeleteFile(TranslationModelPath);
+    }
+
+    public static bool GetAutoTranslateEnabled()
+    {
+        var value = ReadPlaintextSetting(AutoTranslateEnabledPath);
+        return bool.TryParse(value, out var parsed) && parsed;
+    }
+
+    public static void SaveAutoTranslateEnabled(bool enabled)
+    {
+        SavePlaintextSetting(AutoTranslateEnabledPath, enabled ? "true" : "false");
     }
 
     private static string? ReadPlaintextSetting(string path)
@@ -162,5 +218,19 @@ internal static class SecureSettingsStore
         var bytes = Encoding.UTF8.GetBytes(value.Trim());
         var protectedBytes = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
         File.WriteAllBytes(path, protectedBytes);
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+        }
     }
 }

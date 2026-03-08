@@ -30,6 +30,16 @@ public class TranscriptChunk
     public bool IsFinal { get; set; }
 }
 
+public sealed class ModelTransferProgress
+{
+    public string Stage { get; init; } = string.Empty;
+    public string ModelLabel { get; init; } = string.Empty;
+    public long BytesTransferred { get; init; }
+    public long? TotalBytes { get; init; }
+
+    public double? ProgressRatio => TotalBytes is > 0 ? (double)BytesTransferred / TotalBytes.Value : null;
+}
+
 public class AsrService
 {
     private static readonly HttpClient HttpClient = new()
@@ -38,10 +48,9 @@ public class AsrService
     };
 
     private static readonly SemaphoreSlim WhisperFactoryGate = new(1, 1);
-    private static WhisperFactory? _whisperFactory;
-    private static string? _whisperModelPath;
 
     public event Action<TranscriptChunk>? OnFinal;
+    public event Action<ModelTransferProgress>? OnModelTransferProgress;
 
     public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoAsync(string videoPath, CaptionGenerationOptions options, CancellationToken cancellationToken)
     {
@@ -134,7 +143,7 @@ public class AsrService
 
     private static readonly Dictionary<GgmlType, WhisperFactory> WhisperFactories = [];
 
-    private static async Task<WhisperFactory> GetWhisperFactoryAsync(GgmlType localModelType, CancellationToken cancellationToken)
+    private async Task<WhisperFactory> GetWhisperFactoryAsync(GgmlType localModelType, CancellationToken cancellationToken)
     {
         if (WhisperFactories.TryGetValue(localModelType, out var existingFactory))
         {
@@ -149,26 +158,56 @@ public class AsrService
                 return existingFactory;
             }
 
-            var asrModelsDirectory = ModelManager.GetAsrModelsDirectory();
-            _whisperModelPath = Path.Combine(asrModelsDirectory, $"ggml-{localModelType.ToString().ToLowerInvariant()}-q5_0.bin");
-            if (!File.Exists(_whisperModelPath))
+            var whisperModelPath = ModelManager.GetAsrModelPath(localModelType);
+            if (!File.Exists(whisperModelPath))
             {
+                PublishModelTransferProgress("downloading", localModelType, 0, null);
                 await using var modelStream = await WhisperGgmlDownloader.Default.GetGgmlModelAsync(
                     localModelType,
                     QuantizationType.Q5_0,
                     cancellationToken);
-                await using var fileStream = File.Create(_whisperModelPath);
-                await modelStream.CopyToAsync(fileStream, cancellationToken);
+                await using var fileStream = File.Create(whisperModelPath);
+                await CopyModelStreamWithProgressAsync(modelStream, fileStream, localModelType, cancellationToken);
             }
 
-            var factory = WhisperFactory.FromPath(_whisperModelPath);
+            PublishModelTransferProgress("loading", localModelType, 0, null);
+            var factory = WhisperFactory.FromPath(whisperModelPath);
             WhisperFactories[localModelType] = factory;
+            PublishModelTransferProgress("ready", localModelType, 0, null);
             return factory;
         }
         finally
         {
             WhisperFactoryGate.Release();
         }
+    }
+
+    private async Task CopyModelStreamWithProgressAsync(Stream source, Stream destination, GgmlType localModelType, CancellationToken cancellationToken)
+    {
+        long? totalBytes = source.CanSeek ? source.Length : null;
+        var buffer = new byte[1024 * 128];
+        long transferred = 0;
+        int bytesRead;
+
+        while ((bytesRead = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
+        {
+            await destination.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+            transferred += bytesRead;
+            PublishModelTransferProgress("downloading", localModelType, transferred, totalBytes);
+        }
+
+        await destination.FlushAsync(cancellationToken);
+    }
+
+    private void PublishModelTransferProgress(string stage, GgmlType localModelType, long bytesTransferred, long? totalBytes)
+    {
+        OnModelTransferProgress?.Invoke(new ModelTransferProgress
+        {
+            Stage = stage,
+            ModelLabel = localModelType.ToString(),
+            BytesTransferred = bytesTransferred,
+            TotalBytes = totalBytes
+        });
     }
 
     private static string NormalizeWhisperLanguage(string? languageHint)

@@ -1,3 +1,5 @@
+using Whisper.net.Ggml;
+
 namespace PlayerApp.Core
 {
     public static class ModelManager
@@ -21,6 +23,16 @@ namespace PlayerApp.Core
             var asrRoot = Path.Combine(ModelsRoot, "asr");
             Directory.CreateDirectory(asrRoot);
             return asrRoot;
+        }
+
+        public static string GetAsrModelPath(GgmlType modelType)
+        {
+            return Path.Combine(GetAsrModelsDirectory(), $"ggml-{modelType.ToString().ToLowerInvariant()}-q5_0.bin");
+        }
+
+        public static bool HasAsrModel(GgmlType modelType)
+        {
+            return File.Exists(GetAsrModelPath(modelType));
         }
     }
 }
