@@ -1,103 +1,192 @@
-# BabelPlayer
+# Babel Player
 
-BabelPlayer is a Windows desktop video player for local files that can:
+[Babel Player](https://github.com/mta1124-1629472/Babel-Player/) is a Windows desktop video player for local media with local-first subtitle generation, optional cloud services, and an AI subtitle overlay designed for translation workflows.
 
-- play video locally
-- load existing `.srt` subtitles
-- auto-generate subtitles when no `.srt` exists
-- translate subtitles into English on demand
-- export the English subtitle track as `.srt`
+Canonical repo:
+- GitHub: [mta1124-1629472/Babel-Player](https://github.com/mta1124-1629472/Babel-Player/)
+- Local solution: `BabelPlayer.sln`
+- Public app name: `Babel Player`
+- Internal code name: `BabelPlayer`
 
-The current app is a WPF application targeting `.NET 8` on Windows.
+## Current Scope
 
-## Current Status
-
-What works today:
-
-- Local video playback for common formats such as `.mp4`, `.mkv`, `.mov`, `.avi`, and `.webm`
-- Sidecar subtitle auto-load when a matching `.srt` is present
-- Manual subtitle loading from the `Subtitles` menu
-- Automatic subtitle generation from video audio when no `.srt` exists
-- Separate transcription and translation pipelines
-- Local and cloud transcription model selection
-- Local and cloud translation model selection
-- Real-time subtitle overlay during playback
-- English subtitle export
-- Persisted OpenAI API key storage for cloud features
-- Bottom transport controls with seek, rewind, fast-forward, fullscreen, and volume
+What the app does today:
+- plays local video files in a WPF desktop shell backed by an embedded mpv runtime
+- auto-loads sidecar subtitles when present
+- generates subtitles from audio when no sidecar subtitle file exists
+- supports local and cloud transcription model selection
+- supports local and cloud translation model selection
+- shows subtitles as source-only, translation-only, dual, or hidden
+- imports external subtitle files in `SRT`, `VTT`, `ASS`, and `SSA`
+- can extract text-based embedded subtitle tracks from media into the Babel Player subtitle pipeline
+- exports the current English subtitle result as `SRT`
+- persists model selection, auto-translate preference, API credentials, playback settings, and resume state
 
 ## Architecture
 
 - `src/BabelPlayer.UI`
-  - WPF desktop UI
-  - video playback
-  - subtitle overlay
-  - transcription and translation menu state
-  - transport controls
+  - WPF desktop shell
+  - embedded mpv playback surface
+  - playlist, file browser, transport, menus, shortcut editor
+  - ffmpeg/mpv/llama.cpp runtime bootstrap
+  - subtitle overlay and player state persistence
 - `src/BabelPlayer.Core`
   - subtitle parsing and export
+  - subtitle cue/state models
   - local/cloud transcription
   - local/cloud translation
   - language detection
   - hardware detection
 
-## How The App Works
+## Playback Workflow
 
-### 1. Open a video
+### Open media
 
-Use the `Open` button in the bottom transport bar.
+Use the bottom transport `Open` button, drag files/folders into the window, or add items to the playlist.
 
-When a video opens, the app:
+When a video opens, Babel Player:
+- loads the file into the embedded mpv player
+- checks for a matching sidecar `.srt`
+- loads the sidecar subtitle track if it exists
+- otherwise starts automatic caption generation from audio
+- restores playback position when a saved resume point exists and is valid
 
-- plays the local file
-- looks for a sidecar `.srt` next to the video
-- loads that subtitle track if present
-- otherwise starts automatic subtitle generation from the video audio
+### Playlist and browser
 
-### 2. Subtitle source behavior
+- The file browser and playlist panels are collapsed by default.
+- Use `View` to show or hide either panel.
+- Visibility persists across sessions.
+- Folder adds are recursive for supported video extensions.
+- Playlist auto-advances when playback ends.
 
-If an `.srt` exists:
+### Resume playback
 
-- the `.srt` is treated as the source subtitle track
-- the app detects the source language
-- translation only happens if you enable it
+Resume entries are stored under local app data and are restored for partially watched files.
 
-If no `.srt` exists:
+Behavior:
+- saved during playback and on app close
+- resumed only for meaningful unfinished positions
+- cleared when a video is effectively finished
 
-- the app generates source subtitles from audio
-- generated subtitles are then either shown directly or translated, depending on your translation settings
+## Subtitle Sources
 
-### 3. Translation behavior
+Babel Player can work from several subtitle sources:
 
-Translation is separate from subtitle generation.
+- sidecar `.srt`
+- manually loaded external subtitle files: `SRT`, `VTT`, `ASS`, `SSA`
+- auto-generated captions from video audio
+- extracted embedded text subtitle tracks from MKV/MP4-compatible containers
 
-By default:
+Notes:
+- text-based embedded subtitle tracks can be imported into the Babel Player AI subtitle pipeline
+- image-based embedded subtitle tracks can still be selected for direct playback, but they are not translated by the overlay pipeline
 
-- `Translate Current Video` is off
-- `Auto-Translate Videos Not In > English` is off
+## Subtitle Overlay Modes
 
-This means the app does not translate anything unless you explicitly enable translation.
+`Subtitles > Render Mode` supports:
+- `Off`
+- `Source Only`
+- `Translation Only`
+- `Dual`
 
-If `Auto-Translate Videos Not In > English` is enabled:
+`Dual` shows source text above translated text when both are meaningfully different.
 
-- the app waits for source language detection
-- if the detected source language is not English, translation is enabled for that video
+## Subtitle Styling
+
+`Subtitles > Style` currently supports:
+- larger/smaller text
+- more/less subtitle background
+- raise/lower subtitle position
+- translation color presets
+
+These settings persist between sessions.
+
+## Transcription Models
+
+### Local transcription
+
+Local transcription uses Whisper.NET with English-only Whisper models:
+- `Local: Tiny (fastest)`
+- `Local: Base (faster)`
+- `Local: Small (better quality)`
+
+These models download on first use and are then reused locally.
+
+### Cloud transcription
+
+Cloud transcription models are available from the `Subtitles` menu:
+- `Cloud: GPT-4o Mini Transcribe (faster)`
+- `Cloud: GPT-4o Transcribe`
+- `Cloud: Whisper-1`
+
+Cloud transcription requires a valid OpenAI API key.
+
+## Translation Models
+
+### Local translation
+
+Local translation currently uses HY-MT models through `llama-server`:
+- `Local: HY-MT1.5 1.8B`
+- `Local: HY-MT1.5 7B`
+
+Behavior:
+- selecting a HY-MT model can bootstrap `llama-server` automatically
+- Babel Player can install the pinned llama.cpp runtime itself
+- HY-MT model acquisition is delegated to `llama-server`
+- local translation has no fake fallback option anymore; if no real translation backend is configured, nothing is selected
+
+### Cloud translation
+
+Cloud translation options currently include:
+- `Cloud: OpenAI GPT-5 Mini`
+- `Cloud: Google Translate`
+- `Cloud: DeepL API`
+- `Cloud: Microsoft Translator`
+
+These are independent from subtitle transcription selection.
+
+## Credentials and Runtime Bootstrap
+
+### OpenAI
+
+Used for:
+- cloud transcription
+- OpenAI cloud translation
+
+Behavior:
+- prompted only when needed
+- validated before being saved
+- persisted between sessions
+
+### Google, DeepL, Microsoft Translator
+
+Cloud translation credentials for these providers are also validated and stored locally when configured from the `Translation` menu.
+
+### llama.cpp / HY-MT
+
+For local HY-MT translation:
+- Babel Player can guide runtime setup
+- `llama-server` can be installed automatically or selected manually
+- runtime state is surfaced in the UI
+- first-use HY-MT model download/loading status is surfaced as milestone text
+
+### mpv and ffmpeg
+
+Babel Player bootstraps these runtimes when needed:
+- `mpv` for playback
+- `ffmpeg` for subtitle conversion and embedded text subtitle extraction
+
+The app surfaces runtime download and extraction progress when it owns the transfer.
 
 ## Menus
 
 ### Subtitles
 
 - `Show Subtitles`
-  - toggles the subtitle overlay
+- `Style`
+- `Render Mode`
 - `Open Subtitles`
-  - manually load an `.srt`
 - `Transcription Model`
-  - `Local: Tiny (fastest)`
-  - `Local: Base (faster)`
-  - `Local: Small (better quality)`
-  - `Cloud: GPT-4o Mini Transcribe (faster)`
-  - `Cloud: GPT-4o Transcribe`
-  - `Cloud: Whisper-1`
 - `Set OpenAI API Key`
 
 ### Translation
@@ -106,162 +195,98 @@ If `Auto-Translate Videos Not In > English` is enabled:
 - `Target Language > English`
 - `Auto-Translate Videos Not In > English`
 - `Translation Model`
-  - `Local: Basic Fallback (fastest)`
-  - `Cloud: GPT-5 Mini`
-- `Set OpenAI API Key`
+- provider credential setup items
+- `Set llama.cpp Server Path`
 - `Export EN SRT`
 
-## Local And Cloud Models
+### Playback
 
-### Transcription / subtitle generation
-
-Local subtitle generation uses Whisper.NET with English-only Whisper variants:
-
-- `Tiny.en`
-- `Base.en`
-- `Small.en`
-
-Cloud subtitle generation can use:
-
-- `gpt-4o-mini-transcribe`
-- `gpt-4o-transcribe`
-- `whisper-1`
-
-### Translation
-
-Cloud translation uses OpenAI Responses with:
-
-- `gpt-5-mini`
-
-Local translation is currently:
-
-- a basic offline fallback
-- not a full local neural machine translation model yet
-
-That distinction matters:
-
-- local subtitle generation is real model-backed transcription
-- local translation is still placeholder quality compared with cloud translation
-
-## OpenAI API Key
-
-An OpenAI API key is only required when you choose a cloud model from either menu.
-
-Behavior:
-
-- if you select a cloud transcription or translation model and no key is available, the app prompts for one
-- valid keys are saved locally for reuse across sessions
-- invalid keys are rejected
-- cloud failures can force the app back to a local default for the current session
-
-The app first checks `OPENAI_API_KEY`, then falls back to its saved local key store.
-
-## Playback UI
-
-The bottom-center transport bar includes:
-
-- `Open`
-- rewind `10s`
-- play / pause
-- fast-forward `10s`
-- seek bar
-- current time and duration
+- audio track selection
+- embedded subtitle track selection
+- hardware decoding mode
+- aspect ratio controls
+- audio/subtitle delay adjustments
+- borderless window
+- picture-in-picture
 - fullscreen
-- volume
 
-The transport auto-hides during active playback and reappears when:
+### View
 
-- the mouse is over the playback surface
-- playback is paused
-- the user is seeking
+- show/hide browser panel
+- show/hide playlist panel
+- edit shortcuts
 
-## Subtitle Overlay
+## Keyboard Shortcuts
 
-- subtitles render at the bottom of the video surface
-- the overlay can be hidden completely with `Show Subtitles`
-- when hidden, the subtitle bar collapses fully instead of leaving a black strip
-- during caption generation, the app keeps status text visible so progress does not look like a failure
+Babel Player now uses a persisted shortcut profile rather than only hardcoded bindings.
 
-## Hardware
+Default bindings include:
+- play/pause
+- small and large seek
+- previous/next frame
+- speed up/down/reset
+- subtitle toggle
+- translation toggle
+- subtitle delay adjust
+- audio delay adjust
+- fullscreen
+- picture-in-picture
+- next/previous playlist item
+- mute
 
-The app detects the active hardware accelerator and reports a simplified runtime label such as:
+Use `View > Edit Shortcuts` to change and persist them.
 
-- `CPU`
-- a GPU name
-- an NVIDIA GPU with `CUDA`
+## Playback Controls
 
-This is informational today. It helps explain which accelerator the runtime is likely using.
+The bottom transport includes:
+- open file
+- previous/next playlist item
+- fullscreen
+- picture-in-picture
+- rewind / fast-forward
+- frame stepping
+- play / pause
+- playback speed selector
+- mute and volume
+- seek bar with current time and duration
+
+The transport auto-hides during active playback and reappears on hover, pause, or seeking.
+
+## Hardware and Rendering
+
+The app reports the active accelerator summary in the top status area.
+
+Current rendering/playback controls include:
+- hardware decoding mode selection
+- aspect ratio overrides
+- borderless and picture-in-picture window modes
+- fullscreen
 
 ## Build Requirements
 
-- Windows 11 or a current Windows 10/11 environment with media support
+- Windows 10/11 with media support
 - `.NET 8 SDK`
-- Visual Studio 2022 or later is recommended for development
+- Visual Studio 2022 or later recommended for development
 
-NuGet packages currently include:
+## Build and Run
 
-- `Whisper.net`
-- `Whisper.net.Runtime`
-- `Whisper.net.Runtime.Cuda`
-- `NAudio`
-- `System.Speech`
-- `System.Management`
-- `Microsoft.ML.OnnxRuntime`
-- `Microsoft.ML.OnnxRuntime.DirectML`
-
-## Build And Run
-
-From the repository root:
+From the `babel-player` repository root:
 
 ```powershell
 dotnet build BabelPlayer.sln
 dotnet run --project src/BabelPlayer.UI
 ```
 
-If the app is already running, stop it before rebuilding or the executable may be locked.
-
-## Recommended Usage
-
-### Best local-only subtitle generation
-
-- use `Subtitles > Transcription Model > Local: Base (faster)` as the default balance
-- use `Local: Tiny (fastest)` if speed matters more than accuracy
-- use `Local: Small (better quality)` if your machine can tolerate slower inference
-
-### Best current translation quality
-
-- enable translation only when needed
-- choose `Translation > Translation Model > Cloud: GPT-5 Mini`
-
-### If your video already has subtitles
-
-- prefer the existing `.srt`
-- treat it as the source subtitle track
-- translate only if the source language is not already English
+If `BabelPlayer.UI` is already running, close it before rebuilding or rerunning.
 
 ## Known Limitations
 
-- Local translation is still a basic fallback, not a full offline MT model.
-- Local subtitle quality depends heavily on audio quality and the selected Whisper model.
-- Cloud features require valid OpenAI credentials and usable account quota.
 - Translation target language is currently English only.
-- The README documents current behavior, not every historical experiment during development.
-
-## Recommended Next Upgrade
-
-The next major quality improvement for local translation should be replacing the current fallback translator with a real offline translation model.
-
-Recommended candidate:
-
-- `NLLB-200 distilled 600M`
-
-Reason:
-
-- it is an actual multilingual translation model
-- it is a much better fit for subtitle translation than the current local fallback
-- it is a better quality choice than keeping heuristic local translation logic
-
-If easier deployment matters more than translation quality, `Argos Translate` is the simpler alternative.
+- Embedded subtitle import is implemented for text-based tracks; image-based subtitle tracks are display-only.
+- HY-MT first-use model download exposes milestone status, not byte-level progress.
+- Real-world ffmpeg stream mapping for some containers may still need tuning on edge cases.
+- RTX Video SDK features are not part of the current WPF overhaul.
+- The workspace directory on disk may still use an older folder name even though the solution/projects/UI have been renamed to Babel Player / BabelPlayer.
 
 ## Additional Docs
 
