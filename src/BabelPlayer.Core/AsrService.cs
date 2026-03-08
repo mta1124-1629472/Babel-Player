@@ -5,7 +5,7 @@ using System.Text.Json;
 using Whisper.net;
 using Whisper.net.Ggml;
 
-namespace PlayerApp.Core;
+namespace BabelPlayer.Core;
 
 public enum CaptionTranscriptionMode
 {
@@ -429,7 +429,7 @@ public class AsrService
 
     private static string ExtractWaveAudio(string mediaPath)
     {
-        var workingDirectory = Path.Combine(Path.GetTempPath(), "PlayerApp");
+        var workingDirectory = Path.Combine(Path.GetTempPath(), "BabelPlayer");
         Directory.CreateDirectory(workingDirectory);
 
         var outputPath = Path.Combine(workingDirectory, $"{Path.GetFileNameWithoutExtension(mediaPath)}-{Guid.NewGuid():N}.wav");
@@ -471,7 +471,7 @@ public class AsrService
                 break;
             }
 
-            var tempPath = Path.Combine(Path.GetTempPath(), "PlayerApp", $"{Path.GetFileNameWithoutExtension(wavePath)}-part-{index++:D4}.wav");
+            var tempPath = Path.Combine(Path.GetTempPath(), "BabelPlayer", $"{Path.GetFileNameWithoutExtension(wavePath)}-part-{index++:D4}.wav");
             using (var writer = new WaveFileWriter(tempPath, reader.WaveFormat))
             {
                 writer.Write(buffer, 0, bytesRead);

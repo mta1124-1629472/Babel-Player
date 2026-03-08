@@ -1,29 +1,39 @@
 using Microsoft.Win32;
-using PlayerApp.Core;
+using BabelPlayer.Core;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
-namespace PlayerApp.UI;
+namespace BabelPlayer.UI;
 
 public partial class MainWindow : Window
 {
     private const string DefaultLocalSpeechCulture = "en-US";
     private const string DefaultSubtitleModelKey = "local:base";
+    private const double BrowserPanelWidth = 260;
+    private const double PlaylistPanelWidth = 280;
     private readonly SubtitleManager _subtitleManager = new();
     private readonly MtService _translator = new();
     private readonly DispatcherTimer _subtitleTimer = new();
+    private readonly DispatcherTimer _resumeTimer = new();
     private readonly object _translationSync = new();
     private readonly HashSet<SubtitleCue> _inFlightCueTranslations = [];
+    private readonly ObservableCollection<PlaylistItem> _playlist = [];
+    private readonly List<PlaybackResumeEntry> _resumeEntries = [];
 
     private CancellationTokenSource? _translationCts;
     private CancellationTokenSource? _captionGenerationCts;
     private string? _sessionOpenAiApiKey;
     private string? _currentVideoPath;
+    private string? _currentFolderPath;
     private bool _isPaused;
     private bool _isSeeking;
     private bool _resumePlaybackAfterSeek;
@@ -38,15 +48,25 @@ public partial class MainWindow : Window
     private string _captionGenerationModeLabel = "local";
     private string _selectedSubtitleModelKey = DefaultSubtitleModelKey;
     private string? _selectedTranslationModelKey;
+    private string _selectedAspectRatio = "auto";
     private string _translationTargetLanguage = "en";
     private string _autoTranslatePreferredSourceLanguage = "en";
     private int _activeCaptionGenerationId;
     private string _currentSourceLanguage = "und";
+    private int _playlistIndex = -1;
+    private double _audioDelaySeconds;
+    private double _subtitleDelaySeconds;
+    private bool _isMuted;
+    private AppPlayerSettings _appSettings = new();
+    private List<MediaTrackInfo> _currentTracks = [];
     private SubtitlePipelineSource _subtitleSource = SubtitlePipelineSource.None;
 
     public MainWindow()
     {
         InitializeComponent();
+
+        _appSettings = AppStateStore.LoadSettings();
+        _resumeEntries = AppStateStore.LoadResumeEntries().ToList();
 
         _selectedSubtitleModelKey = GetPersistedSubtitleModelKey();
         _selectedTranslationModelKey = GetPersistedTranslationModelKey();
@@ -54,30 +74,54 @@ public partial class MainWindow : Window
         UpdateSubtitleModelMenuChecks();
         UpdateTranslationModelMenuChecks();
         UpdateAutoTranslateMenuChecks();
+        UpdateSubtitleRenderModeMenuChecks();
+        UpdateHardwareDecodingMenuChecks();
+        UpdateAspectRatioMenuChecks();
+        UpdatePanelVisibilityMenuChecks();
+        RebuildAudioTrackMenu();
+        RebuildEmbeddedSubtitleTrackMenu();
 
         HardwareStatusText.Text = HardwareDetector.GetSummary();
         PlaybackStatusText.Text = "Ready";
         _sessionOpenAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? SecureSettingsStore.GetOpenAiApiKey();
         _translator.OnLocalRuntimeStatus += HandleLocalTranslationRuntimeStatus;
         ConfigureTranslator();
+        Player.HardwareDecodingMode = _appSettings.HardwareDecodingMode;
         Player.Volume = 0.8;
+        PlaylistListBox.ItemsSource = _playlist;
+        PlaybackSpeedComboBox.SelectedIndex = 3;
+        LoadPlaybackSettings();
+        RebuildLibraryTree();
 
         _subtitleTimer.Interval = TimeSpan.FromMilliseconds(120);
         _subtitleTimer.Tick += SubtitleTimer_Tick;
+        _resumeTimer.Interval = TimeSpan.FromSeconds(5);
+        _resumeTimer.Tick += ResumeTimer_Tick;
 
         Player.MediaOpened += Player_MediaOpened;
         Player.MediaEnded += Player_MediaEnded;
+        Player.MediaFailed += Player_MediaFailed;
+        Player.TracksChanged += Player_TracksChanged;
+        Player.RuntimeInstallProgress += Player_RuntimeInstallProgress;
 
         Closed += MainWindow_Closed;
-        Loaded += (_, _) => UpdateTransportVisibility();
+        Loaded += MainWindow_Loaded;
+    }
+
+    private void MainWindow_Loaded(object? sender, RoutedEventArgs e)
+    {
+        ApplyWindowMode(_appSettings.WindowMode, persist: false);
+        ApplySubtitleStyleSettings();
+        UpdateTransportVisibility();
     }
 
     private async void OpenVideoButton_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "Video files|*.mp4;*.mkv;*.mov;*.avi;*.wmv;*.webm|All files|*.*",
-            Title = "Choose a local video"
+            Filter = GetVideoFileDialogFilter(),
+            Title = "Choose local videos",
+            Multiselect = true
         };
 
         if (dialog.ShowDialog(this) != true)
@@ -85,27 +129,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        var path = dialog.FileName;
-        CancelBackgroundWork();
-        _currentVideoPath = path;
-        _subtitleSource = SubtitlePipelineSource.None;
-        InitializeTranslationPreferencesForNewVideo();
-
-        Player.Source = new Uri(path);
-        Player.Play();
-
-        _isPaused = false;
-        PlayPauseButton.Content = "⏸";
-        PlaybackStatusText.Text = $"Playing: {Path.GetFileName(path)}";
-
-        var hasSubtitles = await TryLoadSidecarSubtitlesAsync(path);
-        if (!hasSubtitles)
-        {
-            Player.Pause();
-            _isPaused = true;
-            PlayPauseButton.Content = "▶";
-            _ = StartAutomaticCaptionGenerationAsync(path);
-        }
+        EnqueuePaths(dialog.FileNames, playFirstNewItem: true);
+        await Task.CompletedTask;
     }
 
     private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
@@ -145,10 +170,7 @@ public partial class MainWindow : Window
     {
         if (WindowStyle == WindowStyle.None && WindowState == WindowState.Maximized)
         {
-            WindowStyle = WindowStyle.SingleBorderWindow;
-            WindowState = WindowState.Normal;
-            ResizeMode = ResizeMode.CanResize;
-            FullscreenButton.Content = "⛶";
+            ApplyWindowMode(PlaybackWindowMode.Standard);
             return;
         }
 
@@ -156,6 +178,7 @@ public partial class MainWindow : Window
         WindowState = WindowState.Maximized;
         ResizeMode = ResizeMode.NoResize;
         FullscreenButton.Content = "🗗";
+        PersistPlaybackSettings();
     }
 
     private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -166,13 +189,361 @@ public partial class MainWindow : Window
         }
 
         Player.Volume = Math.Clamp(VolumeSlider.Value, 0, 1);
+        _isMuted = Player.Volume <= 0.001;
+        MuteButton.Content = _isMuted ? "🔇" : "🔊";
+    }
+
+    private void MuteButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isMuted = !_isMuted;
+        Player.SetMute(_isMuted);
+        MuteButton.Content = _isMuted ? "🔇" : "🔊";
+    }
+
+    private void PreviousFrameButton_Click(object sender, RoutedEventArgs e)
+    {
+        Player.StepFrame(false);
+        _isPaused = true;
+        PlayPauseButton.Content = "▶";
+    }
+
+    private void NextFrameButton_Click(object sender, RoutedEventArgs e)
+    {
+        Player.StepFrame(true);
+        _isPaused = true;
+        PlayPauseButton.Content = "▶";
+    }
+
+    private void PlaybackSpeedComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || PlaybackSpeedComboBox.SelectedItem is not ComboBoxItem item || item.Tag is not string speedText || !double.TryParse(speedText, out var speed))
+        {
+            return;
+        }
+
+        Player.SetPlaybackRate(speed);
+        _appSettings = _appSettings with { DefaultPlaybackRate = speed };
+        AppStateStore.SaveSettings(_appSettings);
+    }
+
+    private void PreviousPlaylistButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_playlistIndex > 0)
+        {
+            _ = PlayPlaylistIndexAsync(_playlistIndex - 1);
+        }
+    }
+
+    private void NextPlaylistButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_playlistIndex + 1 < _playlist.Count)
+        {
+            _ = PlayPlaylistIndexAsync(_playlistIndex + 1);
+        }
+    }
+
+    private void PiPButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetCurrentWindowMode() == PlaybackWindowMode.PictureInPicture)
+        {
+            ApplyWindowMode(PlaybackWindowMode.Standard);
+            return;
+        }
+
+        ApplyWindowMode(PlaybackWindowMode.PictureInPicture);
+    }
+
+    private void AddFilesToPlaylistButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = GetVideoFileDialogFilter(),
+            Title = "Add local videos to playlist",
+            Multiselect = true
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            EnqueuePaths(dialog.FileNames, playFirstNewItem: _playlist.Count == 0);
+        }
+    }
+
+    private void AddFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Choose a folder to add to the playlist and browser"
+        };
+
+        if (dialog.ShowDialog(this) == true && !string.IsNullOrWhiteSpace(dialog.FolderName))
+        {
+            EnqueuePaths([dialog.FolderName], playFirstNewItem: _playlist.Count == 0);
+        }
+    }
+
+    private void ClearPlaylistButton_Click(object sender, RoutedEventArgs e)
+    {
+        _playlist.Clear();
+        _playlistIndex = -1;
+    }
+
+    private void RemovePlaylistItemButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (PlaylistListBox.SelectedItem is not PlaylistItem item)
+        {
+            return;
+        }
+
+        var removedIndex = _playlist.IndexOf(item);
+        _playlist.Remove(item);
+        if (_playlistIndex >= removedIndex)
+        {
+            _playlistIndex = Math.Max(-1, _playlistIndex - 1);
+        }
+    }
+
+    private void PlaylistListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PlaylistListBox.SelectedIndex >= 0)
+        {
+            _playlistIndex = PlaylistListBox.SelectedIndex;
+        }
+    }
+
+    private void PlaylistListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (PlaylistListBox.SelectedIndex >= 0)
+        {
+            _ = PlayPlaylistIndexAsync(PlaylistListBox.SelectedIndex);
+        }
+    }
+
+    private void PlaylistListBox_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            var paths = (string[]?)e.Data.GetData(DataFormats.FileDrop);
+            if (paths is not null)
+            {
+                EnqueuePaths(paths, playFirstNewItem: _playlist.Count == 0);
+            }
+        }
+    }
+
+    private void LibraryTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is TreeViewItem node && node.Tag is string path && Directory.Exists(path))
+        {
+            _currentFolderPath = path;
+        }
+    }
+
+    private void LibraryTreeView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (LibraryTreeView.SelectedItem is not TreeViewItem node || node.Tag is not string path)
+        {
+            return;
+        }
+
+        if (File.Exists(path))
+        {
+            EnqueuePaths([path], playFirstNewItem: true);
+        }
+        else if (Directory.Exists(path))
+        {
+            EnqueuePaths([path], playFirstNewItem: _playlist.Count == 0);
+        }
+    }
+
+    private void PinCurrentFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_currentFolderPath) || !Directory.Exists(_currentFolderPath))
+        {
+            PlaybackStatusText.Text = "Open or browse a folder first.";
+            return;
+        }
+
+        if (!_appSettings.PinnedRoots.Contains(_currentFolderPath, StringComparer.OrdinalIgnoreCase))
+        {
+            _appSettings.PinnedRoots.Add(_currentFolderPath);
+            AppStateStore.SaveSettings(_appSettings);
+            RebuildLibraryTree();
+        }
+    }
+
+    private void Window_DragEnter(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return;
+        }
+
+        var paths = (string[]?)e.Data.GetData(DataFormats.FileDrop);
+        if (paths is not null)
+        {
+            EnqueuePaths(paths, playFirstNewItem: _playlist.Count == 0);
+        }
+    }
+
+    private void Window_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (MatchesShortcut(e, "play_pause"))
+        {
+            PlayPauseButton_Click(sender, new RoutedEventArgs());
+        }
+        else if (MatchesShortcut(e, "seek_back_small"))
+        {
+            SeekBy(TimeSpan.FromSeconds(-5));
+        }
+        else if (MatchesShortcut(e, "seek_forward_small"))
+        {
+            SeekBy(TimeSpan.FromSeconds(5));
+        }
+        else if (MatchesShortcut(e, "seek_back_large"))
+        {
+            SeekBy(TimeSpan.FromSeconds(-15));
+        }
+        else if (MatchesShortcut(e, "seek_forward_large"))
+        {
+            SeekBy(TimeSpan.FromSeconds(15));
+        }
+        else if (MatchesShortcut(e, "previous_frame"))
+        {
+            PreviousFrameButton_Click(sender, new RoutedEventArgs());
+        }
+        else if (MatchesShortcut(e, "next_frame"))
+        {
+            NextFrameButton_Click(sender, new RoutedEventArgs());
+        }
+        else if (MatchesShortcut(e, "fullscreen"))
+        {
+            FullscreenButton_Click(sender, new RoutedEventArgs());
+        }
+        else if (MatchesShortcut(e, "pip"))
+        {
+            PiPButton_Click(sender, new RoutedEventArgs());
+        }
+        else if (MatchesShortcut(e, "mute"))
+        {
+            MuteButton_Click(sender, new RoutedEventArgs());
+        }
+        else if (MatchesShortcut(e, "subtitle_delay_back"))
+        {
+            AdjustSubtitleDelay(-0.05);
+        }
+        else if (MatchesShortcut(e, "subtitle_delay_forward"))
+        {
+            AdjustSubtitleDelay(0.05);
+        }
+        else if (MatchesShortcut(e, "audio_delay_back"))
+        {
+            AdjustAudioDelay(-0.05);
+        }
+        else if (MatchesShortcut(e, "audio_delay_forward"))
+        {
+            AdjustAudioDelay(0.05);
+        }
+        else if (MatchesShortcut(e, "speed_up"))
+        {
+            AdjustPlaybackRate(0.25);
+        }
+        else if (MatchesShortcut(e, "speed_down"))
+        {
+            AdjustPlaybackRate(-0.25);
+        }
+        else if (MatchesShortcut(e, "speed_reset"))
+        {
+            SetPlaybackRate(1.0);
+        }
+        else if (MatchesShortcut(e, "next_item"))
+        {
+            NextPlaylistButton_Click(sender, new RoutedEventArgs());
+        }
+        else if (MatchesShortcut(e, "previous_item"))
+        {
+            PreviousPlaylistButton_Click(sender, new RoutedEventArgs());
+        }
+        else if (MatchesShortcut(e, "subtitle_toggle"))
+        {
+            ShowSubtitlesMenuItem.IsChecked = ShowSubtitlesMenuItem.IsChecked != true;
+        }
+        else if (MatchesShortcut(e, "translation_toggle"))
+        {
+            EnableTranslationForCurrentVideoMenuItem.IsChecked = EnableTranslationForCurrentVideoMenuItem.IsChecked != true;
+        }
+        else
+        {
+            return;
+        }
+
+        e.Handled = true;
+    }
+
+    private bool MatchesShortcut(KeyEventArgs e, string commandId)
+    {
+        if (!_appSettings.ShortcutProfile.Bindings.TryGetValue(commandId, out var gestureText) || string.IsNullOrWhiteSpace(gestureText))
+        {
+            return false;
+        }
+
+        return TryParseShortcut(gestureText, out var modifiers, out var key)
+            && Keyboard.Modifiers == modifiers
+            && e.Key == key;
+    }
+
+    private static bool TryParseShortcut(string gestureText, out ModifierKeys modifiers, out Key key)
+    {
+        modifiers = ModifierKeys.None;
+        key = Key.None;
+
+        var parts = gestureText.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var part in parts[..^1])
+        {
+            if (!Enum.TryParse<ModifierKeys>(part, true, out var modifier))
+            {
+                return false;
+            }
+
+            modifiers |= modifier;
+        }
+
+        return Enum.TryParse(parts[^1], true, out key);
+    }
+
+    private void AdjustPlaybackRate(double delta)
+    {
+        var rate = Math.Clamp((Player.PlaybackRate <= 0 ? 1.0 : Player.PlaybackRate) + delta, 0.25, 2.0);
+        SetPlaybackRate(rate);
+    }
+
+    private void ApplyPlaybackSpeedToCombo(double speed)
+    {
+        foreach (var item in PlaybackSpeedComboBox.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is string tag && double.TryParse(tag, out var itemSpeed) && Math.Abs(itemSpeed - speed) < 0.01)
+            {
+                PlaybackSpeedComboBox.SelectedItem = item;
+                return;
+            }
+        }
     }
 
     private async void OpenSubtitlesButton_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "SubRip subtitles|*.srt|All files|*.*",
+            Filter = "Subtitle files|*.srt;*.vtt;*.ass;*.ssa|SubRip subtitles|*.srt|WebVTT|*.vtt|ASS/SSA|*.ass;*.ssa|All files|*.*",
             Title = "Choose subtitles"
         };
 
@@ -226,10 +597,39 @@ public partial class MainWindow : Window
 
     private async Task LoadSubtitlesFromPathAsync(string path, bool autoLoaded)
     {
+        IReadOnlyList<SubtitleCue> cues;
+        try
+        {
+            cues = await SubtitleImportService.LoadExternalSubtitleCuesAsync(
+                path,
+                HandleFfmpegRuntimeInstallProgress,
+                message =>
+                {
+                    PlaybackStatusText.Text = message;
+                    SetOverlayStatus(message);
+                },
+                CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            PlaybackStatusText.Text = ex.Message;
+            SetOverlayStatus("Subtitle import failed.");
+            return;
+        }
+
+        await LoadSubtitleCuesAsync(
+            cues,
+            autoLoaded ? SubtitlePipelineSource.Sidecar : SubtitlePipelineSource.Manual,
+            autoLoaded
+                ? $"Loaded sidecar subtitles: {Path.GetFileName(path)}"
+                : $"Loaded subtitles: {Path.GetFileName(path)}");
+    }
+
+    private async Task LoadSubtitleCuesAsync(IReadOnlyList<SubtitleCue> cues, SubtitlePipelineSource source, string statusPrefix)
+    {
         InitializeTranslationPreferencesForNewVideo();
-        var cues = SubtitleFileService.ParseSrt(path);
         _subtitleManager.LoadCues(cues);
-        _subtitleSource = autoLoaded ? SubtitlePipelineSource.Sidecar : SubtitlePipelineSource.Manual;
+        _subtitleSource = source;
         _currentSourceLanguage = "und";
 
         _translationCts?.Cancel();
@@ -242,7 +642,7 @@ public partial class MainWindow : Window
 
         if (!_subtitleManager.HasCues)
         {
-            PlaybackStatusText.Text = $"No playable subtitle cues in {Path.GetFileName(path)}.";
+            PlaybackStatusText.Text = "No playable subtitle cues were found.";
             SetOverlayStatus("Loaded subtitle file contains no playable cues.");
             return;
         }
@@ -250,9 +650,7 @@ public partial class MainWindow : Window
         _currentSourceLanguage = ApplySourceLanguageToCues(_subtitleManager.Cues);
         ApplyAutomaticTranslationPreferenceIfNeeded();
 
-        PlaybackStatusText.Text = autoLoaded
-            ? $"Loaded sidecar subtitles: {Path.GetFileName(path)} ({_subtitleManager.CueCount} cues)."
-            : $"Loaded subtitles: {Path.GetFileName(path)} ({_subtitleManager.CueCount} cues).";
+        PlaybackStatusText.Text = $"{statusPrefix} ({_subtitleManager.CueCount} cues).";
 
         SetOverlayStatus(_isTranslationEnabledForCurrentVideo
             ? "Preparing translated subtitles..."
@@ -261,6 +659,39 @@ public partial class MainWindow : Window
         var cts = new CancellationTokenSource();
         _translationCts = cts;
         _ = TranslateAllCuesAsync(cts.Token);
+    }
+
+    private async Task LoadEmbeddedSubtitleTrackAsync(MediaTrackInfo track)
+    {
+        if (string.IsNullOrWhiteSpace(_currentVideoPath))
+        {
+            PlaybackStatusText.Text = "Open a video first.";
+            return;
+        }
+
+        CancelCaptionGeneration();
+        Player.SelectSubtitleTrack(null);
+
+        try
+        {
+            var cues = await SubtitleImportService.ExtractEmbeddedSubtitleCuesAsync(
+                _currentVideoPath,
+                track,
+                HandleFfmpegRuntimeInstallProgress,
+                message =>
+                {
+                    PlaybackStatusText.Text = message;
+                    SetOverlayStatus(message);
+                },
+                CancellationToken.None);
+
+            await LoadSubtitleCuesAsync(cues, SubtitlePipelineSource.EmbeddedTrack, $"Imported embedded subtitle track {track.Id}");
+        }
+        catch (Exception ex)
+        {
+            PlaybackStatusText.Text = ex.Message;
+            SetOverlayStatus("Embedded subtitle import failed.");
+        }
     }
 
     private async Task StartAutomaticCaptionGenerationAsync(string videoPath)
@@ -559,17 +990,476 @@ public partial class MainWindow : Window
         RefreshSubtitleOverlay();
     }
 
+    private static string GetVideoFileDialogFilter()
+    {
+        return "Video files|*.mp4;*.mkv;*.mov;*.avi;*.wmv;*.webm;*.m4v|All files|*.*";
+    }
+
+    private static readonly HashSet<string> SupportedVideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4", ".mkv", ".mov", ".avi", ".wmv", ".webm", ".m4v"
+    };
+
+    private void LoadPlaybackSettings()
+    {
+        _audioDelaySeconds = _appSettings.AudioDelaySeconds;
+        _subtitleDelaySeconds = _appSettings.SubtitleDelaySeconds;
+        _selectedAspectRatio = string.IsNullOrWhiteSpace(_appSettings.AspectRatioOverride) ? "auto" : _appSettings.AspectRatioOverride;
+        VolumeSlider.Value = 0.8;
+        ApplyPlaybackSpeedToCombo(_appSettings.DefaultPlaybackRate);
+        ApplySubtitleStyleSettings();
+        UpdateSubtitleRenderModeMenuChecks();
+        UpdateHardwareDecodingMenuChecks();
+        UpdateAspectRatioMenuChecks();
+        ApplySidePanelVisibility();
+        UpdatePanelVisibilityMenuChecks();
+    }
+
+    private void PersistPlaybackSettings()
+    {
+        _appSettings = _appSettings with
+        {
+            DefaultPlaybackRate = Player.PlaybackRate <= 0 ? 1.0 : Player.PlaybackRate,
+            AudioDelaySeconds = _audioDelaySeconds,
+            SubtitleDelaySeconds = _subtitleDelaySeconds,
+            AspectRatioOverride = _selectedAspectRatio,
+            ShowBrowserPanel = _appSettings.ShowBrowserPanel,
+            ShowPlaylistPanel = _appSettings.ShowPlaylistPanel,
+            WindowMode = GetCurrentWindowMode()
+        };
+        AppStateStore.SaveSettings(_appSettings);
+    }
+
+    private PlaybackWindowMode GetCurrentWindowMode()
+    {
+        if (Topmost && WindowStyle == WindowStyle.None && Width <= 520 && Height <= 360)
+        {
+            return PlaybackWindowMode.PictureInPicture;
+        }
+
+        if (WindowStyle == WindowStyle.None)
+        {
+            return PlaybackWindowMode.Borderless;
+        }
+
+        return PlaybackWindowMode.Standard;
+    }
+
+    private void ApplyWindowMode(PlaybackWindowMode mode, bool persist = true)
+    {
+        switch (mode)
+        {
+            case PlaybackWindowMode.PictureInPicture:
+                Topmost = true;
+                WindowStyle = WindowStyle.None;
+                ResizeMode = ResizeMode.NoResize;
+                WindowState = WindowState.Normal;
+                Width = 480;
+                Height = 270;
+                Left = SystemParameters.WorkArea.Right - Width - 24;
+                Top = SystemParameters.WorkArea.Bottom - Height - 24;
+                PiPButton.Content = "❐";
+                FullscreenButton.Content = "⛶";
+                break;
+            case PlaybackWindowMode.Borderless:
+                Topmost = false;
+                WindowStyle = WindowStyle.None;
+                ResizeMode = ResizeMode.CanResize;
+                WindowState = WindowState.Normal;
+                PiPButton.Content = "▣";
+                FullscreenButton.Content = "⛶";
+                break;
+            default:
+                Topmost = false;
+                WindowStyle = WindowStyle.SingleBorderWindow;
+                ResizeMode = ResizeMode.CanResize;
+                if (WindowState == WindowState.Maximized)
+                {
+                    WindowState = WindowState.Normal;
+                }
+
+                Width = Math.Max(Width, 960);
+                Height = Math.Max(Height, 600);
+                PiPButton.Content = "▣";
+                FullscreenButton.Content = "⛶";
+                break;
+        }
+
+        if (persist)
+        {
+            PersistPlaybackSettings();
+        }
+    }
+
+    private void AdjustSubtitleDelay(double delta)
+    {
+        _subtitleDelaySeconds += delta;
+        Player.SetSubtitleDelay(_subtitleDelaySeconds);
+        PlaybackStatusText.Text = $"Subtitle delay: {_subtitleDelaySeconds:+0.00;-0.00;0.00}s";
+        PersistPlaybackSettings();
+    }
+
+    private void ResetSubtitleDelay()
+    {
+        _subtitleDelaySeconds = 0;
+        Player.SetSubtitleDelay(_subtitleDelaySeconds);
+        PlaybackStatusText.Text = "Subtitle delay reset.";
+        PersistPlaybackSettings();
+    }
+
+    private void AdjustAudioDelay(double delta)
+    {
+        _audioDelaySeconds += delta;
+        Player.SetAudioDelay(_audioDelaySeconds);
+        PlaybackStatusText.Text = $"Audio delay: {_audioDelaySeconds:+0.00;-0.00;0.00}s";
+        PersistPlaybackSettings();
+    }
+
+    private void ResetAudioDelay()
+    {
+        _audioDelaySeconds = 0;
+        Player.SetAudioDelay(_audioDelaySeconds);
+        PlaybackStatusText.Text = "Audio delay reset.";
+        PersistPlaybackSettings();
+    }
+
+    private void SetPlaybackRate(double speed)
+    {
+        Player.SetPlaybackRate(speed);
+        ApplyPlaybackSpeedToCombo(speed);
+        _appSettings = _appSettings with { DefaultPlaybackRate = speed };
+        AppStateStore.SaveSettings(_appSettings);
+    }
+
+    private void ApplySubtitleStyleSettings()
+    {
+        if (SubtitleOverlayContainer is null)
+        {
+            return;
+        }
+
+        var style = _appSettings.SubtitleStyle;
+        SubtitleSourceText.FontSize = style.SourceFontSize;
+        SubtitleText.FontSize = style.TranslationFontSize;
+        SubtitleSourceText.Foreground = ParseBrush(style.SourceForegroundHex, "#CCDAE8");
+        SubtitleText.Foreground = ParseBrush(style.TranslationForegroundHex, "#F7FBFF");
+        SubtitleSourceText.Margin = new Thickness(0, 0, 0, style.DualSpacing);
+        SubtitleOverlayContainer.Margin = new Thickness(0, 0, 0, style.BottomMargin);
+        SubtitleOverlayContainer.Background = new SolidColorBrush(Color.FromArgb(
+            (byte)Math.Clamp(Math.Round(style.BackgroundOpacity * 255), 0, 255),
+            0x14,
+            0x1C,
+            0x25));
+    }
+
+    private void ApplySidePanelVisibility()
+    {
+        if (BrowserColumn is null || PlaylistColumn is null)
+        {
+            return;
+        }
+
+        BrowserColumn.Width = _appSettings.ShowBrowserPanel ? new GridLength(BrowserPanelWidth) : new GridLength(0);
+        PlaylistColumn.Width = _appSettings.ShowPlaylistPanel ? new GridLength(PlaylistPanelWidth) : new GridLength(0);
+        if (BrowserPanel is not null)
+        {
+            BrowserPanel.Visibility = _appSettings.ShowBrowserPanel ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (PlaylistPanel is not null)
+        {
+            PlaylistPanel.Visibility = _appSettings.ShowPlaylistPanel ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void UpdatePanelVisibilityMenuChecks()
+    {
+        if (ShowBrowserPanelMenuItem is not null)
+        {
+            ShowBrowserPanelMenuItem.IsChecked = _appSettings.ShowBrowserPanel;
+        }
+
+        if (ShowPlaylistPanelMenuItem is not null)
+        {
+            ShowPlaylistPanelMenuItem.IsChecked = _appSettings.ShowPlaylistPanel;
+        }
+    }
+
+    private static Brush ParseBrush(string? hex, string fallbackHex)
+    {
+        var converter = new BrushConverter();
+        return converter.ConvertFromString(string.IsNullOrWhiteSpace(hex) ? fallbackHex : hex) as Brush
+            ?? Brushes.White;
+    }
+
+    private void EnqueuePaths(IEnumerable<string> paths, bool playFirstNewItem)
+    {
+        var addedIndices = new List<int>();
+        foreach (var path in paths.Where(path => !string.IsNullOrWhiteSpace(path)))
+        {
+            if (Directory.Exists(path))
+            {
+                addedIndices.AddRange(AddDirectoryToPlaylist(path));
+            }
+            else if (File.Exists(path) && SupportedVideoExtensions.Contains(Path.GetExtension(path)))
+            {
+                var index = AddPlaylistItem(path);
+                if (index >= 0)
+                {
+                    addedIndices.Add(index);
+                }
+            }
+        }
+
+        if (playFirstNewItem && addedIndices.Count > 0)
+        {
+            _ = PlayPlaylistIndexAsync(addedIndices[0]);
+        }
+    }
+
+    private IEnumerable<int> AddDirectoryToPlaylist(string folderPath)
+    {
+        var added = new List<int>();
+        foreach (var file in Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
+                     .Where(file => SupportedVideoExtensions.Contains(Path.GetExtension(file)))
+                     .OrderBy(file => file, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var index = AddPlaylistItem(file);
+            if (index >= 0)
+            {
+                added.Add(index);
+            }
+        }
+
+        _currentFolderPath = folderPath;
+        RebuildLibraryTree();
+        return added;
+    }
+
+    private int AddPlaylistItem(string path)
+    {
+        if (_playlist.Any(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase)))
+        {
+            return _playlist.ToList().FindIndex(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var item = new PlaylistItem
+        {
+            Path = path,
+            DisplayName = Path.GetFileName(path)
+        };
+        _playlist.Add(item);
+        return _playlist.Count - 1;
+    }
+
+    private async Task PlayPlaylistIndexAsync(int index)
+    {
+        if (index < 0 || index >= _playlist.Count)
+        {
+            return;
+        }
+
+        _playlistIndex = index;
+        PlaylistListBox.SelectedIndex = index;
+        var item = _playlist[index];
+        await OpenVideoPathAsync(item.Path);
+    }
+
+    private async Task OpenVideoPathAsync(string path)
+    {
+        CancelBackgroundWork();
+        _currentVideoPath = path;
+        _subtitleSource = SubtitlePipelineSource.None;
+        InitializeTranslationPreferencesForNewVideo();
+
+        Player.Source = new Uri(path);
+        Player.Play();
+
+        _isPaused = false;
+        PlayPauseButton.Content = "⏸";
+        PlaybackStatusText.Text = $"Playing: {Path.GetFileName(path)}";
+
+        var hasSubtitles = await TryLoadSidecarSubtitlesAsync(path);
+        if (!hasSubtitles)
+        {
+            Player.Pause();
+            _isPaused = true;
+            PlayPauseButton.Content = "▶";
+            _ = StartAutomaticCaptionGenerationAsync(path);
+        }
+    }
+
+    private void ResumeTimer_Tick(object? sender, EventArgs e)
+    {
+        SaveResumePosition();
+    }
+
+    private void SaveResumePosition(bool forceRemoveCompleted = false)
+    {
+        if (string.IsNullOrWhiteSpace(_currentVideoPath) || !_appSettings.ResumeEnabled)
+        {
+            return;
+        }
+
+        var duration = Player.NaturalDuration.HasTimeSpan ? Player.NaturalDuration.TimeSpan : TimeSpan.Zero;
+        if (duration <= TimeSpan.FromMinutes(2))
+        {
+            return;
+        }
+
+        var position = Player.Position;
+        var completionRatio = duration.TotalSeconds <= 0 ? 0 : position.TotalSeconds / duration.TotalSeconds;
+        _resumeEntries.RemoveAll(entry => string.Equals(entry.Path, _currentVideoPath, StringComparison.OrdinalIgnoreCase));
+
+        if (forceRemoveCompleted || completionRatio >= 0.95)
+        {
+            AppStateStore.SaveResumeEntries(_resumeEntries);
+            return;
+        }
+
+        if (position < TimeSpan.FromMinutes(2))
+        {
+            AppStateStore.SaveResumeEntries(_resumeEntries);
+            return;
+        }
+
+        _resumeEntries.Add(new PlaybackResumeEntry
+        {
+            Path = _currentVideoPath!,
+            PositionSeconds = position.TotalSeconds,
+            DurationSeconds = duration.TotalSeconds,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        AppStateStore.SaveResumeEntries(_resumeEntries);
+    }
+
+    private void TryApplyResumePosition()
+    {
+        if (string.IsNullOrWhiteSpace(_currentVideoPath) || !Player.NaturalDuration.HasTimeSpan || !_appSettings.ResumeEnabled)
+        {
+            return;
+        }
+
+        var entry = _resumeEntries
+            .Where(item => string.Equals(item.Path, _currentVideoPath, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => item.UpdatedAt)
+            .FirstOrDefault();
+        if (entry is null)
+        {
+            return;
+        }
+
+        var duration = Player.NaturalDuration.TimeSpan;
+        if (entry.PositionSeconds < TimeSpan.FromMinutes(2).TotalSeconds)
+        {
+            return;
+        }
+
+        if (entry.PositionSeconds >= duration.TotalSeconds * 0.95)
+        {
+            return;
+        }
+
+        Player.Position = TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, duration.TotalSeconds));
+        UpdateTransportPosition();
+        PlaybackStatusText.Text = $"Resumed: {Path.GetFileName(_currentVideoPath)}";
+    }
+
+    private void RebuildLibraryTree()
+    {
+        if (LibraryTreeView is null)
+        {
+            return;
+        }
+
+        LibraryTreeView.Items.Clear();
+
+        var roots = new List<string>();
+        roots.AddRange(_appSettings.PinnedRoots.Where(Directory.Exists));
+        if (!string.IsNullOrWhiteSpace(_currentFolderPath) && Directory.Exists(_currentFolderPath) && !roots.Contains(_currentFolderPath, StringComparer.OrdinalIgnoreCase))
+        {
+            roots.Add(_currentFolderPath);
+        }
+
+        if (roots.Count == 0)
+        {
+            roots.AddRange(DriveInfo.GetDrives()
+                .Where(drive => drive.IsReady)
+                .Select(drive => drive.RootDirectory.FullName));
+        }
+
+        foreach (var root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            LibraryTreeView.Items.Add(CreateDirectoryNode(root, expand: string.Equals(root, _currentFolderPath, StringComparison.OrdinalIgnoreCase)));
+        }
+    }
+
+    private TreeViewItem CreateDirectoryNode(string path, bool expand = false)
+    {
+        var node = new TreeViewItem
+        {
+            Header = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : path,
+            Tag = path,
+            IsExpanded = expand,
+            Foreground = System.Windows.Media.Brushes.White
+        };
+        node.Items.Add("*");
+        node.Expanded += DirectoryNode_Expanded;
+        return node;
+    }
+
+    private void DirectoryNode_Expanded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TreeViewItem node || node.Tag is not string path || !Directory.Exists(path))
+        {
+            return;
+        }
+
+        if (node.Items.Count == 1 && Equals(node.Items[0], "*"))
+        {
+            node.Items.Clear();
+            try
+            {
+                foreach (var directory in Directory.EnumerateDirectories(path).OrderBy(item => item, StringComparer.CurrentCultureIgnoreCase))
+                {
+                    node.Items.Add(CreateDirectoryNode(directory));
+                }
+
+                foreach (var file in Directory.EnumerateFiles(path)
+                             .Where(file => SupportedVideoExtensions.Contains(Path.GetExtension(file)))
+                             .OrderBy(file => file, StringComparer.CurrentCultureIgnoreCase))
+                {
+                    node.Items.Add(new TreeViewItem
+                    {
+                        Header = Path.GetFileName(file),
+                        Tag = file,
+                        Foreground = System.Windows.Media.Brushes.White
+                    });
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+
     private void Player_MediaOpened(object sender, RoutedEventArgs e)
     {
+        Player.SetAudioDelay(_audioDelaySeconds);
+        Player.SetSubtitleDelay(_subtitleDelaySeconds);
+        Player.SetAspectRatio(_selectedAspectRatio);
         UpdateTransportDuration();
         UpdateTransportPosition();
         UpdateTransportVisibility();
+        TryApplyResumePosition();
         _subtitleTimer.Start();
+        _resumeTimer.Start();
     }
 
     private void Player_MediaEnded(object sender, RoutedEventArgs e)
     {
         _subtitleTimer.Stop();
+        _resumeTimer.Stop();
         _isPaused = true;
         PlayPauseButton.Content = "▶";
         if (Player.NaturalDuration.HasTimeSpan)
@@ -577,14 +1467,22 @@ public partial class MainWindow : Window
             Player.Position = Player.NaturalDuration.TimeSpan;
         }
 
+        SaveResumePosition(forceRemoveCompleted: true);
         UpdateTransportPosition();
         UpdateTransportVisibility();
+        if (_playlistIndex + 1 < _playlist.Count)
+        {
+            _ = PlayPlaylistIndexAsync(_playlistIndex + 1);
+        }
     }
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
         CancelBackgroundWork();
         _subtitleTimer.Stop();
+        _resumeTimer.Stop();
+        SaveResumePosition();
+        PersistPlaybackSettings();
     }
 
     private void CancelBackgroundWork()
@@ -1588,6 +2486,58 @@ public partial class MainWindow : Window
         });
     }
 
+    private void Player_RuntimeInstallProgress(RuntimeInstallProgress progress)
+    {
+        var message = progress.Stage switch
+        {
+            "downloading" => progress.ProgressRatio is double ratio
+                ? $"Downloading mpv runtime... {ratio:P0} ({FormatBytes(progress.BytesTransferred)} / {FormatBytes(progress.TotalBytes ?? 0)})."
+                : $"Downloading mpv runtime... {FormatBytes(progress.BytesTransferred)}.",
+            "extracting" => progress.ProgressRatio is double ratio
+                ? $"Extracting mpv runtime... {ratio:P0} ({progress.ItemsCompleted ?? 0} / {progress.TotalItems ?? 0})."
+                : "Extracting mpv runtime...",
+            "ready" => "mpv runtime is ready.",
+            _ => "Preparing mpv runtime..."
+        };
+
+        PlaybackStatusText.Text = message;
+        SetOverlayStatus(message);
+    }
+
+    private void HandleFfmpegRuntimeInstallProgress(RuntimeInstallProgress progress)
+    {
+        var message = progress.Stage switch
+        {
+            "downloading" => progress.ProgressRatio is double ratio
+                ? $"Downloading ffmpeg runtime... {ratio:P0} ({FormatBytes(progress.BytesTransferred)} / {FormatBytes(progress.TotalBytes ?? 0)})."
+                : $"Downloading ffmpeg runtime... {FormatBytes(progress.BytesTransferred)}.",
+            "extracting" => progress.ProgressRatio is double ratio
+                ? $"Extracting ffmpeg runtime... {ratio:P0} ({progress.ItemsCompleted ?? 0} / {progress.TotalItems ?? 0})."
+                : "Extracting ffmpeg runtime...",
+            "ready" => "ffmpeg runtime is ready.",
+            _ => "Preparing ffmpeg runtime..."
+        };
+
+        Dispatcher.Invoke(() =>
+        {
+            PlaybackStatusText.Text = message;
+            SetOverlayStatus(message);
+        });
+    }
+
+    private void Player_MediaFailed(string message)
+    {
+        PlaybackStatusText.Text = message;
+        SetOverlayStatus(message);
+    }
+
+    private void Player_TracksChanged(IReadOnlyList<MediaTrackInfo> tracks)
+    {
+        _currentTracks = tracks.ToList();
+        RebuildAudioTrackMenu();
+        RebuildEmbeddedSubtitleTrackMenu();
+    }
+
     private static string FormatSubtitleModelTransferStatus(ModelTransferProgress progress)
     {
         var modelName = progress.ModelLabel switch
@@ -1651,32 +2601,57 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (ShowSubtitlesMenuItem.IsChecked != true)
+        if (ShowSubtitlesMenuItem.IsChecked != true || _appSettings.SubtitleRenderMode == SubtitleRenderMode.Off)
         {
             SubtitleOverlayContainer.Visibility = Visibility.Collapsed;
+            SubtitleSourceText.Visibility = Visibility.Collapsed;
+            SubtitleSourceText.Text = string.Empty;
             SubtitleText.Visibility = Visibility.Collapsed;
             SubtitleText.Text = string.Empty;
             return;
         }
 
         var cue = _subtitleManager.HasCues ? _subtitleManager.GetCueAt(Player.Position) : null;
-        var text = cue?.DisplayText;
-        if (string.IsNullOrWhiteSpace(text))
+        var sourceText = cue?.SourceText?.Trim();
+        var translatedText = cue?.DisplayText?.Trim();
+        if (string.IsNullOrWhiteSpace(translatedText))
         {
-            text = _overlayStatusText;
+            translatedText = _overlayStatusText;
         }
 
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(sourceText) && string.IsNullOrWhiteSpace(translatedText))
         {
             SubtitleOverlayContainer.Visibility = Visibility.Collapsed;
+            SubtitleSourceText.Visibility = Visibility.Collapsed;
+            SubtitleSourceText.Text = string.Empty;
             SubtitleText.Visibility = Visibility.Collapsed;
             SubtitleText.Text = string.Empty;
             return;
         }
 
+        var renderMode = _appSettings.SubtitleRenderMode;
+        var showSourceLine = renderMode == SubtitleRenderMode.Dual
+            && !string.IsNullOrWhiteSpace(sourceText)
+            && !string.Equals(sourceText, translatedText, StringComparison.Ordinal);
+        var primaryText = renderMode switch
+        {
+            SubtitleRenderMode.SourceOnly => sourceText,
+            SubtitleRenderMode.TranslationOnly => translatedText,
+            SubtitleRenderMode.Dual when !string.IsNullOrWhiteSpace(translatedText) => translatedText,
+            SubtitleRenderMode.Dual => sourceText,
+            _ => translatedText
+        };
+
+        if (string.IsNullOrWhiteSpace(primaryText))
+        {
+            primaryText = sourceText;
+        }
+
         SubtitleOverlayContainer.Visibility = Visibility.Visible;
-        SubtitleText.Visibility = Visibility.Visible;
-        SubtitleText.Text = text;
+        SubtitleSourceText.Visibility = showSourceLine ? Visibility.Visible : Visibility.Collapsed;
+        SubtitleSourceText.Text = showSourceLine ? sourceText : string.Empty;
+        SubtitleText.Visibility = string.IsNullOrWhiteSpace(primaryText) ? Visibility.Collapsed : Visibility.Visible;
+        SubtitleText.Text = primaryText ?? string.Empty;
     }
 
     private void UpdateTransportVisibility()
@@ -1765,6 +2740,327 @@ public partial class MainWindow : Window
         {
             _suppressTranslationMenuEvents = false;
         }
+    }
+
+    private void UpdateSubtitleRenderModeMenuChecks()
+    {
+        if (SubtitleRenderOffMenuItem is null)
+        {
+            return;
+        }
+
+        SubtitleRenderOffMenuItem.IsChecked = _appSettings.SubtitleRenderMode == SubtitleRenderMode.Off;
+        SubtitleRenderSourceOnlyMenuItem.IsChecked = _appSettings.SubtitleRenderMode == SubtitleRenderMode.SourceOnly;
+        SubtitleRenderTranslationOnlyMenuItem.IsChecked = _appSettings.SubtitleRenderMode == SubtitleRenderMode.TranslationOnly;
+        SubtitleRenderDualMenuItem.IsChecked = _appSettings.SubtitleRenderMode == SubtitleRenderMode.Dual;
+    }
+
+    private void UpdateHardwareDecodingMenuChecks()
+    {
+        if (HardwareDecodingAutoMenuItem is null)
+        {
+            return;
+        }
+
+        HardwareDecodingAutoMenuItem.IsChecked = _appSettings.HardwareDecodingMode == HardwareDecodingMode.AutoSafe;
+        HardwareDecodingD3D11MenuItem.IsChecked = _appSettings.HardwareDecodingMode == HardwareDecodingMode.D3D11;
+        HardwareDecodingNvdecMenuItem.IsChecked = _appSettings.HardwareDecodingMode == HardwareDecodingMode.Nvdec;
+        HardwareDecodingSoftwareMenuItem.IsChecked = _appSettings.HardwareDecodingMode == HardwareDecodingMode.Software;
+    }
+
+    private void UpdateAspectRatioMenuChecks()
+    {
+        if (AspectRatioAutoMenuItem is null)
+        {
+            return;
+        }
+
+        AspectRatioAutoMenuItem.IsChecked = string.Equals(_selectedAspectRatio, "auto", StringComparison.OrdinalIgnoreCase);
+        AspectRatioWideMenuItem.IsChecked = string.Equals(_selectedAspectRatio, "16:9", StringComparison.OrdinalIgnoreCase);
+        AspectRatioClassicMenuItem.IsChecked = string.Equals(_selectedAspectRatio, "4:3", StringComparison.OrdinalIgnoreCase);
+        AspectRatioStretchMenuItem.IsChecked = string.Equals(_selectedAspectRatio, "-1", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void RebuildAudioTrackMenu()
+    {
+        if (AudioTracksMenuItem is null)
+        {
+            return;
+        }
+
+        AudioTracksMenuItem.Items.Clear();
+        var audioTracks = _currentTracks.Where(track => track.Kind == MediaTrackKind.Audio).OrderBy(track => track.Id).ToList();
+        if (audioTracks.Count == 0)
+        {
+            AudioTracksMenuItem.Items.Add(new MenuItem
+            {
+                Header = "No alternate tracks",
+                IsEnabled = false
+            });
+            return;
+        }
+
+        foreach (var track in audioTracks)
+        {
+            AudioTracksMenuItem.Items.Add(CreateTrackMenuItem(track, AudioTrackMenuItem_Click));
+        }
+    }
+
+    private void RebuildEmbeddedSubtitleTrackMenu()
+    {
+        if (EmbeddedSubtitleTracksMenuItem is null)
+        {
+            return;
+        }
+
+        EmbeddedSubtitleTracksMenuItem.Items.Clear();
+        EmbeddedSubtitleTracksMenuItem.Items.Add(new MenuItem
+        {
+            Header = "Off",
+            IsCheckable = true,
+            IsChecked = !_currentTracks.Any(track => track.Kind == MediaTrackKind.Subtitle && track.IsSelected),
+            Tag = "off"
+        });
+
+        ((MenuItem)EmbeddedSubtitleTracksMenuItem.Items[0]).Click += EmbeddedSubtitleTrackMenuItem_Click;
+
+        var subtitleTracks = _currentTracks.Where(track => track.Kind == MediaTrackKind.Subtitle).OrderBy(track => track.Id).ToList();
+        if (subtitleTracks.Count == 0)
+        {
+            EmbeddedSubtitleTracksMenuItem.Items.Add(new Separator());
+            EmbeddedSubtitleTracksMenuItem.Items.Add(new MenuItem
+            {
+                Header = "No embedded subtitle tracks",
+                IsEnabled = false
+            });
+            return;
+        }
+
+        EmbeddedSubtitleTracksMenuItem.Items.Add(new Separator());
+        foreach (var track in subtitleTracks)
+        {
+            EmbeddedSubtitleTracksMenuItem.Items.Add(CreateTrackMenuItem(track, EmbeddedSubtitleTrackMenuItem_Click));
+        }
+    }
+
+    private MenuItem CreateTrackMenuItem(MediaTrackInfo track, RoutedEventHandler clickHandler)
+    {
+        var label = string.IsNullOrWhiteSpace(track.Title)
+            ? $"{track.Language.ToUpperInvariant()} · Track {track.Id}"
+            : $"{track.Title} ({track.Language.ToUpperInvariant()})";
+
+        if (track.Kind == MediaTrackKind.Subtitle && !track.IsTextBased)
+        {
+            label += " · image-based";
+        }
+
+        var item = new MenuItem
+        {
+            Header = label,
+            Tag = track.Id,
+            IsCheckable = true,
+            IsChecked = track.IsSelected,
+            ToolTip = track.Codec
+        };
+        item.Click += clickHandler;
+        return item;
+    }
+
+    private void AudioTrackMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: int trackId } item)
+        {
+            return;
+        }
+
+        Player.SelectAudioTrack(trackId);
+        PlaybackStatusText.Text = $"Selected audio track: {item.Header}.";
+    }
+
+    private async void EmbeddedSubtitleTrackMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem item)
+        {
+            return;
+        }
+
+        if (item.Tag is string offValue && offValue == "off")
+        {
+            Player.SelectSubtitleTrack(null);
+            PlaybackStatusText.Text = "Embedded subtitle track disabled.";
+            return;
+        }
+
+        if (item.Tag is int trackId)
+        {
+            var track = _currentTracks.FirstOrDefault(candidate => candidate.Kind == MediaTrackKind.Subtitle && candidate.Id == trackId);
+            if (track is null)
+            {
+                return;
+            }
+
+            if (track.IsTextBased)
+            {
+                await LoadEmbeddedSubtitleTrackAsync(track);
+                return;
+            }
+
+            Player.SelectSubtitleTrack(trackId);
+            PlaybackStatusText.Text = "Selected image-based embedded subtitle track for direct playback.";
+        }
+    }
+
+    private void SubtitleRenderModeMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string modeTag })
+        {
+            return;
+        }
+
+        _appSettings = _appSettings with
+        {
+            SubtitleRenderMode = modeTag switch
+            {
+                "off" => SubtitleRenderMode.Off,
+                "source" => SubtitleRenderMode.SourceOnly,
+                "dual" => SubtitleRenderMode.Dual,
+                _ => SubtitleRenderMode.TranslationOnly
+            }
+        };
+
+        AppStateStore.SaveSettings(_appSettings);
+        UpdateSubtitleRenderModeMenuChecks();
+        RefreshSubtitleOverlay();
+    }
+
+    private void HardwareDecodingMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string hwTag })
+        {
+            return;
+        }
+
+        _appSettings = _appSettings with
+        {
+            HardwareDecodingMode = hwTag switch
+            {
+                "d3d11" => HardwareDecodingMode.D3D11,
+                "nvdec" => HardwareDecodingMode.Nvdec,
+                "software" => HardwareDecodingMode.Software,
+                _ => HardwareDecodingMode.AutoSafe
+            }
+        };
+
+        Player.SetHardwareDecodingMode(_appSettings.HardwareDecodingMode);
+        AppStateStore.SaveSettings(_appSettings);
+        UpdateHardwareDecodingMenuChecks();
+        PlaybackStatusText.Text = $"Hardware decoding: {hwTag}.";
+    }
+
+    private void AspectRatioMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string aspectRatio })
+        {
+            return;
+        }
+
+        _selectedAspectRatio = aspectRatio;
+        Player.SetAspectRatio(aspectRatio);
+        UpdateAspectRatioMenuChecks();
+        PersistPlaybackSettings();
+        PlaybackStatusText.Text = $"Aspect ratio: {(aspectRatio == "-1" ? "fill" : aspectRatio)}.";
+    }
+
+    private void SubtitleDelayBackMenuItem_Click(object sender, RoutedEventArgs e) => AdjustSubtitleDelay(-0.05);
+    private void SubtitleDelayForwardMenuItem_Click(object sender, RoutedEventArgs e) => AdjustSubtitleDelay(0.05);
+    private void ResetSubtitleDelayMenuItem_Click(object sender, RoutedEventArgs e) => ResetSubtitleDelay();
+    private void AudioDelayBackMenuItem_Click(object sender, RoutedEventArgs e) => AdjustAudioDelay(-0.05);
+    private void AudioDelayForwardMenuItem_Click(object sender, RoutedEventArgs e) => AdjustAudioDelay(0.05);
+    private void ResetAudioDelayMenuItem_Click(object sender, RoutedEventArgs e) => ResetAudioDelay();
+    private void BorderlessWindowMenuItem_Click(object sender, RoutedEventArgs e) => ApplyWindowMode(PlaybackWindowMode.Borderless);
+    private void PictureInPictureMenuItem_Click(object sender, RoutedEventArgs e) => ApplyWindowMode(PlaybackWindowMode.PictureInPicture);
+    private void FullscreenMenuItem_Click(object sender, RoutedEventArgs e) => FullscreenButton_Click(sender, e);
+    private void IncreaseSubtitleFontMenuItem_Click(object sender, RoutedEventArgs e) => UpdateSubtitleStyle(style => style with
+    {
+        SourceFontSize = Math.Min(style.SourceFontSize + 2, 44),
+        TranslationFontSize = Math.Min(style.TranslationFontSize + 2, 48)
+    });
+    private void DecreaseSubtitleFontMenuItem_Click(object sender, RoutedEventArgs e) => UpdateSubtitleStyle(style => style with
+    {
+        SourceFontSize = Math.Max(style.SourceFontSize - 2, 18),
+        TranslationFontSize = Math.Max(style.TranslationFontSize - 2, 20)
+    });
+    private void IncreaseSubtitleBackgroundMenuItem_Click(object sender, RoutedEventArgs e) => UpdateSubtitleStyle(style => style with
+    {
+        BackgroundOpacity = Math.Min(style.BackgroundOpacity + 0.08, 0.95)
+    });
+    private void DecreaseSubtitleBackgroundMenuItem_Click(object sender, RoutedEventArgs e) => UpdateSubtitleStyle(style => style with
+    {
+        BackgroundOpacity = Math.Max(style.BackgroundOpacity - 0.08, 0.15)
+    });
+    private void RaiseSubtitlesMenuItem_Click(object sender, RoutedEventArgs e) => UpdateSubtitleStyle(style => style with
+    {
+        BottomMargin = Math.Min(style.BottomMargin + 10, 80)
+    });
+    private void LowerSubtitlesMenuItem_Click(object sender, RoutedEventArgs e) => UpdateSubtitleStyle(style => style with
+    {
+        BottomMargin = Math.Max(style.BottomMargin - 10, 0)
+    });
+    private void ShowBrowserPanelMenuItem_Click(object sender, RoutedEventArgs e) => SetBrowserPanelVisibility(ShowBrowserPanelMenuItem.IsChecked == true);
+    private void ShowPlaylistPanelMenuItem_Click(object sender, RoutedEventArgs e) => SetPlaylistPanelVisibility(ShowPlaylistPanelMenuItem.IsChecked == true);
+
+    private void TranslationColorMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string hex })
+        {
+            return;
+        }
+
+        UpdateSubtitleStyle(style => style with { TranslationForegroundHex = hex });
+    }
+
+    private void EditShortcutsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var editor = new ShortcutEditorWindow(_appSettings.ShortcutProfile)
+        {
+            Owner = this
+        };
+
+        if (editor.ShowDialog() != true || editor.ResultProfile is null)
+        {
+            return;
+        }
+
+        _appSettings = _appSettings with { ShortcutProfile = editor.ResultProfile };
+        AppStateStore.SaveSettings(_appSettings);
+        PlaybackStatusText.Text = "Shortcut bindings updated.";
+    }
+
+    private void UpdateSubtitleStyle(Func<SubtitleStyleSettings, SubtitleStyleSettings> updater)
+    {
+        _appSettings = _appSettings with
+        {
+            SubtitleStyle = updater(_appSettings.SubtitleStyle)
+        };
+        AppStateStore.SaveSettings(_appSettings);
+        ApplySubtitleStyleSettings();
+        RefreshSubtitleOverlay();
+    }
+
+    private void SetBrowserPanelVisibility(bool isVisible)
+    {
+        _appSettings = _appSettings with { ShowBrowserPanel = isVisible };
+        ApplySidePanelVisibility();
+        UpdatePanelVisibilityMenuChecks();
+        AppStateStore.SaveSettings(_appSettings);
+    }
+
+    private void SetPlaylistPanelVisibility(bool isVisible)
+    {
+        _appSettings = _appSettings with { ShowPlaylistPanel = isVisible };
+        ApplySidePanelVisibility();
+        UpdatePanelVisibilityMenuChecks();
+        AppStateStore.SaveSettings(_appSettings);
     }
 
     private TranscriptionModelSelection GetSelectedTranscriptionModel()
@@ -2178,6 +3474,7 @@ internal enum SubtitlePipelineSource
     None,
     Sidecar,
     Manual,
+    EmbeddedTrack,
     Generated
 }
 

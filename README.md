@@ -1,6 +1,6 @@
-# PlayerApp
+# BabelPlayer
 
-PlayerApp is a Windows desktop video player for local files that can:
+BabelPlayer is a Windows desktop video player for local files that can:
 
 - play video locally
 - load existing `.srt` subtitles
@@ -28,13 +28,13 @@ What works today:
 
 ## Architecture
 
-- `src/PlayerApp.UI`
+- `src/BabelPlayer.UI`
   - WPF desktop UI
   - video playback
   - subtitle overlay
   - transcription and translation menu state
   - transport controls
-- `src/PlayerApp.Core`
+- `src/BabelPlayer.Core`
   - subtitle parsing and export
   - local/cloud transcription
   - local/cloud translation
@@ -214,8 +214,8 @@ NuGet packages currently include:
 From the repository root:
 
 ```powershell
-dotnet build PlayerApp.sln
-dotnet run --project src/PlayerApp.UI
+dotnet build BabelPlayer.sln
+dotnet run --project src/BabelPlayer.UI
 ```
 
 If the app is already running, stop it before rebuilding or the executable may be locked.

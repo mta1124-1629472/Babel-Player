@@ -3,9 +3,9 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 
-namespace PlayerApp.UI;
+namespace BabelPlayer.UI;
 
-internal sealed class RuntimeInstallProgress
+public sealed class RuntimeInstallProgress
 {
     public string Stage { get; init; } = string.Empty;
     public long BytesTransferred { get; init; }

@@ -1,12 +1,12 @@
 using Whisper.net.Ggml;
 
-namespace PlayerApp.Core
+namespace BabelPlayer.Core
 {
     public static class ModelManager
     {
         private static readonly string ModelsRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PlayerApp",
+            "BabelPlayer",
             "models");
 
         public static Task<string> EnsureModelForLanguageAsync(string languageCode)

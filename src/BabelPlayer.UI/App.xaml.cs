@@ -1,8 +1,8 @@
-﻿using System.Configuration;
+using System.Configuration;
 using System.Data;
 using System.Windows;
 
-namespace PlayerApp.UI;
+namespace BabelPlayer.UI;
 
 /// <summary>
 /// Interaction logic for App.xaml

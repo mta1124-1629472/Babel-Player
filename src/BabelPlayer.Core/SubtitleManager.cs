@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace PlayerApp.Core;
+namespace BabelPlayer.Core;
 
 public class SubtitleManager
 {
