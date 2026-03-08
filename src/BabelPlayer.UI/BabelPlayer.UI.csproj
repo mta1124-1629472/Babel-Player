@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -9,7 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PlayerApp.Core\PlayerApp.Core.csproj" />
+    <ProjectReference Include="..\BabelPlayer.Core\BabelPlayer.Core.csproj" />
+    <PackageReference Include="SharpCompress" Version="0.40.0" />
   </ItemGroup>
 
 </Project>

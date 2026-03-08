@@ -1,7 +1,7 @@
 using System.Management;
 using System.Runtime.InteropServices;
 
-namespace PlayerApp.Core;
+namespace BabelPlayer.Core;
 
 public static class HardwareDetector
 {

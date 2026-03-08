@@ -2,13 +2,13 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace PlayerApp.UI;
+namespace BabelPlayer.UI;
 
 internal static class SecureSettingsStore
 {
     private static readonly string SettingsDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "PlayerApp");
+        "BabelPlayer");
 
     private static readonly string OpenAiApiKeyPath = Path.Combine(SettingsDirectory, "openai-api-key.bin");
     private static readonly string GoogleTranslateApiKeyPath = Path.Combine(SettingsDirectory, "google-translate-api-key.bin");

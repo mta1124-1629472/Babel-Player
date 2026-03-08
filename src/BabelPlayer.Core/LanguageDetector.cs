@@ -1,4 +1,4 @@
-namespace PlayerApp.Core;
+namespace BabelPlayer.Core;
 
 public static class LanguageDetector
 {

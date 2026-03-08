@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
-namespace PlayerApp.UI;
+namespace BabelPlayer.UI;
 
 internal enum LlamaCppBootstrapChoice
 {
@@ -36,7 +36,7 @@ internal sealed class LlamaCppBootstrapWindow : Window
 
         var intro = new TextBlock
         {
-            Text = "HY-MT local translation needs llama-server.exe. You can let PlayerApp install the official runtime automatically, point to an existing copy, or open the official release page.",
+            Text = "HY-MT local translation needs llama-server.exe. You can let BabelPlayer install the official runtime automatically, point to an existing copy, or open the official release page.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 14),
             FontSize = 13
