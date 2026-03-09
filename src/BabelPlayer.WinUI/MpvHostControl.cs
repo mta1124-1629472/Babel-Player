@@ -1,38 +1,57 @@
-using BabelPlayer.Core;
 using System.Runtime.InteropServices;
-using System.Windows;
-using System.Windows.Interop;
+using BabelPlayer.Core;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using WinRT.Interop;
+using Windows.Foundation;
 
-namespace BabelPlayer.UI;
+namespace BabelPlayer.WinUI;
 
-public sealed class MpvPlayerControl : HwndHost
+public sealed class MpvHostControl : UserControl
 {
+    private readonly Grid _root;
     private readonly MpvPlaybackEngine _engine = new();
     private readonly CancellationTokenSource _disposeCts = new();
     private PlaybackStateSnapshot _snapshot = new();
+    private Window? _ownerWindow;
     private Uri? _source;
-    private double _volume = 0.8;
     private string? _pendingPath;
+    private double _volume = 0.8;
     private bool _initialized;
     private IntPtr _hwnd;
 
-    public event RoutedEventHandler? MediaOpened;
-    public event RoutedEventHandler? MediaEnded;
+    public MpvHostControl()
+    {
+        _root = new Grid();
+        Content = _root;
+
+        Loaded += MpvHostControl_Loaded;
+        Unloaded += MpvHostControl_Unloaded;
+        SizeChanged += MpvHostControl_SizeChanged;
+        LayoutUpdated += MpvHostControl_LayoutUpdated;
+        IsTabStop = false;
+
+        _engine.OnStateChanged += snapshot => _snapshot = snapshot;
+        _engine.OnMediaOpened += () => DispatcherQueue.TryEnqueue(() => MediaOpened?.Invoke());
+        _engine.OnMediaEnded += () => DispatcherQueue.TryEnqueue(() => MediaEnded?.Invoke());
+        _engine.OnMediaFailed += message => DispatcherQueue.TryEnqueue(() => MediaFailed?.Invoke(message));
+        _engine.OnTracksChanged += tracks => DispatcherQueue.TryEnqueue(() => TracksChanged?.Invoke(tracks));
+        _engine.OnRuntimeInstallProgress += progress => DispatcherQueue.TryEnqueue(() => RuntimeInstallProgress?.Invoke(progress));
+    }
+
+    public event Action? MediaOpened;
+    public event Action? MediaEnded;
     public event Action<string>? MediaFailed;
     public event Action<IReadOnlyList<MediaTrackInfo>>? TracksChanged;
     public event Action<RuntimeInstallProgress>? RuntimeInstallProgress;
 
-    public MpvPlayerControl()
+    public void Initialize(Window ownerWindow)
     {
-        _engine.OnStateChanged += snapshot =>
+        _ownerWindow = ownerWindow;
+        if (IsLoaded)
         {
-            _snapshot = snapshot;
-        };
-        _engine.OnMediaOpened += () => Dispatcher.Invoke(() => MediaOpened?.Invoke(this, new RoutedEventArgs()));
-        _engine.OnMediaEnded += () => Dispatcher.Invoke(() => MediaEnded?.Invoke(this, new RoutedEventArgs()));
-        _engine.OnMediaFailed += message => Dispatcher.Invoke(() => MediaFailed?.Invoke(message));
-        _engine.OnTracksChanged += tracks => Dispatcher.Invoke(() => TracksChanged?.Invoke(tracks));
-        _engine.OnRuntimeInstallProgress += progress => Dispatcher.Invoke(() => RuntimeInstallProgress?.Invoke(progress));
+            EnsureInitialized();
+        }
     }
 
     public Uri? Source
@@ -61,8 +80,6 @@ public sealed class MpvPlayerControl : HwndHost
         }
     }
 
-    public Duration NaturalDuration => _snapshot.Duration > TimeSpan.Zero ? new Duration(_snapshot.Duration) : Duration.Automatic;
-
     public double Volume
     {
         get => _snapshot.Volume > 0 ? _snapshot.Volume : _volume;
@@ -76,6 +93,7 @@ public sealed class MpvPlayerControl : HwndHost
         }
     }
 
+    public Duration NaturalDuration => _snapshot.Duration > TimeSpan.Zero ? new Duration(_snapshot.Duration) : Duration.Automatic;
     public double PlaybackRate => _snapshot.Speed;
     public bool IsMuted => _snapshot.IsMuted;
     public bool IsPaused => _snapshot.IsPaused;
@@ -95,6 +113,7 @@ public sealed class MpvPlayerControl : HwndHost
     public void SetAudioDelay(double seconds) => _ = _engine.SetAudioDelayAsync(seconds, _disposeCts.Token);
     public void SetSubtitleDelay(double seconds) => _ = _engine.SetSubtitleDelayAsync(seconds, _disposeCts.Token);
     public void SetAspectRatio(string aspectRatio) => _ = _engine.SetAspectRatioAsync(aspectRatio, _disposeCts.Token);
+
     public void SetHardwareDecodingMode(HardwareDecodingMode mode)
     {
         HardwareDecodingMode = mode;
@@ -108,9 +127,33 @@ public sealed class MpvPlayerControl : HwndHost
     public void SetPan(double x, double y) => _ = _engine.SetPanAsync(x, y, _disposeCts.Token);
     public void Screenshot(string outputPath) => _ = _engine.ScreenshotAsync(outputPath, _disposeCts.Token);
 
-    protected override HandleRef BuildWindowCore(HandleRef hwndParent)
+    private void MpvHostControl_Loaded(object sender, RoutedEventArgs e) => EnsureInitialized();
+
+    private void MpvHostControl_Unloaded(object sender, RoutedEventArgs e)
     {
-        var hwnd = NativeMethods.CreateWindowEx(
+        _disposeCts.Cancel();
+        _ = _engine.DisposeAsync();
+        DestroyHostWindow();
+    }
+
+    private void MpvHostControl_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateHostBounds();
+
+    private void MpvHostControl_LayoutUpdated(object? sender, object e) => UpdateHostBounds();
+
+    private void EnsureInitialized()
+    {
+        if (_initialized || _ownerWindow is null)
+        {
+            return;
+        }
+
+        var parentHwnd = WindowNative.GetWindowHandle(_ownerWindow);
+        if (parentHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _hwnd = NativeMethods.CreateWindowEx(
             0,
             "static",
             string.Empty,
@@ -119,24 +162,26 @@ public sealed class MpvPlayerControl : HwndHost
             0,
             Math.Max((int)ActualWidth, 1),
             Math.Max((int)ActualHeight, 1),
-            hwndParent.Handle,
+            parentHwnd,
             IntPtr.Zero,
             IntPtr.Zero,
             IntPtr.Zero);
 
-        if (hwnd == IntPtr.Zero)
+        if (_hwnd == IntPtr.Zero)
         {
-            throw new InvalidOperationException("Unable to create the native video host window.");
+            MediaFailed?.Invoke("Unable to create the native WinUI video host window.");
+            return;
         }
 
-        _hwnd = hwnd;
         _initialized = true;
-        _ = _engine.InitializeAsync(hwnd, HardwareDecodingMode, _disposeCts.Token)
+        UpdateHostBounds();
+
+        _ = _engine.InitializeAsync(_hwnd, HardwareDecodingMode, _disposeCts.Token)
             .ContinueWith(async task =>
             {
                 if (task.IsFaulted)
                 {
-                    Dispatcher.Invoke(() => MediaFailed?.Invoke(task.Exception?.GetBaseException().Message ?? "mpv initialization failed."));
+                    DispatcherQueue.TryEnqueue(() => MediaFailed?.Invoke(task.Exception?.GetBaseException().Message ?? "mpv initialization failed."));
                     return;
                 }
 
@@ -147,25 +192,35 @@ public sealed class MpvPlayerControl : HwndHost
                 }
             }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default)
             .Unwrap();
-
-        return new HandleRef(this, hwnd);
     }
 
-    protected override void DestroyWindowCore(HandleRef hwnd)
+    private void UpdateHostBounds()
     {
-        _disposeCts.Cancel();
-        _ = _engine.DisposeAsync();
-        NativeMethods.DestroyWindow(hwnd.Handle);
-        _hwnd = IntPtr.Zero;
-    }
-
-    protected override void OnWindowPositionChanged(Rect rcBoundingBox)
-    {
-        base.OnWindowPositionChanged(rcBoundingBox);
-        if (_hwnd != IntPtr.Zero)
+        if (_hwnd == IntPtr.Zero || XamlRoot?.Content is not UIElement rootContent || ActualWidth <= 0 || ActualHeight <= 0)
         {
-            NativeMethods.MoveWindow(_hwnd, 0, 0, Math.Max((int)rcBoundingBox.Width, 1), Math.Max((int)rcBoundingBox.Height, 1), true);
+            return;
         }
+
+        var transform = TransformToVisual(rootContent);
+        Point origin = transform.TransformPoint(new Point(0, 0));
+        NativeMethods.MoveWindow(
+            _hwnd,
+            Math.Max((int)Math.Round(origin.X), 0),
+            Math.Max((int)Math.Round(origin.Y), 0),
+            Math.Max((int)Math.Round(ActualWidth), 1),
+            Math.Max((int)Math.Round(ActualHeight), 1),
+            true);
+    }
+
+    private void DestroyHostWindow()
+    {
+        if (_hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        NativeMethods.DestroyWindow(_hwnd);
+        _hwnd = IntPtr.Zero;
     }
 
     private static class NativeMethods
