@@ -2,6 +2,7 @@ using BabelPlayer.App;
 using BabelPlayer.Core;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Windows.Graphics;
 using WinRT.Interop;
 
 namespace BabelPlayer.WinUI;
@@ -10,7 +11,7 @@ public sealed class WinUIWindowModeService : IWindowModeService
 {
     private readonly AppWindow _appWindow;
     private PlaybackWindowMode _mode = PlaybackWindowMode.Standard;
-    private PlaybackWindowMode _lastWindowedMode = PlaybackWindowMode.Standard;
+    private RectInt32? _standardBounds;
 
     public WinUIWindowModeService(Window window)
     {
@@ -28,43 +29,70 @@ public sealed class WinUIWindowModeService : IWindowModeService
         switch (mode)
         {
             case PlaybackWindowMode.Standard:
-                _appWindow.SetPresenter(AppWindowPresenterKind.Default);
+                _appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+                if (_appWindow.Presenter is OverlappedPresenter standardPresenter)
+                {
+                    standardPresenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: true);
+                    standardPresenter.IsResizable = true;
+                    standardPresenter.IsMaximizable = true;
+                    standardPresenter.IsMinimizable = true;
+                }
+
+                if (_standardBounds.HasValue)
+                {
+                    _appWindow.MoveAndResize(_standardBounds.Value);
+                }
+
                 break;
             case PlaybackWindowMode.Borderless:
+                CaptureStandardBounds();
                 _appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
                 if (_appWindow.Presenter is OverlappedPresenter overlappedPresenter)
                 {
                     overlappedPresenter.SetBorderAndTitleBar(hasBorder: false, hasTitleBar: false);
-                    overlappedPresenter.IsResizable = true;
-                    overlappedPresenter.IsMaximizable = true;
+                    overlappedPresenter.IsResizable = false;
+                    overlappedPresenter.IsMaximizable = false;
                     overlappedPresenter.IsMinimizable = true;
                 }
 
+                var displayArea = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
+                _appWindow.MoveAndResize(displayArea.WorkArea);
                 break;
             case PlaybackWindowMode.PictureInPicture:
+                CaptureStandardBounds();
                 _appWindow.SetPresenter(AppWindowPresenterKind.CompactOverlay);
+                break;
+            case PlaybackWindowMode.Fullscreen:
+                CaptureStandardBounds();
+                _appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
                 break;
         }
 
         _mode = mode;
-        if (mode is PlaybackWindowMode.Standard or PlaybackWindowMode.Borderless or PlaybackWindowMode.PictureInPicture)
-        {
-            _lastWindowedMode = mode;
-        }
-
         return Task.CompletedTask;
     }
 
     public Task EnterFullscreenAsync(CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        _appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-        return Task.CompletedTask;
+        return SetModeAsync(PlaybackWindowMode.Fullscreen, cancellationToken);
     }
 
     public Task ExitFullscreenAsync(CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        return SetModeAsync(_lastWindowedMode, cancellationToken);
+        return SetModeAsync(PlaybackWindowMode.Standard, cancellationToken);
+    }
+
+    private void CaptureStandardBounds()
+    {
+        if (_mode != PlaybackWindowMode.Standard)
+        {
+            return;
+        }
+
+        _standardBounds = new RectInt32(
+            _appWindow.Position.X,
+            _appWindow.Position.Y,
+            _appWindow.Size.Width,
+            _appWindow.Size.Height);
     }
 }
