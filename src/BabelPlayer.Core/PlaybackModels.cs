@@ -29,7 +29,8 @@ public enum PlaybackWindowMode
 {
     Standard,
     Borderless,
-    PictureInPicture
+    PictureInPicture,
+    Fullscreen
 }
 
 public sealed class MediaTrackInfo

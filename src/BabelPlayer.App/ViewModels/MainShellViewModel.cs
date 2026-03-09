@@ -11,6 +11,12 @@ public sealed class MainShellViewModel : ObservableObject
     private bool _isDarkTheme = true;
     private string _activeHardwareDecoder = string.Empty;
     private AppPlayerSettings _settings = new();
+    private string _selectedTranscriptionLabel = SubtitleWorkflowCatalog.GetTranscriptionModel(SubtitleWorkflowCatalog.DefaultTranscriptionModelKey).DisplayName;
+    private string _selectedTranslationLabel = SubtitleWorkflowCatalog.GetTranslationModel(null).DisplayName;
+    private bool _isTranslationEnabled;
+    private bool _isAutoTranslateEnabled;
+    private SubtitlePipelineSource _subtitleSource;
+    private bool _isCaptionGenerationInProgress;
 
     public BrowserPaneViewModel Browser { get; } = new();
     public PlaylistViewModel Playlist { get; } = new();
@@ -53,5 +59,41 @@ public sealed class MainShellViewModel : ObservableObject
     {
         get => _settings;
         set => SetProperty(ref _settings, value);
+    }
+
+    public string SelectedTranscriptionLabel
+    {
+        get => _selectedTranscriptionLabel;
+        set => SetProperty(ref _selectedTranscriptionLabel, value);
+    }
+
+    public string SelectedTranslationLabel
+    {
+        get => _selectedTranslationLabel;
+        set => SetProperty(ref _selectedTranslationLabel, value);
+    }
+
+    public bool IsTranslationEnabled
+    {
+        get => _isTranslationEnabled;
+        set => SetProperty(ref _isTranslationEnabled, value);
+    }
+
+    public bool IsAutoTranslateEnabled
+    {
+        get => _isAutoTranslateEnabled;
+        set => SetProperty(ref _isAutoTranslateEnabled, value);
+    }
+
+    public SubtitlePipelineSource SubtitleSource
+    {
+        get => _subtitleSource;
+        set => SetProperty(ref _subtitleSource, value);
+    }
+
+    public bool IsCaptionGenerationInProgress
+    {
+        get => _isCaptionGenerationInProgress;
+        set => SetProperty(ref _isCaptionGenerationInProgress, value);
     }
 }

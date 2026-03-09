@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Babel Player Home Mock</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08131f;
+      --bg-accent: #10263b;
+      --panel: rgba(9, 22, 35, 0.82);
+      --panel-strong: rgba(10, 26, 41, 0.94);
+      --line: rgba(188, 215, 236, 0.15);
+      --line-strong: rgba(188, 215, 236, 0.28);
+      --text: #ecf6ff;
+      --muted: #9cb6cc;
+      --soft: #6d8ba5;
+      --accent: #8ef0c9;
+      --accent-strong: #c9ff6a;
+      --warning: #ffd58a;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 18px;
+      --radius-sm: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(94, 164, 255, 0.25), transparent 28%),
+        radial-gradient(circle at top right, rgba(142, 240, 201, 0.14), transparent 20%),
+        linear-gradient(180deg, #09131f 0%, #07111c 30%, #061019 100%);
+      overflow: hidden;
+    }
+
+    .stage {
+      width: 100%;
+      min-height: 100vh;
+      padding: 28px;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+
+    .shell {
+      width: min(1520px, 100%);
+      min-height: calc(100vh - 56px);
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 320px;
+      grid-template-rows: 74px minmax(0, 1fr) 132px;
+      gap: 18px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 34px;
+      background: linear-gradient(180deg, rgba(13, 27, 42, 0.92), rgba(7, 17, 29, 0.96));
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.05), transparent 24%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 22%);
+      pointer-events: none;
+    }
+
+    .titlebar,
+    .left-pane,
+    .main-pane,
+    .right-pane,
+    .transport {
+      position: relative;
+      z-index: 1;
+    }
+
+    .titlebar {
+      grid-column: 1 / 4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px 10px 18px;
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #c9ff6a, #70d7ff 72%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+
+    .brand-copy h1,
+    .brand-copy p,
+    .status p,
+    .status strong,
+    .section-title h2,
+    .section-title p,
+    .queue-item h3,
+    .queue-item p,
+    .meta-card h3,
+    .meta-card p,
+    .subtitle-chip,
+    .transport p,
+    .transport strong,
+    .transport small {
+      margin: 0;
+    }
+
+    .brand-copy h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .brand-copy p,
+    .section-title p,
+    .queue-item p,
+    .meta-card p,
+    .transport small,
+    .status p {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .title-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .command-pill,
+    .ghost-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 42px;
+      padding: 0 16px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 14px;
+    }
+
+    .command-pill.primary {
+      background: linear-gradient(135deg, rgba(142, 240, 201, 0.2), rgba(201, 255, 106, 0.13));
+      border-color: rgba(201, 255, 106, 0.35);
+    }
+
+    .left-pane,
+    .right-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 18px;
+      border-radius: var(--radius-xl);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(20px);
+    }
+
+    .left-pane {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .right-pane {
+      grid-column: 3;
+      grid-row: 2;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .section-title h2 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .tree,
+    .queue,
+    .meta-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .tree-item,
+    .queue-item,
+    .meta-card {
+      border-radius: var(--radius-md);
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .tree-item {
+      padding: 14px 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .tree-item.active {
+      color: var(--text);
+      border-color: rgba(142, 240, 201, 0.3);
+      background: linear-gradient(135deg, rgba(142, 240, 201, 0.15), rgba(112, 215, 255, 0.06));
+    }
+
+    .tree-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .main-pane {
+      grid-column: 2;
+      grid-row: 2;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 16px;
+    }
+
+    .hero {
+      position: relative;
+      border-radius: 30px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(6, 16, 25, 0.06), rgba(6, 16, 25, 0.8)),
+        radial-gradient(circle at center, rgba(112, 215, 255, 0.18), transparent 42%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1600' height='900' viewBox='0 0 1600 900'%3E%3Crect width='1600' height='900' fill='%23050d16'/%3E%3Ccircle cx='1220' cy='170' r='160' fill='%23152d42'/%3E%3Ccircle cx='320' cy='180' r='210' fill='%2310243a'/%3E%3Cpath d='M0 520C160 450 260 460 400 540C520 610 630 620 770 550C940 465 1090 430 1240 470C1380 505 1490 580 1600 640V900H0Z' fill='%230a1725'/%3E%3Cpath d='M0 680C180 610 300 620 430 690C580 770 720 770 890 690C1040 620 1180 620 1310 680C1410 725 1510 780 1600 820V900H0Z' fill='%230d2236'/%3E%3C/svg%3E");
+      background-size: cover;
+      min-height: 0;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, transparent 0%, rgba(6, 16, 25, 0.12) 55%, rgba(6, 16, 25, 0.78) 100%);
+    }
+
+    .hero-top,
+    .hero-bottom {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      z-index: 1;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .hero-top {
+      top: 22px;
+      align-items: start;
+    }
+
+    .hero-bottom {
+      bottom: 26px;
+      align-items: end;
+    }
+
+    .status,
+    .overlay-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(6, 16, 25, 0.54);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(18px);
+    }
+
+    .status strong,
+    .overlay-card strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .headline {
+      max-width: 480px;
+    }
+
+    .headline h2 {
+      margin: 0 0 10px;
+      font-size: 40px;
+      line-height: 1.04;
+      letter-spacing: -0.03em;
+    }
+
+    .headline p {
+      margin: 0;
+      color: #d5e8f7;
+      line-height: 1.5;
+      font-size: 15px;
+    }
+
+    .subtitles {
+      align-self: center;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: min(560px, 100%);
+      margin: 0 auto 28px;
+      position: absolute;
+      left: 50%;
+      bottom: 102px;
+      transform: translateX(-50%);
+      z-index: 1;
+    }
+
+    .subtitle-chip {
+      padding: 14px 18px;
+      border-radius: 18px;
+      text-align: center;
+      font-size: 18px;
+      line-height: 1.35;
+      background: rgba(5, 13, 22, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.28);
+    }
+
+    .subtitle-chip.translation {
+      color: #d9ff9c;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .meta-card {
+      padding: 16px;
+      min-height: 102px;
+      border-color: var(--line);
+      background: var(--panel-strong);
+    }
+
+    .meta-card h3 {
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .meta-card strong {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+
+    .queue-item {
+      padding: 14px 14px 14px 16px;
+      border: 1px solid var(--line);
+    }
+
+    .queue-item.current {
+      border-color: rgba(201, 255, 106, 0.34);
+      background: linear-gradient(135deg, rgba(201, 255, 106, 0.11), rgba(112, 215, 255, 0.06));
+    }
+
+    .queue-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .queue-item h3 {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .tag {
+      color: var(--warning);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .transport {
+      grid-column: 1 / 4;
+      grid-row: 3;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 320px;
+      gap: 18px;
+      padding: 18px;
+      border-radius: var(--radius-xl);
+      background: rgba(7, 18, 28, 0.88);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(24px);
+    }
+
+    .transport-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .transport-group.center {
+      flex-direction: column;
+      justify-content: center;
+      align-items: stretch;
+      gap: 14px;
+    }
+
+    .control {
+      width: 42px;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      font-size: 15px;
+    }
+
+    .control.primary {
+      width: 52px;
+      height: 52px;
+      background: linear-gradient(135deg, rgba(142, 240, 201, 0.26), rgba(201, 255, 106, 0.16));
+      border-color: rgba(201, 255, 106, 0.34);
+    }
+
+    .track {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .track span {
+      display: block;
+      width: 41%;
+      height: 100%;
+      background: linear-gradient(90deg, #70d7ff, #c9ff6a);
+    }
+
+    .transport-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .transport strong {
+      font-size: 14px;
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .panel-switch {
+      display: none;
+      position: absolute;
+      right: 26px;
+      top: 92px;
+      z-index: 2;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 999px;
+      background: rgba(5, 13, 22, 0.74);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(18px);
+    }
+
+    .panel-switch span {
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .panel-switch .active {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    @media (max-width: 1220px) {
+      .shell {
+        grid-template-columns: 240px minmax(0, 1fr) 280px;
+      }
+
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      body {
+        overflow: auto;
+      }
+
+      .stage {
+        padding: 18px;
+      }
+
+      .shell {
+        min-height: 980px;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: 74px auto auto 132px;
+      }
+
+      .titlebar,
+      .main-pane,
+      .transport {
+        grid-column: 1;
+      }
+
+      .left-pane,
+      .right-pane {
+        display: none;
+      }
+
+      .main-pane {
+        grid-row: 2;
+      }
+
+      .transport {
+        grid-row: 4;
+        grid-template-columns: 1fr;
+      }
+
+      .panel-switch {
+        display: flex;
+      }
+    }
+  </style>
+  <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+</head>
+<body>
+  <div class="stage">
+    <div class="shell">
+      <header class="titlebar">
+        <div class="brand">
+          <div class="brand-mark"></div>
+          <div class="brand-copy">
+            <h1>Babel Player</h1>
+            <p>Local-first video, captions, and translation workflows</p>
+          </div>
+        </div>
+        <div class="title-actions">
+          <div class="ghost-pill">Runtime status: Ready</div>
+          <div class="command-pill">Import subtitles</div>
+          <div class="command-pill primary">Open media</div>
+        </div>
+      </header>
+
+      <aside class="left-pane">
+        <div class="section-title">
+          <div>
+            <h2>Library</h2>
+            <p>Source folders and recent videos</p>
+          </div>
+          <div class="ghost-pill">Browse</div>
+        </div>
+        <div class="tree">
+          <div class="tree-item active">
+            <span class="tree-label">Pinned folder</span>
+            Japanese Lessons / Episode Pack
+          </div>
+          <div class="tree-item">
+            <span class="tree-label">Recently opened</span>
+            Midnight Train to Osaka.mp4
+          </div>
+          <div class="tree-item">
+            <span class="tree-label">Needs captions</span>
+            Documentary rough cuts
+          </div>
+          <div class="tree-item">
+            <span class="tree-label">Embedded subtitles</span>
+            Festival interview archive
+          </div>
+          <div class="tree-item">
+            <span class="tree-label">Cloud translation ready</span>
+            Travel vlog batch
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-pane">
+        <section class="hero">
+          <div class="hero-top">
+            <div class="status">
+              <strong>Now playing</strong>
+              <p>Midnight Train to Osaka · 00:41:13 / 01:56:22</p>
+            </div>
+            <div class="overlay-card">
+              <strong>Subtitle pipeline</strong>
+              <p>Dual render · Local captions · OpenAI translation</p>
+            </div>
+          </div>
+
+          <div class="headline hero-bottom">
+            <div>
+              <h2>Translation-first playback without leaving your library.</h2>
+              <p>Babel Player keeps subtitle generation, translation, track selection, and runtime setup in one desktop workflow.</p>
+            </div>
+          </div>
+
+          <div class="subtitles">
+            <div class="subtitle-chip">Shinkansen wa mou sugu kyoto ni touchaku shimasu.</div>
+            <div class="subtitle-chip translation">The bullet train will arrive in Kyoto very soon.</div>
+          </div>
+        </section>
+
+        <section class="meta-grid">
+          <div class="meta-card">
+            <h3>Transcription</h3>
+            <strong>Cloud: GPT-4o Transcribe</strong>
+            <p>Fallbacks to local Whisper when needed.</p>
+          </div>
+          <div class="meta-card">
+            <h3>Translation</h3>
+            <strong>OpenAI GPT-5 Mini</strong>
+            <p>Target language locked to English for this session.</p>
+          </div>
+          <div class="meta-card">
+            <h3>Session state</h3>
+            <strong>Resume available</strong>
+            <p>Panels, subtitle style, and playback defaults persisted.</p>
+          </div>
+        </section>
+      </main>
+
+      <aside class="right-pane">
+        <div class="section-title">
+          <div>
+            <h2>Playlist</h2>
+            <p>Current queue and next-up media</p>
+          </div>
+          <div class="ghost-pill">Auto-advance</div>
+        </div>
+        <div class="queue">
+          <div class="queue-item current">
+            <div class="queue-header">
+              <h3>Midnight Train to Osaka</h3>
+              <span class="tag">Current</span>
+            </div>
+            <p>Dual subtitles active · 1h 56m</p>
+          </div>
+          <div class="queue-item">
+            <div class="queue-header">
+              <h3>Street Interview Compilation</h3>
+              <span class="tag">Embedded subs</span>
+            </div>
+            <p>Text subtitle extraction available</p>
+          </div>
+          <div class="queue-item">
+            <div class="queue-header">
+              <h3>Language Practice Reel</h3>
+              <span class="tag">Needs captions</span>
+            </div>
+            <p>Cloud transcription selected for first pass</p>
+          </div>
+          <div class="queue-item">
+            <div class="queue-header">
+              <h3>Travel Notes Cut</h3>
+              <span class="tag">Translated</span>
+            </div>
+            <p>English export ready</p>
+          </div>
+        </div>
+      </aside>
+
+      <div class="panel-switch">
+        <span class="active">Library</span>
+        <span>Playlist</span>
+      </div>
+
+      <footer class="transport">
+        <div class="transport-group">
+          <div>
+            <strong>Midnight Train to Osaka</strong>
+            <small>JP audio · EN dual subtitles · Resume synced</small>
+          </div>
+        </div>
+
+        <div class="transport-group center">
+          <div class="transport-group" style="justify-content: center;">
+            <div class="control">|&lt;</div>
+            <div class="control">&lt;&lt;</div>
+            <div class="control primary">&#9654;</div>
+            <div class="control">&gt;&gt;</div>
+            <div class="control">&gt;|</div>
+          </div>
+          <div class="track"><span></span></div>
+          <div class="transport-row">
+            <span>00:41:13</span>
+            <span>Speed 1.0x · HW decode on · Dual mode</span>
+            <span>01:56:22</span>
+          </div>
+        </div>
+
+        <div class="transport-group" style="justify-content: flex-end;">
+          <div>
+            <strong>Window mode</strong>
+            <small>Standard · Borderless · PiP · Fullscreen</small>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

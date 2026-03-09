@@ -19,6 +19,12 @@ public interface ICredentialStore
     void ClearTranslationModelKey();
     bool GetAutoTranslateEnabled();
     void SaveAutoTranslateEnabled(bool enabled);
+    string? GetLlamaCppServerPath();
+    void SaveLlamaCppServerPath(string path);
+    string? GetLlamaCppRuntimeVersion();
+    void SaveLlamaCppRuntimeVersion(string version);
+    string? GetLlamaCppRuntimeSource();
+    void SaveLlamaCppRuntimeSource(string source);
 }
 
 public sealed class SecureCredentialStore : ICredentialStore
@@ -40,6 +46,12 @@ public sealed class SecureCredentialStore : ICredentialStore
     public void ClearTranslationModelKey() => SecureSettingsStore.ClearTranslationModelKey();
     public bool GetAutoTranslateEnabled() => SecureSettingsStore.GetAutoTranslateEnabled();
     public void SaveAutoTranslateEnabled(bool enabled) => SecureSettingsStore.SaveAutoTranslateEnabled(enabled);
+    public string? GetLlamaCppServerPath() => SecureSettingsStore.GetLlamaCppServerPath();
+    public void SaveLlamaCppServerPath(string path) => SecureSettingsStore.SaveLlamaCppServerPath(path);
+    public string? GetLlamaCppRuntimeVersion() => SecureSettingsStore.GetLlamaCppRuntimeVersion();
+    public void SaveLlamaCppRuntimeVersion(string version) => SecureSettingsStore.SaveLlamaCppRuntimeVersion(version);
+    public string? GetLlamaCppRuntimeSource() => SecureSettingsStore.GetLlamaCppRuntimeSource();
+    public void SaveLlamaCppRuntimeSource(string source) => SecureSettingsStore.SaveLlamaCppRuntimeSource(source);
 }
 
 public sealed class CredentialFacade
@@ -80,4 +92,13 @@ public sealed class CredentialFacade
 
     public bool GetAutoTranslateEnabled() => _store.GetAutoTranslateEnabled();
     public void SaveAutoTranslateEnabled(bool enabled) => _store.SaveAutoTranslateEnabled(enabled);
+
+    public string? GetLlamaCppServerPath() => _store.GetLlamaCppServerPath();
+    public void SaveLlamaCppServerPath(string path) => _store.SaveLlamaCppServerPath(path);
+
+    public string? GetLlamaCppRuntimeVersion() => _store.GetLlamaCppRuntimeVersion();
+    public void SaveLlamaCppRuntimeVersion(string version) => _store.SaveLlamaCppRuntimeVersion(version);
+
+    public string? GetLlamaCppRuntimeSource() => _store.GetLlamaCppRuntimeSource();
+    public void SaveLlamaCppRuntimeSource(string source) => _store.SaveLlamaCppRuntimeSource(source);
 }
