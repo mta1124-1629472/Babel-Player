@@ -2,9 +2,9 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 
-namespace BabelPlayer.UI;
+namespace BabelPlayer.App;
 
-internal static class FfmpegRuntimeInstaller
+public static class FfmpegRuntimeInstaller
 {
     public const string RuntimeVersion = "essentials-2026";
     public const string RuntimeSource = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";

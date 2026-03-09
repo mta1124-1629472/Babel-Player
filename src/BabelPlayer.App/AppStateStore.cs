@@ -2,9 +2,9 @@ using System.IO;
 using System.Text.Json;
 using BabelPlayer.Core;
 
-namespace BabelPlayer.UI;
+namespace BabelPlayer.App;
 
-internal static class AppStateStore
+public static class AppStateStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

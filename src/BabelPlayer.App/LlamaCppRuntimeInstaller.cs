@@ -3,7 +3,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 
-namespace BabelPlayer.UI;
+namespace BabelPlayer.App;
 
 public sealed class RuntimeInstallProgress
 {
@@ -21,7 +21,7 @@ public sealed class RuntimeInstallProgress
                 : null;
 }
 
-internal static class LlamaCppRuntimeInstaller
+public static class LlamaCppRuntimeInstaller
 {
     public const string RuntimeVersion = "b8234";
     public const string RuntimeSource = "auto";

@@ -2,9 +2,9 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace BabelPlayer.UI;
+namespace BabelPlayer.App;
 
-internal static class SecureSettingsStore
+public static class SecureSettingsStore
 {
     private static readonly string SettingsDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

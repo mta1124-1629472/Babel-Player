@@ -3,9 +3,9 @@ using SharpCompress.Archives;
 using SharpCompress.Common;
 using System.Net.Http;
 
-namespace BabelPlayer.UI;
+namespace BabelPlayer.App;
 
-internal static class MpvRuntimeInstaller
+public static class MpvRuntimeInstaller
 {
     public const string RuntimeVersion = "0.41.0";
     public const string RuntimeSource = "https://sourceforge.net/projects/mpv-player-windows/files/release/mpv-0.41.0-x86_64-v3.7z/download";

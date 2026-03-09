@@ -4,9 +4,9 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace BabelPlayer.UI;
+namespace BabelPlayer.App;
 
-internal static class SubtitleImportService
+public static class SubtitleImportService
 {
     public static async Task<IReadOnlyList<SubtitleCue>> LoadExternalSubtitleCuesAsync(
         string path,
