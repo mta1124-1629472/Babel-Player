@@ -6,9 +6,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>..\Assets\BabelPlayer.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="..\Assets\BabelPlayer.ico" Link="BabelPlayer.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <ProjectReference Include="..\BabelPlayer.App\BabelPlayer.App.csproj" />
     <ProjectReference Include="..\BabelPlayer.Core\BabelPlayer.Core.csproj" />
     <PackageReference Include="SharpCompress" Version="0.40.0" />

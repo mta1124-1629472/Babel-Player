@@ -73,20 +73,28 @@ public sealed record SubtitleWorkflowSnapshot
     public IReadOnlyList<SubtitleCue> Cues { get; init; } = [];
 }
 
+public sealed record SubtitleOverlayPresentation
+{
+    public bool IsVisible { get; init; }
+    public string PrimaryText { get; init; } = string.Empty;
+    public string SecondaryText { get; init; } = string.Empty;
+}
+
 public static class SubtitleWorkflowCatalog
 {
-    public const string DefaultTranscriptionModelKey = "local:base";
+    public const string DefaultTranscriptionModelKey = "local:tiny";
 
     public static TranscriptionModelSelection GetTranscriptionModel(string? modelKey)
     {
         return modelKey switch
         {
             "local:tiny" => new TranscriptionModelSelection("local:tiny", "Local Tiny.en", TranscriptionProvider.Local, GgmlType.TinyEn, null),
+            "local:base" => new TranscriptionModelSelection("local:base", "Local Base.en", TranscriptionProvider.Local, GgmlType.BaseEn, null),
             "local:small" => new TranscriptionModelSelection("local:small", "Local Small.en", TranscriptionProvider.Local, GgmlType.SmallEn, null),
             "cloud:gpt-4o-mini-transcribe" => new TranscriptionModelSelection("cloud:gpt-4o-mini-transcribe", "Cloud GPT-4o Mini Transcribe", TranscriptionProvider.Cloud, null, "gpt-4o-mini-transcribe"),
             "cloud:gpt-4o-transcribe" => new TranscriptionModelSelection("cloud:gpt-4o-transcribe", "Cloud GPT-4o Transcribe", TranscriptionProvider.Cloud, null, "gpt-4o-transcribe"),
             "cloud:whisper-1" => new TranscriptionModelSelection("cloud:whisper-1", "Cloud Whisper-1", TranscriptionProvider.Cloud, null, "whisper-1"),
-            _ => new TranscriptionModelSelection(DefaultTranscriptionModelKey, "Local Base.en", TranscriptionProvider.Local, GgmlType.BaseEn, null)
+            _ => new TranscriptionModelSelection(DefaultTranscriptionModelKey, "Local Tiny.en", TranscriptionProvider.Local, GgmlType.TinyEn, null)
         };
     }
 

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using Whisper.net.Ggml;
 
 namespace BabelPlayer.App.Tests;
 
@@ -44,6 +45,18 @@ public sealed class AppLayerTests
         Assert.Contains(conflicts[0].ExistingAction, new[] { "play_pause", "pip" });
         Assert.Contains(conflicts[0].ConflictingAction, new[] { "play_pause", "pip" });
         Assert.NotEqual(conflicts[0].ExistingAction, conflicts[0].ConflictingAction);
+    }
+
+    [Fact]
+    public void ShortcutService_SupportedActionsCoverDefaultShortcutProfile()
+    {
+        var defaultProfile = ShortcutProfile.CreateDefault();
+        var supportedActionIds = ShortcutService.SupportedActions
+            .Select(action => action.CommandId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(supportedActionIds.Count, ShortcutService.SupportedActions.Count);
+        Assert.All(defaultProfile.Bindings.Keys, commandId => Assert.Contains(commandId, supportedActionIds));
     }
 
     [Fact]
@@ -104,6 +117,8 @@ public sealed class AppLayerTests
         Assert.Equal(HardwareDecodingMode.D3D11, settings!.HardwareDecodingMode);
         Assert.Equal(SubtitleRenderMode.Dual, settings.SubtitleRenderMode);
         Assert.Single(settings.PinnedRoots);
+        Assert.Equal(0.8, settings.VolumeLevel);
+        Assert.False(settings.IsMuted);
         Assert.Equal(PlaybackWindowMode.PictureInPicture, settings.WindowMode);
 
         Assert.NotNull(resumeEntries);
@@ -140,7 +155,7 @@ public sealed class AppLayerTests
 
         await controller.InitializeAsync();
 
-        Assert.Equal("local:base", controller.Snapshot.SelectedTranscriptionModelKey);
+        Assert.Equal("local:tiny", controller.Snapshot.SelectedTranscriptionModelKey);
     }
 
     [Fact]
@@ -325,6 +340,148 @@ Hola
             Assert.False(result.UsedGeneratedCaptions);
             Assert.Equal(SubtitlePipelineSource.Sidecar, controller.Snapshot.SubtitleSource);
             Assert.Single(controller.Snapshot.Cues);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_BuildsSourceOverlayForEnglishCueWhenTranslationIsOff()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hello there
+""");
+
+            var controller = new SubtitleWorkflowController(
+                new CredentialFacade(new FakeCredentialStore()),
+                environmentVariableReader: _ => null);
+
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+
+            var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.Dual);
+
+            Assert.True(presentation.IsVisible);
+            Assert.Equal("Hello there", presentation.PrimaryText);
+            Assert.Equal(string.Empty, presentation.SecondaryText);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_BuildsDualOverlayWhenTranslatedCueDiffersFromSource()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hola
+""");
+
+            var controller = new SubtitleWorkflowController(
+                new CredentialFacade(new FakeCredentialStore()),
+                environmentVariableReader: _ => null);
+
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            controller.CurrentCues[0].TranslatedText = "Hello";
+            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+
+            var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.Dual);
+
+            Assert.True(presentation.IsVisible);
+            Assert.Equal("Hello", presentation.PrimaryText);
+            Assert.Equal("Hola", presentation.SecondaryText);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_ChangingTranscriptionModelPreservesTranslationEnabledState()
+    {
+        var store = new FakeCredentialStore();
+        store.SaveDeepLApiKey("configured");
+        var controller = new SubtitleWorkflowController(
+            new CredentialFacade(store),
+            environmentVariableReader: _ => null,
+            validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
+
+        await controller.InitializeAsync();
+        await controller.SelectTranslationModelAsync("cloud:deepl");
+        await controller.SetTranslationEnabledAsync(true);
+        await controller.SelectTranscriptionModelAsync("local:small");
+
+        Assert.True(controller.Snapshot.IsTranslationEnabled);
+        Assert.Equal("cloud:deepl", controller.Snapshot.SelectedTranslationModelKey);
+        Assert.Equal("local:small", controller.Snapshot.SelectedTranscriptionModelKey);
+    }
+
+    [Fact]
+    public void SubtitleWorkflowCatalog_ResolvesBaseModelSeparatelyFromTiny()
+    {
+        var baseModel = SubtitleWorkflowCatalog.GetTranscriptionModel("local:base");
+        var tinyModel = SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny");
+
+        Assert.Equal("local:base", baseModel.Key);
+        Assert.Equal("Local Base.en", baseModel.DisplayName);
+        Assert.NotEqual(baseModel.Key, tinyModel.Key);
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_ReusesGeneratedCaptionCachePerTranscriptionModel()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            File.WriteAllText(videoPath, string.Empty);
+            var transcribeCalls = 0;
+            var controller = new SubtitleWorkflowController(
+                new CredentialFacade(new FakeCredentialStore()),
+                environmentVariableReader: _ => null,
+                transcribeVideoAsync: (path, options, _, _, _) =>
+                {
+                    transcribeCalls++;
+                    IReadOnlyList<SubtitleCue> cues =
+                    [
+                        new SubtitleCue
+                        {
+                            Start = TimeSpan.Zero,
+                            End = TimeSpan.FromSeconds(1),
+                            SourceText = options.LocalModelType == GgmlType.SmallEn ? "small model cue" : "tiny model cue",
+                            SourceLanguage = "en"
+                        }
+                    ];
+
+                    return Task.FromResult(cues);
+                });
+
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            await controller.SelectTranscriptionModelAsync("local:small");
+            await controller.SelectTranscriptionModelAsync("local:tiny");
+
+            Assert.Equal(2, transcribeCalls);
+            Assert.Equal("tiny model cue", controller.Snapshot.Cues[0].SourceText);
         }
         finally
         {

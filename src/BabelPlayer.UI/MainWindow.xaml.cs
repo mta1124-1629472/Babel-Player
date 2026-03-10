@@ -17,7 +17,7 @@ namespace BabelPlayer.UI;
 public partial class MainWindow : Window
 {
     private const string DefaultLocalSpeechCulture = "en-US";
-    private const string DefaultSubtitleModelKey = "local:base";
+private const string DefaultSubtitleModelKey = "local:tiny";
     private const double BrowserPanelWidth = 260;
     private const double PlaylistPanelWidth = 280;
     private readonly SubtitleManager _subtitleManager = new();
@@ -1005,7 +1005,10 @@ public partial class MainWindow : Window
         _audioDelaySeconds = _appSettings.AudioDelaySeconds;
         _subtitleDelaySeconds = _appSettings.SubtitleDelaySeconds;
         _selectedAspectRatio = string.IsNullOrWhiteSpace(_appSettings.AspectRatioOverride) ? "auto" : _appSettings.AspectRatioOverride;
-        VolumeSlider.Value = 0.8;
+        VolumeSlider.Value = Math.Clamp(_appSettings.VolumeLevel, 0, 1);
+        _isMuted = _appSettings.IsMuted;
+        Player.SetMute(_isMuted);
+        MuteButton.Content = _isMuted ? "🔇" : "🔊";
         ApplyPlaybackSpeedToCombo(_appSettings.DefaultPlaybackRate);
         ApplySubtitleStyleSettings();
         UpdateSubtitleRenderModeMenuChecks();
@@ -1019,6 +1022,8 @@ public partial class MainWindow : Window
     {
         _appSettings = _appSettings with
         {
+            VolumeLevel = Math.Clamp(VolumeSlider.Value, 0, 1),
+            IsMuted = _isMuted,
             DefaultPlaybackRate = Player.PlaybackRate <= 0 ? 1.0 : Player.PlaybackRate,
             AudioDelaySeconds = _audioDelaySeconds,
             SubtitleDelaySeconds = _subtitleDelaySeconds,
@@ -3086,7 +3091,7 @@ public partial class MainWindow : Window
             "cloud:gpt-4o-mini-transcribe" => new TranscriptionModelSelection(modelKey, "cloud GPT-4o Mini Transcribe", TranscriptionProvider.Cloud, null, "gpt-4o-mini-transcribe"),
             "cloud:gpt-4o-transcribe" => new TranscriptionModelSelection(modelKey, "cloud GPT-4o Transcribe", TranscriptionProvider.Cloud, null, "gpt-4o-transcribe"),
             "cloud:whisper-1" => new TranscriptionModelSelection(modelKey, "cloud Whisper-1", TranscriptionProvider.Cloud, null, "whisper-1"),
-            _ => new TranscriptionModelSelection(DefaultSubtitleModelKey, "local Base.en", TranscriptionProvider.Local, Whisper.net.Ggml.GgmlType.BaseEn, null)
+            _ => new TranscriptionModelSelection(DefaultSubtitleModelKey, "local Tiny.en", TranscriptionProvider.Local, Whisper.net.Ggml.GgmlType.TinyEn, null)
         };
     }
 

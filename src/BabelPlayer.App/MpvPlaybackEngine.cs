@@ -108,9 +108,26 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         await ObservePropertyAsync("aid", cancellationToken);
         await ObservePropertyAsync("sid", cancellationToken);
         await ObservePropertyAsync("hwdec-current", cancellationToken);
+        await ObservePropertyAsync("video-params", cancellationToken);
+        await ObservePropertyAsync("video-out-params", cancellationToken);
     }
 
-    public Task LoadAsync(string path, CancellationToken cancellationToken) => SendCommandAsync(cancellationToken, "loadfile", path, "replace");
+    public Task LoadAsync(string path, CancellationToken cancellationToken)
+    {
+        Snapshot = Snapshot with
+        {
+            Path = path,
+            Position = TimeSpan.Zero,
+            Duration = TimeSpan.Zero,
+            VideoWidth = 0,
+            VideoHeight = 0,
+            VideoDisplayWidth = 0,
+            VideoDisplayHeight = 0,
+            HasVideo = false
+        };
+        OnStateChanged?.Invoke(Snapshot);
+        return SendCommandAsync(cancellationToken, "loadfile", path, "replace");
+    }
     public Task PlayAsync(CancellationToken cancellationToken) => SetPropertyAsync("pause", false, cancellationToken);
     public Task PauseAsync(CancellationToken cancellationToken) => SetPropertyAsync("pause", true, cancellationToken);
     public Task StopAsync(CancellationToken cancellationToken) => SendCommandAsync(cancellationToken, "stop");
@@ -318,6 +335,17 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             case "hwdec-current":
                 snapshot = snapshot with { ActiveHardwareDecoder = data.ValueKind == JsonValueKind.String ? data.GetString() ?? string.Empty : string.Empty };
                 break;
+            case "video-params":
+            case "video-out-params":
+                snapshot = snapshot with
+                {
+                    VideoWidth = ReadIntProperty(data, "w"),
+                    VideoHeight = ReadIntProperty(data, "h"),
+                    VideoDisplayWidth = ReadIntProperty(data, "dw", "w"),
+                    VideoDisplayHeight = ReadIntProperty(data, "dh", "h"),
+                    HasVideo = ReadIntProperty(data, "w") > 0 && ReadIntProperty(data, "h") > 0
+                };
+                break;
             case "aid":
                 _selectedAudioTrackId = data.ValueKind == JsonValueKind.Number ? data.GetInt32() : null;
                 UpdateTrackSelection();
@@ -437,6 +465,29 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         return data.ValueKind is JsonValueKind.Number
             ? TimeSpan.FromSeconds(data.GetDouble())
             : TimeSpan.Zero;
+    }
+
+    private static int ReadIntProperty(JsonElement data, params string[] propertyNames)
+    {
+        if (data.ValueKind != JsonValueKind.Object)
+        {
+            return 0;
+        }
+
+        foreach (var propertyName in propertyNames)
+        {
+            if (!data.TryGetProperty(propertyName, out var value))
+            {
+                continue;
+            }
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var result))
+            {
+                return result;
+            }
+        }
+
+        return 0;
     }
 
     private static string MapHardwareDecodingMode(HardwareDecodingMode mode)
