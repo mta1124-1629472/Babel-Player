@@ -84,7 +84,23 @@ public class SubtitleManager
     {
         lock (_sync)
         {
-            return _cues.FirstOrDefault(c => position >= c.Start && position <= c.End);
+            SubtitleCue? activeCue = null;
+            foreach (var cue in _cues)
+            {
+                if (position < cue.Start || position > cue.End)
+                {
+                    continue;
+                }
+
+                if (activeCue is null
+                    || cue.Start > activeCue.Start
+                    || (cue.Start == activeCue.Start && cue.End > activeCue.End))
+                {
+                    activeCue = cue;
+                }
+            }
+
+            return activeCue;
         }
     }
 

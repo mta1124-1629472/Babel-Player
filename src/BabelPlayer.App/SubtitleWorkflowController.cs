@@ -1357,6 +1357,24 @@ public sealed class SubtitleWorkflowController
                     ? "Updating generated subtitle translation."
                     : "Showing source-language subtitles for the current video.");
             ResetCurrentTranslations();
+            if (_isCaptionGenerationInProgress)
+            {
+                PublishSnapshot();
+                await Task.CompletedTask;
+                return;
+            }
+
+            if (_subtitleManager.HasCues)
+            {
+                var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                _translationCts?.Cancel();
+                _translationCts?.Dispose();
+                _translationCts = cts;
+                _ = TranslateAllCuesAsync(cts.Token);
+                PublishSnapshot();
+                return;
+            }
+
             PublishSnapshot();
             await Task.CompletedTask;
             return;
