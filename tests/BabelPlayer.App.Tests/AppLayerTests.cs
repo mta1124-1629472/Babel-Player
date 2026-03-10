@@ -485,6 +485,16 @@ Second sentence
     }
 
     [Fact]
+    public void SubtitleWorkflowCatalog_ExposesMultilingualLocalTranscriptionModels()
+    {
+        var model = SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny-multilingual");
+
+        Assert.Equal("local:tiny-multilingual", model.Key);
+        Assert.Equal("Local Tiny (multilingual)", model.DisplayName);
+        Assert.Equal(GgmlType.Tiny, model.LocalModelType);
+    }
+
+    [Fact]
     public async Task SubtitleWorkflowController_ReusesGeneratedCaptionCachePerTranscriptionModel()
     {
         var directory = Directory.CreateTempSubdirectory();

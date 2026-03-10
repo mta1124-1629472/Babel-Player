@@ -827,6 +827,9 @@ public sealed partial class MainWindow : Window
                      SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny"),
                      SubtitleWorkflowCatalog.GetTranscriptionModel("local:base"),
                      SubtitleWorkflowCatalog.GetTranscriptionModel("local:small"),
+                     SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny-multilingual"),
+                     SubtitleWorkflowCatalog.GetTranscriptionModel("local:base-multilingual"),
+                     SubtitleWorkflowCatalog.GetTranscriptionModel("local:small-multilingual"),
                      SubtitleWorkflowCatalog.GetTranscriptionModel("cloud:gpt-4o-mini-transcribe"),
                      SubtitleWorkflowCatalog.GetTranscriptionModel("cloud:gpt-4o-transcribe"),
                      SubtitleWorkflowCatalog.GetTranscriptionModel("cloud:whisper-1")
