@@ -742,14 +742,14 @@ public sealed partial class MainWindow : Window
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        for (var index = 0; index < 9; index++)
+        for (var index = 0; index < 11; index++)
         {
             grid.ColumnDefinitions.Add(new ColumnDefinition
             {
                 Width = index switch
                 {
-                    5 => new GridLength(1, GridUnitType.Star),
-                    7 => new GridLength(150),
+                    7 => new GridLength(1, GridUnitType.Star),
+                    9 => new GridLength(150),
                     _ => GridLength.Auto
                 }
             });
@@ -769,34 +769,44 @@ public sealed partial class MainWindow : Window
         Grid.SetColumn(PlayPauseButton, 2);
         grid.Children.Add(PlayPauseButton);
 
+        var previousFrameButton = new Button { Content = new FontIcon { Glyph = "\uE100" } };
+        previousFrameButton.Click += PreviousFrame_Click;
+        Grid.SetColumn(previousFrameButton, 3);
+        grid.Children.Add(previousFrameButton);
+
+        var nextFrameButton = new Button { Content = new FontIcon { Glyph = "\uE101" } };
+        nextFrameButton.Click += NextFrame_Click;
+        Grid.SetColumn(nextFrameButton, 4);
+        grid.Children.Add(nextFrameButton);
+
         var forwardButton = new Button { Content = new FontIcon { Glyph = "\uE893" } };
         forwardButton.Click += SeekForward_Click;
-        Grid.SetColumn(forwardButton, 3);
+        Grid.SetColumn(forwardButton, 5);
         grid.Children.Add(forwardButton);
 
         var nextButton = new Button { Content = new FontIcon { Glyph = "\uE893" } };
         nextButton.Click += NextTrack_Click;
-        Grid.SetColumn(nextButton, 4);
+        Grid.SetColumn(nextButton, 6);
         grid.Children.Add(nextButton);
 
         PositionSlider = new Slider { Minimum = 0, Maximum = 1 };
         PositionSlider.ValueChanged += PositionSlider_ValueChanged;
         AttachScrubberHandlers(PositionSlider);
-        Grid.SetColumn(PositionSlider, 5);
+        Grid.SetColumn(PositionSlider, 7);
         grid.Children.Add(PositionSlider);
 
         TimeTextBlock = new TextBlock { Text = "00:00 / 00:00", VerticalAlignment = VerticalAlignment.Center };
-        Grid.SetColumn(TimeTextBlock, 6);
+        Grid.SetColumn(TimeTextBlock, 8);
         grid.Children.Add(TimeTextBlock);
 
         VolumeSlider = new Slider { Minimum = 0, Maximum = 1, Value = 0.8 };
         VolumeSlider.ValueChanged += VolumeSlider_ValueChanged;
-        Grid.SetColumn(VolumeSlider, 7);
+        Grid.SetColumn(VolumeSlider, 9);
         grid.Children.Add(VolumeSlider);
 
         MuteToggleButton = new ToggleButton { Content = new FontIcon { Glyph = "\uE767" } };
         MuteToggleButton.Click += MuteToggleButton_Click;
-        Grid.SetColumn(MuteToggleButton, 8);
+        Grid.SetColumn(MuteToggleButton, 10);
         grid.Children.Add(MuteToggleButton);
 
         SpeedComboBox = new ComboBox { Header = "Speed" };
@@ -1237,6 +1247,22 @@ public sealed partial class MainWindow : Window
 
         PlayerHost.Pause();
         ShowStatus("Playback paused.");
+    }
+
+    private void PreviousFrame_Click(object sender, RoutedEventArgs e)
+    {
+        RegisterFullscreenOverlayInteraction();
+        PlayerHost.StepFrame(forward: false);
+        ViewModel.Transport.IsPaused = true;
+        ShowStatus("Stepped to previous frame.");
+    }
+
+    private void NextFrame_Click(object sender, RoutedEventArgs e)
+    {
+        RegisterFullscreenOverlayInteraction();
+        PlayerHost.StepFrame(forward: true);
+        ViewModel.Transport.IsPaused = true;
+        ShowStatus("Stepped to next frame.");
     }
 
     private void PositionSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
