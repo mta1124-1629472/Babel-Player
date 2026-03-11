@@ -28,13 +28,15 @@ jobs:
       - name: Publish WinUI app
         run: dotnet publish src/BabelPlayer.WinUI/BabelPlayer.WinUI.csproj --configuration Release --runtime win-x64 --self-contained false
 
-      - name: Package release archive
+      - name: Package portable archive
         shell: pwsh
         run: |
           $publishDir = "src/BabelPlayer.WinUI/bin/Release/net8.0-windows10.0.22621.0/win-x64/publish"
-          $version = if ("${{ github.ref }}".StartsWith("refs/tags/")) { "${{ github.ref_name }}" } else { "${{ github.sha }}" }
+          $rawVersion = if ("${{ github.ref }}".StartsWith("refs/tags/")) { "${{ github.ref_name }}" } else { "${{ github.sha }}" }
+          $releaseVersion = if ($rawVersion.StartsWith("v")) { $rawVersion.Substring(1) } else { $rawVersion }
           $archiveDir = "artifacts"
-          $archivePath = Join-Path $archiveDir "BabelPlayer-WinUI-$version-win-x64.zip"
+          $archivePath = Join-Path $archiveDir "BabelPlayer-$rawVersion-portable-win-x64.zip"
+          $installerBaseName = "BabelPlayer-$rawVersion-setup-win-x64"
 
           New-Item -ItemType Directory -Path $archiveDir -Force | Out-Null
           if (Test-Path $archivePath) {
@@ -43,12 +45,44 @@ jobs:
 
           Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $archivePath
           "ARCHIVE_PATH=$archivePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PUBLISH_DIR=$publishDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_VERSION=$releaseVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "INSTALLER_BASENAME=$installerBaseName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Upload WinUI artifact
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build EXE installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe not found at '$iscc'."
+          }
+
+          & $iscc `
+            "/DMyAppVersion=${{ env.RELEASE_VERSION }}" `
+            "/DMyPublishDir=${{ env.PUBLISH_DIR }}" `
+            "/DMyOutputDir=artifacts" `
+            "/DMyOutputBaseFilename=${{ env.INSTALLER_BASENAME }}" `
+            "installer\BabelPlayer.iss"
+
+          $installerPath = Join-Path "artifacts" ("${{ env.INSTALLER_BASENAME }}" + ".exe")
+          "INSTALLER_PATH=$installerPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload portable artifact
         uses: actions/upload-artifact@v7
         with:
-          name: BabelPlayer-WinUI-win-x64
+          name: BabelPlayer-portable-win-x64
           path: ${{ env.ARCHIVE_PATH }}
+          if-no-files-found: error
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: BabelPlayer-setup-win-x64
+          path: ${{ env.INSTALLER_PATH }}
           if-no-files-found: error
 
       - name: Create GitHub release
@@ -57,4 +91,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" "${{ env.ARCHIVE_PATH }}" --generate-notes --title "${{ github.ref_name }}"
+          gh release create "${{ github.ref_name }}" "${{ env.ARCHIVE_PATH }}" "${{ env.INSTALLER_PATH }}" --generate-notes --title "${{ github.ref_name }}"
