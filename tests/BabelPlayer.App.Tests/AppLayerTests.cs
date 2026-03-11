@@ -387,6 +387,7 @@ Hello there
         var directory = Directory.CreateTempSubdirectory();
         try
         {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -398,10 +399,12 @@ Hola
 
             var controller = new SubtitleWorkflowController(
                 new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null);
 
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            controller.CurrentCues[0].TranslatedText = "Hello";
+            var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+            mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
             controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.Dual);
@@ -424,6 +427,7 @@ Hola
         {
             var store = new FakeCredentialStore();
             store.SaveDeepLApiKey("configured");
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -435,14 +439,15 @@ Hola
 
             var controller = new SubtitleWorkflowController(
                 new CredentialFacade(store),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
 
             await controller.InitializeAsync();
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            await controller.SelectTranslationModelAsync("cloud:deepl");
-            await controller.SetTranslationEnabledAsync(true);
-            controller.CurrentCues[0].TranslatedText = "Hello";
+            mediaSessionCoordinator.SetTranslationState(true, false);
+            var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+            mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
             controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
 
             var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.SourceOnly);
@@ -467,6 +472,7 @@ Hola
         {
             var store = new FakeCredentialStore();
             store.SaveDeepLApiKey("configured");
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -478,14 +484,13 @@ Hola
 
             var controller = new SubtitleWorkflowController(
                 new CredentialFacade(store),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
 
             await controller.InitializeAsync();
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            await controller.SelectTranslationModelAsync("cloud:deepl");
-            await controller.SetTranslationEnabledAsync(true);
-            controller.CurrentCues[0].TranslatedText = null;
+            mediaSessionCoordinator.SetTranslationState(true, false);
             controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.TranslationOnly);
@@ -507,6 +512,7 @@ Hola
         {
             var store = new FakeCredentialStore();
             store.SaveDeepLApiKey("configured");
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -518,14 +524,15 @@ Hola
 
             var controller = new SubtitleWorkflowController(
                 new CredentialFacade(store),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
 
             await controller.InitializeAsync();
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            await controller.SelectTranslationModelAsync("cloud:deepl");
-            await controller.SetTranslationEnabledAsync(true);
-            controller.CurrentCues[0].TranslatedText = "Hello";
+            mediaSessionCoordinator.SetTranslationState(true, false);
+            var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+            mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
             controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
 
             var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.SourceOnly, sourceOnlyOverrideForCurrentVideo: true);
@@ -669,11 +676,13 @@ Second sentence
         {
             var store = new FakeCredentialStore();
             store.SaveDeepLApiKey("configured");
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "generated.mp4");
             File.WriteAllText(videoPath, string.Empty);
 
             var controller = new SubtitleWorkflowController(
                 new CredentialFacade(store),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask,
                 transcribeVideoAsync: (_, _, _, _, _) =>
@@ -697,7 +706,7 @@ Second sentence
             var result = await controller.LoadMediaSubtitlesAsync(videoPath);
             Assert.True(result.UsedGeneratedCaptions);
             Assert.Single(controller.CurrentCues);
-            controller.CurrentCues[0].TranslatedText = null;
+            mediaSessionCoordinator.ClearTranslations();
 
             await controller.SetTranslationEnabledAsync(true);
             await Task.Delay(50);
@@ -709,6 +718,62 @@ Second sentence
         {
             directory.Delete(recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_CurrentCuesProjectionDoesNotMutateSessionState()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hola
+""");
+
+            var controller = new SubtitleWorkflowController(
+                new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
+                environmentVariableReader: _ => null);
+
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            mediaSessionCoordinator.ClearTranslations();
+
+            controller.CurrentCues[0].TranslatedText = "Hello";
+
+            var sessionCue = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+            Assert.Equal("Hola", sessionCue.Text);
+            Assert.Empty(mediaSessionCoordinator.Snapshot.Translation.Segments);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private static TranslationSegment CreateTranslationSegment(TranscriptSegment transcript, string text, string language = "en")
+    {
+        return new TranslationSegment
+        {
+            Id = new TranslationSegmentId($"test:{transcript.Id.Value}:{language}:{text}"),
+            SourceSegmentId = transcript.Id,
+            Start = transcript.Start,
+            End = transcript.End,
+            Text = text,
+            Language = language,
+            Provenance = new SegmentProvenance
+            {
+                Source = SubtitlePipelineSource.Generated,
+                Provider = "tests",
+                ModelKey = "tests"
+            },
+            Revision = SegmentRevision.Initial
+        };
     }
 
     private sealed class FakeCredentialStore : ICredentialStore
