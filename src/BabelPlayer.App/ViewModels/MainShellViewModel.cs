@@ -6,6 +6,7 @@ namespace BabelPlayer.App;
 public sealed class MainShellViewModel : ObservableObject
 {
     private string _windowTitle = "Babel Player";
+    private string _windowSubtitle = "Play anything. Understand everything.";
     private string _statusMessage = "Open media to begin.";
     private bool _isStatusOpen = true;
     private bool _isDarkTheme = true;
@@ -29,6 +30,12 @@ public sealed class MainShellViewModel : ObservableObject
     {
         get => _windowTitle;
         set => SetProperty(ref _windowTitle, value);
+    }
+
+    public string WindowSubtitle
+    {
+        get => _windowSubtitle;
+        set => SetProperty(ref _windowSubtitle, value);
     }
 
     public string StatusMessage
