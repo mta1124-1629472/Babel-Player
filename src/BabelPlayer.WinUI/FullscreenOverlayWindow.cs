@@ -9,7 +9,28 @@ using WinRT.Interop;
 
 namespace BabelPlayer.WinUI;
 
-public sealed class FullscreenOverlayWindow : Window
+public interface IFullscreenOverlayWindow
+{
+    event Action? ActivityDetected;
+    event Action<bool>? InteractionStateChanged;
+
+    Button PlayPauseButton { get; }
+    Button SeekBackButton { get; }
+    Button SeekForwardButton { get; }
+    Button SubtitleToggleButton { get; }
+    Button ExitFullscreenButton { get; }
+    Slider PositionSlider { get; }
+    TextBlock CurrentTimeTextBlock { get; }
+    TextBlock DurationTextBlock { get; }
+    bool IsOverlayVisible { get; }
+
+    void ShowOverlay(RectInt32 displayBounds);
+    void HideOverlay();
+    void PositionOverlay(RectInt32 displayBounds);
+    void CloseOverlay();
+}
+
+public sealed class FullscreenOverlayWindow : Window, IFullscreenOverlayWindow
 {
     private readonly Border _rootBorder;
     private readonly IntPtr _ownerHwnd;

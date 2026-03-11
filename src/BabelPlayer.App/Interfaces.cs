@@ -1,4 +1,5 @@
 using BabelPlayer.Core;
+using Windows.Graphics;
 
 namespace BabelPlayer.App;
 
@@ -36,6 +37,7 @@ public interface IPlaybackHost
 public interface IWindowModeService
 {
     PlaybackWindowMode CurrentMode { get; }
+    RectInt32 GetCurrentDisplayBounds(bool workArea = false);
     Task SetModeAsync(PlaybackWindowMode mode, CancellationToken cancellationToken = default);
 }
 

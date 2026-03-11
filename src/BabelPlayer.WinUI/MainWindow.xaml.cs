@@ -32,21 +32,18 @@ public sealed partial class MainWindow : Window
     private readonly SubtitleWorkflowController _subtitleWorkflowController;
     private readonly IPlaybackBackend _playbackBackend;
     private readonly PlaybackBackendCoordinator _playbackBackendCoordinator;
+    private readonly ShellProjectionService _shellProjectionService;
     private readonly ShellController _shellController;
     private readonly IVideoPresenter _videoPresenter;
     private readonly ISubtitlePresenter _subtitlePresenter;
     private readonly ShortcutService _shortcutService = new();
-    private readonly DispatcherTimer _transportTimer;
-    private readonly DispatcherTimer _fullscreenControlsTimer;
     private readonly DispatcherTimer _resumeTimer;
     private readonly IFilePickerService _filePickerService;
     private readonly WinUIWindowModeService _windowModeService;
     private readonly WinUICredentialDialogService _credentialDialogService;
     private readonly IRuntimeBootstrapService _runtimeBootstrapService;
     private readonly StageCoordinator _stageCoordinator;
-    private readonly List<PlaybackResumeEntry> _resumeEntries = [];
     private readonly List<MediaTrackInfo> _currentTracks = [];
-    private FullscreenOverlayWindow? _fullscreenOverlayWindow;
     private bool _suppressPositionSliderChanges;
     private bool _suppressFullscreenSliderChanges;
     private bool _suppressWorkflowControlEvents;
@@ -54,17 +51,10 @@ public sealed partial class MainWindow : Window
     private bool _isPositionScrubbing;
     private bool _isInitializingShellState;
     private bool _isNormalizingWinUITranscriptionSelection;
-    private bool _isFullscreenOverlayVisible;
-    private bool _isWindowActive = true;
-    private bool _isFullscreenOverlayInteracting;
     private bool _isLanguageToolsExpanded = true;
     private bool _hasAttemptedSystemBackdrop;
     private bool _shellDropTargetsInitialized;
-    private int _modalUiSuppressionCount;
     private Slider? _activeScrubber;
-    private long _lastFullscreenInputTick;
-    private long _lastOverlayTimerResetTick;
-    private long _fullscreenOverlayHideBlockedUntilTick;
     private string? _pendingAutoFitPath;
     private string? _lastAutoFitSignature;
     private string? _subtitleSourceOnlyOverrideVideoPath;
@@ -140,48 +130,38 @@ public sealed partial class MainWindow : Window
 
     public MainShellViewModel ViewModel { get; } = new();
 
-    public MainWindow()
+    public MainWindow(IShellCompositionRoot? compositionRoot = null)
     {
         // Removed: InitializeComponent(); (not needed for code-built UI in WinUI 3)
 
         RootGrid = new Grid();
         Content = RootGrid;
         _playbackSessionController = new PlaybackSessionController(_playlistController);
-        _filePickerService = new WinUIFilePickerService(this);
-        _windowModeService = new WinUIWindowModeService(this);
-        _windowModeService.SetWindowIcon(Path.Combine(AppContext.BaseDirectory, "BabelPlayer.ico"));
-        _runtimeBootstrapService = new RuntimeBootstrapService();
-        _transportTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(400)
-        };
-        _fullscreenControlsTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(2.5)
-        };
         _resumeTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(5)
         };
-        _credentialDialogService = new WinUICredentialDialogService(RootGrid, SuppressDialogPresentation);
-        _mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-        _subtitleWorkflowController = new SubtitleWorkflowController(
-            _credentialFacade,
-            _credentialDialogService,
-            _filePickerService,
-            _runtimeBootstrapService,
-            _mediaSessionCoordinator);
-        _playbackBackend = new MpvPlaybackBackend();
-        _playbackBackendCoordinator = new PlaybackBackendCoordinator(_playbackBackend, _mediaSessionCoordinator);
-        _videoPresenter = new MpvVideoPresenter();
-        _subtitlePresenter = new DetachedWindowSubtitlePresenter(this);
-        _shellController = new ShellController(
+        var dependencies = (compositionRoot ?? new ShellCompositionRoot()).Create(
+            this,
+            RootGrid,
             _playlistController,
             _playbackSessionController,
-            _playbackBackend,
-            _subtitleWorkflowController);
+            _credentialFacade,
+            SuppressDialogPresentation);
+        _filePickerService = dependencies.FilePickerService;
+        _windowModeService = dependencies.WindowModeService;
+        _credentialDialogService = dependencies.CredentialDialogService;
+        _runtimeBootstrapService = dependencies.RuntimeBootstrapService;
+        _mediaSessionCoordinator = dependencies.MediaSessionCoordinator;
+        _subtitleWorkflowController = dependencies.SubtitleWorkflowController;
+        _playbackBackend = dependencies.PlaybackBackend;
+        _playbackBackendCoordinator = dependencies.PlaybackBackendCoordinator;
+        _videoPresenter = dependencies.VideoPresenter;
+        _subtitlePresenter = dependencies.SubtitlePresenter;
+        _shellProjectionService = dependencies.ShellProjectionService;
+        _shellController = dependencies.ShellController;
         BuildShell();
-        _stageCoordinator = new StageCoordinator(RootGrid, _windowModeService, _videoPresenter, _subtitlePresenter);
+        _stageCoordinator = dependencies.StageCoordinator;
 
         var fullscreenExitAccelerator = new Microsoft.UI.Xaml.Input.KeyboardAccelerator
         {
@@ -197,15 +177,11 @@ public sealed partial class MainWindow : Window
         PlayerHost.Initialize(this);
         PlaylistList.ItemsSource = ViewModel.Playlist.Items;
 
-        _transportTimer.Tick += TransportTimer_Tick;
-        _fullscreenControlsTimer.Tick += FullscreenControlsTimer_Tick;
         _resumeTimer.Tick += ResumeTimer_Tick;
-        _transportTimer.Start();
 
         PlayerHost.MediaOpened += PlayerHost_MediaOpened;
         PlayerHost.MediaEnded += PlayerHost_MediaEnded;
         PlayerHost.MediaFailed += PlayerHost_MediaFailed;
-        PlayerHost.TracksChanged += PlayerHost_TracksChanged;
         PlayerHost.RuntimeInstallProgress += PlayerHost_RuntimeInstallProgress;
         PlayerHost.PlaybackStateChanged += PlayerHost_PlaybackStateChanged;
         PlayerHost.InputActivity += PlayerHost_InputActivity;
@@ -213,11 +189,13 @@ public sealed partial class MainWindow : Window
         PlayerHost.ShortcutKeyPressed += PlayerHost_ShortcutKeyPressed;
         _subtitleWorkflowController.StatusChanged += SubtitleWorkflowController_StatusChanged;
         _subtitleWorkflowController.SnapshotChanged += SubtitleWorkflowController_SnapshotChanged;
+        _shellProjectionService.ProjectionChanged += ShellProjectionService_ProjectionChanged;
 
         Closed += MainWindow_Closed;
         Activated += MainWindow_Activated;
 
         InitializeShellState();
+        ApplyShellProjection(_shellProjectionService.Current);
         _ = _subtitleWorkflowController.InitializeAsync();
     }
 
@@ -1196,8 +1174,6 @@ public sealed partial class MainWindow : Window
             };
         }
 
-        _resumeEntries.Clear();
-        _resumeEntries.AddRange(_settingsFacade.LoadResumeEntries());
         _audioDelaySeconds = settings.AudioDelaySeconds;
         _subtitleDelaySeconds = settings.SubtitleDelaySeconds;
         _selectedAspectRatio = string.IsNullOrWhiteSpace(settings.AspectRatioOverride) ? "auto" : settings.AspectRatioOverride;
@@ -1321,8 +1297,9 @@ public sealed partial class MainWindow : Window
     {
         SystemBackdrop = null;
         _micaBackdrop = null;
-        HideFullscreenOverlay();
-        _fullscreenOverlayWindow?.CloseOverlay();
+        _stageCoordinator.Dispose();
+        _shellProjectionService.ProjectionChanged -= ShellProjectionService_ProjectionChanged;
+        _shellProjectionService.Dispose();
         (_subtitlePresenter as IDisposable)?.Dispose();
         _playbackBackendCoordinator.Dispose();
         _ = _playbackBackend.DisposeAsync();
@@ -1360,14 +1337,7 @@ public sealed partial class MainWindow : Window
     private async void OpenFile_Click(object sender, RoutedEventArgs e)
     {
         var files = await _filePickerService.PickMediaFilesAsync();
-        if (files.Count == 0)
-        {
-            return;
-        }
-
-        var added = _playlistController.EnqueueFiles(files);
-        RefreshPlaylistView();
-        await LoadPlaylistItemAsync(added.FirstOrDefault());
+        await ApplyQueuedMediaAsync(_shellController.EnqueueFiles(files, autoplay: true));
     }
 
     private async void OpenFolder_Click(object sender, RoutedEventArgs e)
@@ -2130,6 +2100,7 @@ public sealed partial class MainWindow : Window
         e.Handled = true;
         var storageItems = await e.DataView.GetStorageItemsAsync();
         List<string> files = [];
+        List<string> folders = [];
         foreach (var item in storageItems)
         {
             switch (item)
@@ -2138,21 +2109,12 @@ public sealed partial class MainWindow : Window
                     files.Add(file.Path);
                     break;
                 case StorageFolder folder:
-                    AddPinnedRoot(folder.Path);
-                    files.AddRange(_libraryBrowserService.EnumerateMediaFiles(folder.Path, recursive: true));
+                    folders.Add(folder.Path);
                     break;
             }
         }
 
-        if (files.Count == 0)
-        {
-            ShowStatus("Dropped items did not contain supported media files.");
-            return;
-        }
-
-        var added = _playlistController.EnqueueFiles(files);
-        RefreshPlaylistView();
-        await LoadPlaylistItemAsync(added.FirstOrDefault());
+        await ApplyQueuedMediaAsync(_shellController.EnqueueDroppedItems(files, folders));
     }
 
     private void RootGrid_DragOver(object sender, DragEventArgs e)
@@ -2179,10 +2141,7 @@ public sealed partial class MainWindow : Window
         ApplyAdaptiveStandardLayout(e.NewSize.Height);
         PlayerHost.RequestHostBoundsSync();
         UpdateSubtitleVisibility();
-        if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen && _isFullscreenOverlayVisible)
-        {
-            PositionFullscreenOverlay();
-        }
+        _stageCoordinator.HandleStageLayoutChanged();
     }
 
     private void LibraryTree_Expanding(TreeView sender, TreeViewExpandingEventArgs args)
@@ -2329,11 +2288,13 @@ public sealed partial class MainWindow : Window
             PlayerHost.SetAudioDelay(_audioDelaySeconds);
             PlayerHost.SetSubtitleDelay(_subtitleDelaySeconds);
             PlayerHost.SetAspectRatio(_selectedAspectRatio);
-            var current = _playlistController.CurrentItem;
             UpdateWindowHeader();
             TryApplyResumePosition();
             _resumeTimer.Start();
-            ShowStatus(current is null ? "Media opened." : $"Now playing {current.DisplayName}.");
+            ShowStatus(_shellController.HandleMediaOpened(
+                PlayerHost.Source?.LocalPath,
+                PlayerHost.NaturalDuration.HasTimeSpan ? PlayerHost.NaturalDuration.TimeSpan : TimeSpan.Zero,
+                ViewModel.Settings.ResumeEnabled).StatusMessage);
         });
     }
 
@@ -2353,20 +2314,19 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(async () =>
         {
             _resumeTimer.Stop();
-            SaveResumePosition(forceRemoveCompleted: true);
             _autoResumePlaybackAfterCaptionReady = false;
             _autoResumePlaybackPath = null;
             _autoResumePlaybackPosition = TimeSpan.Zero;
             _autoResumePlaybackFromBeginning = true;
-            var next = _playlistController.AdvanceAfterMediaEnded();
+            var result = _shellController.HandleMediaEnded(CapturePlaybackStateSnapshot(), ViewModel.Settings.ResumeEnabled);
             RefreshPlaylistView();
-            if (next is null)
+            if (result.NextItem is null)
             {
-                ShowStatus("Playback ended.");
+                ShowStatus(result.StatusMessage);
                 return;
             }
 
-            await LoadPlaylistItemAsync(next);
+            await LoadPlaylistItemAsync(result.NextItem);
         });
     }
 
@@ -2404,24 +2364,9 @@ public sealed partial class MainWindow : Window
 
     private void PlayerHost_InputActivity()
     {
-        if (_windowModeService.CurrentMode != PlaybackWindowMode.Fullscreen)
-        {
-            return;
-        }
-
-        var now = Environment.TickCount64;
-        if (_isFullscreenOverlayVisible && now - _lastFullscreenInputTick < 80)
-        {
-            return;
-        }
-
-        _lastFullscreenInputTick = now;
         void showOverlay()
         {
-            if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen)
-            {
-                ShowFullscreenOverlay();
-            }
+            ShowFullscreenOverlay();
         }
 
         if (DispatcherQueue.HasThreadAccess)
@@ -2454,6 +2399,95 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(() => ApplyWorkflowSnapshot(snapshot));
     }
 
+    private void ShellProjectionService_ProjectionChanged(ShellProjectionSnapshot projection)
+    {
+        DispatcherQueue.TryEnqueue(() => ApplyShellProjection(projection));
+    }
+
+    private void ApplyShellProjection(ShellProjectionSnapshot projection)
+    {
+        ViewModel.Transport.PositionSeconds = projection.Transport.PositionSeconds;
+        ViewModel.Transport.DurationSeconds = projection.Transport.DurationSeconds;
+        ViewModel.Transport.CurrentTimeText = projection.Transport.CurrentTimeText;
+        ViewModel.Transport.DurationText = projection.Transport.DurationText;
+        ViewModel.Transport.IsPaused = projection.Transport.IsPaused;
+        ViewModel.Transport.IsMuted = projection.Transport.IsMuted;
+        ViewModel.Transport.Volume = projection.Transport.Volume;
+        ViewModel.Transport.PlaybackRate = projection.Transport.PlaybackRate;
+        ViewModel.ActiveHardwareDecoder = projection.Transport.ActiveHardwareDecoder;
+        HardwareDecoderTextBlock.Text = ViewModel.ActiveHardwareDecoder;
+
+        ViewModel.SubtitleOverlay.SourceText = projection.Subtitle.SourceText;
+        ViewModel.SubtitleOverlay.TranslationText = projection.Subtitle.TranslationText;
+        ViewModel.SubtitleOverlay.StatusText = projection.Subtitle.StatusText;
+        ViewModel.SubtitleOverlay.SubtitleSource = projection.Subtitle.Source;
+        ViewModel.SubtitleOverlay.IsCaptionGenerationInProgress = projection.Subtitle.IsCaptionGenerationInProgress;
+        ViewModel.SubtitleOverlay.IsTranslationEnabled = projection.Subtitle.IsTranslationEnabled;
+        ViewModel.SubtitleOverlay.IsAutoTranslateEnabled = projection.Subtitle.IsAutoTranslateEnabled;
+
+        UpdatePositionSurfaces(
+            TimeSpan.FromSeconds(projection.Transport.PositionSeconds),
+            TimeSpan.FromSeconds(projection.Transport.DurationSeconds));
+
+        UpdateTrackProjection(projection.SelectedTracks.Tracks);
+        UpdateSubtitleVisibility();
+        UpdatePlayPauseButtonVisual();
+        UpdateOverlayControlState();
+        CurrentTimeTextBlock.Text = ViewModel.Transport.CurrentTimeText;
+        DurationTextBlock.Text = ViewModel.Transport.DurationText;
+        MuteToggleButton.IsChecked = ViewModel.Transport.IsMuted;
+        UpdateMuteButtonVisual();
+    }
+
+    private void UpdateTrackProjection(IReadOnlyList<MediaTrackInfo> tracks)
+    {
+        if (HasEquivalentTrackProjection(_currentTracks, tracks))
+        {
+            return;
+        }
+
+        _currentTracks.Clear();
+        _currentTracks.AddRange(tracks.Select(track => new MediaTrackInfo
+        {
+            Id = track.Id,
+            FfIndex = track.FfIndex,
+            Kind = track.Kind,
+            Title = track.Title,
+            Language = track.Language,
+            Codec = track.Codec,
+            IsEmbedded = track.IsEmbedded,
+            IsSelected = track.IsSelected,
+            IsTextBased = track.IsTextBased
+        }));
+        RebuildAudioTrackFlyout();
+        RebuildEmbeddedSubtitleTrackFlyout();
+    }
+
+    private static bool HasEquivalentTrackProjection(IReadOnlyList<MediaTrackInfo> current, IReadOnlyList<MediaTrackInfo> next)
+    {
+        if (current.Count != next.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < current.Count; index++)
+        {
+            var left = current[index];
+            var right = next[index];
+            if (left.Id != right.Id
+                || left.Kind != right.Kind
+                || left.IsSelected != right.IsSelected
+                || !string.Equals(left.Title, right.Title, StringComparison.Ordinal)
+                || !string.Equals(left.Language, right.Language, StringComparison.Ordinal)
+                || !string.Equals(left.Codec, right.Codec, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void ApplyWorkflowSnapshot(SubtitleWorkflowSnapshot snapshot)
     {
         _suppressWorkflowControlEvents = true;
@@ -2476,11 +2510,6 @@ public sealed partial class MainWindow : Window
             ViewModel.IsCaptionGenerationInProgress = snapshot.IsCaptionGenerationInProgress;
             ViewModel.SubtitleOverlay.SelectedTranscriptionLabel = normalizedTranscriptionSelection.DisplayName;
             ViewModel.SubtitleOverlay.SelectedTranslationLabel = snapshot.SelectedTranslationLabel;
-            ViewModel.SubtitleOverlay.IsTranslationEnabled = snapshot.IsTranslationEnabled;
-            ViewModel.SubtitleOverlay.IsAutoTranslateEnabled = snapshot.AutoTranslateEnabled;
-            ViewModel.SubtitleOverlay.SubtitleSource = snapshot.SubtitleSource;
-            ViewModel.SubtitleOverlay.IsCaptionGenerationInProgress = snapshot.IsCaptionGenerationInProgress;
-            ViewModel.SubtitleOverlay.StatusText = snapshot.OverlayStatus ?? string.Empty;
 
             if (TranscriptionModelComboBox is not null)
             {
@@ -2562,67 +2591,18 @@ public sealed partial class MainWindow : Window
 
     private void SaveResumePosition(bool forceRemoveCompleted = false)
     {
-        if (!ViewModel.Settings.ResumeEnabled)
-        {
-            return;
-        }
-
-        var path = PlayerHost.Source?.LocalPath;
-        var duration = PlayerHost.NaturalDuration.HasTimeSpan ? PlayerHost.NaturalDuration.TimeSpan : TimeSpan.Zero;
-        if (string.IsNullOrWhiteSpace(path) || duration <= TimeSpan.FromMinutes(2))
-        {
-            return;
-        }
-
-        var position = PlayerHost.Position;
-        var completionRatio = duration.TotalSeconds <= 0 ? 0 : position.TotalSeconds / duration.TotalSeconds;
-        _resumeEntries.RemoveAll(entry => string.Equals(entry.Path, path, StringComparison.OrdinalIgnoreCase));
-
-        if (forceRemoveCompleted || completionRatio >= 0.95 || position < TimeSpan.FromMinutes(2))
-        {
-            _settingsFacade.SaveResumeEntries(_resumeEntries);
-            return;
-        }
-
-        _resumeEntries.Add(new PlaybackResumeEntry
-        {
-            Path = path,
-            PositionSeconds = position.TotalSeconds,
-            DurationSeconds = duration.TotalSeconds,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
-        _settingsFacade.SaveResumeEntries(_resumeEntries);
+        _shellController.SaveResumePosition(CapturePlaybackStateSnapshot(), ViewModel.Settings.ResumeEnabled, forceRemoveCompleted);
     }
 
     private void TryApplyResumePosition()
     {
-        if (!ViewModel.Settings.ResumeEnabled)
-        {
-            return;
-        }
-
         var path = PlayerHost.Source?.LocalPath;
         var duration = PlayerHost.NaturalDuration.HasTimeSpan ? PlayerHost.NaturalDuration.TimeSpan : TimeSpan.Zero;
-        if (string.IsNullOrWhiteSpace(path) || duration <= TimeSpan.Zero)
+        var result = _shellController.HandleMediaOpened(path, duration, ViewModel.Settings.ResumeEnabled);
+        if (result.ResumePosition is not TimeSpan resumePosition)
         {
             return;
         }
-
-        var entry = _resumeEntries
-            .Where(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(item => item.UpdatedAt)
-            .FirstOrDefault();
-        if (entry is null)
-        {
-            return;
-        }
-
-        if (entry.PositionSeconds < TimeSpan.FromMinutes(2).TotalSeconds || entry.PositionSeconds >= duration.TotalSeconds * 0.95)
-        {
-            return;
-        }
-
-        var resumePosition = TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, duration.TotalSeconds));
         PlayerHost.Position = resumePosition;
         UpdatePositionSurfaces(resumePosition, duration);
         ShowStatus($"Resumed: {Path.GetFileName(path)}");
@@ -3052,8 +3032,7 @@ public sealed partial class MainWindow : Window
         };
         if (!ResumePlaybackToggleItem.IsChecked)
         {
-            _resumeEntries.Clear();
-            _settingsFacade.SaveResumeEntries(_resumeEntries);
+            _shellController.ClearResumeHistory();
         }
 
         SaveCurrentSettings();
@@ -3217,24 +3196,59 @@ public sealed partial class MainWindow : Window
         await QueueSpecificFolderAsync(folder, autoplay);
     }
 
-    private async Task QueueSpecificFolderAsync(string folder, bool autoplay)
+    private async Task ApplyQueuedMediaAsync(ShellQueueMediaResult result)
     {
-        var files = _libraryBrowserService.EnumerateMediaFiles(folder, recursive: true)
-            .Where(path => !_playlistController.Items.Any(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-        if (files.Count == 0)
+        foreach (var folder in result.PinnedFolders)
         {
-            ShowStatus($"No new supported media files were found in {folder}.");
-            return;
+            AddPinnedRoot(folder);
         }
 
-        var added = _playlistController.EnqueueFolder(folder, files);
-        RefreshPlaylistView();
-        ShowStatus($"Queued {added.Count} item(s) from {Path.GetFileName(folder)}.");
-        if (autoplay)
+        if (!string.IsNullOrWhiteSpace(result.StatusMessage))
         {
-            await LoadPlaylistItemAsync(added.FirstOrDefault());
+            ShowStatus(result.StatusMessage, result.IsError);
         }
+
+        RefreshPlaylistView();
+        if (result.ItemToLoad is not null)
+        {
+            await LoadPlaylistItemAsync(result.ItemToLoad);
+        }
+    }
+
+    private ShellLoadMediaOptions BuildShellLoadOptions()
+    {
+        return new ShellLoadMediaOptions
+        {
+            HardwareDecodingMode = ViewModel.Settings.HardwareDecodingMode,
+            PlaybackRate = ViewModel.Transport.PlaybackRate,
+            AspectRatio = _selectedAspectRatio,
+            AudioDelaySeconds = _audioDelaySeconds,
+            SubtitleDelaySeconds = _subtitleDelaySeconds,
+            Volume = ViewModel.Transport.Volume,
+            ResumeEnabled = ViewModel.Settings.ResumeEnabled,
+            PreviousPlaybackState = CapturePlaybackStateSnapshot()
+        };
+    }
+
+    private PlaybackStateSnapshot CapturePlaybackStateSnapshot()
+    {
+        var duration = PlayerHost.NaturalDuration.HasTimeSpan ? PlayerHost.NaturalDuration.TimeSpan : TimeSpan.Zero;
+        return new PlaybackStateSnapshot
+        {
+            Path = PlayerHost.Source?.LocalPath,
+            Position = PlayerHost.Position,
+            Duration = duration,
+            IsPaused = PlayerHost.IsPaused,
+            IsMuted = PlayerHost.IsMuted,
+            Volume = ViewModel.Transport.Volume,
+            Speed = ViewModel.Transport.PlaybackRate,
+            ActiveHardwareDecoder = PlayerHost.ActiveHardwareDecoder
+        };
+    }
+
+    private async Task QueueSpecificFolderAsync(string folder, bool autoplay)
+    {
+        await ApplyQueuedMediaAsync(_shellController.EnqueueFolder(folder, autoplay));
     }
 
     private PlaylistItem? EnsurePlaylistItem(string path)
@@ -3297,7 +3311,6 @@ public sealed partial class MainWindow : Window
         }
 
         _subtitleSourceOnlyOverrideVideoPath = null;
-        SaveResumePosition();
         _resumeTimer.Stop();
         _autoResumePlaybackAfterCaptionReady = false;
         _autoResumePlaybackPath = null;
@@ -3307,12 +3320,7 @@ public sealed partial class MainWindow : Window
         _lastAutoFitSignature = null;
         var loaded = await _shellController.LoadPlaylistItemAsync(
             item,
-            ViewModel.Settings.HardwareDecodingMode,
-            ViewModel.Transport.PlaybackRate,
-            _selectedAspectRatio,
-            _audioDelaySeconds,
-            _subtitleDelaySeconds,
-            ViewModel.Transport.Volume,
+            BuildShellLoadOptions(),
             CancellationToken.None);
         if (!loaded)
         {
@@ -3501,12 +3509,10 @@ public sealed partial class MainWindow : Window
     private async Task EnterFullscreenAsync()
     {
         await SetWindowModeAsync(PlaybackWindowMode.Fullscreen);
-        ShowFullscreenOverlay();
     }
 
     private async Task ExitFullscreenAsync()
     {
-        HideFullscreenOverlay();
         await SetWindowModeAsync(PlaybackWindowMode.Standard);
     }
 
@@ -3529,12 +3535,9 @@ public sealed partial class MainWindow : Window
             : new Thickness(24);
         if (mode == PlaybackWindowMode.Fullscreen)
         {
-            ShowFullscreenOverlay();
+            EnsureStageOverlayControls();
         }
-        else
-        {
-            HideFullscreenOverlay();
-        }
+        _stageCoordinator.HandleWindowModeChanged(mode);
 
         SyncPaneLayout(RootGrid.ActualWidth);
         if (mode == PlaybackWindowMode.Standard)
@@ -3555,28 +3558,30 @@ public sealed partial class MainWindow : Window
         _suppressWindowModeButtonChanges = false;
     }
 
-    private void EnsureFullscreenOverlayWindow()
+    private void EnsureStageOverlayControls()
     {
-        if (_fullscreenOverlayWindow is not null)
+        if (OverlayPlayPauseButton is not null
+            && OverlaySubtitleToggleButton is not null
+            && FullscreenPositionSlider is not null
+            && FullscreenCurrentTimeTextBlock is not null
+            && FullscreenDurationTextBlock is not null)
         {
             return;
         }
 
-        _fullscreenOverlayWindow = new FullscreenOverlayWindow(WindowNative.GetWindowHandle(this));
-        _fullscreenOverlayWindow.ActivityDetected += FullscreenOverlayWindow_ActivityDetected;
-        _fullscreenOverlayWindow.InteractionStateChanged += FullscreenOverlayWindow_InteractionStateChanged;
-        OverlayPlayPauseButton = _fullscreenOverlayWindow.PlayPauseButton;
+        var overlayWindow = _stageCoordinator.EnsureFullscreenOverlayWindow();
+        OverlayPlayPauseButton = overlayWindow.PlayPauseButton;
         OverlayPlayPauseButton.Click += PlayPauseButton_Click;
-        OverlaySubtitleToggleButton = _fullscreenOverlayWindow.SubtitleToggleButton;
+        OverlaySubtitleToggleButton = overlayWindow.SubtitleToggleButton;
         OverlaySubtitleToggleButton.Click += OverlaySubtitleToggleButton_Click;
-        _fullscreenOverlayWindow.SeekBackButton.Click += SeekBack_Click;
-        _fullscreenOverlayWindow.SeekForwardButton.Click += SeekForward_Click;
-        _fullscreenOverlayWindow.ExitFullscreenButton.Click += ExitFullscreenOverlayButton_Click;
-        FullscreenPositionSlider = _fullscreenOverlayWindow.PositionSlider;
+        overlayWindow.SeekBackButton.Click += SeekBack_Click;
+        overlayWindow.SeekForwardButton.Click += SeekForward_Click;
+        overlayWindow.ExitFullscreenButton.Click += ExitFullscreenOverlayButton_Click;
+        FullscreenPositionSlider = overlayWindow.PositionSlider;
         FullscreenPositionSlider.ValueChanged += FullscreenPositionSlider_ValueChanged;
         AttachScrubberHandlers(FullscreenPositionSlider);
-        FullscreenCurrentTimeTextBlock = _fullscreenOverlayWindow.CurrentTimeTextBlock;
-        FullscreenDurationTextBlock = _fullscreenOverlayWindow.DurationTextBlock;
+        FullscreenCurrentTimeTextBlock = overlayWindow.CurrentTimeTextBlock;
+        FullscreenDurationTextBlock = overlayWindow.DurationTextBlock;
     }
 
     private void UpdateOverlayControlState()
@@ -3602,94 +3607,9 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ShowFullscreenOverlay()
-    {
-        if (_modalUiSuppressionCount > 0)
-        {
-            _fullscreenControlsTimer.Stop();
-            _fullscreenOverlayWindow?.HideOverlay();
-            return;
-        }
-
-        if (_windowModeService.CurrentMode != PlaybackWindowMode.Fullscreen || !_isWindowActive)
-        {
-            return;
-        }
-
-        EnsureFullscreenOverlayWindow();
-        if (!_isFullscreenOverlayVisible)
-        {
-            PositionFullscreenOverlay();
-            _fullscreenOverlayWindow!.ShowOverlay(_windowModeService.GetCurrentDisplayBounds());
-            _isFullscreenOverlayVisible = true;
-        }
-        else
-        {
-            PositionFullscreenOverlay();
-        }
-
-        UpdateSubtitleVisibility();
-        ScheduleFullscreenOverlayAutoHide();
-    }
-
-    private void HideFullscreenOverlay()
-    {
-        _isFullscreenOverlayVisible = false;
-        _fullscreenControlsTimer.Stop();
-        _fullscreenOverlayWindow?.HideOverlay();
-        UpdateSubtitleVisibility();
-    }
-
     private void PositionFullscreenOverlay()
     {
-        if (_fullscreenOverlayWindow is null)
-        {
-            return;
-        }
-
-        _fullscreenOverlayWindow.PositionOverlay(_windowModeService.GetCurrentDisplayBounds());
-    }
-
-    private void ScheduleFullscreenOverlayAutoHide()
-    {
-        if (_windowModeService.CurrentMode != PlaybackWindowMode.Fullscreen || !_isFullscreenOverlayVisible || _isPositionScrubbing || _isFullscreenOverlayInteracting)
-        {
-            return;
-        }
-
-        var now = Environment.TickCount64;
-        if (_fullscreenControlsTimer.IsEnabled && now - _lastOverlayTimerResetTick < 140)
-        {
-            return;
-        }
-
-        _lastOverlayTimerResetTick = now;
-        _fullscreenControlsTimer.Stop();
-        _fullscreenControlsTimer.Start();
-    }
-
-    private void FullscreenOverlayWindow_ActivityDetected()
-    {
-        if (_windowModeService.CurrentMode != PlaybackWindowMode.Fullscreen)
-        {
-            return;
-        }
-
-        RegisterFullscreenOverlayInteraction();
-        ShowFullscreenOverlay();
-    }
-
-    private void FullscreenOverlayWindow_InteractionStateChanged(bool isInteracting)
-    {
-        _isFullscreenOverlayInteracting = isInteracting;
-        RegisterFullscreenOverlayInteraction();
-        if (isInteracting)
-        {
-            _fullscreenControlsTimer.Stop();
-            return;
-        }
-
-        ScheduleFullscreenOverlayAutoHide();
+        _stageCoordinator.HandleStageLayoutChanged();
     }
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -3714,37 +3634,24 @@ public sealed partial class MainWindow : Window
 
     private void PlayerPane_PointerMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        if (_windowModeService.CurrentMode != PlaybackWindowMode.Fullscreen)
-        {
-            return;
-        }
-
         ShowFullscreenOverlay();
-    }
-
-    private void FullscreenControlsTimer_Tick(object? sender, object e)
-    {
-        _fullscreenControlsTimer.Stop();
-        if (Environment.TickCount64 < _fullscreenOverlayHideBlockedUntilTick)
-        {
-            ScheduleFullscreenOverlayAutoHide();
-            return;
-        }
-
-        if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen && !_isPositionScrubbing && !_isFullscreenOverlayInteracting)
-        {
-            HideFullscreenOverlay();
-        }
     }
 
     private void RegisterFullscreenOverlayInteraction(int holdMilliseconds = 1800)
     {
+        _stageCoordinator.RegisterFullscreenOverlayInteraction(holdMilliseconds);
+    }
+
+    private void ShowFullscreenOverlay()
+    {
         if (_windowModeService.CurrentMode != PlaybackWindowMode.Fullscreen)
         {
             return;
         }
 
-        _fullscreenOverlayHideBlockedUntilTick = Math.Max(_fullscreenOverlayHideBlockedUntilTick, Environment.TickCount64 + holdMilliseconds);
+        EnsureStageOverlayControls();
+        _stageCoordinator.HandlePointerActivity();
+        UpdateSubtitleVisibility();
     }
 
     private void UpdateSubtitleOverlay(SubtitleWorkflowSnapshot snapshot)
@@ -3771,8 +3678,6 @@ public sealed partial class MainWindow : Window
         TranslatedSubtitleTextBlock.Visibility = showPrimary ? Visibility.Visible : Visibility.Collapsed;
         TranslatedSubtitleTextBlock.Text = ViewModel.SubtitleOverlay.TranslationText;
         SubtitleOverlayBorder.Visibility = Visibility.Collapsed;
-        _stageCoordinator.SetWindowActive(_isWindowActive);
-        _stageCoordinator.SetFullscreenOverlayVisible(_isFullscreenOverlayVisible);
         _stageCoordinator.PresentSubtitles(
             new SubtitlePresentationModel
             {
@@ -3787,10 +3692,7 @@ public sealed partial class MainWindow : Window
 
     private IDisposable SuppressModalUi()
     {
-        _modalUiSuppressionCount++;
-        _fullscreenControlsTimer.Stop();
-        _fullscreenOverlayWindow?.HideOverlay();
-        return new CombinedSuppressionScope(_stageCoordinator.SuppressModalUi(), new ModalUiSuppressionScope(this));
+        return new CombinedSuppressionScope(_stageCoordinator.SuppressModalUi(), null);
     }
 
     private IDisposable SuppressDialogPresentation()
@@ -3798,28 +3700,6 @@ public sealed partial class MainWindow : Window
         var hostSuppression = PlayerHost?.SuppressNativeHost();
         var modalSuppression = SuppressModalUi();
         return new CombinedSuppressionScope(hostSuppression, modalSuppression);
-    }
-
-    private void ReleaseModalUiSuppression()
-    {
-        if (_modalUiSuppressionCount == 0)
-        {
-            return;
-        }
-
-        _modalUiSuppressionCount--;
-        if (_modalUiSuppressionCount > 0)
-        {
-            return;
-        }
-
-        if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen && _isFullscreenOverlayVisible)
-        {
-            ShowFullscreenOverlay();
-            return;
-        }
-
-        UpdateSubtitleVisibility();
     }
 
     private void AttachScrubberHandlers(Slider slider)
@@ -3835,8 +3715,9 @@ public sealed partial class MainWindow : Window
         _activeScrubber = sender as Slider;
         if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen)
         {
+            EnsureStageOverlayControls();
+            _stageCoordinator.HandleScrubbingChanged(true);
             ShowFullscreenOverlay();
-            _fullscreenControlsTimer.Stop();
         }
     }
 
@@ -3861,6 +3742,7 @@ public sealed partial class MainWindow : Window
         _activeScrubber = null;
         if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen)
         {
+            _stageCoordinator.HandleScrubbingChanged(false);
             ShowFullscreenOverlay();
         }
     }
@@ -3869,25 +3751,22 @@ public sealed partial class MainWindow : Window
     {
         if (args.WindowActivationState == WindowActivationState.Deactivated && IsAppStillForeground())
         {
-            _isWindowActive = true;
             return;
         }
 
-        _isWindowActive = args.WindowActivationState != WindowActivationState.Deactivated;
-        if (args.WindowActivationState == WindowActivationState.Deactivated)
+        var isWindowActive = args.WindowActivationState != WindowActivationState.Deactivated;
+        _stageCoordinator.HandleWindowActivationChanged(isWindowActive);
+        if (!isWindowActive)
         {
-            _fullscreenOverlayWindow?.HideOverlay();
-            _stageCoordinator.HideSubtitlePresentation();
             return;
         }
 
         TryApplySystemBackdrop();
         EnsureShellDropTargets();
         UpdateSubtitleVisibility();
-        if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen && _isFullscreenOverlayVisible)
+        if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen && _stageCoordinator.IsFullscreenOverlayVisible)
         {
             PositionFullscreenOverlay();
-            _fullscreenOverlayWindow?.ShowOverlay(_windowModeService.GetCurrentDisplayBounds());
         }
     }
 
@@ -4121,27 +4000,6 @@ public sealed partial class MainWindow : Window
                 && input.Ctrl == Ctrl
                 && input.Alt == Alt
                 && input.Shift == Shift;
-        }
-    }
-
-    private sealed class ModalUiSuppressionScope : IDisposable
-    {
-        private MainWindow? _owner;
-
-        public ModalUiSuppressionScope(MainWindow owner)
-        {
-            _owner = owner;
-        }
-
-        public void Dispose()
-        {
-            if (_owner is null)
-            {
-                return;
-            }
-
-            _owner.ReleaseModalUiSuppression();
-            _owner = null;
         }
     }
 

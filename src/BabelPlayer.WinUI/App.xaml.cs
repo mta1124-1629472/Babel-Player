@@ -13,7 +13,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow();
+        _window = new MainWindow(new ShellCompositionRoot());
         _window.Activate();
     }
 }

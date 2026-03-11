@@ -83,6 +83,61 @@ public class AsrService
         }
     }
 
+    public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoWithWhisperAsync(
+        string videoPath,
+        GgmlType localModelType,
+        string? languageHint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
+        var extractedWavePath = await Task.Run(() => ExtractWaveAudio(videoPath), cancellationToken);
+
+        try
+        {
+            return await TranscribeWithWhisperAsync(extractedWavePath, localModelType, languageHint, cancellationToken);
+        }
+        finally
+        {
+            TryDeleteFile(extractedWavePath);
+        }
+    }
+
+    public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoWithWindowsSpeechAsync(
+        string videoPath,
+        string? languageHint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
+        var extractedWavePath = await Task.Run(() => ExtractWaveAudio(videoPath), cancellationToken);
+
+        try
+        {
+            return await RunOnStaThreadAsync(() => TranscribeWithWindowsSpeech(extractedWavePath, languageHint, cancellationToken), cancellationToken);
+        }
+        finally
+        {
+            TryDeleteFile(extractedWavePath);
+        }
+    }
+
+    public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoWithOpenAiAsync(
+        string videoPath,
+        CaptionGenerationOptions options,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
+        var extractedWavePath = await Task.Run(() => ExtractWaveAudio(videoPath), cancellationToken);
+
+        try
+        {
+            return await TranscribeWithCloudAsync(extractedWavePath, options, cancellationToken);
+        }
+        finally
+        {
+            TryDeleteFile(extractedWavePath);
+        }
+    }
+
     private async Task<IReadOnlyList<SubtitleCue>> TranscribeLocallyAsync(string wavePath, GgmlType localModelType, string? languageHint, CancellationToken cancellationToken)
     {
         try
