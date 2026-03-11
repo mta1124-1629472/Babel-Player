@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $solutionPath = Join-Path $repoRoot "BabelPlayer.sln"
 $projectPath = Join-Path $repoRoot "src\\BabelPlayer.WinUI\\BabelPlayer.WinUI.csproj"
-$exePath = Join-Path $repoRoot "src\\BabelPlayer.WinUI\\bin\\x64\\Debug\\net8.0-windows10.0.22621.0\\BabelPlayer.WinUI.exe"
+$exePath = Join-Path $repoRoot "src\\BabelPlayer.WinUI\\bin\\x64\\Debug\\net8.0-windows10.0.22621.0\\BabelPlayer.exe"
 
 Push-Location $repoRoot
 try {
@@ -17,7 +17,7 @@ try {
     }
 
     if (-not $SkipBuild) {
-        Get-Process BabelPlayer.WinUI -ErrorAction SilentlyContinue | Stop-Process -Force
+        Get-Process BabelPlayer -ErrorAction SilentlyContinue | Stop-Process -Force
         dotnet build $projectPath -p:Platform=x64
     }
 
