@@ -40,7 +40,7 @@ public sealed record ShellWorkflowTransitionResult
     public string? StatusMessage { get; init; }
 }
 
-public sealed class ShellController
+public sealed class ShellController : IDisposable
 {
     private readonly PlaylistController _playlistController;
     private readonly PlaybackSessionController _playbackSessionController;
@@ -48,6 +48,7 @@ public sealed class ShellController
     private readonly SubtitleWorkflowController _subtitleWorkflowController;
     private readonly LibraryBrowserService _libraryBrowserService;
     private readonly ResumePlaybackService _resumePlaybackService;
+    private readonly ResumeTrackingCoordinator _resumeTrackingCoordinator;
 
     private bool _autoResumePlaybackAfterCaptionReady;
     private string? _autoResumePlaybackPath;
@@ -59,15 +60,16 @@ public sealed class ShellController
         PlaybackSessionController playbackSessionController,
         IPlaybackBackend playbackBackend,
         SubtitleWorkflowController subtitleWorkflowController,
-        LibraryBrowserService? libraryBrowserService = null,
-        ResumePlaybackService? resumePlaybackService = null)
+        LibraryBrowserService libraryBrowserService,
+        ResumePlaybackService resumePlaybackService)
     {
         _playlistController = playlistController;
         _playbackSessionController = playbackSessionController;
         _playbackBackend = playbackBackend;
         _subtitleWorkflowController = subtitleWorkflowController;
-        _libraryBrowserService = libraryBrowserService ?? new LibraryBrowserService();
-        _resumePlaybackService = resumePlaybackService ?? new ResumePlaybackService();
+        _libraryBrowserService = libraryBrowserService;
+        _resumePlaybackService = resumePlaybackService;
+        _resumeTrackingCoordinator = new ResumeTrackingCoordinator(playbackBackend, resumePlaybackService);
     }
 
     public IReadOnlyList<PlaylistItem> PlaylistItems => _playlistController.Items;
@@ -75,6 +77,12 @@ public sealed class ShellController
     public int CurrentPlaylistIndex => _playlistController.CurrentIndex;
 
     public PlaylistItem? CurrentPlaylistItem => _playlistController.CurrentItem;
+
+    public PlaybackStateSnapshot CurrentPlaybackSnapshot => _resumeTrackingCoordinator.CurrentSnapshot with
+    {
+        PlaylistIndex = _playlistController.CurrentIndex,
+        PlaylistCount = _playlistController.Items.Count
+    };
 
     public ShellQueueMediaResult EnqueueFiles(IEnumerable<string> files, bool autoplay)
     {
@@ -180,12 +188,14 @@ public sealed class ShellController
 
         ResetCaptionStartupGate();
 
+        _resumeTrackingCoordinator.SetEnabled(options.ResumeEnabled);
         if (options.ResumeEnabled)
         {
-            _resumePlaybackService.Update(options.PreviousPlaybackState);
+            _resumeTrackingCoordinator.Flush();
         }
 
         _playbackSessionController.StartWith(item);
+        _resumeTrackingCoordinator.ResetForMedia(item.Path);
 
         await _playbackBackend.LoadAsync(item.Path, cancellationToken);
         await _playbackBackend.SetHardwareDecodingModeAsync(options.HardwareDecodingMode, cancellationToken);
@@ -200,7 +210,7 @@ public sealed class ShellController
         return true;
     }
 
-    public async Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(string? path, TimeSpan duration, bool resumeEnabled, CancellationToken cancellationToken = default)
+    public async Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(PlaybackStateSnapshot snapshot, bool resumeEnabled, CancellationToken cancellationToken = default)
     {
         var current = _playlistController.CurrentItem;
         var result = new ShellPlaybackOpenResult
@@ -208,18 +218,20 @@ public sealed class ShellController
             StatusMessage = current is null ? "Media opened." : $"Now playing {current.DisplayName}."
         };
 
+        _resumeTrackingCoordinator.SetEnabled(resumeEnabled);
+        _resumeTrackingCoordinator.ResetForMedia(snapshot.Path);
         if (!resumeEnabled)
         {
             return result;
         }
 
-        var entry = _resumePlaybackService.FindEntry(path, duration);
+        var entry = _resumePlaybackService.FindEntry(snapshot.Path, snapshot.Duration);
         if (entry is null)
         {
             return result;
         }
 
-        var resumePosition = TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, duration.TotalSeconds));
+        var resumePosition = TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, snapshot.Duration.TotalSeconds));
         await _playbackBackend.SeekAsync(resumePosition, cancellationToken);
         return result with
         {
@@ -227,14 +239,9 @@ public sealed class ShellController
         };
     }
 
-    public void SaveResumePosition(PlaybackStateSnapshot snapshot, bool enabled, bool forceRemoveCompleted = false)
+    public void SetResumeTrackingEnabled(bool enabled)
     {
-        if (!enabled)
-        {
-            return;
-        }
-
-        _resumePlaybackService.Update(snapshot, forceRemoveCompleted);
+        _resumeTrackingCoordinator.SetEnabled(enabled);
     }
 
     public void ClearResumeHistory()
@@ -242,11 +249,17 @@ public sealed class ShellController
         _resumePlaybackService.Clear();
     }
 
-    public ShellMediaEndedResult HandleMediaEnded(PlaybackStateSnapshot snapshot, bool resumeEnabled)
+    public void FlushResumeTracking(bool forceRemoveCompleted = false)
     {
+        _resumeTrackingCoordinator.Flush(forceRemoveCompleted);
+    }
+
+    public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled)
+    {
+        _resumeTrackingCoordinator.SetEnabled(resumeEnabled);
         if (resumeEnabled)
         {
-            _resumePlaybackService.Update(snapshot, forceRemoveCompleted: true);
+            _resumeTrackingCoordinator.Flush(forceRemoveCompleted: true);
         }
 
         ResetCaptionStartupGate();
@@ -256,6 +269,11 @@ public sealed class ShellController
             NextItem = next,
             StatusMessage = next is null ? "Playback ended." : $"Now playing {next.DisplayName}."
         };
+    }
+
+    public void Dispose()
+    {
+        _resumeTrackingCoordinator.Dispose();
     }
 
     public Task PlayAsync(CancellationToken cancellationToken = default)

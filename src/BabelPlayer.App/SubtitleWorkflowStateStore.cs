@@ -20,6 +20,8 @@ public interface ISubtitleWorkflowStateStore
     event Action<SubtitleWorkflowState>? SnapshotChanged;
 
     SubtitleWorkflowState Snapshot { get; }
+
+    void Update(Func<SubtitleWorkflowState, SubtitleWorkflowState> update);
 }
 
 public sealed class InMemorySubtitleWorkflowStateStore : ISubtitleWorkflowStateStore

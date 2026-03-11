@@ -133,12 +133,20 @@ public sealed class RemainingArchitecturePlanTests
         var subtitleTranslator = new FakeSubtitleTranslator();
         var credentialCoordinator = new FakeAiCredentialCoordinator();
         var runtimeProvisioner = new FakeRuntimeProvisioner();
-        var service = new SubtitleApplicationService(
+        var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+        var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+        var providerAvailabilityService = new ProviderAvailabilityService(credentialFacade, _ => null);
+        using var service = new SubtitleApplicationService(
             sourceResolver,
             captionGenerator,
             subtitleTranslator,
             credentialCoordinator,
-            runtimeProvisioner);
+            runtimeProvisioner,
+            credentialFacade,
+            mediaSessionCoordinator,
+            workflowStateStore,
+            providerAvailabilityService);
 
         await service.LoadExternalSubtitleCuesAsync("sub.srt", null, null, CancellationToken.None);
         await service.ExtractEmbeddedSubtitleCuesAsync("video.mp4", new MediaTrackInfo { Id = 9 }, null, null, CancellationToken.None);
@@ -158,6 +166,57 @@ public sealed class RemainingArchitecturePlanTests
         Assert.Equal(1, credentialCoordinator.TranslationCalls);
         Assert.Equal(1, runtimeProvisioner.LlamaCalls);
         Assert.Equal(1, runtimeProvisioner.FfmpegCalls);
+    }
+
+    [Fact]
+    public async Task SubtitleApplicationService_TriggersActiveSegmentTranslationFromMediaSessionChanges()
+    {
+        var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+        var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+        var subtitleTranslator = new FakeSubtitleTranslator();
+        using var service = new SubtitleApplicationService(
+            new FakeSubtitleSourceResolver(),
+            new FakeCaptionGenerator(),
+            subtitleTranslator,
+            new FakeAiCredentialCoordinator(),
+            new FakeRuntimeProvisioner(),
+            credentialFacade,
+            mediaSessionCoordinator,
+            workflowStateStore,
+            new ProviderAvailabilityService(credentialFacade, _ => null));
+
+        workflowStateStore.Update(state => state with
+        {
+            SelectedTranslationModelKey = "cloud:deepl",
+            IsTranslationEnabled = true
+        });
+        mediaSessionCoordinator.SetTranslationState(enabled: true, autoTranslateEnabled: false);
+        mediaSessionCoordinator.SetTranscriptSegments(
+        [
+            new TranscriptSegment
+            {
+                Id = new TranscriptSegmentId("tr:active"),
+                Start = TimeSpan.Zero,
+                End = TimeSpan.FromSeconds(2),
+                Text = "Hola",
+                Language = "es"
+            }
+        ],
+        SubtitlePipelineSource.Sidecar,
+        "es");
+        mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromMinutes(5),
+            1.0,
+            false,
+            true,
+            DateTimeOffset.UtcNow));
+
+        await WaitForConditionAsync(() => subtitleTranslator.CallCount == 1);
+
+        Assert.Equal(1, subtitleTranslator.CallCount);
+        Assert.Equal("Hola", mediaSessionCoordinator.Snapshot.Translation.Segments.Single().Text);
     }
 
     [Fact]
@@ -258,6 +317,69 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
+    public async Task ResumeTrackingCoordinator_PersistsOnClockCadenceAndFlushesCompletedPlayback()
+    {
+        IReadOnlyList<PlaybackResumeEntry>? persisted = null;
+        var backend = new FakeShellPlaybackBackend();
+        var service = new ResumePlaybackService(
+            initialEntries: [],
+            persistEntries: entries => persisted = entries.Select(entry => new PlaybackResumeEntry
+            {
+                Path = entry.Path,
+                PositionSeconds = entry.PositionSeconds,
+                DurationSeconds = entry.DurationSeconds,
+                UpdatedAt = entry.UpdatedAt
+            }).ToArray());
+        using var coordinator = new ResumeTrackingCoordinator(backend, service);
+        coordinator.SetEnabled(true);
+        await backend.LoadAsync("C:\\Media\\movie.mp4", CancellationToken.None);
+        coordinator.ResetForMedia("C:\\Media\\movie.mp4");
+
+        var start = DateTimeOffset.UtcNow;
+        backend.ClockSnapshot = new ClockSnapshot(TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(90), 1.0, false, true, start);
+        Assert.NotNull(persisted);
+        Assert.Single(persisted!);
+        Assert.Equal(600, persisted![0].PositionSeconds);
+
+        backend.ClockSnapshot = new ClockSnapshot(TimeSpan.FromMinutes(11), TimeSpan.FromMinutes(90), 1.0, false, true, start.AddSeconds(3));
+        Assert.Single(persisted!);
+        Assert.Equal(600, persisted![0].PositionSeconds);
+
+        backend.ClockSnapshot = new ClockSnapshot(TimeSpan.FromMinutes(12), TimeSpan.FromMinutes(90), 1.0, false, true, start.AddSeconds(6));
+        Assert.Single(persisted!);
+        Assert.Equal(720, persisted![0].PositionSeconds);
+
+        backend.ClockSnapshot = new ClockSnapshot(TimeSpan.FromMinutes(89), TimeSpan.FromMinutes(90), 1.0, false, true, start.AddSeconds(12));
+        coordinator.Flush(forceRemoveCompleted: true);
+
+        Assert.Empty(service.Entries);
+    }
+
+    [Fact]
+    public async Task ResumeTrackingCoordinator_DoesNothingWhenDisabled()
+    {
+        var backend = new FakeShellPlaybackBackend();
+        var persistCallCount = 0;
+        var service = new ResumePlaybackService(
+            initialEntries: [],
+            persistEntries: _ => persistCallCount++);
+        using var coordinator = new ResumeTrackingCoordinator(backend, service);
+
+        await backend.LoadAsync("C:\\Media\\movie.mp4", CancellationToken.None);
+        coordinator.ResetForMedia("C:\\Media\\movie.mp4");
+        backend.ClockSnapshot = new ClockSnapshot(
+            TimeSpan.FromMinutes(10),
+            TimeSpan.FromMinutes(90),
+            1.0,
+            false,
+            true,
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(0, persistCallCount);
+        Assert.Empty(service.Entries);
+    }
+
+    [Fact]
     public async Task ShellController_EnqueuesLoadsAndAdvancesPlaylistItems()
     {
         var directory = Directory.CreateTempSubdirectory();
@@ -273,8 +395,8 @@ public sealed class RemainingArchitecturePlanTests
             var playlist = new PlaylistController();
             var session = new PlaybackSessionController(playlist);
             var backend = new FakeShellPlaybackBackend();
-            var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-            var shell = new ShellController(
+            using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            using var shell = new ShellController(
                 playlist,
                 session,
                 backend,
@@ -291,14 +413,14 @@ public sealed class RemainingArchitecturePlanTests
                     PreviousPlaybackState = new PlaybackStateSnapshot()
                 },
                 CancellationToken.None);
-            var ended = shell.HandleMediaEnded(
-                new PlaybackStateSnapshot
-                {
-                    Path = firstPath,
-                    Position = TimeSpan.FromMinutes(5),
-                    Duration = TimeSpan.FromMinutes(10)
-                },
-                resumeEnabled: true);
+            backend.ClockSnapshot = new ClockSnapshot(
+                TimeSpan.FromMinutes(5),
+                TimeSpan.FromMinutes(10),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow);
+            var ended = shell.HandleMediaEnded(resumeEnabled: true);
 
             Assert.True(loaded);
             Assert.Equal(firstPath, backend.LoadedPaths[0]);
@@ -317,8 +439,8 @@ public sealed class RemainingArchitecturePlanTests
         var playlist = new PlaylistController();
         var session = new PlaybackSessionController(playlist);
         var backend = new FakeShellPlaybackBackend();
-        var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        var shell = new ShellController(
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
             playlist,
             session,
             backend,
@@ -348,7 +470,7 @@ public sealed class RemainingArchitecturePlanTests
         playlist.EnqueueFiles(["C:\\Media\\movie.mp4"]);
         var session = new PlaybackSessionController(playlist);
         var backend = new FakeShellPlaybackBackend();
-        var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
         var resumeEntry = new PlaybackResumeEntry
         {
             Path = "C:\\Media\\movie.mp4",
@@ -356,7 +478,7 @@ public sealed class RemainingArchitecturePlanTests
             DurationSeconds = 3600,
             UpdatedAt = DateTimeOffset.UtcNow
         };
-        var shell = new ShellController(
+        using var shell = new ShellController(
             playlist,
             session,
             backend,
@@ -364,7 +486,13 @@ public sealed class RemainingArchitecturePlanTests
             new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [resumeEntry], persistEntries: _ => { }));
 
-        var result = await shell.HandleMediaOpenedAsync("C:\\Media\\movie.mp4", TimeSpan.FromMinutes(60), resumeEnabled: true);
+        var result = await shell.HandleMediaOpenedAsync(
+            new PlaybackStateSnapshot
+            {
+                Path = "C:\\Media\\movie.mp4",
+                Duration = TimeSpan.FromMinutes(60)
+            },
+            resumeEnabled: true);
 
         Assert.Equal(TimeSpan.FromSeconds(125), result.ResumePosition);
         Assert.Equal(TimeSpan.FromSeconds(125), backend.LastSeekPosition);
@@ -379,8 +507,8 @@ public sealed class RemainingArchitecturePlanTests
         {
             ClockSnapshot = new ClockSnapshot(TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(5), 1.0, false, true, DateTimeOffset.UtcNow)
         };
-        var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        var shell = new ShellController(
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
             playlist,
             session,
             backend,
@@ -436,20 +564,69 @@ public sealed class RemainingArchitecturePlanTests
     {
         var workflowStore = new InMemorySubtitleWorkflowStateStore();
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-        var service = new SubtitleApplicationService(
+        var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+        using var service = new SubtitleApplicationService(
             new FakeSubtitleSourceResolver(),
             new FakeCaptionGenerator(),
             new FakeSubtitleTranslator(),
             new FakeAiCredentialCoordinator(),
             new FakeRuntimeProvisioner(),
-            mediaSessionCoordinator: mediaSessionCoordinator,
-            workflowStateStore: workflowStore);
+            credentialFacade,
+            mediaSessionCoordinator,
+            workflowStore,
+            new ProviderAvailabilityService(credentialFacade, _ => null));
         using var projectionAdapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaSessionCoordinator.Store);
-
-        var controller = new SubtitleWorkflowController(service, projectionAdapter, new SubtitlePresentationProjector());
+        using var controller = new SubtitleWorkflowController(service, projectionAdapter, new SubtitlePresentationProjector());
 
         Assert.Same(service.MediaSessionStore, controller.MediaSessionStore);
         Assert.Equal(controller.Snapshot.CurrentVideoPath, projectionAdapter.Current.CurrentVideoPath);
+    }
+
+    [Fact]
+    public async Task ShellController_CurrentPlaybackSnapshotReflectsBackendState()
+    {
+        var playlist = new PlaylistController();
+        var session = new PlaybackSessionController(playlist);
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
+            playlist,
+            session,
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+        await backend.LoadAsync("C:\\Media\\movie.mp4", CancellationToken.None);
+        backend.SetState(new PlaybackBackendState
+        {
+            Path = "C:\\Media\\movie.mp4",
+            HasVideo = true,
+            HasAudio = true,
+            VideoWidth = 1920,
+            VideoHeight = 1080,
+            VideoDisplayWidth = 1920,
+            VideoDisplayHeight = 1080,
+            Volume = 0.5,
+            ActiveHardwareDecoder = "d3d11va"
+        });
+        backend.ClockSnapshot = new ClockSnapshot(
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromMinutes(10),
+            1.25,
+            false,
+            true,
+            DateTimeOffset.UtcNow);
+
+        var snapshot = shell.CurrentPlaybackSnapshot;
+
+        Assert.Equal("C:\\Media\\movie.mp4", snapshot.Path);
+        Assert.Equal(TimeSpan.FromSeconds(30), snapshot.Position);
+        Assert.Equal(TimeSpan.FromMinutes(10), snapshot.Duration);
+        Assert.Equal(0.5, snapshot.Volume);
+        Assert.Equal("d3d11va", snapshot.ActiveHardwareDecoder);
+        Assert.False(snapshot.IsPaused);
+        Assert.True(snapshot.IsSeekable);
     }
 
     private sealed class FakeTranscriptionProvider : ITranscriptionProvider
@@ -645,6 +822,12 @@ public sealed class RemainingArchitecturePlanTests
             return Task.CompletedTask;
         }
 
+        public void SetState(PlaybackBackendState state)
+        {
+            State = state;
+            StateChanged?.Invoke(State);
+        }
+
         public Task PlayAsync(CancellationToken cancellationToken)
         {
             PlayCallCount++;
@@ -697,6 +880,20 @@ public sealed class RemainingArchitecturePlanTests
                 Current = snapshot;
                 Changed?.Invoke(snapshot);
             }
+        }
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> predicate, int timeoutMilliseconds = 1000)
+    {
+        var start = DateTimeOffset.UtcNow;
+        while (!predicate())
+        {
+            if ((DateTimeOffset.UtcNow - start).TotalMilliseconds > timeoutMilliseconds)
+            {
+                throw new TimeoutException("Timed out waiting for condition.");
+            }
+
+            await Task.Delay(20);
         }
     }
 

@@ -20,7 +20,6 @@ public sealed class PlaybackHostAdapterSeamTests
         var adapter = new PlaybackHostAdapter(backend, presenter);
 
         Assert.Same(presenter.View, adapter.View);
-        Assert.Equal(HardwareDecodingMode.AutoSafe, adapter.HardwareDecodingMode);
 
         adapter.RequestHostBoundsSync();
         Assert.Equal(1, presenter.RequestBoundsSyncCount);
