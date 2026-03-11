@@ -62,7 +62,7 @@ public sealed class AppLayerTests
     [Fact]
     public void SubtitleWorkflowController_TogglesRenderModesAndPreservesUnchangedStyleValues()
     {
-        var controller = new SubtitleWorkflowController();
+        var controller = TestWorkflowControllerFactory.Create();
         var currentStyle = new SubtitleStyleSettings
         {
             SourceFontSize = 28,
@@ -149,7 +149,7 @@ public sealed class AppLayerTests
         var store = new FakeCredentialStore();
         store.SaveSubtitleModelKey("cloud:gpt-4o-transcribe");
         var facade = new CredentialFacade(store);
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             facade,
             environmentVariableReader: _ => null);
 
@@ -164,7 +164,7 @@ public sealed class AppLayerTests
         var store = new FakeCredentialStore();
         store.SaveTranslationModelKey("cloud:deepl");
         store.SaveDeepLApiKey("configured");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null);
 
@@ -179,7 +179,7 @@ public sealed class AppLayerTests
     {
         var store = new FakeCredentialStore();
         store.SaveTranslationModelKey("cloud:google-translate");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null);
 
@@ -194,14 +194,14 @@ public sealed class AppLayerTests
         var store = new FakeCredentialStore();
         var dialogs = new FakeCredentialDialogService();
         dialogs.ApiKeyResponses.Enqueue("google-key");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             dialogs,
             new FakeFilePickerService(),
             new FakeRuntimeBootstrapService(),
-            _ => null,
-            (_, _) => Task.CompletedTask,
-            (_, _) => Task.CompletedTask);
+            environmentVariableReader: _ => null,
+            validateOpenAiApiKeyAsync: (_, _) => Task.CompletedTask,
+            validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
 
         var applied = await controller.SelectTranslationModelAsync("cloud:google-translate");
 
@@ -215,7 +215,7 @@ public sealed class AppLayerTests
     {
         var store = new FakeCredentialStore();
         store.SaveDeepLApiKey("configured");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null,
             validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
@@ -231,7 +231,7 @@ public sealed class AppLayerTests
     public async Task SubtitleWorkflowController_EnablingTranslationWithoutModelKeepsSelectorFlowAvailable()
     {
         var store = new FakeCredentialStore();
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null);
 
@@ -250,14 +250,14 @@ public sealed class AppLayerTests
             LlamaChoice = LlamaCppBootstrapChoice.InstallAutomatically
         };
         var runtimeBootstrap = new FakeRuntimeBootstrapService();
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             dialogs,
             new FakeFilePickerService(),
             runtimeBootstrap,
-            _ => null,
-            (_, _) => Task.CompletedTask,
-            (_, _) => Task.CompletedTask,
+            environmentVariableReader: _ => null,
+            validateOpenAiApiKeyAsync: (_, _) => Task.CompletedTask,
+            validateTranslationProviderAsync: (_, _) => Task.CompletedTask,
             providerAvailabilityService: new FakeProviderAvailabilityService(),
             subtitleTranslator: new ThrowingWarmupSubtitleTranslator(),
             runtimeProvisioner: new FakeSuccessfulRuntimeProvisioner());
@@ -272,7 +272,7 @@ public sealed class AppLayerTests
     public async Task SubtitleWorkflowController_AutoTranslateStaysOffForEnglishSourceLanguageWithoutModel()
     {
         var store = new FakeCredentialStore();
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null);
 
@@ -290,7 +290,7 @@ public sealed class AppLayerTests
             var store = new FakeCredentialStore();
             store.SaveTranslationModelKey("cloud:deepl");
             store.SaveDeepLApiKey("configured");
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
@@ -333,7 +333,7 @@ Hello there
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
                 environmentVariableReader: _ => null);
 
@@ -365,7 +365,7 @@ Hola
 Hello there
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
                 environmentVariableReader: _ => null);
 
@@ -400,7 +400,7 @@ Hello there
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
                 mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null);
@@ -440,7 +440,7 @@ Hola
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
                 mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
@@ -485,7 +485,7 @@ Hola
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
                 mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
@@ -525,7 +525,7 @@ Hola
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
                 mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
@@ -570,7 +570,7 @@ First sentence
 Second sentence
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
                 environmentVariableReader: _ => null);
 
@@ -593,7 +593,7 @@ Second sentence
     {
         var store = new FakeCredentialStore();
         store.SaveDeepLApiKey("configured");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null,
             validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
@@ -638,7 +638,7 @@ Second sentence
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             File.WriteAllText(videoPath, string.Empty);
             var transcribeCalls = 0;
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
                 environmentVariableReader: _ => null,
                 transcribeVideoAsync: (path, options, _, _, _) =>
@@ -683,7 +683,7 @@ Second sentence
             var videoPath = Path.Combine(directory.FullName, "generated.mp4");
             File.WriteAllText(videoPath, string.Empty);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
                 mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
@@ -739,7 +739,7 @@ Second sentence
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
                 mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null);

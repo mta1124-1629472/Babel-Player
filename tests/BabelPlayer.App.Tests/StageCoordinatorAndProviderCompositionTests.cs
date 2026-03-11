@@ -148,7 +148,7 @@ public sealed class StageCoordinatorAndProviderCompositionTests
             var availabilityService = new ProviderAvailabilityService(credentialFacade, _ => null);
             var subtitleTranslator = new RecordingSubtitleTranslator();
             var runtimeProvisioner = new CountingRuntimeProvisioner();
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 credentialFacade,
                 environmentVariableReader: _ => null,
                 providerAvailabilityService: availabilityService,
