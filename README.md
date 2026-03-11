@@ -278,6 +278,17 @@ In Visual Studio, set `BabelPlayer.WinUI` as the startup project.
 
 If `BabelPlayer.WinUI` is already running, close it before rebuilding or rerunning.
 
+## Release Artifacts
+
+Tagged GitHub releases publish two Windows distribution formats:
+
+- portable zip
+  - extract the archive to any folder and run `BabelPlayer.exe`
+- EXE installer
+  - run the installer and launch Babel Player from the Start menu or desktop shortcut
+
+The portable build and installer are produced from the same WinUI publish output.
+
 ## Known Limitations
 
 - Translation target language is currently English only.
