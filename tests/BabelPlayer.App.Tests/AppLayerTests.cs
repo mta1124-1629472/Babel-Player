@@ -417,6 +417,131 @@ Hola
     }
 
     [Fact]
+    public async Task SubtitleWorkflowController_UsesTranslatedFirstPresentationWhenSourceOnlyIsPersisted()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var store = new FakeCredentialStore();
+            store.SaveDeepLApiKey("configured");
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hola
+""");
+
+            var controller = new SubtitleWorkflowController(
+                new CredentialFacade(store),
+                environmentVariableReader: _ => null,
+                validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
+
+            await controller.InitializeAsync();
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            await controller.SelectTranslationModelAsync("cloud:deepl");
+            await controller.SetTranslationEnabledAsync(true);
+            controller.CurrentCues[0].TranslatedText = "Hello";
+            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+
+            var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.SourceOnly);
+            var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.SourceOnly);
+
+            Assert.Equal(SubtitleRenderMode.TranslationOnly, effectiveMode);
+            Assert.True(presentation.IsVisible);
+            Assert.Equal("Hello", presentation.PrimaryText);
+            Assert.Equal(string.Empty, presentation.SecondaryText);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_FallsBackToSourceTextWhenTranslatedTextIsNotReady()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var store = new FakeCredentialStore();
+            store.SaveDeepLApiKey("configured");
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hola
+""");
+
+            var controller = new SubtitleWorkflowController(
+                new CredentialFacade(store),
+                environmentVariableReader: _ => null,
+                validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
+
+            await controller.InitializeAsync();
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            await controller.SelectTranslationModelAsync("cloud:deepl");
+            await controller.SetTranslationEnabledAsync(true);
+            controller.CurrentCues[0].TranslatedText = null;
+            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+
+            var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.TranslationOnly);
+
+            Assert.True(presentation.IsVisible);
+            Assert.Equal("Hola", presentation.PrimaryText);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_AllowsSourceOnlyOverrideForCurrentVideo()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var store = new FakeCredentialStore();
+            store.SaveDeepLApiKey("configured");
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hola
+""");
+
+            var controller = new SubtitleWorkflowController(
+                new CredentialFacade(store),
+                environmentVariableReader: _ => null,
+                validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
+
+            await controller.InitializeAsync();
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            await controller.SelectTranslationModelAsync("cloud:deepl");
+            await controller.SetTranslationEnabledAsync(true);
+            controller.CurrentCues[0].TranslatedText = "Hello";
+            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+
+            var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.SourceOnly, sourceOnlyOverrideForCurrentVideo: true);
+            var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.SourceOnly, sourceOnlyOverrideForCurrentVideo: true);
+
+            Assert.Equal(SubtitleRenderMode.SourceOnly, effectiveMode);
+            Assert.True(presentation.IsVisible);
+            Assert.Equal("Hola", presentation.PrimaryText);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SubtitleWorkflowController_PrefersLatestOverlappingCueDuringPlayback()
     {
         var directory = Directory.CreateTempSubdirectory();
