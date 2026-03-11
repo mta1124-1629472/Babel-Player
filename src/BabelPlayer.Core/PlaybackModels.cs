@@ -29,7 +29,8 @@ public enum PlaybackWindowMode
 {
     Standard,
     Borderless,
-    PictureInPicture
+    PictureInPicture,
+    Fullscreen
 }
 
 public sealed class MediaTrackInfo
@@ -76,6 +77,10 @@ public sealed record PlaybackStateSnapshot
     public string? Path { get; init; }
     public TimeSpan Position { get; init; }
     public TimeSpan Duration { get; init; }
+    public int VideoWidth { get; init; }
+    public int VideoHeight { get; init; }
+    public int VideoDisplayWidth { get; init; }
+    public int VideoDisplayHeight { get; init; }
     public bool IsPaused { get; init; }
     public bool IsMuted { get; init; }
     public double Volume { get; init; }
@@ -131,6 +136,8 @@ public sealed record AppPlayerSettings
     public SubtitleStyleSettings SubtitleStyle { get; init; } = new();
     public ShortcutProfile ShortcutProfile { get; init; } = ShortcutProfile.CreateDefault();
     public List<string> PinnedRoots { get; init; } = [];
+    public double VolumeLevel { get; init; } = 0.8;
+    public bool IsMuted { get; init; }
     public double DefaultPlaybackRate { get; init; } = 1.0;
     public double AudioDelaySeconds { get; init; }
     public double SubtitleDelaySeconds { get; init; }

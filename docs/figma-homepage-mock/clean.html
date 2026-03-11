@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Babel Player Home Mock v3</title>
+  <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071018;
+      --bg-soft: #0c1822;
+      --bg-panel: rgba(10, 20, 29, 0.7);
+      --bg-panel-2: rgba(12, 24, 35, 0.84);
+      --line: rgba(214, 227, 238, 0.08);
+      --line-strong: rgba(214, 227, 238, 0.14);
+      --text: #eef6fb;
+      --muted: #90a7ba;
+      --accent: #d8f07f;
+      --accent-2: #89d4ff;
+      --shadow: 0 34px 100px rgba(0, 0, 0, 0.36);
+      --radius-xl: 34px;
+      --radius-lg: 26px;
+      --radius-md: 18px;
+      --radius-sm: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      font-family: "Aptos", "Segoe UI Variable", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 16% 10%, rgba(137, 212, 255, 0.14), transparent 24%),
+        radial-gradient(circle at 86% 82%, rgba(216, 240, 127, 0.1), transparent 20%),
+        linear-gradient(180deg, #061018, #081219 52%, #071018);
+    }
+
+    body {
+      padding: 26px;
+    }
+
+    .window {
+      width: min(1520px, 100%);
+      min-height: calc(100vh - 52px);
+      margin: 0 auto;
+      padding: 18px;
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 236px minmax(0, 1fr) 270px;
+      grid-template-rows: 72px minmax(0, 1fr) 104px;
+      border-radius: 38px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(13, 22, 31, 0.96), rgba(7, 14, 21, 0.94)),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.02), transparent 20%);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .window::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 14%),
+        radial-gradient(circle at 50% 36%, rgba(137, 212, 255, 0.06), transparent 28%);
+      pointer-events: none;
+    }
+
+    .topbar,
+    .library,
+    .hero,
+    .playlist,
+    .transport {
+      position: relative;
+      z-index: 1;
+    }
+
+    .topbar {
+      grid-column: 1 / 4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px 0 14px;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.025);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    .brand h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .brand p,
+    .eyebrow,
+    .list-item p,
+    .transport p,
+    .transport small,
+    .chip p {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pill {
+      min-height: 40px;
+      padding: 0 16px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.025);
+      font-size: 14px;
+    }
+
+    .pill.primary {
+      border-color: rgba(216, 240, 127, 0.18);
+      background: linear-gradient(135deg, rgba(216, 240, 127, 0.12), rgba(137, 212, 255, 0.06));
+    }
+
+    .panel {
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--line);
+      background: var(--bg-panel);
+      backdrop-filter: blur(18px);
+    }
+
+    .library,
+    .playlist {
+      padding: 22px 18px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .panel-head h2 {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .panel-head p {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .list-item {
+      padding: 14px 14px 15px;
+      border-radius: 18px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .list-item strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .list-item.active {
+      border-color: rgba(137, 212, 255, 0.16);
+      background: linear-gradient(135deg, rgba(137, 212, 255, 0.08), rgba(216, 240, 127, 0.04));
+    }
+
+    .hero {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 16px;
+    }
+
+    .stage {
+      position: relative;
+      padding: 24px 26px 28px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 34px;
+      border-radius: 32px;
+      border: 1px solid var(--line);
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(8, 16, 22, 0.18), rgba(8, 16, 22, 0.68)),
+        radial-gradient(circle at 28% 18%, rgba(137, 212, 255, 0.13), transparent 22%),
+        radial-gradient(circle at 82% 78%, rgba(216, 240, 127, 0.12), transparent 18%),
+        linear-gradient(135deg, #10202e, #08121a 56%, #0a1520);
+      min-height: 0;
+    }
+
+    .stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 22%),
+        linear-gradient(180deg, transparent 0%, rgba(6, 12, 18, 0.08) 56%, rgba(6, 12, 18, 0.76) 100%);
+      pointer-events: none;
+    }
+
+    .stage-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      z-index: 1;
+    }
+
+    .stage-content {
+      display: grid;
+      grid-template-columns: minmax(0, 430px) minmax(360px, 420px);
+      justify-content: space-between;
+      align-items: end;
+      gap: 34px;
+      min-height: 0;
+      z-index: 1;
+    }
+
+    .chip {
+      padding: 13px 15px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      background: rgba(6, 13, 18, 0.48);
+      backdrop-filter: blur(14px);
+      min-width: 220px;
+    }
+
+    .chip strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .copy {
+      max-width: 430px;
+      align-self: end;
+    }
+
+    .eyebrow {
+      display: block;
+      margin-bottom: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 11px;
+    }
+
+    .copy h2 {
+      font-size: 44px;
+      line-height: 1.04;
+      letter-spacing: -0.05em;
+      font-weight: 600;
+      max-width: 420px;
+    }
+
+    .copy p {
+      margin-top: 18px;
+      max-width: 400px;
+      color: #d5e5f0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .subtitles {
+      width: min(420px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      justify-self: end;
+      align-self: start;
+      margin-top: 54px;
+    }
+
+    .cue {
+      padding: 14px 18px;
+      border-radius: 20px;
+      background: rgba(4, 9, 14, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      text-align: center;
+      font-size: 15px;
+      line-height: 1.35;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+      white-space: nowrap;
+    }
+
+    .cue.translation {
+      color: var(--accent);
+    }
+
+    .details {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .detail {
+      padding: 16px 18px;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: rgba(9, 18, 27, 0.6);
+    }
+
+    .detail strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .detail p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .transport {
+      grid-column: 1 / 4;
+      display: grid;
+      grid-template-columns: 236px minmax(0, 1fr) 270px;
+      grid-template-rows: auto auto;
+      column-gap: 18px;
+      row-gap: 14px;
+      min-height: 124px;
+      padding: 20px 18px 24px;
+      border-radius: 32px;
+      border: 1px solid var(--line);
+      background: rgba(7, 14, 21, 0.82);
+      align-items: center;
+    }
+
+    .transport-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 46px;
+    }
+
+    .transport-main {
+      justify-content: center;
+    }
+
+    .transport-side {
+      grid-row: 1 / span 2;
+      align-self: center;
+    }
+
+    .transport-side.right {
+      justify-content: flex-end;
+    }
+
+    .transport-progress {
+      grid-column: 2;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .transport strong,
+    .transport .meta-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .button {
+      width: 38px;
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.025);
+      font-size: 14px;
+    }
+
+    .button.primary {
+      width: 46px;
+      height: 46px;
+      border-color: rgba(216, 240, 127, 0.22);
+      background: linear-gradient(135deg, rgba(216, 240, 127, 0.16), rgba(137, 212, 255, 0.08));
+    }
+
+    .progress {
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .progress span {
+      display: block;
+      width: 39%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-2), var(--accent));
+    }
+
+    .progress-meta {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 2px 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .compact-toggle {
+      display: none;
+      position: absolute;
+      top: 92px;
+      right: 26px;
+      z-index: 2;
+      padding: 8px;
+      gap: 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(8, 15, 22, 0.86);
+      backdrop-filter: blur(14px);
+    }
+
+    .compact-toggle span {
+      padding: 9px 14px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .compact-toggle .active {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+    }
+
+    @media (max-width: 1100px) {
+      body {
+        overflow: auto;
+      }
+
+      .window {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: 72px minmax(0, 1fr) 104px;
+        min-height: 980px;
+      }
+
+      .topbar,
+      .hero,
+      .transport {
+        grid-column: 1;
+      }
+
+      .library,
+      .playlist {
+        display: none;
+      }
+
+      .transport {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto;
+        row-gap: 14px;
+        min-height: 0;
+      }
+
+      .transport-progress {
+        grid-column: 1;
+      }
+
+      .transport-side {
+        grid-row: auto;
+      }
+
+      .stage-content {
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+
+      .copy,
+      .subtitles {
+        max-width: none;
+        width: 100%;
+        justify-self: stretch;
+        margin-right: 0;
+      }
+
+      .copy h2 {
+        max-width: 560px;
+        font-size: 46px;
+      }
+
+      .subtitles {
+        align-self: start;
+        margin-top: 0;
+      }
+
+      .cue {
+        white-space: normal;
+      }
+
+      .compact-toggle {
+        display: flex;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark"></div>
+        <div>
+          <h1>Babel Player</h1>
+          <p>Translation-first desktop playback</p>
+        </div>
+      </div>
+      <div class="actions">
+        <div class="pill">Ready</div>
+        <div class="pill primary">Open media</div>
+      </div>
+    </header>
+
+    <aside class="library panel">
+      <div class="panel-head">
+        <h2>Library</h2>
+        <p>Pinned and recent sources</p>
+      </div>
+      <div class="list">
+        <div class="list-item active">
+          <strong>Japanese Lessons</strong>
+          <p>Episode pack · 24 files</p>
+        </div>
+        <div class="list-item">
+          <strong>Recently opened</strong>
+          <p>Midnight Train to Osaka.mp4</p>
+        </div>
+        <div class="list-item">
+          <strong>Needs captions</strong>
+          <p>Three imported rough cuts</p>
+        </div>
+      </div>
+    </aside>
+
+    <main class="hero">
+      <section class="stage">
+        <div class="stage-top">
+          <div class="chip">
+            <strong>Now playing</strong>
+            <p>Midnight Train to Osaka · 00:41:13 / 01:56:22</p>
+          </div>
+          <div class="chip">
+            <strong>Pipeline</strong>
+            <p>Dual subtitles · OpenAI translation</p>
+          </div>
+        </div>
+
+        <div class="stage-content">
+          <div class="copy">
+            <span class="eyebrow">Babel Player</span>
+            <h2>Watch, caption, and translate from one calm workspace.</h2>
+            <p>The video stays central while Library and Playlist remain available at the edges, then collapse into one side panel when space gets tight.</p>
+          </div>
+
+          <div class="subtitles">
+            <div class="cue">Shinkansen wa mou sugu kyoto ni touchaku shimasu.</div>
+            <div class="cue translation">The bullet train will arrive in Kyoto very soon.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="details">
+        <div class="detail">
+          <strong>Transcription</strong>
+          <p>Cloud: GPT-4o Transcribe</p>
+        </div>
+        <div class="detail">
+          <strong>Translation</strong>
+          <p>OpenAI GPT-5 Mini · English target</p>
+        </div>
+        <div class="detail">
+          <strong>Session</strong>
+          <p>Resume enabled · Panels persisted</p>
+        </div>
+      </section>
+    </main>
+
+    <aside class="playlist panel">
+      <div class="panel-head">
+        <h2>Playlist</h2>
+        <p>Current session queue</p>
+      </div>
+      <div class="list">
+        <div class="list-item active">
+          <strong>Midnight Train to Osaka</strong>
+          <p>Current item · Dual subtitles active</p>
+        </div>
+        <div class="list-item">
+          <strong>Street Interview Compilation</strong>
+          <p>Embedded subtitle extraction available</p>
+        </div>
+        <div class="list-item">
+          <strong>Travel Notes Cut</strong>
+          <p>English subtitle export ready</p>
+        </div>
+      </div>
+    </aside>
+
+    <div class="compact-toggle">
+      <span class="active">Library</span>
+      <span>Playlist</span>
+    </div>
+
+    <footer class="transport">
+      <div class="transport-block transport-side">
+        <div>
+          <span class="meta-label">Midnight Train to Osaka</span>
+          <p>JP audio · EN dual subtitles</p>
+        </div>
+      </div>
+      <div class="transport-block transport-main">
+        <div class="controls">
+          <div class="button">|&lt;</div>
+          <div class="button">&lt;&lt;</div>
+          <div class="button primary">&#9654;</div>
+          <div class="button">&gt;&gt;</div>
+          <div class="button">&gt;|</div>
+        </div>
+      </div>
+      <div class="transport-block transport-side right">
+        <div>
+          <span class="meta-label">Window mode</span>
+          <small>Standard · Borderless · PiP · Fullscreen</small>
+        </div>
+      </div>
+      <div class="transport-progress">
+        <div class="progress"><span></span></div>
+        <div class="progress-meta">
+          <span>00:41:13</span>
+          <span>1.0x · HW decode on</span>
+          <span>01:56:22</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>
