@@ -24,6 +24,12 @@ What the app does today:
 - exports the current English subtitle result as `SRT`
 - persists model selection, auto-translate preference, API credentials, playback settings, and resume state
 
+## Screenshots
+
+![Main window](docs/images/screenshot%201.png)
+
+![Playback menu](docs/images/screenshot%202.png)
+
 ## Architecture
 
 - `src/BabelPlayer.WinUI`
