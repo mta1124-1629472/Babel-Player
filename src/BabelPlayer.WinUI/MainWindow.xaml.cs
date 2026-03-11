@@ -26,8 +26,6 @@ public sealed partial class MainWindow : Window
     private readonly SettingsFacade _settingsFacade = new();
     private readonly LibraryBrowserService _libraryBrowserService = new();
     private readonly PlaylistController _playlistController = new();
-    private readonly PlaybackSessionController _playbackSessionController;
-    private readonly MediaSessionCoordinator _mediaSessionCoordinator;
     private readonly CredentialFacade _credentialFacade = new();
     private readonly SubtitleWorkflowController _subtitleWorkflowController;
     private readonly IPlaybackBackend _playbackBackend;
@@ -132,7 +130,7 @@ public sealed partial class MainWindow : Window
 
         RootGrid = new Grid();
         Content = RootGrid;
-        _playbackSessionController = new PlaybackSessionController(_playlistController);
+        var playbackSessionController = new PlaybackSessionController(_playlistController);
         _resumeTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(5)
@@ -141,14 +139,13 @@ public sealed partial class MainWindow : Window
             this,
             RootGrid,
             _playlistController,
-            _playbackSessionController,
+            playbackSessionController,
             _credentialFacade,
             SuppressDialogPresentation);
         _filePickerService = dependencies.FilePickerService;
         _windowModeService = dependencies.WindowModeService;
         _credentialDialogService = dependencies.CredentialDialogService;
         _runtimeBootstrapService = dependencies.RuntimeBootstrapService;
-        _mediaSessionCoordinator = dependencies.MediaSessionCoordinator;
         _subtitleWorkflowController = dependencies.SubtitleWorkflowController;
         _playbackBackend = dependencies.PlaybackBackend;
         _playbackBackendCoordinator = dependencies.PlaybackBackendCoordinator;
@@ -1247,7 +1244,7 @@ public sealed partial class MainWindow : Window
 
     private string? GetActiveWindowSubtitle()
     {
-        if (_playlistController.CurrentItem is { DisplayName: { Length: > 0 } currentItemName })
+        if (_shellController.CurrentPlaylistItem is { DisplayName: { Length: > 0 } currentItemName })
         {
             return currentItemName;
         }
@@ -1569,13 +1566,13 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _playlistController.RemoveAt(PlaylistList.SelectedIndex);
+        _shellController.RemovePlaylistItemAt(PlaylistList.SelectedIndex);
         RefreshPlaylistView();
     }
 
     private void ClearPlaylist_Click(object sender, RoutedEventArgs e)
     {
-        _playlistController.Clear();
+        _shellController.ClearPlaylist();
         RefreshPlaylistView();
         ShowStatus("Playlist cleared.");
     }
@@ -3295,16 +3292,16 @@ public sealed partial class MainWindow : Window
     private void RefreshPlaylistView()
     {
         ViewModel.Playlist.Items.Clear();
-        foreach (var item in _playlistController.Items)
+        foreach (var item in _shellController.PlaylistItems)
         {
             ViewModel.Playlist.Items.Add(item);
         }
 
-        ViewModel.Playlist.CurrentIndex = _playlistController.CurrentIndex;
-        if (_playlistController.CurrentIndex >= 0 && _playlistController.CurrentIndex < ViewModel.Playlist.Items.Count)
+        ViewModel.Playlist.CurrentIndex = _shellController.CurrentPlaylistIndex;
+        if (_shellController.CurrentPlaylistIndex >= 0 && _shellController.CurrentPlaylistIndex < ViewModel.Playlist.Items.Count)
         {
-            PlaylistList.SelectedIndex = _playlistController.CurrentIndex;
-            ViewModel.Playlist.SelectedItem = ViewModel.Playlist.Items[_playlistController.CurrentIndex];
+            PlaylistList.SelectedIndex = _shellController.CurrentPlaylistIndex;
+            ViewModel.Playlist.SelectedItem = ViewModel.Playlist.Items[_shellController.CurrentPlaylistIndex];
         }
 
         PlaylistSummaryTextBlock.Text = ViewModel.Playlist.Items.Count == 0

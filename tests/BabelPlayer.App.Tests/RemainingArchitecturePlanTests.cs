@@ -312,6 +312,36 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
+    public void ShellController_ExposesAndMutatesPlaylistStateWithoutWindowAccess()
+    {
+        var playlist = new PlaylistController();
+        var session = new PlaybackSessionController(playlist);
+        var backend = new FakeShellPlaybackBackend();
+        var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        var shell = new ShellController(
+            playlist,
+            session,
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+        shell.EnqueueFiles(["first.mp4", "second.mp4"], autoplay: false);
+        shell.RemovePlaylistItemAt(0);
+
+        Assert.Single(shell.PlaylistItems);
+        Assert.Equal("second.mp4", shell.PlaylistItems[0].Path);
+        Assert.Equal(0, shell.CurrentPlaylistIndex);
+        Assert.Equal("second.mp4", shell.CurrentPlaylistItem?.Path);
+
+        shell.ClearPlaylist();
+
+        Assert.Empty(shell.PlaylistItems);
+        Assert.Equal(-1, shell.CurrentPlaylistIndex);
+        Assert.Null(shell.CurrentPlaylistItem);
+    }
+
+    [Fact]
     public async Task ShellController_HandleMediaOpenedAppliesResumeThroughBackend()
     {
         var playlist = new PlaylistController();

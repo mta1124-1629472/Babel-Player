@@ -70,6 +70,12 @@ public sealed class ShellController
         _resumePlaybackService = resumePlaybackService ?? new ResumePlaybackService();
     }
 
+    public IReadOnlyList<PlaylistItem> PlaylistItems => _playlistController.Items;
+
+    public int CurrentPlaylistIndex => _playlistController.CurrentIndex;
+
+    public PlaylistItem? CurrentPlaylistItem => _playlistController.CurrentItem;
+
     public ShellQueueMediaResult EnqueueFiles(IEnumerable<string> files, bool autoplay)
     {
         var added = _playlistController.EnqueueFiles(files);
@@ -151,6 +157,16 @@ public sealed class ShellController
     public PlaylistItem? MovePrevious() => _playlistController.MovePrevious();
 
     public PlaylistItem? MoveNext() => _playlistController.MoveNext();
+
+    public void RemovePlaylistItemAt(int index)
+    {
+        _playlistController.RemoveAt(index);
+    }
+
+    public void ClearPlaylist()
+    {
+        _playlistController.Clear();
+    }
 
     public async Task<bool> LoadPlaylistItemAsync(
         PlaylistItem? item,
