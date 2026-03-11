@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using Microsoft.UI;
+using Microsoft.UI.Composition.SystemBackdrops;
 using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -41,15 +42,19 @@ public sealed partial class MainWindow : Window
     private bool _suppressWindowModeButtonChanges;
     private bool _isPositionScrubbing;
     private bool _isInitializingShellState;
+    private bool _isNormalizingWinUITranscriptionSelection;
     private bool _isFullscreenOverlayVisible;
     private bool _isWindowActive = true;
     private bool _isFullscreenOverlayInteracting;
+    private bool _hasAttemptedSystemBackdrop;
+    private int _modalUiSuppressionCount;
     private Slider? _activeScrubber;
     private long _lastFullscreenInputTick;
     private long _lastOverlayTimerResetTick;
     private long _fullscreenOverlayHideBlockedUntilTick;
     private string? _pendingAutoFitPath;
     private string? _lastAutoFitSignature;
+    private string? _subtitleSourceOnlyOverrideVideoPath;
     private bool _autoResumePlaybackAfterCaptionReady;
     private string? _autoResumePlaybackPath;
     private TimeSpan _autoResumePlaybackPosition = TimeSpan.Zero;
@@ -58,6 +63,7 @@ public sealed partial class MainWindow : Window
     private string _selectedAspectRatio = "auto";
     private double _audioDelaySeconds;
     private double _subtitleDelaySeconds;
+    private MicaBackdrop? _micaBackdrop;
     private readonly Dictionary<string, ResolvedShortcutBinding> _resolvedShortcutBindings = new(StringComparer.OrdinalIgnoreCase);
     private Border AppTitleBar = null!;
     private TextBlock WindowTitleTextBlock = null!;
@@ -113,13 +119,16 @@ public sealed partial class MainWindow : Window
     private Slider FullscreenPositionSlider = null!;
     private TextBlock FullscreenCurrentTimeTextBlock = null!;
     private TextBlock FullscreenDurationTextBlock = null!;
+    private Grid RootGrid = null!;
 
     public MainShellViewModel ViewModel { get; } = new();
 
     public MainWindow()
     {
-        InitializeComponent();
+        // Removed: InitializeComponent(); (not needed for code-built UI in WinUI 3)
 
+        RootGrid = new Grid();
+        Content = RootGrid;
         _playbackSessionController = new PlaybackSessionController(_playlistController);
         _filePickerService = new WinUIFilePickerService(this);
         _windowModeService = new WinUIWindowModeService(this);
@@ -137,8 +146,14 @@ public sealed partial class MainWindow : Window
         {
             Interval = TimeSpan.FromSeconds(5)
         };
-
+        _credentialDialogService = new WinUICredentialDialogService(RootGrid, SuppressDialogPresentation);
+        _subtitleWorkflowController = new SubtitleWorkflowController(
+            _credentialFacade,
+            _credentialDialogService,
+            _filePickerService,
+            _runtimeBootstrapService);
         BuildShell();
+
         var fullscreenExitAccelerator = new Microsoft.UI.Xaml.Input.KeyboardAccelerator
         {
             Key = Windows.System.VirtualKey.Escape
@@ -146,14 +161,10 @@ public sealed partial class MainWindow : Window
         fullscreenExitAccelerator.Invoked += FullscreenExitAccelerator_Invoked;
         RootGrid.KeyboardAccelerators.Add(fullscreenExitAccelerator);
         RootGrid.KeyDown += RootGrid_KeyDown;
-        _credentialDialogService = new WinUICredentialDialogService(RootGrid);
-        _subtitleWorkflowController = new SubtitleWorkflowController(
-            _credentialFacade,
-            _credentialDialogService,
-            _filePickerService,
-            _runtimeBootstrapService);
+
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+
         PlayerHost.Initialize(this);
         PlaylistList.ItemsSource = ViewModel.Playlist.Items;
 
@@ -183,10 +194,9 @@ public sealed partial class MainWindow : Window
 
     private void BuildShell()
     {
-        RootGrid.AllowDrop = true;
-        RootGrid.DragOver += RootGrid_DragOver;
-        RootGrid.Drop += RootGrid_Drop;
-        RootGrid.SizeChanged += RootGrid_SizeChanged;
+        RootGrid ??= new Grid();
+        Content = RootGrid;
+
         RootGrid.RowDefinitions.Clear();
         RootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -370,6 +380,7 @@ public sealed partial class MainWindow : Window
         Grid.SetRow(TransportPane, 4);
         TransportPane.Child = BuildTransportPane();
         RootGrid.Children.Add(TransportPane);
+        RootGrid.SizeChanged += RootGrid_SizeChanged;
     }
 
     private Border CreatePanelBorder(Brush background, Brush borderBrush)
@@ -824,9 +835,6 @@ public sealed partial class MainWindow : Window
         TranscriptionModelComboBox = new ComboBox { Header = "Transcription", MinWidth = 220 };
         foreach (var model in new[]
                  {
-                     SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny"),
-                     SubtitleWorkflowCatalog.GetTranscriptionModel("local:base"),
-                     SubtitleWorkflowCatalog.GetTranscriptionModel("local:small"),
                      SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny-multilingual"),
                      SubtitleWorkflowCatalog.GetTranscriptionModel("local:base-multilingual"),
                      SubtitleWorkflowCatalog.GetTranscriptionModel("local:small-multilingual"),
@@ -941,7 +949,7 @@ public sealed partial class MainWindow : Window
             : settings.SubtitleRenderMode;
         ViewModel.SubtitleOverlay.ShowSource = settings.SubtitleRenderMode is SubtitleRenderMode.SourceOnly or SubtitleRenderMode.Dual;
         ViewModel.SubtitleOverlay.TranslationText = "Drop a file or choose Open to start playback.";
-        ViewModel.SelectedTranscriptionLabel = SubtitleWorkflowCatalog.GetTranscriptionModel(SubtitleWorkflowCatalog.DefaultTranscriptionModelKey).DisplayName;
+        ViewModel.SelectedTranscriptionLabel = SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny-multilingual").DisplayName;
         ViewModel.SelectedTranslationLabel = SubtitleWorkflowCatalog.GetTranslationModel(null).DisplayName;
         WindowTitleTextBlock.Text = ViewModel.WindowTitle;
         TranslatedSubtitleTextBlock.Text = ViewModel.SubtitleOverlay.TranslationText;
@@ -961,7 +969,7 @@ public sealed partial class MainWindow : Window
         ApplyWindowModeChrome(settings.WindowMode);
         SyncWindowModeButtons(settings.WindowMode);
         UpdateOverlayControlState();
-        TranscriptionModelComboBox.SelectedIndex = 0;
+        TranscriptionModelComboBox.SelectedIndex = -1;
         TranslationModelComboBox.SelectedIndex = -1;
         TranslationToggleSwitch.IsOn = false;
         AutoTranslateToggleSwitch.IsOn = false;
@@ -987,6 +995,8 @@ public sealed partial class MainWindow : Window
 
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
+        SystemBackdrop = null;
+        _micaBackdrop = null;
         HideFullscreenOverlay();
         _fullscreenOverlayWindow?.CloseOverlay();
         _subtitleOverlayWindow?.CloseOverlay();
@@ -1162,10 +1172,11 @@ public sealed partial class MainWindow : Window
 
     private void ToggleSubtitleVisibility()
     {
-        var subtitlesEnabled = ViewModel.Settings.SubtitleRenderMode != SubtitleRenderMode.Off;
+        var currentMode = GetEffectiveSubtitleRenderMode();
+        var subtitlesEnabled = currentMode != SubtitleRenderMode.Off;
         if (subtitlesEnabled)
         {
-            _lastNonOffSubtitleRenderMode = ViewModel.Settings.SubtitleRenderMode;
+            _lastNonOffSubtitleRenderMode = currentMode;
         }
 
         var nextMode = subtitlesEnabled ? SubtitleRenderMode.Off : _lastNonOffSubtitleRenderMode;
@@ -1183,6 +1194,77 @@ public sealed partial class MainWindow : Window
         UpdateOverlayControlState();
         SaveCurrentSettings();
         ShowStatus(subtitlesEnabled ? "Subtitles hidden." : "Subtitles shown.");
+    }
+
+    private static string NormalizeWinUiTranscriptionModelKey(string? modelKey)
+    {
+        return modelKey switch
+        {
+            "local:tiny" => "local:tiny-multilingual",
+            "local:base" => "local:base-multilingual",
+            "local:small" => "local:small-multilingual",
+            _ => string.IsNullOrWhiteSpace(modelKey)
+                ? "local:tiny-multilingual"
+                : modelKey
+        };
+    }
+
+    private async Task NormalizeWinUiTranscriptionSelectionAsync(string normalizedKey)
+    {
+        if (_isNormalizingWinUITranscriptionSelection)
+        {
+            return;
+        }
+
+        _isNormalizingWinUITranscriptionSelection = true;
+        try
+        {
+            await _subtitleWorkflowController.SelectTranscriptionModelAsync(normalizedKey, suppressStatus: true);
+        }
+        finally
+        {
+            _isNormalizingWinUITranscriptionSelection = false;
+        }
+    }
+
+    private bool HasSourceOnlyOverrideForCurrentVideo(SubtitleWorkflowSnapshot? snapshot = null)
+    {
+        if (_subtitleWorkflowController is null)
+        {
+            return false;
+        }
+
+        snapshot ??= _subtitleWorkflowController.Snapshot;
+        return !string.IsNullOrWhiteSpace(_subtitleSourceOnlyOverrideVideoPath)
+            && !string.IsNullOrWhiteSpace(snapshot.CurrentVideoPath)
+            && string.Equals(_subtitleSourceOnlyOverrideVideoPath, snapshot.CurrentVideoPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ClearSourceOnlyOverrideIfInactive(SubtitleWorkflowSnapshot snapshot)
+    {
+        if (string.IsNullOrWhiteSpace(_subtitleSourceOnlyOverrideVideoPath))
+        {
+            return;
+        }
+
+        if (!snapshot.IsTranslationEnabled
+            || string.IsNullOrWhiteSpace(snapshot.CurrentVideoPath)
+            || !string.Equals(_subtitleSourceOnlyOverrideVideoPath, snapshot.CurrentVideoPath, StringComparison.OrdinalIgnoreCase))
+        {
+            _subtitleSourceOnlyOverrideVideoPath = null;
+        }
+    }
+
+    private SubtitleRenderMode GetEffectiveSubtitleRenderMode(SubtitleWorkflowSnapshot? snapshot = null)
+    {
+        if (_subtitleWorkflowController is null)
+        {
+            return ViewModel.Settings.SubtitleRenderMode;
+        }
+
+        return _subtitleWorkflowController.GetEffectiveRenderMode(
+            ViewModel.Settings.SubtitleRenderMode,
+            HasSourceOnlyOverrideForCurrentVideo(snapshot));
     }
 
     private async void PlaylistList_ItemClick(object sender, ItemClickEventArgs e)
@@ -1713,6 +1795,18 @@ public sealed partial class MainWindow : Window
 
     private void RootGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
+        if (BrowserColumn is null
+            || PlaylistColumn is null
+            || BrowserPane is null
+            || PlaylistPane is null
+            || PlayerHost is null
+            || SourceSubtitleTextBlock is null
+            || TranslatedSubtitleTextBlock is null
+            || SubtitleOverlayBorder is null)
+        {
+            return;
+        }
+
         SyncPaneLayout(e.NewSize.Width);
         ApplyAdaptiveStandardLayout(e.NewSize.Height);
         PlayerHost.RequestHostBoundsSync();
@@ -1926,13 +2020,22 @@ public sealed partial class MainWindow : Window
         _suppressWorkflowControlEvents = true;
         try
         {
-            ViewModel.SelectedTranscriptionLabel = snapshot.SelectedTranscriptionLabel;
+            ClearSourceOnlyOverrideIfInactive(snapshot);
+            var normalizedTranscriptionKey = NormalizeWinUiTranscriptionModelKey(snapshot.SelectedTranscriptionModelKey);
+            var normalizedTranscriptionSelection = SubtitleWorkflowCatalog.GetTranscriptionModel(normalizedTranscriptionKey);
+            if (!_isNormalizingWinUITranscriptionSelection
+                && !string.Equals(normalizedTranscriptionKey, snapshot.SelectedTranscriptionModelKey, StringComparison.Ordinal))
+            {
+                _ = NormalizeWinUiTranscriptionSelectionAsync(normalizedTranscriptionKey);
+            }
+
+            ViewModel.SelectedTranscriptionLabel = normalizedTranscriptionSelection.DisplayName;
             ViewModel.SelectedTranslationLabel = snapshot.SelectedTranslationLabel;
             ViewModel.IsTranslationEnabled = snapshot.IsTranslationEnabled;
             ViewModel.IsAutoTranslateEnabled = snapshot.AutoTranslateEnabled;
             ViewModel.SubtitleSource = snapshot.SubtitleSource;
             ViewModel.IsCaptionGenerationInProgress = snapshot.IsCaptionGenerationInProgress;
-            ViewModel.SubtitleOverlay.SelectedTranscriptionLabel = snapshot.SelectedTranscriptionLabel;
+            ViewModel.SubtitleOverlay.SelectedTranscriptionLabel = normalizedTranscriptionSelection.DisplayName;
             ViewModel.SubtitleOverlay.SelectedTranslationLabel = snapshot.SelectedTranslationLabel;
             ViewModel.SubtitleOverlay.IsTranslationEnabled = snapshot.IsTranslationEnabled;
             ViewModel.SubtitleOverlay.IsAutoTranslateEnabled = snapshot.AutoTranslateEnabled;
@@ -1944,7 +2047,7 @@ public sealed partial class MainWindow : Window
             {
                 TranscriptionModelComboBox.SelectedItem = TranscriptionModelComboBox.Items
                     .OfType<TranscriptionModelSelection>()
-                    .FirstOrDefault(item => string.Equals(item.Key, snapshot.SelectedTranscriptionModelKey, StringComparison.Ordinal));
+                    .FirstOrDefault(item => string.Equals(item.Key, normalizedTranscriptionKey, StringComparison.Ordinal));
             }
 
             if (TranslationModelComboBox is not null)
@@ -1970,6 +2073,8 @@ public sealed partial class MainWindow : Window
             {
                 ExportCurrentSubtitlesFlyoutItem.IsEnabled = snapshot.Cues.Count > 0;
             }
+
+            UpdateSubtitleRenderModeFlyoutChecks(snapshot);
         }
         finally
         {
@@ -1984,6 +2089,31 @@ public sealed partial class MainWindow : Window
     {
         ViewModel.IsDarkTheme = isDark;
         RootGrid.RequestedTheme = isDark ? ElementTheme.Dark : ElementTheme.Light;
+    }
+
+    private void TryApplySystemBackdrop()
+    {
+        if (_hasAttemptedSystemBackdrop)
+        {
+            return;
+        }
+
+        _hasAttemptedSystemBackdrop = true;
+        if (!MicaController.IsSupported())
+        {
+            return;
+        }
+
+        try
+        {
+            _micaBackdrop = new MicaBackdrop();
+            SystemBackdrop = _micaBackdrop;
+        }
+        catch
+        {
+            SystemBackdrop = null;
+            _micaBackdrop = null;
+        }
     }
 
     private void ResumeTimer_Tick(object? sender, object e)
@@ -2072,16 +2202,17 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void UpdateSubtitleRenderModeFlyoutChecks()
+    private void UpdateSubtitleRenderModeFlyoutChecks(SubtitleWorkflowSnapshot? snapshot = null)
     {
         if (SubtitleRenderModeFlyoutSubItem is null)
         {
             return;
         }
 
+        var checkedMode = GetEffectiveSubtitleRenderMode(snapshot);
         foreach (var item in SubtitleRenderModeFlyoutSubItem.Items.OfType<ToggleMenuFlyoutItem>())
         {
-            item.IsChecked = item.Tag is SubtitleRenderMode mode && mode == ViewModel.Settings.SubtitleRenderMode;
+            item.IsChecked = item.Tag is SubtitleRenderMode mode && mode == checkedMode;
         }
     }
 
@@ -2285,6 +2416,19 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        var translationActive = _subtitleWorkflowController.Snapshot.IsTranslationEnabled;
+        if (translationActive && mode == SubtitleRenderMode.SourceOnly)
+        {
+            _subtitleSourceOnlyOverrideVideoPath = _subtitleWorkflowController.Snapshot.CurrentVideoPath;
+            _lastNonOffSubtitleRenderMode = SubtitleRenderMode.SourceOnly;
+            UpdateSubtitleRenderModeFlyoutChecks();
+            UpdateSubtitleVisibility();
+            UpdateOverlayControlState();
+            ShowStatus("Subtitle mode: source only.");
+            return;
+        }
+
+        _subtitleSourceOnlyOverrideVideoPath = null;
         if (mode != SubtitleRenderMode.Off)
         {
             _lastNonOffSubtitleRenderMode = mode;
@@ -2572,6 +2716,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        _subtitleSourceOnlyOverrideVideoPath = null;
         SaveResumePosition();
         _resumeTimer.Stop();
         _autoResumePlaybackAfterCaptionReady = false;
@@ -2874,6 +3019,13 @@ public sealed partial class MainWindow : Window
 
     private void ShowFullscreenOverlay()
     {
+        if (_modalUiSuppressionCount > 0)
+        {
+            _fullscreenControlsTimer.Stop();
+            _fullscreenOverlayWindow?.HideOverlay();
+            return;
+        }
+
         if (_windowModeService.CurrentMode != PlaybackWindowMode.Fullscreen || !_isWindowActive)
         {
             return;
@@ -3014,7 +3166,8 @@ public sealed partial class MainWindow : Window
     {
         var presentation = _subtitleWorkflowController.GetOverlayPresentation(
             ViewModel.Settings.SubtitleRenderMode,
-            subtitlesVisible: ViewModel.Settings.SubtitleRenderMode != SubtitleRenderMode.Off);
+            subtitlesVisible: ViewModel.Settings.SubtitleRenderMode != SubtitleRenderMode.Off,
+            sourceOnlyOverrideForCurrentVideo: HasSourceOnlyOverrideForCurrentVideo(snapshot));
         ViewModel.SubtitleOverlay.ShowSource = !string.IsNullOrWhiteSpace(presentation.SecondaryText);
         ViewModel.SubtitleOverlay.SourceText = presentation.SecondaryText;
         ViewModel.SubtitleOverlay.TranslationText = presentation.PrimaryText;
@@ -3044,6 +3197,18 @@ public sealed partial class MainWindow : Window
 
     private void UpdateSubtitleOverlayWindow(bool showSource, bool showTranslation)
     {
+        if (_modalUiSuppressionCount > 0)
+        {
+            _subtitleOverlayWindow?.HideOverlay();
+            return;
+        }
+
+        if (PlayerHost.Source is null)
+        {
+            _subtitleOverlayWindow?.HideOverlay();
+            return;
+        }
+
         if (!_isWindowActive)
         {
             _subtitleOverlayWindow?.HideOverlay();
@@ -3084,6 +3249,44 @@ public sealed partial class MainWindow : Window
         }
 
         return 44 + styleOffset;
+    }
+
+    private IDisposable SuppressModalUi()
+    {
+        _modalUiSuppressionCount++;
+        _fullscreenControlsTimer.Stop();
+        _fullscreenOverlayWindow?.HideOverlay();
+        _subtitleOverlayWindow?.HideOverlay();
+        return new ModalUiSuppressionScope(this);
+    }
+
+    private IDisposable SuppressDialogPresentation()
+    {
+        var hostSuppression = PlayerHost?.SuppressNativeHost();
+        var modalSuppression = SuppressModalUi();
+        return new CombinedSuppressionScope(hostSuppression, modalSuppression);
+    }
+
+    private void ReleaseModalUiSuppression()
+    {
+        if (_modalUiSuppressionCount == 0)
+        {
+            return;
+        }
+
+        _modalUiSuppressionCount--;
+        if (_modalUiSuppressionCount > 0)
+        {
+            return;
+        }
+
+        if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen && _isFullscreenOverlayVisible)
+        {
+            ShowFullscreenOverlay();
+            return;
+        }
+
+        UpdateSubtitleVisibility();
     }
 
     private RectInt32 GetPlayerStageScreenBounds()
@@ -3171,6 +3374,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        TryApplySystemBackdrop();
         UpdateSubtitleVisibility();
         if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen && _isFullscreenOverlayVisible)
         {
@@ -3348,6 +3552,47 @@ public sealed partial class MainWindow : Window
                 && input.Ctrl == Ctrl
                 && input.Alt == Alt
                 && input.Shift == Shift;
+        }
+    }
+
+    private sealed class ModalUiSuppressionScope : IDisposable
+    {
+        private MainWindow? _owner;
+
+        public ModalUiSuppressionScope(MainWindow owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            if (_owner is null)
+            {
+                return;
+            }
+
+            _owner.ReleaseModalUiSuppression();
+            _owner = null;
+        }
+    }
+
+    private sealed class CombinedSuppressionScope : IDisposable
+    {
+        private IDisposable? _first;
+        private IDisposable? _second;
+
+        public CombinedSuppressionScope(IDisposable? first, IDisposable? second)
+        {
+            _first = first;
+            _second = second;
+        }
+
+        public void Dispose()
+        {
+            _second?.Dispose();
+            _second = null;
+            _first?.Dispose();
+            _first = null;
         }
     }
 

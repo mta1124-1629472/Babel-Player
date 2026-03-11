@@ -89,9 +89,43 @@ public sealed class SubtitleWorkflowController
 
     public bool HasCurrentCues => _subtitleManager.HasCues;
 
-    public SubtitleOverlayPresentation GetOverlayPresentation(SubtitleRenderMode renderMode, bool subtitlesVisible = true)
+    public SubtitleOverlayPresentation GetOverlayPresentation(
+        SubtitleRenderMode renderMode,
+        bool subtitlesVisible = true,
+        bool sourceOnlyOverrideForCurrentVideo = false)
     {
-        return BuildOverlayPresentation(renderMode, subtitlesVisible, _activeCue, _overlayStatusText);
+        return BuildOverlayPresentation(
+            GetEffectiveRenderMode(renderMode, sourceOnlyOverrideForCurrentVideo),
+            subtitlesVisible,
+            _activeCue,
+            _overlayStatusText);
+    }
+
+    public SubtitleRenderMode GetEffectiveRenderMode(
+        SubtitleRenderMode requestedMode,
+        bool sourceOnlyOverrideForCurrentVideo = false)
+    {
+        if (requestedMode == SubtitleRenderMode.Off || !_isTranslationEnabledForCurrentVideo)
+        {
+            return requestedMode;
+        }
+
+        if (sourceOnlyOverrideForCurrentVideo)
+        {
+            return SubtitleRenderMode.SourceOnly;
+        }
+
+        if (requestedMode != SubtitleRenderMode.SourceOnly)
+        {
+            return requestedMode;
+        }
+
+        var sourceText = _activeCue?.SourceText?.Trim();
+        var translatedText = _activeCue?.TranslatedText?.Trim();
+        return !string.IsNullOrWhiteSpace(translatedText)
+               && !string.Equals(sourceText, translatedText, StringComparison.Ordinal)
+            ? SubtitleRenderMode.TranslationOnly
+            : SubtitleRenderMode.SourceOnly;
     }
 
     public void ExportCurrentSubtitles(string path)
@@ -154,19 +188,26 @@ public sealed class SubtitleWorkflowController
         };
     }
 
-    public async Task<bool> SelectTranscriptionModelAsync(string modelKey, CancellationToken cancellationToken = default)
+    public async Task<bool> SelectTranscriptionModelAsync(
+        string modelKey,
+        CancellationToken cancellationToken = default,
+        bool suppressStatus = false)
     {
         var selection = SubtitleWorkflowCatalog.GetTranscriptionModel(modelKey);
         if (selection.Provider == TranscriptionProvider.Cloud && !await EnsureOpenAiApiKeyAsync(cancellationToken))
         {
-            PublishStatus("Cloud transcription model selection canceled.");
+            if (!suppressStatus)
+            {
+                PublishStatus("Cloud transcription model selection canceled.");
+            }
+
             return false;
         }
 
         _selectedTranscriptionModelKey = selection.Key;
         _credentialFacade.SaveSubtitleModelKey(selection.Key);
         PublishSnapshot();
-        await ReprocessCurrentSubtitlesForTranscriptionModelAsync(selection, cancellationToken);
+        await ReprocessCurrentSubtitlesForTranscriptionModelAsync(selection, cancellationToken, suppressStatus);
         return true;
     }
 
@@ -1400,13 +1441,20 @@ public sealed class SubtitleWorkflowController
         await Task.CompletedTask;
     }
 
-    private async Task ReprocessCurrentSubtitlesForTranscriptionModelAsync(TranscriptionModelSelection selection, CancellationToken cancellationToken)
+    private async Task ReprocessCurrentSubtitlesForTranscriptionModelAsync(
+        TranscriptionModelSelection selection,
+        CancellationToken cancellationToken,
+        bool suppressStatus = false)
     {
         if (_subtitleSource == SubtitlePipelineSource.Generated && !string.IsNullOrWhiteSpace(_currentVideoPath))
         {
             if (TryLoadCachedGeneratedSubtitles(_currentVideoPath, selection.Key))
             {
-                PublishStatus($"Loaded cached captions for {selection.DisplayName}.");
+                if (!suppressStatus)
+                {
+                    PublishStatus($"Loaded cached captions for {selection.DisplayName}.");
+                }
+
                 await LoadSubtitleCuesAsync(
                     CloneCues(_subtitleManager.Cues),
                     SubtitlePipelineSource.Generated,
@@ -1416,12 +1464,19 @@ public sealed class SubtitleWorkflowController
                 return;
             }
 
-            PublishStatus($"Restarting transcription with {selection.DisplayName}.");
+            if (!suppressStatus)
+            {
+                PublishStatus($"Restarting transcription with {selection.DisplayName}.");
+            }
+
             await StartAutomaticCaptionGenerationAsync(_currentVideoPath, cancellationToken, preserveCurrentTranslationPreference: true);
             return;
         }
 
-        PublishStatus($"Selected transcription model: {selection.DisplayName}.");
+        if (!suppressStatus)
+        {
+            PublishStatus($"Selected transcription model: {selection.DisplayName}.");
+        }
     }
 
     private void ResetCurrentTranslations()

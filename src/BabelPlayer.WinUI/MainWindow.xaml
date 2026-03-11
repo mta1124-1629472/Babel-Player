@@ -8,9 +8,5 @@
     mc:Ignorable="d"
     Title="Babel Player">
 
-    <Window.SystemBackdrop>
-        <MicaBackdrop />
-    </Window.SystemBackdrop>
-
-    <Grid x:Name="RootGrid" />
+    <Grid />
 </Window>

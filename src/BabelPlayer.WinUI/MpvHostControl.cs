@@ -31,6 +31,7 @@ public sealed class MpvHostControl : UserControl
     private bool _hasLastHostBounds;
     private bool _lastHostVisible;
     private bool _hasLastHostVisibility;
+    private int _nativeHostSuppressionCount;
     private RectInt32 _lastHostBounds;
     private int _pendingHostBoundsRetryCount;
 
@@ -174,6 +175,7 @@ public sealed class MpvHostControl : UserControl
     public void SetPan(double x, double y) => _ = _engine.SetPanAsync(x, y, _disposeCts.Token);
     public void Screenshot(string outputPath) => _ = _engine.ScreenshotAsync(outputPath, _disposeCts.Token);
     public void RequestHostBoundsSync() => QueueHostBoundsSync();
+    public IDisposable SuppressNativeHost() => new NativeHostSuppressionScope(this);
 
     private void MpvHostControl_Loaded(object sender, RoutedEventArgs e)
     {
@@ -326,8 +328,32 @@ public sealed class MpvHostControl : UserControl
             Math.Max((int)Math.Round(origin.Y * scale), 0),
             Math.Max(width, 1),
             Math.Max(height, 1));
-        isVisible = Visibility == Visibility.Visible;
+        isVisible = Visibility == Visibility.Visible && _nativeHostSuppressionCount == 0;
         return true;
+    }
+
+    private void BeginNativeHostSuppression()
+    {
+        _nativeHostSuppressionCount++;
+        if (_hwnd != IntPtr.Zero)
+        {
+            NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
+        }
+
+        _hasLastHostVisibility = false;
+        QueueHostBoundsSync();
+    }
+
+    private void EndNativeHostSuppression()
+    {
+        if (_nativeHostSuppressionCount == 0)
+        {
+            return;
+        }
+
+        _nativeHostSuppressionCount--;
+        _hasLastHostVisibility = false;
+        QueueHostBoundsSync();
     }
 
     private void ScheduleDeferredHostBoundsRetry()
@@ -518,5 +544,27 @@ public sealed class MpvHostControl : UserControl
         [DllImport("user32.dll")]
         public static extern short GetKeyState(int nVirtKey);
 
+    }
+
+    private sealed class NativeHostSuppressionScope : IDisposable
+    {
+        private MpvHostControl? _owner;
+
+        public NativeHostSuppressionScope(MpvHostControl owner)
+        {
+            _owner = owner;
+            owner.BeginNativeHostSuppression();
+        }
+
+        public void Dispose()
+        {
+            if (_owner is null)
+            {
+                return;
+            }
+
+            _owner.EndNativeHostSuppression();
+            _owner = null;
+        }
     }
 }
