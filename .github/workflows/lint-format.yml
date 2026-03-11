@@ -1,0 +1,26 @@
+name: Format Check
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  dotnet-format:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore BabelPlayer.sln
+
+      - name: Verify formatting
+        run: dotnet format BabelPlayer.sln --verify-no-changes --no-restore
