@@ -1157,29 +1157,29 @@ public sealed class SubtitleWorkflowController
             case LlamaCppBootstrapChoice.InstallAutomatically:
                 return await InstallLlamaCppRuntimeAsync(cancellationToken);
             case LlamaCppBootstrapChoice.ChooseExisting:
-            {
-                if (_filePickerService is null)
                 {
-                    return false;
-                }
+                    if (_filePickerService is null)
+                    {
+                        return false;
+                    }
 
-                var selectedPath = await _filePickerService.PickExecutableAsync(
-                    "Choose llama-server",
-                    "llama.cpp server",
-                    [".exe"],
-                    cancellationToken);
-                if (string.IsNullOrWhiteSpace(selectedPath) || !File.Exists(selectedPath))
-                {
-                    return false;
-                }
+                    var selectedPath = await _filePickerService.PickExecutableAsync(
+                        "Choose llama-server",
+                        "llama.cpp server",
+                        [".exe"],
+                        cancellationToken);
+                    if (string.IsNullOrWhiteSpace(selectedPath) || !File.Exists(selectedPath))
+                    {
+                        return false;
+                    }
 
-                _credentialFacade.SaveLlamaCppServerPath(selectedPath);
-                _credentialFacade.SaveLlamaCppRuntimeSource("manual");
-                ConfigureTranslator();
-                PublishStatus($"Using llama.cpp runtime: {Path.GetFileName(selectedPath)}");
-                PublishSnapshot();
-                return true;
-            }
+                    _credentialFacade.SaveLlamaCppServerPath(selectedPath);
+                    _credentialFacade.SaveLlamaCppRuntimeSource("manual");
+                    ConfigureTranslator();
+                    PublishStatus($"Using llama.cpp runtime: {Path.GetFileName(selectedPath)}");
+                    PublishSnapshot();
+                    return true;
+                }
             case LlamaCppBootstrapChoice.OpenOfficialDownloadPage:
                 OpenExternalLink(LlamaCppRuntimeInstaller.ReleasePageUrl);
                 PublishStatus("Opened the official llama.cpp release page.");
