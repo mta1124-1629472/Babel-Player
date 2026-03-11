@@ -1,11 +1,11 @@
 # Copilot Workspace Instructions for Babel-Player
 
 ## Overview
-Babel-Player is a media player application migrating from an older Windows UI framework (e.g., WPF or UWP) to WinUI 3. It focuses on cross-platform Windows development with modern UI components, media playback, and extensibility.
+Babel-Player is a WinUI 3 media player application for Windows focused on modern desktop UI components, media playback, and extensibility.
 
 ## Build and Test
 - **Build**: Use Visual Studio or `dotnet build` in the terminal. Ensure WinUI 3 SDK is installed.
-- **Run**: Launch via Visual Studio debugger or `dotnet run`.
+- **Run**: Launch via the Visual Studio debugger with `BabelPlayer.WinUI` as the startup project, or run `powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1`.
 - **Test**: Run unit tests with `dotnet test` (assumes xUnit or MSTest). Integration tests may require a Windows environment.
 - **Common issues**: If builds fail, check for missing NuGet packages (e.g., Microsoft.WindowsAppSDK) or WinUI version mismatches.
 

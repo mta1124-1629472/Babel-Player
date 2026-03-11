@@ -22,10 +22,12 @@ dotnet build BabelPlayer.sln
 ## Run
 
 ```powershell
-dotnet run --project src/BabelPlayer.UI
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
 ```
 
-If `BabelPlayer.UI` is already running, close it before rebuilding or rerunning.
+In Visual Studio, set `BabelPlayer.WinUI` as the startup project.
+
+If `BabelPlayer.WinUI` is already running, close it before rebuilding or rerunning.
 
 ## First-run runtime bootstrap
 
@@ -40,14 +42,14 @@ When Babel Player owns the download stream, it shows explicit progress in the UI
 
 ## First-run workflow
 
-1. Open a local video with the bottom `Open` button, or drag files/folders into the window.
+1. Open a local video with the top `Open` command, the `Folder` command, or by dragging files/folders into the window.
 2. If a matching sidecar subtitle file exists, Babel Player loads it automatically.
 3. If no sidecar subtitle file exists, Babel Player generates subtitles from the audio.
-4. Use `Subtitles > Transcription Model` to choose local or cloud subtitle generation.
-5. Use `Translation` to enable translation for the current video or automatically for non-English videos.
+4. Use the transcription picker to choose local or cloud subtitle generation.
+5. Use the translation controls to enable translation for the current video or automatically for non-English videos.
 6. If you choose a cloud model, enter provider credentials when prompted.
-7. Use `Playback > Embedded Subtitle Track` to import a text-based embedded track into the Babel Player subtitle pipeline.
-8. Use `Translation > Export EN SRT` to save the current English subtitle result.
+7. Use the `Playback` flyout to import a text-based embedded subtitle track into the Babel Player subtitle pipeline.
+8. Use the `Playback` flyout export action to save the current English subtitle result.
 
 ## Current model options
 
@@ -74,9 +76,9 @@ Cloud:
 
 ## Important notes
 
-- This app is a WPF desktop application.
+- The active app is a WinUI 3 desktop application.
 - The playback shell is mpv-based, not `MediaElement`-based anymore.
 - External subtitle import supports `SRT`, `VTT`, `ASS`, and `SSA`.
 - Embedded subtitle import into the AI pipeline is currently for text-based tracks only.
 - Translation target language is currently English only.
-- Browser and playlist side panels are collapsed by default and can be enabled from `View`.
+- Browser and playlist side panels are collapsed by default and can be enabled from the shell commands.
