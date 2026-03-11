@@ -55,6 +55,35 @@ public static class SubtitleFileService
         return cues;
     }
 
+    public static void ExportSrt(string path, IReadOnlyList<SubtitleCue> cues)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(cues);
+
+        var builder = new System.Text.StringBuilder();
+        for (var index = 0; index < cues.Count; index++)
+        {
+            var cue = cues[index];
+            if (string.IsNullOrWhiteSpace(cue.SourceText) && string.IsNullOrWhiteSpace(cue.TranslatedText))
+            {
+                continue;
+            }
+
+            if (builder.Length > 0)
+            {
+                builder.AppendLine();
+            }
+
+            builder.AppendLine((index + 1).ToString(CultureInfo.InvariantCulture));
+            builder.Append(FormatTime(cue.Start));
+            builder.Append(" --> ");
+            builder.AppendLine(FormatTime(cue.End));
+            builder.AppendLine((cue.DisplayText ?? cue.SourceText).Trim());
+        }
+
+        File.WriteAllText(path, builder.ToString());
+    }
+
     private static bool TryParseTime(string input, out TimeSpan result)
     {
         var normalized = input.Replace(',', '.');
@@ -63,5 +92,10 @@ public static class SubtitleFileService
             ["hh\\:mm\\:ss\\.fff", "h\\:mm\\:ss\\.fff"],
             CultureInfo.InvariantCulture,
             out result);
+    }
+
+    private static string FormatTime(TimeSpan value)
+    {
+        return value.ToString(@"hh\:mm\:ss\,fff", CultureInfo.InvariantCulture);
     }
 }

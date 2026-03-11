@@ -8,18 +8,20 @@ public sealed class SubtitleWorkflowController
     private const string DefaultSourceLanguage = "und";
     private const string DefaultTargetLanguage = "en";
 
-    private readonly SubtitleManager _subtitleManager = new();
     private readonly MtService _translator = new();
     private readonly CredentialFacade _credentialFacade;
     private readonly ICredentialDialogService? _credentialDialogService;
     private readonly IFilePickerService? _filePickerService;
     private readonly IRuntimeBootstrapService _runtimeBootstrapService;
+    private readonly MediaSessionCoordinator _mediaSessionCoordinator;
+    private readonly SubtitlePresentationProjector _subtitlePresentationProjector = new();
+    private readonly IProviderAvailabilityService _providerAvailabilityService;
     private readonly Func<string, string?> _environmentVariableReader;
     private readonly Func<string, CancellationToken, Task> _validateOpenAiApiKeyAsync;
     private readonly Func<CloudTranslationOptions, CancellationToken, Task> _validateTranslationProviderAsync;
     private readonly Func<string, CaptionGenerationOptions, Action<TranscriptChunk>, Action<ModelTransferProgress>, CancellationToken, Task<IReadOnlyList<SubtitleCue>>> _transcribeVideoAsync;
     private readonly object _translationSync = new();
-    private readonly HashSet<SubtitleCue> _inFlightCueTranslations = [];
+    private readonly HashSet<string> _inFlightCueTranslations = [];
     private readonly Dictionary<string, List<SubtitleCue>> _generatedSubtitleCache = new(StringComparer.OrdinalIgnoreCase);
 
     private CancellationTokenSource? _translationCts;
@@ -40,7 +42,6 @@ public sealed class SubtitleWorkflowController
     private string _captionGenerationModeLabel = SubtitleWorkflowCatalog.GetTranscriptionModel(SubtitleWorkflowCatalog.DefaultTranscriptionModelKey).DisplayName;
     private int _activeCaptionGenerationId;
     private string? _activeCaptionGenerationModelKey;
-    private SubtitleCue? _activeCue;
 
     public SubtitleWorkflowController()
         : this(
@@ -48,6 +49,7 @@ public sealed class SubtitleWorkflowController
             null,
             null,
             new RuntimeBootstrapService(),
+            null,
             Environment.GetEnvironmentVariable,
             MtService.ValidateApiKeyAsync,
             MtService.ValidateTranslationProviderAsync)
@@ -56,19 +58,47 @@ public sealed class SubtitleWorkflowController
 
     public SubtitleWorkflowController(
         CredentialFacade credentialFacade,
+        ICredentialDialogService? credentialDialogService,
+        IFilePickerService? filePickerService,
+        IRuntimeBootstrapService? runtimeBootstrapService,
+        Func<string, string?>? environmentVariableReader,
+        Func<string, CancellationToken, Task>? validateOpenAiApiKeyAsync,
+        Func<CloudTranslationOptions, CancellationToken, Task>? validateTranslationProviderAsync,
+        Func<string, CaptionGenerationOptions, Action<TranscriptChunk>, Action<ModelTransferProgress>, CancellationToken, Task<IReadOnlyList<SubtitleCue>>>? transcribeVideoAsync = null,
+        IProviderAvailabilityService? providerAvailabilityService = null)
+        : this(
+            credentialFacade,
+            credentialDialogService,
+            filePickerService,
+            runtimeBootstrapService,
+            null,
+            environmentVariableReader,
+            validateOpenAiApiKeyAsync,
+            validateTranslationProviderAsync,
+            transcribeVideoAsync,
+            providerAvailabilityService)
+    {
+    }
+
+    public SubtitleWorkflowController(
+        CredentialFacade credentialFacade,
         ICredentialDialogService? credentialDialogService = null,
         IFilePickerService? filePickerService = null,
         IRuntimeBootstrapService? runtimeBootstrapService = null,
+        MediaSessionCoordinator? mediaSessionCoordinator = null,
         Func<string, string?>? environmentVariableReader = null,
         Func<string, CancellationToken, Task>? validateOpenAiApiKeyAsync = null,
         Func<CloudTranslationOptions, CancellationToken, Task>? validateTranslationProviderAsync = null,
-        Func<string, CaptionGenerationOptions, Action<TranscriptChunk>, Action<ModelTransferProgress>, CancellationToken, Task<IReadOnlyList<SubtitleCue>>>? transcribeVideoAsync = null)
+        Func<string, CaptionGenerationOptions, Action<TranscriptChunk>, Action<ModelTransferProgress>, CancellationToken, Task<IReadOnlyList<SubtitleCue>>>? transcribeVideoAsync = null,
+        IProviderAvailabilityService? providerAvailabilityService = null)
     {
         _credentialFacade = credentialFacade;
         _credentialDialogService = credentialDialogService;
         _filePickerService = filePickerService;
         _runtimeBootstrapService = runtimeBootstrapService ?? new RuntimeBootstrapService();
+        _mediaSessionCoordinator = mediaSessionCoordinator ?? new MediaSessionCoordinator(new InMemoryMediaSessionStore());
         _environmentVariableReader = environmentVariableReader ?? Environment.GetEnvironmentVariable;
+        _providerAvailabilityService = providerAvailabilityService ?? new ProviderAvailabilityService(_credentialFacade, _environmentVariableReader);
         _validateOpenAiApiKeyAsync = validateOpenAiApiKeyAsync ?? MtService.ValidateApiKeyAsync;
         _validateTranslationProviderAsync = validateTranslationProviderAsync ?? MtService.ValidateTranslationProviderAsync;
         _transcribeVideoAsync = transcribeVideoAsync ?? DefaultTranscribeVideoAsync;
@@ -83,55 +113,46 @@ public sealed class SubtitleWorkflowController
     public event Action<string>? StatusChanged;
     public event Action<RuntimeInstallProgress>? RuntimeInstallProgressChanged;
 
+    public IMediaSessionStore MediaSessionStore => _mediaSessionCoordinator.Store;
+
     public SubtitleWorkflowSnapshot Snapshot => BuildSnapshot();
 
-    public IReadOnlyList<SubtitleCue> CurrentCues => _subtitleManager.Cues;
+    public IReadOnlyList<SubtitleCue> CurrentCues => MediaSessionProjection.ToSubtitleCues(_mediaSessionCoordinator.Snapshot);
 
-    public bool HasCurrentCues => _subtitleManager.HasCues;
+    public bool HasCurrentCues => _mediaSessionCoordinator.Snapshot.Transcript.Segments.Count > 0;
 
     public SubtitleOverlayPresentation GetOverlayPresentation(
         SubtitleRenderMode renderMode,
         bool subtitlesVisible = true,
         bool sourceOnlyOverrideForCurrentVideo = false)
     {
-        return BuildOverlayPresentation(
-            GetEffectiveRenderMode(renderMode, sourceOnlyOverrideForCurrentVideo),
+        var presentation = _subtitlePresentationProjector.Build(
+            _mediaSessionCoordinator.Snapshot,
+            renderMode,
             subtitlesVisible,
-            _activeCue,
-            _overlayStatusText);
+            sourceOnlyOverrideForCurrentVideo);
+        return new SubtitleOverlayPresentation
+        {
+            IsVisible = presentation.IsVisible,
+            PrimaryText = presentation.PrimaryText,
+            SecondaryText = presentation.SecondaryText
+        };
     }
 
     public SubtitleRenderMode GetEffectiveRenderMode(
         SubtitleRenderMode requestedMode,
         bool sourceOnlyOverrideForCurrentVideo = false)
     {
-        if (requestedMode == SubtitleRenderMode.Off || !_isTranslationEnabledForCurrentVideo)
-        {
-            return requestedMode;
-        }
-
-        if (sourceOnlyOverrideForCurrentVideo)
-        {
-            return SubtitleRenderMode.SourceOnly;
-        }
-
-        if (requestedMode != SubtitleRenderMode.SourceOnly)
-        {
-            return requestedMode;
-        }
-
-        var sourceText = _activeCue?.SourceText?.Trim();
-        var translatedText = _activeCue?.TranslatedText?.Trim();
-        return !string.IsNullOrWhiteSpace(translatedText)
-               && !string.Equals(sourceText, translatedText, StringComparison.Ordinal)
-            ? SubtitleRenderMode.TranslationOnly
-            : SubtitleRenderMode.SourceOnly;
+        return _subtitlePresentationProjector.GetEffectiveRenderMode(
+            _mediaSessionCoordinator.Snapshot,
+            requestedMode,
+            sourceOnlyOverrideForCurrentVideo);
     }
 
     public void ExportCurrentSubtitles(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        _subtitleManager.ExportSrt(path);
+        SubtitleFileService.ExportSrt(path, CurrentCues);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -314,10 +335,10 @@ public sealed class SubtitleWorkflowController
         }
 
         CancelTranslationWork();
-        _subtitleManager.Clear();
         _subtitleSource = SubtitlePipelineSource.None;
-        _activeCue = null;
         _currentSourceLanguage = DefaultSourceLanguage;
+        _mediaSessionCoordinator.OpenMedia(videoPath);
+        _mediaSessionCoordinator.ClearTranscriptSegments(SubtitlePipelineSource.None, false, null, DefaultSourceLanguage);
         InitializeTranslationPreferencesForNewVideo();
         SetOverlayStatus("No sidecar subtitles found. Generating captions from the video audio.");
         PublishSnapshot();
@@ -325,7 +346,7 @@ public sealed class SubtitleWorkflowController
         if (TryLoadCachedGeneratedSubtitles(videoPath, _selectedTranscriptionModelKey))
         {
             return await LoadSubtitleCuesAsync(
-                CloneCues(_subtitleManager.Cues),
+                CurrentCues,
                 SubtitlePipelineSource.Generated,
                 $"Loaded cached generated captions ({SubtitleWorkflowCatalog.GetTranscriptionModel(_selectedTranscriptionModelKey).DisplayName})",
                 cancellationToken);
@@ -429,17 +450,18 @@ public sealed class SubtitleWorkflowController
 
     public void UpdatePlaybackPosition(TimeSpan position)
     {
-        if (!_subtitleManager.HasCues)
+        var session = _mediaSessionCoordinator.Snapshot;
+        _mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+            position,
+            session.Timeline.Duration,
+            session.Timeline.Rate,
+            session.Timeline.IsPaused,
+            session.Timeline.IsSeekable,
+            DateTimeOffset.UtcNow));
+        var activeTranscript = GetActiveTranscriptSegment(_mediaSessionCoordinator.Snapshot);
+        if (activeTranscript is not null && !HasTranslatedSegment(activeTranscript, _mediaSessionCoordinator.Snapshot))
         {
-            _activeCue = null;
-            PublishSnapshot();
-            return;
-        }
-
-        _activeCue = _subtitleManager.GetCueAt(position);
-        if (_activeCue is not null && string.IsNullOrWhiteSpace(_activeCue.TranslatedText))
-        {
-            _ = TranslateCueAsync(_activeCue, _translationCts?.Token ?? CancellationToken.None);
+            _ = TranslateCueAsync(activeTranscript, _translationCts?.Token ?? CancellationToken.None);
         }
 
         PublishSnapshot();
@@ -484,10 +506,13 @@ public sealed class SubtitleWorkflowController
             return false;
         }
 
-        _subtitleManager.LoadCues(CloneCues(cachedCues));
+        var clonedCues = CloneCues(cachedCues);
         _subtitleSource = SubtitlePipelineSource.Generated;
-        _activeCue = null;
-        _currentSourceLanguage = ApplySourceLanguageToCues(_subtitleManager.Cues);
+        _currentSourceLanguage = ApplySourceLanguageToCues(clonedCues);
+        _mediaSessionCoordinator.SetTranscriptSegments(
+            BuildTranscriptSegments(clonedCues, SubtitlePipelineSource.Generated, _currentVideoPath, transcriptionModelKey),
+            SubtitlePipelineSource.Generated,
+            _currentSourceLanguage);
         SetOverlayStatus(null);
         PublishSnapshot();
         return true;
@@ -515,6 +540,72 @@ public sealed class SubtitleWorkflowController
         }).ToList();
     }
 
+    private IReadOnlyList<TranscriptSegment> BuildTranscriptSegments(
+        IReadOnlyList<SubtitleCue> cues,
+        SubtitlePipelineSource source,
+        string? mediaPath,
+        string? modelKey = null)
+    {
+        return cues
+            .Select(cue => BuildTranscriptSegment(cue, source, mediaPath, modelKey))
+            .ToArray();
+    }
+
+    private TranscriptSegment BuildTranscriptSegment(
+        SubtitleCue cue,
+        SubtitlePipelineSource source,
+        string? mediaPath,
+        string? modelKey = null)
+    {
+        return new TranscriptSegment
+        {
+            Id = SegmentIdentity.CreateTranscriptId(mediaPath, cue.Start, cue.End, cue.SourceText),
+            Start = cue.Start,
+            End = cue.End,
+            Text = cue.SourceText,
+            Language = cue.SourceLanguage ?? ResolveSourceLanguage(cue.SourceText),
+            Provenance = new SegmentProvenance
+            {
+                Source = source,
+                ModelKey = modelKey
+            },
+            Revision = SegmentRevision.Initial
+        };
+    }
+
+    private TranslationSegment CreateTranslationSegment(TranscriptSegment transcriptSegment, string translatedText)
+    {
+        return new TranslationSegment
+        {
+            Id = SegmentIdentity.CreateTranslationId(transcriptSegment.Id, _translationTargetLanguage, translatedText),
+            SourceSegmentId = transcriptSegment.Id,
+            Start = transcriptSegment.Start,
+            End = transcriptSegment.End,
+            Text = translatedText,
+            Language = _translationTargetLanguage,
+            Provenance = new SegmentProvenance
+            {
+                Source = _subtitleSource,
+                Provider = SubtitleWorkflowCatalog.GetTranslationModel(_selectedTranslationModelKey).DisplayName,
+                ModelKey = _selectedTranslationModelKey
+            },
+            Revision = SegmentRevision.Initial
+        };
+    }
+
+    private static TranscriptSegment? GetActiveTranscriptSegment(MediaSessionSnapshot snapshot)
+    {
+        var activeTranscriptId = snapshot.SubtitlePresentation.ActiveTranscriptSegmentId;
+        return string.IsNullOrWhiteSpace(activeTranscriptId)
+            ? null
+            : snapshot.Transcript.Segments.FirstOrDefault(segment => string.Equals(segment.Id.Value, activeTranscriptId, StringComparison.Ordinal));
+    }
+
+    private static bool HasTranslatedSegment(TranscriptSegment transcriptSegment, MediaSessionSnapshot snapshot)
+    {
+        return snapshot.Translation.Segments.Any(segment => string.Equals(segment.SourceSegmentId.Value, transcriptSegment.Id.Value, StringComparison.Ordinal));
+    }
+
     private void LoadPersistedSelections()
     {
         _selectedTranscriptionModelKey = ResolvePersistedTranscriptionModelKey(_credentialFacade.GetSubtitleModelKey());
@@ -522,49 +613,37 @@ public sealed class SubtitleWorkflowController
         _autoTranslateVideosOutsidePreferredLanguage = _credentialFacade.GetAutoTranslateEnabled();
         _sessionOpenAiApiKey = _environmentVariableReader("OPENAI_API_KEY") ?? _credentialFacade.GetOpenAiApiKey();
         ConfigureTranslator();
+        _mediaSessionCoordinator.SetTranslationState(_isTranslationEnabledForCurrentVideo, _autoTranslateVideosOutsidePreferredLanguage);
     }
 
     private string ResolvePersistedTranscriptionModelKey(string? modelKey)
     {
-        var selection = SubtitleWorkflowCatalog.GetTranscriptionModel(modelKey);
-        return selection.Provider == TranscriptionProvider.Cloud && !HasOpenAiApiKey()
-            ? SubtitleWorkflowCatalog.DefaultTranscriptionModelKey
-            : selection.Key;
+        return _providerAvailabilityService.ResolvePersistedTranscriptionModelKey(modelKey);
     }
 
     private string? ResolvePersistedTranslationModelKey(string? modelKey)
     {
-        var selection = SubtitleWorkflowCatalog.GetTranslationModel(modelKey);
-        if (selection.Provider == TranslationProvider.None)
-        {
-            return null;
-        }
-
-        if (selection.Provider is TranslationProvider.LocalHyMt15_1_8B or TranslationProvider.LocalHyMt15_7B)
-        {
-            return TryResolveLlamaCppServerPath() is not null ? selection.Key : null;
-        }
-
-        return HasConfiguredTranslationProvider(selection.Provider) ? selection.Key : null;
+        return _providerAvailabilityService.ResolvePersistedTranslationModelKey(modelKey);
     }
 
     private SubtitleWorkflowSnapshot BuildSnapshot()
     {
+        var session = _mediaSessionCoordinator.Snapshot;
         return new SubtitleWorkflowSnapshot
         {
-            CurrentVideoPath = _currentVideoPath,
+            CurrentVideoPath = session.Source.Path ?? _currentVideoPath,
             SelectedTranscriptionModelKey = _selectedTranscriptionModelKey,
             SelectedTranscriptionLabel = SubtitleWorkflowCatalog.GetTranscriptionModel(_selectedTranscriptionModelKey).DisplayName,
             SelectedTranslationModelKey = _selectedTranslationModelKey,
             SelectedTranslationLabel = SubtitleWorkflowCatalog.GetTranslationModel(_selectedTranslationModelKey).DisplayName,
             IsTranslationEnabled = _isTranslationEnabledForCurrentVideo,
             AutoTranslateEnabled = _autoTranslateVideosOutsidePreferredLanguage,
-            IsCaptionGenerationInProgress = _isCaptionGenerationInProgress,
-            CurrentSourceLanguage = _currentSourceLanguage,
-            SubtitleSource = _subtitleSource,
-            OverlayStatus = _overlayStatusText,
-            ActiveCue = _activeCue,
-            Cues = _subtitleManager.Cues
+            IsCaptionGenerationInProgress = session.Transcript.IsGenerating,
+            CurrentSourceLanguage = session.LanguageAnalysis.CurrentSourceLanguage,
+            SubtitleSource = session.Transcript.Source,
+            OverlayStatus = session.SubtitlePresentation.StatusText,
+            ActiveCue = MediaSessionProjection.ToActiveCue(session),
+            Cues = MediaSessionProjection.ToSubtitleCues(session)
         };
     }
 
@@ -631,27 +710,31 @@ public sealed class SubtitleWorkflowController
             InitializeTranslationPreferencesForNewVideo();
         }
         CancelTranslationWork();
-        _subtitleManager.LoadCues(cues);
         _subtitleSource = source;
-        _activeCue = null;
         _currentSourceLanguage = DefaultSourceLanguage;
+        var projectedCues = CloneCues(cues);
 
         lock (_translationSync)
         {
             _inFlightCueTranslations.Clear();
         }
 
-        if (!_subtitleManager.HasCues)
+        if (projectedCues.Count == 0)
         {
+            _mediaSessionCoordinator.ClearTranscriptSegments(source, false, "Loaded subtitle file contains no playable cues.", DefaultSourceLanguage);
             PublishStatus("No playable subtitle cues were found.", "Loaded subtitle file contains no playable cues.");
             return new SubtitleLoadResult(source, 0, source == SubtitlePipelineSource.Sidecar, false);
         }
 
-        _currentSourceLanguage = ApplySourceLanguageToCues(_subtitleManager.Cues);
+        _currentSourceLanguage = ApplySourceLanguageToCues(projectedCues);
+        _mediaSessionCoordinator.SetTranscriptSegments(
+            BuildTranscriptSegments(projectedCues, source, _currentVideoPath),
+            source,
+            _currentSourceLanguage);
         ApplyAutomaticTranslationPreferenceIfNeeded();
 
         PublishStatus(
-            $"{statusPrefix} ({_subtitleManager.CueCount} cues).",
+            $"{statusPrefix} ({projectedCues.Count} cues).",
             _isTranslationEnabledForCurrentVideo
                 ? "Preparing translated subtitles..."
                 : "Preparing source-language subtitles...");
@@ -661,15 +744,13 @@ public sealed class SubtitleWorkflowController
         _ = TranslateAllCuesAsync(cts.Token);
         PublishSnapshot();
 
-        return new SubtitleLoadResult(source, _subtitleManager.CueCount, source == SubtitlePipelineSource.Sidecar, false);
+        return new SubtitleLoadResult(source, projectedCues.Count, source == SubtitlePipelineSource.Sidecar, false);
     }
 
     private async Task<SubtitleLoadResult> StartAutomaticCaptionGenerationAsync(string videoPath, CancellationToken cancellationToken, bool preserveCurrentTranslationPreference = false)
     {
         CancelCaptionGeneration();
         CancelTranslationWork();
-        _subtitleManager.Clear();
-        _activeCue = null;
         _currentSourceLanguage = DefaultSourceLanguage;
         if (!preserveCurrentTranslationPreference)
         {
@@ -677,6 +758,8 @@ public sealed class SubtitleWorkflowController
         }
         _subtitleSource = SubtitlePipelineSource.Generated;
         _isCaptionGenerationInProgress = true;
+        _mediaSessionCoordinator.ClearTranscriptSegments(SubtitlePipelineSource.Generated, true, null, DefaultSourceLanguage);
+        _mediaSessionCoordinator.SetCaptionGenerationState(true);
 
         var generationId = Interlocked.Increment(ref _activeCaptionGenerationId);
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -728,35 +811,42 @@ public sealed class SubtitleWorkflowController
 
             if (generationId != _activeCaptionGenerationId || cts.IsCancellationRequested)
             {
-                return new SubtitleLoadResult(SubtitlePipelineSource.Generated, _subtitleManager.CueCount, false, true);
+                return new SubtitleLoadResult(SubtitlePipelineSource.Generated, CurrentCues.Count, false, true);
             }
 
-            if (_subtitleManager.CueCount == 0 && generatedCues.Count > 0)
+            if (CurrentCues.Count == 0 && generatedCues.Count > 0)
             {
-                _subtitleManager.LoadCues(CloneCues(generatedCues));
-                _currentSourceLanguage = ApplySourceLanguageToCues(_subtitleManager.Cues);
+                var clonedCues = CloneCues(generatedCues);
+                _currentSourceLanguage = ApplySourceLanguageToCues(clonedCues);
+                _mediaSessionCoordinator.SetTranscriptSegments(
+                    BuildTranscriptSegments(clonedCues, SubtitlePipelineSource.Generated, videoPath, _activeCaptionGenerationModelKey ?? transcriptionModel.Key),
+                    SubtitlePipelineSource.Generated,
+                    _currentSourceLanguage);
                 ApplyAutomaticTranslationPreferenceIfNeeded();
             }
 
             _isCaptionGenerationInProgress = false;
-            CacheGeneratedSubtitles(videoPath, _activeCaptionGenerationModelKey ?? transcriptionModel.Key, _subtitleManager.Cues);
+            _mediaSessionCoordinator.SetCaptionGenerationState(false);
+            CacheGeneratedSubtitles(videoPath, _activeCaptionGenerationModelKey ?? transcriptionModel.Key, CurrentCues);
             PublishStatus(
-                _subtitleManager.CueCount > 0
-                    ? $"Generated {_subtitleManager.CueCount} caption cues automatically."
+                CurrentCues.Count > 0
+                    ? $"Generated {CurrentCues.Count} caption cues automatically."
                     : "No speech could be recognized from the video audio.",
-                _subtitleManager.CueCount > 0
+                CurrentCues.Count > 0
                     ? null
                     : "No speech could be recognized from the video audio.");
         }
         catch (OperationCanceledException)
         {
             _isCaptionGenerationInProgress = false;
+            _mediaSessionCoordinator.SetCaptionGenerationState(false);
         }
         catch (Exception ex)
         {
             if (generationId == _activeCaptionGenerationId)
             {
                 _isCaptionGenerationInProgress = false;
+                _mediaSessionCoordinator.SetCaptionGenerationState(false);
                 PublishStatus(
                     $"Automatic caption generation failed: {ex.Message}",
                     "Automatic caption generation failed. You can still load a manual subtitle file.");
@@ -764,7 +854,7 @@ public sealed class SubtitleWorkflowController
         }
 
         PublishSnapshot();
-        return new SubtitleLoadResult(SubtitlePipelineSource.Generated, _subtitleManager.CueCount, false, true);
+        return new SubtitleLoadResult(SubtitlePipelineSource.Generated, CurrentCues.Count, false, true);
     }
 
     private void HandleRecognizedChunk(TranscriptChunk chunk, int generationId)
@@ -781,25 +871,27 @@ public sealed class SubtitleWorkflowController
             SourceText = chunk.Text.Trim(),
             SourceLanguage = ResolveSourceLanguage(chunk.Text)
         };
+        var transcriptSegment = BuildTranscriptSegment(
+            cue,
+            SubtitlePipelineSource.Generated,
+            _currentVideoPath,
+            _activeCaptionGenerationModelKey ?? _selectedTranscriptionModelKey);
 
         _currentSourceLanguage = ResolveAggregateSourceLanguage(_currentSourceLanguage, cue.SourceLanguage);
+        _mediaSessionCoordinator.SetCaptionGenerationState(true);
+        _mediaSessionCoordinator.UpsertTranscriptSegment(transcriptSegment, _currentSourceLanguage);
         ApplyAutomaticTranslationPreferenceIfNeeded();
-
-        lock (_translationSync)
-        {
-            _subtitleManager.AddCue(cue);
-        }
 
         if (!string.IsNullOrWhiteSpace(_currentVideoPath))
         {
-            CacheGeneratedSubtitles(_currentVideoPath, _activeCaptionGenerationModelKey ?? _selectedTranscriptionModelKey, _subtitleManager.Cues);
+            CacheGeneratedSubtitles(_currentVideoPath, _activeCaptionGenerationModelKey ?? _selectedTranscriptionModelKey, CurrentCues);
         }
 
         PublishStatus(
             $"Generating captions ({_captionGenerationModeLabel})... captions ready through {FormatClock(cue.End)}.",
             null);
         SetOverlayStatus(null);
-        _ = TranslateCueAsync(cue, _captionGenerationCts?.Token ?? CancellationToken.None);
+        _ = TranslateCueAsync(transcriptSegment, _captionGenerationCts?.Token ?? CancellationToken.None);
         PublishSnapshot();
     }
 
@@ -809,19 +901,16 @@ public sealed class SubtitleWorkflowController
         {
             if (_isTranslationEnabledForCurrentVideo && _translator.UseCloudTranslation)
             {
-                var cues = _subtitleManager.Cues.ToList();
+                var cues = _mediaSessionCoordinator.Snapshot.Transcript.Segments.ToList();
                 var translatedTexts = await TranslateCueBatchAsync(cues, cancellationToken);
                 for (var index = 0; index < cues.Count; index++)
                 {
-                    lock (_translationSync)
-                    {
-                        _subtitleManager.CommitTranslation(cues[index], translatedTexts[index]);
-                    }
+                    _mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(cues[index], translatedTexts[index]));
                 }
             }
             else
             {
-                foreach (var cue in _subtitleManager.Cues.ToList())
+                foreach (var cue in _mediaSessionCoordinator.Snapshot.Transcript.Segments.ToList())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     await TranslateCueAsync(cue, cancellationToken);
@@ -831,8 +920,8 @@ public sealed class SubtitleWorkflowController
             if (!cancellationToken.IsCancellationRequested)
             {
                 PublishStatus(_isTranslationEnabledForCurrentVideo
-                    ? $"Prepared {_subtitleManager.CueCount} translated subtitle cues."
-                    : $"Prepared {_subtitleManager.CueCount} source-language subtitle cues.");
+                    ? $"Prepared {CurrentCues.Count} translated subtitle cues."
+                    : $"Prepared {CurrentCues.Count} source-language subtitle cues.");
             }
         }
         catch (OperationCanceledException)
@@ -848,28 +937,23 @@ public sealed class SubtitleWorkflowController
         }
     }
 
-    private async Task TranslateCueAsync(SubtitleCue cue, CancellationToken cancellationToken)
+    private async Task TranslateCueAsync(TranscriptSegment cue, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(cue.TranslatedText))
+        if (HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot))
         {
             return;
         }
 
-        cue.SourceLanguage ??= ResolveSourceLanguage(cue.SourceText);
         if (ShouldUseTranscriptDirectly(cue))
         {
-            lock (_translationSync)
-            {
-                _subtitleManager.CommitTranslation(cue, cue.SourceText.Trim());
-            }
-
+            _mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(cue, cue.Text.Trim()));
             PublishSnapshot();
             return;
         }
 
         lock (_translationSync)
         {
-            if (!string.IsNullOrWhiteSpace(cue.TranslatedText) || !_inFlightCueTranslations.Add(cue))
+            if (HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot) || !_inFlightCueTranslations.Add(cue.Id.Value))
             {
                 return;
             }
@@ -878,12 +962,8 @@ public sealed class SubtitleWorkflowController
         try
         {
             PublishLocalTranslationPreparationStatus();
-            var translated = await _translator.TranslateAsync(cue.SourceText, cancellationToken);
-
-            lock (_translationSync)
-            {
-                _subtitleManager.CommitTranslation(cue, translated);
-            }
+            var translated = await _translator.TranslateAsync(cue.Text, cancellationToken);
+            _mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(cue, translated));
 
             PublishSnapshot();
         }
@@ -898,22 +978,22 @@ public sealed class SubtitleWorkflowController
         {
             lock (_translationSync)
             {
-                _inFlightCueTranslations.Remove(cue);
+                _inFlightCueTranslations.Remove(cue.Id.Value);
             }
         }
     }
 
-    private bool ShouldUseTranscriptDirectly(SubtitleCue cue)
+    private bool ShouldUseTranscriptDirectly(TranscriptSegment cue)
     {
         if (!_isTranslationEnabledForCurrentVideo || !HasSelectedTranslationModel())
         {
             return true;
         }
 
-        return IsLanguageCode(cue.SourceLanguage ?? _currentSourceLanguage, _translationTargetLanguage);
+        return IsLanguageCode(cue.Language, _translationTargetLanguage);
     }
 
-    private async Task<IReadOnlyList<string>> TranslateCueBatchAsync(IReadOnlyList<SubtitleCue> cues, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> TranslateCueBatchAsync(IReadOnlyList<TranscriptSegment> cues, CancellationToken cancellationToken)
     {
         const int batchSize = 20;
         var translated = new List<string>(cues.Count);
@@ -921,7 +1001,7 @@ public sealed class SubtitleWorkflowController
         {
             cancellationToken.ThrowIfCancellationRequested();
             var batch = cues.Skip(index).Take(batchSize).ToList();
-            var batchTranslations = await _translator.TranslateBatchAsync(batch.Select(cue => cue.SourceText).ToList(), cancellationToken);
+            var batchTranslations = await _translator.TranslateBatchAsync(batch.Select(cue => cue.Text).ToList(), cancellationToken);
             translated.AddRange(batchTranslations);
         }
 
@@ -1291,61 +1371,12 @@ public sealed class SubtitleWorkflowController
 
     private bool HasConfiguredTranslationProvider(TranslationProvider provider)
     {
-        return provider switch
-        {
-            TranslationProvider.None => false,
-            TranslationProvider.LocalHyMt15_1_8B => TryResolveLlamaCppServerPath() is not null,
-            TranslationProvider.LocalHyMt15_7B => TryResolveLlamaCppServerPath() is not null,
-            TranslationProvider.OpenAi => HasOpenAiApiKey(),
-            TranslationProvider.Google => GetGoogleCloudTranslationOptions() is not null,
-            TranslationProvider.DeepL => GetDeepLCloudTranslationOptions() is not null,
-            TranslationProvider.MicrosoftTranslator => GetMicrosoftCloudTranslationOptions() is not null,
-            _ => false
-        };
+        return _providerAvailabilityService.IsTranslationProviderConfigured(provider);
     }
 
     private string? TryResolveLlamaCppServerPath()
     {
-        var configuredPath = _environmentVariableReader("LLAMA_SERVER_PATH");
-        if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
-        {
-            return configuredPath;
-        }
-
-        configuredPath = _credentialFacade.GetLlamaCppServerPath();
-        if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
-        {
-            return configuredPath;
-        }
-
-        var installedPath = LlamaCppRuntimeInstaller.GetInstalledServerPath();
-        if (File.Exists(installedPath))
-        {
-            return installedPath;
-        }
-
-        var pathValue = _environmentVariableReader("PATH");
-        if (string.IsNullOrWhiteSpace(pathValue))
-        {
-            return null;
-        }
-
-        foreach (var segment in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var exePath = Path.Combine(segment, "llama-server.exe");
-            if (File.Exists(exePath))
-            {
-                return exePath;
-            }
-
-            var noExtensionPath = Path.Combine(segment, "llama-server");
-            if (File.Exists(noExtensionPath))
-            {
-                return noExtensionPath;
-            }
-        }
-
-        return null;
+        return _providerAvailabilityService.ResolveLlamaCppServerPath();
     }
 
     private void InitializeTranslationPreferencesForNewVideo()
@@ -1378,6 +1409,7 @@ public sealed class SubtitleWorkflowController
     private void SetTranslationEnabledForCurrentVideo(bool enabled)
     {
         _isTranslationEnabledForCurrentVideo = enabled;
+        _mediaSessionCoordinator.SetTranslationState(enabled, _autoTranslateVideosOutsidePreferredLanguage);
     }
 
     private async Task ReprocessCurrentSubtitlesForTranslationSettingsAsync(CancellationToken cancellationToken)
@@ -1405,7 +1437,7 @@ public sealed class SubtitleWorkflowController
                 return;
             }
 
-            if (_subtitleManager.HasCues)
+            if (HasCurrentCues)
             {
                 var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 _translationCts?.Cancel();
@@ -1421,7 +1453,7 @@ public sealed class SubtitleWorkflowController
             return;
         }
 
-        if (_subtitleManager.HasCues)
+        if (HasCurrentCues)
         {
             ResetCurrentTranslations();
             PublishStatus(_isTranslationEnabledForCurrentVideo
@@ -1456,7 +1488,7 @@ public sealed class SubtitleWorkflowController
                 }
 
                 await LoadSubtitleCuesAsync(
-                    CloneCues(_subtitleManager.Cues),
+                    CurrentCues,
                     SubtitlePipelineSource.Generated,
                     $"Loaded cached generated captions ({selection.DisplayName})",
                     cancellationToken,
@@ -1483,13 +1515,10 @@ public sealed class SubtitleWorkflowController
     {
         lock (_translationSync)
         {
-            foreach (var cue in _subtitleManager.Cues)
-            {
-                cue.TranslatedText = null;
-            }
-
             _inFlightCueTranslations.Clear();
         }
+
+        _mediaSessionCoordinator.ClearTranslations();
     }
 
     private void RestoreTranslationSelection(string? previousModelKey)
@@ -1609,6 +1638,7 @@ public sealed class SubtitleWorkflowController
         if (overlayStatus is not null)
         {
             _overlayStatusText = overlayStatus;
+            _mediaSessionCoordinator.SetSubtitleStatus(overlayStatus);
         }
 
         StatusChanged?.Invoke(message);
@@ -1618,6 +1648,7 @@ public sealed class SubtitleWorkflowController
     private void SetOverlayStatus(string? text)
     {
         _overlayStatusText = text;
+        _mediaSessionCoordinator.SetSubtitleStatus(text);
     }
 
     private void PublishSnapshot()

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using BabelPlayer.App;
 using BabelPlayer.Core;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -13,14 +14,13 @@ namespace BabelPlayer.WinUI;
 public sealed class MpvHostControl : UserControl
 {
     private readonly Grid _root;
-    private readonly MpvPlaybackEngine _engine = new();
-    private readonly CancellationTokenSource _disposeCts = new();
-    private PlaybackStateSnapshot _snapshot = new();
+    private readonly CancellationTokenSource _lifetimeCts = new();
     private Window? _ownerWindow;
-    private Uri? _source;
+    private IPlaybackBackend? _playbackBackend;
     private string? _pendingPath;
     private double _volume = 0.8;
     private bool _initialized;
+    private bool _eventsAttached;
     private IntPtr _hwnd;
     private IntPtr _previousWndProc;
     private NativeMethods.WndProc? _wndProc;
@@ -51,20 +51,6 @@ public sealed class MpvHostControl : UserControl
         IsTabStop = false;
 
         _hostBoundsRetryTimer.Tick += HostBoundsRetryTimer_Tick;
-        _engine.OnStateChanged += snapshot => DispatcherQueue.TryEnqueue(() =>
-        {
-            _snapshot = snapshot;
-            PlaybackStateChanged?.Invoke(snapshot);
-            if (snapshot.VideoWidth > 0 && snapshot.VideoHeight > 0)
-            {
-                RequestHostBoundsSync();
-            }
-        });
-        _engine.OnMediaOpened += () => DispatcherQueue.TryEnqueue(() => MediaOpened?.Invoke());
-        _engine.OnMediaEnded += () => DispatcherQueue.TryEnqueue(() => MediaEnded?.Invoke());
-        _engine.OnMediaFailed += message => DispatcherQueue.TryEnqueue(() => MediaFailed?.Invoke(message));
-        _engine.OnTracksChanged += tracks => DispatcherQueue.TryEnqueue(() => TracksChanged?.Invoke(tracks));
-        _engine.OnRuntimeInstallProgress += progress => DispatcherQueue.TryEnqueue(() => RuntimeInstallProgress?.Invoke(progress));
     }
 
     public event Action? MediaOpened;
@@ -77,9 +63,13 @@ public sealed class MpvHostControl : UserControl
     public event Action? FullscreenExitRequested;
     public event Func<ShortcutKeyInput, bool>? ShortcutKeyPressed;
 
-    public void Initialize(Window ownerWindow)
+    public void Initialize(Window ownerWindow, IPlaybackBackend playbackBackend)
     {
+        ArgumentNullException.ThrowIfNull(ownerWindow);
+        ArgumentNullException.ThrowIfNull(playbackBackend);
+
         _ownerWindow = ownerWindow;
+        AttachPlaybackBackend(playbackBackend);
         if (IsLoaded)
         {
             EnsureInitialized();
@@ -88,94 +78,179 @@ public sealed class MpvHostControl : UserControl
 
     public Uri? Source
     {
-        get => _source;
+        get => string.IsNullOrWhiteSpace(_playbackBackend?.State.Path) ? null : new Uri(_playbackBackend.State.Path);
         set
         {
-            _source = value;
             _pendingPath = value?.LocalPath;
-            _snapshot = _snapshot with
+            if (_initialized && _playbackBackend is not null && !string.IsNullOrWhiteSpace(_pendingPath))
             {
-                Path = _pendingPath,
-                Position = TimeSpan.Zero,
-                Duration = TimeSpan.Zero,
-                VideoWidth = 0,
-                VideoHeight = 0,
-                VideoDisplayWidth = 0,
-                VideoDisplayHeight = 0,
-                HasVideo = false
-            };
-            PlaybackStateChanged?.Invoke(_snapshot);
-            QueueHostBoundsSync();
-            if (_initialized && !string.IsNullOrWhiteSpace(_pendingPath))
-            {
-                _ = _engine.LoadAsync(_pendingPath, _disposeCts.Token);
+                _ = _playbackBackend.LoadAsync(_pendingPath, _lifetimeCts.Token);
             }
+
+            RaisePlaybackStateChanged();
         }
     }
 
     public TimeSpan Position
     {
-        get => _snapshot.Position;
+        get => _playbackBackend?.Clock.Current.Position ?? TimeSpan.Zero;
         set
         {
-            if (_initialized)
+            if (_initialized && _playbackBackend is not null)
             {
-                _ = _engine.SeekAsync(value, _disposeCts.Token);
+                _ = _playbackBackend.SeekAsync(value, _lifetimeCts.Token);
             }
         }
     }
 
     public double Volume
     {
-        get => _snapshot.Volume > 0 ? _snapshot.Volume : _volume;
+        get => _playbackBackend?.State.Volume > 0 ? _playbackBackend.State.Volume : _volume;
         set
         {
             _volume = Math.Clamp(value, 0, 1);
-            if (_initialized)
+            if (_initialized && _playbackBackend is not null)
             {
-                _ = _engine.SetVolumeAsync(_volume, _disposeCts.Token);
+                _ = _playbackBackend.SetVolumeAsync(_volume, _lifetimeCts.Token);
             }
         }
     }
 
-    public Duration NaturalDuration => _snapshot.Duration > TimeSpan.Zero ? new Duration(_snapshot.Duration) : Duration.Automatic;
-    public PlaybackStateSnapshot Snapshot => _snapshot;
-    public double PlaybackRate => _snapshot.Speed;
-    public bool IsMuted => _snapshot.IsMuted;
-    public bool IsPaused => _snapshot.IsPaused;
-    public IReadOnlyList<MediaTrackInfo> CurrentTracks => _engine.CurrentTracks;
-    public string ActiveHardwareDecoder => _snapshot.ActiveHardwareDecoder;
-    public HardwareDecodingMode HardwareDecodingMode { get; set; } = HardwareDecodingMode.AutoSafe;
-
-    public void Play() => _ = _engine.PlayAsync(_disposeCts.Token);
-    public Task PlayAsync() => _engine.PlayAsync(_disposeCts.Token);
-    public void Pause() => _ = _engine.PauseAsync(_disposeCts.Token);
-    public Task PauseAsync() => _engine.PauseAsync(_disposeCts.Token);
-    public void Stop() => _ = _engine.StopAsync(_disposeCts.Token);
-    public void SeekBy(TimeSpan delta) => _ = _engine.SeekRelativeAsync(delta, _disposeCts.Token);
-    public void StepFrame(bool forward) => _ = _engine.StepFrameAsync(forward, _disposeCts.Token);
-    public void SetPlaybackRate(double speed) => _ = _engine.SetPlaybackRateAsync(speed, _disposeCts.Token);
-    public void SetMute(bool muted) => _ = _engine.SetMuteAsync(muted, _disposeCts.Token);
-    public void SelectAudioTrack(int? trackId) => _ = _engine.SetAudioTrackAsync(trackId, _disposeCts.Token);
-    public void SelectSubtitleTrack(int? trackId) => _ = _engine.SetSubtitleTrackAsync(trackId, _disposeCts.Token);
-    public void SetAudioDelay(double seconds) => _ = _engine.SetAudioDelayAsync(seconds, _disposeCts.Token);
-    public void SetSubtitleDelay(double seconds) => _ = _engine.SetSubtitleDelayAsync(seconds, _disposeCts.Token);
-    public void SetAspectRatio(string aspectRatio) => _ = _engine.SetAspectRatioAsync(aspectRatio, _disposeCts.Token);
-
-    public void SetHardwareDecodingMode(HardwareDecodingMode mode)
+    public Duration NaturalDuration
     {
-        HardwareDecodingMode = mode;
-        if (_initialized)
+        get
         {
-            _ = _engine.SetHardwareDecodingModeAsync(mode, _disposeCts.Token);
+            var duration = _playbackBackend?.Clock.Current.Duration ?? TimeSpan.Zero;
+            return duration > TimeSpan.Zero ? new Duration(duration) : Duration.Automatic;
         }
     }
 
-    public void SetZoom(double zoom) => _ = _engine.SetZoomAsync(zoom, _disposeCts.Token);
-    public void SetPan(double x, double y) => _ = _engine.SetPanAsync(x, y, _disposeCts.Token);
-    public void Screenshot(string outputPath) => _ = _engine.ScreenshotAsync(outputPath, _disposeCts.Token);
+    public PlaybackStateSnapshot Snapshot => BuildPlaybackSnapshot();
+
+    public double PlaybackRate => _playbackBackend?.Clock.Current.Rate ?? 1.0;
+
+    public bool IsMuted => _playbackBackend?.State.IsMuted == true;
+
+    public bool IsPaused => _playbackBackend?.Clock.Current.IsPaused ?? true;
+
+    public IReadOnlyList<MediaTrackInfo> CurrentTracks => _playbackBackend?.CurrentTracks ?? [];
+
+    public string ActiveHardwareDecoder => _playbackBackend?.State.ActiveHardwareDecoder ?? string.Empty;
+
+    public HardwareDecodingMode HardwareDecodingMode
+    {
+        get => _playbackBackend?.HardwareDecodingMode ?? HardwareDecodingMode.AutoSafe;
+        set
+        {
+            if (_playbackBackend is not null)
+            {
+                _ = _playbackBackend.SetHardwareDecodingModeAsync(value, _lifetimeCts.Token);
+            }
+        }
+    }
+
+    public void Play() => _ = _playbackBackend?.PlayAsync(_lifetimeCts.Token);
+
+    public Task PlayAsync() => _playbackBackend?.PlayAsync(_lifetimeCts.Token) ?? Task.CompletedTask;
+
+    public void Pause() => _ = _playbackBackend?.PauseAsync(_lifetimeCts.Token);
+
+    public Task PauseAsync() => _playbackBackend?.PauseAsync(_lifetimeCts.Token) ?? Task.CompletedTask;
+
+    public void Stop() => _ = _playbackBackend?.StopAsync(_lifetimeCts.Token);
+
+    public void SeekBy(TimeSpan delta) => _ = _playbackBackend?.SeekRelativeAsync(delta, _lifetimeCts.Token);
+
+    public void StepFrame(bool forward) => _ = _playbackBackend?.StepFrameAsync(forward, _lifetimeCts.Token);
+
+    public void SetPlaybackRate(double speed) => _ = _playbackBackend?.SetPlaybackRateAsync(speed, _lifetimeCts.Token);
+
+    public void SetMute(bool muted) => _ = _playbackBackend?.SetMuteAsync(muted, _lifetimeCts.Token);
+
+    public void SelectAudioTrack(int? trackId) => _ = _playbackBackend?.SetAudioTrackAsync(trackId, _lifetimeCts.Token);
+
+    public void SelectSubtitleTrack(int? trackId) => _ = _playbackBackend?.SetSubtitleTrackAsync(trackId, _lifetimeCts.Token);
+
+    public void SetAudioDelay(double seconds) => _ = _playbackBackend?.SetAudioDelayAsync(seconds, _lifetimeCts.Token);
+
+    public void SetSubtitleDelay(double seconds) => _ = _playbackBackend?.SetSubtitleDelayAsync(seconds, _lifetimeCts.Token);
+
+    public void SetAspectRatio(string aspectRatio) => _ = _playbackBackend?.SetAspectRatioAsync(aspectRatio, _lifetimeCts.Token);
+
+    public void SetHardwareDecodingMode(HardwareDecodingMode mode) => _ = _playbackBackend?.SetHardwareDecodingModeAsync(mode, _lifetimeCts.Token);
+
+    public void SetZoom(double zoom) => _ = _playbackBackend?.SetZoomAsync(zoom, _lifetimeCts.Token);
+
+    public void SetPan(double x, double y) => _ = _playbackBackend?.SetPanAsync(x, y, _lifetimeCts.Token);
+
+    public void Screenshot(string outputPath) => _ = _playbackBackend?.ScreenshotAsync(outputPath, _lifetimeCts.Token);
+
     public void RequestHostBoundsSync() => QueueHostBoundsSync();
+
     public IDisposable SuppressNativeHost() => new NativeHostSuppressionScope(this);
+
+    public RectInt32 GetStageBounds(FrameworkElement relativeTo)
+    {
+        ArgumentNullException.ThrowIfNull(relativeTo);
+        if (XamlRoot is null || _ownerWindow is null)
+        {
+            return default;
+        }
+
+        var hwnd = WindowNative.GetWindowHandle(_ownerWindow);
+        var topLeft = new NativePoint();
+        if (!NativeMethods.ClientToScreen(hwnd, ref topLeft))
+        {
+            return default;
+        }
+
+        var transform = TransformToVisual(relativeTo);
+        var origin = transform.TransformPoint(new Point(0, 0));
+        var scale = XamlRoot.RasterizationScale;
+        var x = topLeft.X + Math.Max((int)Math.Round(origin.X * scale), 0);
+        var y = topLeft.Y + Math.Max((int)Math.Round(origin.Y * scale), 0);
+        var width = Math.Max((int)Math.Round(ActualWidth * scale), 0);
+        var height = Math.Max((int)Math.Round(ActualHeight * scale), 0);
+        return width <= 0 || height <= 0
+            ? default
+            : new RectInt32(x, y, width, height);
+    }
+
+    private void AttachPlaybackBackend(IPlaybackBackend playbackBackend)
+    {
+        if (ReferenceEquals(_playbackBackend, playbackBackend) && _eventsAttached)
+        {
+            return;
+        }
+
+        DetachPlaybackBackend();
+        _playbackBackend = playbackBackend;
+        _playbackBackend.StateChanged += PlaybackBackend_StateChanged;
+        _playbackBackend.TracksChanged += PlaybackBackend_TracksChanged;
+        _playbackBackend.MediaOpened += PlaybackBackend_MediaOpened;
+        _playbackBackend.MediaEnded += PlaybackBackend_MediaEnded;
+        _playbackBackend.MediaFailed += PlaybackBackend_MediaFailed;
+        _playbackBackend.RuntimeInstallProgress += PlaybackBackend_RuntimeInstallProgress;
+        _playbackBackend.Clock.Changed += PlaybackClock_Changed;
+        _eventsAttached = true;
+    }
+
+    private void DetachPlaybackBackend()
+    {
+        if (_playbackBackend is null || !_eventsAttached)
+        {
+            return;
+        }
+
+        _playbackBackend.StateChanged -= PlaybackBackend_StateChanged;
+        _playbackBackend.TracksChanged -= PlaybackBackend_TracksChanged;
+        _playbackBackend.MediaOpened -= PlaybackBackend_MediaOpened;
+        _playbackBackend.MediaEnded -= PlaybackBackend_MediaEnded;
+        _playbackBackend.MediaFailed -= PlaybackBackend_MediaFailed;
+        _playbackBackend.RuntimeInstallProgress -= PlaybackBackend_RuntimeInstallProgress;
+        _playbackBackend.Clock.Changed -= PlaybackClock_Changed;
+        _eventsAttached = false;
+    }
 
     private void MpvHostControl_Loaded(object sender, RoutedEventArgs e)
     {
@@ -185,8 +260,7 @@ public sealed class MpvHostControl : UserControl
 
     private void MpvHostControl_Unloaded(object sender, RoutedEventArgs e)
     {
-        _disposeCts.Cancel();
-        _ = _engine.DisposeAsync();
+        _lifetimeCts.Cancel();
         _hostBoundsRetryTimer.Stop();
         DestroyHostWindow();
     }
@@ -197,7 +271,7 @@ public sealed class MpvHostControl : UserControl
 
     private void EnsureInitialized()
     {
-        if (_initialized || _ownerWindow is null)
+        if (_initialized || _ownerWindow is null || _playbackBackend is null)
         {
             return;
         }
@@ -234,24 +308,104 @@ public sealed class MpvHostControl : UserControl
         _initialized = true;
         QueueHostBoundsSync();
 
-        _ = _engine.InitializeAsync(_hwnd, HardwareDecodingMode, _disposeCts.Token)
+        _ = _playbackBackend.InitializeAsync(_hwnd, _lifetimeCts.Token)
             .ContinueWith(async task =>
             {
                 if (task.IsFaulted)
                 {
-                    DispatcherQueue.TryEnqueue(() => MediaFailed?.Invoke(task.Exception?.GetBaseException().Message ?? "mpv initialization failed."));
+                    DispatcherQueue.TryEnqueue(() => MediaFailed?.Invoke(task.Exception?.GetBaseException().Message ?? "Playback backend initialization failed."));
                     return;
                 }
 
-                await _engine.SetVolumeAsync(_volume, _disposeCts.Token);
+                await _playbackBackend.SetVolumeAsync(_volume, _lifetimeCts.Token);
                 if (!string.IsNullOrWhiteSpace(_pendingPath))
                 {
-                    await _engine.LoadAsync(_pendingPath, _disposeCts.Token);
+                    await _playbackBackend.LoadAsync(_pendingPath, _lifetimeCts.Token);
                 }
 
-                DispatcherQueue.TryEnqueue(QueueHostBoundsSync);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    RaisePlaybackStateChanged();
+                    QueueHostBoundsSync();
+                });
             }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default)
             .Unwrap();
+    }
+
+    private void PlaybackBackend_StateChanged(PlaybackBackendState state)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (state.VideoWidth > 0 && state.VideoHeight > 0)
+            {
+                RequestHostBoundsSync();
+            }
+
+            RaisePlaybackStateChanged();
+        });
+    }
+
+    private void PlaybackBackend_TracksChanged(IReadOnlyList<MediaTrackInfo> tracks)
+    {
+        DispatcherQueue.TryEnqueue(() => TracksChanged?.Invoke(tracks));
+    }
+
+    private void PlaybackBackend_MediaOpened()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            RaisePlaybackStateChanged();
+            MediaOpened?.Invoke();
+        });
+    }
+
+    private void PlaybackBackend_MediaEnded()
+    {
+        DispatcherQueue.TryEnqueue(() => MediaEnded?.Invoke());
+    }
+
+    private void PlaybackBackend_MediaFailed(string message)
+    {
+        DispatcherQueue.TryEnqueue(() => MediaFailed?.Invoke(message));
+    }
+
+    private void PlaybackBackend_RuntimeInstallProgress(RuntimeInstallProgress progress)
+    {
+        DispatcherQueue.TryEnqueue(() => RuntimeInstallProgress?.Invoke(progress));
+    }
+
+    private void PlaybackClock_Changed(ClockSnapshot snapshot)
+    {
+        DispatcherQueue.TryEnqueue(RaisePlaybackStateChanged);
+    }
+
+    private void RaisePlaybackStateChanged()
+    {
+        PlaybackStateChanged?.Invoke(BuildPlaybackSnapshot());
+    }
+
+    private PlaybackStateSnapshot BuildPlaybackSnapshot()
+    {
+        var clock = _playbackBackend?.Clock.Current ?? new ClockSnapshot(TimeSpan.Zero, TimeSpan.Zero, 1.0, true, false, DateTimeOffset.UtcNow);
+        var state = _playbackBackend?.State ?? new PlaybackBackendState();
+        return new PlaybackStateSnapshot
+        {
+            Path = state.Path ?? _pendingPath,
+            Position = clock.Position,
+            Duration = clock.Duration,
+            Speed = clock.Rate,
+            IsPaused = clock.IsPaused,
+            IsSeekable = clock.IsSeekable,
+            HasVideo = state.HasVideo,
+            HasAudio = state.HasAudio,
+            VideoWidth = state.VideoWidth,
+            VideoHeight = state.VideoHeight,
+            VideoDisplayWidth = state.VideoDisplayWidth,
+            VideoDisplayHeight = state.VideoDisplayHeight,
+            IsMuted = state.IsMuted,
+            Volume = state.Volume,
+            ActiveHardwareDecoder = state.ActiveHardwareDecoder
+        };
     }
 
     private void QueueHostBoundsSync()
@@ -314,7 +468,7 @@ public sealed class MpvHostControl : UserControl
         }
 
         var transform = TransformToVisual(rootContent);
-        Point origin = transform.TransformPoint(new Point(0, 0));
+        var origin = transform.TransformPoint(new Point(0, 0));
         var scale = XamlRoot.RasterizationScale;
         var width = Math.Max((int)Math.Round(ActualWidth * scale), 0);
         var height = Math.Max((int)Math.Round(ActualHeight * scale), 0);
@@ -401,6 +555,7 @@ public sealed class MpvHostControl : UserControl
                 {
                     InputActivity?.Invoke();
                 }
+
                 break;
             case NativeMethods.WM_LBUTTONDOWN:
                 InputActivity?.Invoke();
@@ -492,6 +647,13 @@ public sealed class MpvHostControl : UserControl
 
     private static bool IsModifierPressed(int virtualKey) => (NativeMethods.GetKeyState(virtualKey) & 0x8000) != 0;
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
     private static class NativeMethods
     {
         public const int WS_CHILD = 0x40000000;
@@ -544,6 +706,9 @@ public sealed class MpvHostControl : UserControl
         [DllImport("user32.dll")]
         public static extern short GetKeyState(int nVirtKey);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ClientToScreen(nint hWnd, ref NativePoint lpPoint);
     }
 
     private sealed class NativeHostSuppressionScope : IDisposable

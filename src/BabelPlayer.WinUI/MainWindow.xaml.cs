@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
+using BabelPlayer.App;
 using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -26,8 +27,14 @@ public sealed partial class MainWindow : Window
     private readonly LibraryBrowserService _libraryBrowserService = new();
     private readonly PlaylistController _playlistController = new();
     private readonly PlaybackSessionController _playbackSessionController;
+    private readonly MediaSessionCoordinator _mediaSessionCoordinator;
     private readonly CredentialFacade _credentialFacade = new();
     private readonly SubtitleWorkflowController _subtitleWorkflowController;
+    private readonly IPlaybackBackend _playbackBackend;
+    private readonly PlaybackBackendCoordinator _playbackBackendCoordinator;
+    private readonly ShellController _shellController;
+    private readonly IVideoPresenter _videoPresenter;
+    private readonly ISubtitlePresenter _subtitlePresenter;
     private readonly ShortcutService _shortcutService = new();
     private readonly DispatcherTimer _transportTimer;
     private readonly DispatcherTimer _fullscreenControlsTimer;
@@ -36,10 +43,10 @@ public sealed partial class MainWindow : Window
     private readonly WinUIWindowModeService _windowModeService;
     private readonly WinUICredentialDialogService _credentialDialogService;
     private readonly IRuntimeBootstrapService _runtimeBootstrapService;
+    private readonly StageCoordinator _stageCoordinator;
     private readonly List<PlaybackResumeEntry> _resumeEntries = [];
     private readonly List<MediaTrackInfo> _currentTracks = [];
     private FullscreenOverlayWindow? _fullscreenOverlayWindow;
-    private SubtitleOverlayWindow? _subtitleOverlayWindow;
     private bool _suppressPositionSliderChanges;
     private bool _suppressFullscreenSliderChanges;
     private bool _suppressWorkflowControlEvents;
@@ -97,7 +104,7 @@ public sealed partial class MainWindow : Window
     private ColumnDefinition BrowserColumn = null!;
     private ColumnDefinition PlaylistColumn = null!;
     private TreeView LibraryTree = null!;
-    private MpvHostControl PlayerHost = null!;
+    private PlaybackHostAdapter PlayerHost = null!;
     private TextBlock HardwareDecoderTextBlock = null!;
     private TextBlock SourceSubtitleTextBlock = null!;
     private TextBlock TranslatedSubtitleTextBlock = null!;
@@ -157,12 +164,24 @@ public sealed partial class MainWindow : Window
             Interval = TimeSpan.FromSeconds(5)
         };
         _credentialDialogService = new WinUICredentialDialogService(RootGrid, SuppressDialogPresentation);
+        _mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
         _subtitleWorkflowController = new SubtitleWorkflowController(
             _credentialFacade,
             _credentialDialogService,
             _filePickerService,
-            _runtimeBootstrapService);
+            _runtimeBootstrapService,
+            _mediaSessionCoordinator);
+        _playbackBackend = new MpvPlaybackBackend();
+        _playbackBackendCoordinator = new PlaybackBackendCoordinator(_playbackBackend, _mediaSessionCoordinator);
+        _videoPresenter = new MpvVideoPresenter();
+        _subtitlePresenter = new DetachedWindowSubtitlePresenter(this);
+        _shellController = new ShellController(
+            _playlistController,
+            _playbackSessionController,
+            _playbackBackend,
+            _subtitleWorkflowController);
         BuildShell();
+        _stageCoordinator = new StageCoordinator(RootGrid, _windowModeService, _videoPresenter, _subtitlePresenter);
 
         var fullscreenExitAccelerator = new Microsoft.UI.Xaml.Input.KeyboardAccelerator
         {
@@ -630,12 +649,8 @@ public sealed partial class MainWindow : Window
         };
         grid.Children.Add(playerStage);
 
-        PlayerHost = new MpvHostControl
-        {
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
-        };
-        playerStage.Children.Add(PlayerHost);
+        PlayerHost = new PlaybackHostAdapter(_playbackBackend, _videoPresenter);
+        playerStage.Children.Add(PlayerHost.View);
 
         DecoderBadge = new Border
         {
@@ -876,7 +891,7 @@ public sealed partial class MainWindow : Window
         return grid;
     }
 
-    private UIElement BuildLanguageToolsDrawer()
+    private FrameworkElement BuildLanguageToolsDrawer()
     {
         var drawer = new StackPanel
         {
@@ -1208,7 +1223,7 @@ public sealed partial class MainWindow : Window
         StatusInfoBar.IsOpen = true;
         StatusInfoBar.Message = ViewModel.StatusMessage;
 
-        ThemeToggleButton.IsChecked = true;
+        ThemeToggleMenuItem.IsChecked = true;
         ApplyTheme(isDark: true);
         VolumeSlider.Value = ViewModel.Transport.Volume;
         MuteToggleButton.IsChecked = settings.IsMuted;
@@ -1308,7 +1323,9 @@ public sealed partial class MainWindow : Window
         _micaBackdrop = null;
         HideFullscreenOverlay();
         _fullscreenOverlayWindow?.CloseOverlay();
-        _subtitleOverlayWindow?.CloseOverlay();
+        (_subtitlePresenter as IDisposable)?.Dispose();
+        _playbackBackendCoordinator.Dispose();
+        _ = _playbackBackend.DisposeAsync();
         _resumeTimer.Stop();
         SaveCurrentSettings();
     }
@@ -2075,9 +2092,33 @@ public sealed partial class MainWindow : Window
         return state.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
     }
 
+    private void ThemeToggleMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTheme(ThemeToggleMenuItem.IsChecked);
+    }
+
     private void ThemeToggleButton_Checked(object sender, RoutedEventArgs e) => ApplyTheme(isDark: true);
 
     private void ThemeToggleButton_Unchecked(object sender, RoutedEventArgs e) => ApplyTheme(isDark: false);
+
+    private void LanguageToolsToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isLanguageToolsExpanded = !_isLanguageToolsExpanded;
+        UpdateLanguageToolsDrawerState();
+    }
+
+    private void UpdateLanguageToolsDrawerState()
+    {
+        if (LanguageToolsToggleButton is null || LanguageToolsContentBorder is null)
+        {
+            return;
+        }
+
+        LanguageToolsContentBorder.Visibility = _isLanguageToolsExpanded ? Visibility.Visible : Visibility.Collapsed;
+        LanguageToolsToggleButton.Content = _isLanguageToolsExpanded
+            ? "Language Tools   Hide"
+            : "Language Tools   Show";
+    }
 
     private async void RootGrid_Drop(object sender, DragEventArgs e)
     {
@@ -2756,7 +2797,7 @@ public sealed partial class MainWindow : Window
         var overlayAlpha = (byte)Math.Clamp(Math.Round(style.BackgroundOpacity * 255), 0, 255);
         SubtitleOverlayBorder.Background = new SolidColorBrush(ColorHelper.FromArgb(overlayAlpha, 18, 23, 32));
         SubtitleOverlayBorder.Margin = new Thickness(0, 0, 0, style.BottomMargin);
-        _subtitleOverlayWindow?.ApplyStyle(style);
+        _subtitlePresenter.ApplyStyle(style);
     }
 
     private void UpdateSubtitleStyle(Func<SubtitleStyleSettings, SubtitleStyleSettings> updater, string statusMessage)
@@ -3262,21 +3303,24 @@ public sealed partial class MainWindow : Window
         _autoResumePlaybackPath = null;
         _autoResumePlaybackPosition = TimeSpan.Zero;
         _autoResumePlaybackFromBeginning = true;
-        _playbackSessionController.StartWith(item);
-        RefreshPlaylistView();
         _pendingAutoFitPath = item.Path;
         _lastAutoFitSignature = null;
-        PlayerHost.Source = new Uri(item.Path);
-        PlayerHost.SetHardwareDecodingMode(ViewModel.Settings.HardwareDecodingMode);
-        PlayerHost.SetPlaybackRate(ViewModel.Transport.PlaybackRate);
-        PlayerHost.SetAspectRatio(_selectedAspectRatio);
-        PlayerHost.SetAudioDelay(_audioDelaySeconds);
-        PlayerHost.SetSubtitleDelay(_subtitleDelaySeconds);
-        PlayerHost.SetZoom(0);
-        PlayerHost.SetPan(0, 0);
-        PlayerHost.Volume = ViewModel.Transport.Volume;
+        var loaded = await _shellController.LoadPlaylistItemAsync(
+            item,
+            ViewModel.Settings.HardwareDecodingMode,
+            ViewModel.Transport.PlaybackRate,
+            _selectedAspectRatio,
+            _audioDelaySeconds,
+            _subtitleDelaySeconds,
+            ViewModel.Transport.Volume,
+            CancellationToken.None);
+        if (!loaded)
+        {
+            return;
+        }
+
+        RefreshPlaylistView();
         PlayerHost.RequestHostBoundsSync();
-        await _subtitleWorkflowController.LoadMediaSubtitlesAsync(item.Path);
         UpdateWindowHeader();
     }
 
@@ -3390,7 +3434,7 @@ public sealed partial class MainWindow : Window
         var snapshot = PlayerHost.Snapshot;
         var displayWidth = snapshot.VideoDisplayWidth > 0 ? snapshot.VideoDisplayWidth : snapshot.VideoWidth;
         var displayHeight = snapshot.VideoDisplayHeight > 0 ? snapshot.VideoDisplayHeight : snapshot.VideoHeight;
-        if (displayWidth <= 0 || displayHeight <= 0 || PlayerPane.ActualWidth <= 0 || PlayerHost.ActualHeight <= 0)
+        if (displayWidth <= 0 || displayHeight <= 0 || PlayerPane.ActualWidth <= 0 || PlayerHost.View.ActualHeight <= 0)
         {
             return;
         }
@@ -3403,8 +3447,8 @@ public sealed partial class MainWindow : Window
 
         var currentBounds = _windowModeService.CurrentBounds;
         var workArea = _windowModeService.GetCurrentDisplayBounds(workArea: true);
-        var stageHeight = Math.Max(PlayerHost.ActualHeight, 1);
-        var playerChromeWidth = Math.Max(PlayerPane.ActualWidth - PlayerHost.ActualWidth, 0);
+        var stageHeight = Math.Max(PlayerHost.View.ActualHeight, 1);
+        var playerChromeWidth = Math.Max(PlayerPane.ActualWidth - PlayerHost.View.ActualWidth, 0);
         var nonPlayerWidth = Math.Max(currentBounds.Width - PlayerPane.ActualWidth, 0);
         var desiredStageWidth = stageHeight * displayWidth / displayHeight;
         var desiredWindowWidth = (int)Math.Round(nonPlayerWidth + playerChromeWidth + desiredStageWidth);
@@ -3727,69 +3771,18 @@ public sealed partial class MainWindow : Window
         TranslatedSubtitleTextBlock.Visibility = showPrimary ? Visibility.Visible : Visibility.Collapsed;
         TranslatedSubtitleTextBlock.Text = ViewModel.SubtitleOverlay.TranslationText;
         SubtitleOverlayBorder.Visibility = Visibility.Collapsed;
-        UpdateSubtitleOverlayWindow(showSource, showPrimary);
+        _stageCoordinator.SetWindowActive(_isWindowActive);
+        _stageCoordinator.SetFullscreenOverlayVisible(_isFullscreenOverlayVisible);
+        _stageCoordinator.PresentSubtitles(
+            new SubtitlePresentationModel
+            {
+                IsVisible = showSource || showPrimary,
+                PrimaryText = showPrimary ? ViewModel.SubtitleOverlay.TranslationText : string.Empty,
+                SecondaryText = showSource ? ViewModel.SubtitleOverlay.SourceText : string.Empty
+            },
+            ViewModel.Settings.SubtitleStyle,
+            PlayerHost.Source is not null);
         UpdateOverlayControlState();
-    }
-
-    private void EnsureSubtitleOverlayWindow()
-    {
-        _subtitleOverlayWindow ??= new SubtitleOverlayWindow(WindowNative.GetWindowHandle(this));
-    }
-
-    private void UpdateSubtitleOverlayWindow(bool showSource, bool showTranslation)
-    {
-        if (_modalUiSuppressionCount > 0)
-        {
-            _subtitleOverlayWindow?.HideOverlay();
-            return;
-        }
-
-        if (PlayerHost.Source is null)
-        {
-            _subtitleOverlayWindow?.HideOverlay();
-            return;
-        }
-
-        if (!_isWindowActive)
-        {
-            _subtitleOverlayWindow?.HideOverlay();
-            return;
-        }
-
-        var hasSource = showSource && !string.IsNullOrWhiteSpace(ViewModel.SubtitleOverlay.SourceText);
-        var hasTranslation = showTranslation && !string.IsNullOrWhiteSpace(ViewModel.SubtitleOverlay.TranslationText);
-        if (!hasSource && !hasTranslation)
-        {
-            _subtitleOverlayWindow?.HideOverlay();
-            return;
-        }
-
-        var stageBounds = GetPlayerStageScreenBounds();
-        if (stageBounds.Width <= 0 || stageBounds.Height <= 0)
-        {
-            _subtitleOverlayWindow?.HideOverlay();
-            return;
-        }
-
-        EnsureSubtitleOverlayWindow();
-        _subtitleOverlayWindow!.ApplyStyle(ViewModel.Settings.SubtitleStyle);
-        _subtitleOverlayWindow!.SetContent(
-            ViewModel.SubtitleOverlay.SourceText,
-            ViewModel.SubtitleOverlay.TranslationText,
-            hasSource,
-            hasTranslation);
-        _subtitleOverlayWindow.ShowOverlay(stageBounds, GetSubtitleOverlayBottomOffset());
-    }
-
-    private int GetSubtitleOverlayBottomOffset()
-    {
-        var styleOffset = (int)Math.Round(ViewModel.Settings.SubtitleStyle.BottomMargin);
-        if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen)
-        {
-            return (_isFullscreenOverlayVisible ? 248 : 68) + styleOffset;
-        }
-
-        return 44 + styleOffset;
     }
 
     private IDisposable SuppressModalUi()
@@ -3797,8 +3790,7 @@ public sealed partial class MainWindow : Window
         _modalUiSuppressionCount++;
         _fullscreenControlsTimer.Stop();
         _fullscreenOverlayWindow?.HideOverlay();
-        _subtitleOverlayWindow?.HideOverlay();
-        return new ModalUiSuppressionScope(this);
+        return new CombinedSuppressionScope(_stageCoordinator.SuppressModalUi(), new ModalUiSuppressionScope(this));
     }
 
     private IDisposable SuppressDialogPresentation()
@@ -3828,32 +3820,6 @@ public sealed partial class MainWindow : Window
         }
 
         UpdateSubtitleVisibility();
-    }
-
-    private RectInt32 GetPlayerStageScreenBounds()
-    {
-        if (PlayerHost.XamlRoot is null)
-        {
-            return default;
-        }
-
-        var hwnd = WindowNative.GetWindowHandle(this);
-        var topLeft = new NativePoint();
-        if (!NativeMethods.ClientToScreen(hwnd, ref topLeft))
-        {
-            return default;
-        }
-
-        var transform = PlayerHost.TransformToVisual(RootGrid);
-        var origin = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-        var scale = PlayerHost.XamlRoot.RasterizationScale;
-        var x = topLeft.X + Math.Max((int)Math.Round(origin.X * scale), 0);
-        var y = topLeft.Y + Math.Max((int)Math.Round(origin.Y * scale), 0);
-        var width = Math.Max((int)Math.Round(PlayerHost.ActualWidth * scale), 0);
-        var height = Math.Max((int)Math.Round(PlayerHost.ActualHeight * scale), 0);
-        return width <= 0 || height <= 0
-            ? default
-            : new RectInt32(x, y, width, height);
     }
 
     private void AttachScrubberHandlers(Slider slider)
@@ -3911,7 +3877,7 @@ public sealed partial class MainWindow : Window
         if (args.WindowActivationState == WindowActivationState.Deactivated)
         {
             _fullscreenOverlayWindow?.HideOverlay();
-            _subtitleOverlayWindow?.HideOverlay();
+            _stageCoordinator.HideSubtitlePresentation();
             return;
         }
 
