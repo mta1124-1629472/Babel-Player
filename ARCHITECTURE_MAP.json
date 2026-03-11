@@ -1,22 +1,19 @@
 {
-  "repository": {
-    "name": "Babel-Player",
-    "solution": "BabelPlayer.sln",
-    "summary": "WinUI 3 desktop media player with mpv-based playback, subtitle workflows, and integrated transcription/translation services."
+  "generated_on": "2026-03-11",
+  "summary": {
+    "architecture_style": "MediaSession-centered WinUI desktop app with adapterized playback, subtitle presentation, and AI provider seams",
+    "authoritative_timed_state": "MediaSessionSnapshot via IMediaSessionStore and MediaSessionCoordinator",
+    "current_backend": "mpv.exe via MpvPlaybackBackend and MpvPlaybackEngine",
+    "shell_framework": "WinUI 3",
+    "future_renderer_status": "placeholder contracts present; custom renderer not implemented"
   },
   "layers": [
     {
-      "name": "WinUI shell",
-      "projects": [
-        "src/BabelPlayer.WinUI"
-      ],
-      "responsibilities": [
-        "application startup",
-        "window creation",
-        "command handling",
-        "player host embedding",
-        "overlay windows",
-        "window mode transitions"
+      "name": "Process Entry And Composition",
+      "responsibility": "Launch the app and compose runtime dependencies",
+      "components": [
+        "app-launcher",
+        "shell-composition-root"
       ],
       "evidence": [
         {
@@ -27,449 +24,195 @@
           ]
         },
         {
-          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-          "class": "MainWindow",
+          "file": "src/BabelPlayer.WinUI/ShellCompositionRoot.cs",
+          "class": "ShellCompositionRoot",
           "methods": [
-            "MainWindow",
-            "BuildShell",
-            "BuildPlayerPane"
+            "Create"
           ]
         }
       ]
     },
     {
-      "name": "Application orchestration",
-      "projects": [
-        "src/BabelPlayer.App"
-      ],
-      "responsibilities": [
-        "playlist/session control",
-        "subtitle workflow orchestration",
-        "settings and credential facades",
-        "runtime bootstrapping",
-        "view-model state"
+      "name": "Shell And Presentation",
+      "responsibility": "Own WinUI controls, stage coordination, view adapters, and projection application",
+      "components": [
+        "main-window",
+        "playback-host-adapter",
+        "stage-coordinator",
+        "mpv-video-presenter",
+        "detached-window-subtitle-presenter",
+        "shell-projection-service"
       ],
       "evidence": [
         {
-          "file": "src/BabelPlayer.App/ViewModels/MainShellViewModel.cs",
-          "class": "MainShellViewModel",
-          "methods": []
+          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+          "class": "MainWindow",
+          "methods": [
+            "MainWindow",
+            "BuildShell",
+            "ApplyShellProjection",
+            "PlayerHost_MediaOpened",
+            "PlayerHost_MediaEnded",
+            "UpdateSubtitleVisibility"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.WinUI/PlaybackHostAdapter.cs",
+          "class": "PlaybackHostAdapter",
+          "methods": [
+            "Initialize",
+            "BuildSnapshot"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.WinUI/StageCoordinator.cs",
+          "class": "StageCoordinator",
+          "methods": [
+            "HandleWindowModeChanged",
+            "HandleStageLayoutChanged",
+            "PresentSubtitles",
+            "RefreshSubtitlePresentation"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/ShellProjectionService.cs",
+          "class": "ShellProjectionService",
+          "methods": [
+            "HandleSnapshotChanged",
+            "BuildTransportProjection",
+            "BuildTrackProjection",
+            "BuildSubtitleProjection"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Application Orchestration",
+      "responsibility": "Coordinate shell flows, subtitle workflows, resume policy, and backend-to-session bridging",
+      "components": [
+        "shell-controller",
+        "subtitle-application-service",
+        "subtitle-workflow-controller",
+        "subtitle-workflow-projection-adapter",
+        "playback-backend-coordinator",
+        "resume-tracking-coordinator"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/ShellController.cs",
+          "class": "ShellController",
+          "methods": [
+            "EnqueueFiles",
+            "EnqueueFolder",
+            "EnqueueDroppedItems",
+            "LoadPlaylistItemAsync",
+            "HandleMediaOpenedAsync",
+            "HandleMediaEnded",
+            "EvaluateCaptionStartupGateAsync"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/SubtitleApplicationService.cs",
+          "class": "SubtitleApplicationService",
+          "methods": [
+            "InitializeAsync",
+            "LoadMediaSubtitlesAsync",
+            "SelectTranscriptionModelAsync",
+            "SelectTranslationModelAsync",
+            "HandleMediaSessionSnapshotChanged"
+          ]
         },
         {
           "file": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
           "class": "SubtitleWorkflowController",
           "methods": [
             "InitializeAsync",
-            "LoadMediaSubtitlesAsync",
-            "StartAutomaticCaptionGenerationAsync",
-            "TranslateCueAsync"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Core services",
-      "projects": [
-        "src/BabelPlayer.Core"
-      ],
-      "responsibilities": [
-        "speech recognition",
-        "machine translation",
-        "language detection",
-        "hardware detection",
-        "playback abstractions"
-      ],
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.Core/AsrService.cs",
-          "class": "AsrService",
-          "methods": [
-            "TranscribeVideoAsync",
-            "TranscribeWithCloudAsync"
+            "GetOverlayPresentation",
+            "GetEffectiveRenderMode",
+            "LoadMediaSubtitlesAsync"
           ]
         },
         {
-          "file": "src/BabelPlayer.Core/MtService.cs",
-          "class": "MtService",
+          "file": "src/BabelPlayer.App/PlaybackBackendCoordinator.cs",
+          "class": "PlaybackBackendCoordinator",
           "methods": [
-            "TranslateAsync",
-            "TranslateBatchAsync"
-          ]
-        }
-      ]
-    }
-  ],
-  "components": [
-    {
-      "name": "App startup",
-      "layer": "WinUI shell",
-      "file": "src/BabelPlayer.WinUI/App.xaml.cs",
-      "class": "App",
-      "methods": [
-        "OnLaunched"
-      ],
-      "description": "Creates and activates the main window."
-    },
-    {
-      "name": "Main shell",
-      "layer": "WinUI shell",
-      "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-      "class": "MainWindow",
-      "methods": [
-        "MainWindow",
-        "BuildShell",
-        "LoadPlaylistItemAsync",
-        "UpdateSubtitleOverlayWindow",
-        "ShowFullscreenOverlay"
-      ],
-      "description": "Runtime composition root and primary coordinator for playback, overlays, commands, and shell state."
-    },
-    {
-      "name": "Player host control",
-      "layer": "WinUI shell",
-      "file": "src/BabelPlayer.WinUI/MpvHostControl.cs",
-      "class": "MpvHostControl",
-      "methods": [
-        "Initialize",
-        "EnsureInitialized",
-        "UpdateHostBounds",
-        "HostWindowProc"
-      ],
-      "description": "Hosts a native child window and embeds mpv rendering into the WinUI stage."
-    },
-    {
-      "name": "Window mode service",
-      "layer": "WinUI shell",
-      "file": "src/BabelPlayer.WinUI/WinUIWindowModeService.cs",
-      "class": "WinUIWindowModeService",
-      "methods": [
-        "EnsureInitialStandardBounds",
-        "SetModeAsync"
-      ],
-      "description": "Controls standard, picture-in-picture, and fullscreen transitions through AppWindow presenters."
-    },
-    {
-      "name": "Subtitle overlay window",
-      "layer": "WinUI shell",
-      "file": "src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs",
-      "class": "SubtitleOverlayWindow",
-      "methods": [
-        "ApplyStyle",
-        "ShowOverlay",
-        "PositionOverlay",
-        "EnsureWindow"
-      ],
-      "description": "Detached overlay window used for subtitle presentation."
-    },
-    {
-      "name": "Fullscreen overlay window",
-      "layer": "WinUI shell",
-      "file": "src/BabelPlayer.WinUI/FullscreenOverlayWindow.cs",
-      "class": "FullscreenOverlayWindow",
-      "methods": [
-        "ShowOverlay",
-        "PositionOverlay",
-        "EnsureWindow"
-      ],
-      "description": "Detached overlay window used for fullscreen transport controls."
-    },
-    {
-      "name": "Shell view-model root",
-      "layer": "Application orchestration",
-      "file": "src/BabelPlayer.App/ViewModels/MainShellViewModel.cs",
-      "class": "MainShellViewModel",
-      "methods": [],
-      "description": "Aggregates browser, playlist, transport, and subtitle overlay state."
-    },
-    {
-      "name": "Playlist controller",
-      "layer": "Application orchestration",
-      "file": "src/BabelPlayer.App/PlaylistController.cs",
-      "class": "PlaylistController",
-      "methods": [],
-      "description": "Owns playlist contents and navigation state."
-    },
-    {
-      "name": "Playback session controller",
-      "layer": "Application orchestration",
-      "file": "src/BabelPlayer.App/PlaybackSessionController.cs",
-      "class": "PlaybackSessionController",
-      "methods": [
-        "StartWith"
-      ],
-      "description": "Coordinates active playlist item selection and playback session lifecycle."
-    },
-    {
-      "name": "mpv playback engine",
-      "layer": "Application orchestration",
-      "file": "src/BabelPlayer.App/MpvPlaybackEngine.cs",
-      "class": "MpvPlaybackEngine",
-      "methods": [
-        "InitializeAsync",
-        "LoadAsync",
-        "ReaderLoopAsync",
-        "HandlePropertyChange"
-      ],
-      "description": "Launches mpv.exe, connects to JSON IPC over named pipes, and projects playback state."
-    },
-    {
-      "name": "Subtitle workflow controller",
-      "layer": "Application orchestration",
-      "file": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
-      "class": "SubtitleWorkflowController",
-      "methods": [
-        "LoadMediaSubtitlesAsync",
-        "ImportExternalSubtitlesAsync",
-        "ImportEmbeddedSubtitleTrackAsync",
-        "StartAutomaticCaptionGenerationAsync",
-        "TranslateAllCuesAsync",
-        "TranslateCueAsync",
-        "ConfigureTranslator",
-        "BuildOverlayPresentation"
-      ],
-      "description": "Central orchestration point for subtitle loading, caption generation, translation, provider setup, and overlay snapshots."
-    },
-    {
-      "name": "Subtitle import service",
-      "layer": "Application orchestration",
-      "file": "src/BabelPlayer.App/SubtitleImportService.cs",
-      "class": "SubtitleImportService",
-      "methods": [
-        "LoadExternalSubtitleCuesAsync",
-        "ExtractEmbeddedSubtitleCuesAsync"
-      ],
-      "description": "Loads sidecar subtitles and extracts embedded text subtitles through ffmpeg."
-    },
-    {
-      "name": "App state store",
-      "layer": "Application orchestration",
-      "file": "src/BabelPlayer.App/AppStateStore.cs",
-      "class": "AppStateStore",
-      "methods": [],
-      "description": "Persists settings and resume state."
-    },
-    {
-      "name": "Secure settings store",
-      "layer": "Application orchestration",
-      "file": "src/BabelPlayer.App/SecureSettingsStore.cs",
-      "class": "SecureSettingsStore",
-      "methods": [],
-      "description": "Persists protected credentials and selected provider/runtime settings."
-    },
-    {
-      "name": "ASR service",
-      "layer": "Core services",
-      "file": "src/BabelPlayer.Core/AsrService.cs",
-      "class": "AsrService",
-      "methods": [
-        "TranscribeVideoAsync",
-        "TranscribeLocallyAsync",
-        "TranscribeWithCloudAsync",
-        "ExtractWaveAudio",
-        "SplitWaveFile"
-      ],
-      "description": "Implements local and cloud speech recognition workflows."
-    },
-    {
-      "name": "MT service",
-      "layer": "Core services",
-      "file": "src/BabelPlayer.Core/MtService.cs",
-      "class": "MtService",
-      "methods": [
-        "ConfigureCloud",
-        "ConfigureLocal",
-        "TranslateAsync",
-        "TranslateBatchAsync",
-        "EnsureLlamaServerAsync",
-        "TranslateWithLlamaServerAsync"
-      ],
-      "description": "Implements local llama.cpp and cloud translation providers."
-    },
-    {
-      "name": "Hardware detector",
-      "layer": "Core services",
-      "file": "src/BabelPlayer.Core/HardwareDetector.cs",
-      "class": "HardwareDetector",
-      "methods": [],
-      "description": "Probes platform capabilities and GPU decoder availability."
-    }
-  ],
-  "dependencies": [
-    {
-      "from": "src/BabelPlayer.WinUI/BabelPlayer.WinUI.csproj",
-      "to": "src/BabelPlayer.App/BabelPlayer.App.csproj",
-      "type": "project_reference",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/BabelPlayer.WinUI.csproj",
-          "class": null,
-          "methods": []
-        }
-      ]
-    },
-    {
-      "from": "src/BabelPlayer.WinUI/BabelPlayer.WinUI.csproj",
-      "to": "src/BabelPlayer.Core/BabelPlayer.Core.csproj",
-      "type": "project_reference",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/BabelPlayer.WinUI.csproj",
-          "class": null,
-          "methods": []
-        }
-      ]
-    },
-    {
-      "from": "src/BabelPlayer.App/BabelPlayer.App.csproj",
-      "to": "src/BabelPlayer.Core/BabelPlayer.Core.csproj",
-      "type": "project_reference",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.App/BabelPlayer.App.csproj",
-          "class": null,
-          "methods": []
-        }
-      ]
-    },
-    {
-      "from": "MainWindow",
-      "to": "SubtitleWorkflowController",
-      "type": "runtime_construction",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-          "class": "MainWindow",
-          "methods": [
-            "MainWindow"
-          ]
-        }
-      ]
-    },
-    {
-      "from": "MpvHostControl",
-      "to": "MpvPlaybackEngine",
-      "type": "runtime_construction",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/MpvHostControl.cs",
-          "class": "MpvHostControl",
-          "methods": [
-            "MpvHostControl"
-          ]
-        }
-      ]
-    }
-  ],
-  "entry_points": [
-    {
-      "name": "Process launch",
-      "file": "src/BabelPlayer.WinUI/App.xaml.cs",
-      "class": "App",
-      "methods": [
-        "OnLaunched"
-      ],
-      "description": "Creates MainWindow and activates it."
-    },
-    {
-      "name": "Shell composition",
-      "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-      "class": "MainWindow",
-      "methods": [
-        "MainWindow",
-        "BuildShell"
-      ],
-      "description": "Builds the UI, constructs services, and wires events."
-    },
-    {
-      "name": "File open",
-      "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-      "class": "MainWindow",
-      "methods": [
-        "OpenFile_Click"
-      ],
-      "description": "Imports one or more media files."
-    },
-    {
-      "name": "Folder open",
-      "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-      "class": "MainWindow",
-      "methods": [
-        "OpenFolder_Click",
-        "QueueSpecificFolderAsync"
-      ],
-      "description": "Queues media from a selected folder."
-    },
-    {
-      "name": "Drag and drop",
-      "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-      "class": "MainWindow",
-      "methods": [
-        "RootGrid_Drop"
-      ],
-      "description": "Accepts dropped files/folders and routes them into the playlist/session pipeline."
-    }
-  ],
-  "media_pipeline": [
-    {
-      "stage": "playlist ingestion",
-      "description": "Files and folders enter through open commands or drag-drop and are added to the playlist.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-          "class": "MainWindow",
-          "methods": [
-            "OpenFile_Click",
-            "OpenFolder_Click",
-            "RootGrid_Drop",
-            "QueueSpecificFolderAsync"
+            "HandlePlaybackStateChanged",
+            "HandleTracksChanged",
+            "HandleClockChanged"
           ]
         },
         {
-          "file": "src/BabelPlayer.App/PlaylistController.cs",
-          "class": "PlaylistController",
+          "file": "src/BabelPlayer.App/ResumeTrackingCoordinator.cs",
+          "class": "ResumeTrackingCoordinator",
+          "methods": [
+            "SetEnabled",
+            "ResetForMedia",
+            "Flush",
+            "HandleClockChanged"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Session Domain State",
+      "responsibility": "Store immutable timed media-language state and enforce a single write boundary",
+      "components": [
+        "media-session-store",
+        "media-session-coordinator",
+        "media-session-models"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/MediaSessionStore.cs",
+          "class": "InMemoryMediaSessionStore",
+          "methods": [
+            "Snapshot",
+            "Update"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/MediaSessionCoordinator.cs",
+          "class": "MediaSessionCoordinator",
+          "methods": [
+            "ApplyPlaybackState",
+            "ApplyClock",
+            "ApplyTracks",
+            "SetTranscriptSegments",
+            "ReplaceTranslationSegments",
+            "UpdatePresentation"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/MediaSessionModels.cs",
+          "class": "MediaSessionSnapshot",
           "methods": []
         }
       ]
     },
     {
-      "stage": "session start",
-      "description": "The selected playlist item becomes the active playback session before the player host loads the source.",
+      "name": "Playback And Presenter Adapters",
+      "responsibility": "Bridge the app-facing playback and presenter seams to mpv and WinUI hosting",
+      "components": [
+        "playback-contracts",
+        "mpv-playback-backend",
+        "mpv-playback-engine",
+        "mpv-host-control",
+        "presentation-contracts"
+      ],
       "evidence": [
         {
-          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-          "class": "MainWindow",
-          "methods": [
-            "LoadPlaylistItemAsync"
-          ]
+          "file": "src/BabelPlayer.App/PlaybackContracts.cs",
+          "class": "IPlaybackClock",
+          "methods": []
         },
         {
-          "file": "src/BabelPlayer.App/PlaybackSessionController.cs",
-          "class": "PlaybackSessionController",
+          "file": "src/BabelPlayer.App/MpvPlaybackBackend.cs",
+          "class": "MpvPlaybackBackend",
           "methods": [
-            "StartWith"
+            "InitializeAsync",
+            "HandleEngineStateChanged"
           ]
-        }
-      ]
-    },
-    {
-      "stage": "native host setup",
-      "description": "A native child window is created and resized to match the WinUI player surface.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/MpvHostControl.cs",
-          "class": "MpvHostControl",
-          "methods": [
-            "EnsureInitialized",
-            "UpdateHostBounds",
-            "HostWindowProc"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": "mpv launch and IPC",
-      "description": "mpv.exe is installed if necessary, launched out-of-process, and controlled through JSON IPC over named pipes.",
-      "evidence": [
+        },
         {
           "file": "src/BabelPlayer.App/MpvPlaybackEngine.cs",
           "class": "MpvPlaybackEngine",
@@ -481,296 +224,130 @@
           ]
         },
         {
-          "file": "src/BabelPlayer.App/MpvRuntimeInstaller.cs",
-          "class": "MpvRuntimeInstaller",
-          "methods": [
-            "InstallAsync"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": "subtitle source resolution",
-      "description": "The workflow attempts sidecar subtitles, generated subtitle cache, embedded extraction, or generated captions depending on availability.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
-          "class": "SubtitleWorkflowController",
-          "methods": [
-            "LoadMediaSubtitlesAsync",
-            "ImportExternalSubtitlesAsync",
-            "ImportEmbeddedSubtitleTrackAsync",
-            "StartAutomaticCaptionGenerationAsync"
-          ]
-        },
-        {
-          "file": "src/BabelPlayer.App/SubtitleImportService.cs",
-          "class": "SubtitleImportService",
-          "methods": [
-            "LoadExternalSubtitleCuesAsync",
-            "ExtractEmbeddedSubtitleCuesAsync"
-          ]
-        }
-      ]
-    }
-  ],
-  "ai_pipeline": [
-    {
-      "stage": "transcription orchestration",
-      "description": "SubtitleWorkflowController decides when captions should be generated and which transcription mode to use.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
-          "class": "SubtitleWorkflowController",
-          "methods": [
-            "StartAutomaticCaptionGenerationAsync",
-            "DefaultTranscribeVideoAsync"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": "local and cloud ASR",
-      "description": "ASR can run locally with Whisper or Windows speech, or remotely through cloud APIs after audio extraction and chunking.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.Core/AsrService.cs",
-          "class": "AsrService",
-          "methods": [
-            "TranscribeVideoAsync",
-            "TranscribeLocallyAsync",
-            "TranscribeWithCloudAsync",
-            "ExtractWaveAudio",
-            "SplitWaveFile",
-            "GetWhisperFactoryAsync",
-            "TranscribeWithWindowsSpeech"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": "translation orchestration",
-      "description": "SubtitleWorkflowController configures providers, persists selections, and applies translation to cues or batches.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
-          "class": "SubtitleWorkflowController",
-          "methods": [
-            "SelectTranslationModelAsync",
-            "SetTranslationEnabledAsync",
-            "SetAutoTranslateEnabledAsync",
-            "TranslateAllCuesAsync",
-            "TranslateCueAsync",
-            "TranslateCueBatchAsync",
-            "ConfigureTranslator"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": "provider execution",
-      "description": "MtService dispatches translation requests to local llama.cpp or cloud providers including OpenAI, Google, DeepL, and Microsoft.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.Core/MtService.cs",
-          "class": "MtService",
-          "methods": [
-            "ConfigureCloud",
-            "ConfigureLocal",
-            "TranslateAsync",
-            "TranslateBatchAsync",
-            "EnsureLlamaServerAsync",
-            "TranslateWithLlamaServerAsync",
-            "TranslateBatchWithProviderAsync"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": "credential and runtime bootstrap",
-      "description": "AI features depend on provider credentials and local runtime installation managed from the subtitle workflow controller.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
-          "class": "SubtitleWorkflowController",
-          "methods": [
-            "EnsureOpenAiApiKeyAsync",
-            "EnsureTranslationProviderCredentialsAsync",
-            "EnsureLlamaCppRuntimeAsync",
-            "InstallLlamaCppRuntimeAsync"
-          ]
-        },
-        {
-          "file": "src/BabelPlayer.App/LlamaCppRuntimeInstaller.cs",
-          "class": "LlamaCppRuntimeInstaller",
-          "methods": []
-        }
-      ]
-    }
-  ],
-  "rendering_pipeline": [
-    {
-      "stage": "shell rendering",
-      "description": "The application chrome and panes are created in code and rendered by WinUI controls.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-          "class": "MainWindow",
-          "methods": [
-            "BuildShell",
-            "BuildPlayerPane"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": "video rendering",
-      "description": "mpv renders video into a hosted native window embedded inside the WinUI stage.",
-      "evidence": [
-        {
           "file": "src/BabelPlayer.WinUI/MpvHostControl.cs",
           "class": "MpvHostControl",
           "methods": [
+            "Initialize",
             "EnsureInitialized",
-            "UpdateHostBounds"
-          ]
-        },
-        {
-          "file": "src/BabelPlayer.App/MpvPlaybackEngine.cs",
-          "class": "MpvPlaybackEngine",
-          "methods": [
-            "InitializeAsync"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": "subtitle overlay rendering",
-      "description": "Subtitles are rendered through a detached overlay window positioned relative to the player stage.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-          "class": "MainWindow",
-          "methods": [
-            "UpdateSubtitleOverlay",
-            "UpdateSubtitleOverlayWindow",
-            "GetPlayerStageScreenBounds"
-          ]
-        },
-        {
-          "file": "src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs",
-          "class": "SubtitleOverlayWindow",
-          "methods": [
-            "ApplyStyle",
-            "ShowOverlay",
-            "PositionOverlay",
-            "EnsureWindow"
-          ]
-        }
-      ]
-    },
-    {
-      "stage": "fullscreen control rendering",
-      "description": "Fullscreen controls are rendered in a detached overlay window whose visibility is driven by input activity and timers.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-          "class": "MainWindow",
-          "methods": [
-            "EnsureFullscreenOverlayWindow",
-            "ShowFullscreenOverlay",
-            "HideFullscreenOverlay",
-            "FullscreenControlsTimer_Tick"
-          ]
-        },
-        {
-          "file": "src/BabelPlayer.WinUI/FullscreenOverlayWindow.cs",
-          "class": "FullscreenOverlayWindow",
-          "methods": [
-            "ShowOverlay",
-            "PositionOverlay",
-            "EnsureWindow"
-          ]
-        }
-      ]
-    }
-  ],
-  "native_interop_points": [
-    {
-      "name": "Win32 child window hosting",
-      "description": "The mpv host uses direct Win32 APIs to create, subclass, and manage the render surface.",
-      "evidence": [
-        {
-          "file": "src/BabelPlayer.WinUI/MpvHostControl.cs",
-          "class": "MpvHostControl",
-          "methods": [
-            "EnsureInitialized",
+            "QueueHostBoundsSync",
+            "GetStageBounds",
             "HostWindowProc"
           ]
-        }
-      ]
-    },
-    {
-      "name": "Foreground and coordinate interop",
-      "description": "The shell uses native calls to translate client coordinates and validate focus state while managing overlays.",
-      "evidence": [
+        },
         {
-          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-          "class": "MainWindow",
+          "file": "src/BabelPlayer.WinUI/PresentationContracts.cs",
+          "class": "IVideoPresenter",
           "methods": [
-            "GetPlayerStageScreenBounds",
-            "IsAppStillForeground"
+            "Initialize",
+            "RequestBoundsSync",
+            "SuppressPresentation",
+            "GetStageBounds"
           ]
         }
       ]
     },
     {
-      "name": "AppWindow presenter control",
-      "description": "Window mode transitions rely on AppWindow interop and presenter switching.",
+      "name": "AI Providers And Runtime Bootstrap",
+      "responsibility": "Resolve provider availability, run caption/translation adapters, and bootstrap external runtimes",
+      "components": [
+        "provider-availability-service",
+        "subtitle-application-services",
+        "runtime-bootstrap-service",
+        "mpv-runtime-installer",
+        "ffmpeg-runtime-installer",
+        "llama-runtime-installer"
+      ],
       "evidence": [
         {
-          "file": "src/BabelPlayer.WinUI/WinUIWindowModeService.cs",
-          "class": "WinUIWindowModeService",
+          "file": "src/BabelPlayer.App/ProviderAvailabilityService.cs",
+          "class": "ProviderAvailabilityCompositionFactory",
           "methods": [
-            "EnsureInitialStandardBounds",
-            "SetModeAsync"
+            "Create"
           ]
-        }
-      ]
-    },
-    {
-      "name": "File picker handle initialization",
-      "description": "WinRT file pickers are attached to the native window handle before display.",
-      "evidence": [
+        },
         {
-          "file": "src/BabelPlayer.WinUI/WinUIFilePickerService.cs",
-          "class": "WinUIFilePickerService",
-          "methods": []
-        }
-      ]
-    },
-    {
-      "name": "Hardware probing",
-      "description": "Platform capability checks use WMI and native library probing for decoder/runtime detection.",
-      "evidence": [
+          "file": "src/BabelPlayer.App/SubtitleApplicationServices.cs",
+          "class": "DefaultCaptionGenerator",
+          "methods": [
+            "GenerateCaptionsAsync"
+          ]
+        },
         {
-          "file": "src/BabelPlayer.Core/HardwareDetector.cs",
-          "class": "HardwareDetector",
-          "methods": []
+          "file": "src/BabelPlayer.App/SubtitleApplicationServices.cs",
+          "class": "ProviderBackedSubtitleTranslator",
+          "methods": [
+            "WarmupAsync",
+            "TranslateBatchAsync"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/RuntimeBootstrapService.cs",
+          "class": "RuntimeBootstrapService",
+          "methods": [
+            "EnsureMpvAsync",
+            "EnsureFfmpegAsync",
+            "EnsureLlamaCppAsync"
+          ]
         }
       ]
     }
   ],
-  "likely_refactor_targets": [
+  "components": [
     {
-      "target": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
-      "class": "MainWindow",
-      "reasons": [
-        "acts as runtime composition root",
-        "handles playback coordination",
-        "manages overlay windows",
-        "owns drag-drop and resume behavior",
-        "mixes UI composition with orchestration"
+      "id": "app-launcher",
+      "layer": "Process Entry And Composition",
+      "role": "Process entry point that creates and activates the shell window",
+      "depends_on": [
+        "main-window",
+        "shell-composition-root"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/App.xaml.cs",
+          "class": "App",
+          "methods": [
+            "OnLaunched"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shell-composition-root",
+      "layer": "Process Entry And Composition",
+      "role": "Manual runtime composition of shell, session, workflow, provider, playback, and presenter dependencies",
+      "depends_on": [
+        "media-session-coordinator",
+        "provider-availability-service",
+        "subtitle-application-service",
+        "subtitle-workflow-controller",
+        "mpv-playback-backend",
+        "playback-backend-coordinator",
+        "mpv-video-presenter",
+        "detached-window-subtitle-presenter",
+        "shell-projection-service",
+        "shell-controller",
+        "stage-coordinator"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/ShellCompositionRoot.cs",
+          "class": "ShellCompositionRoot",
+          "methods": [
+            "Create"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "main-window",
+      "layer": "Shell And Presentation",
+      "role": "WinUI shell that builds controls, forwards events, and applies projection state",
+      "depends_on": [
+        "playback-host-adapter",
+        "shell-controller",
+        "subtitle-workflow-controller",
+        "shell-projection-service",
+        "stage-coordinator"
       ],
       "evidence": [
         {
@@ -779,123 +356,1484 @@
           "methods": [
             "MainWindow",
             "BuildShell",
-            "LoadPlaylistItemAsync",
-            "UpdateSubtitleOverlayWindow",
-            "ShowFullscreenOverlay"
+            "ApplyShellProjection",
+            "PlayerHost_MediaOpened",
+            "PlayerHost_MediaEnded",
+            "UpdateSubtitleVisibility",
+            "MainWindow_Closed"
           ]
         }
       ]
     },
     {
-      "target": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
-      "class": "SubtitleWorkflowController",
-      "reasons": [
-        "owns subtitle loading and import",
-        "owns caption generation orchestration",
-        "owns translation orchestration",
-        "owns credential and runtime bootstrap",
-        "owns overlay projection state"
+      "id": "shell-controller",
+      "layer": "Application Orchestration",
+      "role": "Owns playlist/load/resume/transport orchestration and caption startup gating",
+      "depends_on": [
+        "subtitle-workflow-controller",
+        "mpv-playback-backend",
+        "resume-tracking-coordinator"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/ShellController.cs",
+          "class": "ShellController",
+          "methods": [
+            "LoadPlaylistItemAsync",
+            "HandleMediaOpenedAsync",
+            "HandleMediaEnded",
+            "PlayAsync",
+            "PauseAsync",
+            "SeekAsync",
+            "EvaluateCaptionStartupGateAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "resume-tracking-coordinator",
+      "layer": "Application Orchestration",
+      "role": "Persists resume state from the normalized playback clock on a periodic cadence",
+      "depends_on": [
+        "mpv-playback-backend",
+        "resume-playback-service"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/ResumeTrackingCoordinator.cs",
+          "class": "ResumeTrackingCoordinator",
+          "methods": [
+            "SetEnabled",
+            "ResetForMedia",
+            "Flush",
+            "HandleClockChanged"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "resume-playback-service",
+      "layer": "AI Providers And Runtime Bootstrap",
+      "role": "Builds, looks up, updates, and clears persisted playback resume entries",
+      "depends_on": [],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/ResumePlaybackService.cs",
+          "class": "ResumePlaybackService",
+          "methods": [
+            "BuildEntry",
+            "FindEntry",
+            "Update",
+            "RemoveCompletedEntry",
+            "Clear"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "media-session-store",
+      "layer": "Session Domain State",
+      "role": "Publishes immutable session snapshots at the shell and workflow boundary",
+      "depends_on": [
+        "media-session-models"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/MediaSessionStore.cs",
+          "class": "InMemoryMediaSessionStore",
+          "methods": [
+            "Snapshot",
+            "Update"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/MediaSessionModels.cs",
+          "class": "MediaSessionSnapshotCloner",
+          "methods": [
+            "Clone"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "media-session-coordinator",
+      "layer": "Session Domain State",
+      "role": "Single write boundary for playback clocks, tracks, transcript lanes, translation lanes, and active subtitle presentation",
+      "depends_on": [
+        "media-session-store",
+        "media-session-models"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/MediaSessionCoordinator.cs",
+          "class": "MediaSessionCoordinator",
+          "methods": [
+            "ApplyPlaybackState",
+            "ApplyClock",
+            "ApplyTracks",
+            "SetTranscriptSegments",
+            "UpsertTranscriptSegment",
+            "ReplaceTranslationSegments",
+            "UpsertTranslationSegment",
+            "UpdatePresentation"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shell-projection-service",
+      "layer": "Shell And Presentation",
+      "role": "Projects transport, track, and subtitle read models from MediaSession",
+      "depends_on": [
+        "media-session-store"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/ShellProjectionService.cs",
+          "class": "ShellProjectionService",
+          "methods": [
+            "HandleSnapshotChanged",
+            "BuildTransportProjection",
+            "BuildTrackProjection",
+            "BuildSubtitleProjection"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subtitle-workflow-projection-adapter",
+      "layer": "Application Orchestration",
+      "role": "Combines workflow-selection state with MediaSession timed state into a compatibility snapshot",
+      "depends_on": [
+        "media-session-store",
+        "subtitle-workflow-state-store"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/SubtitleWorkflowProjectionAdapter.cs",
+          "class": "SubtitleWorkflowProjectionAdapter",
+          "methods": [
+            "BuildSnapshot"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subtitle-workflow-state-store",
+      "layer": "Application Orchestration",
+      "role": "Stores non-timed workflow selection state separate from MediaSession",
+      "depends_on": [],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/SubtitleWorkflowStateStore.cs",
+          "class": "InMemorySubtitleWorkflowStateStore",
+          "methods": [
+            "Update"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subtitle-application-service",
+      "layer": "Application Orchestration",
+      "role": "Owns subtitle import/generation/translation policy and writes results through MediaSessionCoordinator",
+      "depends_on": [
+        "media-session-coordinator",
+        "subtitle-workflow-state-store",
+        "provider-availability-service"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/SubtitleApplicationService.cs",
+          "class": "SubtitleApplicationService",
+          "methods": [
+            "LoadMediaSubtitlesAsync",
+            "ImportExternalSubtitlesAsync",
+            "ImportEmbeddedSubtitleTrackAsync",
+            "SelectTranscriptionModelAsync",
+            "SelectTranslationModelAsync",
+            "HandleMediaSessionSnapshotChanged"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/SubtitleApplicationService.Workflow.cs",
+          "class": "SubtitleApplicationService",
+          "methods": [
+            "LoadPersistedSelections",
+            "ReprocessCurrentSubtitlesForTranslationSettingsAsync",
+            "ReprocessCurrentSubtitlesForTranscriptionModelAsync",
+            "StartAutomaticCaptionGenerationAsync"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/SubtitleApplicationService.Utilities.cs",
+          "class": "SubtitleApplicationService",
+          "methods": [
+            "BuildTranscriptSegments",
+            "CreateTranslationSegment",
+            "GetActiveTranscriptSegment",
+            "HasTranslatedSegment"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subtitle-workflow-controller",
+      "layer": "Application Orchestration",
+      "role": "Compatibility facade that exposes projection-based workflow state and delegates commands",
+      "depends_on": [
+        "subtitle-application-service",
+        "subtitle-workflow-projection-adapter",
+        "subtitle-presentation-projector"
       ],
       "evidence": [
         {
           "file": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
           "class": "SubtitleWorkflowController",
           "methods": [
-            "LoadMediaSubtitlesAsync",
-            "StartAutomaticCaptionGenerationAsync",
-            "TranslateCueAsync",
-            "EnsureTranslationProviderCredentialsAsync",
-            "BuildOverlayPresentation"
+            "InitializeAsync",
+            "GetOverlayPresentation",
+            "GetEffectiveRenderMode",
+            "SelectTranscriptionModelAsync",
+            "SetTranslationEnabledAsync"
           ]
         }
       ]
     },
     {
-      "target": "src/BabelPlayer.Core/MtService.cs",
-      "class": "MtService",
-      "reasons": [
-        "bundles provider dispatch",
-        "bundles local server lifecycle",
-        "bundles prompt construction",
-        "bundles multiple cloud provider implementations"
+      "id": "subtitle-presentation-projector",
+      "layer": "Application Orchestration",
+      "role": "Converts session subtitle state and render preferences into a renderer-neutral presentation model",
+      "depends_on": [
+        "media-session-models"
       ],
       "evidence": [
         {
-          "file": "src/BabelPlayer.Core/MtService.cs",
-          "class": "MtService",
+          "file": "src/BabelPlayer.App/SubtitlePresentationProjector.cs",
+          "class": "SubtitlePresentationProjector",
           "methods": [
-            "TranslateBatchWithProviderAsync",
-            "EnsureLlamaServerAsync",
-            "TranslateWithLlamaServerAsync"
+            "Build",
+            "GetEffectiveRenderMode"
           ]
         }
       ]
     },
     {
-      "target": "Playback abstraction boundary",
-      "class": null,
-      "reasons": [
-        "the codebase defines playback abstractions",
-        "the shell still depends on a concrete host",
-        "the host still constructs a concrete mpv engine"
+      "id": "playback-backend-coordinator",
+      "layer": "Application Orchestration",
+      "role": "Bridges backend state/events into MediaSessionCoordinator",
+      "depends_on": [
+        "mpv-playback-backend",
+        "media-session-coordinator"
       ],
       "evidence": [
         {
-          "file": "src/BabelPlayer.Core/IPlaybackEngine.cs",
-          "class": "IPlaybackEngine",
-          "methods": []
-        },
+          "file": "src/BabelPlayer.App/PlaybackBackendCoordinator.cs",
+          "class": "PlaybackBackendCoordinator",
+          "methods": [
+            "HandlePlaybackStateChanged",
+            "HandleTracksChanged",
+            "HandleClockChanged"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mpv-playback-backend",
+      "layer": "Playback And Presenter Adapters",
+      "role": "Normalizes mpv engine state behind IPlaybackBackend and IPlaybackClock",
+      "depends_on": [
+        "mpv-playback-engine",
+        "playback-contracts"
+      ],
+      "evidence": [
         {
-          "file": "src/BabelPlayer.App/Interfaces.cs",
-          "class": "IPlaybackHost",
-          "methods": []
-        },
+          "file": "src/BabelPlayer.App/MpvPlaybackBackend.cs",
+          "class": "MpvPlaybackBackend",
+          "methods": [
+            "InitializeAsync",
+            "LoadAsync",
+            "HandleEngineStateChanged"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mpv-playback-engine",
+      "layer": "Playback And Presenter Adapters",
+      "role": "Runs external mpv, maintains named-pipe IPC, and translates mpv properties/events into snapshots and track lists",
+      "depends_on": [
+        "mpv-runtime-installer"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/MpvPlaybackEngine.cs",
+          "class": "MpvPlaybackEngine",
+          "methods": [
+            "InitializeAsync",
+            "LoadAsync",
+            "ObservePropertyAsync",
+            "SendCommandAsync",
+            "WriteMessageAsync",
+            "ReaderLoopAsync",
+            "HandlePropertyChange",
+            "ParseTracks"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "playback-host-adapter",
+      "layer": "Shell And Presentation",
+      "role": "Bridges playback backend state and video presenter events into immutable view-facing event payloads",
+      "depends_on": [
+        "mpv-playback-backend",
+        "mpv-video-presenter"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/PlaybackHostAdapter.cs",
+          "class": "PlaybackHostAdapter",
+          "methods": [
+            "Initialize",
+            "BuildSnapshot"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mpv-video-presenter",
+      "layer": "Playback And Presenter Adapters",
+      "role": "Presentation-only wrapper around MpvHostControl",
+      "depends_on": [
+        "mpv-host-control",
+        "playback-contracts"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/MpvVideoPresenter.cs",
+          "class": "MpvVideoPresenter",
+          "methods": [
+            "Initialize",
+            "RequestBoundsSync",
+            "SuppressPresentation",
+            "GetStageBounds"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mpv-host-control",
+      "layer": "Playback And Presenter Adapters",
+      "role": "Creates the native child host window, initializes the playback backend, syncs host bounds, and forwards input/fullscreen/shortcut events",
+      "depends_on": [
+        "mpv-playback-backend"
+      ],
+      "evidence": [
         {
           "file": "src/BabelPlayer.WinUI/MpvHostControl.cs",
           "class": "MpvHostControl",
           "methods": [
-            "MpvHostControl"
+            "Initialize",
+            "EnsureInitialized",
+            "GetStageBounds",
+            "QueueHostBoundsSync",
+            "UpdateHostBounds",
+            "HostWindowProc"
           ]
         }
       ]
     },
     {
-      "target": "Overlay and window-mode coordination",
-      "class": null,
-      "reasons": [
-        "fullscreen and subtitle overlays are detached windows",
-        "main window owns coordination logic",
-        "state synchronization spans multiple classes"
+      "id": "stage-coordinator",
+      "layer": "Shell And Presentation",
+      "role": "Coordinates fullscreen overlay lifecycle, subtitle presenter placement, stage sync, and modal suppression",
+      "depends_on": [
+        "mpv-video-presenter",
+        "detached-window-subtitle-presenter",
+        "window-mode-service"
       ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/StageCoordinator.cs",
+          "class": "StageCoordinator",
+          "methods": [
+            "HandleWindowModeChanged",
+            "HandlePointerActivity",
+            "HandleStageLayoutChanged",
+            "PresentSubtitles",
+            "SuppressModalUi",
+            "RefreshSubtitlePresentation"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "detached-window-subtitle-presenter",
+      "layer": "Shell And Presentation",
+      "role": "Compatibility subtitle presenter that renders the projection model in a detached overlay window",
+      "depends_on": [
+        "subtitle-overlay-window"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/DetachedWindowSubtitlePresenter.cs",
+          "class": "DetachedWindowSubtitlePresenter",
+          "methods": [
+            "ApplyStyle",
+            "Present",
+            "Hide"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "provider-availability-service",
+      "layer": "AI Providers And Runtime Bootstrap",
+      "role": "Composes provider registries, resolves configured providers, and normalizes persisted model selection",
+      "depends_on": [
+        "subtitle-provider-adapters"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/ProviderAvailabilityService.cs",
+          "class": "ProviderAvailabilityCompositionFactory",
+          "methods": [
+            "Create"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/ProviderAvailabilityService.cs",
+          "class": "ProviderAvailabilityService",
+          "methods": [
+            "ResolvePersistedTranscriptionModelKey",
+            "ResolvePersistedTranslationModelKey",
+            "IsTranslationProviderConfigured",
+            "ResolveLlamaCppServerPath"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subtitle-provider-adapters",
+      "layer": "AI Providers And Runtime Bootstrap",
+      "role": "Concrete transcription and translation adapters over low-level services",
+      "depends_on": [
+        "provider-availability-service"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/LocalTranscriptionProviderAdapter.cs",
+          "class": "WhisperLocalTranscriptionProvider",
+          "methods": [
+            "TranscribeAsync"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/LocalTranscriptionProviderAdapter.cs",
+          "class": "WindowsSpeechFallbackTranscriptionProvider",
+          "methods": [
+            "TranscribeAsync"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/OpenAiTranslationProviderAdapter.cs",
+          "class": "OpenAiTranslationProviderAdapter",
+          "methods": [
+            "TranslateBatchAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "runtime-bootstrap-service",
+      "layer": "AI Providers And Runtime Bootstrap",
+      "role": "Delegates runtime installation to concrete installers",
+      "depends_on": [
+        "mpv-runtime-installer",
+        "ffmpeg-runtime-installer",
+        "llama-runtime-installer"
+      ],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/RuntimeBootstrapService.cs",
+          "class": "RuntimeBootstrapService",
+          "methods": [
+            "EnsureMpvAsync",
+            "EnsureFfmpegAsync",
+            "EnsureLlamaCppAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "window-mode-service",
+      "layer": "Shell And Presentation",
+      "role": "Applies standard, borderless, PiP, and fullscreen window modes through AppWindow presenters",
+      "depends_on": [],
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/WinUIWindowModeService.cs",
+          "class": "WinUIWindowModeService",
+          "methods": [
+            "EnsureInitialStandardBounds",
+            "SetModeAsync",
+            "EnterFullscreenAsync",
+            "ExitFullscreenAsync"
+          ]
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "from": "app-launcher",
+      "to": "main-window",
+      "reason": "App launches and activates MainWindow",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/App.xaml.cs",
+          "class": "App",
+          "methods": [
+            "OnLaunched"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "main-window",
+      "to": "shell-composition-root",
+      "reason": "MainWindow requests fully composed shell dependencies from the composition root",
       "evidence": [
         {
           "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
           "class": "MainWindow",
           "methods": [
-            "UpdateSubtitleOverlayWindow",
-            "EnsureFullscreenOverlayWindow",
-            "ShowFullscreenOverlay"
+            "MainWindow"
           ]
         },
         {
-          "file": "src/BabelPlayer.WinUI/WinUIWindowModeService.cs",
-          "class": "WinUIWindowModeService",
+          "file": "src/BabelPlayer.WinUI/ShellCompositionRoot.cs",
+          "class": "ShellCompositionRoot",
           "methods": [
-            "SetModeAsync"
+            "Create"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "shell-composition-root",
+      "to": "shell-controller",
+      "reason": "Composition root creates ShellController as the shell orchestration surface",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/ShellCompositionRoot.cs",
+          "class": "ShellCompositionRoot",
+          "methods": [
+            "Create"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "shell-composition-root",
+      "to": "subtitle-application-service",
+      "reason": "Composition root wires the subtitle workflow graph explicitly",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/ShellCompositionRoot.cs",
+          "class": "ShellCompositionRoot",
+          "methods": [
+            "Create"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "shell-controller",
+      "to": "mpv-playback-backend",
+      "reason": "ShellController routes playback commands through IPlaybackBackend",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/ShellController.cs",
+          "class": "ShellController",
+          "methods": [
+            "PlayAsync",
+            "PauseAsync",
+            "SeekAsync",
+            "SetPlaybackRateAsync",
+            "SetAudioTrackAsync",
+            "SetSubtitleTrackAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "shell-controller",
+      "to": "subtitle-workflow-controller",
+      "reason": "ShellController asks the workflow facade to load subtitles during media load",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/ShellController.cs",
+          "class": "ShellController",
+          "methods": [
+            "LoadPlaylistItemAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "subtitle-workflow-controller",
+      "to": "subtitle-application-service",
+      "reason": "Workflow controller delegates all behavior commands to SubtitleApplicationService",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
+          "class": "SubtitleWorkflowController",
+          "methods": [
+            "SelectTranscriptionModelAsync",
+            "SelectTranslationModelAsync",
+            "SetTranslationEnabledAsync",
+            "LoadMediaSubtitlesAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "subtitle-workflow-controller",
+      "to": "subtitle-workflow-projection-adapter",
+      "reason": "Workflow controller exposes projection-based compatibility snapshots",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/SubtitleWorkflowController.cs",
+          "class": "SubtitleWorkflowController",
+          "methods": [
+            "Snapshot"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "subtitle-application-service",
+      "to": "media-session-coordinator",
+      "reason": "Subtitle workflows write transcript, translation, and language state through MediaSessionCoordinator",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/SubtitleApplicationService.cs",
+          "class": "SubtitleApplicationService",
+          "methods": [
+            "LoadMediaSubtitlesAsync",
+            "ImportExternalSubtitlesAsync",
+            "ImportEmbeddedSubtitleTrackAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "subtitle-application-service",
+      "to": "provider-availability-service",
+      "reason": "Subtitle workflows resolve persisted models and provider readiness via provider availability service",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/SubtitleApplicationService.cs",
+          "class": "SubtitleApplicationService",
+          "methods": [
+            "SubtitleApplicationService"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "playback-backend-coordinator",
+      "to": "media-session-coordinator",
+      "reason": "Playback backend state, tracks, and clock updates are projected into MediaSession through the coordinator",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/PlaybackBackendCoordinator.cs",
+          "class": "PlaybackBackendCoordinator",
+          "methods": [
+            "HandlePlaybackStateChanged",
+            "HandleTracksChanged",
+            "HandleClockChanged"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "mpv-playback-backend",
+      "to": "mpv-playback-engine",
+      "reason": "The backend adapter delegates all real media control and observation to the engine",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/MpvPlaybackBackend.cs",
+          "class": "MpvPlaybackBackend",
+          "methods": [
+            "InitializeAsync",
+            "LoadAsync",
+            "HandleEngineStateChanged"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "playback-host-adapter",
+      "to": "mpv-video-presenter",
+      "reason": "The shell-side host adapter uses the video presenter for stage attachment and bounds sync",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/PlaybackHostAdapter.cs",
+          "class": "PlaybackHostAdapter",
+          "methods": [
+            "Initialize",
+            "RequestHostBoundsSync",
+            "GetStageBounds"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "mpv-video-presenter",
+      "to": "mpv-host-control",
+      "reason": "The presenter is a thin wrapper over MpvHostControl",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/MpvVideoPresenter.cs",
+          "class": "MpvVideoPresenter",
+          "methods": [
+            "Initialize",
+            "RequestBoundsSync",
+            "SuppressPresentation",
+            "GetStageBounds"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "stage-coordinator",
+      "to": "detached-window-subtitle-presenter",
+      "reason": "StageCoordinator delegates actual subtitle rendering to ISubtitlePresenter",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/StageCoordinator.cs",
+          "class": "StageCoordinator",
+          "methods": [
+            "PresentSubtitles",
+            "RefreshSubtitlePresentation"
+          ]
+        }
+      ]
+    },
+    {
+      "from": "main-window",
+      "to": "shell-projection-service",
+      "reason": "MainWindow applies immutable shell projections to controls",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+          "class": "MainWindow",
+          "methods": [
+            "ApplyShellProjection",
+            "ShellProjectionService_ProjectionChanged"
+          ]
+        }
+      ]
+    }
+  ],
+  "entry_points": [
+    {
+      "name": "process-launch",
+      "description": "Application launch creates the shell window and composition root",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/App.xaml.cs",
+          "class": "App",
+          "methods": [
+            "OnLaunched"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-startup",
+      "description": "MainWindow builds the visual tree, initializes the playback host, and subscribes to workflow and shell projections",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+          "class": "MainWindow",
+          "methods": [
+            "MainWindow"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "open-file-command",
+      "description": "Open file UI action enters through MainWindow and forwards to shell/workflow services",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+          "class": "MainWindow",
+          "methods": [
+            "OpenFile_Click"
           ]
         },
+        {
+          "file": "src/BabelPlayer.App/ShellController.cs",
+          "class": "ShellController",
+          "methods": [
+            "EnqueueFiles",
+            "LoadPlaylistItemAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "backend-media-opened",
+      "description": "Backend media-open event flows through the host adapter into shell resume/open logic",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/PlaybackHostAdapter.cs",
+          "class": "PlaybackHostAdapter",
+          "methods": [
+            "MediaOpened",
+            "BuildSnapshot"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+          "class": "MainWindow",
+          "methods": [
+            "PlayerHost_MediaOpened"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/ShellController.cs",
+          "class": "ShellController",
+          "methods": [
+            "HandleMediaOpenedAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "backend-media-ended",
+      "description": "Backend media-ended event flows through the host adapter into auto-advance and resume cleanup logic",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/PlaybackHostAdapter.cs",
+          "class": "PlaybackHostAdapter",
+          "methods": [
+            "MediaEnded",
+            "BuildSnapshot"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+          "class": "MainWindow",
+          "methods": [
+            "PlayerHost_MediaEnded"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/ShellController.cs",
+          "class": "ShellController",
+          "methods": [
+            "HandleMediaEnded"
+          ]
+        }
+      ]
+    }
+  ],
+  "media_pipeline": {
+    "authoritative_state": "MediaSessionSnapshot",
+    "steps": [
+      {
+        "step": 1,
+        "description": "ShellController loads the playlist item and applies playback defaults",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/ShellController.cs",
+            "class": "ShellController",
+            "methods": [
+              "LoadPlaylistItemAsync"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "description": "MpvPlaybackBackend forwards media load to MpvPlaybackEngine",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/MpvPlaybackBackend.cs",
+            "class": "MpvPlaybackBackend",
+            "methods": [
+              "LoadAsync"
+            ]
+          },
+          {
+            "file": "src/BabelPlayer.App/MpvPlaybackEngine.cs",
+            "class": "MpvPlaybackEngine",
+            "methods": [
+              "LoadAsync"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "description": "MpvPlaybackEngine publishes normalized playback state and track changes",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/MpvPlaybackEngine.cs",
+            "class": "MpvPlaybackEngine",
+            "methods": [
+              "ReaderLoopAsync",
+              "HandlePropertyChange",
+              "ParseTracks"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "description": "PlaybackBackendCoordinator applies backend state, tracks, and clock updates to MediaSessionCoordinator",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/PlaybackBackendCoordinator.cs",
+            "class": "PlaybackBackendCoordinator",
+            "methods": [
+              "HandlePlaybackStateChanged",
+              "HandleTracksChanged",
+              "HandleClockChanged"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "description": "MediaSessionCoordinator updates the timeline, streams, and active subtitle presentation state",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/MediaSessionCoordinator.cs",
+            "class": "MediaSessionCoordinator",
+            "methods": [
+              "ApplyPlaybackState",
+              "ApplyClock",
+              "ApplyTracks",
+              "UpdatePresentation"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "description": "ShellProjectionService converts MediaSession into immutable UI projections consumed by MainWindow",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/ShellProjectionService.cs",
+            "class": "ShellProjectionService",
+            "methods": [
+              "HandleSnapshotChanged",
+              "BuildTransportProjection",
+              "BuildTrackProjection",
+              "BuildSubtitleProjection"
+            ]
+          },
+          {
+            "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+            "class": "MainWindow",
+            "methods": [
+              "ApplyShellProjection"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "ai_pipeline": {
+    "authoritative_state": "TranscriptLane and TranslationLane inside MediaSessionSnapshot",
+    "steps": [
+      {
+        "step": 1,
+        "description": "SubtitleApplicationService decides sidecar, embedded, cached-generated, or generated-caption flow for the current media",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/SubtitleApplicationService.cs",
+            "class": "SubtitleApplicationService",
+            "methods": [
+              "LoadMediaSubtitlesAsync",
+              "ImportExternalSubtitlesAsync",
+              "ImportEmbeddedSubtitleTrackAsync"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "description": "DefaultSubtitleSourceResolver imports external or embedded subtitle cues",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/SubtitleApplicationServices.cs",
+            "class": "DefaultSubtitleSourceResolver",
+            "methods": [
+              "LoadExternalSubtitleCuesAsync",
+              "ExtractEmbeddedSubtitleCuesAsync"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "description": "DefaultCaptionGenerator resolves available transcription providers and generates subtitle cues",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/SubtitleApplicationServices.cs",
+            "class": "DefaultCaptionGenerator",
+            "methods": [
+              "GenerateCaptionsAsync"
+            ]
+          },
+          {
+            "file": "src/BabelPlayer.App/ProviderAvailabilityService.cs",
+            "class": "TranscriptionProviderRegistry",
+            "methods": [
+              "ResolveProviders"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "description": "SubtitleApplicationService builds stable transcript and translation segments with provenance and writes them through MediaSessionCoordinator",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/SubtitleApplicationService.Utilities.cs",
+            "class": "SubtitleApplicationService",
+            "methods": [
+              "BuildTranscriptSegments",
+              "BuildTranscriptSegment",
+              "CreateTranslationSegment"
+            ]
+          },
+          {
+            "file": "src/BabelPlayer.App/MediaSessionCoordinator.cs",
+            "class": "MediaSessionCoordinator",
+            "methods": [
+              "SetTranscriptSegments",
+              "UpsertTranscriptSegment",
+              "ReplaceTranslationSegments",
+              "UpsertTranslationSegment"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "description": "Session-driven translation trigger watches the active transcript segment and translates only when a matching translated segment is missing",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/SubtitleApplicationService.cs",
+            "class": "SubtitleApplicationService",
+            "methods": [
+              "HandleMediaSessionSnapshotChanged"
+            ]
+          },
+          {
+            "file": "src/BabelPlayer.App/SubtitleApplicationService.Utilities.cs",
+            "class": "SubtitleApplicationService",
+            "methods": [
+              "GetActiveTranscriptSegment",
+              "HasTranslatedSegment"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "description": "SubtitleWorkflowProjectionAdapter and SubtitlePresentationProjector turn workflow state plus MediaSession state into UI and presenter-ready projections",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/SubtitleWorkflowProjectionAdapter.cs",
+            "class": "SubtitleWorkflowProjectionAdapter",
+            "methods": [
+              "BuildSnapshot"
+            ]
+          },
+          {
+            "file": "src/BabelPlayer.App/SubtitlePresentationProjector.cs",
+            "class": "SubtitlePresentationProjector",
+            "methods": [
+              "Build",
+              "GetEffectiveRenderMode"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "rendering_pipeline": {
+    "video_steps": [
+      {
+        "step": 1,
+        "description": "MainWindow hosts PlaybackHostAdapter.View in the player pane",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+            "class": "MainWindow",
+            "methods": [
+              "BuildPlayerPane"
+            ]
+          },
+          {
+            "file": "src/BabelPlayer.WinUI/PlaybackHostAdapter.cs",
+            "class": "PlaybackHostAdapter",
+            "methods": [
+              "View"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "description": "PlaybackHostAdapter initializes MpvVideoPresenter with the playback backend",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.WinUI/PlaybackHostAdapter.cs",
+            "class": "PlaybackHostAdapter",
+            "methods": [
+              "Initialize"
+            ]
+          },
+          {
+            "file": "src/BabelPlayer.WinUI/MpvVideoPresenter.cs",
+            "class": "MpvVideoPresenter",
+            "methods": [
+              "Initialize"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "description": "MpvHostControl creates the native host window and binds the playback backend to it",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.WinUI/MpvHostControl.cs",
+            "class": "MpvHostControl",
+            "methods": [
+              "Initialize",
+              "EnsureInitialized"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "description": "MpvPlaybackEngine launches mpv with the host window id and named-pipe IPC",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.App/MpvPlaybackEngine.cs",
+            "class": "MpvPlaybackEngine",
+            "methods": [
+              "InitializeAsync"
+            ]
+          }
+        ]
+      }
+    ],
+    "subtitle_steps": [
+      {
+        "step": 1,
+        "description": "MainWindow builds a SubtitlePresentationModel and delegates to StageCoordinator",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+            "class": "MainWindow",
+            "methods": [
+              "UpdateSubtitleVisibility"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "description": "StageCoordinator computes stage-relative placement and delegates rendering to ISubtitlePresenter",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.WinUI/StageCoordinator.cs",
+            "class": "StageCoordinator",
+            "methods": [
+              "PresentSubtitles",
+              "RefreshSubtitlePresentation"
+            ]
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "description": "DetachedWindowSubtitlePresenter renders the model in SubtitleOverlayWindow",
+        "evidence": [
+          {
+            "file": "src/BabelPlayer.WinUI/DetachedWindowSubtitlePresenter.cs",
+            "class": "DetachedWindowSubtitlePresenter",
+            "methods": [
+              "Present"
+            ]
+          },
+          {
+            "file": "src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs",
+            "class": "SubtitleOverlayWindow",
+            "methods": [
+              "SetContent",
+              "ShowOverlay",
+              "PositionOverlay"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "native_interop_points": [
+    {
+      "name": "mpv-child-window-hosting",
+      "mechanism": "Win32 child window creation and message subclassing",
+      "details": "Creates a native child window, subclasses its window proc, syncs bounds with WinUI layout, and forwards input/fullscreen/shortcut activity",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/MpvHostControl.cs",
+          "class": "MpvHostControl",
+          "methods": [
+            "EnsureInitialized",
+            "UpdateHostBounds",
+            "HostWindowProc",
+            "DestroyHostWindow",
+            "GetStageBounds"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mpv-process-ipc",
+      "mechanism": "External process plus named pipe",
+      "details": "Launches mpv.exe with --wid and --input-ipc-server, then reads/writes JSON messages through NamedPipeClientStream",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/MpvPlaybackEngine.cs",
+          "class": "MpvPlaybackEngine",
+          "methods": [
+            "InitializeAsync",
+            "WriteMessageAsync",
+            "ReaderLoopAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "subtitle-overlay-windowing",
+      "mechanism": "Detached owned window with explicit AppWindow positioning",
+      "details": "Creates a transparent overlay window, parents it to the owner HWND, and positions it over the video stage",
+      "evidence": [
         {
           "file": "src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs",
           "class": "SubtitleOverlayWindow",
           "methods": [
-            "ShowOverlay"
+            "EnsureWindow",
+            "ShowOverlay",
+            "PositionOverlay"
           ]
-        },
+        }
+      ]
+    },
+    {
+      "name": "fullscreen-overlay-windowing",
+      "mechanism": "Detached owned window with explicit AppWindow positioning and pointer state tracking",
+      "details": "Hosts the fullscreen control overlay separately from the main window",
+      "evidence": [
         {
           "file": "src/BabelPlayer.WinUI/FullscreenOverlayWindow.cs",
           "class": "FullscreenOverlayWindow",
           "methods": [
-            "ShowOverlay"
+            "EnsureWindow",
+            "ShowOverlay",
+            "PositionOverlay"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-mode-control",
+      "mechanism": "Windows App SDK AppWindow presenter switching",
+      "details": "Switches between standard, borderless, compact overlay, and fullscreen presenters",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/WinUIWindowModeService.cs",
+          "class": "WinUIWindowModeService",
+          "methods": [
+            "SetModeAsync",
+            "EnterFullscreenAsync",
+            "ExitFullscreenAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "runtime-download-bootstrap",
+      "mechanism": "Http download plus archive extraction into app data",
+      "details": "Bootstraps mpv, ffmpeg, and llama.cpp at runtime",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/MpvRuntimeInstaller.cs",
+          "class": "MpvRuntimeInstaller",
+          "methods": [
+            "InstallAsync"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/FfmpegRuntimeInstaller.cs",
+          "class": "FfmpegRuntimeInstaller",
+          "methods": [
+            "InstallAsync"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/LlamaCppRuntimeInstaller.cs",
+          "class": "LlamaCppRuntimeInstaller",
+          "methods": [
+            "InstallAsync"
+          ]
+        }
+      ]
+    }
+  ],
+  "likely_refactor_targets": [
+    {
+      "component": "MainWindow",
+      "why": "Still the largest shell integration class with code-built UI, event wiring, projection application, and multiple UI behavior paths",
+      "priority": "high",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/MainWindow.xaml.cs",
+          "class": "MainWindow",
+          "methods": [
+            "MainWindow",
+            "BuildShell",
+            "ApplyShellProjection",
+            "PlayerHost_MediaOpened",
+            "PlayerHost_MediaEnded",
+            "UpdateSubtitleVisibility",
+            "MainWindow_Closed"
+          ]
+        }
+      ]
+    },
+    {
+      "component": "ShellCompositionRoot",
+      "why": "Manual composition root is correct architecturally but now carries a long, infrastructure-heavy object graph factory",
+      "priority": "medium",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/ShellCompositionRoot.cs",
+          "class": "ShellCompositionRoot",
+          "methods": [
+            "Create"
+          ]
+        }
+      ]
+    },
+    {
+      "component": "SubtitleApplicationService",
+      "why": "Workflow split is complete at the public boundary, but orchestration, caching, translation control, runtime coordination, and status choreography remain concentrated here",
+      "priority": "high",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/SubtitleApplicationService.cs",
+          "class": "SubtitleApplicationService",
+          "methods": [
+            "LoadMediaSubtitlesAsync",
+            "HandleMediaSessionSnapshotChanged"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/SubtitleApplicationService.Workflow.cs",
+          "class": "SubtitleApplicationService",
+          "methods": [
+            "ReprocessCurrentSubtitlesForTranslationSettingsAsync",
+            "ReprocessCurrentSubtitlesForTranscriptionModelAsync",
+            "StartAutomaticCaptionGenerationAsync"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/SubtitleApplicationService.Helpers.cs",
+          "class": "SubtitleApplicationService",
+          "methods": [
+            "TranslateAllCuesAsync",
+            "TranslateCueAsync",
+            "WarmupSelectedLocalTranslationRuntimeAsync"
+          ]
+        }
+      ]
+    },
+    {
+      "component": "MpvHostControl",
+      "why": "Still exposes a legacy transport/control surface even though the architecture now routes playback control through IPlaybackBackend and ShellController",
+      "priority": "medium",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.WinUI/MpvHostControl.cs",
+          "class": "MpvHostControl",
+          "methods": [
+            "Source",
+            "Position",
+            "Volume",
+            "Play",
+            "Pause",
+            "SeekBy",
+            "SetPlaybackRate",
+            "SetAspectRatio",
+            "SetHardwareDecodingMode",
+            "Screenshot"
+          ]
+        }
+      ]
+    },
+    {
+      "component": "MpvPlaybackEngine",
+      "why": "Infrastructure hotspot for process lifecycle, named-pipe IPC, property observation, and mpv-specific state parsing",
+      "priority": "medium",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/MpvPlaybackEngine.cs",
+          "class": "MpvPlaybackEngine",
+          "methods": [
+            "InitializeAsync",
+            "SendCommandAsync",
+            "ReaderLoopAsync",
+            "HandlePropertyChange",
+            "ParseTracks"
+          ]
+        }
+      ]
+    },
+    {
+      "component": "ProviderAvailabilityService",
+      "why": "Composition factory, registries, availability logic, and runtime path resolution still live in one file",
+      "priority": "medium",
+      "evidence": [
+        {
+          "file": "src/BabelPlayer.App/ProviderAvailabilityService.cs",
+          "class": "ProviderAvailabilityCompositionFactory",
+          "methods": [
+            "Create"
+          ]
+        },
+        {
+          "file": "src/BabelPlayer.App/ProviderAvailabilityService.cs",
+          "class": "ProviderAvailabilityService",
+          "methods": [
+            "ResolvePersistedTranscriptionModelKey",
+            "ResolvePersistedTranslationModelKey",
+            "ResolveLlamaCppServerPath"
           ]
         }
       ]

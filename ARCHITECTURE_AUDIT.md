@@ -1,395 +1,164 @@
 # Babel Player Architecture Audit
 
-## Scope
-
-This audit covers the current solution structure, runtime flow, UI/rendering model, media and AI pipelines, native interop, and likely refactor targets in `Babel-Player`.
+Last updated: 2026-03-11
 
 ## Executive Summary
 
-Babel Player is organized as a three-layer desktop application:
+- The current branch is no longer organized around a WinUI shell directly controlling `mpv`; it is organized around immutable `MediaSessionSnapshot` state plus a write boundary in `MediaSessionCoordinator`. Evidence: `src/BabelPlayer.App/MediaSessionModels.cs :: MediaSessionSnapshot`; `src/BabelPlayer.App/MediaSessionStore.cs :: InMemoryMediaSessionStore.Snapshot`, `InMemoryMediaSessionStore.Update`; `src/BabelPlayer.App/MediaSessionCoordinator.cs :: MediaSessionCoordinator.ApplyClock`, `ApplyPlaybackState`, `ApplyTracks`, `SetTranscriptSegments`, `ReplaceTranslationSegments`, `UpdatePresentation`.
+- `mpv` and detached subtitle/fullscreen overlays are now infrastructure adapters behind explicit seams. Evidence: `src/BabelPlayer.App/PlaybackContracts.cs :: IPlaybackClock`, `IPlaybackBackend`; `src/BabelPlayer.WinUI/PresentationContracts.cs :: IVideoPresenter`, `ISubtitlePresenter`; `src/BabelPlayer.App/MpvPlaybackBackend.cs :: MpvPlaybackBackend.InitializeAsync`; `src/BabelPlayer.WinUI/MpvVideoPresenter.cs :: MpvVideoPresenter.Initialize`; `src/BabelPlayer.WinUI/DetachedWindowSubtitlePresenter.cs :: DetachedWindowSubtitlePresenter.Present`.
+- The shell is substantially thinner than the historical version, but `MainWindow` is still the largest integration hotspot because it builds the visual tree, wires events, applies projections, and still owns a large amount of UI glue. Evidence: `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: MainWindow.MainWindow`, `BuildShell`, `ApplyShellProjection`, `PlayerHost_MediaOpened`, `PlayerHost_MediaEnded`, `UpdateSubtitleVisibility`, `MainWindow_Closed`.
 
-1. `BabelPlayer.WinUI` is the WinUI 3 shell and native windowing layer.
-2. `BabelPlayer.App` is the orchestration layer for playback, subtitles, settings, credentials, and runtime bootstrapping.
-3. `BabelPlayer.Core` contains reusable engines and provider-facing services for transcription, translation, language detection, and hardware probing.
+## Layer Breakdown
 
-Evidence:
+### 1. Process Entry And Runtime Composition
 
-- Solution references show `WinUI -> App -> Core`: `src/BabelPlayer.WinUI/BabelPlayer.WinUI.csproj`, `src/BabelPlayer.App/BabelPlayer.App.csproj`
-- Test references target `App` and `Core`, not the shell: `tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj`
+- `App.OnLaunched()` is the process entry point and delegates real composition to `MainWindow(new ShellCompositionRoot())`. Evidence: `src/BabelPlayer.WinUI/App.xaml.cs :: App.OnLaunched`.
+- `ShellCompositionRoot.Create()` is the real dependency graph builder. It manually wires the shell, session coordinator, provider registries, subtitle services, playback backend, presenters, projections, and stage coordinator. Evidence: `src/BabelPlayer.WinUI/ShellCompositionRoot.cs :: ShellCompositionRoot.Create`.
+- The composition root already reflects the future direction: app-layer session and workflow services are composed separately from WinUI presenters and mpv adapters. Evidence: `src/BabelPlayer.WinUI/ShellCompositionRoot.cs :: ShellCompositionRoot.Create`; constructed classes include `MediaSessionCoordinator`, `SubtitleApplicationService`, `SubtitleWorkflowController`, `MpvPlaybackBackend`, `PlaybackBackendCoordinator`, `MpvVideoPresenter`, `DetachedWindowSubtitlePresenter`, `ShellProjectionService`, `ShellController`, `StageCoordinator`.
 
-The architecture is functional, but it is not strongly layered at runtime. The main shell directly constructs many collaborators, the player host directly creates its playback engine, and subtitle workflow logic centralizes orchestration, credentials, runtime installation, translation, and caption generation in one controller.
+### 2. Shell / Presentation Layer
 
-Evidence:
+- `MainWindow` is the WinUI shell surface. It owns control construction, event hookup, and application of immutable projections to UI controls. Evidence: `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: MainWindow.MainWindow`, `BuildShell`, `ApplyShellProjection`.
+- `PlaybackHostAdapter` is the view-side bridge for video presentation and host-originated events. It exposes a WinUI `View`, initializes the presenter, and converts backend state into immutable `PlaybackStateSnapshot` payloads for shell events. Evidence: `src/BabelPlayer.WinUI/PlaybackHostAdapter.cs :: PlaybackHostAdapter.Initialize`, `BuildSnapshot`; events `MediaOpened`, `MediaEnded`, `PlaybackStateChanged`.
+- `StageCoordinator` owns fullscreen overlay lifecycle, subtitle presenter placement, stage-bound synchronization, modal suppression, and overlay auto-hide behavior. It does not own subtitle business rules or playback policy. Evidence: `src/BabelPlayer.WinUI/StageCoordinator.cs :: StageCoordinator.HandleWindowModeChanged`, `HandleStageLayoutChanged`, `PresentSubtitles`, `SuppressModalUi`, `RefreshSubtitlePresentation`.
+- `ShellProjectionService` is the shell’s read-model projector. It consumes `IMediaSessionStore` and emits immutable transport, track, and subtitle projections. Evidence: `src/BabelPlayer.App/ShellProjectionService.cs :: ShellProjectionService.HandleSnapshotChanged`, `BuildTransportProjection`, `BuildTrackProjection`, `BuildSubtitleProjection`.
 
-- Shell composition happens in `MainWindow.MainWindow()`: `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `MainWindow`
-- Player host hard-codes the engine in `src/BabelPlayer.WinUI/MpvHostControl.cs`, class `MpvHostControl`
-- Subtitle workflow is concentrated in `src/BabelPlayer.App/SubtitleWorkflowController.cs`, class `SubtitleWorkflowController`
+### 3. Application Orchestration Layer
 
-## Solution Breakdown
+- `ShellController` is the top-level app orchestrator for playlist loading, media-open/media-ended behavior, resume policy, transport commands, and the caption startup gate. Evidence: `src/BabelPlayer.App/ShellController.cs :: ShellController.EnqueueFiles`, `EnqueueFolder`, `EnqueueDroppedItems`, `LoadPlaylistItemAsync`, `HandleMediaOpenedAsync`, `HandleMediaEnded`, `PlayAsync`, `SeekAsync`, `EvaluateCaptionStartupGateAsync`.
+- `SubtitleApplicationService` is the main subtitle/AI workflow orchestrator. It owns model selection, translation enablement, auto-translate policy, subtitle import/generation/translation, cached generated subtitles, and runtime/credential readiness orchestration. Evidence: `src/BabelPlayer.App/SubtitleApplicationService.cs :: SubtitleApplicationService.InitializeAsync`, `SelectTranscriptionModelAsync`, `SelectTranslationModelAsync`, `LoadMediaSubtitlesAsync`, `HandleMediaSessionSnapshotChanged`; `src/BabelPlayer.App/SubtitleApplicationService.Workflow.cs :: LoadPersistedSelections`, `EnsureTranslationProviderReadyAsync`, `ReprocessCurrentSubtitlesForTranslationSettingsAsync`, `StartAutomaticCaptionGenerationAsync`.
+- `SubtitleWorkflowController` is now a compatibility facade, not the source of truth. It delegates commands to `SubtitleApplicationService`, exposes projection-based snapshots, and uses `SubtitlePresentationProjector` for renderer-neutral subtitle presentation. Evidence: `src/BabelPlayer.App/SubtitleWorkflowController.cs :: SubtitleWorkflowController.InitializeAsync`, `SelectTranscriptionModelAsync`, `GetOverlayPresentation`, `GetEffectiveRenderMode`.
 
-### 1. WinUI Shell Layer
+### 4. Session / Domain State Layer
 
-Primary responsibility: application startup, windowing, layout, command handling, host control integration, overlay windows, and user interaction.
+- `MediaSessionSnapshot` is the central timed domain model. It is deliberately structured into source, timeline, streams, transcript, translation, subtitle presentation, language analysis, and augmentation lanes instead of one flat object. Evidence: `src/BabelPlayer.App/MediaSessionModels.cs :: MediaSessionSnapshot`, `MediaSourceState`, `MediaTimelineState`, `MediaStreamState`, `TranscriptLane`, `TranslationLane`, `SubtitlePresentationState`, `LanguageAnalysisState`, `AudioAugmentationLane`.
+- The shell boundary is immutable. `InMemoryMediaSessionStore.Snapshot` returns a cloned snapshot, and `Update()` clones both the incoming and outgoing state before publishing `SnapshotChanged`. Evidence: `src/BabelPlayer.App/MediaSessionStore.cs :: InMemoryMediaSessionStore.Snapshot`, `InMemoryMediaSessionStore.Update`; `src/BabelPlayer.App/MediaSessionModels.cs :: MediaSessionSnapshotCloner.Clone`.
+- `MediaSessionCoordinator` is the only mutation boundary for timed state. It applies playback backend state, clocks, tracks, transcript segments, translation segments, language analysis, and computed subtitle presentation. Evidence: `src/BabelPlayer.App/MediaSessionCoordinator.cs :: MediaSessionCoordinator.ApplyPlaybackState`, `ApplyClock`, `ApplyTracks`, `SetTranscriptSegments`, `UpsertTranscriptSegment`, `ReplaceTranslationSegments`, `UpsertTranslationSegment`, `SetLanguageAnalysis`, `UpdatePresentation`.
+- Subtitle presentation state in the app layer is renderer-neutral. It stores active segment IDs and plain text/status, not screen coordinates, window handles, or presentational geometry. Evidence: `src/BabelPlayer.App/MediaSessionModels.cs :: SubtitlePresentationState`.
+- Transcript and translation segments already carry stable identities, provenance, and revision data that can support later alignment, replacement, hover lookup, and dubbed-audio mapping. Evidence: `src/BabelPlayer.App/MediaSessionModels.cs :: TranscriptSegmentId`, `TranslationSegmentId`, `SegmentProvenance`, `SegmentRevision`, `TranscriptSegment`, `TranslationSegment`, `SegmentIdentity.CreateTranscriptId`, `SegmentIdentity.CreateTranslationId`.
 
-Key components:
+### 5. Playback / Rendering Adapters
 
-- `src/BabelPlayer.WinUI/App.xaml.cs`, class `App`, method `OnLaunched`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, methods `MainWindow`, `BuildShell`
-- `src/BabelPlayer.WinUI/MpvHostControl.cs`, class `MpvHostControl`, methods `Initialize`, `EnsureInitialized`, `UpdateHostBounds`
-- `src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs`, class `SubtitleOverlayWindow`, methods `ShowOverlay`, `PositionOverlay`
-- `src/BabelPlayer.WinUI/FullscreenOverlayWindow.cs`, class `FullscreenOverlayWindow`, methods `ShowOverlay`, `PositionOverlay`
-- `src/BabelPlayer.WinUI/WinUIWindowModeService.cs`, class `WinUIWindowModeService`, methods `EnsureInitialStandardBounds`, `SetModeAsync`
+- `IPlaybackClock` is intentionally minimal and normalized: `Position`, `Duration`, `Rate`, `IsPaused`, `IsSeekable`, and `SampledAtUtc`. Evidence: `src/BabelPlayer.App/PlaybackContracts.cs :: ClockSnapshot`, `IPlaybackClock`.
+- `IPlaybackBackend` is the app-facing playback seam. It owns load/play/pause/seek/track/delay/rate/volume commands, media lifecycle events, and track/state publication. Evidence: `src/BabelPlayer.App/PlaybackContracts.cs :: IPlaybackBackend`.
+- `MpvPlaybackBackend` is the current backend adapter. It wraps `MpvPlaybackEngine`, normalizes engine state into `ClockSnapshot` and `PlaybackBackendState`, and raises backend-neutral events. Evidence: `src/BabelPlayer.App/MpvPlaybackBackend.cs :: MpvPlaybackBackend.InitializeAsync`, `HandleEngineStateChanged`.
+- `PlaybackBackendCoordinator` is the only path that writes backend timing/state into `MediaSession`. Evidence: `src/BabelPlayer.App/PlaybackBackendCoordinator.cs :: PlaybackBackendCoordinator.HandlePlaybackStateChanged`, `HandleTracksChanged`, `HandleClockChanged`.
+- `MpvVideoPresenter` is a narrow presentation adapter over `MpvHostControl`. Evidence: `src/BabelPlayer.WinUI/MpvVideoPresenter.cs :: MpvVideoPresenter.Initialize`, `RequestBoundsSync`, `SuppressPresentation`, `GetStageBounds`.
+- `MpvHostControl` is transitional infrastructure that still contains a broader legacy transport surface than the rest of the architecture now exposes, but its active role is native child window hosting, backend initialization, host bounds sync, and input/shortcut/fullscreen event bridging. Evidence: `src/BabelPlayer.WinUI/MpvHostControl.cs :: MpvHostControl.Initialize`, `EnsureInitialized`, `QueueHostBoundsSync`, `GetStageBounds`, `HostWindowProc`.
 
-Claim:
+### 6. AI / Provider Layer
 
-- The shell is code-built rather than XAML-composed for its main UI surface.
+- `ISubtitleSourceResolver`, `ICaptionGenerator`, `ISubtitleTranslator`, `IAiCredentialCoordinator`, and `IRuntimeProvisioner` are the workflow-side capability seams. Evidence: `src/BabelPlayer.App/SubtitleApplicationServices.cs :: ISubtitleSourceResolver`, `ICaptionGenerator`, `ISubtitleTranslator`, `IAiCredentialCoordinator`, `IRuntimeProvisioner`.
+- Caption generation is provider-registry based. `DefaultCaptionGenerator.GenerateCaptionsAsync()` resolves providers from `TranscriptionProviderRegistry` and tries them in sequence. Evidence: `src/BabelPlayer.App/SubtitleApplicationServices.cs :: DefaultCaptionGenerator.GenerateCaptionsAsync`; `src/BabelPlayer.App/ProviderAvailabilityService.cs :: TranscriptionProviderRegistry.ResolveProviders`.
+- Translation is provider-registry based. `ProviderBackedSubtitleTranslator.TranslateBatchAsync()` selects an adapter through `TranslationProviderRegistry`. Evidence: `src/BabelPlayer.App/SubtitleApplicationServices.cs :: ProviderBackedSubtitleTranslator.TranslateBatchAsync`; `src/BabelPlayer.App/ProviderAvailabilityService.cs :: TranslationProviderRegistry.TryGetProvider`.
+- Provider composition is explicit and centralized. `ProviderAvailabilityCompositionFactory.Create()` wires local Whisper, Windows Speech fallback, OpenAI transcription, OpenAI/Google/DeepL/Microsoft translation, local llama translation, and the llama.cpp runtime resolver. Evidence: `src/BabelPlayer.App/ProviderAvailabilityService.cs :: ProviderAvailabilityCompositionFactory.Create`.
+- Per-provider adapters already exist as isolated files, which makes the adapter seam real rather than theoretical. Evidence: `src/BabelPlayer.App/LocalTranscriptionProviderAdapter.cs :: WhisperLocalTranscriptionProvider.TranscribeAsync`, `WindowsSpeechFallbackTranscriptionProvider.TranscribeAsync`; `src/BabelPlayer.App/OpenAiTranslationProviderAdapter.cs :: OpenAiTranslationProviderAdapter.TranslateBatchAsync`; sibling files `GoogleTranslationProviderAdapter.cs`, `DeepLTranslationProviderAdapter.cs`, `MicrosoftTranslationProviderAdapter.cs`, `LocalLlamaTranslationProviderAdapter.cs`, `OpenAiTranscriptionProviderAdapter.cs`.
 
-Evidence:
+### 7. Runtime Bootstrap And Persistence
 
-- `src/BabelPlayer.WinUI/MainWindow.xaml`, class `MainWindow`, only declares a root `<Grid />`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `BuildShell`, builds the command bar, panes, player surface, and transport UI in C#
+- Runtime acquisition is handled by explicit installers, not embedded binaries. Evidence: `src/BabelPlayer.App/RuntimeBootstrapService.cs :: RuntimeBootstrapService.EnsureMpvAsync`, `EnsureFfmpegAsync`, `EnsureLlamaCppAsync`; `src/BabelPlayer.App/MpvRuntimeInstaller.cs :: MpvRuntimeInstaller.InstallAsync`; `src/BabelPlayer.App/FfmpegRuntimeInstaller.cs :: FfmpegRuntimeInstaller.InstallAsync`; `src/BabelPlayer.App/LlamaCppRuntimeInstaller.cs :: LlamaCppRuntimeInstaller.InstallAsync`.
+- Resume persistence is now app-layer coordination rather than window-owned timer logic. `ResumeTrackingCoordinator` subscribes to the normalized playback clock and persists on a five-second cadence through `ResumePlaybackService`. Evidence: `src/BabelPlayer.App/ResumeTrackingCoordinator.cs :: ResumeTrackingCoordinator.HandleClockChanged`, `Flush`, `CurrentSnapshot`; `src/BabelPlayer.App/ResumePlaybackService.cs :: ResumePlaybackService.BuildEntry`, `FindEntry`, `Update`, `RemoveCompletedEntry`.
 
-### 2. Application Orchestration Layer
+## Dependency Structure
 
-Primary responsibility: session state, playlist control, subtitle workflow, settings, credentials, runtime setup, and view-model state.
-
-Key components:
-
-- `src/BabelPlayer.App/ViewModels/MainShellViewModel.cs`, class `MainShellViewModel`
-- `src/BabelPlayer.App/PlaylistController.cs`, class `PlaylistController`
-- `src/BabelPlayer.App/PlaybackSessionController.cs`, class `PlaybackSessionController`
-- `src/BabelPlayer.App/SubtitleWorkflowController.cs`, class `SubtitleWorkflowController`
-- `src/BabelPlayer.App/SettingsFacade.cs`, class `SettingsFacade`
-- `src/BabelPlayer.App/CredentialFacade.cs`, class `CredentialFacade`
-- `src/BabelPlayer.App/AppStateStore.cs`, class `AppStateStore`
-- `src/BabelPlayer.App/SecureSettingsStore.cs`, class `SecureSettingsStore`
-- `src/BabelPlayer.App/MpvPlaybackEngine.cs`, class `MpvPlaybackEngine`
-- `src/BabelPlayer.App/MpvRuntimeInstaller.cs`, class `MpvRuntimeInstaller`
-- `src/BabelPlayer.App/LlamaCppRuntimeInstaller.cs`, class `LlamaCppRuntimeInstaller`
-
-Claim:
-
-- The view-model root aggregates browser, playlist, transport, and subtitle overlay state for the shell.
-
-Evidence:
-
-- `src/BabelPlayer.App/ViewModels/MainShellViewModel.cs`, class `MainShellViewModel`, properties `Browser`, `Playlist`, `Transport`, `SubtitleOverlay`
-
-### 3. Core Services Layer
-
-Primary responsibility: reusable AI/media-adjacent services and platform detection.
-
-Key components:
-
-- `src/BabelPlayer.Core/AsrService.cs`, class `AsrService`
-- `src/BabelPlayer.Core/MtService.cs`, class `MtService`
-- `src/BabelPlayer.Core/LanguageDetector.cs`, class `LanguageDetector`
-- `src/BabelPlayer.Core/HardwareDetector.cs`, class `HardwareDetector`
-- `src/BabelPlayer.Core/IPlaybackEngine.cs`, interface `IPlaybackEngine`
-
-Claim:
-
-- The Core layer contains the provider-facing translation and transcription implementations, while the App layer decides when and how to use them.
-
-Evidence:
-
-- `src/BabelPlayer.Core/AsrService.cs`, class `AsrService`, methods `TranscribeVideoAsync`, `TranscribeWithCloudAsync`
-- `src/BabelPlayer.Core/MtService.cs`, class `MtService`, methods `TranslateAsync`, `TranslateBatchAsync`
-- `src/BabelPlayer.App/SubtitleWorkflowController.cs`, class `SubtitleWorkflowController`, methods `StartAutomaticCaptionGenerationAsync`, `TranslateCueAsync`, `TranslateCueBatchAsync`
+- `App` depends on `MainWindow`, and `MainWindow` depends on `IShellCompositionRoot`. Evidence: `src/BabelPlayer.WinUI/App.xaml.cs :: App.OnLaunched`; `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: MainWindow.MainWindow`.
+- `ShellCompositionRoot` depends on both app-layer services and WinUI infrastructure. Evidence: `src/BabelPlayer.WinUI/ShellCompositionRoot.cs :: ShellCompositionRoot.Create`.
+- `ShellController` depends on `PlaylistController`, `PlaybackSessionController`, `IPlaybackBackend`, `SubtitleWorkflowController`, `LibraryBrowserService`, and `ResumePlaybackService`. Evidence: `src/BabelPlayer.App/ShellController.cs :: ShellController.ShellController`.
+- `SubtitleWorkflowController` depends on `SubtitleApplicationService`, `SubtitleWorkflowProjectionAdapter`, and `SubtitlePresentationProjector`. Evidence: `src/BabelPlayer.App/SubtitleWorkflowController.cs :: SubtitleWorkflowController.SubtitleWorkflowController`.
+- `SubtitleWorkflowProjectionAdapter` depends on `ISubtitleWorkflowStateStore` and `IMediaSessionStore`. Evidence: `src/BabelPlayer.App/SubtitleWorkflowProjectionAdapter.cs :: SubtitleWorkflowProjectionAdapter.BuildSnapshot`.
+- `SubtitleApplicationService` depends on source resolver, caption generator, translator, credential/runtime coordinators, `MediaSessionCoordinator`, workflow state store, and provider availability. Evidence: `src/BabelPlayer.App/SubtitleApplicationService.cs :: SubtitleApplicationService.SubtitleApplicationService`.
+- `PlaybackBackendCoordinator` depends on `IPlaybackBackend` and `MediaSessionCoordinator` and is the bridge from backend events to session state. Evidence: `src/BabelPlayer.App/PlaybackBackendCoordinator.cs :: PlaybackBackendCoordinator.PlaybackBackendCoordinator`.
+- `PlaybackHostAdapter` depends on `IPlaybackBackend` and `IVideoPresenter`; `StageCoordinator` depends on `IWindowModeService`, `IVideoPresenter`, and `ISubtitlePresenter`. Evidence: `src/BabelPlayer.WinUI/PlaybackHostAdapter.cs :: PlaybackHostAdapter.PlaybackHostAdapter`; `src/BabelPlayer.WinUI/StageCoordinator.cs :: StageCoordinator.StageCoordinator`.
 
 ## Entry Points
 
 ### Process Entry
 
-The application starts in WinUI and immediately activates `MainWindow`.
+- `App.OnLaunched()` creates and activates the shell. Evidence: `src/BabelPlayer.WinUI/App.xaml.cs :: App.OnLaunched`.
+- `MainWindow.MainWindow()` creates the visual tree, asks the composition root for dependencies, initializes the playback host, and subscribes to workflow and projection events. Evidence: `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: MainWindow.MainWindow`.
 
-Evidence:
+### User / Runtime Entry Paths
 
-- `src/BabelPlayer.WinUI/App.xaml.cs`, class `App`, method `OnLaunched`
-
-### UI Composition Entry
-
-`MainWindow.MainWindow()` is the runtime composition root. It constructs services, wires events, initializes the player host, binds playlist state, and starts asynchronous shell initialization.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `MainWindow`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `BuildShell`
-
-### Media Ingress Entry Points
-
-Media can enter the system through explicit open actions, folder queueing, and drag-drop.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `OpenFile_Click`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `OpenFolder_Click`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `RootGrid_Drop`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `QueueSpecificFolderAsync`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `LoadPlaylistItemAsync`
-
-## Dependency Structure
-
-The intended reference graph is clean, but runtime ownership is concentrated in the shell.
-
-Reference graph:
-
-- `BabelPlayer.WinUI` references `BabelPlayer.App` and `BabelPlayer.Core`
-- `BabelPlayer.App` references `BabelPlayer.Core`
-- Tests reference `BabelPlayer.App` and `BabelPlayer.Core`
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/BabelPlayer.WinUI.csproj`
-- `src/BabelPlayer.App/BabelPlayer.App.csproj`
-- `tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj`
-
-Runtime graph:
-
-- `MainWindow` directly creates playback, window-mode, file-picker, credential-dialog, runtime-bootstrap, and subtitle workflow services.
-- `MpvHostControl` directly creates `MpvPlaybackEngine`.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `MainWindow`
-- `src/BabelPlayer.WinUI/MpvHostControl.cs`, class `MpvHostControl`, field initialization for `_engine`
+- Open-file command enters through `MainWindow.OpenFile_Click`, then hands work to `ShellController` and `SubtitleWorkflowController`. Evidence: `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: OpenFile_Click`; `src/BabelPlayer.App/ShellController.cs :: EnqueueFiles`, `LoadPlaylistItemAsync`; `src/BabelPlayer.App/SubtitleWorkflowController.cs :: LoadMediaSubtitlesAsync`.
+- Media-open events enter through `PlaybackHostAdapter.MediaOpened`, then `MainWindow.PlayerHost_MediaOpened`, then `ShellController.HandleMediaOpenedAsync`. Evidence: `src/BabelPlayer.WinUI/PlaybackHostAdapter.cs :: MediaOpened`; `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: PlayerHost_MediaOpened`; `src/BabelPlayer.App/ShellController.cs :: HandleMediaOpenedAsync`.
+- Media-ended events enter through `PlaybackHostAdapter.MediaEnded`, then `MainWindow.PlayerHost_MediaEnded`, then `ShellController.HandleMediaEnded`. Evidence: `src/BabelPlayer.WinUI/PlaybackHostAdapter.cs :: MediaEnded`; `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: PlayerHost_MediaEnded`; `src/BabelPlayer.App/ShellController.cs :: HandleMediaEnded`.
+- Subtitle workflow changes enter through `SubtitleWorkflowController` command methods and propagate through `SubtitleApplicationService`. Evidence: `src/BabelPlayer.App/SubtitleWorkflowController.cs :: SelectTranscriptionModelAsync`, `SelectTranslationModelAsync`, `SetTranslationEnabledAsync`, `ImportExternalSubtitlesAsync`; `src/BabelPlayer.App/SubtitleApplicationService.cs :: SelectTranscriptionModelAsync`, `SelectTranslationModelAsync`, `SetTranslationEnabledAsync`, `ImportExternalSubtitlesAsync`.
 
 ## Media Pipeline
 
-### 1. Queue and Session Selection
+1. `ShellController.LoadPlaylistItemAsync()` loads media into the backend, applies playback defaults, resets resume tracking, and asks the subtitle workflow to load subtitles. Evidence: `src/BabelPlayer.App/ShellController.cs :: LoadPlaylistItemAsync`.
+2. `MpvPlaybackBackend.LoadAsync()` forwards to `MpvPlaybackEngine.LoadAsync()`. Evidence: `src/BabelPlayer.App/MpvPlaybackBackend.cs :: LoadAsync`; `src/BabelPlayer.App/MpvPlaybackEngine.cs :: LoadAsync`.
+3. `MpvPlaybackEngine.InitializeAsync()` ensures the mpv runtime, launches `mpv.exe`, opens the named pipe, and subscribes to property changes. Evidence: `src/BabelPlayer.App/MpvPlaybackEngine.cs :: InitializeAsync`, `ObservePropertyAsync`, `ReaderLoopAsync`.
+4. Backend events flow through `PlaybackBackendCoordinator` into `MediaSessionCoordinator`, which updates source, timeline, streams, and active subtitle presentation. Evidence: `src/BabelPlayer.App/PlaybackBackendCoordinator.cs :: HandlePlaybackStateChanged`, `HandleTracksChanged`, `HandleClockChanged`; `src/BabelPlayer.App/MediaSessionCoordinator.cs :: ApplyPlaybackState`, `ApplyClock`, `ApplyTracks`, `UpdatePresentation`.
+5. The shell reads immutable projections from `ShellProjectionService` and updates transport/track/subtitle UI from those projections. Evidence: `src/BabelPlayer.App/ShellProjectionService.cs :: HandleSnapshotChanged`; `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: ApplyShellProjection`.
 
-User actions populate the playlist and select an item for loading.
+## AI / Subtitle Pipeline
 
-Evidence:
-
-- `src/BabelPlayer.App/PlaylistController.cs`, class `PlaylistController`
-- `src/BabelPlayer.App/PlaybackSessionController.cs`, class `PlaybackSessionController`, method `StartWith`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `LoadPlaylistItemAsync`
-
-### 2. Playback Host Initialization
-
-The WinUI host creates a child native window, embeds mpv into it, and keeps the host bounds synchronized with the XAML layout.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/MpvHostControl.cs`, class `MpvHostControl`, methods `EnsureInitialized`, `UpdateHostBounds`, `HostWindowProc`
-- `src/BabelPlayer.WinUI/MpvHostControl.cs`, class `MpvHostControl`, native imports `CreateWindowEx`, `SetWindowLongPtr`, `DefWindowProc`, `DestroyWindow`
-
-### 3. mpv Runtime and IPC
-
-Playback uses an external `mpv.exe` process controlled through named-pipe JSON IPC, not an in-proc media engine.
-
-Evidence:
-
-- `src/BabelPlayer.App/MpvPlaybackEngine.cs`, class `MpvPlaybackEngine`, methods `InitializeAsync`, `LoadAsync`, `ReaderLoopAsync`, `HandlePropertyChange`
-- `src/BabelPlayer.App/MpvRuntimeInstaller.cs`, class `MpvRuntimeInstaller`, method `InstallAsync`
-
-### 4. Subtitle Source Resolution
-
-Subtitle loading prefers sidecar files, then generated subtitle cache, then caption generation, while embedded subtitle imports are handled separately.
-
-Evidence:
-
-- `src/BabelPlayer.App/SubtitleWorkflowController.cs`, class `SubtitleWorkflowController`, methods `LoadMediaSubtitlesAsync`, `TryLoadCachedGeneratedSubtitles`, `StartAutomaticCaptionGenerationAsync`
-- `src/BabelPlayer.App/SubtitleImportService.cs`, class `SubtitleImportService`, methods `LoadExternalSubtitleCuesAsync`, `ExtractEmbeddedSubtitleCuesAsync`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, method `LoadPlaylistItemAsync`
-
-## AI Pipeline
-
-### 1. Automatic Caption Generation
-
-Caption generation is orchestrated by `SubtitleWorkflowController`, which chooses between local and cloud ASR based on model selection and available credentials.
-
-Evidence:
-
-- `src/BabelPlayer.App/SubtitleWorkflowController.cs`, class `SubtitleWorkflowController`, methods `StartAutomaticCaptionGenerationAsync`, `DefaultTranscribeVideoAsync`
-- `src/BabelPlayer.Core/AsrService.cs`, class `AsrService`, methods `TranscribeVideoAsync`, `TranscribeLocallyAsync`, `TranscribeWithCloudAsync`
-
-### 2. Local ASR Path
-
-The local path extracts audio, chunks it, downloads or loads Whisper models, and can fall back to Windows speech APIs.
-
-Evidence:
-
-- `src/BabelPlayer.Core/AsrService.cs`, class `AsrService`, methods `ExtractWaveAudio`, `SplitWaveFile`, `GetWhisperFactoryAsync`, `CopyModelStreamWithProgressAsync`, `TranscribeWithWindowsSpeech`
-
-### 3. Translation Path
-
-Translation is provider-pluggable. The subtitle workflow configures the translation mode, and `MtService` dispatches to local llama.cpp or cloud providers such as OpenAI, Google, DeepL, and Microsoft.
-
-Evidence:
-
-- `src/BabelPlayer.App/SubtitleWorkflowController.cs`, class `SubtitleWorkflowController`, methods `ConfigureTranslator`, `TranslateAllCuesAsync`, `TranslateCueAsync`, `TranslateCueBatchAsync`
-- `src/BabelPlayer.Core/MtService.cs`, class `MtService`, methods `ConfigureCloud`, `ConfigureLocal`, `TranslateBatchWithProviderAsync`, `TranslateWithLlamaServerAsync`
-- `src/BabelPlayer.Core/MtService.cs`, class `MtService`, provider methods for OpenAI, Google, DeepL, and Microsoft
-
-### 4. Credential and Runtime Bootstrap
-
-The AI pipeline is coupled to credential prompts and local runtime installation from within the subtitle workflow controller.
-
-Evidence:
-
-- `src/BabelPlayer.App/SubtitleWorkflowController.cs`, class `SubtitleWorkflowController`, methods `EnsureOpenAiApiKeyAsync`, `EnsureTranslationProviderCredentialsAsync`, `EnsureLlamaCppRuntimeAsync`, `InstallLlamaCppRuntimeAsync`
-- `src/BabelPlayer.App/LlamaCppRuntimeInstaller.cs`, class `LlamaCppRuntimeInstaller`
+1. Media subtitle loading begins in `SubtitleApplicationService.LoadMediaSubtitlesAsync()`, which resets workflow state, opens the session, clears transcript state, and chooses sidecar, cached generated, or generated-caption paths. Evidence: `src/BabelPlayer.App/SubtitleApplicationService.cs :: LoadMediaSubtitlesAsync`.
+2. External or embedded subtitle import flows through `ISubtitleSourceResolver` and then back into `LoadSubtitleCuesAsync()` to write transcript lanes. Evidence: `src/BabelPlayer.App/SubtitleApplicationServices.cs :: DefaultSubtitleSourceResolver.LoadExternalSubtitleCuesAsync`, `ExtractEmbeddedSubtitleCuesAsync`; `src/BabelPlayer.App/SubtitleApplicationService.Workflow.cs :: LoadSubtitleCuesAsync`.
+3. Generated captions flow through `DefaultCaptionGenerator.GenerateCaptionsAsync()`, provider registries, and provider adapters, then are converted into `TranscriptSegment` records. Evidence: `src/BabelPlayer.App/SubtitleApplicationServices.cs :: DefaultCaptionGenerator.GenerateCaptionsAsync`; `src/BabelPlayer.App/SubtitleApplicationService.Utilities.cs :: BuildTranscriptSegments`, `BuildTranscriptSegment`.
+4. Transcript and translation lanes are written through `MediaSessionCoordinator`, not by presenter code. Evidence: `src/BabelPlayer.App/MediaSessionCoordinator.cs :: SetTranscriptSegments`, `UpsertTranscriptSegment`, `ReplaceTranslationSegments`, `UpsertTranslationSegment`.
+5. Translation triggering is session-driven. `SubtitleApplicationService.HandleMediaSessionSnapshotChanged()` watches the active transcript segment in session state and queues translation only when translation is enabled and the matching translated segment does not yet exist. Evidence: `src/BabelPlayer.App/SubtitleApplicationService.cs :: HandleMediaSessionSnapshotChanged`; `src/BabelPlayer.App/SubtitleApplicationService.Utilities.cs :: HasTranslatedSegment`, `GetActiveTranscriptSegment`, `CreateTranslationSegment`.
+6. `SubtitleWorkflowProjectionAdapter` and `SubtitlePresentationProjector` convert workflow state plus media session state into UI-friendly workflow snapshots and renderer-neutral subtitle presentation models. Evidence: `src/BabelPlayer.App/SubtitleWorkflowProjectionAdapter.cs :: BuildSnapshot`; `src/BabelPlayer.App/SubtitlePresentationProjector.cs :: Build`, `GetEffectiveRenderMode`.
 
 ## Rendering Pipeline
 
-### 1. Main Stage Rendering
+### Video Path
 
-The visible application shell is rendered by WinUI controls assembled in `MainWindow.BuildShell()`, with the player stage built in `BuildPlayerPane()`.
+1. `MainWindow` hosts `PlaybackHostAdapter.View`. Evidence: `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: MainWindow.MainWindow`, `BuildPlayerPane`; `src/BabelPlayer.WinUI/PlaybackHostAdapter.cs :: View`.
+2. `PlaybackHostAdapter.Initialize()` calls `IVideoPresenter.Initialize()`. Evidence: `src/BabelPlayer.WinUI/PlaybackHostAdapter.cs :: Initialize`.
+3. `MpvVideoPresenter.Initialize()` delegates to `MpvHostControl.Initialize()`. Evidence: `src/BabelPlayer.WinUI/MpvVideoPresenter.cs :: Initialize`.
+4. `MpvHostControl.EnsureInitialized()` creates a native child host window, initializes the backend with the host handle, and keeps host bounds synchronized with the WinUI layout. Evidence: `src/BabelPlayer.WinUI/MpvHostControl.cs :: EnsureInitialized`, `QueueHostBoundsSync`, `UpdateHostBounds`.
+5. `MpvPlaybackEngine.InitializeAsync()` launches mpv with `--wid=<hostHandle>` and feeds its playback state back through IPC. Evidence: `src/BabelPlayer.App/MpvPlaybackEngine.cs :: InitializeAsync`.
 
-Evidence:
+### Subtitle Path
 
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, methods `BuildShell`, `BuildPlayerPane`
-
-### 2. Video Rendering
-
-Video rendering itself is delegated to mpv inside a hosted native child window rather than to a WinUI media element.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/MpvHostControl.cs`, class `MpvHostControl`, methods `EnsureInitialized`, `UpdateHostBounds`
-- `src/BabelPlayer.App/MpvPlaybackEngine.cs`, class `MpvPlaybackEngine`, method `InitializeAsync`
-
-### 3. Subtitle Overlay Rendering
-
-Subtitle presentation is projected into a separate overlay window, which is positioned relative to the player stage and updated independently of the main XAML tree.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, methods `UpdateSubtitleOverlay`, `UpdateSubtitleOverlayWindow`, `GetPlayerStageScreenBounds`
-- `src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs`, class `SubtitleOverlayWindow`, methods `ApplyStyle`, `ShowOverlay`, `PositionOverlay`, `EnsureWindow`
-
-### 4. Fullscreen Control Overlay
-
-Fullscreen controls are managed through another detached window, with visibility driven by input activity and timers.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, methods `EnsureFullscreenOverlayWindow`, `ShowFullscreenOverlay`, `HideFullscreenOverlay`, `FullscreenControlsTimer_Tick`
-- `src/BabelPlayer.WinUI/FullscreenOverlayWindow.cs`, class `FullscreenOverlayWindow`, methods `ShowOverlay`, `PositionOverlay`, `EnsureWindow`
+1. `MainWindow.UpdateSubtitleVisibility()` builds a `SubtitlePresentationModel` from current shell/workflow state and delegates actual presentation to `StageCoordinator`. Evidence: `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: UpdateSubtitleVisibility`.
+2. `StageCoordinator.PresentSubtitles()` stores the current presentation model and style, then `RefreshSubtitlePresentation()` calculates stage bounds from the video presenter and calls the subtitle presenter. Evidence: `src/BabelPlayer.WinUI/StageCoordinator.cs :: PresentSubtitles`, `RefreshSubtitlePresentation`.
+3. `DetachedWindowSubtitlePresenter.Present()` turns the renderer-neutral model into overlay window content and positions the detached subtitle window. Evidence: `src/BabelPlayer.WinUI/DetachedWindowSubtitlePresenter.cs :: Present`.
+4. `SubtitleOverlayWindow.ShowOverlay()` and `PositionOverlay()` handle the concrete detached-window composition. Evidence: `src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs :: ShowOverlay`, `PositionOverlay`.
 
 ## Native Interop Points
 
-### Win32 Windowing
-
-The player host and overlay coordination depend on explicit Win32 APIs.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/MpvHostControl.cs`, class `MpvHostControl`, native imports and subclassing methods
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, methods `GetPlayerStageScreenBounds`, `IsAppStillForeground`
-
-### WinUI/AppWindow Interop
-
-Window-mode changes use `AppWindow` and presenter switching rather than remaining entirely inside XAML state.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/WinUIWindowModeService.cs`, class `WinUIWindowModeService`, methods `EnsureInitialStandardBounds`, `SetModeAsync`
-
-### File Picker Interop
-
-File picker services attach WinRT pickers to the native window handle.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/WinUIFilePickerService.cs`, class `WinUIFilePickerService`
-
-### Platform Probing
-
-Hardware capability detection uses system-level probes including WMI and native library loading.
-
-Evidence:
-
-- `src/BabelPlayer.Core/HardwareDetector.cs`, class `HardwareDetector`
-
-## State and Persistence
-
-Settings, resume state, credentials, and selected AI/runtime preferences are persisted in separate stores.
-
-Evidence:
-
-- `src/BabelPlayer.App/AppStateStore.cs`, class `AppStateStore`, methods for settings and resume persistence
-- `src/BabelPlayer.App/SecureSettingsStore.cs`, class `SecureSettingsStore`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`, methods `SaveResumePosition`, `TryApplyResumePosition`
-- `src/BabelPlayer.App/SubtitleWorkflowController.cs`, class `SubtitleWorkflowController`, method `LoadPersistedSelections`
-
-## Test Coverage Signals
-
-Automated tests focus on the App/Core layers and on workflow behavior rather than UI shell rendering or native interop.
-
-Evidence:
-
-- `tests/BabelPlayer.App.Tests/AppLayerTests.cs`
-- No dedicated WinUI UI test project is referenced from `BabelPlayer.sln`
+- Native child video host creation and message pumping live in `MpvHostControl`. Evidence: `src/BabelPlayer.WinUI/MpvHostControl.cs :: EnsureInitialized`, `DestroyHostWindow`, `HostWindowProc`; Win32 calls include `CreateWindowEx`, `SetWindowLongPtr`, `DestroyWindow`, `ShowWindow`, `MoveWindow`, `CallWindowProc`, `DefWindowProc`, `GetKeyState`, `GetDoubleClickTime`, `ClientToScreen`.
+- Detached subtitle and fullscreen overlay windows both use owner-window parenting and manual z-order/show positioning. Evidence: `src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs :: EnsureWindow`, `ShowOverlay`, `PositionOverlay`; `src/BabelPlayer.WinUI/FullscreenOverlayWindow.cs :: EnsureWindow`, `ShowOverlay`, `PositionOverlay`; Win32 calls include `SetWindowLongPtr`, `ShowWindow`, `SetWindowPos`.
+- Window mode changes are performed through `AppWindow` presenters rather than custom Win32 fullscreen logic. Evidence: `src/BabelPlayer.WinUI/WinUIWindowModeService.cs :: SetModeAsync`, `EnterFullscreenAsync`, `ExitFullscreenAsync`.
+- mpv integration is process + named-pipe IPC, not an in-process decoder. Evidence: `src/BabelPlayer.App/MpvPlaybackEngine.cs :: InitializeAsync`, `ReaderLoopAsync`, `WriteMessageAsync`; .NET interop types include `Process`, `NamedPipeClientStream`, `StreamReader`, `StreamWriter`.
+- Runtime bootstrap downloads binaries at runtime and unpacks them into app data. Evidence: `src/BabelPlayer.App/MpvRuntimeInstaller.cs :: InstallAsync`; `src/BabelPlayer.App/FfmpegRuntimeInstaller.cs :: InstallAsync`; `src/BabelPlayer.App/LlamaCppRuntimeInstaller.cs :: InstallAsync`.
 
 ## Likely Refactor Targets
 
 ### 1. `MainWindow`
 
-Why it stands out:
+- Why: It still combines code-built visual tree construction, a large amount of event wiring, settings/UI synchronization, shell event forwarding, overlay control handling, and several UI-specific behavior branches. Evidence: `src/BabelPlayer.WinUI/MainWindow.xaml.cs :: MainWindow.MainWindow`, `BuildShell`, `ApplyShellProjection`, `PlayerHost_MediaOpened`, `PlayerHost_MediaEnded`, `UpdateSubtitleVisibility`, `TryApplyStandardAutoFit`, `MainWindow_Closed`.
 
-- It acts as composition root, event hub, command handler, playback coordinator, overlay coordinator, drag-drop handler, resume manager, and window-mode controller.
-- The file size indicates high responsibility concentration.
+### 2. `ShellCompositionRoot`
 
-Evidence:
+- Why: It is the correct composition boundary, but it is now a long manual object-graph factory with substantial knowledge of provider, runtime, workflow, playback, and shell wiring. Evidence: `src/BabelPlayer.WinUI/ShellCompositionRoot.cs :: ShellCompositionRoot.Create`.
 
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`
+### 3. `SubtitleApplicationService`
 
-### 2. `SubtitleWorkflowController`
+- Why: The controller split is done, but the application service is still large and spread across multiple partials for policy, cache management, translation orchestration, caption generation, status publishing, and runtime coordination. Evidence: `src/BabelPlayer.App/SubtitleApplicationService.cs :: SubtitleApplicationService.LoadMediaSubtitlesAsync`, `HandleMediaSessionSnapshotChanged`; `src/BabelPlayer.App/SubtitleApplicationService.Workflow.cs :: ReprocessCurrentSubtitlesForTranslationSettingsAsync`, `ReprocessCurrentSubtitlesForTranscriptionModelAsync`, `StartAutomaticCaptionGenerationAsync`; `src/BabelPlayer.App/SubtitleApplicationService.Helpers.cs :: TranslateAllCuesAsync`, `TranslateCueAsync`, `WarmupSelectedLocalTranslationRuntimeAsync`.
 
-Why it stands out:
+### 4. `MpvHostControl`
 
-- It owns subtitle source selection, ASR orchestration, translation orchestration, provider credential UX, runtime installation, overlay snapshots, and persisted selection handling.
+- Why: It is functioning as infrastructure, but it still exposes a broad legacy transport/control surface (`Source`, `Position`, `Volume`, `Play`, `Pause`, `SeekBy`, `SetPlaybackRate`, `SetAspectRatio`, `SetHardwareDecodingMode`, `Screenshot`) that no longer matches the narrowed presenter architecture. Evidence: `src/BabelPlayer.WinUI/MpvHostControl.cs :: Source`, `Position`, `Volume`, `Play`, `Pause`, `SeekBy`, `SetPlaybackRate`, `SetAspectRatio`, `SetHardwareDecodingMode`, `Screenshot`.
 
-Evidence:
+### 5. `MpvPlaybackEngine`
 
-- `src/BabelPlayer.App/SubtitleWorkflowController.cs`, class `SubtitleWorkflowController`
+- Why: It is the most infrastructure-heavy class in the repo. It owns process lifecycle, named-pipe IPC, mpv command serialization, property observation, track parsing, and snapshot normalization. Any backend swap or deeper renderer migration will continue to isolate here first. Evidence: `src/BabelPlayer.App/MpvPlaybackEngine.cs :: InitializeAsync`, `SendCommandAsync`, `WriteMessageAsync`, `ReaderLoopAsync`, `HandlePropertyChange`, `ParseTracks`, `UpdateTrackSelection`.
 
-### 3. `MtService`
+### 6. `ProviderAvailabilityService`
 
-Why it stands out:
+- Why: Provider availability, provider composition, registry definitions, and runtime path resolution still live in one file. The seam is correct, but composition, registry declarations, and availability service logic are tightly co-located. Evidence: `src/BabelPlayer.App/ProviderAvailabilityService.cs :: ProviderAvailabilityCompositionFactory.Create`, `TranscriptionProviderRegistry.ResolveProviders`, `TranslationProviderRegistry.TryGetProvider`, `ProviderAvailabilityService.ResolvePersistedTranscriptionModelKey`, `ResolvePersistedTranslationModelKey`, `ResolveLlamaCppServerPath`.
 
-- Provider implementations, local server lifecycle, prompt construction, and provider dispatch all live in one class.
+## Future-Renderer Readiness
 
-Evidence:
+- Placeholder renderer-neutral contracts already exist in code, which means future renderer work has named seams to target without leaking graphics API concerns into app state. Evidence: `src/BabelPlayer.App/FutureRendererContracts.cs :: IMediaDecodeBackend`, `IVideoPresentationPipeline`, `ISubtitleCompositor`, `IAudioPipeline`.
+- The current subtitle presentation model is already clean enough for in-renderer subtitle composition later because it only carries text visibility and line selection, not detached-window coordinates. Evidence: `src/BabelPlayer.App/MediaSessionModels.cs :: SubtitlePresentationModel`, `SubtitlePresentationState`; `src/BabelPlayer.App/SubtitlePresentationProjector.cs :: Build`.
+- The future renderer is not implemented. Today’s rendering path still terminates in `MpvPlaybackEngine` plus detached overlay windows. Evidence: `src/BabelPlayer.App/MpvPlaybackEngine.cs :: InitializeAsync`; `src/BabelPlayer.WinUI/DetachedWindowSubtitlePresenter.cs :: Present`; `src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs :: ShowOverlay`.
 
-- `src/BabelPlayer.Core/MtService.cs`, class `MtService`
+## Overall Assessment
 
-### 4. Playback Abstraction Boundary
-
-Why it stands out:
-
-- The codebase defines playback abstractions, but the shell still depends on a concrete WinUI host and that host still depends on a concrete mpv engine.
-
-Evidence:
-
-- `src/BabelPlayer.Core/IPlaybackEngine.cs`, interface `IPlaybackEngine`
-- `src/BabelPlayer.App/Interfaces.cs`, interface `IPlaybackHost`
-- `src/BabelPlayer.WinUI/MpvHostControl.cs`, class `MpvHostControl`
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`
-
-### 5. Overlay and Window-Mode Coordination
-
-Why it stands out:
-
-- Responsibility is split across the main window, a window-mode service, and two detached overlay windows, which increases state-sync risk during fullscreen, PiP, and focus transitions.
-
-Evidence:
-
-- `src/BabelPlayer.WinUI/MainWindow.xaml.cs`, class `MainWindow`
-- `src/BabelPlayer.WinUI/WinUIWindowModeService.cs`, class `WinUIWindowModeService`
-- `src/BabelPlayer.WinUI/SubtitleOverlayWindow.cs`, class `SubtitleOverlayWindow`
-- `src/BabelPlayer.WinUI/FullscreenOverlayWindow.cs`, class `FullscreenOverlayWindow`
-
-## Architectural Characteristics
-
-The current design is pragmatic and desktop-oriented:
-
-- mpv is treated as an external rendering engine controlled over IPC.
-- AI features are first-class application features, not add-ons.
-- Overlay rendering intentionally leaves the main XAML visual tree for tighter control over subtitle and fullscreen presentation.
-- Runtime installation is part of the app experience for both playback and local AI paths.
-
-Those choices are coherent for a Windows-first media app, but they also explain the current coupling: shell logic, runtime bootstrap, and workflow orchestration are all tightly connected because the application optimizes for end-to-end control instead of strict separation.
+- The architecture has crossed the important threshold from “WinUI player shell with subtitle features” to “MediaSession-centered application with replaceable playback/presentation adapters.” Evidence: `src/BabelPlayer.App/MediaSessionModels.cs :: MediaSessionSnapshot`; `src/BabelPlayer.App/PlaybackContracts.cs :: IPlaybackClock`, `IPlaybackBackend`; `src/BabelPlayer.WinUI/PresentationContracts.cs :: IVideoPresenter`, `ISubtitlePresenter`.
+- The highest remaining architectural risk is not missing seams; it is integration complexity concentrated in a few large boundary classes. The primary candidates are `MainWindow`, `ShellCompositionRoot`, `SubtitleApplicationService`, `MpvHostControl`, `MpvPlaybackEngine`, and `ProviderAvailabilityService`. Evidence: cited above in “Likely Refactor Targets.”
