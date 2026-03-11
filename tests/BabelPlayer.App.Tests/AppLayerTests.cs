@@ -257,7 +257,10 @@ public sealed class AppLayerTests
             runtimeBootstrap,
             _ => null,
             (_, _) => Task.CompletedTask,
-            (_, _) => Task.CompletedTask);
+            (_, _) => Task.CompletedTask,
+            providerAvailabilityService: new FakeProviderAvailabilityService(),
+            subtitleTranslator: new ThrowingWarmupSubtitleTranslator(),
+            runtimeProvisioner: new FakeSuccessfulRuntimeProvisioner());
 
         var applied = await controller.SelectTranslationModelAsync("local:hymt-1.8b");
 
@@ -863,5 +866,46 @@ Hola
             onProgress?.Invoke(new RuntimeInstallProgress { Stage = "ready" });
             return Task.FromResult("C:\\Tools\\llama-server.exe");
         }
+    }
+
+    private sealed class FakeProviderAvailabilityService : IProviderAvailabilityService
+    {
+        public string ResolvePersistedTranscriptionModelKey(string? modelKey)
+            => SubtitleWorkflowCatalog.GetTranscriptionModel(modelKey).Key;
+
+        public string? ResolvePersistedTranslationModelKey(string? modelKey)
+            => modelKey;
+
+        public bool IsTranslationProviderConfigured(TranslationProvider provider)
+            => false;
+
+        public string? ResolveLlamaCppServerPath()
+            => null;
+    }
+
+    private sealed class ThrowingWarmupSubtitleTranslator : ISubtitleTranslator
+    {
+        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged;
+
+        public Task WarmupAsync(TranslationModelSelection selection, CancellationToken cancellationToken)
+            => Task.FromException(new InvalidOperationException("warmup failed"));
+
+        public Task<string> TranslateAsync(TranslationModelSelection selection, string text, CancellationToken cancellationToken)
+            => Task.FromResult(text);
+
+        public Task<IReadOnlyList<string>> TranslateBatchAsync(TranslationModelSelection selection, IReadOnlyList<string> texts, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<string>>(texts.ToArray());
+    }
+
+    private sealed class FakeSuccessfulRuntimeProvisioner : IRuntimeProvisioner
+    {
+        public Task<string> EnsureLlamaCppAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+            => Task.FromResult("llama");
+
+        public Task<string> EnsureFfmpegAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+            => Task.FromResult("ffmpeg");
+
+        public Task<bool> EnsureLlamaCppRuntimeReadyAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+            => Task.FromResult(true);
     }
 }
