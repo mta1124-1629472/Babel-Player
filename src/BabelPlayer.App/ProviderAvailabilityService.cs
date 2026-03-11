@@ -101,13 +101,13 @@ public interface IProviderAvailabilityService
     string? ResolveLlamaCppServerPath();
 }
 
-internal sealed record ProviderAvailabilityComposition(
+public sealed record ProviderAvailabilityComposition(
     ProviderAvailabilityContext Context,
     TranscriptionProviderRegistry TranscriptionRegistry,
     TranslationProviderRegistry TranslationRegistry,
     ILocalModelRuntime LocalRuntime);
 
-internal static class ProviderAvailabilityCompositionFactory
+public static class ProviderAvailabilityCompositionFactory
 {
     public static ProviderAvailabilityComposition Create(CredentialFacade credentialFacade, Func<string, string?> environmentVariableReader)
     {
@@ -141,12 +141,12 @@ public sealed class ProviderAvailabilityService : IProviderAvailabilityService
     {
     }
 
-    internal ProviderAvailabilityService(ProviderAvailabilityComposition composition)
+    public ProviderAvailabilityService(ProviderAvailabilityComposition composition)
     {
         _composition = composition;
     }
 
-    internal ProviderAvailabilityComposition Composition => _composition;
+    public ProviderAvailabilityComposition Composition => _composition;
 
     internal ProviderAvailabilityContext Context => _composition.Context;
 

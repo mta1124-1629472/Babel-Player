@@ -4,10 +4,10 @@ namespace BabelPlayer.App;
 
 public sealed class SubtitleWorkflowController
 {
-    private readonly MediaSessionCoordinator _mediaSessionCoordinator;
     private readonly SubtitlePresentationProjector _subtitlePresentationProjector = new();
     private readonly SubtitleApplicationService _subtitleApplicationService;
     private readonly SubtitleWorkflowProjectionAdapter _projectionAdapter;
+    private readonly IMediaSessionStore _mediaSessionStore;
 
     public SubtitleWorkflowController()
         : this(
@@ -69,40 +69,46 @@ public sealed class SubtitleWorkflowController
         ISubtitleTranslator? subtitleTranslator = null,
         IAiCredentialCoordinator? aiCredentialCoordinator = null,
         IRuntimeProvisioner? runtimeProvisioner = null)
-    {
-        _mediaSessionCoordinator = mediaSessionCoordinator ?? new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-        var environmentReader = environmentVariableReader ?? Environment.GetEnvironmentVariable;
-        var providerComposition = providerAvailabilityService is ProviderAvailabilityService concreteProviderAvailabilityService
-            ? concreteProviderAvailabilityService.Composition
-            : ProviderAvailabilityCompositionFactory.Create(credentialFacade, environmentReader);
-        var availabilityService = providerAvailabilityService
-            ?? new ProviderAvailabilityService(providerComposition);
-        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
-        var resolvedCaptionGenerator = captionGenerator ?? (transcribeVideoAsync is null
-            ? new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry)
-            : new DelegateCaptionGenerator(transcribeVideoAsync));
-
-        _subtitleApplicationService = new SubtitleApplicationService(
-            new DefaultSubtitleSourceResolver(),
-            resolvedCaptionGenerator,
-            subtitleTranslator ?? new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry),
-            aiCredentialCoordinator ?? new DefaultAiCredentialCoordinator(
-                credentialFacade,
-                credentialDialogService,
-                environmentReader,
-                validateOpenAiApiKeyAsync ?? MtService.ValidateApiKeyAsync,
-                validateTranslationProviderAsync ?? MtService.ValidateTranslationProviderAsync),
-            runtimeProvisioner ?? new DefaultRuntimeProvisioner(
-                runtimeBootstrapService ?? new RuntimeBootstrapService(),
-                credentialFacade,
-                credentialDialogService,
-                filePickerService,
-                environmentReader),
+        : this(ComposeCompatibilityDependencies(
             credentialFacade,
-            _mediaSessionCoordinator,
-            workflowStateStore,
-            availabilityService);
-        _projectionAdapter = new SubtitleWorkflowProjectionAdapter(workflowStateStore, _mediaSessionCoordinator.Store);
+            credentialDialogService,
+            filePickerService,
+            runtimeBootstrapService,
+            mediaSessionCoordinator,
+            environmentVariableReader,
+            validateOpenAiApiKeyAsync,
+            validateTranslationProviderAsync,
+            transcribeVideoAsync,
+            providerAvailabilityService,
+            captionGenerator,
+            subtitleTranslator,
+            aiCredentialCoordinator,
+            runtimeProvisioner))
+    {
+    }
+
+    private SubtitleWorkflowController(CompatibilityDependencies dependencies)
+        : this(
+            dependencies.SubtitleApplicationService,
+            new SubtitleWorkflowProjectionAdapter(
+                dependencies.WorkflowStateStore,
+                dependencies.SubtitleApplicationService.MediaSessionStore))
+    {
+    }
+
+    public SubtitleWorkflowController(
+        SubtitleApplicationService subtitleApplicationService,
+        SubtitleWorkflowProjectionAdapter projectionAdapter,
+        SubtitlePresentationProjector? subtitlePresentationProjector = null)
+    {
+        _subtitleApplicationService = subtitleApplicationService;
+        _projectionAdapter = projectionAdapter;
+        if (subtitlePresentationProjector is not null)
+        {
+            _subtitlePresentationProjector = subtitlePresentationProjector;
+        }
+
+        _mediaSessionStore = _subtitleApplicationService.MediaSessionStore;
         _projectionAdapter.SnapshotChanged += HandleSnapshotChanged;
         _subtitleApplicationService.StatusChanged += HandleStatusChanged;
         _subtitleApplicationService.RuntimeInstallProgressChanged += HandleRuntimeInstallProgressChanged;
@@ -112,13 +118,13 @@ public sealed class SubtitleWorkflowController
     public event Action<string>? StatusChanged;
     public event Action<RuntimeInstallProgress>? RuntimeInstallProgressChanged;
 
-    public IMediaSessionStore MediaSessionStore => _mediaSessionCoordinator.Store;
+    public IMediaSessionStore MediaSessionStore => _mediaSessionStore;
 
     public SubtitleWorkflowSnapshot Snapshot => _projectionAdapter.Current;
 
-    public IReadOnlyList<SubtitleCue> CurrentCues => MediaSessionProjection.ToSubtitleCues(_mediaSessionCoordinator.Snapshot);
+    public IReadOnlyList<SubtitleCue> CurrentCues => _subtitleApplicationService.CurrentCues;
 
-    public bool HasCurrentCues => _mediaSessionCoordinator.Snapshot.Transcript.Segments.Count > 0;
+    public bool HasCurrentCues => _subtitleApplicationService.HasCurrentCues;
 
     public SubtitleOverlayPresentation GetOverlayPresentation(
         SubtitleRenderMode renderMode,
@@ -126,7 +132,7 @@ public sealed class SubtitleWorkflowController
         bool sourceOnlyOverrideForCurrentVideo = false)
     {
         var presentation = _subtitlePresentationProjector.Build(
-            _mediaSessionCoordinator.Snapshot,
+            _mediaSessionStore.Snapshot,
             renderMode,
             subtitlesVisible,
             sourceOnlyOverrideForCurrentVideo);
@@ -143,7 +149,7 @@ public sealed class SubtitleWorkflowController
         bool sourceOnlyOverrideForCurrentVideo = false)
     {
         return _subtitlePresentationProjector.GetEffectiveRenderMode(
-            _mediaSessionCoordinator.Snapshot,
+            _mediaSessionStore.Snapshot,
             requestedMode,
             sourceOnlyOverrideForCurrentVideo);
     }
@@ -242,6 +248,57 @@ public sealed class SubtitleWorkflowController
         RuntimeInstallProgressChanged?.Invoke(progress);
     }
 
+    private static CompatibilityDependencies ComposeCompatibilityDependencies(
+        CredentialFacade credentialFacade,
+        ICredentialDialogService? credentialDialogService,
+        IFilePickerService? filePickerService,
+        IRuntimeBootstrapService? runtimeBootstrapService,
+        MediaSessionCoordinator? mediaSessionCoordinator,
+        Func<string, string?>? environmentVariableReader,
+        Func<string, CancellationToken, Task>? validateOpenAiApiKeyAsync,
+        Func<CloudTranslationOptions, CancellationToken, Task>? validateTranslationProviderAsync,
+        Func<string, CaptionGenerationOptions, Action<TranscriptChunk>, Action<ModelTransferProgress>, CancellationToken, Task<IReadOnlyList<SubtitleCue>>>? transcribeVideoAsync,
+        IProviderAvailabilityService? providerAvailabilityService,
+        ICaptionGenerator? captionGenerator,
+        ISubtitleTranslator? subtitleTranslator,
+        IAiCredentialCoordinator? aiCredentialCoordinator,
+        IRuntimeProvisioner? runtimeProvisioner)
+    {
+        var coordinator = mediaSessionCoordinator ?? new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var environmentReader = environmentVariableReader ?? Environment.GetEnvironmentVariable;
+        var providerComposition = providerAvailabilityService is ProviderAvailabilityService concreteProviderAvailabilityService
+            ? concreteProviderAvailabilityService.Composition
+            : ProviderAvailabilityCompositionFactory.Create(credentialFacade, environmentReader);
+        var availabilityService = providerAvailabilityService ?? new ProviderAvailabilityService(providerComposition);
+        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+        var resolvedCaptionGenerator = captionGenerator ?? (transcribeVideoAsync is null
+            ? new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry)
+            : new DelegateCaptionGenerator(transcribeVideoAsync));
+
+        return new CompatibilityDependencies(
+            new SubtitleApplicationService(
+                new DefaultSubtitleSourceResolver(),
+                resolvedCaptionGenerator,
+                subtitleTranslator ?? new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry),
+                aiCredentialCoordinator ?? new DefaultAiCredentialCoordinator(
+                    credentialFacade,
+                    credentialDialogService,
+                    environmentReader,
+                    validateOpenAiApiKeyAsync ?? MtService.ValidateApiKeyAsync,
+                    validateTranslationProviderAsync ?? MtService.ValidateTranslationProviderAsync),
+                runtimeProvisioner ?? new DefaultRuntimeProvisioner(
+                    runtimeBootstrapService ?? new RuntimeBootstrapService(),
+                    credentialFacade,
+                    credentialDialogService,
+                    filePickerService,
+                    environmentReader),
+                credentialFacade,
+                coordinator,
+                workflowStateStore,
+                availabilityService),
+            workflowStateStore);
+    }
+
     private sealed class DelegateCaptionGenerator : ICaptionGenerator
     {
         private readonly Func<string, CaptionGenerationOptions, Action<TranscriptChunk>, Action<ModelTransferProgress>, CancellationToken, Task<IReadOnlyList<SubtitleCue>>> _transcribeVideoAsync;
@@ -274,4 +331,8 @@ public sealed class SubtitleWorkflowController
                 cancellationToken);
         }
     }
+
+    private sealed record CompatibilityDependencies(
+        SubtitleApplicationService SubtitleApplicationService,
+        InMemorySubtitleWorkflowStateStore WorkflowStateStore);
 }

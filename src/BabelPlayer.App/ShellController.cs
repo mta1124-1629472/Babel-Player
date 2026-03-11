@@ -35,6 +35,11 @@ public sealed record ShellMediaEndedResult
     public string StatusMessage { get; init; } = "Playback ended.";
 }
 
+public sealed record ShellWorkflowTransitionResult
+{
+    public string? StatusMessage { get; init; }
+}
+
 public sealed class ShellController
 {
     private readonly PlaylistController _playlistController;
@@ -43,6 +48,11 @@ public sealed class ShellController
     private readonly SubtitleWorkflowController _subtitleWorkflowController;
     private readonly LibraryBrowserService _libraryBrowserService;
     private readonly ResumePlaybackService _resumePlaybackService;
+
+    private bool _autoResumePlaybackAfterCaptionReady;
+    private string? _autoResumePlaybackPath;
+    private TimeSpan _autoResumePlaybackPosition = TimeSpan.Zero;
+    private bool _autoResumePlaybackFromBeginning = true;
 
     public ShellController(
         PlaylistController playlistController,
@@ -130,6 +140,18 @@ public sealed class ShellController
         };
     }
 
+    public PlaylistItem? EnsurePlaylistItem(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var existing = _playlistController.Items.FirstOrDefault(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
+        return existing ?? _playlistController.EnqueueFiles([path]).FirstOrDefault();
+    }
+
+    public PlaylistItem? MovePrevious() => _playlistController.MovePrevious();
+
+    public PlaylistItem? MoveNext() => _playlistController.MoveNext();
+
     public async Task<bool> LoadPlaylistItemAsync(
         PlaylistItem? item,
         ShellLoadMediaOptions options,
@@ -139,6 +161,8 @@ public sealed class ShellController
         {
             return false;
         }
+
+        ResetCaptionStartupGate();
 
         if (options.ResumeEnabled)
         {
@@ -160,22 +184,30 @@ public sealed class ShellController
         return true;
     }
 
-    public ShellPlaybackOpenResult HandleMediaOpened(string? path, TimeSpan duration, bool resumeEnabled)
+    public async Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(string? path, TimeSpan duration, bool resumeEnabled, CancellationToken cancellationToken = default)
     {
         var current = _playlistController.CurrentItem;
+        var result = new ShellPlaybackOpenResult
+        {
+            StatusMessage = current is null ? "Media opened." : $"Now playing {current.DisplayName}."
+        };
+
         if (!resumeEnabled)
         {
-            return new ShellPlaybackOpenResult
-            {
-                StatusMessage = current is null ? "Media opened." : $"Now playing {current.DisplayName}."
-            };
+            return result;
         }
 
         var entry = _resumePlaybackService.FindEntry(path, duration);
-        return new ShellPlaybackOpenResult
+        if (entry is null)
         {
-            ResumePosition = entry is null ? null : TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, duration.TotalSeconds)),
-            StatusMessage = current is null ? "Media opened." : $"Now playing {current.DisplayName}."
+            return result;
+        }
+
+        var resumePosition = TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, duration.TotalSeconds));
+        await _playbackBackend.SeekAsync(resumePosition, cancellationToken);
+        return result with
+        {
+            ResumePosition = resumePosition
         };
     }
 
@@ -201,11 +233,154 @@ public sealed class ShellController
             _resumePlaybackService.Update(snapshot, forceRemoveCompleted: true);
         }
 
+        ResetCaptionStartupGate();
         var next = _playlistController.AdvanceAfterMediaEnded();
         return new ShellMediaEndedResult
         {
             NextItem = next,
             StatusMessage = next is null ? "Playback ended." : $"Now playing {next.DisplayName}."
         };
+    }
+
+    public Task PlayAsync(CancellationToken cancellationToken = default)
+        => _playbackBackend.PlayAsync(cancellationToken);
+
+    public Task PauseAsync(CancellationToken cancellationToken = default)
+        => _playbackBackend.PauseAsync(cancellationToken);
+
+    public Task SeekAsync(TimeSpan position, CancellationToken cancellationToken = default)
+        => _playbackBackend.SeekAsync(position, cancellationToken);
+
+    public Task SeekRelativeAsync(TimeSpan delta, CancellationToken cancellationToken = default)
+        => _playbackBackend.SeekRelativeAsync(delta, cancellationToken);
+
+    public Task StepFrameAsync(bool forward, CancellationToken cancellationToken = default)
+        => _playbackBackend.StepFrameAsync(forward, cancellationToken);
+
+    public Task SetVolumeAsync(double volume, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetVolumeAsync(volume, cancellationToken);
+
+    public Task SetMutedAsync(bool muted, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetMuteAsync(muted, cancellationToken);
+
+    public Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetPlaybackRateAsync(speed, cancellationToken);
+
+    public Task SetAudioTrackAsync(int? trackId, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetAudioTrackAsync(trackId, cancellationToken);
+
+    public Task SetSubtitleTrackAsync(int? trackId, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetSubtitleTrackAsync(trackId, cancellationToken);
+
+    public Task SetAudioDelayAsync(double seconds, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetAudioDelayAsync(seconds, cancellationToken);
+
+    public Task SetSubtitleDelayAsync(double seconds, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetSubtitleDelayAsync(seconds, cancellationToken);
+
+    public Task SetAspectRatioAsync(string aspectRatio, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetAspectRatioAsync(aspectRatio, cancellationToken);
+
+    public Task SetHardwareDecodingModeAsync(HardwareDecodingMode mode, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetHardwareDecodingModeAsync(mode, cancellationToken);
+
+    public Task<ShellWorkflowTransitionResult> PrepareForTranscriptionRefreshAsync(
+        SubtitleWorkflowSnapshot snapshot,
+        PlaybackStateSnapshot playbackState,
+        CancellationToken cancellationToken = default)
+    {
+        if (snapshot.SubtitleSource != SubtitlePipelineSource.Generated || string.IsNullOrWhiteSpace(playbackState.Path))
+        {
+            return Task.FromResult(new ShellWorkflowTransitionResult());
+        }
+
+        _autoResumePlaybackAfterCaptionReady = true;
+        _autoResumePlaybackPath = playbackState.Path;
+        _autoResumePlaybackPosition = playbackState.Position;
+        _autoResumePlaybackFromBeginning = false;
+        return PauseForWorkflowTransitionAsync("Refreshing captions for the selected transcription model.", cancellationToken);
+    }
+
+    public async Task<ShellWorkflowTransitionResult> EvaluateCaptionStartupGateAsync(
+        SubtitleWorkflowSnapshot snapshot,
+        PlaybackStateSnapshot playbackState,
+        CancellationToken cancellationToken = default)
+    {
+        var currentPath = playbackState.Path;
+        if (string.IsNullOrWhiteSpace(currentPath) || !string.Equals(snapshot.CurrentVideoPath, currentPath, StringComparison.OrdinalIgnoreCase))
+        {
+            ResetCaptionStartupGate();
+            return new ShellWorkflowTransitionResult();
+        }
+
+        var shouldPauseForInitialCaptions = snapshot.SubtitleSource == SubtitlePipelineSource.Generated
+            && snapshot.IsCaptionGenerationInProgress
+            && snapshot.Cues.Count == 0
+            && playbackState.Position <= TimeSpan.FromSeconds(2);
+
+        if (shouldPauseForInitialCaptions && !_autoResumePlaybackAfterCaptionReady)
+        {
+            _autoResumePlaybackAfterCaptionReady = true;
+            _autoResumePlaybackPath = currentPath;
+            _autoResumePlaybackPosition = TimeSpan.Zero;
+            _autoResumePlaybackFromBeginning = true;
+            return await PauseForWorkflowTransitionAsync("Generating initial captions before playback starts.", cancellationToken);
+        }
+
+        if (_autoResumePlaybackAfterCaptionReady
+            && string.Equals(_autoResumePlaybackPath, currentPath, StringComparison.OrdinalIgnoreCase)
+            && snapshot.Cues.Count > 0)
+        {
+            _autoResumePlaybackAfterCaptionReady = false;
+            _autoResumePlaybackPath = null;
+            var resumePosition = _autoResumePlaybackFromBeginning ? TimeSpan.Zero : _autoResumePlaybackPosition;
+            _autoResumePlaybackPosition = TimeSpan.Zero;
+            _autoResumePlaybackFromBeginning = true;
+            await _playbackBackend.SeekAsync(resumePosition, cancellationToken);
+            await _playbackBackend.PlayAsync(cancellationToken);
+            return new ShellWorkflowTransitionResult
+            {
+                StatusMessage = "Captions ready. Playing with generated subtitles."
+            };
+        }
+
+        if (!snapshot.IsCaptionGenerationInProgress)
+        {
+            ResetCaptionStartupGate();
+        }
+
+        return new ShellWorkflowTransitionResult();
+    }
+
+    private async Task<ShellWorkflowTransitionResult> PauseForWorkflowTransitionAsync(string statusMessage, CancellationToken cancellationToken)
+    {
+        await _playbackBackend.PauseAsync(cancellationToken);
+        await WaitForPauseStateAsync(true, cancellationToken);
+        return new ShellWorkflowTransitionResult
+        {
+            StatusMessage = statusMessage
+        };
+    }
+
+    private async Task WaitForPauseStateAsync(bool paused, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_playbackBackend.Clock.Current.IsPaused == paused)
+            {
+                return;
+            }
+
+            await Task.Delay(50, cancellationToken);
+        }
+    }
+
+    private void ResetCaptionStartupGate()
+    {
+        _autoResumePlaybackAfterCaptionReady = false;
+        _autoResumePlaybackPath = null;
+        _autoResumePlaybackPosition = TimeSpan.Zero;
+        _autoResumePlaybackFromBeginning = true;
     }
 }
