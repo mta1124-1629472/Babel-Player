@@ -1,7 +1,7 @@
 # Minimal model download helper (placeholder). Replace URLs and checksums before use.
 param(
-  [string]$manifestPath = ".\src\PlayerApp.Models\model_manifest.json",
-  [string]$dest = "$env:LOCALAPPDATA\PlayerApp\models"
+  [string]$manifestPath = ".\src\BabelPlayer.Assets\model_manifest.json",
+  [string]$dest = "$env:LOCALAPPDATA\BabelPlayer\models"
 )
 
 Write-Host "Reading manifest: $manifestPath"

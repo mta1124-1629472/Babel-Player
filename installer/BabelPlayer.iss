@@ -43,7 +43,7 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\BabelPlayer.exe
-SetupIconFile=..\src\Assets\BabelPlayer.ico
+SetupIconFile=..\src\BabelPlayer.Assets\BabelPlayer.ico
 OutputDir={#MyOutputDir}
 OutputBaseFilename={#MyOutputBaseFilename}
 
