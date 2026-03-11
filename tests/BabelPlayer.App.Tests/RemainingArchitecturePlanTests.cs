@@ -273,7 +273,7 @@ public sealed class RemainingArchitecturePlanTests
             var playlist = new PlaylistController();
             var session = new PlaybackSessionController(playlist);
             var backend = new FakeShellPlaybackBackend();
-            var workflow = new SubtitleWorkflowController(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
             var shell = new ShellController(
                 playlist,
                 session,
@@ -318,7 +318,7 @@ public sealed class RemainingArchitecturePlanTests
         playlist.EnqueueFiles(["C:\\Media\\movie.mp4"]);
         var session = new PlaybackSessionController(playlist);
         var backend = new FakeShellPlaybackBackend();
-        var workflow = new SubtitleWorkflowController(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
         var resumeEntry = new PlaybackResumeEntry
         {
             Path = "C:\\Media\\movie.mp4",
@@ -349,7 +349,7 @@ public sealed class RemainingArchitecturePlanTests
         {
             ClockSnapshot = new ClockSnapshot(TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(5), 1.0, false, true, DateTimeOffset.UtcNow)
         };
-        var workflow = new SubtitleWorkflowController(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
         var shell = new ShellController(
             playlist,
             session,

@@ -73,7 +73,7 @@ Second sentence
 """);
 
             var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
                 mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null);
