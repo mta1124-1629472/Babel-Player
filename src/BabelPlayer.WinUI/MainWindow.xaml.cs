@@ -47,6 +47,7 @@ public sealed partial class MainWindow : Window
     private bool _isWindowActive = true;
     private bool _isFullscreenOverlayInteracting;
     private bool _hasAttemptedSystemBackdrop;
+    private bool _shellDropTargetsInitialized;
     private int _modalUiSuppressionCount;
     private Slider? _activeScrubber;
     private long _lastFullscreenInputTick;
@@ -1761,6 +1762,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        e.Handled = true;
         var storageItems = await e.DataView.GetStorageItemsAsync();
         List<string> files = [];
         foreach (var item in storageItems)
@@ -1791,6 +1793,7 @@ public sealed partial class MainWindow : Window
     private void RootGrid_DragOver(object sender, DragEventArgs e)
     {
         e.AcceptedOperation = DataPackageOperation.Copy;
+        e.Handled = true;
     }
 
     private void RootGrid_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -3375,11 +3378,73 @@ public sealed partial class MainWindow : Window
         }
 
         TryApplySystemBackdrop();
+        EnsureShellDropTargets();
         UpdateSubtitleVisibility();
         if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen && _isFullscreenOverlayVisible)
         {
             PositionFullscreenOverlay();
             _fullscreenOverlayWindow?.ShowOverlay(_windowModeService.GetCurrentDisplayBounds());
+        }
+    }
+
+    private void EnsureShellDropTargets()
+    {
+        if (_shellDropTargetsInitialized || RootGrid.XamlRoot is null)
+        {
+            return;
+        }
+
+        _shellDropTargetsInitialized = true;
+        foreach (var target in GetShellDropTargets())
+        {
+            target.AllowDrop = true;
+            target.DragOver += RootGrid_DragOver;
+            target.Drop += RootGrid_Drop;
+        }
+    }
+
+    private IEnumerable<UIElement> GetShellDropTargets()
+    {
+        yield return RootGrid;
+
+        if (AppTitleBar is not null)
+        {
+            yield return AppTitleBar;
+        }
+
+        if (ShellCommandBar is not null)
+        {
+            yield return ShellCommandBar;
+        }
+
+        if (StatusInfoBar is not null)
+        {
+            yield return StatusInfoBar;
+        }
+
+        if (ShellContentGrid is not null)
+        {
+            yield return ShellContentGrid;
+        }
+
+        if (BrowserPane is not null)
+        {
+            yield return BrowserPane;
+        }
+
+        if (PlayerPane is not null)
+        {
+            yield return PlayerPane;
+        }
+
+        if (PlaylistPane is not null)
+        {
+            yield return PlaylistPane;
+        }
+
+        if (TransportPane is not null)
+        {
+            yield return TransportPane;
         }
     }
 

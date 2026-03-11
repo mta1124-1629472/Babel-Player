@@ -2,6 +2,8 @@
 
 [Babel Player](https://github.com/mta1124-1629472/Babel-Player/) is a Windows desktop video player for local media with local-first subtitle generation, optional cloud services, and an AI subtitle overlay designed for translation workflows.
 
+The active desktop shell is `src/BabelPlayer.WinUI`.
+
 Canonical repo:
 - GitHub: [mta1124-1629472/Babel-Player](https://github.com/mta1124-1629472/Babel-Player/)
 - Local solution: `BabelPlayer.sln`
@@ -11,7 +13,7 @@ Canonical repo:
 ## Current Scope
 
 What the app does today:
-- plays local video files in a WPF desktop shell backed by an embedded mpv runtime
+- plays local video files in a WinUI 3 desktop shell backed by an embedded mpv runtime
 - auto-loads sidecar subtitles when present
 - generates subtitles from audio when no sidecar subtitle file exists
 - supports local and cloud transcription model selection
@@ -24,12 +26,11 @@ What the app does today:
 
 ## Architecture
 
-- `src/BabelPlayer.UI`
-  - WPF desktop shell
+- `src/BabelPlayer.WinUI`
+  - primary WinUI 3 desktop shell
   - embedded mpv playback surface
-  - playlist, file browser, transport, menus, shortcut editor
-  - ffmpeg/mpv/llama.cpp runtime bootstrap
-  - subtitle overlay and player state persistence
+  - playlist, file browser, transport, command bar, overlays, and shortcut editor
+  - file/folder pickers, credential prompts, and window-mode handling
 - `src/BabelPlayer.Core`
   - subtitle parsing and export
   - subtitle cue/state models
@@ -42,7 +43,7 @@ What the app does today:
 
 ### Open media
 
-Use the bottom transport `Open` button, drag files/folders into the window, or add items to the playlist.
+Use the command bar `Open` or `Folder` actions, drag files/folders into the window, or add items to the playlist/browser.
 
 When a video opens, Babel Player:
 - loads the file into the embedded mpv player
@@ -114,7 +115,7 @@ These models download on first use and are then reused locally.
 
 ### Cloud transcription
 
-Cloud transcription models are available from the `Subtitles` menu:
+Cloud transcription models are available from the WinUI shell transcription picker:
 - `Cloud: GPT-4o Mini Transcribe (faster)`
 - `Cloud: GPT-4o Transcribe`
 - `Cloud: Whisper-1`
@@ -160,7 +161,7 @@ Behavior:
 
 ### Google, DeepL, Microsoft Translator
 
-Cloud translation credentials for these providers are also validated and stored locally when configured from the `Translation` menu.
+Cloud translation credentials for these providers are also validated and stored locally when configured from the WinUI translation picker and provider prompts.
 
 ### llama.cpp / HY-MT
 
@@ -178,43 +179,39 @@ Babel Player bootstraps these runtimes when needed:
 
 The app surfaces runtime download and extraction progress when it owns the transfer.
 
-## Menus
+## Command Surface
 
-### Subtitles
+The WinUI shell uses a top command bar plus a `Playback` flyout instead of a traditional menu bar.
 
-- `Show Subtitles`
-- `Style`
-- `Render Mode`
-- `Open Subtitles`
-- `Transcription Model`
-- `Set OpenAI API Key`
+### Shell commands
 
-### Translation
+- `Open`
+- `Folder`
+- `Import Subs`
+- `Subtitles`
+- `Immersive`
+- `Fullscreen`
+- `PiP`
 
-- `Translate Current Video`
-- `Target Language > English`
-- `Auto-Translate Videos Not In > English`
-- `Translation Model`
-- provider credential setup items
-- `Set llama.cpp Server Path`
-- `Export EN SRT`
-
-### Playback
+### Playback flyout
 
 - audio track selection
 - embedded subtitle track selection
 - hardware decoding mode
 - aspect ratio controls
 - audio/subtitle delay adjustments
-- borderless window
+- subtitle render mode and style controls
+- transcription and translation model controls
+- resume playback toggle
+- subtitle export
 - picture-in-picture
 - fullscreen
 
-### View
+### Secondary commands
 
 - show/hide browser panel
 - show/hide playlist panel
-- edit shortcuts
+- add videos root
 
 ## Keyboard Shortcuts
 
@@ -234,7 +231,7 @@ Default bindings include:
 - next/previous playlist item
 - mute
 
-Use `View > Edit Shortcuts` to change and persist them.
+Use the shortcut editor in the WinUI shell to change and persist them.
 
 ## Playback Controls
 
@@ -274,10 +271,12 @@ From the `babel-player` repository root:
 
 ```powershell
 dotnet build BabelPlayer.sln
-dotnet run --project src/BabelPlayer.UI
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
 ```
 
-If `BabelPlayer.UI` is already running, close it before rebuilding or rerunning.
+In Visual Studio, set `BabelPlayer.WinUI` as the startup project.
+
+If `BabelPlayer.WinUI` is already running, close it before rebuilding or rerunning.
 
 ## Known Limitations
 
@@ -285,7 +284,7 @@ If `BabelPlayer.UI` is already running, close it before rebuilding or rerunning.
 - Embedded subtitle import is implemented for text-based tracks; image-based subtitle tracks are display-only.
 - HY-MT first-use model download exposes milestone status, not byte-level progress.
 - Real-world ffmpeg stream mapping for some containers may still need tuning on edge cases.
-- RTX Video SDK features are not part of the current WPF overhaul.
+- RTX Video SDK features are not part of the current WinUI migration cleanup.
 - The workspace directory on disk may still use an older folder name even though the solution/projects/UI have been renamed to Babel Player / BabelPlayer.
 
 ## Additional Docs
