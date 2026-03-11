@@ -2,9 +2,9 @@ using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
 
-public sealed class SubtitleWorkflowController
+public sealed class SubtitleWorkflowController : IDisposable
 {
-    private readonly SubtitlePresentationProjector _subtitlePresentationProjector = new();
+    private readonly SubtitlePresentationProjector _subtitlePresentationProjector;
     private readonly SubtitleApplicationService _subtitleApplicationService;
     private readonly SubtitleWorkflowProjectionAdapter _projectionAdapter;
     private readonly IMediaSessionStore _mediaSessionStore;
@@ -12,15 +12,11 @@ public sealed class SubtitleWorkflowController
     public SubtitleWorkflowController(
         SubtitleApplicationService subtitleApplicationService,
         SubtitleWorkflowProjectionAdapter projectionAdapter,
-        SubtitlePresentationProjector? subtitlePresentationProjector = null)
+        SubtitlePresentationProjector subtitlePresentationProjector)
     {
         _subtitleApplicationService = subtitleApplicationService;
         _projectionAdapter = projectionAdapter;
-        if (subtitlePresentationProjector is not null)
-        {
-            _subtitlePresentationProjector = subtitlePresentationProjector;
-        }
-
+        _subtitlePresentationProjector = subtitlePresentationProjector;
         _mediaSessionStore = _subtitleApplicationService.MediaSessionStore;
         _projectionAdapter.SnapshotChanged += HandleSnapshotChanged;
         _subtitleApplicationService.StatusChanged += HandleStatusChanged;
@@ -143,8 +139,14 @@ public sealed class SubtitleWorkflowController
     public Task<SubtitleLoadResult> ImportEmbeddedSubtitleTrackAsync(string videoPath, MediaTrackInfo track, CancellationToken cancellationToken = default)
         => _subtitleApplicationService.ImportEmbeddedSubtitleTrackAsync(videoPath, track, cancellationToken);
 
-    public void UpdatePlaybackPosition(TimeSpan position)
-        => _subtitleApplicationService.UpdatePlaybackPosition(position);
+    public void Dispose()
+    {
+        _projectionAdapter.SnapshotChanged -= HandleSnapshotChanged;
+        _subtitleApplicationService.StatusChanged -= HandleStatusChanged;
+        _subtitleApplicationService.RuntimeInstallProgressChanged -= HandleRuntimeInstallProgressChanged;
+        _projectionAdapter.Dispose();
+        _subtitleApplicationService.Dispose();
+    }
 
     private void HandleSnapshotChanged(SubtitleWorkflowSnapshot snapshot)
     {

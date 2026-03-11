@@ -35,7 +35,6 @@ public sealed partial class MainWindow : Window
     private readonly IVideoPresenter _videoPresenter;
     private readonly ISubtitlePresenter _subtitlePresenter;
     private readonly ShortcutService _shortcutService = new();
-    private readonly DispatcherTimer _resumeTimer;
     private readonly IFilePickerService _filePickerService;
     private readonly WinUIWindowModeService _windowModeService;
     private readonly WinUICredentialDialogService _credentialDialogService;
@@ -131,10 +130,6 @@ public sealed partial class MainWindow : Window
         RootGrid = new Grid();
         Content = RootGrid;
         var playbackSessionController = new PlaybackSessionController(_playlistController);
-        _resumeTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(5)
-        };
         var dependencies = (compositionRoot ?? new ShellCompositionRoot()).Create(
             this,
             RootGrid,
@@ -169,8 +164,6 @@ public sealed partial class MainWindow : Window
 
         PlayerHost.Initialize(this);
         PlaylistList.ItemsSource = ViewModel.Playlist.Items;
-
-        _resumeTimer.Tick += ResumeTimer_Tick;
 
         PlayerHost.MediaOpened += PlayerHost_MediaOpened;
         PlayerHost.MediaEnded += PlayerHost_MediaEnded;
@@ -1196,8 +1189,9 @@ public sealed partial class MainWindow : Window
         ApplyTheme(isDark: true);
         VolumeSlider.Value = ViewModel.Transport.Volume;
         MuteToggleButton.IsChecked = settings.IsMuted;
-        PlayerHost.Volume = ViewModel.Transport.Volume;
-        PlayerHost.SetMute(settings.IsMuted);
+        _ = _shellController.SetVolumeAsync(ViewModel.Transport.Volume);
+        _ = _shellController.SetMutedAsync(settings.IsMuted);
+        _shellController.SetResumeTrackingEnabled(settings.ResumeEnabled);
         ResumePlaybackToggleItem.IsChecked = settings.ResumeEnabled;
         SetPlaybackRate(settings.DefaultPlaybackRate, persistSettings: false, showStatus: false);
         _windowModeService.EnsureInitialStandardBounds();
@@ -1290,19 +1284,20 @@ public sealed partial class MainWindow : Window
     {
         SystemBackdrop = null;
         _micaBackdrop = null;
+        _shellController.FlushResumeTracking();
+        SaveCurrentSettings();
         _stageCoordinator.Dispose();
         _shellProjectionService.ProjectionChanged -= ShellProjectionService_ProjectionChanged;
         _shellProjectionService.Dispose();
         (_subtitlePresenter as IDisposable)?.Dispose();
+        _subtitleWorkflowController.Dispose();
+        _shellController.Dispose();
         _playbackBackendCoordinator.Dispose();
         _ = _playbackBackend.DisposeAsync();
-        _resumeTimer.Stop();
-        SaveCurrentSettings();
     }
 
     private void SaveCurrentSettings()
     {
-        SaveResumePosition();
         var pinnedRoots = ViewModel.Browser.Roots.Select(root => root.Path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var updatedSettings = _settingsFacade.UpdatePlaybackDefaults(
             _settingsFacade.UpdateLayout(
@@ -1310,7 +1305,7 @@ public sealed partial class MainWindow : Window
                 ViewModel.Browser.IsVisible,
                 ViewModel.Playlist.IsVisible,
                 _windowModeService.CurrentMode),
-            PlayerHost.HardwareDecodingMode,
+            ViewModel.Settings.HardwareDecodingMode,
             ViewModel.Transport.PlaybackRate,
             _audioDelaySeconds,
             _subtitleDelaySeconds,
@@ -2243,32 +2238,7 @@ public sealed partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void TransportTimer_Tick(object? sender, object e)
-    {
-        var duration = PlayerHost.NaturalDuration.HasTimeSpan ? PlayerHost.NaturalDuration.TimeSpan : TimeSpan.Zero;
-        var position = PlayerHost.Position;
-        ViewModel.Transport.PositionSeconds = position.TotalSeconds;
-        ViewModel.Transport.DurationSeconds = duration.TotalSeconds;
-        ViewModel.Transport.CurrentTimeText = position.ToString(@"mm\:ss");
-        ViewModel.Transport.DurationText = duration > TimeSpan.Zero ? duration.ToString(@"mm\:ss") : "00:00";
-        ViewModel.Transport.IsPaused = PlayerHost.IsPaused;
-        ViewModel.Transport.IsMuted = PlayerHost.IsMuted;
-        ViewModel.ActiveHardwareDecoder = string.IsNullOrWhiteSpace(PlayerHost.ActiveHardwareDecoder) ? "mpv ready" : PlayerHost.ActiveHardwareDecoder;
-        HardwareDecoderTextBlock.Text = ViewModel.ActiveHardwareDecoder;
-
-        UpdatePositionSurfaces(position, duration);
-
-        UpdatePlayPauseButtonVisual();
-        UpdateOverlayControlState();
-        CurrentTimeTextBlock.Text = ViewModel.Transport.CurrentTimeText;
-        DurationTextBlock.Text = ViewModel.Transport.DurationText;
-        MuteToggleButton.IsChecked = ViewModel.Transport.IsMuted;
-        UpdateMuteButtonVisual();
-
-        _subtitleWorkflowController.UpdatePlaybackPosition(position);
-    }
-
-    private void PlayerHost_MediaOpened()
+    private void PlayerHost_MediaOpened(PlaybackStateSnapshot snapshot)
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
@@ -2278,15 +2248,19 @@ public sealed partial class MainWindow : Window
             await _shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds);
             await _shellController.SetAspectRatioAsync(_selectedAspectRatio);
             UpdateWindowHeader();
-            _resumeTimer.Start();
             var result = await _shellController.HandleMediaOpenedAsync(
-                PlayerHost.Source?.LocalPath,
-                PlayerHost.NaturalDuration.HasTimeSpan ? PlayerHost.NaturalDuration.TimeSpan : TimeSpan.Zero,
+                snapshot,
                 ViewModel.Settings.ResumeEnabled);
             if (result.ResumePosition is TimeSpan resumePosition)
             {
-                UpdatePositionSurfaces(resumePosition, PlayerHost.NaturalDuration.HasTimeSpan ? PlayerHost.NaturalDuration.TimeSpan : TimeSpan.Zero);
-                ShowStatus($"Resumed: {Path.GetFileName(PlayerHost.Source?.LocalPath)}");
+                var duration = snapshot.Duration > TimeSpan.Zero
+                    ? snapshot.Duration
+                    : _shellController.CurrentPlaybackSnapshot.Duration;
+                var path = !string.IsNullOrWhiteSpace(snapshot.Path)
+                    ? snapshot.Path
+                    : _shellController.CurrentPlaybackSnapshot.Path;
+                UpdatePositionSurfaces(resumePosition, duration);
+                ShowStatus($"Resumed: {Path.GetFileName(path)}");
                 return;
             }
 
@@ -2305,12 +2279,11 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    private void PlayerHost_MediaEnded()
+    private void PlayerHost_MediaEnded(PlaybackStateSnapshot snapshot)
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
-            _resumeTimer.Stop();
-            var result = _shellController.HandleMediaEnded(CapturePlaybackStateSnapshot(), ViewModel.Settings.ResumeEnabled);
+            var result = _shellController.HandleMediaEnded(ViewModel.Settings.ResumeEnabled);
             RefreshPlaylistView();
             if (result.NextItem is null)
             {
@@ -2326,7 +2299,6 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            _resumeTimer.Stop();
             ShowStatus(message, true);
         });
     }
@@ -2573,16 +2545,6 @@ public sealed partial class MainWindow : Window
             SystemBackdrop = null;
             _micaBackdrop = null;
         }
-    }
-
-    private void ResumeTimer_Tick(object? sender, object e)
-    {
-        SaveResumePosition();
-    }
-
-    private void SaveResumePosition(bool forceRemoveCompleted = false)
-    {
-        _shellController.SaveResumePosition(CapturePlaybackStateSnapshot(), ViewModel.Settings.ResumeEnabled, forceRemoveCompleted);
     }
 
     private void UpdateAspectRatioFlyoutChecks()
@@ -2902,7 +2864,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var currentPath = PlayerHost.Source?.LocalPath;
+        var currentPath = _shellController.CurrentPlaybackSnapshot.Path;
         if (item.Tag is string offValue && offValue == "off")
         {
             _ = _shellController.SetSubtitleTrackAsync(null);
@@ -3007,6 +2969,7 @@ public sealed partial class MainWindow : Window
         {
             ResumeEnabled = ResumePlaybackToggleItem.IsChecked
         };
+        _shellController.SetResumeTrackingEnabled(ResumePlaybackToggleItem.IsChecked);
         if (!ResumePlaybackToggleItem.IsChecked)
         {
             _shellController.ClearResumeHistory();
@@ -3203,23 +3166,7 @@ public sealed partial class MainWindow : Window
             SubtitleDelaySeconds = _subtitleDelaySeconds,
             Volume = ViewModel.Transport.Volume,
             ResumeEnabled = ViewModel.Settings.ResumeEnabled,
-            PreviousPlaybackState = CapturePlaybackStateSnapshot()
-        };
-    }
-
-    private PlaybackStateSnapshot CapturePlaybackStateSnapshot()
-    {
-        var duration = PlayerHost.NaturalDuration.HasTimeSpan ? PlayerHost.NaturalDuration.TimeSpan : TimeSpan.Zero;
-        return new PlaybackStateSnapshot
-        {
-            Path = PlayerHost.Source?.LocalPath,
-            Position = PlayerHost.Position,
-            Duration = duration,
-            IsPaused = PlayerHost.IsPaused,
-            IsMuted = PlayerHost.IsMuted,
-            Volume = ViewModel.Transport.Volume,
-            Speed = ViewModel.Transport.PlaybackRate,
-            ActiveHardwareDecoder = PlayerHost.ActiveHardwareDecoder
+            PreviousPlaybackState = _shellController.CurrentPlaybackSnapshot
         };
     }
 
@@ -3272,7 +3219,6 @@ public sealed partial class MainWindow : Window
         }
 
         _subtitleSourceOnlyOverrideVideoPath = null;
-        _resumeTimer.Stop();
         _pendingAutoFitPath = item.Path;
         _lastAutoFitSignature = null;
         var loaded = await _shellController.LoadPlaylistItemAsync(
@@ -3390,15 +3336,15 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var sourcePath = PlayerHost.Source?.LocalPath;
+        var playbackSnapshot = _shellController.CurrentPlaybackSnapshot;
+        var sourcePath = playbackSnapshot.Path;
         if (string.IsNullOrWhiteSpace(sourcePath) || (_pendingAutoFitPath is not null && !string.Equals(_pendingAutoFitPath, sourcePath, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
 
-        var snapshot = PlayerHost.Snapshot;
-        var displayWidth = snapshot.VideoDisplayWidth > 0 ? snapshot.VideoDisplayWidth : snapshot.VideoWidth;
-        var displayHeight = snapshot.VideoDisplayHeight > 0 ? snapshot.VideoDisplayHeight : snapshot.VideoHeight;
+        var displayWidth = playbackSnapshot.VideoDisplayWidth > 0 ? playbackSnapshot.VideoDisplayWidth : playbackSnapshot.VideoWidth;
+        var displayHeight = playbackSnapshot.VideoDisplayHeight > 0 ? playbackSnapshot.VideoDisplayHeight : playbackSnapshot.VideoHeight;
         if (displayWidth <= 0 || displayHeight <= 0 || PlayerPane.ActualWidth <= 0 || PlayerHost.View.ActualHeight <= 0)
         {
             return;
@@ -3643,7 +3589,7 @@ public sealed partial class MainWindow : Window
                 SecondaryText = showSource ? ViewModel.SubtitleOverlay.SourceText : string.Empty
             },
             ViewModel.Settings.SubtitleStyle,
-            PlayerHost.Source is not null);
+            !string.IsNullOrWhiteSpace(_shellController.CurrentPlaybackSnapshot.Path));
         UpdateOverlayControlState();
     }
 
@@ -3692,7 +3638,7 @@ public sealed partial class MainWindow : Window
     {
         if (sender is Slider slider)
         {
-            PlayerHost.Position = TimeSpan.FromSeconds(slider.Value);
+            _ = _shellController.SeekAsync(TimeSpan.FromSeconds(slider.Value));
         }
 
         _isPositionScrubbing = false;
@@ -3804,7 +3750,7 @@ public sealed partial class MainWindow : Window
     {
         var result = await _shellController.PrepareForTranscriptionRefreshAsync(
             _subtitleWorkflowController.Snapshot,
-            CapturePlaybackStateSnapshot(),
+            _shellController.CurrentPlaybackSnapshot,
             CancellationToken.None);
         if (!string.IsNullOrWhiteSpace(result.StatusMessage))
         {
@@ -3819,7 +3765,7 @@ public sealed partial class MainWindow : Window
     {
         var result = await _shellController.EvaluateCaptionStartupGateAsync(
             snapshot,
-            CapturePlaybackStateSnapshot(),
+            _shellController.CurrentPlaybackSnapshot,
             CancellationToken.None);
         if (!string.IsNullOrWhiteSpace(result.StatusMessage))
         {

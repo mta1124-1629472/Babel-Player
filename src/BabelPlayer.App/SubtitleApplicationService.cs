@@ -2,7 +2,7 @@ using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
 
-public sealed partial class SubtitleApplicationService
+public sealed partial class SubtitleApplicationService : IDisposable
 {
     private const string DefaultSourceLanguage = "und";
     private const string DefaultTargetLanguage = "en";
@@ -15,7 +15,7 @@ public sealed partial class SubtitleApplicationService
     private readonly IProviderAvailabilityService _providerAvailabilityService;
     private readonly CredentialFacade _credentialFacade;
     private readonly MediaSessionCoordinator _mediaSessionCoordinator;
-    private readonly InMemorySubtitleWorkflowStateStore _workflowStateStore;
+    private readonly ISubtitleWorkflowStateStore _workflowStateStore;
     private readonly object _translationSync = new();
     private readonly HashSet<string> _inFlightCueTranslations = [];
     private readonly Dictionary<string, List<SubtitleCue>> _generatedSubtitleCache = new(StringComparer.OrdinalIgnoreCase);
@@ -24,6 +24,8 @@ public sealed partial class SubtitleApplicationService
     private CancellationTokenSource? _captionGenerationCts;
     private readonly string _translationTargetLanguage = DefaultTargetLanguage;
     private readonly string _autoTranslatePreferredSourceLanguage = DefaultTargetLanguage;
+    private string? _lastObservedActiveTranscriptSegmentId;
+    private bool _disposed;
 
     public SubtitleApplicationService(
         ISubtitleSourceResolver sourceResolver,
@@ -31,21 +33,23 @@ public sealed partial class SubtitleApplicationService
         ISubtitleTranslator subtitleTranslator,
         IAiCredentialCoordinator aiCredentialCoordinator,
         IRuntimeProvisioner runtimeProvisioner,
-        CredentialFacade? credentialFacade = null,
-        MediaSessionCoordinator? mediaSessionCoordinator = null,
-        ISubtitleWorkflowStateStore? workflowStateStore = null,
-        IProviderAvailabilityService? providerAvailabilityService = null)
+        CredentialFacade credentialFacade,
+        MediaSessionCoordinator mediaSessionCoordinator,
+        ISubtitleWorkflowStateStore workflowStateStore,
+        IProviderAvailabilityService providerAvailabilityService)
     {
         _sourceResolver = sourceResolver;
         _captionGenerator = captionGenerator;
         _subtitleTranslator = subtitleTranslator;
         _aiCredentialCoordinator = aiCredentialCoordinator;
         _runtimeProvisioner = runtimeProvisioner;
-        _credentialFacade = credentialFacade ?? new CredentialFacade();
-        _mediaSessionCoordinator = mediaSessionCoordinator ?? new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-        _workflowStateStore = workflowStateStore as InMemorySubtitleWorkflowStateStore ?? new InMemorySubtitleWorkflowStateStore();
-        _providerAvailabilityService = providerAvailabilityService ?? new ProviderAvailabilityService(_credentialFacade, Environment.GetEnvironmentVariable);
+        _credentialFacade = credentialFacade;
+        _mediaSessionCoordinator = mediaSessionCoordinator;
+        _workflowStateStore = workflowStateStore;
+        _providerAvailabilityService = providerAvailabilityService;
         _subtitleTranslator.RuntimeStatusChanged += HandleLocalTranslationRuntimeStatus;
+        _mediaSessionCoordinator.Store.SnapshotChanged += HandleMediaSessionSnapshotChanged;
+        _lastObservedActiveTranscriptSegmentId = _mediaSessionCoordinator.Snapshot.SubtitlePresentation.ActiveTranscriptSegmentId;
     }
 
     public event Action<string>? StatusChanged;
@@ -58,6 +62,20 @@ public sealed partial class SubtitleApplicationService
     public IReadOnlyList<SubtitleCue> CurrentCues => MediaSessionProjection.ToSubtitleCues(_mediaSessionCoordinator.Snapshot);
 
     public bool HasCurrentCues => _mediaSessionCoordinator.Snapshot.Transcript.Segments.Count > 0;
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _mediaSessionCoordinator.Store.SnapshotChanged -= HandleMediaSessionSnapshotChanged;
+        _subtitleTranslator.RuntimeStatusChanged -= HandleLocalTranslationRuntimeStatus;
+        CancelTranslationWork();
+        CancelCaptionGeneration();
+        _disposed = true;
+    }
 
     public Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -262,24 +280,6 @@ public sealed partial class SubtitleApplicationService
         }
     }
 
-    public void UpdatePlaybackPosition(TimeSpan position)
-    {
-        var session = _mediaSessionCoordinator.Snapshot;
-        _mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
-            position,
-            session.Timeline.Duration,
-            session.Timeline.Rate,
-            session.Timeline.IsPaused,
-            session.Timeline.IsSeekable,
-            DateTimeOffset.UtcNow));
-
-        var activeTranscript = GetActiveTranscriptSegment(_mediaSessionCoordinator.Snapshot);
-        if (activeTranscript is not null && !HasTranslatedSegment(activeTranscript, _mediaSessionCoordinator.Snapshot))
-        {
-            _ = TranslateCueAsync(activeTranscript, _translationCts?.Token ?? CancellationToken.None);
-        }
-    }
-
     public Task<IReadOnlyList<SubtitleCue>> LoadExternalSubtitleCuesAsync(
         string path,
         Action<RuntimeInstallProgress>? onRuntimeProgress,
@@ -327,4 +327,27 @@ public sealed partial class SubtitleApplicationService
 
     public Task<string> EnsureFfmpegAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
         => _runtimeProvisioner.EnsureFfmpegAsync(onProgress, cancellationToken);
+
+    private void HandleMediaSessionSnapshotChanged(MediaSessionSnapshot snapshot)
+    {
+        var activeTranscriptId = snapshot.SubtitlePresentation.ActiveTranscriptSegmentId;
+        if (string.Equals(_lastObservedActiveTranscriptSegmentId, activeTranscriptId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastObservedActiveTranscriptSegmentId = activeTranscriptId;
+        if (!_workflowStateStore.Snapshot.IsTranslationEnabled || string.IsNullOrWhiteSpace(activeTranscriptId))
+        {
+            return;
+        }
+
+        var activeTranscript = GetActiveTranscriptSegment(snapshot);
+        if (activeTranscript is null || HasTranslatedSegment(activeTranscript, snapshot))
+        {
+            return;
+        }
+
+        _ = TranslateCueAsync(activeTranscript, _translationCts?.Token ?? CancellationToken.None);
+    }
 }

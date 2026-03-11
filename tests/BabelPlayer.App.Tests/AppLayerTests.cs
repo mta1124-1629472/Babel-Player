@@ -356,6 +356,7 @@ Hola
         var directory = Directory.CreateTempSubdirectory();
         try
         {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -367,10 +368,17 @@ Hello there
 
             var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null);
 
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.Dual);
 
@@ -408,7 +416,13 @@ Hola
             await controller.LoadMediaSubtitlesAsync(videoPath);
             var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
             mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.Dual);
 
@@ -451,7 +465,13 @@ Hola
             mediaSessionCoordinator.SetTranslationState(true, false);
             var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
             mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.SourceOnly);
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.SourceOnly);
@@ -494,7 +514,13 @@ Hola
             await controller.InitializeAsync();
             await controller.LoadMediaSubtitlesAsync(videoPath);
             mediaSessionCoordinator.SetTranslationState(true, false);
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.TranslationOnly);
 
@@ -536,7 +562,13 @@ Hola
             mediaSessionCoordinator.SetTranslationState(true, false);
             var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
             mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.SourceOnly, sourceOnlyOverrideForCurrentVideo: true);
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.SourceOnly, sourceOnlyOverrideForCurrentVideo: true);
@@ -557,6 +589,7 @@ Hola
         var directory = Directory.CreateTempSubdirectory();
         try
         {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -572,10 +605,17 @@ Second sentence
 
             var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null);
 
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(4));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(4),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.SourceOnly);
 
