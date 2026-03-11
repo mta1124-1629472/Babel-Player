@@ -52,18 +52,33 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
         var credentialDialogService = new WinUICredentialDialogService(rootGrid, suppressDialogPresentation);
         var runtimeBootstrapService = new RuntimeBootstrapService();
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-        var providerAvailabilityService = new ProviderAvailabilityService(credentialFacade, Environment.GetEnvironmentVariable);
-        var subtitleWorkflowController = new SubtitleWorkflowController(
+        var providerComposition = ProviderAvailabilityCompositionFactory.Create(credentialFacade, Environment.GetEnvironmentVariable);
+        var providerAvailabilityService = new ProviderAvailabilityService(providerComposition);
+        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+        var subtitleApplicationService = new SubtitleApplicationService(
+            new DefaultSubtitleSourceResolver(),
+            new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry),
+            new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry),
+            new DefaultAiCredentialCoordinator(
+                credentialFacade,
+                credentialDialogService,
+                Environment.GetEnvironmentVariable,
+                MtService.ValidateApiKeyAsync,
+                MtService.ValidateTranslationProviderAsync),
+            new DefaultRuntimeProvisioner(
+                runtimeBootstrapService,
+                credentialFacade,
+                credentialDialogService,
+                filePickerService,
+                Environment.GetEnvironmentVariable),
             credentialFacade,
-            credentialDialogService,
-            filePickerService,
-            runtimeBootstrapService,
             mediaSessionCoordinator,
-            Environment.GetEnvironmentVariable,
-            MtService.ValidateApiKeyAsync,
-            MtService.ValidateTranslationProviderAsync,
-            null,
+            workflowStateStore,
             providerAvailabilityService);
+        var subtitleWorkflowController = new SubtitleWorkflowController(
+            subtitleApplicationService,
+            new SubtitleWorkflowProjectionAdapter(workflowStateStore, mediaSessionCoordinator.Store),
+            new SubtitlePresentationProjector());
         var playbackBackend = new MpvPlaybackBackend();
         var playbackBackendCoordinator = new PlaybackBackendCoordinator(playbackBackend, mediaSessionCoordinator);
         var videoPresenter = new MpvVideoPresenter();

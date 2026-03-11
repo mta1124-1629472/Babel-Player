@@ -311,6 +311,117 @@ public sealed class RemainingArchitecturePlanTests
         }
     }
 
+    [Fact]
+    public async Task ShellController_HandleMediaOpenedAppliesResumeThroughBackend()
+    {
+        var playlist = new PlaylistController();
+        playlist.EnqueueFiles(["C:\\Media\\movie.mp4"]);
+        var session = new PlaybackSessionController(playlist);
+        var backend = new FakeShellPlaybackBackend();
+        var workflow = new SubtitleWorkflowController(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        var resumeEntry = new PlaybackResumeEntry
+        {
+            Path = "C:\\Media\\movie.mp4",
+            PositionSeconds = 125,
+            DurationSeconds = 3600,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        var shell = new ShellController(
+            playlist,
+            session,
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [resumeEntry], persistEntries: _ => { }));
+
+        var result = await shell.HandleMediaOpenedAsync("C:\\Media\\movie.mp4", TimeSpan.FromMinutes(60), resumeEnabled: true);
+
+        Assert.Equal(TimeSpan.FromSeconds(125), result.ResumePosition);
+        Assert.Equal(TimeSpan.FromSeconds(125), backend.LastSeekPosition);
+    }
+
+    [Fact]
+    public async Task ShellController_CaptionStartupGatePausesAndResumesThroughBackend()
+    {
+        var playlist = new PlaylistController();
+        var session = new PlaybackSessionController(playlist);
+        var backend = new FakeShellPlaybackBackend
+        {
+            ClockSnapshot = new ClockSnapshot(TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(5), 1.0, false, true, DateTimeOffset.UtcNow)
+        };
+        var workflow = new SubtitleWorkflowController(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        var shell = new ShellController(
+            playlist,
+            session,
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+        var pauseResult = await shell.EvaluateCaptionStartupGateAsync(
+            new SubtitleWorkflowSnapshot
+            {
+                CurrentVideoPath = "C:\\Media\\movie.mp4",
+                SubtitleSource = SubtitlePipelineSource.Generated,
+                IsCaptionGenerationInProgress = true,
+                Cues = []
+            },
+            new PlaybackStateSnapshot
+            {
+                Path = "C:\\Media\\movie.mp4",
+                Position = TimeSpan.FromSeconds(1)
+            });
+
+        var resumeResult = await shell.EvaluateCaptionStartupGateAsync(
+            new SubtitleWorkflowSnapshot
+            {
+                CurrentVideoPath = "C:\\Media\\movie.mp4",
+                SubtitleSource = SubtitlePipelineSource.Generated,
+                IsCaptionGenerationInProgress = true,
+                Cues =
+                [
+                    new SubtitleCue
+                    {
+                        Start = TimeSpan.Zero,
+                        End = TimeSpan.FromSeconds(2),
+                        SourceText = "Hello"
+                    }
+                ]
+            },
+            new PlaybackStateSnapshot
+            {
+                Path = "C:\\Media\\movie.mp4",
+                Position = TimeSpan.FromSeconds(1)
+            });
+
+        Assert.Equal("Generating initial captions before playback starts.", pauseResult.StatusMessage);
+        Assert.Equal(1, backend.PauseCallCount);
+        Assert.Equal("Captions ready. Playing with generated subtitles.", resumeResult.StatusMessage);
+        Assert.Equal(1, backend.PlayCallCount);
+        Assert.Equal(TimeSpan.Zero, backend.LastSeekPosition);
+    }
+
+    [Fact]
+    public void SubtitleWorkflowController_CanBeConstructedFromInjectedCollaboratorsOnly()
+    {
+        var workflowStore = new InMemorySubtitleWorkflowStateStore();
+        var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var service = new SubtitleApplicationService(
+            new FakeSubtitleSourceResolver(),
+            new FakeCaptionGenerator(),
+            new FakeSubtitleTranslator(),
+            new FakeAiCredentialCoordinator(),
+            new FakeRuntimeProvisioner(),
+            mediaSessionCoordinator: mediaSessionCoordinator,
+            workflowStateStore: workflowStore);
+        using var projectionAdapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaSessionCoordinator.Store);
+
+        var controller = new SubtitleWorkflowController(service, projectionAdapter, new SubtitlePresentationProjector());
+
+        Assert.Same(service.MediaSessionStore, controller.MediaSessionStore);
+        Assert.Equal(controller.Snapshot.CurrentVideoPath, projectionAdapter.Current.CurrentVideoPath);
+    }
+
     private sealed class FakeTranscriptionProvider : ITranscriptionProvider
     {
         private readonly bool _shouldFail;
@@ -472,6 +583,9 @@ public sealed class RemainingArchitecturePlanTests
     private sealed class FakeShellPlaybackBackend : IPlaybackBackend
     {
         public List<string> LoadedPaths { get; } = [];
+        public int PauseCallCount { get; private set; }
+        public int PlayCallCount { get; private set; }
+        public TimeSpan? LastSeekPosition { get; private set; }
 
         public event Action<PlaybackBackendState>? StateChanged;
         public event Action<IReadOnlyList<MediaTrackInfo>>? TracksChanged;
@@ -480,10 +594,15 @@ public sealed class RemainingArchitecturePlanTests
         public event Action<string>? MediaFailed;
         public event Action<RuntimeInstallProgress>? RuntimeInstallProgress;
 
-        public IPlaybackClock Clock { get; } = new FakePlaybackClock();
+        private readonly FakePlaybackClock _clock = new();
+        public IPlaybackClock Clock => _clock;
         public PlaybackBackendState State { get; private set; } = new();
         public IReadOnlyList<MediaTrackInfo> CurrentTracks { get; private set; } = [];
         public HardwareDecodingMode HardwareDecodingMode { get; private set; }
+        public ClockSnapshot ClockSnapshot
+        {
+            set => _clock.Set(value);
+        }
 
         public Task InitializeAsync(nint hostHandle, CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -496,10 +615,26 @@ public sealed class RemainingArchitecturePlanTests
             return Task.CompletedTask;
         }
 
-        public Task PlayAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task PauseAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PlayAsync(CancellationToken cancellationToken)
+        {
+            PlayCallCount++;
+            _clock.Set(_clock.Current with { IsPaused = false });
+            return Task.CompletedTask;
+        }
+
+        public Task PauseAsync(CancellationToken cancellationToken)
+        {
+            PauseCallCount++;
+            _clock.Set(_clock.Current with { IsPaused = true });
+            return Task.CompletedTask;
+        }
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SeekAsync(TimeSpan position, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SeekAsync(TimeSpan position, CancellationToken cancellationToken)
+        {
+            LastSeekPosition = position;
+            _clock.Set(_clock.Current with { Position = position });
+            return Task.CompletedTask;
+        }
         public Task SeekRelativeAsync(TimeSpan delta, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SetVolumeAsync(double volume, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -525,7 +660,13 @@ public sealed class RemainingArchitecturePlanTests
         {
             public event Action<ClockSnapshot>? Changed;
 
-            public ClockSnapshot Current { get; } = new(TimeSpan.Zero, TimeSpan.Zero, 1.0, true, false, DateTimeOffset.UtcNow);
+            public ClockSnapshot Current { get; private set; } = new(TimeSpan.Zero, TimeSpan.Zero, 1.0, true, false, DateTimeOffset.UtcNow);
+
+            public void Set(ClockSnapshot snapshot)
+            {
+                Current = snapshot;
+                Changed?.Invoke(snapshot);
+            }
         }
     }
 
