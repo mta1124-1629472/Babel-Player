@@ -263,9 +263,12 @@ public sealed class StageCoordinatorAndProviderCompositionTests
         public event Action<bool>? InteractionStateChanged;
 
         public Button PlayPauseButton { get; } = CreateUninitialized<Button>();
-        public Button SeekBackButton { get; } = CreateUninitialized<Button>();
-        public Button SeekForwardButton { get; } = CreateUninitialized<Button>();
         public Button SubtitleToggleButton { get; } = CreateUninitialized<Button>();
+        public DropDownButton SubtitleModeButton { get; } = CreateUninitialized<DropDownButton>();
+        public DropDownButton SubtitleStyleButton { get; } = CreateUninitialized<DropDownButton>();
+        public Button PipButton { get; } = CreateUninitialized<Button>();
+        public Button ImmersiveButton { get; } = CreateUninitialized<Button>();
+        public DropDownButton SettingsButton { get; } = CreateUninitialized<DropDownButton>();
         public Button ExitFullscreenButton { get; } = CreateUninitialized<Button>();
         public Slider PositionSlider { get; } = CreateUninitialized<Slider>();
         public TextBlock CurrentTimeTextBlock { get; } = CreateUninitialized<TextBlock>();

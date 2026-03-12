@@ -1,4 +1,5 @@
 using BabelPlayer.App;
+using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
 
@@ -6,11 +7,16 @@ namespace BabelPlayer.WinUI;
 
 public sealed class MpvVideoPresenter : IVideoPresenter
 {
-    private readonly MpvHostControl _hostControl = new()
+    private readonly MpvHostControl _hostControl;
+
+    public MpvVideoPresenter(IBabelLogFactory? logFactory = null)
     {
-        HorizontalAlignment = HorizontalAlignment.Stretch,
-        VerticalAlignment = VerticalAlignment.Stretch
-    };
+        _hostControl = new MpvHostControl(logFactory)
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
+    }
 
     public event Action? InputActivity
     {
