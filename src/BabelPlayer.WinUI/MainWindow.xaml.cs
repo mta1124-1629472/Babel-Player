@@ -23,9 +23,10 @@ namespace BabelPlayer.WinUI;
 public sealed partial class MainWindow : Window
 {
     private const string IdleWindowSubtitle = "Play anything. Understand everything.";
+    private const string LibraryQueueDragFormat = "BabelPlayer/LibraryQueuePaths";
     private readonly SettingsFacade _settingsFacade = new();
     private readonly LibraryBrowserService _libraryBrowserService = new();
-    private readonly PlaylistController _playlistController = new();
+    private readonly PlaybackQueueController _playbackQueueController = new();
     private readonly CredentialFacade _credentialFacade = new();
     private readonly SubtitleWorkflowController _subtitleWorkflowController;
     private readonly IPlaybackBackend _playbackBackend;
@@ -49,11 +50,15 @@ public sealed partial class MainWindow : Window
     private bool _isInitializingShellState;
     private bool _isNormalizingWinUITranscriptionSelection;
     private bool _isLanguageToolsExpanded = true;
+    private bool _autoCollapsedLanguageToolsForPortraitVideo;
+    private bool _isLanguageToolsAutoCollapseOverridden;
     private bool _hasAttemptedSystemBackdrop;
     private bool _shellDropTargetsInitialized;
+    private bool _isLibraryDragOperationInProgress;
     private Slider? _activeScrubber;
     private string? _pendingAutoFitPath;
     private string? _lastAutoFitSignature;
+    private string? _pendingLibraryLoadPath;
     private string? _subtitleSourceOnlyOverrideVideoPath;
     private LibraryNode? _selectedLibraryNode;
     private SubtitleRenderMode _lastNonOffSubtitleRenderMode = SubtitleRenderMode.TranslationOnly;
@@ -77,10 +82,13 @@ public sealed partial class MainWindow : Window
     private AppBarToggleButton PictureInPictureToggleButton = null!;
     private InfoBar StatusInfoBar = null!;
     private Grid ShellContentGrid = null!;
+    private Grid CenterStageGrid = null!;
     private Border BrowserPane = null!;
     private Border PlaylistPane = null!;
     private Border PlayerPane = null!;
+    private Border TimelinePane = null!;
     private Border TransportPane = null!;
+    private Border LanguageToolsPane = null!;
     private Border LanguageToolsContentBorder = null!;
     private Border DecoderBadge = null!;
     private Border SubtitleOverlayBorder = null!;
@@ -92,7 +100,9 @@ public sealed partial class MainWindow : Window
     private TextBlock SourceSubtitleTextBlock = null!;
     private TextBlock TranslatedSubtitleTextBlock = null!;
     private TextBlock PlaylistSummaryTextBlock = null!;
+    private TextBlock NowPlayingQueueTextBlock = null!;
     private ListView PlaylistList = null!;
+    private ListView HistoryList = null!;
     private Button PlayPauseButton = null!;
     private Slider PositionSlider = null!;
     private TextBlock CurrentTimeTextBlock = null!;
@@ -100,6 +110,7 @@ public sealed partial class MainWindow : Window
     private Slider VolumeSlider = null!;
     private ToggleButton MuteToggleButton = null!;
     private Button LanguageToolsToggleButton = null!;
+    private ToggleButton LanguageToolsSubtitleToggleButton = null!;
     private ComboBox SubtitleModeComboBox = null!;
     private ComboBox TranscriptionModelComboBox = null!;
     private ComboBox TranslationModelComboBox = null!;
@@ -129,12 +140,10 @@ public sealed partial class MainWindow : Window
 
         RootGrid = new Grid();
         Content = RootGrid;
-        var playbackSessionController = new PlaybackSessionController(_playlistController);
         var dependencies = (compositionRoot ?? new ShellCompositionRoot()).Create(
             this,
             RootGrid,
-            _playlistController,
-            playbackSessionController,
+            _playbackQueueController,
             _credentialFacade,
             SuppressDialogPresentation);
         _filePickerService = dependencies.FilePickerService;
@@ -163,7 +172,8 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
 
         PlayerHost.Initialize(this);
-        PlaylistList.ItemsSource = ViewModel.Playlist.Items;
+        PlaylistList.ItemsSource = ViewModel.Queue.QueueItems;
+        HistoryList.ItemsSource = ViewModel.Queue.HistoryItems;
 
         PlayerHost.MediaOpened += PlayerHost_MediaOpened;
         PlayerHost.MediaEnded += PlayerHost_MediaEnded;
@@ -176,12 +186,14 @@ public sealed partial class MainWindow : Window
         _subtitleWorkflowController.StatusChanged += SubtitleWorkflowController_StatusChanged;
         _subtitleWorkflowController.SnapshotChanged += SubtitleWorkflowController_SnapshotChanged;
         _shellProjectionService.ProjectionChanged += ShellProjectionService_ProjectionChanged;
+        _shellController.QueueSnapshotChanged += ShellController_QueueSnapshotChanged;
 
         Closed += MainWindow_Closed;
         Activated += MainWindow_Activated;
 
         InitializeShellState();
         ApplyShellProjection(_shellProjectionService.Current);
+        ApplyQueueSnapshot(_shellController.QueueSnapshot);
         _ = _subtitleWorkflowController.InitializeAsync();
     }
 
@@ -196,15 +208,17 @@ public sealed partial class MainWindow : Window
         RootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-        var shellBrush = new SolidColorBrush(ColorHelper.FromArgb(170, 20, 24, 32));
-        var drawerBrush = new SolidColorBrush(ColorHelper.FromArgb(132, 24, 30, 40));
-        var playerSurfaceBrush = new SolidColorBrush(ColorHelper.FromArgb(90, 10, 14, 20));
-        var borderBrush = new SolidColorBrush(ColorHelper.FromArgb(120, 86, 101, 122));
+        var shellBrush = new SolidColorBrush(ColorHelper.FromArgb(188, 17, 20, 27));
+        var drawerBrush = new SolidColorBrush(ColorHelper.FromArgb(136, 23, 29, 38));
+        var railBrush = new SolidColorBrush(ColorHelper.FromArgb(110, 20, 25, 34));
+        var playerSurfaceBrush = new SolidColorBrush(ColorHelper.FromArgb(72, 12, 16, 22));
+        var subtleBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(72, 120, 136, 160));
+        var stageBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(126, 106, 126, 156));
         var accentBrush = new SolidColorBrush(ColorHelper.FromArgb(255, 47, 111, 178));
 
         AppTitleBar = new Border
         {
-            Padding = new Thickness(18, 14, 18, 14),
+            Padding = new Thickness(22, 12, 22, 12),
             Background = shellBrush
         };
         Grid.SetRow(AppTitleBar, 0);
@@ -249,7 +263,7 @@ public sealed partial class MainWindow : Window
 
         ShellCommandBar = new CommandBar
         {
-            Margin = new Thickness(16, 10, 16, 0),
+            Margin = new Thickness(20, 8, 20, 0),
             Background = shellBrush,
             DefaultLabelPosition = CommandBarDefaultLabelPosition.Right
         };
@@ -266,21 +280,13 @@ public sealed partial class MainWindow : Window
 
         PlaylistPaneToggle = new AppBarToggleButton
         {
-            Label = "Playlist",
+            Label = "Queue",
             Icon = new SymbolIcon(Symbol.List)
         };
         PlaylistPaneToggle.Click += PlaylistPaneToggle_Click;
-        SetControlHint(PlaylistPaneToggle, "Toggle playlist");
+        SetControlHint(PlaylistPaneToggle, "Toggle queue");
         ShellCommandBar.PrimaryCommands.Add(PlaylistPaneToggle);
 
-        ImmersiveToggleButton = new AppBarToggleButton
-        {
-            Label = "Immersive",
-            Icon = new SymbolIcon(Symbol.HideBcc)
-        };
-        ImmersiveToggleButton.Click += ImmersiveToggleButton_Click;
-        SetControlHint(ImmersiveToggleButton, "Immersive mode");
-        ShellCommandBar.PrimaryCommands.Add(ImmersiveToggleButton);
         FullscreenToggleButton = new AppBarToggleButton
         {
             Label = "Fullscreen",
@@ -297,6 +303,14 @@ public sealed partial class MainWindow : Window
         PictureInPictureToggleButton.Click += PictureInPictureToggleButton_Click;
         SetControlHint(PictureInPictureToggleButton, "Picture in picture");
         ShellCommandBar.PrimaryCommands.Add(PictureInPictureToggleButton);
+        ImmersiveToggleButton = new AppBarToggleButton
+        {
+            Label = "Immersive",
+            Icon = new SymbolIcon(Symbol.HideBcc)
+        };
+        ImmersiveToggleButton.Click += ImmersiveToggleButton_Click;
+        SetControlHint(ImmersiveToggleButton, "Immersive mode");
+        ShellCommandBar.PrimaryCommands.Add(ImmersiveToggleButton);
 
         PlaybackOptionsFlyout = BuildPlaybackOptionsFlyout();
         PlaybackOptionsButton = new AppBarButton
@@ -322,8 +336,8 @@ public sealed partial class MainWindow : Window
 
         ShellContentGrid = new Grid
         {
-            Padding = new Thickness(12, 8, 12, 12),
-            ColumnSpacing = 12
+            Padding = new Thickness(20, 10, 20, 18),
+            ColumnSpacing = 0
         };
         Grid.SetRow(ShellContentGrid, 3);
         BrowserColumn = new ColumnDefinition { Width = new GridLength(0) };
@@ -333,34 +347,46 @@ public sealed partial class MainWindow : Window
         ShellContentGrid.ColumnDefinitions.Add(PlaylistColumn);
         RootGrid.Children.Add(ShellContentGrid);
 
-        BrowserPane = CreatePanelBorder(drawerBrush, borderBrush, 1, new CornerRadius(20), new Thickness(12));
+        BrowserPane = CreatePanelBorder(drawerBrush, subtleBorderBrush, 1, new CornerRadius(28), new Thickness(18, 16, 18, 18));
         BrowserPane.Visibility = Visibility.Collapsed;
         Grid.SetColumn(BrowserPane, 0);
         ShellContentGrid.Children.Add(BrowserPane);
         BrowserPane.Child = BuildBrowserPane();
 
-        var centerStageGrid = new Grid
+        CenterStageGrid = new Grid
         {
-            RowSpacing = 12
+            RowSpacing = 10
         };
-        centerStageGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        centerStageGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        Grid.SetColumn(centerStageGrid, 1);
-        ShellContentGrid.Children.Add(centerStageGrid);
+        CenterStageGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        CenterStageGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        CenterStageGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        CenterStageGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetColumn(CenterStageGrid, 1);
+        ShellContentGrid.Children.Add(CenterStageGrid);
 
-        PlayerPane = CreatePanelBorder(playerSurfaceBrush, borderBrush, 0, new CornerRadius(18), new Thickness(10));
+        PlayerPane = CreatePanelBorder(playerSurfaceBrush, stageBorderBrush, 1, new CornerRadius(26), new Thickness(12));
         PlayerPane.MinHeight = 320;
         Grid.SetColumn(PlayerPane, 1);
-        centerStageGrid.Children.Add(PlayerPane);
+        CenterStageGrid.Children.Add(PlayerPane);
         PlayerPane.Child = BuildPlayerPane(accentBrush);
 
-        TransportPane = CreatePanelBorder(drawerBrush, borderBrush, 1, new CornerRadius(18), new Thickness(14));
-        TransportPane.Margin = new Thickness(0);
-        Grid.SetRow(TransportPane, 1);
-        TransportPane.Child = BuildTransportPane();
-        centerStageGrid.Children.Add(TransportPane);
+        TimelinePane = CreatePanelBorder(railBrush, subtleBorderBrush, 0, new CornerRadius(18), new Thickness(14, 10, 14, 10));
+        Grid.SetRow(TimelinePane, 1);
+        TimelinePane.Child = BuildTimelinePane();
+        CenterStageGrid.Children.Add(TimelinePane);
 
-        PlaylistPane = CreatePanelBorder(drawerBrush, borderBrush, 1, new CornerRadius(20), new Thickness(12));
+        TransportPane = CreatePanelBorder(railBrush, subtleBorderBrush, 0, new CornerRadius(22), new Thickness(10, 6, 10, 6));
+        TransportPane.Margin = new Thickness(0);
+        Grid.SetRow(TransportPane, 2);
+        TransportPane.Child = BuildTransportPane();
+        CenterStageGrid.Children.Add(TransportPane);
+
+        LanguageToolsPane = CreatePanelBorder(drawerBrush, subtleBorderBrush, 0, new CornerRadius(22), new Thickness(16, 14, 16, 16));
+        Grid.SetRow(LanguageToolsPane, 3);
+        LanguageToolsPane.Child = BuildLanguageToolsDrawer();
+        CenterStageGrid.Children.Add(LanguageToolsPane);
+
+        PlaylistPane = CreatePanelBorder(drawerBrush, subtleBorderBrush, 1, new CornerRadius(28), new Thickness(18, 16, 18, 18));
         PlaylistPane.Visibility = Visibility.Collapsed;
         Grid.SetColumn(PlaylistPane, 2);
         ShellContentGrid.Children.Add(PlaylistPane);
@@ -394,6 +420,18 @@ public sealed partial class MainWindow : Window
         };
         button.Click += handler;
         SetControlHint(button, label);
+        return button;
+    }
+
+    private static Button CreateDrawerActionButton(string glyph, string hint, RoutedEventHandler handler)
+    {
+        var button = new Button
+        {
+            Padding = new Thickness(10, 8, 10, 8),
+            Content = new FontIcon { Glyph = glyph }
+        };
+        button.Click += handler;
+        SetControlHint(button, hint);
         return button;
     }
 
@@ -569,6 +607,7 @@ public sealed partial class MainWindow : Window
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var headerStack = new StackPanel { Spacing = 2 };
         headerStack.Children.Add(new TextBlock
         {
@@ -578,28 +617,91 @@ public sealed partial class MainWindow : Window
         });
         headerStack.Children.Add(new TextBlock
         {
-            Text = "Pinned folders and local media roots",
+            Text = "Pinned folders, media roots, and quick play actions.",
             Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 196, 205, 219))
         });
         header.Children.Add(headerStack);
-        var addButton = new Button { Content = new FontIcon { Glyph = "\uE710" } };
+        var addButton = new Button
+        {
+            Padding = new Thickness(12, 8, 12, 8),
+            Content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                Children =
+                {
+                    new FontIcon { Glyph = "\uE710" },
+                    new TextBlock
+                    {
+                        Text = "Add Root",
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                }
+            }
+        };
         addButton.Click += AddRootFolder_Click;
         SetControlHint(addButton, "Add library folder");
         Grid.SetColumn(addButton, 1);
         header.Children.Add(addButton);
+        var closeButton = CreateDrawerActionButton("\uE711", "Close library", CloseBrowserPane_Click);
+        Grid.SetColumn(closeButton, 2);
+        header.Children.Add(closeButton);
         grid.Children.Add(header);
 
         LibraryTree = new TreeView
         {
-            SelectionMode = TreeViewSelectionMode.Single
+            SelectionMode = TreeViewSelectionMode.Single,
+            CanDragItems = true
         };
         LibraryTree.Expanding += LibraryTree_Expanding;
+        LibraryTree.SelectionChanged += LibraryTree_SelectionChanged;
         LibraryTree.ItemInvoked += LibraryTree_ItemInvoked;
+        LibraryTree.DragItemsStarting += LibraryTree_DragItemsStarting;
+        LibraryTree.DragItemsCompleted += LibraryTree_DragItemsCompleted;
+        LibraryTree.ContextRequested += LibraryTree_ContextRequested;
         LibraryTree.RightTapped += LibraryTree_RightTapped;
         Grid.SetRow(LibraryTree, 1);
         grid.Children.Add(LibraryTree);
 
         return grid;
+    }
+
+    private UIElement BuildTimelinePane()
+    {
+        var seekRow = new Grid
+        {
+            ColumnSpacing = 12
+        };
+        seekRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        seekRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        seekRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        CurrentTimeTextBlock = new TextBlock
+        {
+            Text = "00:00",
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        seekRow.Children.Add(CurrentTimeTextBlock);
+
+        PositionSlider = new Slider
+        {
+            Minimum = 0,
+            Maximum = 1,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        PositionSlider.ValueChanged += PositionSlider_ValueChanged;
+        AttachScrubberHandlers(PositionSlider);
+        SetControlHint(PositionSlider, "Playback position");
+        Grid.SetColumn(PositionSlider, 1);
+        seekRow.Children.Add(PositionSlider);
+
+        DurationTextBlock = new TextBlock
+        {
+            Text = "00:00",
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(DurationTextBlock, 2);
+        seekRow.Children.Add(DurationTextBlock);
+        return seekRow;
     }
 
     private UIElement BuildPlayerPane(Brush accentBrush)
@@ -677,6 +779,10 @@ public sealed partial class MainWindow : Window
             RowSpacing = 12
         };
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(2, GridUnitType.Star) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         var header = new Grid();
@@ -684,36 +790,76 @@ public sealed partial class MainWindow : Window
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var headerStack = new StackPanel { Spacing = 2 };
         headerStack.Children.Add(new TextBlock
         {
-            Text = "Playlist",
+            Text = "Up Next",
             FontSize = 18,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
         });
         PlaylistSummaryTextBlock = new TextBlock
         {
-            Text = "No queued items",
+            Text = "Queue is empty",
             Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 196, 205, 219))
         };
         headerStack.Children.Add(PlaylistSummaryTextBlock);
         header.Children.Add(headerStack);
-        var queueFolderButton = new Button { Content = new FontIcon { Glyph = "\uE8B7" }, Margin = new Thickness(0, 0, 8, 0) };
+        var queueFolderButton = new Button { Content = new FontIcon { Glyph = "\uE8B7" }, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(10, 8, 10, 8) };
         queueFolderButton.Click += QueuePlaylistFolder_Click;
-        SetControlHint(queueFolderButton, "Queue folder");
+        SetControlHint(queueFolderButton, "Add folder to queue");
         Grid.SetColumn(queueFolderButton, 1);
         header.Children.Add(queueFolderButton);
-        var removeButton = new Button { Content = new FontIcon { Glyph = "\uE74D" }, Margin = new Thickness(0, 0, 8, 0) };
+        var removeButton = new Button { Content = new FontIcon { Glyph = "\uE74D" }, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(10, 8, 10, 8) };
         removeButton.Click += RemoveSelected_Click;
-        SetControlHint(removeButton, "Remove selected item");
+        SetControlHint(removeButton, "Remove selected queued item");
         Grid.SetColumn(removeButton, 2);
         header.Children.Add(removeButton);
-        var clearButton = new Button { Content = new FontIcon { Glyph = "\uE894" } };
+        var clearButton = new Button { Content = new FontIcon { Glyph = "\uE894" }, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(10, 8, 10, 8) };
         clearButton.Click += ClearPlaylist_Click;
-        SetControlHint(clearButton, "Clear playlist");
+        SetControlHint(clearButton, "Clear queue");
         Grid.SetColumn(clearButton, 3);
         header.Children.Add(clearButton);
+        var closeButton = CreateDrawerActionButton("\uE711", "Close queue", ClosePlaylistPane_Click);
+        Grid.SetColumn(closeButton, 4);
+        header.Children.Add(closeButton);
         grid.Children.Add(header);
+
+        var nowPlayingBorder = CreatePanelBorder(
+            new SolidColorBrush(ColorHelper.FromArgb(32, 255, 255, 255)),
+            new SolidColorBrush(ColorHelper.FromArgb(56, 255, 255, 255)),
+            1,
+            new CornerRadius(18),
+            new Thickness(14, 12, 14, 12));
+        Grid.SetRow(nowPlayingBorder, 1);
+        var nowPlayingStack = new StackPanel
+        {
+            Spacing = 4
+        };
+        nowPlayingStack.Children.Add(new TextBlock
+        {
+            Text = "Now Playing",
+            FontSize = 14,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        });
+        NowPlayingQueueTextBlock = new TextBlock
+        {
+            Text = "Nothing is playing.",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 209, 219, 233))
+        };
+        nowPlayingStack.Children.Add(NowPlayingQueueTextBlock);
+        nowPlayingBorder.Child = nowPlayingStack;
+        grid.Children.Add(nowPlayingBorder);
+
+        var queueHeader = new TextBlock
+        {
+            Text = "Queue",
+            FontSize = 14,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        };
+        Grid.SetRow(queueHeader, 2);
+        grid.Children.Add(queueHeader);
 
         PlaylistList = new ListView
         {
@@ -723,8 +869,28 @@ public sealed partial class MainWindow : Window
         };
         PlaylistList.ItemClick += PlaylistList_ItemClick;
         PlaylistList.SelectionChanged += PlaylistList_SelectionChanged;
-        Grid.SetRow(PlaylistList, 1);
+        Grid.SetRow(PlaylistList, 3);
         grid.Children.Add(PlaylistList);
+
+        var historyHeader = new TextBlock
+        {
+            Text = "Recent",
+            FontSize = 14,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        };
+        Grid.SetRow(historyHeader, 4);
+        grid.Children.Add(historyHeader);
+
+        HistoryList = new ListView
+        {
+            DisplayMemberPath = nameof(PlaylistItem.DisplayName),
+            IsItemClickEnabled = true,
+            SelectionMode = ListViewSelectionMode.Single
+        };
+        HistoryList.ItemClick += HistoryList_ItemClick;
+        HistoryList.SelectionChanged += HistoryList_SelectionChanged;
+        Grid.SetRow(HistoryList, 5);
+        grid.Children.Add(HistoryList);
 
         return grid;
     }
@@ -733,65 +899,24 @@ public sealed partial class MainWindow : Window
     {
         var grid = new Grid
         {
-            RowSpacing = 12
+            RowSpacing = 10
         };
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        var seekRow = new Grid
-        {
-            ColumnSpacing = 12
-        };
-        seekRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        seekRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        seekRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        CurrentTimeTextBlock = new TextBlock
-        {
-            Text = "00:00",
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        seekRow.Children.Add(CurrentTimeTextBlock);
-
-        PositionSlider = new Slider
-        {
-            Minimum = 0,
-            Maximum = 1,
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
-        PositionSlider.ValueChanged += PositionSlider_ValueChanged;
-        AttachScrubberHandlers(PositionSlider);
-        SetControlHint(PositionSlider, "Playback position");
-        Grid.SetColumn(PositionSlider, 1);
-        seekRow.Children.Add(PositionSlider);
-
-        DurationTextBlock = new TextBlock
-        {
-            Text = "00:00",
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        Grid.SetColumn(DurationTextBlock, 2);
-        seekRow.Children.Add(DurationTextBlock);
-        grid.Children.Add(seekRow);
 
         var transportHost = new Grid();
         transportHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         transportHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         transportHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetRow(transportHost, 1);
         var transportButtons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 16,
+            Spacing = 20,
             HorizontalAlignment = HorizontalAlignment.Center
         };
         Grid.SetColumn(transportButtons, 1);
         transportButtons.Children.Add(CreateTransportButton(new SymbolIcon(Symbol.Previous), "Previous track", PreviousTrack_Click));
         PlayPauseButton = CreateTransportButton(new SymbolIcon(Symbol.Play), "Play", PlayPauseButton_Click, emphasized: true);
-        PlayPauseButton.MinWidth = 72;
-        PlayPauseButton.MinHeight = 52;
-        PlayPauseButton.Padding = new Thickness(18, 10, 18, 10);
         transportButtons.Children.Add(PlayPauseButton);
         transportButtons.Children.Add(CreateTransportButton(new SymbolIcon(Symbol.Next), "Next track", NextTrack_Click));
         transportHost.Children.Add(transportButtons);
@@ -804,7 +929,7 @@ public sealed partial class MainWindow : Window
         secondaryRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         secondaryRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         secondaryRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetRow(secondaryRow, 2);
+        Grid.SetRow(secondaryRow, 1);
 
         var secondaryButtons = new StackPanel
         {
@@ -848,10 +973,6 @@ public sealed partial class MainWindow : Window
         secondaryRow.Children.Add(volumeCluster);
         grid.Children.Add(secondaryRow);
 
-        var languageDrawer = BuildLanguageToolsDrawer();
-        Grid.SetRow(languageDrawer, 3);
-        grid.Children.Add(languageDrawer);
-
         return grid;
     }
 
@@ -865,17 +986,21 @@ public sealed partial class MainWindow : Window
         LanguageToolsToggleButton = new Button
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(0),
+            BorderThickness = new Thickness(0),
+            Background = new SolidColorBrush(Colors.Transparent)
         };
         LanguageToolsToggleButton.Click += LanguageToolsToggleButton_Click;
+        SetControlHint(LanguageToolsToggleButton, "Toggle language tools");
         drawer.Children.Add(LanguageToolsToggleButton);
 
         LanguageToolsContentBorder = CreatePanelBorder(
-            new SolidColorBrush(ColorHelper.FromArgb(70, 255, 255, 255)),
-            new SolidColorBrush(ColorHelper.FromArgb(90, 86, 101, 122)),
-            1,
-            new CornerRadius(14),
-            new Thickness(14));
+            new SolidColorBrush(ColorHelper.FromArgb(40, 255, 255, 255)),
+            new SolidColorBrush(ColorHelper.FromArgb(0, 0, 0, 0)),
+            0,
+            new CornerRadius(18),
+            new Thickness(16, 14, 16, 16));
 
         var languageGrid = new Grid
         {
@@ -888,18 +1013,36 @@ public sealed partial class MainWindow : Window
         languageGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         languageGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var languageHeader = new StackPanel { Spacing = 4 };
-        languageHeader.Children.Add(new TextBlock
+        var languageHeader = new Grid
+        {
+            ColumnSpacing = 12
+        };
+        languageHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        languageHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var languageHeaderText = new StackPanel { Spacing = 4 };
+        languageHeaderText.Children.Add(new TextBlock
         {
             Text = "Language Tools",
             FontSize = 16,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
         });
-        languageHeader.Children.Add(new TextBlock
+        languageHeaderText.Children.Add(new TextBlock
         {
-            Text = "Language processing and subtitle behavior.",
+            Text = "Transcription, translation, and subtitle behavior.",
             Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 196, 205, 219))
         });
+        languageHeader.Children.Add(languageHeaderText);
+        LanguageToolsSubtitleToggleButton = new ToggleButton
+        {
+            MinWidth = 116,
+            Padding = new Thickness(12, 8, 12, 8),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top
+        };
+        LanguageToolsSubtitleToggleButton.Click += SubtitleVisibilityToggleButton_Click;
+        SetControlHint(LanguageToolsSubtitleToggleButton, "Toggle subtitles");
+        Grid.SetColumn(LanguageToolsSubtitleToggleButton, 1);
+        languageHeader.Children.Add(LanguageToolsSubtitleToggleButton);
         Grid.SetColumnSpan(languageHeader, 2);
         languageGrid.Children.Add(languageHeader);
 
@@ -1129,9 +1272,9 @@ public sealed partial class MainWindow : Window
         var button = new Button
         {
             Content = icon,
-            MinWidth = emphasized ? 64 : 48,
-            MinHeight = emphasized ? 44 : 40,
-            Padding = emphasized ? new Thickness(14, 8, 14, 8) : new Thickness(10, 8, 10, 8)
+            MinWidth = emphasized ? 88 : 60,
+            MinHeight = emphasized ? 60 : 50,
+            Padding = emphasized ? new Thickness(22, 14, 22, 14) : new Thickness(14, 12, 14, 12)
         };
         button.Click += handler;
         SetControlHint(button, label);
@@ -1170,8 +1313,8 @@ public sealed partial class MainWindow : Window
         ViewModel.StatusMessage = "Open local media or subtitles to start playback.";
         ViewModel.IsStatusOpen = true;
         ViewModel.ActiveHardwareDecoder = "mpv ready";
-        ViewModel.Browser.IsVisible = settings.ShowBrowserPanel;
-        ViewModel.Playlist.IsVisible = settings.ShowPlaylistPanel;
+        ViewModel.Browser.IsVisible = false;
+        ViewModel.Queue.IsVisible = false;
         ViewModel.Transport.Volume = Math.Clamp(settings.VolumeLevel, 0, 1);
         ViewModel.Transport.PlaybackRate = settings.DefaultPlaybackRate;
         _lastNonOffSubtitleRenderMode = settings.SubtitleRenderMode == SubtitleRenderMode.Off
@@ -1204,7 +1347,7 @@ public sealed partial class MainWindow : Window
         TranslationToggleSwitch.IsOn = false;
         AutoTranslateToggleSwitch.IsOn = false;
         BrowserPaneToggle.IsChecked = ViewModel.Browser.IsVisible;
-        PlaylistPaneToggle.IsChecked = ViewModel.Playlist.IsVisible;
+        PlaylistPaneToggle.IsChecked = ViewModel.Queue.IsVisible;
         ApplySubtitleStyleSettings();
         UpdateSubtitleRenderModeFlyoutChecks();
         UpdateHardwareDecodingFlyoutChecks();
@@ -1238,14 +1381,19 @@ public sealed partial class MainWindow : Window
 
     private string? GetActiveWindowSubtitle()
     {
-        if (_shellController.CurrentPlaylistItem is { DisplayName: { Length: > 0 } currentItemName })
+        if (_shellController.NowPlayingItem is { DisplayName: { Length: > 0 } currentItemName })
         {
             return currentItemName;
         }
 
-        if (ViewModel.Playlist.SelectedItem is { DisplayName: { Length: > 0 } selectedPlaylistName })
+        if (ViewModel.Queue.SelectedQueueItem is { DisplayName: { Length: > 0 } selectedQueueName })
         {
-            return selectedPlaylistName;
+            return selectedQueueName;
+        }
+
+        if (ViewModel.Queue.SelectedHistoryItem is { DisplayName: { Length: > 0 } selectedHistoryName })
+        {
+            return selectedHistoryName;
         }
 
         if (_selectedLibraryNode is { IsFolder: false, Name: { Length: > 0 } } selectedLibraryNode)
@@ -1288,12 +1436,24 @@ public sealed partial class MainWindow : Window
         SaveCurrentSettings();
         _stageCoordinator.Dispose();
         _shellProjectionService.ProjectionChanged -= ShellProjectionService_ProjectionChanged;
+        _shellController.QueueSnapshotChanged -= ShellController_QueueSnapshotChanged;
         _shellProjectionService.Dispose();
         (_subtitlePresenter as IDisposable)?.Dispose();
         _subtitleWorkflowController.Dispose();
         _shellController.Dispose();
         _playbackBackendCoordinator.Dispose();
         _ = _playbackBackend.DisposeAsync();
+    }
+
+    private void ShellController_QueueSnapshotChanged(PlaybackQueueSnapshot snapshot)
+    {
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            ApplyQueueSnapshot(snapshot);
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(() => ApplyQueueSnapshot(snapshot));
     }
 
     private void SaveCurrentSettings()
@@ -1303,7 +1463,7 @@ public sealed partial class MainWindow : Window
             _settingsFacade.UpdateLayout(
                 ViewModel.Settings,
                 ViewModel.Browser.IsVisible,
-                ViewModel.Playlist.IsVisible,
+                ViewModel.Queue.IsVisible,
                 _windowModeService.CurrentMode),
             ViewModel.Settings.HardwareDecodingMode,
             ViewModel.Transport.PlaybackRate,
@@ -1325,7 +1485,7 @@ public sealed partial class MainWindow : Window
     private async void OpenFile_Click(object sender, RoutedEventArgs e)
     {
         var files = await _filePickerService.PickMediaFilesAsync();
-        await ApplyQueuedMediaAsync(_shellController.EnqueueFiles(files, autoplay: true));
+        await ApplyQueueMutationAsync(_shellController.EnqueueFiles(files, autoplay: true));
     }
 
     private async void OpenFolder_Click(object sender, RoutedEventArgs e)
@@ -1377,7 +1537,23 @@ public sealed partial class MainWindow : Window
 
     private void PlaylistPaneToggle_Click(object sender, RoutedEventArgs e)
     {
-        ViewModel.Playlist.IsVisible = PlaylistPaneToggle.IsChecked == true;
+        ViewModel.Queue.IsVisible = PlaylistPaneToggle.IsChecked == true;
+        SyncPaneLayout(RootGrid.ActualWidth);
+        SaveCurrentSettings();
+    }
+
+    private void CloseBrowserPane_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.Browser.IsVisible = false;
+        BrowserPaneToggle.IsChecked = false;
+        SyncPaneLayout(RootGrid.ActualWidth);
+        SaveCurrentSettings();
+    }
+
+    private void ClosePlaylistPane_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.Queue.IsVisible = false;
+        PlaylistPaneToggle.IsChecked = false;
         SyncPaneLayout(RootGrid.ActualWidth);
         SaveCurrentSettings();
     }
@@ -1544,13 +1720,27 @@ public sealed partial class MainWindow : Window
     {
         if (e.ClickedItem is PlaylistItem item)
         {
-            await LoadPlaylistItemAsync(item);
+            await ApplyQueueMutationAsync(_shellController.PlayNow(item.Path));
         }
     }
 
     private void PlaylistList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        ViewModel.Playlist.SelectedItem = PlaylistList.SelectedItem as PlaylistItem;
+        ViewModel.Queue.SelectedQueueItem = PlaylistList.SelectedItem as PlaylistItem;
+        UpdateWindowHeader();
+    }
+
+    private async void HistoryList_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is PlaylistItem item)
+        {
+            await ApplyQueueMutationAsync(_shellController.PlayNow(item.Path));
+        }
+    }
+
+    private void HistoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        ViewModel.Queue.SelectedHistoryItem = HistoryList.SelectedItem as PlaylistItem;
         UpdateWindowHeader();
     }
 
@@ -1561,25 +1751,23 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _shellController.RemovePlaylistItemAt(PlaylistList.SelectedIndex);
-        RefreshPlaylistView();
+        _shellController.RemoveQueueItemAt(PlaylistList.SelectedIndex);
     }
 
     private void ClearPlaylist_Click(object sender, RoutedEventArgs e)
     {
-        _shellController.ClearPlaylist();
-        RefreshPlaylistView();
-        ShowStatus("Playlist cleared.");
+        _shellController.ClearQueue();
+        ShowStatus("Queue cleared.");
     }
 
     private async void PreviousTrack_Click(object sender, RoutedEventArgs e)
     {
-        await LoadPlaylistItemAsync(_shellController.MovePrevious());
+        await LoadPlaybackItemAsync(_shellController.MovePrevious());
     }
 
     private async void NextTrack_Click(object sender, RoutedEventArgs e)
     {
-        await LoadPlaylistItemAsync(_shellController.MoveNext());
+        await LoadPlaybackItemAsync(_shellController.MoveNext());
     }
 
     private void SeekBack_Click(object sender, RoutedEventArgs e)
@@ -1870,10 +2058,10 @@ public sealed partial class MainWindow : Window
                 SetPlaybackRateShortcut(1.0);
                 break;
             case "next_item":
-                await LoadPlaylistItemAsync(_shellController.MoveNext());
+                await LoadPlaybackItemAsync(_shellController.MoveNext());
                 break;
             case "previous_item":
-                await LoadPlaylistItemAsync(_shellController.MovePrevious());
+                await LoadPlaybackItemAsync(_shellController.MovePrevious());
                 break;
             case "subtitle_toggle":
                 ToggleSubtitleVisibility();
@@ -2057,8 +2245,19 @@ public sealed partial class MainWindow : Window
 
     private void LanguageToolsToggleButton_Click(object sender, RoutedEventArgs e)
     {
-        _isLanguageToolsExpanded = !_isLanguageToolsExpanded;
+        if (IsLanguageToolsEffectivelyExpanded())
+        {
+            _isLanguageToolsExpanded = false;
+            _isLanguageToolsAutoCollapseOverridden = false;
+        }
+        else
+        {
+            _isLanguageToolsExpanded = true;
+            _isLanguageToolsAutoCollapseOverridden = _autoCollapsedLanguageToolsForPortraitVideo;
+        }
+
         UpdateLanguageToolsDrawerState();
+        RefreshStageLayoutAfterLanguageToolsChange();
     }
 
     private void UpdateLanguageToolsDrawerState()
@@ -2068,14 +2267,110 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        LanguageToolsContentBorder.Visibility = _isLanguageToolsExpanded ? Visibility.Visible : Visibility.Collapsed;
-        LanguageToolsToggleButton.Content = _isLanguageToolsExpanded
-            ? "Language Tools   Hide"
-            : "Language Tools   Show";
+        var isEffectivelyExpanded = IsLanguageToolsEffectivelyExpanded();
+        LanguageToolsContentBorder.Visibility = isEffectivelyExpanded ? Visibility.Visible : Visibility.Collapsed;
+        var header = new Grid
+        {
+            ColumnSpacing = 16
+        };
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var titleStack = new StackPanel
+        {
+            Spacing = 2
+        };
+        titleStack.Children.Add(new TextBlock
+        {
+            Text = "Language Tools",
+            FontSize = 16,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        });
+        titleStack.Children.Add(new TextBlock
+        {
+            Text = _autoCollapsedLanguageToolsForPortraitVideo
+                ? _isLanguageToolsAutoCollapseOverridden
+                    ? "Reopened manually for portrait video."
+                    : "Collapsed to preserve height for portrait video. Click Show to reopen."
+                : "Transcription, translation, and subtitle behavior.",
+            Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 196, 205, 219))
+        });
+        header.Children.Add(titleStack);
+        var actionText = new TextBlock
+        {
+            Text = isEffectivelyExpanded ? "Hide" : "Show",
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 209, 219, 233))
+        };
+        Grid.SetColumn(actionText, 1);
+        header.Children.Add(actionText);
+        LanguageToolsToggleButton.Content = header;
+    }
+
+    private bool IsLanguageToolsEffectivelyExpanded()
+    {
+        return _isLanguageToolsExpanded
+            && (!_autoCollapsedLanguageToolsForPortraitVideo || _isLanguageToolsAutoCollapseOverridden);
+    }
+
+    private void UpdatePortraitVideoLanguageToolsState()
+    {
+        var shouldAutoCollapse = false;
+        if (_windowModeService.CurrentMode == PlaybackWindowMode.Standard
+            && LanguageToolsPane is not null
+            && PlayerHost is not null)
+        {
+            var playbackSnapshot = _shellController.CurrentPlaybackSnapshot;
+            var displayWidth = playbackSnapshot.VideoDisplayWidth > 0
+                ? playbackSnapshot.VideoDisplayWidth
+                : playbackSnapshot.VideoWidth;
+            var displayHeight = playbackSnapshot.VideoDisplayHeight > 0
+                ? playbackSnapshot.VideoDisplayHeight
+                : playbackSnapshot.VideoHeight;
+
+            if (displayWidth > 0
+                && displayHeight > 0
+                && displayHeight > displayWidth
+                && PlayerHost.View.ActualWidth > 0
+                && PlayerHost.View.ActualHeight > 0)
+            {
+                var requiredHeightAtCurrentWidth = PlayerHost.View.ActualWidth * displayHeight / (double)displayWidth;
+                shouldAutoCollapse = requiredHeightAtCurrentWidth > PlayerHost.View.ActualHeight + 8;
+            }
+        }
+
+        if (!shouldAutoCollapse)
+        {
+            _isLanguageToolsAutoCollapseOverridden = false;
+        }
+
+        if (_autoCollapsedLanguageToolsForPortraitVideo != shouldAutoCollapse)
+        {
+            _autoCollapsedLanguageToolsForPortraitVideo = shouldAutoCollapse;
+            UpdateLanguageToolsDrawerState();
+            RefreshStageLayoutAfterLanguageToolsChange();
+        }
+    }
+
+    private void RefreshStageLayoutAfterLanguageToolsChange()
+    {
+        if (PlayerHost is null)
+        {
+            return;
+        }
+
+        PlayerHost.RequestHostBoundsSync();
+        UpdateSubtitleVisibility();
+        _stageCoordinator?.HandleStageLayoutChanged();
     }
 
     private async void RootGrid_Drop(object sender, DragEventArgs e)
     {
+        if (await TryHandleLibraryQueueDropAsync(sender, e.DataView))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (!e.DataView.Contains(StandardDataFormats.StorageItems))
         {
             return;
@@ -2098,11 +2393,32 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        await ApplyQueuedMediaAsync(_shellController.EnqueueDroppedItems(files, folders));
+        if (IsPlaylistDropTarget(sender))
+        {
+            var result = _shellController.AddToQueue(
+                files.Concat(folders.SelectMany(folder => _libraryBrowserService.EnumerateMediaFiles(folder, recursive: true))));
+            if (!string.IsNullOrWhiteSpace(result.StatusMessage))
+            {
+                ShowStatus(result.StatusMessage, result.IsError);
+            }
+
+            return;
+        }
+
+        await ApplyQueueMutationAsync(_shellController.EnqueueDroppedItems(files, folders));
     }
 
     private void RootGrid_DragOver(object sender, DragEventArgs e)
     {
+        if (e.DataView.Contains(LibraryQueueDragFormat))
+        {
+            e.AcceptedOperation = IsPlaylistDropTarget(sender)
+                ? DataPackageOperation.Copy
+                : DataPackageOperation.None;
+            e.Handled = true;
+            return;
+        }
+
         e.AcceptedOperation = DataPackageOperation.Copy;
         e.Handled = true;
     }
@@ -2123,6 +2439,12 @@ public sealed partial class MainWindow : Window
 
         SyncPaneLayout(e.NewSize.Width);
         ApplyAdaptiveStandardLayout(e.NewSize.Height);
+        UpdatePortraitVideoLanguageToolsState();
+        if (!string.IsNullOrWhiteSpace(_pendingAutoFitPath))
+        {
+            TryApplyStandardAutoFit();
+        }
+
         PlayerHost.RequestHostBoundsSync();
         UpdateSubtitleVisibility();
         _stageCoordinator.HandleStageLayoutChanged();
@@ -2169,9 +2491,77 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var item = _shellController.EnsurePlaylistItem(node.Path);
-        RefreshPlaylistView();
-        await LoadPlaylistItemAsync(item);
+        await LoadLibraryNodeAsync(node);
+    }
+
+    private async void LibraryTree_SelectionChanged(TreeView sender, TreeViewSelectionChangedEventArgs args)
+    {
+        if (sender.SelectedNode?.Content is not LibraryNode node)
+        {
+            return;
+        }
+
+        _selectedLibraryNode = node;
+        UpdateWindowHeader();
+        if (node.IsFolder)
+        {
+            return;
+        }
+
+        await Task.Yield();
+        if (_isLibraryDragOperationInProgress)
+        {
+            return;
+        }
+
+        await LoadLibraryNodeAsync(node);
+    }
+
+    private void LibraryTree_DragItemsStarting(TreeView sender, TreeViewDragItemsStartingEventArgs args)
+    {
+        var paths = args.Items
+            .OfType<LibraryNode>()
+            .Where(node => !node.IsFolder && !string.IsNullOrWhiteSpace(node.Path))
+            .Select(node => node.Path)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (paths.Length == 0)
+        {
+            args.Cancel = true;
+            return;
+        }
+
+        _isLibraryDragOperationInProgress = true;
+        args.Data.RequestedOperation = DataPackageOperation.Copy;
+        args.Data.SetData(LibraryQueueDragFormat, string.Join('\n', paths));
+    }
+
+    private void LibraryTree_DragItemsCompleted(TreeView sender, TreeViewDragItemsCompletedEventArgs args)
+    {
+        _isLibraryDragOperationInProgress = false;
+    }
+
+    private async Task LoadLibraryNodeAsync(LibraryNode node)
+    {
+        if (node.IsFolder || string.IsNullOrWhiteSpace(node.Path))
+        {
+            return;
+        }
+
+        if (string.Equals(_pendingLibraryLoadPath, node.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _pendingLibraryLoadPath = node.Path;
+        try
+        {
+            await ApplyQueueMutationAsync(_shellController.PlayNow(node.Path));
+        }
+        finally
+        {
+            _pendingLibraryLoadPath = null;
+        }
     }
 
     private void LibraryTree_RightTapped(object sender, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs e)
@@ -2181,13 +2571,33 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        ShowLibraryContextMenu(anchor, node);
+        e.Handled = true;
+    }
+
+    private void LibraryTree_ContextRequested(UIElement sender, Microsoft.UI.Xaml.Input.ContextRequestedEventArgs args)
+    {
+        if (!TryGetLibraryNodeFromElement(args.OriginalSource as DependencyObject, out var anchor, out var node))
+        {
+            return;
+        }
+
+        ShowLibraryContextMenu(anchor, node, args);
+        args.Handled = true;
+    }
+
+    private void ShowLibraryContextMenu(
+        FrameworkElement anchor,
+        LibraryNode node,
+        Microsoft.UI.Xaml.Input.ContextRequestedEventArgs? contextArgs = null)
+    {
         _selectedLibraryNode = node;
         UpdateWindowHeader();
         var menu = new MenuFlyout();
         if (node.IsFolder)
         {
             var queueFolderItem = new MenuFlyoutItem { Text = "Queue Folder" };
-            queueFolderItem.Click += async (_, _) => await ApplyQueuedMediaAsync(_shellController.EnqueueFolder(node.Path, autoplay: false));
+            queueFolderItem.Click += async (_, _) => await ApplyQueueMutationAsync(_shellController.EnqueueFolder(node.Path, autoplay: false));
             menu.Items.Add(queueFolderItem);
 
             var isPinnedRoot = ViewModel.Browser.Roots.Any(root => string.Equals(root.Path, node.Path, StringComparison.OrdinalIgnoreCase));
@@ -2211,22 +2621,25 @@ public sealed partial class MainWindow : Window
         else
         {
             var playNowItem = new MenuFlyoutItem { Text = "Play Now" };
-            playNowItem.Click += async (_, _) =>
-            {
-                var item = _shellController.EnsurePlaylistItem(node.Path);
-                RefreshPlaylistView();
-                await LoadPlaylistItemAsync(item);
-            };
+            playNowItem.Click += async (_, _) => await ApplyQueueMutationAsync(_shellController.PlayNow(node.Path));
             menu.Items.Add(playNowItem);
 
-            var addItem = new MenuFlyoutItem { Text = "Add to Playlist" };
+            var playNextItem = new MenuFlyoutItem { Text = "Play Next" };
+            playNextItem.Click += (_, _) =>
+            {
+                var result = _shellController.PlayNext(node.Path);
+                if (!string.IsNullOrWhiteSpace(result.StatusMessage))
+                {
+                    ShowStatus(result.StatusMessage, result.IsError);
+                }
+            };
+            menu.Items.Add(playNextItem);
+
+            var addItem = new MenuFlyoutItem { Text = "Add to Queue" };
             addItem.Click += (_, _) =>
             {
-                var item = _shellController.EnsurePlaylistItem(node.Path);
-                RefreshPlaylistView();
-                ShowStatus(item is null
-                    ? "Unable to add media to the playlist."
-                    : $"{item.DisplayName} is ready in the playlist.");
+                var result = _shellController.AddToQueue([node.Path]);
+                ShowStatus(result.StatusMessage ?? "Unable to add media to the queue.", result.IsError);
             };
             menu.Items.Add(addItem);
         }
@@ -2234,8 +2647,16 @@ public sealed partial class MainWindow : Window
         var openExplorerItem = new MenuFlyoutItem { Text = "Open in Explorer" };
         openExplorerItem.Click += (_, _) => OpenInExplorer(node.Path, selectItem: !node.IsFolder);
         menu.Items.Add(openExplorerItem);
+        if (contextArgs is not null && contextArgs.TryGetPosition(anchor, out var point))
+        {
+            menu.ShowAt(anchor, new FlyoutShowOptions
+            {
+                Position = point
+            });
+            return;
+        }
+
         menu.ShowAt(anchor);
-        e.Handled = true;
     }
 
     private void PlayerHost_MediaOpened(PlaybackStateSnapshot snapshot)
@@ -2243,6 +2664,7 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(async () =>
         {
             PlayerHost.RequestHostBoundsSync();
+            UpdatePortraitVideoLanguageToolsState();
             TryApplyStandardAutoFit();
             await _shellController.SetAudioDelayAsync(_audioDelaySeconds);
             await _shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds);
@@ -2274,6 +2696,7 @@ public sealed partial class MainWindow : Window
         {
             if (snapshot.VideoWidth > 0 && snapshot.VideoHeight > 0)
             {
+                UpdatePortraitVideoLanguageToolsState();
                 TryApplyStandardAutoFit();
             }
         });
@@ -2284,14 +2707,13 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(async () =>
         {
             var result = _shellController.HandleMediaEnded(ViewModel.Settings.ResumeEnabled);
-            RefreshPlaylistView();
             if (result.NextItem is null)
             {
                 ShowStatus(result.StatusMessage);
                 return;
             }
 
-            await LoadPlaylistItemAsync(result.NextItem);
+            await LoadPlaybackItemAsync(result.NextItem);
         });
     }
 
@@ -3133,10 +3555,10 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        await ApplyQueuedMediaAsync(_shellController.EnqueueFolder(folder, autoplay));
+        await ApplyQueueMutationAsync(_shellController.EnqueueFolder(folder, autoplay));
     }
 
-    private async Task ApplyQueuedMediaAsync(ShellQueueMediaResult result)
+    private async Task ApplyQueueMutationAsync(ShellQueueMediaResult result)
     {
         foreach (var folder in result.PinnedFolders)
         {
@@ -3148,10 +3570,9 @@ public sealed partial class MainWindow : Window
             ShowStatus(result.StatusMessage, result.IsError);
         }
 
-        RefreshPlaylistView();
         if (result.ItemToLoad is not null)
         {
-            await LoadPlaylistItemAsync(result.ItemToLoad);
+            await LoadPlaybackItemAsync(result.ItemToLoad);
         }
     }
 
@@ -3211,7 +3632,7 @@ public sealed partial class MainWindow : Window
         Process.Start(startInfo);
     }
 
-    private async Task LoadPlaylistItemAsync(PlaylistItem? item)
+    private async Task LoadPlaybackItemAsync(PlaylistItem? item)
     {
         if (item is null || string.IsNullOrWhiteSpace(item.Path) || !File.Exists(item.Path))
         {
@@ -3219,9 +3640,10 @@ public sealed partial class MainWindow : Window
         }
 
         _subtitleSourceOnlyOverrideVideoPath = null;
+        _isLanguageToolsAutoCollapseOverridden = false;
         _pendingAutoFitPath = item.Path;
         _lastAutoFitSignature = null;
-        var loaded = await _shellController.LoadPlaylistItemAsync(
+        var loaded = await _shellController.LoadPlaybackItemAsync(
             item,
             BuildShellLoadOptions(),
             CancellationToken.None);
@@ -3230,29 +3652,43 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        RefreshPlaylistView();
         PlayerHost.RequestHostBoundsSync();
         UpdateWindowHeader();
     }
 
-    private void RefreshPlaylistView()
+    private void ApplyQueueSnapshot(PlaybackQueueSnapshot snapshot)
     {
-        ViewModel.Playlist.Items.Clear();
-        foreach (var item in _shellController.PlaylistItems)
+        ViewModel.Queue.NowPlayingItem = snapshot.NowPlayingItem;
+        ViewModel.Queue.QueueItems.Clear();
+        foreach (var item in snapshot.QueueItems)
         {
-            ViewModel.Playlist.Items.Add(item);
+            ViewModel.Queue.QueueItems.Add(item);
         }
 
-        ViewModel.Playlist.CurrentIndex = _shellController.CurrentPlaylistIndex;
-        if (_shellController.CurrentPlaylistIndex >= 0 && _shellController.CurrentPlaylistIndex < ViewModel.Playlist.Items.Count)
+        ViewModel.Queue.HistoryItems.Clear();
+        foreach (var item in snapshot.HistoryItems)
         {
-            PlaylistList.SelectedIndex = _shellController.CurrentPlaylistIndex;
-            ViewModel.Playlist.SelectedItem = ViewModel.Playlist.Items[_shellController.CurrentPlaylistIndex];
+            ViewModel.Queue.HistoryItems.Add(item);
         }
 
-        PlaylistSummaryTextBlock.Text = ViewModel.Playlist.Items.Count == 0
-            ? "No queued items"
-            : $"{ViewModel.Playlist.Items.Count} queued item(s)";
+        if (ViewModel.Queue.SelectedQueueItem is not null
+            && !snapshot.QueueItems.Any(item => string.Equals(item.Path, ViewModel.Queue.SelectedQueueItem.Path, StringComparison.OrdinalIgnoreCase)))
+        {
+            ViewModel.Queue.SelectedQueueItem = null;
+            PlaylistList.SelectedItem = null;
+        }
+
+        if (ViewModel.Queue.SelectedHistoryItem is not null
+            && !snapshot.HistoryItems.Any(item => string.Equals(item.Path, ViewModel.Queue.SelectedHistoryItem.Path, StringComparison.OrdinalIgnoreCase)))
+        {
+            ViewModel.Queue.SelectedHistoryItem = null;
+            HistoryList.SelectedItem = null;
+        }
+
+        NowPlayingQueueTextBlock.Text = snapshot.NowPlayingItem?.DisplayName ?? "Nothing is playing.";
+        PlaylistSummaryTextBlock.Text = snapshot.QueueItems.Count == 0
+            ? "Queue is empty"
+            : $"{snapshot.QueueItems.Count} item(s) up next";
         UpdateWindowHeader();
     }
 
@@ -3294,20 +3730,33 @@ public sealed partial class MainWindow : Window
             PlaylistPane.Visibility = Visibility.Collapsed;
             BrowserColumn.Width = new GridLength(0);
             PlaylistColumn.Width = new GridLength(0);
+            ShellContentGrid.ColumnSpacing = 0;
             BrowserPaneToggle.IsChecked = ViewModel.Browser.IsVisible;
-            PlaylistPaneToggle.IsChecked = ViewModel.Playlist.IsVisible;
+            PlaylistPaneToggle.IsChecked = ViewModel.Queue.IsVisible;
             return;
         }
 
-        var showBrowser = ViewModel.Browser.IsVisible && width >= 900;
-        var showPlaylist = ViewModel.Playlist.IsVisible && width >= 1160;
+        var showBrowser = ViewModel.Browser.IsVisible && width >= GetBrowserDrawerVisibilityThreshold();
+        var showPlaylist = ViewModel.Queue.IsVisible && width >= GetPlaylistDrawerVisibilityThreshold();
+        var browserWidth = GetPreferredBrowserDrawerWidth(width);
+        var playlistWidth = GetPreferredPlaylistDrawerWidth(width);
+        if (showBrowser && showPlaylist && width < 1500)
+        {
+            browserWidth = 260;
+            playlistWidth = 288;
+        }
 
         BrowserPane.Visibility = showBrowser ? Visibility.Visible : Visibility.Collapsed;
         PlaylistPane.Visibility = showPlaylist ? Visibility.Visible : Visibility.Collapsed;
-        BrowserColumn.Width = showBrowser ? new GridLength(280) : new GridLength(0);
-        PlaylistColumn.Width = showPlaylist ? new GridLength(320) : new GridLength(0);
+        BrowserColumn.Width = showBrowser ? new GridLength(browserWidth) : new GridLength(0);
+        PlaylistColumn.Width = showPlaylist ? new GridLength(playlistWidth) : new GridLength(0);
+        ShellContentGrid.ColumnSpacing = showBrowser && showPlaylist
+            ? 16
+            : showBrowser || showPlaylist
+                ? 12
+                : 0;
         BrowserPaneToggle.IsChecked = ViewModel.Browser.IsVisible;
-        PlaylistPaneToggle.IsChecked = ViewModel.Playlist.IsVisible;
+        PlaylistPaneToggle.IsChecked = ViewModel.Queue.IsVisible;
     }
 
     private void ApplyAdaptiveStandardLayout(double height)
@@ -3317,17 +3766,35 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        var narrowWindow = RootGrid.ActualWidth > 0 && RootGrid.ActualWidth < 980;
         var hideStatus = height < 760;
-        var compactTransport = height < 700;
-        var hideTransport = height < 620;
+        var compactLayout = height < 760 || narrowWindow;
+        var hideLanguageTools = height < 640;
+        var hideTransport = height < 580;
+        var hideTimeline = height < 520;
 
         StatusInfoBar.Visibility = hideStatus ? Visibility.Collapsed : Visibility.Visible;
+        TimelinePane.Visibility = hideTimeline ? Visibility.Collapsed : Visibility.Visible;
         TransportPane.Visibility = hideTransport ? Visibility.Collapsed : Visibility.Visible;
-        TransportPane.Margin = compactTransport ? new Thickness(8, 0, 8, 8) : new Thickness(16, 0, 16, 16);
-        TransportPane.Padding = compactTransport ? new Thickness(10, 8, 10, 8) : new Thickness(16, 14, 16, 14);
-        ShellContentGrid.Padding = compactTransport ? new Thickness(12, 8, 12, 8) : new Thickness(16, 12, 16, 12);
-        PlayerPane.MinHeight = compactTransport ? 240 : 280;
+        LanguageToolsPane.Visibility = hideLanguageTools ? Visibility.Collapsed : Visibility.Visible;
+        CenterStageGrid.RowSpacing = compactLayout ? 8 : 10;
+        TimelinePane.Padding = compactLayout ? new Thickness(12, 8, 12, 8) : new Thickness(14, 10, 14, 10);
+        TransportPane.Padding = compactLayout ? new Thickness(8, 4, 8, 4) : new Thickness(10, 6, 10, 6);
+        LanguageToolsPane.Padding = compactLayout ? new Thickness(14, 12, 14, 14) : new Thickness(16, 14, 16, 16);
+        ShellContentGrid.Padding = compactLayout ? new Thickness(14, 8, 14, 12) : new Thickness(20, 10, 20, 18);
+        PlayerPane.MinHeight = compactLayout ? 250 : 320;
+        UpdatePortraitVideoLanguageToolsState();
     }
+
+    private static double GetBrowserDrawerVisibilityThreshold() => 980;
+
+    private static double GetPlaylistDrawerVisibilityThreshold() => 1320;
+
+    private static double GetPreferredBrowserDrawerWidth(double width)
+        => width >= 1560 ? 312 : 276;
+
+    private static double GetPreferredPlaylistDrawerWidth(double width)
+        => width >= 1560 ? 336 : 300;
 
     private void TryApplyStandardAutoFit()
     {
@@ -3350,29 +3817,72 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var signature = $"{sourcePath}|{displayWidth}x{displayHeight}";
-        if (string.Equals(signature, _lastAutoFitSignature, StringComparison.Ordinal))
+        var signature = $"{sourcePath}|{displayWidth}x{displayHeight}|b:{ViewModel.Browser.IsVisible}|q:{ViewModel.Queue.IsVisible}|lt:{IsLanguageToolsEffectivelyExpanded()}";
+        if (_pendingAutoFitPath is null
+            && string.Equals(signature, _lastAutoFitSignature, StringComparison.Ordinal))
         {
             return;
         }
 
         var currentBounds = _windowModeService.CurrentBounds;
         var workArea = _windowModeService.GetCurrentDisplayBounds(workArea: true);
+        var stageWidth = Math.Max(PlayerHost.View.ActualWidth, 1);
         var stageHeight = Math.Max(PlayerHost.View.ActualHeight, 1);
-        var playerChromeWidth = Math.Max(PlayerPane.ActualWidth - PlayerHost.View.ActualWidth, 0);
-        var nonPlayerWidth = Math.Max(currentBounds.Width - PlayerPane.ActualWidth, 0);
-        var desiredStageWidth = stageHeight * displayWidth / displayHeight;
-        var desiredWindowWidth = (int)Math.Round(nonPlayerWidth + playerChromeWidth + desiredStageWidth);
-        var minimumWindowWidth = (int)Math.Ceiling(nonPlayerWidth + playerChromeWidth + 420);
-        desiredWindowWidth = Math.Clamp(desiredWindowWidth, minimumWindowWidth, workArea.Width);
+        var nonStageWidth = Math.Max(currentBounds.Width - stageWidth, 0);
+        var nonStageHeight = Math.Max(currentBounds.Height - stageHeight, 0);
+        var aspectRatio = displayWidth / (double)displayHeight;
+        var maxStageWidth = Math.Max(workArea.Width - nonStageWidth, 320);
+        var maxStageHeight = Math.Max(workArea.Height - nonStageHeight, 180);
+        var desiredStageWidth = Math.Min(maxStageWidth, maxStageHeight * aspectRatio);
+        var desiredStageHeight = desiredStageWidth / aspectRatio;
+        if (desiredStageHeight > maxStageHeight)
+        {
+            desiredStageHeight = maxStageHeight;
+            desiredStageWidth = desiredStageHeight * aspectRatio;
+        }
 
-        var desiredWindowHeight = Math.Clamp(currentBounds.Height, 700, workArea.Height);
+        var desiredWindowWidth = (int)Math.Round(nonStageWidth + desiredStageWidth);
+        var desiredWindowHeight = (int)Math.Round(nonStageHeight + desiredStageHeight);
+        var minimumWindowWidth = (int)Math.Ceiling(nonStageWidth + 420);
+        var drawerPreservingWidth = 0d;
+        if (ViewModel.Browser.IsVisible)
+        {
+            drawerPreservingWidth = Math.Max(
+                drawerPreservingWidth,
+                GetBrowserDrawerVisibilityThreshold());
+        }
+
+        if (ViewModel.Queue.IsVisible)
+        {
+            drawerPreservingWidth = Math.Max(
+                drawerPreservingWidth,
+                GetPlaylistDrawerVisibilityThreshold());
+        }
+
+        minimumWindowWidth = Math.Max(minimumWindowWidth, (int)Math.Ceiling(drawerPreservingWidth));
+        if (ViewModel.Browser.IsVisible || ViewModel.Queue.IsVisible)
+        {
+            // Keep open drawers stable when auto-fitting to newly loaded media.
+            minimumWindowWidth = Math.Max(minimumWindowWidth, currentBounds.Width);
+        }
+
+        desiredWindowWidth = Math.Clamp(desiredWindowWidth, minimumWindowWidth, workArea.Width);
+        var minimumWindowHeight = Math.Max((int)Math.Ceiling(nonStageHeight + 200), 700);
+        desiredWindowHeight = Math.Clamp(desiredWindowHeight, minimumWindowHeight, workArea.Height);
         var x = workArea.X + Math.Max((workArea.Width - desiredWindowWidth) / 2, 0);
         var y = workArea.Y + Math.Max((workArea.Height - desiredWindowHeight) / 2, 0);
         var desiredBounds = new RectInt32(x, y, desiredWindowWidth, desiredWindowHeight);
+        var isWidthSettled = Math.Abs(currentBounds.Width - desiredWindowWidth) <= 4;
+        var isHeightSettled = Math.Abs(currentBounds.Height - desiredWindowHeight) <= 4;
+        if (isWidthSettled && isHeightSettled)
+        {
+            _lastAutoFitSignature = signature;
+            _pendingAutoFitPath = null;
+            PlayerHost.RequestHostBoundsSync();
+            return;
+        }
+
         _windowModeService.ApplyStandardBounds(desiredBounds);
-        _lastAutoFitSignature = signature;
-        _pendingAutoFitPath = null;
         PlayerHost.RequestHostBoundsSync();
     }
 
@@ -3426,9 +3936,11 @@ public sealed partial class MainWindow : Window
         AppTitleBar.Visibility = isNonStandard ? Visibility.Collapsed : Visibility.Visible;
         ShellCommandBar.Visibility = isPlayerOnly ? Visibility.Collapsed : Visibility.Visible;
         StatusInfoBar.Visibility = isNonStandard ? Visibility.Collapsed : Visibility.Visible;
+        TimelinePane.Visibility = isPlayerOnly ? Visibility.Collapsed : Visibility.Visible;
         TransportPane.Visibility = isPlayerOnly ? Visibility.Collapsed : Visibility.Visible;
-        ShellContentGrid.Padding = isNonStandard ? new Thickness(0) : new Thickness(16, 12, 16, 12);
-        ShellContentGrid.ColumnSpacing = isNonStandard ? 0 : 16;
+        LanguageToolsPane.Visibility = isPlayerOnly ? Visibility.Collapsed : Visibility.Visible;
+        ShellContentGrid.Padding = isNonStandard ? new Thickness(0) : new Thickness(20, 10, 20, 18);
+        ShellContentGrid.ColumnSpacing = isNonStandard ? 0 : ShellContentGrid.ColumnSpacing;
         PlayerPane.Padding = isNonStandard ? new Thickness(0) : new Thickness(18);
         PlayerPane.BorderThickness = isNonStandard ? new Thickness(0) : new Thickness(1);
         PlayerPane.CornerRadius = isNonStandard ? new CornerRadius(0) : new CornerRadius(24);
@@ -3449,6 +3961,7 @@ public sealed partial class MainWindow : Window
             TryApplyStandardAutoFit();
         }
 
+        UpdatePortraitVideoLanguageToolsState();
         UpdateSubtitleVisibility();
     }
 
@@ -3493,6 +4006,14 @@ public sealed partial class MainWindow : Window
         {
             SubtitleVisibilityToggleButton.IsChecked = ViewModel.Settings.SubtitleRenderMode != SubtitleRenderMode.Off;
             SubtitleVisibilityToggleButton.Label = ViewModel.Settings.SubtitleRenderMode == SubtitleRenderMode.Off
+                ? "Subtitles Off"
+                : "Subtitles On";
+        }
+
+        if (LanguageToolsSubtitleToggleButton is not null)
+        {
+            LanguageToolsSubtitleToggleButton.IsChecked = ViewModel.Settings.SubtitleRenderMode != SubtitleRenderMode.Off;
+            LanguageToolsSubtitleToggleButton.Content = ViewModel.Settings.SubtitleRenderMode == SubtitleRenderMode.Off
                 ? "Subtitles Off"
                 : "Subtitles On";
         }
@@ -3728,10 +4249,49 @@ public sealed partial class MainWindow : Window
             yield return PlaylistPane;
         }
 
+        if (PlaylistList is not null)
+        {
+            yield return PlaylistList;
+        }
+
         if (TransportPane is not null)
         {
             yield return TransportPane;
         }
+    }
+
+    private bool IsPlaylistDropTarget(object sender)
+        => ReferenceEquals(sender, PlaylistPane) || ReferenceEquals(sender, PlaylistList);
+
+    private async Task<bool> TryHandleLibraryQueueDropAsync(object sender, DataPackageView dataView)
+    {
+        if (!IsPlaylistDropTarget(sender) || !dataView.Contains(LibraryQueueDragFormat))
+        {
+            return false;
+        }
+
+        var data = await dataView.GetDataAsync(LibraryQueueDragFormat);
+        if (data is not string rawPaths)
+        {
+            return false;
+        }
+
+        var paths = rawPaths
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (paths.Length == 0)
+        {
+            return true;
+        }
+
+        var result = _shellController.AddToQueue(paths);
+        ShowStatus(result.StatusMessage
+            ?? (paths.Length == 1
+                ? $"Queued {Path.GetFileName(paths[0])}."
+                : $"Queued {paths.Length} item(s) from the library."));
+        return true;
     }
 
     private static bool IsAppStillForeground()

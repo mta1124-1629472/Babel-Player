@@ -392,20 +392,18 @@ public sealed class RemainingArchitecturePlanTests
             File.WriteAllText(Path.ChangeExtension(firstPath, ".srt"), "1\n00:00:00,000 --> 00:00:01,000\nHello\n");
             File.WriteAllText(Path.ChangeExtension(secondPath, ".srt"), "1\n00:00:00,000 --> 00:00:01,000\nWorld\n");
 
-            var playlist = new PlaylistController();
-            var session = new PlaybackSessionController(playlist);
+            var queue = new PlaybackQueueController();
             var backend = new FakeShellPlaybackBackend();
             using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
             using var shell = new ShellController(
-                playlist,
-                session,
+                queue,
                 backend,
                 workflow,
                 new LibraryBrowserService(),
                 new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
             var queueResult = shell.EnqueueFiles([firstPath, secondPath], autoplay: true);
-            var loaded = await shell.LoadPlaylistItemAsync(
+            var loaded = await shell.LoadPlaybackItemAsync(
                 queueResult.ItemToLoad,
                 new ShellLoadMediaOptions
                 {
@@ -424,8 +422,9 @@ public sealed class RemainingArchitecturePlanTests
 
             Assert.True(loaded);
             Assert.Equal(firstPath, backend.LoadedPaths[0]);
-            Assert.Equal(secondPath, playlist.CurrentItem?.Path);
+            Assert.Equal(secondPath, queue.NowPlayingItem?.Path);
             Assert.Equal(secondPath, ended.NextItem?.Path);
+            Assert.Equal(firstPath, queue.HistoryItems[0].Path);
         }
         finally
         {
@@ -434,41 +433,36 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
-    public void ShellController_ExposesAndMutatesPlaylistStateWithoutWindowAccess()
+    public void ShellController_ExposesAndMutatesQueueStateWithoutWindowAccess()
     {
-        var playlist = new PlaylistController();
-        var session = new PlaybackSessionController(playlist);
+        var queue = new PlaybackQueueController();
         var backend = new FakeShellPlaybackBackend();
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
         using var shell = new ShellController(
-            playlist,
-            session,
+            queue,
             backend,
             workflow,
             new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
         shell.EnqueueFiles(["first.mp4", "second.mp4"], autoplay: false);
-        shell.RemovePlaylistItemAt(0);
+        shell.RemoveQueueItemAt(0);
 
-        Assert.Single(shell.PlaylistItems);
-        Assert.Equal("second.mp4", shell.PlaylistItems[0].Path);
-        Assert.Equal(0, shell.CurrentPlaylistIndex);
-        Assert.Equal("second.mp4", shell.CurrentPlaylistItem?.Path);
+        Assert.Single(shell.QueueItems);
+        Assert.Equal("second.mp4", shell.QueueItems[0].Path);
+        Assert.Null(shell.NowPlayingItem);
 
-        shell.ClearPlaylist();
+        shell.ClearQueue();
 
-        Assert.Empty(shell.PlaylistItems);
-        Assert.Equal(-1, shell.CurrentPlaylistIndex);
-        Assert.Null(shell.CurrentPlaylistItem);
+        Assert.Empty(shell.QueueItems);
+        Assert.Null(shell.NowPlayingItem);
     }
 
     [Fact]
     public async Task ShellController_HandleMediaOpenedAppliesResumeThroughBackend()
     {
-        var playlist = new PlaylistController();
-        playlist.EnqueueFiles(["C:\\Media\\movie.mp4"]);
-        var session = new PlaybackSessionController(playlist);
+        var queue = new PlaybackQueueController();
+        queue.PlayNow("C:\\Media\\movie.mp4");
         var backend = new FakeShellPlaybackBackend();
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
         var resumeEntry = new PlaybackResumeEntry
@@ -479,8 +473,7 @@ public sealed class RemainingArchitecturePlanTests
             UpdatedAt = DateTimeOffset.UtcNow
         };
         using var shell = new ShellController(
-            playlist,
-            session,
+            queue,
             backend,
             workflow,
             new LibraryBrowserService(),
@@ -501,16 +494,14 @@ public sealed class RemainingArchitecturePlanTests
     [Fact]
     public async Task ShellController_CaptionStartupGatePausesAndResumesThroughBackend()
     {
-        var playlist = new PlaylistController();
-        var session = new PlaybackSessionController(playlist);
+        var queue = new PlaybackQueueController();
         var backend = new FakeShellPlaybackBackend
         {
             ClockSnapshot = new ClockSnapshot(TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(5), 1.0, false, true, DateTimeOffset.UtcNow)
         };
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
         using var shell = new ShellController(
-            playlist,
-            session,
+            queue,
             backend,
             workflow,
             new LibraryBrowserService(),
@@ -585,13 +576,11 @@ public sealed class RemainingArchitecturePlanTests
     [Fact]
     public async Task ShellController_CurrentPlaybackSnapshotReflectsBackendState()
     {
-        var playlist = new PlaylistController();
-        var session = new PlaybackSessionController(playlist);
+        var queue = new PlaybackQueueController();
         var backend = new FakeShellPlaybackBackend();
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
         using var shell = new ShellController(
-            playlist,
-            session,
+            queue,
             backend,
             workflow,
             new LibraryBrowserService(),
