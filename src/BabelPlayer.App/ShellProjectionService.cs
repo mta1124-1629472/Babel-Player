@@ -20,6 +20,13 @@ public sealed record ShellTransportProjection
     public bool IsMuted { get; init; }
     public double Volume { get; init; } = 0.8;
     public double PlaybackRate { get; init; } = 1.0;
+    public bool HasVideo { get; init; }
+    public bool HasAudio { get; init; }
+    public bool IsSeekable { get; init; }
+    public int VideoWidth { get; init; }
+    public int VideoHeight { get; init; }
+    public int VideoDisplayWidth { get; init; }
+    public int VideoDisplayHeight { get; init; }
     public string ActiveHardwareDecoder { get; init; } = "mpv ready";
 }
 
@@ -92,6 +99,13 @@ public sealed class ShellProjectionService : IDisposable
             IsMuted = snapshot.Timeline.IsMuted,
             Volume = snapshot.Timeline.Volume,
             PlaybackRate = snapshot.Timeline.Rate,
+            HasVideo = snapshot.Timeline.HasVideo,
+            HasAudio = snapshot.Timeline.HasAudio,
+            IsSeekable = snapshot.Timeline.IsSeekable,
+            VideoWidth = snapshot.Timeline.VideoWidth,
+            VideoHeight = snapshot.Timeline.VideoHeight,
+            VideoDisplayWidth = snapshot.Timeline.VideoDisplayWidth,
+            VideoDisplayHeight = snapshot.Timeline.VideoDisplayHeight,
             ActiveHardwareDecoder = string.IsNullOrWhiteSpace(snapshot.Timeline.ActiveHardwareDecoder)
                 ? "mpv ready"
                 : snapshot.Timeline.ActiveHardwareDecoder

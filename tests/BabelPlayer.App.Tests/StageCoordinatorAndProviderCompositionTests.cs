@@ -197,7 +197,7 @@ public sealed class StageCoordinatorAndProviderCompositionTests
 
         public PlaybackWindowMode CurrentMode => CurrentModeValue;
 
-        public RectInt32 GetCurrentDisplayBounds(bool workArea = false) => new(0, 0, 1920, 1080);
+        public DisplayBounds GetCurrentDisplayBounds(bool workArea = false) => new(0, 0, 1920, 1080);
 
         public Task SetModeAsync(PlaybackWindowMode mode, CancellationToken cancellationToken = default)
         {

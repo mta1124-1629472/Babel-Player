@@ -120,6 +120,32 @@ public sealed class LoggingInfrastructureTests
     }
 
     [Fact]
+    public void BabelLogManager_EmitsOverflowWarning_WhenQueueCapacityIsExceeded()
+    {
+        var directory = CreateTempDirectory();
+        using var manager = new BabelLogManager(new BabelLogOptions
+        {
+            LogDirectory = directory,
+            MinimumLevel = BabelLogLevel.Debug,
+            MaxFileBytes = 1024 * 1024,
+            MaxFilesPerStream = 3,
+            QueueCapacity = 1
+        });
+
+        var logger = manager.CreateLogger("tests.overflow");
+        for (var index = 0; index < 10000; index++)
+        {
+            logger.LogInfo($"overflow-{index}");
+        }
+
+        manager.Flush(TimeSpan.FromSeconds(5));
+
+        var content = File.ReadAllText(Path.Combine(directory, "app.log"));
+        Assert.Contains("WARNING | logging | Dropped", content);
+        Assert.Contains("queueCapacity=1", content);
+    }
+
+    [Fact]
     public void CrashWriter_WritesSnapshotContextToCrashLog()
     {
         var directory = CreateTempDirectory();

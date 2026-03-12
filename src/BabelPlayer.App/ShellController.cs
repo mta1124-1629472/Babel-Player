@@ -40,6 +40,14 @@ public sealed record ShellWorkflowTransitionResult
     public string? StatusMessage { get; init; }
 }
 
+public sealed record ShellSubtitleTrackSelectionResult
+{
+    public int? SelectedSubtitleTrackId { get; init; }
+    public bool TrackSelectionChanged { get; init; }
+    public string StatusMessage { get; init; } = string.Empty;
+    public bool IsError { get; init; }
+}
+
 public sealed class ShellController : IDisposable
 {
     private readonly PlaybackQueueController _playbackQueueController;
@@ -419,6 +427,67 @@ public sealed class ShellController : IDisposable
 
     public Task SetSubtitleTrackAsync(int? trackId, CancellationToken cancellationToken = default)
         => _playbackBackend.SetSubtitleTrackAsync(trackId, cancellationToken);
+
+    public async Task<ShellSubtitleTrackSelectionResult> SelectEmbeddedSubtitleTrackAsync(
+        string? currentPath,
+        SubtitlePipelineSource currentSubtitleSource,
+        MediaTrackInfo? track,
+        CancellationToken cancellationToken = default)
+    {
+        if (track is null)
+        {
+            await _playbackBackend.SetSubtitleTrackAsync(null, cancellationToken);
+            if (currentSubtitleSource == SubtitlePipelineSource.EmbeddedTrack && !string.IsNullOrWhiteSpace(currentPath))
+            {
+                await _subtitleWorkflowController.LoadMediaSubtitlesAsync(currentPath, cancellationToken);
+            }
+
+            _logger.LogInfo("Embedded subtitle track disabled.", BabelLogContext.Create(("path", currentPath), ("subtitleSource", currentSubtitleSource.ToString())));
+            return new ShellSubtitleTrackSelectionResult
+            {
+                TrackSelectionChanged = true,
+                StatusMessage = "Embedded subtitle track disabled."
+            };
+        }
+
+        if (track.IsTextBased)
+        {
+            if (string.IsNullOrWhiteSpace(currentPath))
+            {
+                return new ShellSubtitleTrackSelectionResult
+                {
+                    StatusMessage = "Open a video first.",
+                    IsError = true
+                };
+            }
+
+            await _playbackBackend.SetSubtitleTrackAsync(null, cancellationToken);
+            var loadResult = await _subtitleWorkflowController.ImportEmbeddedSubtitleTrackAsync(currentPath, track, cancellationToken);
+            var imported = loadResult.CueCount > 0;
+            _logger.LogInfo(
+                "Embedded text subtitle track imported.",
+                BabelLogContext.Create(("path", currentPath), ("trackId", track.Id), ("cueCount", loadResult.CueCount)));
+            return new ShellSubtitleTrackSelectionResult
+            {
+                TrackSelectionChanged = true,
+                StatusMessage = imported
+                    ? $"Imported embedded subtitle track {track.Id}."
+                    : "Embedded subtitle import failed.",
+                IsError = !imported
+            };
+        }
+
+        await _playbackBackend.SetSubtitleTrackAsync(track.Id, cancellationToken);
+        _logger.LogInfo(
+            "Embedded image subtitle track selected for direct playback.",
+            BabelLogContext.Create(("path", currentPath), ("trackId", track.Id)));
+        return new ShellSubtitleTrackSelectionResult
+        {
+            SelectedSubtitleTrackId = track.Id,
+            TrackSelectionChanged = true,
+            StatusMessage = "Selected image-based embedded subtitle track for direct playback."
+        };
+    }
 
     public Task SetAudioDelayAsync(double seconds, CancellationToken cancellationToken = default)
         => _playbackBackend.SetAudioDelayAsync(seconds, cancellationToken);

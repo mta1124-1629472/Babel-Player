@@ -21,6 +21,7 @@ public sealed record BabelLogOptions
     public BabelLogLevel MinimumLevel { get; init; } = BabelLogLevel.Info;
     public long MaxFileBytes { get; init; } = 10 * 1024 * 1024;
     public int MaxFilesPerStream { get; init; } = 5;
+    public int QueueCapacity { get; init; } = 2048;
 
     public static BabelLogOptions CreateDefault() => new();
 }
@@ -236,18 +237,21 @@ public sealed class BabelLogManager : IBabelLogFactory, ICrashReportWriter, IDis
     private readonly Channel<LogEntry> _entries;
     private readonly object _fileSync = new();
     private readonly CancellationTokenSource _disposeCts = new();
+    private readonly ManualResetEventSlim _queueDrained = new(initialState: true);
     private readonly Task _writerTask;
     private long _pendingWriteCount;
+    private long _droppedWriteCount;
     private int _disposed;
 
     public BabelLogManager(BabelLogOptions? options = null)
     {
         _options = options ?? BabelLogOptions.CreateDefault();
-        _entries = Channel.CreateUnbounded<LogEntry>(new UnboundedChannelOptions
+        _entries = Channel.CreateBounded<LogEntry>(new BoundedChannelOptions(Math.Max(1, _options.QueueCapacity))
         {
             SingleReader = true,
             SingleWriter = false,
-            AllowSynchronousContinuations = false
+            AllowSynchronousContinuations = false,
+            FullMode = BoundedChannelFullMode.Wait
         });
         _writerTask = Task.Run(ProcessQueueAsync);
     }
@@ -271,18 +275,29 @@ public sealed class BabelLogManager : IBabelLogFactory, ICrashReportWriter, IDis
             return;
         }
 
-        var entry = new LogEntry("app", DateTimeOffset.Now, category, level, message, exception, context);
+        // Automatically attach distributed-trace correlation IDs when a span is active.
+        var activity = Activity.Current;
+        IReadOnlyDictionary<string, object?>? traceContext = activity is not null
+            ? BabelLogContext.Create(
+                ("trace.id", activity.TraceId.ToString()),
+                ("span.id", activity.SpanId.ToString()))
+            : null;
+        var effectiveContext = traceContext is not null ? MergeContext(context, traceContext) : context;
+        var entry = new LogEntry("app", DateTimeOffset.Now, category, level, message, exception, effectiveContext);
         try
         {
+            _queueDrained.Reset();
             Interlocked.Increment(ref _pendingWriteCount);
             if (!_entries.Writer.TryWrite(entry))
             {
-                Interlocked.Decrement(ref _pendingWriteCount);
+                Interlocked.Increment(ref _droppedWriteCount);
+                SignalWriteCompleted();
             }
         }
         catch
         {
-            Interlocked.Decrement(ref _pendingWriteCount);
+            Interlocked.Increment(ref _droppedWriteCount);
+            SignalWriteCompleted();
         }
     }
 
@@ -301,11 +316,12 @@ public sealed class BabelLogManager : IBabelLogFactory, ICrashReportWriter, IDis
 
     public void Flush(TimeSpan timeout)
     {
-        var deadline = Stopwatch.StartNew();
-        while (Interlocked.Read(ref _pendingWriteCount) > 0 && deadline.Elapsed < timeout)
+        if (Interlocked.Read(ref _pendingWriteCount) > 0)
         {
-            Thread.Sleep(25);
+            _queueDrained.Wait(timeout);
         }
+
+        FlushDroppedEntryNotice();
     }
 
     public void Dispose()
@@ -400,7 +416,7 @@ public sealed class BabelLogManager : IBabelLogFactory, ICrashReportWriter, IDis
                 while (_entries.Reader.TryRead(out var entry))
                 {
                     WriteEntrySynchronously(entry);
-                    Interlocked.Decrement(ref _pendingWriteCount);
+                    SignalWriteCompleted();
                 }
             }
         }
@@ -410,6 +426,33 @@ public sealed class BabelLogManager : IBabelLogFactory, ICrashReportWriter, IDis
         catch
         {
         }
+    }
+
+    private void SignalWriteCompleted()
+    {
+        if (Interlocked.Decrement(ref _pendingWriteCount) <= 0)
+        {
+            Interlocked.Exchange(ref _pendingWriteCount, 0);
+            _queueDrained.Set();
+        }
+    }
+
+    private void FlushDroppedEntryNotice()
+    {
+        var droppedCount = Interlocked.Exchange(ref _droppedWriteCount, 0);
+        if (droppedCount <= 0)
+        {
+            return;
+        }
+
+        WriteEntrySynchronously(new LogEntry(
+            "app",
+            DateTimeOffset.Now,
+            "logging",
+            BabelLogLevel.Warning,
+            $"Dropped {droppedCount} log entries because the logging queue reached capacity.",
+            null,
+            BabelLogContext.Create(("droppedCount", droppedCount), ("queueCapacity", _options.QueueCapacity))));
     }
 
     private void WriteEntrySynchronously(LogEntry entry)

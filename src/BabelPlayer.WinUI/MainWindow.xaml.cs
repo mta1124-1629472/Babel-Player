@@ -53,6 +53,7 @@ public sealed partial class MainWindow : Window
     private readonly IBabelLogger _statusLogger;
     private readonly IAppDiagnosticsContext _diagnosticsContext;
     private readonly List<MediaTrackInfo> _currentTracks = [];
+    private ShellProjectionSnapshot _currentShellProjection = new();
     private bool _suppressPositionSliderChanges;
     private bool _suppressFullscreenSliderChanges;
     private bool _suppressWorkflowControlEvents;
@@ -211,7 +212,6 @@ public sealed partial class MainWindow : Window
         PlayerHost.MediaEnded += PlayerHost_MediaEnded;
         PlayerHost.MediaFailed += PlayerHost_MediaFailed;
         PlayerHost.RuntimeInstallProgress += PlayerHost_RuntimeInstallProgress;
-        PlayerHost.PlaybackStateChanged += PlayerHost_PlaybackStateChanged;
         PlayerHost.InputActivity += PlayerHost_InputActivity;
         PlayerHost.FullscreenExitRequested += PlayerHost_FullscreenExitRequested;
         PlayerHost.ShortcutKeyPressed += PlayerHost_ShortcutKeyPressed;
@@ -2651,13 +2651,14 @@ public sealed partial class MainWindow : Window
             && LanguageToolsPane is not null
             && PlayerHost is not null)
         {
-            var playbackSnapshot = _shellController.CurrentPlaybackSnapshot;
-            var displayWidth = playbackSnapshot.VideoDisplayWidth > 0
-                ? playbackSnapshot.VideoDisplayWidth
-                : playbackSnapshot.VideoWidth;
-            var displayHeight = playbackSnapshot.VideoDisplayHeight > 0
-                ? playbackSnapshot.VideoDisplayHeight
-                : playbackSnapshot.VideoHeight;
+            var transport = _currentShellProjection.Transport;
+            var metrics = GetTransportVideoMetrics(transport);
+            var displayWidth = metrics.VideoDisplayWidth > 0
+                ? metrics.VideoDisplayWidth
+                : metrics.VideoWidth;
+            var displayHeight = metrics.VideoDisplayHeight > 0
+                ? metrics.VideoDisplayHeight
+                : metrics.VideoHeight;
 
             if (displayWidth > 0
                 && displayHeight > 0
@@ -2899,7 +2900,6 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
-            UpdatePlaybackDiagnostics(snapshot);
             _logger.LogInfo(
                 "Player host media opened.",
                 BabelLogContext.Create(
@@ -2910,8 +2910,6 @@ public sealed partial class MainWindow : Window
                     ("displayWidth", snapshot.VideoDisplayWidth),
                     ("displayHeight", snapshot.VideoDisplayHeight)));
             PlayerHost.RequestHostBoundsSync();
-            UpdatePortraitVideoLanguageToolsState();
-            TryApplyStandardAutoFit();
             await _shellController.SetAudioDelayAsync(_audioDelaySeconds);
             await _shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds);
             await _shellController.SetAspectRatioAsync(_selectedAspectRatio);
@@ -2919,33 +2917,9 @@ public sealed partial class MainWindow : Window
             var result = await _shellController.HandleMediaOpenedAsync(
                 snapshot,
                 ViewModel.Settings.ResumeEnabled);
-            if (result.ResumePosition is TimeSpan resumePosition)
-            {
-                var duration = snapshot.Duration > TimeSpan.Zero
-                    ? snapshot.Duration
-                    : _shellController.CurrentPlaybackSnapshot.Duration;
-                var path = !string.IsNullOrWhiteSpace(snapshot.Path)
-                    ? snapshot.Path
-                    : _shellController.CurrentPlaybackSnapshot.Path;
-                UpdatePositionSurfaces(resumePosition, duration);
-                ShowStatus($"Resumed: {Path.GetFileName(path)}");
-                return;
-            }
-
-            ShowStatus(result.StatusMessage);
-        });
-    }
-
-    private void PlayerHost_PlaybackStateChanged(PlaybackStateSnapshot snapshot)
-    {
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            UpdatePlaybackDiagnostics(snapshot);
-            if (snapshot.VideoWidth > 0 && snapshot.VideoHeight > 0)
-            {
-                UpdatePortraitVideoLanguageToolsState();
-                TryApplyStandardAutoFit();
-            }
+            ShowStatus(result.ResumePosition is TimeSpan
+                ? $"Resumed: {Path.GetFileName(snapshot.Path)}"
+                : result.StatusMessage);
         });
     }
 
@@ -2953,7 +2927,6 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
-            UpdatePlaybackDiagnostics(snapshot);
             _logger.LogInfo("Player host media ended.", BabelLogContext.Create(("path", snapshot.Path)));
             var result = _shellController.HandleMediaEnded(ViewModel.Settings.ResumeEnabled);
             if (result.NextItem is null)
@@ -2972,20 +2945,6 @@ public sealed partial class MainWindow : Window
         {
             _logger.LogError("Player host media failed.", null, BabelLogContext.Create(("message", message), ("path", _shellController.CurrentPlaybackSnapshot.Path)));
             ShowStatus(message, true);
-        });
-    }
-
-    private void PlayerHost_TracksChanged(IReadOnlyList<MediaTrackInfo> tracks)
-    {
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            _currentTracks.Clear();
-            _currentTracks.AddRange(tracks);
-            RebuildAudioTrackFlyout();
-            RebuildEmbeddedSubtitleTrackFlyout();
-            var audioTracks = tracks.Count(track => track.Kind == MediaTrackKind.Audio);
-            var subtitleTracks = tracks.Count(track => track.Kind == MediaTrackKind.Subtitle);
-            ShowStatus($"Tracks updated. Audio: {audioTracks}, subtitles: {subtitleTracks}.");
         });
     }
 
@@ -3043,6 +3002,7 @@ public sealed partial class MainWindow : Window
 
     private void ApplyShellProjection(ShellProjectionSnapshot projection)
     {
+        _currentShellProjection = projection;
         ViewModel.Transport.PositionSeconds = projection.Transport.PositionSeconds;
         ViewModel.Transport.DurationSeconds = projection.Transport.DurationSeconds;
         ViewModel.Transport.CurrentTimeText = projection.Transport.CurrentTimeText;
@@ -3054,8 +3014,6 @@ public sealed partial class MainWindow : Window
         ViewModel.ActiveHardwareDecoder = projection.Transport.ActiveHardwareDecoder;
         HardwareDecoderTextBlock.Text = ViewModel.ActiveHardwareDecoder;
 
-        ViewModel.SubtitleOverlay.SourceText = projection.Subtitle.SourceText;
-        ViewModel.SubtitleOverlay.TranslationText = projection.Subtitle.TranslationText;
         ViewModel.SubtitleOverlay.StatusText = projection.Subtitle.StatusText;
         ViewModel.SubtitleOverlay.SubtitleSource = projection.Subtitle.Source;
         ViewModel.SubtitleOverlay.IsCaptionGenerationInProgress = projection.Subtitle.IsCaptionGenerationInProgress;
@@ -3078,7 +3036,9 @@ public sealed partial class MainWindow : Window
         MuteToggleButton.IsChecked = ViewModel.Transport.IsMuted;
         PlayerHost.SetPreferredAudioState(ViewModel.Transport.Volume, ViewModel.Transport.IsMuted);
         UpdateMuteButtonVisual();
-        UpdatePlaybackDiagnostics(_shellController.CurrentPlaybackSnapshot);
+        UpdatePlaybackDiagnostics(projection.Transport);
+        UpdatePortraitVideoLanguageToolsState();
+        TryApplyStandardAutoFit();
     }
 
     private void UpdateTrackProjection(IReadOnlyList<MediaTrackInfo> tracks)
@@ -3578,55 +3538,32 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var currentPath = _shellController.CurrentPlaybackSnapshot.Path;
-        if (item.Tag is string offValue && offValue == "off")
+        MediaTrackInfo? track = null;
+        if (item.Tag is int trackId)
         {
-            _ = _shellController.SetSubtitleTrackAsync(null);
-            ApplyTrackSelection(MediaTrackKind.Subtitle, null);
-            RebuildEmbeddedSubtitleTrackFlyout();
-            if (ViewModel.SubtitleSource == SubtitlePipelineSource.EmbeddedTrack && !string.IsNullOrWhiteSpace(currentPath))
+            track = _currentTracks.FirstOrDefault(candidate => candidate.Kind == MediaTrackKind.Subtitle && candidate.Id == trackId);
+            if (track is null)
             {
-                await _subtitleWorkflowController.LoadMediaSubtitlesAsync(currentPath);
-            }
-
-            ShowStatus("Embedded subtitle track disabled.");
-            return;
-        }
-
-        if (item.Tag is not int trackId)
-        {
-            return;
-        }
-
-        var track = _currentTracks.FirstOrDefault(candidate => candidate.Kind == MediaTrackKind.Subtitle && candidate.Id == trackId);
-        if (track is null)
-        {
-            return;
-        }
-
-        if (track.IsTextBased)
-        {
-            if (string.IsNullOrWhiteSpace(currentPath))
-            {
-                ShowStatus("Open a video first.", true);
                 return;
             }
-
-            _ = _shellController.SetSubtitleTrackAsync(null);
-            ApplyTrackSelection(MediaTrackKind.Subtitle, null);
-            RebuildEmbeddedSubtitleTrackFlyout();
-            var result = await _subtitleWorkflowController.ImportEmbeddedSubtitleTrackAsync(currentPath, track);
-            ShowStatus(result.CueCount > 0
-                ? $"Imported embedded subtitle track {track.Id}."
-                : "Embedded subtitle import failed.",
-                result.CueCount == 0);
+        }
+        else if (item.Tag is not string offValue || offValue != "off")
+        {
             return;
         }
 
-        _ = _shellController.SetSubtitleTrackAsync(trackId);
-        ApplyTrackSelection(MediaTrackKind.Subtitle, trackId);
-        RebuildEmbeddedSubtitleTrackFlyout();
-        ShowStatus("Selected image-based embedded subtitle track for direct playback.");
+        var result = await _shellController.SelectEmbeddedSubtitleTrackAsync(
+            _shellController.CurrentPlaybackSnapshot.Path,
+            ViewModel.SubtitleSource,
+            track);
+
+        if (result.TrackSelectionChanged)
+        {
+            ApplyTrackSelection(MediaTrackKind.Subtitle, result.SelectedSubtitleTrackId);
+            RebuildEmbeddedSubtitleTrackFlyout();
+        }
+
+        ShowStatus(result.StatusMessage, result.IsError);
     }
 
     private void AdjustSubtitleDelay(double delta)
@@ -4102,15 +4039,16 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var playbackSnapshot = _shellController.CurrentPlaybackSnapshot;
-        var sourcePath = playbackSnapshot.Path;
+        var transport = _currentShellProjection.Transport;
+        var sourcePath = transport.Path;
         if (string.IsNullOrWhiteSpace(sourcePath) || (_pendingAutoFitPath is not null && !string.Equals(_pendingAutoFitPath, sourcePath, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
 
-        var displayWidth = playbackSnapshot.VideoDisplayWidth > 0 ? playbackSnapshot.VideoDisplayWidth : playbackSnapshot.VideoWidth;
-        var displayHeight = playbackSnapshot.VideoDisplayHeight > 0 ? playbackSnapshot.VideoDisplayHeight : playbackSnapshot.VideoHeight;
+        var metrics = GetTransportVideoMetrics(transport);
+        var displayWidth = metrics.VideoDisplayWidth > 0 ? metrics.VideoDisplayWidth : metrics.VideoWidth;
+        var displayHeight = metrics.VideoDisplayHeight > 0 ? metrics.VideoDisplayHeight : metrics.VideoHeight;
         if (displayWidth <= 0 || displayHeight <= 0 || VideoStageSurface.ActualWidth <= 0 || VideoStageSurface.ActualHeight <= 0)
         {
             return;
@@ -4458,7 +4396,7 @@ public sealed partial class MainWindow : Window
                 SecondaryText = showSource ? ViewModel.SubtitleOverlay.SourceText : string.Empty
             },
             ViewModel.Settings.SubtitleStyle,
-            !string.IsNullOrWhiteSpace(_shellController.CurrentPlaybackSnapshot.Path));
+            !string.IsNullOrWhiteSpace(_currentShellProjection.Transport.Path));
         UpdateOverlayControlState();
     }
 
@@ -4771,6 +4709,46 @@ public sealed partial class MainWindow : Window
             VideoDisplayHeight = snapshot.VideoDisplayHeight
         });
     }
+
+    private void UpdatePlaybackDiagnostics(ShellTransportProjection transport)
+    {
+        var metrics = GetTransportVideoMetrics(transport);
+        _diagnosticsContext.UpdatePlayback(new PlaybackDiagnosticsSummary
+        {
+            CurrentMediaPath = transport.Path,
+            CurrentMediaDisplayName = string.IsNullOrWhiteSpace(transport.Path) ? null : Path.GetFileName(transport.Path),
+            IsPaused = transport.IsPaused,
+            Position = TimeSpan.FromSeconds(transport.PositionSeconds),
+            Duration = TimeSpan.FromSeconds(transport.DurationSeconds),
+            Volume = transport.Volume,
+            IsMuted = transport.IsMuted,
+            ActiveHardwareDecoder = transport.ActiveHardwareDecoder,
+            VideoWidth = metrics.VideoWidth,
+            VideoHeight = metrics.VideoHeight,
+            VideoDisplayWidth = metrics.VideoDisplayWidth,
+            VideoDisplayHeight = metrics.VideoDisplayHeight
+        });
+    }
+
+    private static TransportVideoMetrics GetTransportVideoMetrics(ShellTransportProjection transport)
+    {
+        return new TransportVideoMetrics(
+            GetTransportVideoMetric(transport, nameof(TransportVideoMetrics.VideoWidth)),
+            GetTransportVideoMetric(transport, nameof(TransportVideoMetrics.VideoHeight)),
+            GetTransportVideoMetric(transport, nameof(TransportVideoMetrics.VideoDisplayWidth)),
+            GetTransportVideoMetric(transport, nameof(TransportVideoMetrics.VideoDisplayHeight)));
+    }
+
+    private static int GetTransportVideoMetric(ShellTransportProjection transport, string propertyName)
+    {
+        return transport.GetType().GetProperty(propertyName)?.GetValue(transport) as int? ?? 0;
+    }
+
+    private readonly record struct TransportVideoMetrics(
+        int VideoWidth,
+        int VideoHeight,
+        int VideoDisplayWidth,
+        int VideoDisplayHeight);
 
     private void UpdateQueueDiagnostics(PlaybackQueueSnapshot snapshot)
     {

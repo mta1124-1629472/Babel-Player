@@ -17,6 +17,10 @@ public sealed class RemainingArchitecturePlanTests
             Path = "C:\\Media\\sample.mp4",
             HasVideo = true,
             HasAudio = true,
+            VideoWidth = 1080,
+            VideoHeight = 1920,
+            VideoDisplayWidth = 1080,
+            VideoDisplayHeight = 1920,
             Volume = 0.42,
             ActiveHardwareDecoder = "d3d11va"
         });
@@ -60,6 +64,13 @@ public sealed class RemainingArchitecturePlanTests
         Assert.Equal("00:01", projection.Transport.CurrentTimeText);
         Assert.Equal("05:00", projection.Transport.DurationText);
         Assert.False(projection.Transport.IsPaused);
+        Assert.True(projection.Transport.HasVideo);
+        Assert.True(projection.Transport.HasAudio);
+        Assert.True(projection.Transport.IsSeekable);
+        Assert.Equal(1080, projection.Transport.VideoWidth);
+        Assert.Equal(1920, projection.Transport.VideoHeight);
+        Assert.Equal(1080, projection.Transport.VideoDisplayWidth);
+        Assert.Equal(1920, projection.Transport.VideoDisplayHeight);
         Assert.Equal(0.42, projection.Transport.Volume);
         Assert.Equal("d3d11va", projection.Transport.ActiveHardwareDecoder);
         Assert.Equal(2, projection.SelectedTracks.Tracks.Count);
@@ -80,6 +91,60 @@ public sealed class RemainingArchitecturePlanTests
         };
 
         Assert.Equal("Japanese", coordinator.Snapshot.Streams.Tracks[0].Title);
+    }
+
+    [Fact]
+    public void MediaSessionCoordinator_UpsertTranscriptSegment_ReplacesByIdAndMaintainsOrdering()
+    {
+        var coordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+
+        coordinator.SetTranscriptSegments(
+        [
+            new TranscriptSegment
+            {
+                Id = new TranscriptSegmentId("tr:2"),
+                Start = TimeSpan.FromSeconds(5),
+                End = TimeSpan.FromSeconds(7),
+                Text = "second",
+                Language = "en"
+            }
+        ],
+        SubtitlePipelineSource.Sidecar,
+        "en");
+
+        coordinator.UpsertTranscriptSegment(new TranscriptSegment
+        {
+            Id = new TranscriptSegmentId("tr:1"),
+            Start = TimeSpan.FromSeconds(1),
+            End = TimeSpan.FromSeconds(2),
+            Text = "first",
+            Language = "en"
+        });
+
+        coordinator.UpsertTranscriptSegment(new TranscriptSegment
+        {
+            Id = new TranscriptSegmentId("tr:2"),
+            Start = TimeSpan.FromSeconds(5),
+            End = TimeSpan.FromSeconds(8),
+            Text = "second updated",
+            Language = "en"
+        });
+
+        var segments = coordinator.Snapshot.Transcript.Segments;
+
+        Assert.Collection(
+            segments,
+            first =>
+            {
+                Assert.Equal("tr:1", first.Id.Value);
+                Assert.Equal("first", first.Text);
+            },
+            second =>
+            {
+                Assert.Equal("tr:2", second.Id.Value);
+                Assert.Equal("second updated", second.Text);
+                Assert.Equal(TimeSpan.FromSeconds(8), second.End);
+            });
     }
 
     [Fact]
@@ -188,8 +253,7 @@ public sealed class RemainingArchitecturePlanTests
 
         workflowStateStore.Update(state => state with
         {
-            SelectedTranslationModelKey = "cloud:deepl",
-            IsTranslationEnabled = true
+            SelectedTranslationModelKey = "cloud:deepl"
         });
         mediaSessionCoordinator.SetTranslationState(enabled: true, autoTranslateEnabled: false);
         mediaSessionCoordinator.SetTranscriptSegments(
@@ -244,8 +308,6 @@ public sealed class RemainingArchitecturePlanTests
             CurrentVideoPath = "C:\\Media\\sample.mp4",
             SelectedTranscriptionModelKey = "local:small",
             SelectedTranslationModelKey = "cloud:deepl",
-            IsTranslationEnabled = true,
-            AutoTranslateEnabled = true,
             CaptionGenerationModeLabel = "Local Small.en"
         });
         var transcript = new TranscriptSegment
@@ -551,6 +613,120 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
+    public async Task ShellController_SelectEmbeddedSubtitleTrackAsync_UsesDirectPlaybackForImageTracks()
+    {
+        var queue = new PlaybackQueueController();
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
+            queue,
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+        var result = await shell.SelectEmbeddedSubtitleTrackAsync(
+            "C:\\Media\\movie.mkv",
+            SubtitlePipelineSource.None,
+            new MediaTrackInfo
+            {
+                Id = 7,
+                Kind = MediaTrackKind.Subtitle,
+                IsTextBased = false
+            });
+
+        Assert.True(result.TrackSelectionChanged);
+        Assert.Equal(7, result.SelectedSubtitleTrackId);
+        Assert.False(result.IsError);
+        Assert.Equal(7, backend.LastSubtitleTrackId);
+        Assert.Equal("Selected image-based embedded subtitle track for direct playback.", result.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ShellController_SelectEmbeddedSubtitleTrackAsync_ReturnsErrorForTextTrackWithoutCurrentMedia()
+    {
+        var queue = new PlaybackQueueController();
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
+            queue,
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+        var result = await shell.SelectEmbeddedSubtitleTrackAsync(
+            null,
+            SubtitlePipelineSource.None,
+            new MediaTrackInfo
+            {
+                Id = 4,
+                Kind = MediaTrackKind.Subtitle,
+                IsTextBased = true
+            });
+
+        Assert.False(result.TrackSelectionChanged);
+        Assert.True(result.IsError);
+        Assert.Equal("Open a video first.", result.StatusMessage);
+        Assert.Equal(0, backend.SubtitleTrackSetCallCount);
+    }
+
+    [Fact]
+    public async Task ShellController_SelectEmbeddedSubtitleTrackAsync_DisablingEmbeddedTrackReloadsMediaSubtitles()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var videoPath = Path.Combine(directory.FullName, "movie.mkv");
+            var sidecarPath = Path.ChangeExtension(videoPath, ".srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, "1\n00:00:00,000 --> 00:00:01,000\nHello\n");
+
+            var queue = new PlaybackQueueController();
+            var backend = new FakeShellPlaybackBackend();
+            var workflowStore = new InMemorySubtitleWorkflowStateStore();
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+            var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+            var subtitleSourceResolver = new FakeSubtitleSourceResolver();
+            using var service = new SubtitleApplicationService(
+                subtitleSourceResolver,
+                new FakeCaptionGenerator(),
+                new FakeSubtitleTranslator(),
+                new FakeAiCredentialCoordinator(),
+                new FakeRuntimeProvisioner(),
+                credentialFacade,
+                mediaSessionCoordinator,
+                workflowStore,
+                new ProviderAvailabilityService(credentialFacade, _ => null));
+            using var projectionAdapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaSessionCoordinator.Store);
+            using var workflow = new SubtitleWorkflowController(service, projectionAdapter, new SubtitlePresentationProjector());
+            using var shell = new ShellController(
+                queue,
+                backend,
+                workflow,
+                new LibraryBrowserService(),
+                new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+            var result = await shell.SelectEmbeddedSubtitleTrackAsync(
+                videoPath,
+                SubtitlePipelineSource.EmbeddedTrack,
+                track: null);
+
+            Assert.True(result.TrackSelectionChanged);
+            Assert.False(result.IsError);
+            Assert.Equal("Embedded subtitle track disabled.", result.StatusMessage);
+            Assert.Null(result.SelectedSubtitleTrackId);
+            Assert.Single(backend.SubtitleTrackSelections);
+            Assert.Null(backend.SubtitleTrackSelections[0]);
+            Assert.Equal(1, subtitleSourceResolver.ExternalCalls);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void SubtitleWorkflowController_CanBeConstructedFromInjectedCollaboratorsOnly()
     {
         var workflowStore = new InMemorySubtitleWorkflowStateStore();
@@ -779,9 +955,12 @@ public sealed class RemainingArchitecturePlanTests
     private sealed class FakeShellPlaybackBackend : IPlaybackBackend
     {
         public List<string> LoadedPaths { get; } = [];
+        public List<int?> SubtitleTrackSelections { get; } = [];
         public int PauseCallCount { get; private set; }
         public int PlayCallCount { get; private set; }
+        public int SubtitleTrackSetCallCount { get; private set; }
         public TimeSpan? LastSeekPosition { get; private set; }
+        public int? LastSubtitleTrackId { get; private set; }
 
         public event Action<PlaybackBackendState>? StateChanged;
         public event Action<IReadOnlyList<MediaTrackInfo>>? TracksChanged;
@@ -843,7 +1022,13 @@ public sealed class RemainingArchitecturePlanTests
         public Task SetMuteAsync(bool muted, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task StepFrameAsync(bool forward, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SetAudioTrackAsync(int? trackId, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SetSubtitleTrackAsync(int? trackId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SetSubtitleTrackAsync(int? trackId, CancellationToken cancellationToken)
+        {
+            SubtitleTrackSetCallCount++;
+            LastSubtitleTrackId = trackId;
+            SubtitleTrackSelections.Add(trackId);
+            return Task.CompletedTask;
+        }
         public Task SetAudioDelayAsync(double seconds, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SetSubtitleDelayAsync(double seconds, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SetAspectRatioAsync(string aspectRatio, CancellationToken cancellationToken) => Task.CompletedTask;

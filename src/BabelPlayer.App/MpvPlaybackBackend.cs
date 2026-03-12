@@ -1,6 +1,7 @@
 using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
+using System.Diagnostics;
 
 public sealed class MpvPlaybackBackend : IPlaybackBackend
 {
@@ -49,13 +50,17 @@ public sealed class MpvPlaybackBackend : IPlaybackBackend
     public Task InitializeAsync(nint hostHandle, CancellationToken cancellationToken)
     {
         _logger.LogInfo("Initializing playback backend.", BabelLogContext.Create(("hostHandle", hostHandle)));
-        return _engine.InitializeAsync(hostHandle, HardwareDecodingMode, cancellationToken);
+           using var activity = BabelTracing.Source.StartActivity("playback.initialize");
+           activity?.SetTag(BabelTracing.Tags.BackendHandle, hostHandle.ToString());
+           return _engine.InitializeAsync(hostHandle, HardwareDecodingMode, cancellationToken);
     }
 
-    public Task LoadAsync(string path, CancellationToken cancellationToken)
+        public async Task LoadAsync(string path, CancellationToken cancellationToken)
     {
-        _logger.LogInfo("Loading media into playback backend.", BabelLogContext.Create(("path", path)));
-        return _engine.LoadAsync(path, cancellationToken);
+           using var activity = BabelTracing.Source.StartActivity("playback.load_media");
+           activity?.SetTag(BabelTracing.Tags.MediaPath, path);
+           _logger.LogInfo("Loading media into playback backend.", BabelLogContext.Create(("path", path)));
+           await _engine.LoadAsync(path, cancellationToken);
     }
     public Task PlayAsync(CancellationToken cancellationToken) => _engine.PlayAsync(cancellationToken);
     public Task PauseAsync(CancellationToken cancellationToken) => _engine.PauseAsync(cancellationToken);

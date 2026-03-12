@@ -135,7 +135,7 @@ public sealed class MediaSessionCoordinator
     {
         _store.Update(snapshot =>
         {
-            var updatedSegments = UpsertSegment(snapshot.Transcript.Segments, segment);
+            var updatedSegments = UpsertTranscriptSegments(snapshot.Transcript.Segments, segment);
             return UpdatePresentation(snapshot with
             {
                 Transcript = snapshot.Transcript with
@@ -304,15 +304,10 @@ public sealed class MediaSessionCoordinator
         return active;
     }
 
-    private static T[] UpsertSegment<T>(IReadOnlyList<T> segments, T segment)
-        where T : class
+    private static TranscriptSegment[] UpsertTranscriptSegments(IReadOnlyList<TranscriptSegment> segments, TranscriptSegment segment)
     {
         var list = segments.ToList();
-        var idProperty = typeof(T).GetProperty("Id") ?? throw new InvalidOperationException($"Type {typeof(T).Name} must expose Id.");
-        var startProperty = typeof(T).GetProperty("Start");
-        var endProperty = typeof(T).GetProperty("End");
-        var segmentId = idProperty.GetValue(segment)?.ToString();
-        var index = list.FindIndex(item => string.Equals(idProperty.GetValue(item)?.ToString(), segmentId, StringComparison.Ordinal));
+        var index = list.FindIndex(existing => string.Equals(existing.Id.Value, segment.Id.Value, StringComparison.Ordinal));
         if (index >= 0)
         {
             list[index] = segment;
@@ -322,15 +317,10 @@ public sealed class MediaSessionCoordinator
             list.Add(segment);
         }
 
-        if (startProperty is not null && endProperty is not null)
-        {
-            list = list
-                .OrderBy(item => (TimeSpan)(startProperty.GetValue(item) ?? TimeSpan.Zero))
-                .ThenBy(item => (TimeSpan)(endProperty.GetValue(item) ?? TimeSpan.Zero))
-                .ToList();
-        }
-
-        return list.ToArray();
+        return list
+            .OrderBy(item => item.Start)
+            .ThenBy(item => item.End)
+            .ToArray();
     }
 
     private static TranslationSegment[] UpsertTranslationSegments(IReadOnlyList<TranslationSegment> segments, TranslationSegment segment)
