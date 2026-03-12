@@ -1,6 +1,7 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
+using Windows.Graphics;
 
 namespace BabelPlayer.WinUI;
 
@@ -151,7 +152,8 @@ public sealed class StageCoordinator : IDisposable
     {
         if (IsFullscreenOverlayVisible)
         {
-            EnsureFullscreenOverlayWindow().PositionOverlay(_windowModeService.GetCurrentDisplayBounds());
+            var db = _windowModeService.GetCurrentDisplayBounds();
+            EnsureFullscreenOverlayWindow().PositionOverlay(new RectInt32(db.X, db.Y, db.Width, db.Height));
         }
 
         RefreshSubtitlePresentation();
@@ -242,8 +244,10 @@ public sealed class StageCoordinator : IDisposable
     private void ShowFullscreenOverlayWindow()
     {
         var overlayWindow = EnsureFullscreenOverlayWindow();
-        overlayWindow.PositionOverlay(_windowModeService.GetCurrentDisplayBounds());
-        overlayWindow.ShowOverlay(_windowModeService.GetCurrentDisplayBounds());
+        var db = _windowModeService.GetCurrentDisplayBounds();
+        var displayRect = new RectInt32(db.X, db.Y, db.Width, db.Height);
+        overlayWindow.PositionOverlay(displayRect);
+        overlayWindow.ShowOverlay(displayRect);
         RefreshSubtitlePresentation();
         ScheduleFullscreenOverlayAutoHide();
     }

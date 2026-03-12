@@ -1,6 +1,7 @@
 using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
+using System.Diagnostics;
 
 public sealed partial class SubtitleApplicationService
 {
@@ -16,15 +17,24 @@ public sealed partial class SubtitleApplicationService
             Start = TimeSpan.FromSeconds(chunk.StartTimeSec),
             End = TimeSpan.FromSeconds(chunk.EndTimeSec),
             SourceText = chunk.Text.Trim(),
-            SourceLanguage = ResolveSourceLanguage(chunk.Text)
+            SourceLanguage = SubtitleCueSessionMapper.ResolveSourceLanguage(chunk.Text, DefaultSourceLanguage)
         };
         var activeModelKey = _workflowStateStore.Snapshot.ActiveCaptionGenerationModelKey ?? _workflowStateStore.Snapshot.SelectedTranscriptionModelKey;
-        var transcriptSegment = BuildTranscriptSegment(cue, SubtitlePipelineSource.Generated, _workflowStateStore.Snapshot.CurrentVideoPath, activeModelKey);
-        var currentSourceLanguage = ResolveAggregateSourceLanguage(_workflowStateStore.Snapshot.CurrentSourceLanguage, cue.SourceLanguage);
+        var transcriptionModel = SubtitleWorkflowCatalog.GetTranscriptionModel(activeModelKey);
+        var transcriptSegment = SubtitleCueSessionMapper.BuildTranscriptSegment(
+            cue,
+            SubtitlePipelineSource.Generated,
+            _workflowStateStore.Snapshot.CurrentVideoPath,
+            activeModelKey,
+            transcriptionModel.DisplayName,
+            DefaultSourceLanguage);
+        var currentSourceLanguage = SubtitleCueSessionMapper.ResolveAggregateSourceLanguage(
+            _mediaSessionCoordinator.Snapshot.LanguageAnalysis.CurrentSourceLanguage,
+            cue.SourceLanguage,
+            DefaultSourceLanguage);
 
         UpdateWorkflowState(state => state with
         {
-            CurrentSourceLanguage = currentSourceLanguage,
             OverlayStatus = null
         });
         _mediaSessionCoordinator.SetCaptionGenerationState(true);
@@ -37,7 +47,7 @@ public sealed partial class SubtitleApplicationService
         }
 
         PublishStatus(
-            $"Generating captions ({_workflowStateStore.Snapshot.CaptionGenerationModeLabel})... captions ready through {FormatClock(cue.End)}.");
+            $"Generating captions ({_workflowStateStore.Snapshot.CaptionGenerationModeLabel})... captions ready through {SubtitleCueSessionMapper.FormatClock(cue.End)}.");
         _ = TranslateCueAsync(transcriptSegment, _captionGenerationCts?.Token ?? CancellationToken.None);
     }
 
@@ -48,9 +58,13 @@ public sealed partial class SubtitleApplicationService
             var selectionKey = _workflowStateStore.Snapshot.SelectedTranslationModelKey;
             var selection = SubtitleWorkflowCatalog.GetTranslationModel(selectionKey);
             var cues = _mediaSessionCoordinator.Snapshot.Transcript.Segments.ToList();
-            _logger.LogInfo("Translating cues.", BabelLogContext.Create(("modelKey", selection.Key), ("cueCount", cues.Count), ("translationEnabled", _workflowStateStore.Snapshot.IsTranslationEnabled)));
+            var isTranslationEnabled = _mediaSessionCoordinator.Snapshot.Translation.IsEnabled;
+            using var activity = BabelTracing.Source.StartActivity("subtitle.translate_all");
+            activity?.SetTag(BabelTracing.Tags.ModelKey, selection.Key);
+            activity?.SetTag(BabelTracing.Tags.CueCount, cues.Count);
+            _logger.LogInfo("Translating cues.", BabelLogContext.Create(("modelKey", selection.Key), ("cueCount", cues.Count), ("translationEnabled", isTranslationEnabled)));
 
-            if (_workflowStateStore.Snapshot.IsTranslationEnabled
+            if (isTranslationEnabled
                 && SubtitleWorkflowCatalog.IsCloudTranslationProvider(selection.Provider))
             {
                 var translatedTexts = await TranslateCueBatchAsync(selection, cues, cancellationToken);
@@ -70,7 +84,7 @@ public sealed partial class SubtitleApplicationService
 
             if (!cancellationToken.IsCancellationRequested)
             {
-                PublishStatus(_workflowStateStore.Snapshot.IsTranslationEnabled
+                PublishStatus(isTranslationEnabled
                     ? $"Prepared {CurrentCues.Count} translated subtitle cues."
                     : $"Prepared {CurrentCues.Count} source-language subtitle cues.");
             }
@@ -86,7 +100,7 @@ public sealed partial class SubtitleApplicationService
 
     private async Task TranslateCueAsync(TranscriptSegment cue, CancellationToken cancellationToken)
     {
-        if (HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot))
+        if (SubtitleCueSessionMapper.HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot))
         {
             return;
         }
@@ -99,7 +113,7 @@ public sealed partial class SubtitleApplicationService
 
         lock (_translationSync)
         {
-            if (HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot) || !_inFlightCueTranslations.Add(cue.Id.Value))
+            if (SubtitleCueSessionMapper.HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot) || !_inFlightCueTranslations.Add(cue.Id.Value))
             {
                 return;
             }
@@ -131,12 +145,13 @@ public sealed partial class SubtitleApplicationService
     private bool ShouldUseTranscriptDirectly(TranscriptSegment cue)
     {
         var state = _workflowStateStore.Snapshot;
-        if (!state.IsTranslationEnabled || string.IsNullOrWhiteSpace(state.SelectedTranslationModelKey))
+        var isTranslationEnabled = _mediaSessionCoordinator.Snapshot.Translation.IsEnabled;
+        if (!isTranslationEnabled || string.IsNullOrWhiteSpace(state.SelectedTranslationModelKey))
         {
             return true;
         }
 
-        return IsLanguageCode(cue.Language, _translationTargetLanguage);
+        return SubtitleCueSessionMapper.IsLanguageCode(cue.Language, _translationTargetLanguage);
     }
 
     private async Task<IReadOnlyList<string>> TranslateCueBatchAsync(
@@ -163,7 +178,7 @@ public sealed partial class SubtitleApplicationService
     private async Task HandleCloudServiceFailureAsync(Exception ex)
     {
         _logger.LogError("Subtitle cloud workflow failed.", ex, BabelLogContext.Create(("translationModel", _workflowStateStore.Snapshot.SelectedTranslationModelKey), ("transcriptionModel", _workflowStateStore.Snapshot.SelectedTranscriptionModelKey)));
-        if (ShouldDisableCloudForError(ex))
+        if (SubtitleCueSessionMapper.ShouldDisableCloudForError(ex))
         {
             var state = _workflowStateStore.Snapshot;
             if (SubtitleWorkflowCatalog.IsCloudTranslationProvider(SubtitleWorkflowCatalog.GetTranslationModel(state.SelectedTranslationModelKey).Provider))
@@ -275,7 +290,8 @@ public sealed partial class SubtitleApplicationService
             return;
         }
 
-        PublishStatus(FormatSubtitleModelTransferStatus(progress), FormatSubtitleModelTransferStatus(progress));
+        var message = SubtitleCueSessionMapper.FormatSubtitleModelTransferStatus(progress);
+        PublishStatus(message, message);
     }
 
     private void HandleLocalTranslationRuntimeStatus(LocalTranslationRuntimeStatus status)

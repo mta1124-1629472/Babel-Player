@@ -19,7 +19,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
     private readonly IBabelLogger _logger;
     private readonly object _translationSync = new();
     private readonly HashSet<string> _inFlightCueTranslations = [];
-    private readonly Dictionary<string, List<SubtitleCue>> _generatedSubtitleCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly GeneratedSubtitleCache _generatedSubtitleCache = new();
 
     private CancellationTokenSource? _translationCts;
     private CancellationTokenSource? _captionGenerationCts;
@@ -134,7 +134,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
         });
 
         PublishStatus($"Selected translation model: {selection.DisplayName}.");
-        if (_workflowStateStore.Snapshot.IsTranslationEnabled)
+        if (_mediaSessionCoordinator.Snapshot.Translation.IsEnabled)
         {
             await ReprocessCurrentSubtitlesForTranslationSettingsAsync(cancellationToken);
         }
@@ -185,9 +185,9 @@ public sealed partial class SubtitleApplicationService : IDisposable
         _credentialFacade.SaveAutoTranslateEnabled(enabled);
         UpdateWorkflowState(state => state with
         {
-            AutoTranslateEnabled = enabled,
             CurrentVideoTranslationPreferenceLocked = false
         });
+        _mediaSessionCoordinator.SetTranslationState(_mediaSessionCoordinator.Snapshot.Translation.IsEnabled, enabled);
         ApplyAutomaticTranslationPreferenceIfNeeded();
         await ReprocessCurrentSubtitlesForTranslationSettingsAsync(cancellationToken);
     }
@@ -202,7 +202,6 @@ public sealed partial class SubtitleApplicationService : IDisposable
         UpdateWorkflowState(state => state with
         {
             CurrentVideoPath = videoPath,
-            CurrentSourceLanguage = DefaultSourceLanguage,
             OverlayStatus = "No sidecar subtitles found. Generating captions from the video audio."
         });
         _mediaSessionCoordinator.OpenMedia(videoPath);
@@ -348,13 +347,13 @@ public sealed partial class SubtitleApplicationService : IDisposable
         }
 
         _lastObservedActiveTranscriptSegmentId = activeTranscriptId;
-        if (!_workflowStateStore.Snapshot.IsTranslationEnabled || string.IsNullOrWhiteSpace(activeTranscriptId))
+        if (!_mediaSessionCoordinator.Snapshot.Translation.IsEnabled || string.IsNullOrWhiteSpace(activeTranscriptId))
         {
             return;
         }
 
-        var activeTranscript = GetActiveTranscriptSegment(snapshot);
-        if (activeTranscript is null || HasTranslatedSegment(activeTranscript, snapshot))
+        var activeTranscript = SubtitleCueSessionMapper.GetActiveTranscriptSegment(snapshot);
+        if (activeTranscript is null || SubtitleCueSessionMapper.HasTranslatedSegment(activeTranscript, snapshot))
         {
             return;
         }

@@ -80,10 +80,11 @@ public sealed class WinUIWindowModeService : IWindowModeService
         _initialStandardBoundsApplied = true;
     }
 
-    public RectInt32 GetCurrentDisplayBounds(bool workArea = false)
+    public DisplayBounds GetCurrentDisplayBounds(bool workArea = false)
     {
         var displayArea = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
-        return workArea ? displayArea.WorkArea : displayArea.OuterBounds;
+        var r = workArea ? displayArea.WorkArea : displayArea.OuterBounds;
+        return new DisplayBounds(r.X, r.Y, r.Width, r.Height);
     }
 
     public void ApplyStandardBounds(RectInt32 bounds)
