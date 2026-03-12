@@ -16,24 +16,28 @@ These instructions apply to this repository and guide all architectural decision
 ## Primary Priorities
 
 ### 1. `MediaSession` is the Single Source of Truth
+
 - **What it owns**: timeline position, active stream selections, transcript/translation segments, subtitle presentation state, language processing state.
 - **Why**: Eliminates race conditions; enables clean shell/app separation.
 - **Location**: `src/BabelPlayer.App/MediaSessionModels.cs`.
 - **Antipattern**: Storing playback position in both `MediaSession` and a WinUI control.
 
 ### 2. `MediaSessionCoordinator` is the Timed Mutation Boundary
+
 - **What it does**: Every timed state change flows through this coordinator.
 - **Why**: Single point of control + testability; enforces immutability contracts.
 - **Location**: `src/BabelPlayer.App/MediaSessionCoordinator.cs`.
 - **Antipattern**: Directly modifying `MediaSession.TimelinePosition` without coordinator.
 
 ### 3. Platform-Native Code is Isolated
+
 - **App layer**: Remains platform-agnostic (no `AppWindow`, `HWND`, `DX11Device`, WinUI types).
 - **Infrastructure**: mpv, Win32 interop, DirectX, WinUI presenters live here.
 - **How**: Adapter pattern (`IPlaybackBackend` → `MpvPlaybackBackend`).
 - **Antipattern**: Exporting Windows-specific types in App-layer public contracts.
 
 ### 4. Shell Layer is View-Only
+
 - **Responsibilities**: WinUI visual tree, layout, event wiring, presenter attachment.
 - **What it cannot do**: Business logic, state ownership (except UI-only state like "which pane is visible").
 - **Controllers**: Business logic lives in App layer (`ShellController`, `PlaybackBackendCoordinator`, `SubtitleWorkflowController`).
@@ -41,12 +45,14 @@ These instructions apply to this repository and guide all architectural decision
 - **Antipattern**: Large switch statements in `MainWindow.xaml.cs` → extract to controllers.
 
 ### 5. Presenters are Stateless Adapters
+
 - **`IVideoPresenter`**: Accepts display dimensions, position, tracks; renders video. No state ownership.
 - **`ISubtitlePresenter`**: Accepts subtitle text, styling, position; renders UI overlay. No workflow state.
 - **How state flows**: `MediaSession` → App projections (e.g., `SubtitlePresentationProjector`) → Shell observes and calls presenter.
 - **Antipattern**: Presenter deciding which translation model to use; instead, App layer decides and passes text to presenter.
 
 ### 6. Seams are Preserved for Cross-Platform Support
+
 - **Narrow interfaces**: Each component exposes only what's needed (capability-based, not god objects).
 - **Immutable projections**: Shell consumes immutable views of App state, never writes directly.
 - **Adapters + abstraction**: mpv, transcription providers, translation providers are swappable.
@@ -138,6 +144,7 @@ Three focused agents exist in `.github/agents/`. Use them automatically when the
 | `new-provider` | `.github/agents/new-provider.md` | Adding a new transcription or translation provider adapter (any new AI service, cloud API, or local model) |
 
 **Trigger words that should invoke these agents:**
+
 - "move logic out of MainWindow", "extract to controller", "refactor shell" → `refactor-shell`
 - "write a test", "add a seam test", "add unit test", "test this in isolation" → `seam-test`
 - "add a provider", "integrate `[service]`", "new transcription model", "new translation adapter" → `new-provider`

@@ -794,6 +794,150 @@ public sealed class RemainingArchitecturePlanTests
         Assert.True(snapshot.IsSeekable);
     }
 
+    [Fact]
+    public async Task ShellController_LoadPlaybackItemAsync_AppliesBothVolumeAndMute()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var filePath = Path.Combine(directory.FullName, "test.mp4");
+            File.WriteAllText(filePath, string.Empty);
+
+            var queue = new PlaybackQueueController();
+            var backend = new FakeShellPlaybackBackend();
+            using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            using var shell = new ShellController(
+                queue,
+                backend,
+                workflow,
+                new LibraryBrowserService(),
+                new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+            var item = queue.PlayNow(filePath);
+            var loaded = await shell.LoadPlaybackItemAsync(
+                item,
+                new ShellLoadMediaOptions
+                {
+                    Volume = 0.65,
+                    IsMuted = true,
+                    ResumeEnabled = false,
+                    PreviousPlaybackState = new PlaybackStateSnapshot()
+                },
+                CancellationToken.None);
+
+            Assert.True(loaded);
+            Assert.Equal(0.65, backend.LastVolume);
+            Assert.True(backend.LastMuted);
+            Assert.Single(backend.VolumeHistory);
+            Assert.Single(backend.MuteHistory);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ShellController_LoadPlaybackItemAsync_AppliesUnmutedWhenNotMuted()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var filePath = Path.Combine(directory.FullName, "test.mp4");
+            File.WriteAllText(filePath, string.Empty);
+
+            var queue = new PlaybackQueueController();
+            var backend = new FakeShellPlaybackBackend();
+            using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            using var shell = new ShellController(
+                queue,
+                backend,
+                workflow,
+                new LibraryBrowserService(),
+                new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+            var item = queue.PlayNow(filePath);
+            await shell.LoadPlaybackItemAsync(
+                item,
+                new ShellLoadMediaOptions
+                {
+                    Volume = 0.5,
+                    IsMuted = false,
+                    ResumeEnabled = false,
+                    PreviousPlaybackState = new PlaybackStateSnapshot()
+                },
+                CancellationToken.None);
+
+            Assert.Equal(0.5, backend.LastVolume);
+            Assert.False(backend.LastMuted);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ShellController_ApplyAudioPreferencesAsync_SetsBothVolumeAndMuteAtomically()
+    {
+        var queue = new PlaybackQueueController();
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
+            queue,
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+        await shell.ApplyAudioPreferencesAsync(0.3, true);
+
+        Assert.Equal(0.3, backend.LastVolume);
+        Assert.True(backend.LastMuted);
+        Assert.Single(backend.VolumeHistory);
+        Assert.Single(backend.MuteHistory);
+
+        await shell.ApplyAudioPreferencesAsync(0.9, false);
+
+        Assert.Equal(0.9, backend.LastVolume);
+        Assert.False(backend.LastMuted);
+        Assert.Equal(2, backend.VolumeHistory.Count);
+        Assert.Equal(2, backend.MuteHistory.Count);
+    }
+
+    [Fact]
+    public void ShellProjection_ReflectsBackendDrivenAudioState()
+    {
+        var coordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        using var projectionService = new ShellProjectionService(coordinator.Store);
+
+        coordinator.ApplyPlaybackState(new PlaybackBackendState
+        {
+            Path = "C:\\Media\\sample.mp4",
+            HasAudio = true,
+            Volume = 0.42,
+            IsMuted = true
+        });
+
+        var projection = projectionService.Current;
+
+        Assert.Equal(0.42, projection.Transport.Volume);
+        Assert.True(projection.Transport.IsMuted);
+
+        coordinator.ApplyPlaybackState(new PlaybackBackendState
+        {
+            Path = "C:\\Media\\sample.mp4",
+            HasAudio = true,
+            Volume = 0.75,
+            IsMuted = false
+        });
+
+        projection = projectionService.Current;
+
+        Assert.Equal(0.75, projection.Transport.Volume);
+        Assert.False(projection.Transport.IsMuted);
+    }
+
     private sealed class FakeTranscriptionProvider : ITranscriptionProvider
     {
         private readonly bool _shouldFail;
@@ -956,11 +1100,15 @@ public sealed class RemainingArchitecturePlanTests
     {
         public List<string> LoadedPaths { get; } = [];
         public List<int?> SubtitleTrackSelections { get; } = [];
+        public List<double> VolumeHistory { get; } = [];
+        public List<bool> MuteHistory { get; } = [];
         public int PauseCallCount { get; private set; }
         public int PlayCallCount { get; private set; }
         public int SubtitleTrackSetCallCount { get; private set; }
         public TimeSpan? LastSeekPosition { get; private set; }
         public int? LastSubtitleTrackId { get; private set; }
+        public double LastVolume { get; private set; }
+        public bool LastMuted { get; private set; }
 
         public event Action<PlaybackBackendState>? StateChanged;
         public event Action<IReadOnlyList<MediaTrackInfo>>? TracksChanged;
@@ -1018,8 +1166,22 @@ public sealed class RemainingArchitecturePlanTests
         }
         public Task SeekRelativeAsync(TimeSpan delta, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SetVolumeAsync(double volume, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SetMuteAsync(bool muted, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SetVolumeAsync(double volume, CancellationToken cancellationToken)
+        {
+            LastVolume = volume;
+            VolumeHistory.Add(volume);
+            State = State with { Volume = volume };
+            StateChanged?.Invoke(State);
+            return Task.CompletedTask;
+        }
+        public Task SetMuteAsync(bool muted, CancellationToken cancellationToken)
+        {
+            LastMuted = muted;
+            MuteHistory.Add(muted);
+            State = State with { IsMuted = muted };
+            StateChanged?.Invoke(State);
+            return Task.CompletedTask;
+        }
         public Task StepFrameAsync(bool forward, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SetAudioTrackAsync(int? trackId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SetSubtitleTrackAsync(int? trackId, CancellationToken cancellationToken)
