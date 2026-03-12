@@ -43,22 +43,33 @@ public sealed class WinUIWindowModeService : IWindowModeService
         }
 
         var workArea = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary).WorkArea;
-        const int minWidth = 1100;
-        const int minHeight = 700;
+        const int minWidth = 1180;
+        const int minHeight = 820;
+        const int chromeHeightEstimate = 250;
 
-        var targetWidth = (int)Math.Round(workArea.Width * 0.78);
-        var targetHeight = (int)Math.Round(targetWidth * 10d / 16d);
-
-        var maxWidth = Math.Max(minWidth, (int)Math.Round(workArea.Width * 0.92));
+        var maxWidth = Math.Max(minWidth, (int)Math.Round(workArea.Width * 0.86));
         var maxHeight = Math.Max(minHeight, (int)Math.Round(workArea.Height * 0.92));
-        targetWidth = Math.Clamp(targetWidth, minWidth, Math.Min(workArea.Width, maxWidth));
-        targetHeight = Math.Clamp(targetHeight, minHeight, Math.Min(workArea.Height, maxHeight));
+        var targetWidth = Math.Clamp(
+            (int)Math.Round(workArea.Width * 0.70),
+            minWidth,
+            Math.Min(workArea.Width, maxWidth));
+        var targetStageHeight = (int)Math.Round(targetWidth * 9d / 16d);
+        var targetHeight = Math.Clamp(
+            targetStageHeight + chromeHeightEstimate,
+            minHeight,
+            Math.Min(workArea.Height, maxHeight));
 
-        if (targetHeight > workArea.Height)
+        if (targetHeight >= maxHeight)
         {
-            targetHeight = workArea.Height;
-            targetWidth = (int)Math.Round(targetHeight * 16d / 10d);
-            targetWidth = Math.Clamp(targetWidth, minWidth, workArea.Width);
+            var backsolvedWidth = (int)Math.Round((maxHeight - chromeHeightEstimate) * 3d / 2d);
+            if (backsolvedWidth > 0)
+            {
+                targetWidth = Math.Clamp(backsolvedWidth, minWidth, Math.Min(workArea.Width, maxWidth));
+                targetHeight = Math.Clamp(
+                    (int)Math.Round(targetWidth * 2d / 3d) + chromeHeightEstimate,
+                    minHeight,
+                    Math.Min(workArea.Height, maxHeight));
+            }
         }
 
         var x = workArea.X + Math.Max((workArea.Width - targetWidth) / 2, 0);
@@ -69,10 +80,11 @@ public sealed class WinUIWindowModeService : IWindowModeService
         _initialStandardBoundsApplied = true;
     }
 
-    public RectInt32 GetCurrentDisplayBounds(bool workArea = false)
+    public DisplayBounds GetCurrentDisplayBounds(bool workArea = false)
     {
         var displayArea = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
-        return workArea ? displayArea.WorkArea : displayArea.OuterBounds;
+        var r = workArea ? displayArea.WorkArea : displayArea.OuterBounds;
+        return new DisplayBounds(r.X, r.Y, r.Width, r.Height);
     }
 
     public void ApplyStandardBounds(RectInt32 bounds)

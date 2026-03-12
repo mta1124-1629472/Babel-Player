@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
@@ -9,7 +10,31 @@ using WinRT.Interop;
 
 namespace BabelPlayer.WinUI;
 
-public sealed class FullscreenOverlayWindow : Window
+public interface IFullscreenOverlayWindow
+{
+    event Action? ActivityDetected;
+    event Action<bool>? InteractionStateChanged;
+
+    Button PlayPauseButton { get; }
+    Button SubtitleToggleButton { get; }
+    DropDownButton SubtitleModeButton { get; }
+    DropDownButton SubtitleStyleButton { get; }
+    Button PipButton { get; }
+    Button ImmersiveButton { get; }
+    DropDownButton SettingsButton { get; }
+    Button ExitFullscreenButton { get; }
+    Slider PositionSlider { get; }
+    TextBlock CurrentTimeTextBlock { get; }
+    TextBlock DurationTextBlock { get; }
+    bool IsOverlayVisible { get; }
+
+    void ShowOverlay(RectInt32 displayBounds);
+    void HideOverlay();
+    void PositionOverlay(RectInt32 displayBounds);
+    void CloseOverlay();
+}
+
+public sealed class FullscreenOverlayWindow : Window, IFullscreenOverlayWindow
 {
     private readonly Border _rootBorder;
     private readonly IntPtr _ownerHwnd;
@@ -53,22 +78,35 @@ public sealed class FullscreenOverlayWindow : Window
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Spacing = 12
+            Spacing = 8
         };
 
-        SeekBackButton = new Button { Content = "<<" };
-        controlsRow.Children.Add(SeekBackButton);
-
-        PlayPauseButton = new Button { Content = "Play", MinWidth = 84 };
+        PlayPauseButton = CreateIconButton(Symbol.Play, "Play or pause");
         controlsRow.Children.Add(PlayPauseButton);
 
-        SeekForwardButton = new Button { Content = ">>" };
-        controlsRow.Children.Add(SeekForwardButton);
-
-        SubtitleToggleButton = new Button { Content = "Subtitles On" };
+        SubtitleToggleButton = new Button
+        {
+            Content = "Subtitles",
+            MinWidth = 92
+        };
         controlsRow.Children.Add(SubtitleToggleButton);
 
-        ExitFullscreenButton = new Button { Content = "Exit Fullscreen" };
+        SubtitleModeButton = CreateDropDownButton("Mode", "Subtitle mode");
+        controlsRow.Children.Add(SubtitleModeButton);
+
+        SubtitleStyleButton = CreateDropDownButton("Style", "Subtitle style");
+        controlsRow.Children.Add(SubtitleStyleButton);
+
+        PipButton = CreateIconButton(Symbol.SwitchApps, "Picture in picture");
+        controlsRow.Children.Add(PipButton);
+
+        ImmersiveButton = CreateIconButton(Symbol.HideBcc, "Immersive mode");
+        controlsRow.Children.Add(ImmersiveButton);
+
+        SettingsButton = CreateDropDownButton(new SymbolIcon(Symbol.Setting), "Playback settings");
+        controlsRow.Children.Add(SettingsButton);
+
+        ExitFullscreenButton = CreateIconButton(Symbol.FullScreen, "Exit fullscreen");
         controlsRow.Children.Add(ExitFullscreenButton);
 
         overlayRoot.Children.Add(controlsRow);
@@ -122,9 +160,12 @@ public sealed class FullscreenOverlayWindow : Window
     public event Action<bool>? InteractionStateChanged;
 
     public Button PlayPauseButton { get; }
-    public Button SeekBackButton { get; }
-    public Button SeekForwardButton { get; }
     public Button SubtitleToggleButton { get; }
+    public DropDownButton SubtitleModeButton { get; }
+    public DropDownButton SubtitleStyleButton { get; }
+    public Button PipButton { get; }
+    public Button ImmersiveButton { get; }
+    public DropDownButton SettingsButton { get; }
     public Button ExitFullscreenButton { get; }
     public Slider PositionSlider { get; }
     public TextBlock CurrentTimeTextBlock { get; }
@@ -233,6 +274,43 @@ public sealed class FullscreenOverlayWindow : Window
     private void OverlayHost_PointerActivity(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
         ActivityDetected?.Invoke();
+    }
+
+    private static Button CreateIconButton(Symbol symbol, string automationName)
+    {
+        var button = new Button
+        {
+            Content = new SymbolIcon(symbol),
+            MinWidth = 44,
+            Padding = new Thickness(12, 8, 12, 8)
+        };
+        AutomationProperties.SetName(button, automationName);
+        ToolTipService.SetToolTip(button, automationName);
+        return button;
+    }
+
+    private static DropDownButton CreateDropDownButton(string label, string automationName)
+    {
+        var button = new DropDownButton
+        {
+            Content = label,
+            MinWidth = 88
+        };
+        AutomationProperties.SetName(button, automationName);
+        ToolTipService.SetToolTip(button, automationName);
+        return button;
+    }
+
+    private static DropDownButton CreateDropDownButton(IconElement icon, string automationName)
+    {
+        var button = new DropDownButton
+        {
+            Content = icon,
+            MinWidth = 44
+        };
+        AutomationProperties.SetName(button, automationName);
+        ToolTipService.SetToolTip(button, automationName);
+        return button;
     }
 
     private void OverlayHost_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)

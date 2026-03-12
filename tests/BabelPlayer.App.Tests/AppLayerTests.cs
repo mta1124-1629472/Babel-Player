@@ -8,20 +8,48 @@ namespace BabelPlayer.App.Tests;
 public sealed class AppLayerTests
 {
     [Fact]
-    public void PlaylistController_AutoAdvanceMovesToNextItem()
+    public void PlaybackQueueController_AutoAdvancePromotesQueueAndMovesCurrentToHistory()
     {
-        var controller = new PlaylistController();
+        var controller = new PlaybackQueueController();
 
-        controller.EnqueueFiles(["first.mp4", "second.mp4", "third.mp4"]);
+        controller.PlayNow("first.mp4");
+        controller.AddToQueue(["second.mp4", "third.mp4"]);
 
-        Assert.Equal(0, controller.CurrentIndex);
-        Assert.Equal("first.mp4", controller.CurrentItem?.Path);
+        Assert.Equal("first.mp4", controller.NowPlayingItem?.Path);
 
         var next = controller.AdvanceAfterMediaEnded();
 
         Assert.NotNull(next);
         Assert.Equal("second.mp4", next!.Path);
-        Assert.Equal(1, controller.CurrentIndex);
+        Assert.Equal("second.mp4", controller.NowPlayingItem?.Path);
+        Assert.Equal("first.mp4", controller.HistoryItems[0].Path);
+    }
+
+    [Fact]
+    public void PlaybackQueueController_PlayNowDoesNotAppendCurrentItemToQueue()
+    {
+        var controller = new PlaybackQueueController();
+
+        controller.PlayNow("current.mp4");
+        controller.AddToQueue(["future-a.mp4", "future-b.mp4"]);
+        controller.PlayNow("replacement.mp4");
+
+        Assert.Equal("replacement.mp4", controller.NowPlayingItem?.Path);
+        Assert.Equal(new[] { "future-a.mp4", "future-b.mp4" }, controller.QueueItems.Select(item => item.Path).ToArray());
+        Assert.Equal("current.mp4", controller.HistoryItems[0].Path);
+    }
+
+    [Fact]
+    public void PlaybackQueueController_PlayNextInsertsAtFrontWhilePreservingOrder()
+    {
+        var controller = new PlaybackQueueController();
+
+        controller.AddToQueue(["later-1.mp4", "later-2.mp4"]);
+        controller.PlayNext(["next-1.mp4", "next-2.mp4"]);
+
+        Assert.Equal(
+            new[] { "next-1.mp4", "next-2.mp4", "later-1.mp4", "later-2.mp4" },
+            controller.QueueItems.Select(item => item.Path).ToArray());
     }
 
     [Fact]
@@ -62,7 +90,7 @@ public sealed class AppLayerTests
     [Fact]
     public void SubtitleWorkflowController_TogglesRenderModesAndPreservesUnchangedStyleValues()
     {
-        var controller = new SubtitleWorkflowController();
+        var controller = TestWorkflowControllerFactory.Create();
         var currentStyle = new SubtitleStyleSettings
         {
             SourceFontSize = 28,
@@ -149,7 +177,7 @@ public sealed class AppLayerTests
         var store = new FakeCredentialStore();
         store.SaveSubtitleModelKey("cloud:gpt-4o-transcribe");
         var facade = new CredentialFacade(store);
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             facade,
             environmentVariableReader: _ => null);
 
@@ -164,7 +192,7 @@ public sealed class AppLayerTests
         var store = new FakeCredentialStore();
         store.SaveTranslationModelKey("cloud:deepl");
         store.SaveDeepLApiKey("configured");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null);
 
@@ -179,7 +207,7 @@ public sealed class AppLayerTests
     {
         var store = new FakeCredentialStore();
         store.SaveTranslationModelKey("cloud:google-translate");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null);
 
@@ -194,14 +222,14 @@ public sealed class AppLayerTests
         var store = new FakeCredentialStore();
         var dialogs = new FakeCredentialDialogService();
         dialogs.ApiKeyResponses.Enqueue("google-key");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             dialogs,
             new FakeFilePickerService(),
             new FakeRuntimeBootstrapService(),
-            _ => null,
-            (_, _) => Task.CompletedTask,
-            (_, _) => Task.CompletedTask);
+            environmentVariableReader: _ => null,
+            validateOpenAiApiKeyAsync: (_, _) => Task.CompletedTask,
+            validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
 
         var applied = await controller.SelectTranslationModelAsync("cloud:google-translate");
 
@@ -215,7 +243,7 @@ public sealed class AppLayerTests
     {
         var store = new FakeCredentialStore();
         store.SaveDeepLApiKey("configured");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null,
             validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
@@ -231,7 +259,7 @@ public sealed class AppLayerTests
     public async Task SubtitleWorkflowController_EnablingTranslationWithoutModelKeepsSelectorFlowAvailable()
     {
         var store = new FakeCredentialStore();
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null);
 
@@ -250,14 +278,17 @@ public sealed class AppLayerTests
             LlamaChoice = LlamaCppBootstrapChoice.InstallAutomatically
         };
         var runtimeBootstrap = new FakeRuntimeBootstrapService();
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             dialogs,
             new FakeFilePickerService(),
             runtimeBootstrap,
-            _ => null,
-            (_, _) => Task.CompletedTask,
-            (_, _) => Task.CompletedTask);
+            environmentVariableReader: _ => null,
+            validateOpenAiApiKeyAsync: (_, _) => Task.CompletedTask,
+            validateTranslationProviderAsync: (_, _) => Task.CompletedTask,
+            providerAvailabilityService: new FakeProviderAvailabilityService(),
+            subtitleTranslator: new ThrowingWarmupSubtitleTranslator(),
+            runtimeProvisioner: new FakeSuccessfulRuntimeProvisioner());
 
         var applied = await controller.SelectTranslationModelAsync("local:hymt-1.8b");
 
@@ -269,7 +300,7 @@ public sealed class AppLayerTests
     public async Task SubtitleWorkflowController_AutoTranslateStaysOffForEnglishSourceLanguageWithoutModel()
     {
         var store = new FakeCredentialStore();
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null);
 
@@ -287,7 +318,7 @@ public sealed class AppLayerTests
             var store = new FakeCredentialStore();
             store.SaveTranslationModelKey("cloud:deepl");
             store.SaveDeepLApiKey("configured");
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
@@ -330,7 +361,7 @@ Hello there
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
                 environmentVariableReader: _ => null);
 
@@ -353,6 +384,7 @@ Hola
         var directory = Directory.CreateTempSubdirectory();
         try
         {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -362,12 +394,19 @@ Hola
 Hello there
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null);
 
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.Dual);
 
@@ -387,6 +426,7 @@ Hello there
         var directory = Directory.CreateTempSubdirectory();
         try
         {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -396,13 +436,21 @@ Hello there
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null);
 
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            controller.CurrentCues[0].TranslatedText = "Hello";
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+            mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.Dual);
 
@@ -424,6 +472,7 @@ Hola
         {
             var store = new FakeCredentialStore();
             store.SaveDeepLApiKey("configured");
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -433,17 +482,24 @@ Hola
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
 
             await controller.InitializeAsync();
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            await controller.SelectTranslationModelAsync("cloud:deepl");
-            await controller.SetTranslationEnabledAsync(true);
-            controller.CurrentCues[0].TranslatedText = "Hello";
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            mediaSessionCoordinator.SetTranslationState(true, false);
+            var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+            mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.SourceOnly);
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.SourceOnly);
@@ -467,6 +523,7 @@ Hola
         {
             var store = new FakeCredentialStore();
             store.SaveDeepLApiKey("configured");
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -476,17 +533,22 @@ Hola
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
 
             await controller.InitializeAsync();
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            await controller.SelectTranslationModelAsync("cloud:deepl");
-            await controller.SetTranslationEnabledAsync(true);
-            controller.CurrentCues[0].TranslatedText = null;
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            mediaSessionCoordinator.SetTranslationState(true, false);
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.TranslationOnly);
 
@@ -507,6 +569,7 @@ Hola
         {
             var store = new FakeCredentialStore();
             store.SaveDeepLApiKey("configured");
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -516,17 +579,24 @@ Hola
 Hola
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
 
             await controller.InitializeAsync();
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            await controller.SelectTranslationModelAsync("cloud:deepl");
-            await controller.SetTranslationEnabledAsync(true);
-            controller.CurrentCues[0].TranslatedText = "Hello";
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(1));
+            mediaSessionCoordinator.SetTranslationState(true, false);
+            var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+            mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.SourceOnly, sourceOnlyOverrideForCurrentVideo: true);
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.SourceOnly, sourceOnlyOverrideForCurrentVideo: true);
@@ -547,6 +617,7 @@ Hola
         var directory = Directory.CreateTempSubdirectory();
         try
         {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
             File.WriteAllText(videoPath, string.Empty);
@@ -560,12 +631,19 @@ First sentence
 Second sentence
 """);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null);
 
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            controller.UpdatePlaybackPosition(TimeSpan.FromSeconds(4));
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(4),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.SourceOnly);
 
@@ -583,7 +661,7 @@ Second sentence
     {
         var store = new FakeCredentialStore();
         store.SaveDeepLApiKey("configured");
-        var controller = new SubtitleWorkflowController(
+        var controller = TestWorkflowControllerFactory.Create(
             new CredentialFacade(store),
             environmentVariableReader: _ => null,
             validateTranslationProviderAsync: (_, _) => Task.CompletedTask);
@@ -628,7 +706,7 @@ Second sentence
             var videoPath = Path.Combine(directory.FullName, "sample.mp4");
             File.WriteAllText(videoPath, string.Empty);
             var transcribeCalls = 0;
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(new FakeCredentialStore()),
                 environmentVariableReader: _ => null,
                 transcribeVideoAsync: (path, options, _, _, _) =>
@@ -669,11 +747,13 @@ Second sentence
         {
             var store = new FakeCredentialStore();
             store.SaveDeepLApiKey("configured");
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
             var videoPath = Path.Combine(directory.FullName, "generated.mp4");
             File.WriteAllText(videoPath, string.Empty);
 
-            var controller = new SubtitleWorkflowController(
+            var controller = TestWorkflowControllerFactory.Create(
                 new CredentialFacade(store),
+                mediaSessionCoordinator: mediaSessionCoordinator,
                 environmentVariableReader: _ => null,
                 validateTranslationProviderAsync: (_, _) => Task.CompletedTask,
                 transcribeVideoAsync: (_, _, _, _, _) =>
@@ -697,7 +777,7 @@ Second sentence
             var result = await controller.LoadMediaSubtitlesAsync(videoPath);
             Assert.True(result.UsedGeneratedCaptions);
             Assert.Single(controller.CurrentCues);
-            controller.CurrentCues[0].TranslatedText = null;
+            mediaSessionCoordinator.ClearTranslations();
 
             await controller.SetTranslationEnabledAsync(true);
             await Task.Delay(50);
@@ -709,6 +789,62 @@ Second sentence
         {
             directory.Delete(recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_CurrentCuesProjectionDoesNotMutateSessionState()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hola
+""");
+
+            var controller = TestWorkflowControllerFactory.Create(
+                new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
+                environmentVariableReader: _ => null);
+
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            mediaSessionCoordinator.ClearTranslations();
+
+            controller.CurrentCues[0].TranslatedText = "Hello";
+
+            var sessionCue = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+            Assert.Equal("Hola", sessionCue.Text);
+            Assert.Empty(mediaSessionCoordinator.Snapshot.Translation.Segments);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private static TranslationSegment CreateTranslationSegment(TranscriptSegment transcript, string text, string language = "en")
+    {
+        return new TranslationSegment
+        {
+            Id = new TranslationSegmentId($"test:{transcript.Id.Value}:{language}:{text}"),
+            SourceSegmentId = transcript.Id,
+            Start = transcript.Start,
+            End = transcript.End,
+            Text = text,
+            Language = language,
+            Provenance = new SegmentProvenance
+            {
+                Source = SubtitlePipelineSource.Generated,
+                Provider = "tests",
+                ModelKey = "tests"
+            },
+            Revision = SegmentRevision.Initial
+        };
     }
 
     private sealed class FakeCredentialStore : ICredentialStore
@@ -798,5 +934,46 @@ Second sentence
             onProgress?.Invoke(new RuntimeInstallProgress { Stage = "ready" });
             return Task.FromResult("C:\\Tools\\llama-server.exe");
         }
+    }
+
+    private sealed class FakeProviderAvailabilityService : IProviderAvailabilityService
+    {
+        public string ResolvePersistedTranscriptionModelKey(string? modelKey)
+            => SubtitleWorkflowCatalog.GetTranscriptionModel(modelKey).Key;
+
+        public string? ResolvePersistedTranslationModelKey(string? modelKey)
+            => modelKey;
+
+        public bool IsTranslationProviderConfigured(TranslationProvider provider)
+            => false;
+
+        public string? ResolveLlamaCppServerPath()
+            => null;
+    }
+
+    private sealed class ThrowingWarmupSubtitleTranslator : ISubtitleTranslator
+    {
+        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged;
+
+        public Task WarmupAsync(TranslationModelSelection selection, CancellationToken cancellationToken)
+            => Task.FromException(new InvalidOperationException("warmup failed"));
+
+        public Task<string> TranslateAsync(TranslationModelSelection selection, string text, CancellationToken cancellationToken)
+            => Task.FromResult(text);
+
+        public Task<IReadOnlyList<string>> TranslateBatchAsync(TranslationModelSelection selection, IReadOnlyList<string> texts, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<string>>(texts.ToArray());
+    }
+
+    private sealed class FakeSuccessfulRuntimeProvisioner : IRuntimeProvisioner
+    {
+        public Task<string> EnsureLlamaCppAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+            => Task.FromResult("llama");
+
+        public Task<string> EnsureFfmpegAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+            => Task.FromResult("ffmpeg");
+
+        public Task<bool> EnsureLlamaCppRuntimeReadyAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+            => Task.FromResult(true);
     }
 }

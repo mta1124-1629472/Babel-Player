@@ -20,7 +20,7 @@ public sealed class MainShellViewModel : ObservableObject
     private bool _isCaptionGenerationInProgress;
 
     public BrowserPaneViewModel Browser { get; } = new();
-    public PlaylistViewModel Playlist { get; } = new();
+    public QueuePaneViewModel Queue { get; } = new();
     public TransportViewModel Transport { get; } = new();
     public SubtitleOverlayViewModel SubtitleOverlay { get; } = new();
 
