@@ -42,8 +42,7 @@ public sealed record ShellWorkflowTransitionResult
 
 public sealed class ShellController : IDisposable
 {
-    private readonly PlaylistController _playlistController;
-    private readonly PlaybackSessionController _playbackSessionController;
+    private readonly PlaybackQueueController _playbackQueueController;
     private readonly IPlaybackBackend _playbackBackend;
     private readonly SubtitleWorkflowController _subtitleWorkflowController;
     private readonly LibraryBrowserService _libraryBrowserService;
@@ -55,42 +54,73 @@ public sealed class ShellController : IDisposable
     private TimeSpan _autoResumePlaybackPosition = TimeSpan.Zero;
     private bool _autoResumePlaybackFromBeginning = true;
 
+    public event Action<PlaybackQueueSnapshot>? QueueSnapshotChanged;
+
     public ShellController(
-        PlaylistController playlistController,
-        PlaybackSessionController playbackSessionController,
+        PlaybackQueueController playbackQueueController,
         IPlaybackBackend playbackBackend,
         SubtitleWorkflowController subtitleWorkflowController,
         LibraryBrowserService libraryBrowserService,
         ResumePlaybackService resumePlaybackService)
     {
-        _playlistController = playlistController;
-        _playbackSessionController = playbackSessionController;
+        _playbackQueueController = playbackQueueController;
         _playbackBackend = playbackBackend;
         _subtitleWorkflowController = subtitleWorkflowController;
         _libraryBrowserService = libraryBrowserService;
         _resumePlaybackService = resumePlaybackService;
         _resumeTrackingCoordinator = new ResumeTrackingCoordinator(playbackBackend, resumePlaybackService);
+        _playbackQueueController.SnapshotChanged += HandleQueueSnapshotChanged;
     }
 
-    public IReadOnlyList<PlaylistItem> PlaylistItems => _playlistController.Items;
+    public PlaybackQueueSnapshot QueueSnapshot => _playbackQueueController.Snapshot;
 
-    public int CurrentPlaylistIndex => _playlistController.CurrentIndex;
+    public PlaylistItem? NowPlayingItem => _playbackQueueController.NowPlayingItem;
 
-    public PlaylistItem? CurrentPlaylistItem => _playlistController.CurrentItem;
+    public IReadOnlyList<PlaylistItem> QueueItems => _playbackQueueController.QueueItems;
+
+    public IReadOnlyList<PlaylistItem> HistoryItems => _playbackQueueController.HistoryItems;
 
     public PlaybackStateSnapshot CurrentPlaybackSnapshot => _resumeTrackingCoordinator.CurrentSnapshot with
     {
-        PlaylistIndex = _playlistController.CurrentIndex,
-        PlaylistCount = _playlistController.Items.Count
+        PlaylistIndex = _playbackQueueController.NowPlayingItem is null ? -1 : 0,
+        PlaylistCount = _playbackQueueController.QueueItems.Count
     };
 
     public ShellQueueMediaResult EnqueueFiles(IEnumerable<string> files, bool autoplay)
     {
-        var added = _playlistController.EnqueueFiles(files);
+        var entries = files
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToList();
+        if (entries.Count == 0)
+        {
+            return new ShellQueueMediaResult
+            {
+                StatusMessage = "No supported media files were selected.",
+                IsError = true
+            };
+        }
+
+        if (!autoplay)
+        {
+            var added = _playbackQueueController.AddToQueue(entries);
+            return new ShellQueueMediaResult
+            {
+                AddedItems = added,
+                StatusMessage = $"Queued {added.Count} item(s)."
+            };
+        }
+
+        var itemToLoad = _playbackQueueController.PlayNow(entries[0]);
+        var addedItems = entries.Count > 1
+            ? _playbackQueueController.AddToQueue(entries.Skip(1))
+            : [];
         return new ShellQueueMediaResult
         {
-            AddedItems = added,
-            ItemToLoad = autoplay ? added.FirstOrDefault() : null
+            AddedItems = addedItems,
+            ItemToLoad = itemToLoad,
+            StatusMessage = addedItems.Count > 0
+                ? $"Now playing {itemToLoad.DisplayName}. Added {addedItems.Count} item(s) to Up Next."
+                : $"Now playing {itemToLoad.DisplayName}."
         };
     }
 
@@ -99,7 +129,6 @@ public sealed class ShellController : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(folderPath);
 
         var files = _libraryBrowserService.EnumerateMediaFiles(folderPath, recursive: true)
-            .Where(path => !_playlistController.Items.Any(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         if (files.Count == 0)
         {
@@ -110,13 +139,37 @@ public sealed class ShellController : IDisposable
             };
         }
 
-        var added = _playlistController.EnqueueFolder(folderPath, files);
+        PlaylistItem? itemToLoad = null;
+        IReadOnlyList<PlaylistItem> added;
+        if (autoplay)
+        {
+            itemToLoad = _playbackQueueController.PlayNow(new PlaylistItem
+            {
+                Path = files[0],
+                DisplayName = Path.GetFileName(files[0]),
+                IsDirectorySeed = true
+            });
+            added = files.Count > 1
+                ? _playbackQueueController.AddFolderToQueue(folderPath, files.Skip(1))
+                : [];
+        }
+        else
+        {
+            added = _playbackQueueController.AddFolderToQueue(folderPath, files);
+        }
+
         return new ShellQueueMediaResult
         {
             AddedItems = added,
-            ItemToLoad = autoplay ? added.FirstOrDefault() : null,
+            ItemToLoad = itemToLoad,
             PinnedFolders = [folderPath],
-            StatusMessage = $"Queued {added.Count} item(s) from {Path.GetFileName(folderPath)}."
+            StatusMessage = autoplay
+                ? itemToLoad is null
+                    ? $"Queued {added.Count} item(s) from {Path.GetFileName(folderPath)}."
+                    : added.Count > 0
+                        ? $"Now playing {itemToLoad.DisplayName}. Added {added.Count} item(s) from {Path.GetFileName(folderPath)} to Up Next."
+                        : $"Now playing {itemToLoad.DisplayName}."
+                : $"Queued {added.Count} item(s) from {Path.GetFileName(folderPath)}."
         };
     }
 
@@ -145,38 +198,67 @@ public sealed class ShellController : IDisposable
             };
         }
 
-        var added = _playlistController.EnqueueFiles(discoveredFiles);
+        var itemToLoad = _playbackQueueController.PlayNow(discoveredFiles[0]);
+        var added = discoveredFiles.Count > 1
+            ? _playbackQueueController.AddToQueue(discoveredFiles.Skip(1))
+            : [];
         return new ShellQueueMediaResult
         {
             AddedItems = added,
-            ItemToLoad = added.FirstOrDefault(),
+            ItemToLoad = itemToLoad,
             PinnedFolders = pinnedFolders.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
         };
     }
 
-    public PlaylistItem? EnsurePlaylistItem(string path)
+    public ShellQueueMediaResult PlayNow(string path)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-
-        var existing = _playlistController.Items.FirstOrDefault(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
-        return existing ?? _playlistController.EnqueueFiles([path]).FirstOrDefault();
+        var item = _playbackQueueController.PlayNow(path);
+        return new ShellQueueMediaResult
+        {
+            ItemToLoad = item,
+            StatusMessage = $"Now playing {item.DisplayName}."
+        };
     }
 
-    public PlaylistItem? MovePrevious() => _playlistController.MovePrevious();
-
-    public PlaylistItem? MoveNext() => _playlistController.MoveNext();
-
-    public void RemovePlaylistItemAt(int index)
+    public ShellQueueMediaResult PlayNext(string path)
     {
-        _playlistController.RemoveAt(index);
+        var added = _playbackQueueController.PlayNext([path]);
+        return new ShellQueueMediaResult
+        {
+            AddedItems = added,
+            StatusMessage = added.Count == 0
+                ? "Nothing was added to Up Next."
+                : $"{added[0].DisplayName} will play next."
+        };
     }
 
-    public void ClearPlaylist()
+    public ShellQueueMediaResult AddToQueue(IEnumerable<string> files)
     {
-        _playlistController.Clear();
+        var added = _playbackQueueController.AddToQueue(files);
+        return new ShellQueueMediaResult
+        {
+            AddedItems = added,
+            StatusMessage = added.Count == 0
+                ? "Nothing was added to Up Next."
+                : $"Queued {added.Count} item(s) in Up Next."
+        };
     }
 
-    public async Task<bool> LoadPlaylistItemAsync(
+    public PlaylistItem? MovePrevious() => _playbackQueueController.MovePrevious();
+
+    public PlaylistItem? MoveNext() => _playbackQueueController.MoveNext();
+
+    public void RemoveQueueItemAt(int index)
+    {
+        _playbackQueueController.RemoveQueueItemAt(index);
+    }
+
+    public void ClearQueue()
+    {
+        _playbackQueueController.ClearQueue();
+    }
+
+    public async Task<bool> LoadPlaybackItemAsync(
         PlaylistItem? item,
         ShellLoadMediaOptions options,
         CancellationToken cancellationToken)
@@ -194,7 +276,6 @@ public sealed class ShellController : IDisposable
             _resumeTrackingCoordinator.Flush();
         }
 
-        _playbackSessionController.StartWith(item);
         _resumeTrackingCoordinator.ResetForMedia(item.Path);
 
         await _playbackBackend.LoadAsync(item.Path, cancellationToken);
@@ -212,7 +293,7 @@ public sealed class ShellController : IDisposable
 
     public async Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(PlaybackStateSnapshot snapshot, bool resumeEnabled, CancellationToken cancellationToken = default)
     {
-        var current = _playlistController.CurrentItem;
+        var current = _playbackQueueController.NowPlayingItem;
         var result = new ShellPlaybackOpenResult
         {
             StatusMessage = current is null ? "Media opened." : $"Now playing {current.DisplayName}."
@@ -263,7 +344,7 @@ public sealed class ShellController : IDisposable
         }
 
         ResetCaptionStartupGate();
-        var next = _playlistController.AdvanceAfterMediaEnded();
+        var next = _playbackQueueController.AdvanceAfterMediaEnded();
         return new ShellMediaEndedResult
         {
             NextItem = next,
@@ -273,7 +354,13 @@ public sealed class ShellController : IDisposable
 
     public void Dispose()
     {
+        _playbackQueueController.SnapshotChanged -= HandleQueueSnapshotChanged;
         _resumeTrackingCoordinator.Dispose();
+    }
+
+    private void HandleQueueSnapshotChanged(PlaybackQueueSnapshot snapshot)
+    {
+        QueueSnapshotChanged?.Invoke(snapshot);
     }
 
     public Task PlayAsync(CancellationToken cancellationToken = default)

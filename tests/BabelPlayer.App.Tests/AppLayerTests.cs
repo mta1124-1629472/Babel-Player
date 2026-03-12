@@ -8,20 +8,48 @@ namespace BabelPlayer.App.Tests;
 public sealed class AppLayerTests
 {
     [Fact]
-    public void PlaylistController_AutoAdvanceMovesToNextItem()
+    public void PlaybackQueueController_AutoAdvancePromotesQueueAndMovesCurrentToHistory()
     {
-        var controller = new PlaylistController();
+        var controller = new PlaybackQueueController();
 
-        controller.EnqueueFiles(["first.mp4", "second.mp4", "third.mp4"]);
+        controller.PlayNow("first.mp4");
+        controller.AddToQueue(["second.mp4", "third.mp4"]);
 
-        Assert.Equal(0, controller.CurrentIndex);
-        Assert.Equal("first.mp4", controller.CurrentItem?.Path);
+        Assert.Equal("first.mp4", controller.NowPlayingItem?.Path);
 
         var next = controller.AdvanceAfterMediaEnded();
 
         Assert.NotNull(next);
         Assert.Equal("second.mp4", next!.Path);
-        Assert.Equal(1, controller.CurrentIndex);
+        Assert.Equal("second.mp4", controller.NowPlayingItem?.Path);
+        Assert.Equal("first.mp4", controller.HistoryItems[0].Path);
+    }
+
+    [Fact]
+    public void PlaybackQueueController_PlayNowDoesNotAppendCurrentItemToQueue()
+    {
+        var controller = new PlaybackQueueController();
+
+        controller.PlayNow("current.mp4");
+        controller.AddToQueue(["future-a.mp4", "future-b.mp4"]);
+        controller.PlayNow("replacement.mp4");
+
+        Assert.Equal("replacement.mp4", controller.NowPlayingItem?.Path);
+        Assert.Equal(new[] { "future-a.mp4", "future-b.mp4" }, controller.QueueItems.Select(item => item.Path).ToArray());
+        Assert.Equal("current.mp4", controller.HistoryItems[0].Path);
+    }
+
+    [Fact]
+    public void PlaybackQueueController_PlayNextInsertsAtFrontWhilePreservingOrder()
+    {
+        var controller = new PlaybackQueueController();
+
+        controller.AddToQueue(["later-1.mp4", "later-2.mp4"]);
+        controller.PlayNext(["next-1.mp4", "next-2.mp4"]);
+
+        Assert.Equal(
+            new[] { "next-1.mp4", "next-2.mp4", "later-1.mp4", "later-2.mp4" },
+            controller.QueueItems.Select(item => item.Path).ToArray());
     }
 
     [Fact]

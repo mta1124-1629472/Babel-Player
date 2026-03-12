@@ -12,8 +12,7 @@ public interface IShellCompositionRoot
     ShellDependencies Create(
         MainWindow ownerWindow,
         Grid rootGrid,
-        PlaylistController playlistController,
-        PlaybackSessionController playbackSessionController,
+        PlaybackQueueController playbackQueueController,
         CredentialFacade credentialFacade,
         Func<IDisposable> suppressDialogPresentation);
 }
@@ -40,8 +39,7 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
     public ShellDependencies Create(
         MainWindow ownerWindow,
         Grid rootGrid,
-        PlaylistController playlistController,
-        PlaybackSessionController playbackSessionController,
+        PlaybackQueueController playbackQueueController,
         CredentialFacade credentialFacade,
         Func<IDisposable> suppressDialogPresentation)
     {
@@ -87,8 +85,7 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
         var libraryBrowserService = new LibraryBrowserService();
         var resumePlaybackService = new ResumePlaybackService();
         var shellController = new ShellController(
-            playlistController,
-            playbackSessionController,
+            playbackQueueController,
             playbackBackend,
             subtitleWorkflowController,
             libraryBrowserService,
