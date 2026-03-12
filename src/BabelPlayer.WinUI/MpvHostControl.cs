@@ -13,12 +13,14 @@ namespace BabelPlayer.WinUI;
 
 public sealed class MpvHostControl : UserControl
 {
+    private readonly IBabelLogger _logger;
     private readonly Grid _root;
     private readonly CancellationTokenSource _lifetimeCts = new();
     private Window? _ownerWindow;
     private IPlaybackBackend? _playbackBackend;
     private string? _pendingPath;
     private double _volume = 0.8;
+    private bool _isMuted;
     private bool _initialized;
     private bool _eventsAttached;
     private IntPtr _hwnd;
@@ -35,8 +37,9 @@ public sealed class MpvHostControl : UserControl
     private RectInt32 _lastHostBounds;
     private int _pendingHostBoundsRetryCount;
 
-    public MpvHostControl()
+    public MpvHostControl(IBabelLogFactory? logFactory = null)
     {
+        _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("shell.mpvHost");
         _root = new Grid();
         Content = _root;
         _hostBoundsRetryTimer = new DispatcherTimer
@@ -105,7 +108,9 @@ public sealed class MpvHostControl : UserControl
 
     public double Volume
     {
-        get => _playbackBackend?.State.Volume > 0 ? _playbackBackend.State.Volume : _volume;
+        get => _initialized && _playbackBackend is not null
+            ? Math.Clamp(_playbackBackend.State.Volume, 0, 1)
+            : _volume;
         set
         {
             _volume = Math.Clamp(value, 0, 1);
@@ -129,7 +134,9 @@ public sealed class MpvHostControl : UserControl
 
     public double PlaybackRate => _playbackBackend?.Clock.Current.Rate ?? 1.0;
 
-    public bool IsMuted => _playbackBackend?.State.IsMuted == true;
+    public bool IsMuted => _initialized && _playbackBackend is not null
+        ? _playbackBackend.State.IsMuted
+        : _isMuted;
 
     public bool IsPaused => _playbackBackend?.Clock.Current.IsPaused ?? true;
 
@@ -165,7 +172,17 @@ public sealed class MpvHostControl : UserControl
 
     public void SetPlaybackRate(double speed) => _ = _playbackBackend?.SetPlaybackRateAsync(speed, _lifetimeCts.Token);
 
-    public void SetMute(bool muted) => _ = _playbackBackend?.SetMuteAsync(muted, _lifetimeCts.Token);
+    public void SetMute(bool muted)
+    {
+        _isMuted = muted;
+        _ = _playbackBackend?.SetMuteAsync(muted, _lifetimeCts.Token);
+    }
+
+    public void SetPreferredAudioState(double volume, bool muted)
+    {
+        _volume = Math.Clamp(volume, 0, 1);
+        _isMuted = muted;
+    }
 
     public void SelectAudioTrack(int? trackId) => _ = _playbackBackend?.SetAudioTrackAsync(trackId, _lifetimeCts.Token);
 
@@ -282,6 +299,13 @@ public sealed class MpvHostControl : UserControl
             return;
         }
 
+        _logger.LogInfo(
+            "Initializing mpv host control.",
+            BabelLogContext.Create(
+                ("pendingPath", _pendingPath),
+                ("preferredVolume", _volume),
+                ("preferredMuted", _isMuted)));
+
         _hwnd = NativeMethods.CreateWindowEx(
             0,
             "static",
@@ -298,6 +322,7 @@ public sealed class MpvHostControl : UserControl
 
         if (_hwnd == IntPtr.Zero)
         {
+            _logger.LogError("Unable to create native mpv host window.");
             MediaFailed?.Invoke("Unable to create the native WinUI video host window.");
             return;
         }
@@ -313,11 +338,15 @@ public sealed class MpvHostControl : UserControl
             {
                 if (task.IsFaulted)
                 {
+                    _logger.LogError(
+                        "Playback backend initialization failed from host control.",
+                        task.Exception?.GetBaseException(),
+                        BabelLogContext.Create(("pendingPath", _pendingPath)));
                     DispatcherQueue.TryEnqueue(() => MediaFailed?.Invoke(task.Exception?.GetBaseException().Message ?? "Playback backend initialization failed."));
                     return;
                 }
 
-                await _playbackBackend.SetVolumeAsync(_volume, _lifetimeCts.Token);
+                await SyncPreferredAudioStateAsync("backend-initialized").ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(_pendingPath))
                 {
                     await _playbackBackend.LoadAsync(_pendingPath, _lifetimeCts.Token);
@@ -325,6 +354,9 @@ public sealed class MpvHostControl : UserControl
 
                 DispatcherQueue.TryEnqueue(() =>
                 {
+                    _logger.LogInfo(
+                        "Playback backend initialized for mpv host control.",
+                        BabelLogContext.Create(("pendingPath", _pendingPath), ("hostWindow", _hwnd)));
                     RaisePlaybackStateChanged();
                     QueueHostBoundsSync();
                 });
@@ -354,6 +386,7 @@ public sealed class MpvHostControl : UserControl
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            _ = SyncPreferredAudioStateAsync("media-opened");
             RaisePlaybackStateChanged();
             MediaOpened?.Invoke();
         });
@@ -408,6 +441,41 @@ public sealed class MpvHostControl : UserControl
         };
     }
 
+    private async Task SyncPreferredAudioStateAsync(string reason)
+    {
+        if (!_initialized || _playbackBackend is null || _lifetimeCts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            _logger.LogInfo(
+                "Synchronizing preferred audio state.",
+                BabelLogContext.Create(
+                    ("reason", reason),
+                    ("volume", _volume),
+                    ("muted", _isMuted),
+                    ("path", _playbackBackend.State.Path)));
+            await _playbackBackend.SetVolumeAsync(_volume, _lifetimeCts.Token).ConfigureAwait(false);
+            await _playbackBackend.SetMuteAsync(_isMuted, _lifetimeCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                "Failed to synchronize preferred audio state.",
+                ex,
+                BabelLogContext.Create(
+                    ("reason", reason),
+                    ("volume", _volume),
+                    ("muted", _isMuted),
+                    ("path", _playbackBackend.State.Path)));
+        }
+    }
+
     private void QueueHostBoundsSync()
     {
         if (_hostBoundsSyncQueued)
@@ -445,6 +513,16 @@ public sealed class MpvHostControl : UserControl
         {
             return;
         }
+
+        _logger.LogInfo(
+            "Native video host bounds synchronized.",
+            BabelLogContext.Create(
+                ("x", bounds.X),
+                ("y", bounds.Y),
+                ("width", bounds.Width),
+                ("height", bounds.Height),
+                ("visible", isVisible),
+                ("path", _playbackBackend?.State.Path)));
 
         NativeMethods.ShowWindow(_hwnd, isVisible ? NativeMethods.SW_SHOW : NativeMethods.SW_HIDE);
         if (isVisible)

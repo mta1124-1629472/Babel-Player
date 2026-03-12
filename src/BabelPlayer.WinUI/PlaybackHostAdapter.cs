@@ -51,6 +51,14 @@ public sealed class PlaybackHostAdapter
 
     public RectInt32 GetStageBounds(FrameworkElement relativeTo) => _videoPresenter.GetStageBounds(relativeTo);
 
+    public void SetPreferredAudioState(double volume, bool muted)
+    {
+        if (View is MpvHostControl hostControl)
+        {
+            hostControl.SetPreferredAudioState(volume, muted);
+        }
+    }
+
     private PlaybackStateSnapshot BuildSnapshot()
     {
         return new PlaybackStateSnapshot

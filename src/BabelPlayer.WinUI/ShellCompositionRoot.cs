@@ -92,7 +92,7 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             new SubtitlePresentationProjector());
         var playbackBackend = new MpvPlaybackBackend(_logFactory);
         var playbackBackendCoordinator = new PlaybackBackendCoordinator(playbackBackend, mediaSessionCoordinator);
-        var videoPresenter = new MpvVideoPresenter();
+        var videoPresenter = new MpvVideoPresenter(_logFactory);
         var subtitlePresenter = new DetachedWindowSubtitlePresenter(ownerWindow);
         var shellProjectionService = new ShellProjectionService(mediaSessionCoordinator.Store);
         var libraryBrowserService = new LibraryBrowserService();
