@@ -69,6 +69,7 @@ public sealed record SubtitleWorkflowSnapshot
     public string CurrentSourceLanguage { get; init; } = "und";
     public SubtitlePipelineSource SubtitleSource { get; init; }
     public string? OverlayStatus { get; init; }
+    public string CaptionGenerationModeLabel { get; init; } = SubtitleWorkflowCatalog.GetTranscriptionModel(SubtitleWorkflowCatalog.DefaultTranscriptionModelKey).DisplayName;
     public SubtitleCue? ActiveCue { get; init; }
     public IReadOnlyList<SubtitleCue> Cues { get; init; } = [];
 }

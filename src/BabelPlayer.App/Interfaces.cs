@@ -2,6 +2,9 @@ using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
 
+/// <summary>Platform-neutral rectangle (pixel units) returned by display-bounds queries.</summary>
+public readonly record struct DisplayBounds(int X, int Y, int Width, int Height);
+
 public interface IPlaybackHost
 {
     event Action<PlaybackStateSnapshot>? StateChanged;
@@ -36,6 +39,7 @@ public interface IPlaybackHost
 public interface IWindowModeService
 {
     PlaybackWindowMode CurrentMode { get; }
+    DisplayBounds GetCurrentDisplayBounds(bool workArea = false);
     Task SetModeAsync(PlaybackWindowMode mode, CancellationToken cancellationToken = default);
 }
 
