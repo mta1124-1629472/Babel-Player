@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Foundation;
 using Windows.Graphics;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
@@ -22,6 +23,14 @@ namespace BabelPlayer.WinUI;
 
 public sealed partial class MainWindow : Window
 {
+    private enum LanguageToolsPanelLayoutMode
+    {
+        Unknown,
+        Wide,
+        Medium,
+        Narrow
+    }
+
     private const string IdleWindowSubtitle = "Play anything. Understand everything.";
     private const string LibraryQueueDragFormat = "BabelPlayer/LibraryQueuePaths";
     private readonly SettingsFacade _settingsFacade = new();
@@ -41,6 +50,9 @@ public sealed partial class MainWindow : Window
     private readonly WinUICredentialDialogService _credentialDialogService;
     private readonly IRuntimeBootstrapService _runtimeBootstrapService;
     private readonly StageCoordinator _stageCoordinator;
+    private readonly IBabelLogger _logger;
+    private readonly IBabelLogger _statusLogger;
+    private readonly IAppDiagnosticsContext _diagnosticsContext;
     private readonly List<MediaTrackInfo> _currentTracks = [];
     private bool _suppressPositionSliderChanges;
     private bool _suppressFullscreenSliderChanges;
@@ -55,6 +67,7 @@ public sealed partial class MainWindow : Window
     private bool _hasAttemptedSystemBackdrop;
     private bool _shellDropTargetsInitialized;
     private bool _isLibraryDragOperationInProgress;
+    private LanguageToolsPanelLayoutMode _languageToolsPanelLayoutMode;
     private Slider? _activeScrubber;
     private string? _pendingAutoFitPath;
     private string? _lastAutoFitSignature;
@@ -90,6 +103,9 @@ public sealed partial class MainWindow : Window
     private Border TransportPane = null!;
     private Border LanguageToolsPane = null!;
     private Border LanguageToolsContentBorder = null!;
+    private Border LanguageToolsTranscriptionGroup = null!;
+    private Border LanguageToolsTranslationGroup = null!;
+    private Border LanguageToolsSubtitlesGroup = null!;
     private Border DecoderBadge = null!;
     private Border SubtitleOverlayBorder = null!;
     private ColumnDefinition BrowserColumn = null!;
@@ -110,7 +126,9 @@ public sealed partial class MainWindow : Window
     private Slider VolumeSlider = null!;
     private ToggleButton MuteToggleButton = null!;
     private Button LanguageToolsToggleButton = null!;
+    private Grid LanguageToolsGroupsGrid = null!;
     private ToggleButton LanguageToolsSubtitleToggleButton = null!;
+    private TextBlock LanguageToolsSubtitleStatusTextBlock = null!;
     private ComboBox SubtitleModeComboBox = null!;
     private ComboBox TranscriptionModelComboBox = null!;
     private ComboBox TranslationModelComboBox = null!;
@@ -150,6 +168,9 @@ public sealed partial class MainWindow : Window
         _windowModeService = dependencies.WindowModeService;
         _credentialDialogService = dependencies.CredentialDialogService;
         _runtimeBootstrapService = dependencies.RuntimeBootstrapService;
+        _diagnosticsContext = dependencies.DiagnosticsContext;
+        _logger = dependencies.LogFactory.CreateLogger("shell.window");
+        _statusLogger = dependencies.LogFactory.CreateLogger("shell.status");
         _subtitleWorkflowController = dependencies.SubtitleWorkflowController;
         _playbackBackend = dependencies.PlaybackBackend;
         _playbackBackendCoordinator = dependencies.PlaybackBackendCoordinator;
@@ -192,8 +213,10 @@ public sealed partial class MainWindow : Window
         Activated += MainWindow_Activated;
 
         InitializeShellState();
+        _diagnosticsContext.UpdateWindowMode(_windowModeService.CurrentMode.ToString());
         ApplyShellProjection(_shellProjectionService.Current);
         ApplyQueueSnapshot(_shellController.QueueSnapshot);
+        _logger.LogInfo("Main window initialized.");
         _ = _subtitleWorkflowController.InitializeAsync();
     }
 
@@ -658,8 +681,6 @@ public sealed partial class MainWindow : Window
         LibraryTree.ItemInvoked += LibraryTree_ItemInvoked;
         LibraryTree.DragItemsStarting += LibraryTree_DragItemsStarting;
         LibraryTree.DragItemsCompleted += LibraryTree_DragItemsCompleted;
-        LibraryTree.ContextRequested += LibraryTree_ContextRequested;
-        LibraryTree.RightTapped += LibraryTree_RightTapped;
         Grid.SetRow(LibraryTree, 1);
         grid.Children.Add(LibraryTree);
 
@@ -980,7 +1001,7 @@ public sealed partial class MainWindow : Window
     {
         var drawer = new StackPanel
         {
-            Spacing = 10
+            Spacing = 12
         };
 
         LanguageToolsToggleButton = new Button
@@ -996,66 +1017,28 @@ public sealed partial class MainWindow : Window
         drawer.Children.Add(LanguageToolsToggleButton);
 
         LanguageToolsContentBorder = CreatePanelBorder(
-            new SolidColorBrush(ColorHelper.FromArgb(40, 255, 255, 255)),
-            new SolidColorBrush(ColorHelper.FromArgb(0, 0, 0, 0)),
-            0,
+            new SolidColorBrush(ColorHelper.FromArgb(20, 255, 255, 255)),
+            new SolidColorBrush(ColorHelper.FromArgb(24, 255, 255, 255)),
+            1,
             new CornerRadius(18),
-            new Thickness(16, 14, 16, 16));
+            new Thickness(14));
+        LanguageToolsContentBorder.SizeChanged += LanguageToolsContentBorder_SizeChanged;
 
-        var languageGrid = new Grid
+        LanguageToolsGroupsGrid = new Grid
         {
-            RowSpacing = 10,
+            RowSpacing = 12,
             ColumnSpacing = 12
         };
-        languageGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        languageGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        languageGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        languageGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        languageGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-        var languageHeader = new Grid
+        var transcriptionControls = new StackPanel
         {
-            ColumnSpacing = 12
+            Spacing = 10
         };
-        languageHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        languageHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var languageHeaderText = new StackPanel { Spacing = 4 };
-        languageHeaderText.Children.Add(new TextBlock
+        TranscriptionModelComboBox = new ComboBox
         {
-            Text = "Language Tools",
-            FontSize = 16,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-        });
-        languageHeaderText.Children.Add(new TextBlock
-        {
-            Text = "Transcription, translation, and subtitle behavior.",
-            Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 196, 205, 219))
-        });
-        languageHeader.Children.Add(languageHeaderText);
-        LanguageToolsSubtitleToggleButton = new ToggleButton
-        {
-            MinWidth = 116,
-            Padding = new Thickness(12, 8, 12, 8),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top
+            Header = "Transcription Model",
+            MinWidth = 160,
+            HorizontalAlignment = HorizontalAlignment.Stretch
         };
-        LanguageToolsSubtitleToggleButton.Click += SubtitleVisibilityToggleButton_Click;
-        SetControlHint(LanguageToolsSubtitleToggleButton, "Toggle subtitles");
-        Grid.SetColumn(LanguageToolsSubtitleToggleButton, 1);
-        languageHeader.Children.Add(LanguageToolsSubtitleToggleButton);
-        Grid.SetColumnSpan(languageHeader, 2);
-        languageGrid.Children.Add(languageHeader);
-
-        var modelRow = new Grid
-        {
-            ColumnSpacing = 12
-        };
-        modelRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        modelRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetRow(modelRow, 1);
-        Grid.SetColumnSpan(modelRow, 2);
-
-        TranscriptionModelComboBox = new ComboBox { Header = "Transcription Model", MinWidth = 220 };
         foreach (var model in new[]
                  {
                      SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny-multilingual"),
@@ -1072,9 +1055,42 @@ public sealed partial class MainWindow : Window
         TranscriptionModelComboBox.DisplayMemberPath = nameof(TranscriptionModelSelection.DisplayName);
         TranscriptionModelComboBox.SelectionChanged += TranscriptionModelComboBox_SelectionChanged;
         SetControlHint(TranscriptionModelComboBox, "Transcription model");
-        modelRow.Children.Add(TranscriptionModelComboBox);
+        transcriptionControls.Children.Add(TranscriptionModelComboBox);
+        LanguageToolsTranscriptionGroup = CreateLanguageToolsSection(
+            "Transcription",
+            "Choose the speech-to-text model used for subtitle generation.",
+            transcriptionControls);
 
-        TranslationModelComboBox = new ComboBox { Header = "Translation Model", MinWidth = 220 };
+        var translationControls = new StackPanel
+        {
+            Spacing = 10
+        };
+        TranslationToggleSwitch = new ToggleSwitch
+        {
+            Header = "Translate Current Video",
+            OffContent = "Off",
+            OnContent = "On"
+        };
+        TranslationToggleSwitch.Toggled += TranslationToggleSwitch_Toggled;
+        SetControlHint(TranslationToggleSwitch, "Translate current video");
+        translationControls.Children.Add(TranslationToggleSwitch);
+
+        AutoTranslateToggleSwitch = new ToggleSwitch
+        {
+            Header = "Auto Translate Non-English",
+            OffContent = "Off",
+            OnContent = "On"
+        };
+        AutoTranslateToggleSwitch.Toggled += AutoTranslateToggleSwitch_Toggled;
+        SetControlHint(AutoTranslateToggleSwitch, "Auto translate non-English");
+        translationControls.Children.Add(AutoTranslateToggleSwitch);
+
+        TranslationModelComboBox = new ComboBox
+        {
+            Header = "Translation Model",
+            MinWidth = 160,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
         foreach (var model in new[]
                  {
                      SubtitleWorkflowCatalog.GetTranslationModel("local:hymt-1.8b"),
@@ -1092,52 +1108,57 @@ public sealed partial class MainWindow : Window
         TranslationModelComboBox.SelectionChanged += TranslationModelComboBox_SelectionChanged;
         TranslationModelComboBox.IsEnabled = false;
         SetControlHint(TranslationModelComboBox, "Translation model");
-        Grid.SetColumn(TranslationModelComboBox, 1);
-        modelRow.Children.Add(TranslationModelComboBox);
-        languageGrid.Children.Add(modelRow);
+        translationControls.Children.Add(TranslationModelComboBox);
+        LanguageToolsTranslationGroup = CreateLanguageToolsSection(
+            "Translation",
+            "Configure translation behavior and keep the model selector with translation controls.",
+            translationControls);
 
-        var processingRow = new Grid
+        var subtitleControls = new StackPanel
+        {
+            Spacing = 12
+        };
+        var subtitleStatusRow = new Grid
         {
             ColumnSpacing = 12
         };
-        processingRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        processingRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        processingRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetRow(processingRow, 2);
-        Grid.SetColumnSpan(processingRow, 2);
-
-        TranslationToggleSwitch = new ToggleSwitch
+        subtitleStatusRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        subtitleStatusRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var subtitleStatusText = new StackPanel
         {
-            Header = "Translate Current Video",
-            OffContent = "Off",
-            OnContent = "On"
+            Spacing = 2
         };
-        TranslationToggleSwitch.Toggled += TranslationToggleSwitch_Toggled;
-        SetControlHint(TranslationToggleSwitch, "Translate current video");
-        processingRow.Children.Add(TranslationToggleSwitch);
-
-        AutoTranslateToggleSwitch = new ToggleSwitch
+        subtitleStatusText.Children.Add(new TextBlock
         {
-            Header = "Auto Translate Non-English",
-            OffContent = "Off",
-            OnContent = "On"
+            Text = "Subtitle Status",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        });
+        LanguageToolsSubtitleStatusTextBlock = new TextBlock
+        {
+            Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 196, 205, 219)),
+            TextWrapping = TextWrapping.Wrap
         };
-        AutoTranslateToggleSwitch.Toggled += AutoTranslateToggleSwitch_Toggled;
-        SetControlHint(AutoTranslateToggleSwitch, "Auto translate non-English");
-        Grid.SetColumn(AutoTranslateToggleSwitch, 1);
-        processingRow.Children.Add(AutoTranslateToggleSwitch);
+        subtitleStatusText.Children.Add(LanguageToolsSubtitleStatusTextBlock);
+        subtitleStatusRow.Children.Add(subtitleStatusText);
 
-        var subtitleRow = new StackPanel
+        LanguageToolsSubtitleToggleButton = new ToggleButton
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 10,
+            MinWidth = 116,
+            Padding = new Thickness(12, 8, 12, 8),
             HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Bottom
+            VerticalAlignment = VerticalAlignment.Center
         };
+        LanguageToolsSubtitleToggleButton.Click += SubtitleVisibilityToggleButton_Click;
+        SetControlHint(LanguageToolsSubtitleToggleButton, "Toggle subtitles");
+        Grid.SetColumn(LanguageToolsSubtitleToggleButton, 1);
+        subtitleStatusRow.Children.Add(LanguageToolsSubtitleToggleButton);
+        subtitleControls.Children.Add(subtitleStatusRow);
+
         SubtitleModeComboBox = new ComboBox
         {
             Header = "Subtitle Mode",
-            MinWidth = 170
+            MinWidth = 160,
+            HorizontalAlignment = HorizontalAlignment.Stretch
         };
         SubtitleModeComboBox.Items.Add(new ComboBoxItem { Content = "Off", Tag = SubtitleRenderMode.Off });
         SubtitleModeComboBox.Items.Add(new ComboBoxItem { Content = "Source Only", Tag = SubtitleRenderMode.SourceOnly });
@@ -1145,23 +1166,178 @@ public sealed partial class MainWindow : Window
         SubtitleModeComboBox.Items.Add(new ComboBoxItem { Content = "Dual", Tag = SubtitleRenderMode.Dual });
         SubtitleModeComboBox.SelectionChanged += SubtitleModeComboBox_SelectionChanged;
         SetControlHint(SubtitleModeComboBox, "Subtitle mode");
-        subtitleRow.Children.Add(SubtitleModeComboBox);
+        subtitleControls.Children.Add(SubtitleModeComboBox);
 
+        var subtitleStyleRow = new StackPanel
+        {
+            Spacing = 6
+        };
+        subtitleStyleRow.Children.Add(new TextBlock
+        {
+            Text = "Subtitle Style",
+            Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 196, 205, 219))
+        });
         var subtitleStyleButton = new DropDownButton
         {
-            Content = "Subtitle Style",
-            Flyout = CreateSubtitleStyleFlyout()
+            Content = "Adjust Style",
+            Flyout = CreateSubtitleStyleFlyout(),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left
         };
         SetControlHint(subtitleStyleButton, "Subtitle style");
-        subtitleRow.Children.Add(subtitleStyleButton);
-        Grid.SetColumn(subtitleRow, 2);
-        processingRow.Children.Add(subtitleRow);
-        languageGrid.Children.Add(processingRow);
+        subtitleStyleRow.Children.Add(subtitleStyleButton);
+        subtitleControls.Children.Add(subtitleStyleRow);
+        LanguageToolsSubtitlesGroup = CreateLanguageToolsSection(
+            "Subtitles",
+            "Keep subtitle visibility, mode, and styling together.",
+            subtitleControls);
 
-        LanguageToolsContentBorder.Child = languageGrid;
+        LanguageToolsGroupsGrid.Children.Add(LanguageToolsTranscriptionGroup);
+        LanguageToolsGroupsGrid.Children.Add(LanguageToolsTranslationGroup);
+        LanguageToolsGroupsGrid.Children.Add(LanguageToolsSubtitlesGroup);
+
+        LanguageToolsContentBorder.Child = LanguageToolsGroupsGrid;
         drawer.Children.Add(LanguageToolsContentBorder);
         UpdateLanguageToolsDrawerState();
+        UpdateLanguageToolsResponsiveLayout();
         return drawer;
+    }
+
+    private void LanguageToolsContentBorder_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        ApplyLanguageToolsResponsiveLayout(e.NewSize.Width);
+    }
+
+    private void UpdateLanguageToolsResponsiveLayout()
+    {
+        if (LanguageToolsContentBorder is null)
+        {
+            return;
+        }
+
+        var availableWidth = LanguageToolsContentBorder.ActualWidth;
+        if (availableWidth <= 0 && LanguageToolsPane is not null)
+        {
+            availableWidth = Math.Max(
+                0,
+                LanguageToolsPane.ActualWidth - LanguageToolsPane.Padding.Left - LanguageToolsPane.Padding.Right);
+        }
+
+        ApplyLanguageToolsResponsiveLayout(availableWidth);
+    }
+
+    private void ApplyLanguageToolsResponsiveLayout(double availableWidth)
+    {
+        if (LanguageToolsGroupsGrid is null
+            || LanguageToolsTranscriptionGroup is null
+            || LanguageToolsTranslationGroup is null
+            || LanguageToolsSubtitlesGroup is null
+            || availableWidth <= 0)
+        {
+            return;
+        }
+
+        var layoutMode = GetLanguageToolsPanelLayoutMode(availableWidth);
+        if (_languageToolsPanelLayoutMode == layoutMode)
+        {
+            return;
+        }
+
+        _languageToolsPanelLayoutMode = layoutMode;
+        LanguageToolsGroupsGrid.ColumnDefinitions.Clear();
+        LanguageToolsGroupsGrid.RowDefinitions.Clear();
+
+        switch (layoutMode)
+        {
+            case LanguageToolsPanelLayoutMode.Wide:
+                LanguageToolsGroupsGrid.ColumnSpacing = 12;
+                LanguageToolsGroupsGrid.RowSpacing = 0;
+                LanguageToolsGroupsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                LanguageToolsGroupsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                LanguageToolsGroupsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                LanguageToolsGroupsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                PlaceLanguageToolsGroup(LanguageToolsTranscriptionGroup, row: 0, column: 0);
+                PlaceLanguageToolsGroup(LanguageToolsTranslationGroup, row: 0, column: 1);
+                PlaceLanguageToolsGroup(LanguageToolsSubtitlesGroup, row: 0, column: 2);
+                break;
+
+            case LanguageToolsPanelLayoutMode.Medium:
+                LanguageToolsGroupsGrid.ColumnSpacing = 12;
+                LanguageToolsGroupsGrid.RowSpacing = 12;
+                LanguageToolsGroupsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                LanguageToolsGroupsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                LanguageToolsGroupsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                LanguageToolsGroupsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                PlaceLanguageToolsGroup(LanguageToolsTranscriptionGroup, row: 0, column: 0);
+                PlaceLanguageToolsGroup(LanguageToolsTranslationGroup, row: 0, column: 1);
+                PlaceLanguageToolsGroup(LanguageToolsSubtitlesGroup, row: 1, column: 0, columnSpan: 2);
+                break;
+
+            default:
+                LanguageToolsGroupsGrid.ColumnSpacing = 0;
+                LanguageToolsGroupsGrid.RowSpacing = 12;
+                LanguageToolsGroupsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                LanguageToolsGroupsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                LanguageToolsGroupsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                LanguageToolsGroupsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                PlaceLanguageToolsGroup(LanguageToolsTranscriptionGroup, row: 0, column: 0);
+                PlaceLanguageToolsGroup(LanguageToolsTranslationGroup, row: 1, column: 0);
+                PlaceLanguageToolsGroup(LanguageToolsSubtitlesGroup, row: 2, column: 0);
+                break;
+        }
+    }
+
+    private static LanguageToolsPanelLayoutMode GetLanguageToolsPanelLayoutMode(double availableWidth)
+        => availableWidth switch
+        {
+            >= 1080 => LanguageToolsPanelLayoutMode.Wide,
+            >= 720 => LanguageToolsPanelLayoutMode.Medium,
+            _ => LanguageToolsPanelLayoutMode.Narrow
+        };
+
+    private static void PlaceLanguageToolsGroup(FrameworkElement element, int row, int column, int columnSpan = 1)
+    {
+        Grid.SetRow(element, row);
+        Grid.SetColumn(element, column);
+        Grid.SetColumnSpan(element, columnSpan);
+    }
+
+    private static Border CreateLanguageToolsSection(string title, string description, UIElement content)
+    {
+        var header = new StackPanel
+        {
+            Spacing = 2
+        };
+        header.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontSize = 14,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        });
+        header.Children.Add(new TextBlock
+        {
+            Text = description,
+            Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 196, 205, 219)),
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        var body = new StackPanel
+        {
+            Spacing = 12
+        };
+        body.Children.Add(header);
+        body.Children.Add(content);
+
+        return new Border
+        {
+            Background = new SolidColorBrush(ColorHelper.FromArgb(18, 255, 255, 255)),
+            BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(26, 255, 255, 255)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(16),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(14),
+            Child = body
+        };
     }
 
     private Button CreateSecondaryTransportButton(IconElement icon, string label, RoutedEventHandler handler, string? text = null)
@@ -1430,6 +1606,7 @@ public sealed partial class MainWindow : Window
 
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
+        _logger.LogInfo("Main window closing.");
         SystemBackdrop = null;
         _micaBackdrop = null;
         _shellController.FlushResumeTracking();
@@ -2304,6 +2481,7 @@ public sealed partial class MainWindow : Window
         Grid.SetColumn(actionText, 1);
         header.Children.Add(actionText);
         LanguageToolsToggleButton.Content = header;
+        UpdateLanguageToolsResponsiveLayout();
     }
 
     private bool IsLanguageToolsEffectivelyExpanded()
@@ -2445,6 +2623,7 @@ public sealed partial class MainWindow : Window
             TryApplyStandardAutoFit();
         }
 
+        UpdateLanguageToolsResponsiveLayout();
         PlayerHost.RequestHostBoundsSync();
         UpdateSubtitleVisibility();
         _stageCoordinator.HandleStageLayoutChanged();
@@ -2507,8 +2686,6 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
-
-        await Task.Yield();
         if (_isLibraryDragOperationInProgress)
         {
             return;
@@ -2564,105 +2741,12 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void LibraryTree_RightTapped(object sender, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs e)
-    {
-        if (!TryGetLibraryNodeFromElement(e.OriginalSource as DependencyObject, out var anchor, out var node))
-        {
-            return;
-        }
-
-        ShowLibraryContextMenu(anchor, node);
-        e.Handled = true;
-    }
-
-    private void LibraryTree_ContextRequested(UIElement sender, Microsoft.UI.Xaml.Input.ContextRequestedEventArgs args)
-    {
-        if (!TryGetLibraryNodeFromElement(args.OriginalSource as DependencyObject, out var anchor, out var node))
-        {
-            return;
-        }
-
-        ShowLibraryContextMenu(anchor, node, args);
-        args.Handled = true;
-    }
-
-    private void ShowLibraryContextMenu(
-        FrameworkElement anchor,
-        LibraryNode node,
-        Microsoft.UI.Xaml.Input.ContextRequestedEventArgs? contextArgs = null)
-    {
-        _selectedLibraryNode = node;
-        UpdateWindowHeader();
-        var menu = new MenuFlyout();
-        if (node.IsFolder)
-        {
-            var queueFolderItem = new MenuFlyoutItem { Text = "Queue Folder" };
-            queueFolderItem.Click += async (_, _) => await ApplyQueueMutationAsync(_shellController.EnqueueFolder(node.Path, autoplay: false));
-            menu.Items.Add(queueFolderItem);
-
-            var isPinnedRoot = ViewModel.Browser.Roots.Any(root => string.Equals(root.Path, node.Path, StringComparison.OrdinalIgnoreCase));
-            var pinItem = new MenuFlyoutItem
-            {
-                Text = isPinnedRoot ? "Unpin Root" : "Pin Root"
-            };
-            pinItem.Click += (_, _) =>
-            {
-                if (isPinnedRoot)
-                {
-                    RemovePinnedRoot(node.Path);
-                }
-                else
-                {
-                    AddPinnedRoot(node.Path);
-                }
-            };
-            menu.Items.Add(pinItem);
-        }
-        else
-        {
-            var playNowItem = new MenuFlyoutItem { Text = "Play Now" };
-            playNowItem.Click += async (_, _) => await ApplyQueueMutationAsync(_shellController.PlayNow(node.Path));
-            menu.Items.Add(playNowItem);
-
-            var playNextItem = new MenuFlyoutItem { Text = "Play Next" };
-            playNextItem.Click += (_, _) =>
-            {
-                var result = _shellController.PlayNext(node.Path);
-                if (!string.IsNullOrWhiteSpace(result.StatusMessage))
-                {
-                    ShowStatus(result.StatusMessage, result.IsError);
-                }
-            };
-            menu.Items.Add(playNextItem);
-
-            var addItem = new MenuFlyoutItem { Text = "Add to Queue" };
-            addItem.Click += (_, _) =>
-            {
-                var result = _shellController.AddToQueue([node.Path]);
-                ShowStatus(result.StatusMessage ?? "Unable to add media to the queue.", result.IsError);
-            };
-            menu.Items.Add(addItem);
-        }
-
-        var openExplorerItem = new MenuFlyoutItem { Text = "Open in Explorer" };
-        openExplorerItem.Click += (_, _) => OpenInExplorer(node.Path, selectItem: !node.IsFolder);
-        menu.Items.Add(openExplorerItem);
-        if (contextArgs is not null && contextArgs.TryGetPosition(anchor, out var point))
-        {
-            menu.ShowAt(anchor, new FlyoutShowOptions
-            {
-                Position = point
-            });
-            return;
-        }
-
-        menu.ShowAt(anchor);
-    }
-
     private void PlayerHost_MediaOpened(PlaybackStateSnapshot snapshot)
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
+            UpdatePlaybackDiagnostics(snapshot);
+            _logger.LogInfo("Player host media opened.", BabelLogContext.Create(("path", snapshot.Path), ("duration", snapshot.Duration)));
             PlayerHost.RequestHostBoundsSync();
             UpdatePortraitVideoLanguageToolsState();
             TryApplyStandardAutoFit();
@@ -2694,6 +2778,7 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            UpdatePlaybackDiagnostics(snapshot);
             if (snapshot.VideoWidth > 0 && snapshot.VideoHeight > 0)
             {
                 UpdatePortraitVideoLanguageToolsState();
@@ -2706,6 +2791,8 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
+            UpdatePlaybackDiagnostics(snapshot);
+            _logger.LogInfo("Player host media ended.", BabelLogContext.Create(("path", snapshot.Path)));
             var result = _shellController.HandleMediaEnded(ViewModel.Settings.ResumeEnabled);
             if (result.NextItem is null)
             {
@@ -2721,6 +2808,7 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            _logger.LogError("Player host media failed.", null, BabelLogContext.Create(("message", message), ("path", _shellController.CurrentPlaybackSnapshot.Path)));
             ShowStatus(message, true);
         });
     }
@@ -2780,6 +2868,7 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
+            UpdateWorkflowDiagnostics(snapshot);
             ApplyWorkflowSnapshot(snapshot);
             await ApplyCaptionStartupGateAsync(snapshot);
         });
@@ -2823,6 +2912,7 @@ public sealed partial class MainWindow : Window
         DurationTextBlock.Text = ViewModel.Transport.DurationText;
         MuteToggleButton.IsChecked = ViewModel.Transport.IsMuted;
         UpdateMuteButtonVisual();
+        UpdatePlaybackDiagnostics(_shellController.CurrentPlaybackSnapshot);
     }
 
     private void UpdateTrackProjection(IReadOnlyList<MediaTrackInfo> tracks)
@@ -3591,47 +3681,6 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    private static bool TryGetLibraryNodeFromElement(DependencyObject? source, out FrameworkElement anchor, out LibraryNode node)
-    {
-        var current = source;
-        while (current is not null)
-        {
-            if (current is TreeViewItem item && item.Content is LibraryNode itemNode)
-            {
-                anchor = item;
-                node = itemNode;
-                return true;
-            }
-
-            if (current is FrameworkElement element && element.DataContext is LibraryNode dataNode)
-            {
-                anchor = element;
-                node = dataNode;
-                return true;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        anchor = null!;
-        node = null!;
-        return false;
-    }
-
-    private static void OpenInExplorer(string path, bool selectItem)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return;
-        }
-
-        var startInfo = selectItem
-            ? new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"")
-            : new ProcessStartInfo("explorer.exe", $"\"{path}\"");
-        startInfo.UseShellExecute = true;
-        Process.Start(startInfo);
-    }
-
     private async Task LoadPlaybackItemAsync(PlaylistItem? item)
     {
         if (item is null || string.IsNullOrWhiteSpace(item.Path) || !File.Exists(item.Path))
@@ -3643,17 +3692,25 @@ public sealed partial class MainWindow : Window
         _isLanguageToolsAutoCollapseOverridden = false;
         _pendingAutoFitPath = item.Path;
         _lastAutoFitSignature = null;
-        var loaded = await _shellController.LoadPlaybackItemAsync(
-            item,
-            BuildShellLoadOptions(),
-            CancellationToken.None);
-        if (!loaded)
+        try
         {
-            return;
-        }
+            var loaded = await _shellController.LoadPlaybackItemAsync(
+                item,
+                BuildShellLoadOptions(),
+                CancellationToken.None);
+            if (!loaded)
+            {
+                return;
+            }
 
-        PlayerHost.RequestHostBoundsSync();
-        UpdateWindowHeader();
+            PlayerHost.RequestHostBoundsSync();
+            UpdateWindowHeader();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Window-level media load failed.", ex, BabelLogContext.Create(("path", item.Path), ("displayName", item.DisplayName)));
+            ShowStatus(ex.Message, true);
+        }
     }
 
     private void ApplyQueueSnapshot(PlaybackQueueSnapshot snapshot)
@@ -3690,6 +3747,7 @@ public sealed partial class MainWindow : Window
             ? "Queue is empty"
             : $"{snapshot.QueueItems.Count} item(s) up next";
         UpdateWindowHeader();
+        UpdateQueueDiagnostics(snapshot);
     }
 
     private void RebuildLibraryTree()
@@ -3902,6 +3960,8 @@ public sealed partial class MainWindow : Window
     private async Task SetWindowModeAsync(PlaybackWindowMode mode)
     {
         await _windowModeService.SetModeAsync(mode);
+        _diagnosticsContext.UpdateWindowMode(mode.ToString());
+        _logger.LogInfo("Window mode changed.", BabelLogContext.Create(("mode", mode)));
         ApplyWindowModeChrome(mode);
         PlayerHost.RequestHostBoundsSync();
         SyncWindowModeButtons(mode);
@@ -4016,6 +4076,13 @@ public sealed partial class MainWindow : Window
             LanguageToolsSubtitleToggleButton.Content = ViewModel.Settings.SubtitleRenderMode == SubtitleRenderMode.Off
                 ? "Subtitles Off"
                 : "Subtitles On";
+        }
+
+        if (LanguageToolsSubtitleStatusTextBlock is not null)
+        {
+            LanguageToolsSubtitleStatusTextBlock.Text = ViewModel.Settings.SubtitleRenderMode == SubtitleRenderMode.Off
+                ? "Disabled"
+                : $"Enabled in {FormatSubtitleRenderModeLabel(ViewModel.Settings.SubtitleRenderMode)} mode.";
         }
 
         if (OverlayPlayPauseButton is not null)
@@ -4389,6 +4456,58 @@ public sealed partial class MainWindow : Window
         {
             ViewModel.StatusFeed.RemoveAt(ViewModel.StatusFeed.Count - 1);
         }
+
+        if (isError)
+        {
+            _statusLogger.LogError("Status message displayed.", null, BabelLogContext.Create(("message", message)));
+            return;
+        }
+
+        _statusLogger.LogInfo("Status message displayed.", BabelLogContext.Create(("message", message)));
+    }
+
+    private void UpdatePlaybackDiagnostics(PlaybackStateSnapshot snapshot)
+    {
+        _diagnosticsContext.UpdatePlayback(new PlaybackDiagnosticsSummary
+        {
+            CurrentMediaPath = snapshot.Path,
+            CurrentMediaDisplayName = string.IsNullOrWhiteSpace(snapshot.Path) ? null : Path.GetFileName(snapshot.Path),
+            IsPaused = snapshot.IsPaused,
+            Position = snapshot.Position,
+            Duration = snapshot.Duration,
+            Volume = snapshot.Volume,
+            IsMuted = snapshot.IsMuted,
+            ActiveHardwareDecoder = snapshot.ActiveHardwareDecoder,
+            VideoWidth = snapshot.VideoWidth,
+            VideoHeight = snapshot.VideoHeight,
+            VideoDisplayWidth = snapshot.VideoDisplayWidth,
+            VideoDisplayHeight = snapshot.VideoDisplayHeight
+        });
+    }
+
+    private void UpdateQueueDiagnostics(PlaybackQueueSnapshot snapshot)
+    {
+        _diagnosticsContext.UpdateQueue(new QueueDiagnosticsSummary
+        {
+            NowPlayingDisplayName = snapshot.NowPlayingItem?.DisplayName,
+            NowPlayingPath = snapshot.NowPlayingItem?.Path,
+            UpNextCount = snapshot.QueueItems.Count,
+            HistoryCount = snapshot.HistoryItems.Count
+        });
+    }
+
+    private void UpdateWorkflowDiagnostics(SubtitleWorkflowSnapshot snapshot)
+    {
+        _diagnosticsContext.UpdateSubtitleWorkflow(new SubtitleWorkflowDiagnosticsSummary
+        {
+            SubtitleSource = snapshot.SubtitleSource.ToString(),
+            IsCaptionGenerationInProgress = snapshot.IsCaptionGenerationInProgress,
+            SelectedTranscriptionModelKey = snapshot.SelectedTranscriptionModelKey ?? string.Empty,
+            SelectedTranslationModelKey = snapshot.SelectedTranslationModelKey ?? string.Empty,
+            IsTranslationEnabled = snapshot.IsTranslationEnabled,
+            SourceLanguage = snapshot.CurrentSourceLanguage ?? string.Empty,
+            OverlayStatus = snapshot.OverlayStatus ?? string.Empty
+        });
     }
 
     private readonly record struct ResolvedShortcutBinding(string CommandId, VirtualKey Key, bool Ctrl, bool Alt, bool Shift)

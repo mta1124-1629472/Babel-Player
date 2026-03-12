@@ -20,8 +20,10 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement?>> _pendingRequests = new();
     private readonly List<MediaTrackInfo> _tracks = [];
+    private readonly IBabelLogger _logger;
     private CancellationTokenSource? _readerCts;
     private Task? _readerTask;
+    private Task? _stderrTask;
     private Process? _process;
     private NamedPipeClientStream? _pipe;
     private StreamReader? _reader;
@@ -29,6 +31,11 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     private int _requestId;
     private int? _selectedAudioTrackId;
     private int? _selectedSubtitleTrackId;
+
+    public MpvPlaybackEngine(IBabelLogFactory? logFactory = null)
+    {
+        _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("playback.mpv");
+    }
 
     public event Action<PlaybackStateSnapshot>? OnStateChanged;
     public event Action<IReadOnlyList<MediaTrackInfo>>? OnTracksChanged;
@@ -44,12 +51,14 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     {
         if (_process is not null && !_process.HasExited)
         {
+            _logger.LogInfo("mpv already initialized.", BabelLogContext.Create(("pid", _process.Id)));
             return;
         }
 
+        _logger.LogInfo("Initializing embedded mpv.", BabelLogContext.Create(("hostHandle", hostHandle), ("hardwareDecodingMode", hardwareDecodingMode)));
         var mpvExePath = await MpvRuntimeInstaller.InstallAsync(progress => OnRuntimeInstallProgress?.Invoke(progress), cancellationToken);
         var pipeName = $"babelplayer-mpv-{Guid.NewGuid():N}";
-        var pipePath = $"\\.\\pipe\\{pipeName}";
+        var sanitizedHwdec = MapHardwareDecodingMode(hardwareDecodingMode);
 
         var arguments = new StringBuilder()
             .Append("--idle=yes ")
@@ -63,7 +72,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             .Append("--sid=no ")
             .Append("--msg-level=all=warn ")
             .Append($"--wid={hostHandle} ")
-            .Append($"--hwdec={MapHardwareDecodingMode(hardwareDecodingMode)} ")
+            .Append($"--hwdec={sanitizedHwdec} ")
             .Append($"--input-ipc-server=\\\\.\\pipe\\{pipeName}");
 
         _process = Process.Start(new ProcessStartInfo
@@ -74,6 +83,18 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             CreateNoWindow = true,
             RedirectStandardError = true
         }) ?? throw new InvalidOperationException("Unable to start mpv.");
+        _process.EnableRaisingEvents = true;
+        _process.Exited += (_, _) =>
+        {
+            _logger.LogInfo("mpv process exited.", BabelLogContext.Create(("pid", _process?.Id), ("exitCode", _process?.ExitCode)));
+        };
+        _logger.LogInfo("mpv process started.", BabelLogContext.Create(
+            ("exePath", mpvExePath),
+            ("pid", _process.Id),
+            ("pipeName", pipeName),
+            ("hardwareDecoder", sanitizedHwdec),
+            ("hasHostHandle", hostHandle != 0)));
+        _stderrTask = Task.Run(() => DrainStandardErrorAsync(_process, pipeName, cancellationToken), cancellationToken);
 
         _pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         var started = Stopwatch.StartNew();
@@ -85,13 +106,16 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             }
             catch (TimeoutException)
             {
+                _logger.LogDebug("Waiting for mpv IPC pipe.", BabelLogContext.Create(("pipeName", pipeName), ("elapsedMs", started.ElapsedMilliseconds)));
             }
         }
 
         if (!_pipe.IsConnected)
         {
+            _logger.LogError("Unable to connect to embedded mpv instance.", null, BabelLogContext.Create(("pipeName", pipeName), ("pid", _process.Id)));
             throw new InvalidOperationException("Unable to connect to the embedded mpv instance.");
         }
+        _logger.LogInfo("Connected to mpv IPC pipe.", BabelLogContext.Create(("pipeName", pipeName), ("pid", _process.Id)));
 
         _reader = new StreamReader(_pipe, Encoding.UTF8, leaveOpen: true);
         _writer = new StreamWriter(_pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
@@ -114,6 +138,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     public Task LoadAsync(string path, CancellationToken cancellationToken)
     {
+        _logger.LogInfo("Loading media into mpv.", BabelLogContext.Create(("path", path)));
         Snapshot = Snapshot with
         {
             Path = path,
@@ -153,6 +178,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     public async ValueTask DisposeAsync()
     {
+        _logger.LogInfo("Disposing embedded mpv engine.");
         try
         {
             if (_readerCts is not null)
@@ -169,6 +195,10 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             _writer?.Dispose();
             _reader?.Dispose();
             _pipe?.Dispose();
+            if (_stderrTask is not null)
+            {
+                await _stderrTask.WaitAsync(TimeSpan.FromSeconds(1));
+            }
         }
         catch
         {
@@ -178,6 +208,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         {
             if (_process is not null && !_process.HasExited)
             {
+                _logger.LogInfo("Killing embedded mpv process.", BabelLogContext.Create(("pid", _process.Id)));
                 _process.Kill(entireProcessTree: true);
             }
         }
@@ -213,6 +244,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             var error = errorProperty.GetString();
             if (!string.Equals(error, "success", StringComparison.OrdinalIgnoreCase))
             {
+                _logger.LogError("mpv command failed.", null, BabelLogContext.Create(("command", string.Join(",", command.Select(value => value?.ToString() ?? "null"))), ("error", error), ("requestId", id)));
                 throw new InvalidOperationException($"mpv command failed: {error}.");
             }
         }
@@ -222,6 +254,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     {
         if (_writer is null)
         {
+            _logger.LogError("mpv IPC write attempted before writer initialization.");
             throw new InvalidOperationException("The embedded mpv instance is not ready.");
         }
 
@@ -253,6 +286,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             }
             catch (Exception ex)
             {
+                _logger.LogError("mpv reader loop failed.", ex, BabelLogContext.Create(("path", Snapshot.Path), ("pid", _process?.Id)));
                 OnMediaFailed?.Invoke(ex.Message);
                 break;
             }
@@ -283,10 +317,12 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                         HandlePropertyChange(root);
                         break;
                     case "file-loaded":
+                        _logger.LogInfo("mpv reported file-loaded.", BabelLogContext.Create(("path", Snapshot.Path), ("pid", _process?.Id)));
                         OnMediaOpened?.Invoke();
                         break;
                     case "end-file":
                         var reason = root.TryGetProperty("reason", out var reasonProperty) ? reasonProperty.GetString() : string.Empty;
+                        _logger.LogInfo("mpv reported end-file.", BabelLogContext.Create(("path", Snapshot.Path), ("reason", reason), ("pid", _process?.Id)));
                         if (string.Equals(reason, "eof", StringComparison.OrdinalIgnoreCase))
                         {
                             OnMediaEnded?.Invoke();
@@ -499,5 +535,35 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             HardwareDecodingMode.Software => "no",
             _ => "auto-safe"
         };
+    }
+
+    private async Task DrainStandardErrorAsync(Process process, string pipeName, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var line = await process.StandardError.ReadLineAsync(cancellationToken);
+                if (line is null)
+                {
+                    break;
+                }
+
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                _logger.LogWarning("mpv stderr", null, BabelLogContext.Create(("pipeName", pipeName), ("pid", process.Id), ("line", line.Trim())));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("mpv stderr pump failed.", ex, BabelLogContext.Create(("pipeName", pipeName), ("pid", process.Id)));
+        }
     }
 }

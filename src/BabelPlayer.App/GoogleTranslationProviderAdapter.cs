@@ -18,6 +18,7 @@ internal sealed class GoogleTranslationProviderAdapter : ITranslationProvider
             request.Texts,
             ProviderAvailabilityUtilities.TryGetGoogleOptions(context),
             null,
-            cancellationToken);
+            cancellationToken,
+            context.LogFactory);
     }
 }

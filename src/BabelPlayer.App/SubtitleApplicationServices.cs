@@ -65,12 +65,20 @@ public interface IRuntimeProvisioner
 
 public sealed class DefaultSubtitleSourceResolver : ISubtitleSourceResolver
 {
+    private readonly IBabelLogger _logger;
+
+    public DefaultSubtitleSourceResolver(IBabelLogFactory? logFactory = null)
+    {
+        _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("subtitles.source");
+    }
+
     public Task<IReadOnlyList<SubtitleCue>> LoadExternalSubtitleCuesAsync(
         string path,
         Action<RuntimeInstallProgress>? onRuntimeProgress,
         Action<string>? onStatus,
         CancellationToken cancellationToken)
     {
+        _logger.LogInfo("Loading external subtitles.", BabelLogContext.Create(("path", path)));
         return SubtitleImportService.LoadExternalSubtitleCuesAsync(path, onRuntimeProgress, onStatus, cancellationToken);
     }
 
@@ -81,6 +89,7 @@ public sealed class DefaultSubtitleSourceResolver : ISubtitleSourceResolver
         Action<string>? onStatus,
         CancellationToken cancellationToken)
     {
+        _logger.LogInfo("Extracting embedded subtitle track.", BabelLogContext.Create(("videoPath", videoPath), ("trackId", track.Id), ("codec", track.Codec)));
         return SubtitleImportService.ExtractEmbeddedSubtitleCuesAsync(videoPath, track, onRuntimeProgress, onStatus, cancellationToken);
     }
 }
@@ -89,11 +98,13 @@ public sealed class DefaultCaptionGenerator : ICaptionGenerator
 {
     private readonly ProviderAvailabilityContext _context;
     private readonly TranscriptionProviderRegistry _registry;
+    private readonly IBabelLogger _logger;
 
-    public DefaultCaptionGenerator(ProviderAvailabilityContext context, TranscriptionProviderRegistry registry)
+    public DefaultCaptionGenerator(ProviderAvailabilityContext context, TranscriptionProviderRegistry registry, IBabelLogFactory? logFactory = null)
     {
         _context = context;
         _registry = registry;
+        _logger = (logFactory ?? context.LogFactory ?? NullBabelLogFactory.Instance).CreateLogger("subtitles.captions");
     }
 
     public async Task<IReadOnlyList<SubtitleCue>> GenerateCaptionsAsync(
@@ -114,20 +125,24 @@ public sealed class DefaultCaptionGenerator : ICaptionGenerator
             LocalModelType = selection.LocalModelType,
             CloudModel = selection.CloudModel
         };
+        _logger.LogInfo("Caption generation starting.", BabelLogContext.Create(("videoPath", videoPath), ("modelKey", selection.Key), ("provider", selection.Provider), ("languageHint", languageHint)));
 
         foreach (var provider in providers)
         {
             try
             {
-                return await provider.TranscribeAsync(
+                var result = await provider.TranscribeAsync(
                     new TranscriptionRequest(videoPath, options, onFinal, onProgress),
                     _context,
                     cancellationToken);
+                _logger.LogInfo("Caption generation completed.", BabelLogContext.Create(("videoPath", videoPath), ("modelKey", selection.Key), ("cueCount", result.Count), ("providerAdapter", provider.Id)));
+                return result;
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 failures ??= [];
                 failures.Add(ex);
+                _logger.LogWarning("Caption generation provider failed.", ex, BabelLogContext.Create(("videoPath", videoPath), ("modelKey", selection.Key), ("providerAdapter", provider.Id)));
             }
         }
 
@@ -144,11 +159,13 @@ public sealed class ProviderBackedSubtitleTranslator : ISubtitleTranslator
 {
     private readonly ProviderAvailabilityContext _context;
     private readonly TranslationProviderRegistry _registry;
+    private readonly IBabelLogger _logger;
 
-    public ProviderBackedSubtitleTranslator(ProviderAvailabilityContext context, TranslationProviderRegistry registry)
+    public ProviderBackedSubtitleTranslator(ProviderAvailabilityContext context, TranslationProviderRegistry registry, IBabelLogFactory? logFactory = null)
     {
         _context = context;
         _registry = registry;
+        _logger = (logFactory ?? context.LogFactory ?? NullBabelLogFactory.Instance).CreateLogger("subtitles.translation");
     }
 
     public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged;
@@ -160,7 +177,8 @@ public sealed class ProviderBackedSubtitleTranslator : ISubtitleTranslator
             return;
         }
 
-        var service = new MtService();
+        _logger.LogInfo("Translation runtime warmup starting.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
+        var service = new MtService(_context.LogFactory);
         service.OnLocalRuntimeStatus += HandleRuntimeStatus;
         service.ConfigureLocal(selection.Provider switch
         {
@@ -176,6 +194,7 @@ public sealed class ProviderBackedSubtitleTranslator : ISubtitleTranslator
         try
         {
             await service.WarmupLocalRuntimeAsync(cancellationToken);
+            _logger.LogInfo("Translation runtime warmup completed.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
         }
         finally
         {
@@ -207,10 +226,21 @@ public sealed class ProviderBackedSubtitleTranslator : ISubtitleTranslator
             throw new InvalidOperationException($"No translation provider adapter is registered for {selection.Provider}.");
         }
 
-        return await provider.TranslateBatchAsync(
-            new TranslationRequest(selection, texts, "en"),
-            _context,
-            cancellationToken);
+        _logger.LogInfo("Translation batch starting.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider), ("textCount", texts.Count)));
+        try
+        {
+            var result = await provider.TranslateBatchAsync(
+                new TranslationRequest(selection, texts, "en"),
+                _context,
+                cancellationToken);
+            _logger.LogInfo("Translation batch completed.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider), ("textCount", texts.Count)));
+            return result;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError("Translation batch failed.", ex, BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider), ("textCount", texts.Count)));
+            throw;
+        }
     }
 
     private void HandleRuntimeStatus(LocalTranslationRuntimeStatus status)
@@ -376,19 +406,22 @@ public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
     private readonly ICredentialDialogService? _credentialDialogService;
     private readonly IFilePickerService? _filePickerService;
     private readonly Func<string, string?> _environmentVariableReader;
+    private readonly IBabelLogger _logger;
 
     public DefaultRuntimeProvisioner(
         IRuntimeBootstrapService runtimeBootstrapService,
         CredentialFacade? credentialFacade = null,
         ICredentialDialogService? credentialDialogService = null,
         IFilePickerService? filePickerService = null,
-        Func<string, string?>? environmentVariableReader = null)
+        Func<string, string?>? environmentVariableReader = null,
+        IBabelLogFactory? logFactory = null)
     {
         _runtimeBootstrapService = runtimeBootstrapService;
         _credentialFacade = credentialFacade;
         _credentialDialogService = credentialDialogService;
         _filePickerService = filePickerService;
         _environmentVariableReader = environmentVariableReader ?? Environment.GetEnvironmentVariable;
+        _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("runtime.provisioner");
     }
 
     public Task<string> EnsureLlamaCppAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
@@ -401,6 +434,7 @@ public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
     {
         if (TryResolveLlamaCppServerPath() is not null)
         {
+            _logger.LogInfo("llama.cpp runtime already available.");
             return true;
         }
 
@@ -413,6 +447,7 @@ public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
             "llama.cpp Setup",
             "Local HY-MT translation needs llama-server. Install it automatically or choose an existing executable.",
             cancellationToken);
+        _logger.LogInfo("llama.cpp bootstrap choice received.", BabelLogContext.Create(("choice", choice)));
 
         switch (choice)
         {
@@ -427,6 +462,7 @@ public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
                     _credentialFacade?.SaveLlamaCppServerPath(serverPath);
                     _credentialFacade?.SaveLlamaCppRuntimeVersion(LlamaCppRuntimeInstaller.RuntimeVersion);
                     _credentialFacade?.SaveLlamaCppRuntimeSource(LlamaCppRuntimeInstaller.RuntimeSource);
+                    _logger.LogInfo("llama.cpp runtime installed automatically.", BabelLogContext.Create(("serverPath", serverPath)));
                     return true;
                 }
             case LlamaCppBootstrapChoice.ChooseExisting:
@@ -448,9 +484,11 @@ public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
 
                     _credentialFacade?.SaveLlamaCppServerPath(selectedPath);
                     _credentialFacade?.SaveLlamaCppRuntimeSource("manual");
+                    _logger.LogInfo("llama.cpp runtime path selected manually.", BabelLogContext.Create(("serverPath", selectedPath)));
                     return true;
                 }
             case LlamaCppBootstrapChoice.OpenOfficialDownloadPage:
+                _logger.LogInfo("Opening llama.cpp download page.");
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = LlamaCppRuntimeInstaller.ReleasePageUrl,

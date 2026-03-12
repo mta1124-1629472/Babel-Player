@@ -22,6 +22,7 @@ public sealed partial class SubtitleApplicationService
 
     private async Task<bool> EnsureTranslationProviderReadyAsync(TranslationModelSelection selection, CancellationToken cancellationToken)
     {
+        _logger.LogInfo("Ensuring translation provider is ready.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
         if (selection.Provider is not (TranslationProvider.LocalHyMt15_1_8B or TranslationProvider.LocalHyMt15_7B))
         {
             return await _aiCredentialCoordinator.EnsureTranslationProviderCredentialsAsync(selection.Provider, cancellationToken);
@@ -80,6 +81,7 @@ public sealed partial class SubtitleApplicationService
     private async Task ReprocessCurrentSubtitlesForTranslationSettingsAsync(CancellationToken cancellationToken)
     {
         var state = _workflowStateStore.Snapshot;
+        _logger.LogInfo("Reprocessing subtitles for translation settings.", BabelLogContext.Create(("translationEnabled", state.IsTranslationEnabled), ("modelKey", state.SelectedTranslationModelKey)));
         if (state.IsTranslationEnabled && string.IsNullOrWhiteSpace(state.SelectedTranslationModelKey))
         {
             ResetCurrentTranslations();
@@ -109,6 +111,7 @@ public sealed partial class SubtitleApplicationService
         CancellationToken cancellationToken,
         bool suppressStatus)
     {
+        _logger.LogInfo("Reprocessing subtitles for transcription model.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider), ("suppressStatus", suppressStatus)));
         var session = _mediaSessionCoordinator.Snapshot;
         var currentVideoPath = _workflowStateStore.Snapshot.CurrentVideoPath;
         if (session.Transcript.Source != SubtitlePipelineSource.Generated || string.IsNullOrWhiteSpace(currentVideoPath))
@@ -152,6 +155,7 @@ public sealed partial class SubtitleApplicationService
         CancellationToken cancellationToken,
         bool preserveCurrentTranslationPreference = false)
     {
+        _logger.LogInfo("Loading subtitle cues into workflow.", BabelLogContext.Create(("source", source), ("cueCount", cues.Count), ("preserveTranslationPreference", preserveCurrentTranslationPreference)));
         var currentVideoPath = _workflowStateStore.Snapshot.CurrentVideoPath;
         CancelCaptionGeneration();
         CancelTranslationWork();
@@ -214,6 +218,7 @@ public sealed partial class SubtitleApplicationService
         CancellationToken cancellationToken,
         bool preserveCurrentTranslationPreference = false)
     {
+        var operationId = $"captions-{Guid.NewGuid():N}";
         CancelCaptionGeneration();
         CancelTranslationWork();
         if (!preserveCurrentTranslationPreference)
@@ -239,6 +244,7 @@ public sealed partial class SubtitleApplicationService
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _captionGenerationCts = cts;
+        _logger.LogInfo("Automatic caption generation starting.", BabelLogContext.Create(("operationId", operationId), ("videoPath", videoPath), ("modelKey", transcriptionModel.Key), ("preserveTranslationPreference", preserveCurrentTranslationPreference)));
         PublishStatus($"Generating captions with {transcriptionModel.DisplayName}.", _workflowStateStore.Snapshot.OverlayStatus);
 
         try
@@ -277,6 +283,7 @@ public sealed partial class SubtitleApplicationService
             {
                 OverlayStatus = CurrentCues.Count > 0 ? null : "No speech could be recognized from the video audio."
             });
+            _logger.LogInfo("Automatic caption generation completed.", BabelLogContext.Create(("operationId", operationId), ("videoPath", videoPath), ("cueCount", CurrentCues.Count), ("modelKey", transcriptionModel.Key)));
             PublishStatus(
                 CurrentCues.Count > 0
                     ? $"Generated {CurrentCues.Count} caption cues automatically."
@@ -286,6 +293,7 @@ public sealed partial class SubtitleApplicationService
         catch (OperationCanceledException)
         {
             _mediaSessionCoordinator.SetCaptionGenerationState(false);
+            _logger.LogInfo("Automatic caption generation canceled.", BabelLogContext.Create(("operationId", operationId), ("videoPath", videoPath), ("modelKey", transcriptionModel.Key)));
         }
         catch (Exception ex)
         {
@@ -296,6 +304,7 @@ public sealed partial class SubtitleApplicationService
                 {
                     OverlayStatus = "Automatic caption generation failed. You can still load a manual subtitle file."
                 });
+                _logger.LogError("Automatic caption generation failed.", ex, BabelLogContext.Create(("operationId", operationId), ("videoPath", videoPath), ("modelKey", transcriptionModel.Key)));
                 PublishStatus(
                     $"Automatic caption generation failed: {ex.Message}",
                     _workflowStateStore.Snapshot.OverlayStatus);

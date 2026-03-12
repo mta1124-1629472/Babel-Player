@@ -19,6 +19,7 @@ internal sealed class OpenAiTranslationProviderAdapter : ITranslationProvider
             request.Texts,
             new CloudTranslationOptions(CloudTranslationProvider.OpenAi, apiKey!.Trim(), request.Selection.CloudModel),
             null,
-            cancellationToken);
+            cancellationToken,
+            context.LogFactory);
     }
 }

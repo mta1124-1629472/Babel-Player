@@ -52,8 +52,14 @@ public class MtService
     private static string? _activeLlamaServerPath;
 
     private readonly ConcurrentDictionary<string, Task<string>> _pendingTranslations = new(StringComparer.Ordinal);
+    private readonly IBabelLogger _logger;
     private CloudTranslationOptions? _cloudOptions;
     private LocalTranslationOptions _localOptions = new(OfflineTranslationModel.None);
+
+    public MtService(IBabelLogFactory? logFactory = null)
+    {
+        _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("translation.mt");
+    }
 
     public string LoadedModelPath { get; private set; } = string.Empty;
     public bool UseCloudTranslation => _cloudOptions is not null && !string.IsNullOrWhiteSpace(_cloudOptions.ApiKey);
@@ -67,6 +73,7 @@ public class MtService
             return;
         }
 
+        _logger.LogInfo("Local translation runtime warmup starting.", BabelLogContext.Create(("model", _localOptions.Model)));
         await EnsureLlamaServerAsync(_localOptions, cancellationToken);
     }
 
@@ -75,6 +82,10 @@ public class MtService
         _cloudOptions = string.IsNullOrWhiteSpace(options?.ApiKey)
             ? null
             : options with { ApiKey = options.ApiKey.Trim() };
+        if (_cloudOptions is not null)
+        {
+            _logger.LogInfo("Cloud translation configured.", BabelLogContext.Create(("provider", _cloudOptions.Provider), ("model", _cloudOptions.Model), ("region", _cloudOptions.Region), ("apiKey", _cloudOptions.ApiKey)));
+        }
     }
 
     public void ConfigureLocal(LocalTranslationOptions? options)
@@ -86,6 +97,7 @@ public class MtService
             OfflineTranslationModel.HyMt15_7B => "HY-MT1.5-7B (llama.cpp)",
             _ => string.Empty
         };
+        _logger.LogInfo("Local translation configured.", BabelLogContext.Create(("model", _localOptions.Model), ("serverPath", _localOptions.LlamaServerPath)));
     }
 
     public static async Task ValidateApiKeyAsync(string apiKey, CancellationToken cancellationToken)
@@ -156,11 +168,13 @@ public class MtService
 
         if (UseCloudTranslation && _cloudOptions is not null)
         {
+            _logger.LogInfo("Cloud translation batch starting.", BabelLogContext.Create(("provider", _cloudOptions.Provider), ("textCount", normalizedTexts.Count), ("model", _cloudOptions.Model)));
             return await TranslateBatchWithProviderAsync(_cloudOptions, normalizedTexts, "en", cancellationToken);
         }
 
         if (_localOptions.Model != OfflineTranslationModel.None)
         {
+            _logger.LogInfo("Local translation batch starting.", BabelLogContext.Create(("model", _localOptions.Model), ("textCount", normalizedTexts.Count)));
             return await TranslateBatchWithOfflineModelAsync(_localOptions, normalizedTexts, cancellationToken);
         }
 
@@ -248,6 +262,7 @@ public class MtService
                 && string.Equals(_activeLlamaServerPath, resolvedServerPath, StringComparison.OrdinalIgnoreCase)
                 && await IsLlamaServerReadyAsync(cancellationToken))
             {
+                _logger.LogInfo("llama-server already running and ready.", BabelLogContext.Create(("model", options.Model), ("serverPath", resolvedServerPath), ("pid", _llamaServerProcess.Id)));
                 return;
             }
 
@@ -265,14 +280,23 @@ public class MtService
                 WorkingDirectory = Path.GetDirectoryName(resolvedServerPath) ?? Environment.CurrentDirectory
             };
 
+            _logger.LogInfo("Launching llama-server.", BabelLogContext.Create(("model", options.Model), ("serverPath", resolvedServerPath), ("workingDirectory", startInfo.WorkingDirectory), ("arguments", startInfo.Arguments)));
             _llamaServerProcess = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Failed to start llama-server.");
+            _llamaServerProcess.EnableRaisingEvents = true;
+            _llamaServerProcess.Exited += (_, _) =>
+            {
+                _logger.LogInfo("llama-server exited.", BabelLogContext.Create(("model", _activeLlamaModel), ("serverPath", _activeLlamaServerPath), ("pid", _llamaServerProcess?.Id), ("exitCode", _llamaServerProcess?.ExitCode)));
+            };
             _activeLlamaModel = options.Model;
             _activeLlamaServerPath = resolvedServerPath;
+            StartProcessLogging(_llamaServerProcess, options.Model, resolvedServerPath);
+            _logger.LogInfo("llama-server started.", BabelLogContext.Create(("model", options.Model), ("serverPath", resolvedServerPath), ("pid", _llamaServerProcess.Id)));
 
             PublishLocalRuntimeStatus("downloading-model", $"Downloading {GetOfflineModelLabel(options.Model)} model on first use...");
             await WaitForLlamaServerReadyAsync(options.Model, cancellationToken);
             PublishLocalRuntimeStatus("ready", $"{GetOfflineModelLabel(options.Model)} is ready.");
+            _logger.LogInfo("llama-server ready.", BabelLogContext.Create(("model", options.Model), ("serverPath", resolvedServerPath), ("pid", _llamaServerProcess.Id)));
         }
         finally
         {
@@ -291,6 +315,7 @@ public class MtService
             if (_llamaServerProcess?.HasExited == true)
             {
                 var error = await _llamaServerProcess.StandardError.ReadToEndAsync(cancellationToken);
+                _logger.LogError("llama-server exited before ready.", null, BabelLogContext.Create(("model", model), ("error", error), ("exitCode", _llamaServerProcess.ExitCode)));
                 throw new InvalidOperationException($"llama-server exited before becoming ready. {error}".Trim());
             }
 
@@ -447,7 +472,7 @@ public class MtService
         return null;
     }
 
-    private static void StopLlamaServer()
+    private void StopLlamaServer()
     {
         if (_llamaServerProcess is not null)
         {
@@ -455,6 +480,7 @@ public class MtService
             {
                 if (!_llamaServerProcess.HasExited)
                 {
+                    _logger.LogInfo("Stopping llama-server.", BabelLogContext.Create(("pid", _llamaServerProcess.Id), ("model", _activeLlamaModel), ("serverPath", _activeLlamaServerPath)));
                     _llamaServerProcess.Kill(entireProcessTree: true);
                     _llamaServerProcess.WaitForExit(5000);
                 }
@@ -489,6 +515,33 @@ public class MtService
             Stage = stage,
             Message = message
         });
+    }
+
+    private void StartProcessLogging(Process process, OfflineTranslationModel model, string serverPath)
+    {
+        _ = Task.Run(() => DrainProcessStreamAsync(process.StandardError, BabelLogLevel.Warning, "translation.llama.stderr", model, serverPath));
+        _ = Task.Run(() => DrainProcessStreamAsync(process.StandardOutput, BabelLogLevel.Info, "translation.llama.stdout", model, serverPath));
+    }
+
+    private async Task DrainProcessStreamAsync(StreamReader reader, BabelLogLevel level, string category, OfflineTranslationModel model, string serverPath)
+    {
+        try
+        {
+            while (!reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                _logger.Log(level, line.Trim(), null, BabelLogContext.Create(("stream", category), ("model", model), ("serverPath", serverPath)));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("llama-server stream logging failed.", ex, BabelLogContext.Create(("stream", category), ("model", model), ("serverPath", serverPath)));
+        }
     }
 
     private static async Task<IReadOnlyList<string>> TranslateWithOpenAiBatchAsync(

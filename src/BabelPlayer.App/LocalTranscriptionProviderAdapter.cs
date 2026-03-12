@@ -17,7 +17,7 @@ internal sealed class WhisperLocalTranscriptionProvider : ITranscriptionProvider
         ProviderAvailabilityContext context,
         CancellationToken cancellationToken)
     {
-        var service = ProviderAvailabilityUtilities.BuildAsrService(request);
+        var service = ProviderAvailabilityUtilities.BuildAsrService(request, context);
         return service.TranscribeVideoWithWhisperAsync(
             request.VideoPath,
             request.Options.LocalModelType ?? Whisper.net.Ggml.GgmlType.BaseEn,
@@ -41,7 +41,7 @@ internal sealed class WindowsSpeechFallbackTranscriptionProvider : ITranscriptio
         ProviderAvailabilityContext context,
         CancellationToken cancellationToken)
     {
-        var service = ProviderAvailabilityUtilities.BuildAsrService(request);
+        var service = ProviderAvailabilityUtilities.BuildAsrService(request, context);
         return service.TranscribeVideoWithWindowsSpeechAsync(
             request.VideoPath,
             request.Options.LanguageHint,

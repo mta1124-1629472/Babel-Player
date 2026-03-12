@@ -30,6 +30,7 @@ internal sealed class LocalLlamaTranslationProviderAdapter : ITranslationProvide
             request.Texts,
             null,
             new LocalTranslationOptions(model, ProviderAvailabilityUtilities.ResolveLlamaCppServerPath(context)),
-            cancellationToken);
+            cancellationToken,
+            context.LogFactory);
     }
 }

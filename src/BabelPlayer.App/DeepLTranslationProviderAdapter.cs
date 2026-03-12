@@ -18,6 +18,7 @@ internal sealed class DeepLTranslationProviderAdapter : ITranslationProvider
             request.Texts,
             ProviderAvailabilityUtilities.TryGetDeepLOptions(context),
             null,
-            cancellationToken);
+            cancellationToken,
+            context.LogFactory);
     }
 }
