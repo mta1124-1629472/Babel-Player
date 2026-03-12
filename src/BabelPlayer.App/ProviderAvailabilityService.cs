@@ -4,7 +4,8 @@ namespace BabelPlayer.App;
 
 public sealed record ProviderAvailabilityContext(
     CredentialFacade CredentialFacade,
-    Func<string, string?> EnvironmentVariableReader);
+    Func<string, string?> EnvironmentVariableReader,
+    IBabelLogFactory? LogFactory = null);
 
 public sealed record TranscriptionRequest(
     string VideoPath,
@@ -109,10 +110,13 @@ public sealed record ProviderAvailabilityComposition(
 
 public static class ProviderAvailabilityCompositionFactory
 {
-    public static ProviderAvailabilityComposition Create(CredentialFacade credentialFacade, Func<string, string?> environmentVariableReader)
+    public static ProviderAvailabilityComposition Create(
+        CredentialFacade credentialFacade,
+        Func<string, string?> environmentVariableReader,
+        IBabelLogFactory? logFactory = null)
     {
         return new ProviderAvailabilityComposition(
-            new ProviderAvailabilityContext(credentialFacade, environmentVariableReader),
+            new ProviderAvailabilityContext(credentialFacade, environmentVariableReader, logFactory ?? NullBabelLogFactory.Instance),
             new TranscriptionProviderRegistry(
             [
                 new WhisperLocalTranscriptionProvider(),
@@ -136,8 +140,8 @@ public sealed class ProviderAvailabilityService : IProviderAvailabilityService
 {
     private readonly ProviderAvailabilityComposition _composition;
 
-    public ProviderAvailabilityService(CredentialFacade credentialFacade, Func<string, string?> environmentVariableReader)
-        : this(ProviderAvailabilityCompositionFactory.Create(credentialFacade, environmentVariableReader))
+    public ProviderAvailabilityService(CredentialFacade credentialFacade, Func<string, string?> environmentVariableReader, IBabelLogFactory? logFactory = null)
+        : this(ProviderAvailabilityCompositionFactory.Create(credentialFacade, environmentVariableReader, logFactory))
     {
     }
 

@@ -18,6 +18,7 @@ internal sealed class MicrosoftTranslationProviderAdapter : ITranslationProvider
             request.Texts,
             ProviderAvailabilityUtilities.TryGetMicrosoftOptions(context),
             null,
-            cancellationToken);
+            cancellationToken,
+            context.LogFactory);
     }
 }

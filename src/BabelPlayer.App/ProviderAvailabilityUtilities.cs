@@ -54,9 +54,11 @@ internal static class ProviderAvailabilityUtilities
         return null;
     }
 
-    public static AsrService BuildAsrService(TranscriptionRequest request)
+    public static AsrService BuildAsrService(TranscriptionRequest request, ProviderAvailabilityContext context)
     {
-        var service = new AsrService();
+        var service = new AsrService(
+            request.Options.Mode == CaptionTranscriptionMode.Cloud ? "transcription.cloud" : "transcription.local",
+            context.LogFactory);
         if (request.OnFinal is not null)
         {
             service.OnFinal += request.OnFinal;
@@ -74,9 +76,10 @@ internal static class ProviderAvailabilityUtilities
         IReadOnlyList<string> texts,
         CloudTranslationOptions? cloud,
         LocalTranslationOptions? local,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IBabelLogFactory? logFactory = null)
     {
-        var service = new MtService();
+        var service = new MtService(logFactory);
         service.ConfigureCloud(cloud);
         service.ConfigureLocal(local);
         return service.TranslateBatchAsync(texts, cancellationToken);

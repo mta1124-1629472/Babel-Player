@@ -19,6 +19,8 @@ public interface IShellCompositionRoot
 
 public sealed record ShellDependencies
 {
+    public required IBabelLogFactory LogFactory { get; init; }
+    public required IAppDiagnosticsContext DiagnosticsContext { get; init; }
     public required IFilePickerService FilePickerService { get; init; }
     public required WinUIWindowModeService WindowModeService { get; init; }
     public required WinUICredentialDialogService CredentialDialogService { get; init; }
@@ -36,6 +38,15 @@ public sealed record ShellDependencies
 
 public sealed class ShellCompositionRoot : IShellCompositionRoot
 {
+    private readonly IBabelLogFactory _logFactory;
+    private readonly IAppDiagnosticsContext _diagnosticsContext;
+
+    public ShellCompositionRoot(IBabelLogFactory? logFactory = null, IAppDiagnosticsContext? diagnosticsContext = null)
+    {
+        _logFactory = logFactory ?? NullBabelLogFactory.Instance;
+        _diagnosticsContext = diagnosticsContext ?? new AppDiagnosticsContext();
+    }
+
     public ShellDependencies Create(
         MainWindow ownerWindow,
         Grid rootGrid,
@@ -48,15 +59,15 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
         windowModeService.SetWindowIcon(Path.Combine(AppContext.BaseDirectory, "BabelPlayer.ico"));
 
         var credentialDialogService = new WinUICredentialDialogService(rootGrid, suppressDialogPresentation);
-        var runtimeBootstrapService = new RuntimeBootstrapService();
+        var runtimeBootstrapService = new RuntimeBootstrapService(_logFactory);
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-        var providerComposition = ProviderAvailabilityCompositionFactory.Create(credentialFacade, Environment.GetEnvironmentVariable);
+        var providerComposition = ProviderAvailabilityCompositionFactory.Create(credentialFacade, Environment.GetEnvironmentVariable, _logFactory);
         var providerAvailabilityService = new ProviderAvailabilityService(providerComposition);
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
         var subtitleApplicationService = new SubtitleApplicationService(
-            new DefaultSubtitleSourceResolver(),
-            new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry),
-            new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry),
+            new DefaultSubtitleSourceResolver(_logFactory),
+            new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry, _logFactory),
+            new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry, _logFactory),
             new DefaultAiCredentialCoordinator(
                 credentialFacade,
                 credentialDialogService,
@@ -68,16 +79,18 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
                 credentialFacade,
                 credentialDialogService,
                 filePickerService,
-                Environment.GetEnvironmentVariable),
+                Environment.GetEnvironmentVariable,
+                _logFactory),
             credentialFacade,
             mediaSessionCoordinator,
             workflowStateStore,
-            providerAvailabilityService);
+            providerAvailabilityService,
+            _logFactory);
         var subtitleWorkflowController = new SubtitleWorkflowController(
             subtitleApplicationService,
             new SubtitleWorkflowProjectionAdapter(workflowStateStore, mediaSessionCoordinator.Store),
             new SubtitlePresentationProjector());
-        var playbackBackend = new MpvPlaybackBackend();
+        var playbackBackend = new MpvPlaybackBackend(_logFactory);
         var playbackBackendCoordinator = new PlaybackBackendCoordinator(playbackBackend, mediaSessionCoordinator);
         var videoPresenter = new MpvVideoPresenter();
         var subtitlePresenter = new DetachedWindowSubtitlePresenter(ownerWindow);
@@ -89,7 +102,8 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             playbackBackend,
             subtitleWorkflowController,
             libraryBrowserService,
-            resumePlaybackService);
+            resumePlaybackService,
+            _logFactory);
 
         var stageCoordinator = new StageCoordinator(
             rootGrid,
@@ -100,6 +114,8 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
 
         return new ShellDependencies
         {
+            LogFactory = _logFactory,
+            DiagnosticsContext = _diagnosticsContext,
             FilePickerService = filePickerService,
             WindowModeService = windowModeService,
             CredentialDialogService = credentialDialogService,

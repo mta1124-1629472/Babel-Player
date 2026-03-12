@@ -4,17 +4,33 @@ namespace BabelPlayer.App;
 
 public sealed class MpvPlaybackBackend : IPlaybackBackend
 {
-    private readonly MpvPlaybackEngine _engine = new();
+    private readonly MpvPlaybackEngine _engine;
     private readonly BackendPlaybackClock _clock = new();
+    private readonly IBabelLogger _logger;
     private PlaybackBackendState _state = new();
 
-    public MpvPlaybackBackend()
+    public MpvPlaybackBackend(IBabelLogFactory? logFactory = null)
     {
+        var effectiveLogFactory = logFactory ?? NullBabelLogFactory.Instance;
+        _logger = effectiveLogFactory.CreateLogger("playback.backend");
+        _engine = new MpvPlaybackEngine(effectiveLogFactory);
         _engine.OnStateChanged += HandleEngineStateChanged;
         _engine.OnTracksChanged += tracks => TracksChanged?.Invoke(tracks);
-        _engine.OnMediaOpened += () => MediaOpened?.Invoke();
-        _engine.OnMediaEnded += () => MediaEnded?.Invoke();
-        _engine.OnMediaFailed += message => MediaFailed?.Invoke(message);
+        _engine.OnMediaOpened += () =>
+        {
+            _logger.LogInfo("Media opened.", BabelLogContext.Create(("path", _state.Path)));
+            MediaOpened?.Invoke();
+        };
+        _engine.OnMediaEnded += () =>
+        {
+            _logger.LogInfo("Media ended.", BabelLogContext.Create(("path", _state.Path)));
+            MediaEnded?.Invoke();
+        };
+        _engine.OnMediaFailed += message =>
+        {
+            _logger.LogError("Media failed.", null, BabelLogContext.Create(("path", _state.Path), ("message", message)));
+            MediaFailed?.Invoke(message);
+        };
         _engine.OnRuntimeInstallProgress += progress => RuntimeInstallProgress?.Invoke(progress);
     }
 
@@ -32,10 +48,15 @@ public sealed class MpvPlaybackBackend : IPlaybackBackend
 
     public Task InitializeAsync(nint hostHandle, CancellationToken cancellationToken)
     {
+        _logger.LogInfo("Initializing playback backend.", BabelLogContext.Create(("hostHandle", hostHandle)));
         return _engine.InitializeAsync(hostHandle, HardwareDecodingMode, cancellationToken);
     }
 
-    public Task LoadAsync(string path, CancellationToken cancellationToken) => _engine.LoadAsync(path, cancellationToken);
+    public Task LoadAsync(string path, CancellationToken cancellationToken)
+    {
+        _logger.LogInfo("Loading media into playback backend.", BabelLogContext.Create(("path", path)));
+        return _engine.LoadAsync(path, cancellationToken);
+    }
     public Task PlayAsync(CancellationToken cancellationToken) => _engine.PlayAsync(cancellationToken);
     public Task PauseAsync(CancellationToken cancellationToken) => _engine.PauseAsync(cancellationToken);
     public Task StopAsync(CancellationToken cancellationToken) => _engine.StopAsync(cancellationToken);

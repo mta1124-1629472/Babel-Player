@@ -16,6 +16,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
     private readonly CredentialFacade _credentialFacade;
     private readonly MediaSessionCoordinator _mediaSessionCoordinator;
     private readonly ISubtitleWorkflowStateStore _workflowStateStore;
+    private readonly IBabelLogger _logger;
     private readonly object _translationSync = new();
     private readonly HashSet<string> _inFlightCueTranslations = [];
     private readonly Dictionary<string, List<SubtitleCue>> _generatedSubtitleCache = new(StringComparer.OrdinalIgnoreCase);
@@ -36,7 +37,8 @@ public sealed partial class SubtitleApplicationService : IDisposable
         CredentialFacade credentialFacade,
         MediaSessionCoordinator mediaSessionCoordinator,
         ISubtitleWorkflowStateStore workflowStateStore,
-        IProviderAvailabilityService providerAvailabilityService)
+        IProviderAvailabilityService providerAvailabilityService,
+        IBabelLogFactory? logFactory = null)
     {
         _sourceResolver = sourceResolver;
         _captionGenerator = captionGenerator;
@@ -47,6 +49,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
         _mediaSessionCoordinator = mediaSessionCoordinator;
         _workflowStateStore = workflowStateStore;
         _providerAvailabilityService = providerAvailabilityService;
+        _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("subtitles.workflow");
         _subtitleTranslator.RuntimeStatusChanged += HandleLocalTranslationRuntimeStatus;
         _mediaSessionCoordinator.Store.SnapshotChanged += HandleMediaSessionSnapshotChanged;
         _lastObservedActiveTranscriptSegmentId = _mediaSessionCoordinator.Snapshot.SubtitlePresentation.ActiveTranscriptSegmentId;
@@ -81,6 +84,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         LoadPersistedSelections();
+        _logger.LogInfo("Subtitle application service initialized.", BabelLogContext.Create(("transcriptionModel", _workflowStateStore.Snapshot.SelectedTranscriptionModelKey), ("translationModel", _workflowStateStore.Snapshot.SelectedTranslationModelKey)));
         return Task.CompletedTask;
     }
 
@@ -90,6 +94,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
         bool suppressStatus = false)
     {
         var selection = SubtitleWorkflowCatalog.GetTranscriptionModel(modelKey);
+        _logger.LogInfo("Selecting transcription model.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
         if (selection.Provider == TranscriptionProvider.Cloud && !await _aiCredentialCoordinator.EnsureOpenAiApiKeyAsync(cancellationToken))
         {
             if (!suppressStatus)
@@ -114,6 +119,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
     public async Task<bool> SelectTranslationModelAsync(string modelKey, CancellationToken cancellationToken = default)
     {
         var selection = SubtitleWorkflowCatalog.GetTranslationModel(modelKey);
+        _logger.LogInfo("Selecting translation model.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
         if (selection.Provider == TranslationProvider.None || !await EnsureTranslationProviderReadyAsync(selection, cancellationToken))
         {
             PublishStatus("Translation model selection canceled.");
@@ -189,6 +195,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
     public async Task<SubtitleLoadResult> LoadMediaSubtitlesAsync(string videoPath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
+        _logger.LogInfo("Loading media subtitles.", BabelLogContext.Create(("videoPath", videoPath)));
 
         CancelCaptionGeneration();
         CancelTranslationWork();
@@ -223,6 +230,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
     public async Task<SubtitleLoadResult> ImportExternalSubtitlesAsync(string path, bool autoLoaded = false, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        _logger.LogInfo("Importing external subtitles.", BabelLogContext.Create(("path", path), ("autoLoaded", autoLoaded)));
 
         try
         {
@@ -242,6 +250,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
         }
         catch (Exception ex)
         {
+            _logger.LogError("External subtitle import failed.", ex, BabelLogContext.Create(("path", path), ("autoLoaded", autoLoaded)));
             PublishStatus(ex.Message, "Subtitle import failed.");
             return new SubtitleLoadResult(SubtitlePipelineSource.None, 0, false, false);
         }
@@ -251,6 +260,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
         ArgumentNullException.ThrowIfNull(track);
+        _logger.LogInfo("Importing embedded subtitle track.", BabelLogContext.Create(("videoPath", videoPath), ("trackId", track.Id), ("codec", track.Codec)));
 
         CancelCaptionGeneration();
         UpdateWorkflowState(state => state with
@@ -275,6 +285,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
         }
         catch (Exception ex)
         {
+            _logger.LogError("Embedded subtitle import failed.", ex, BabelLogContext.Create(("videoPath", videoPath), ("trackId", track.Id), ("codec", track.Codec)));
             PublishStatus(ex.Message, "Embedded subtitle import failed.");
             return new SubtitleLoadResult(SubtitlePipelineSource.None, 0, false, false);
         }

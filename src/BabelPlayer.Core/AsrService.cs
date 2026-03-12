@@ -48,6 +48,12 @@ public class AsrService
     };
 
     private static readonly SemaphoreSlim WhisperFactoryGate = new(1, 1);
+    private readonly IBabelLogger _logger;
+
+    public AsrService(string category = "transcription.asr", IBabelLogFactory? logFactory = null)
+    {
+        _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger(category);
+    }
 
     public event Action<TranscriptChunk>? OnFinal;
     public event Action<ModelTransferProgress>? OnModelTransferProgress;
@@ -55,6 +61,7 @@ public class AsrService
     public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoAsync(string videoPath, CaptionGenerationOptions options, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
+        _logger.LogInfo("ASR transcription starting.", BabelLogContext.Create(("videoPath", videoPath), ("mode", options.Mode), ("cloudModel", options.CloudModel), ("localModelType", options.LocalModelType?.ToString())));
 
         var extractedWavePath = await Task.Run(() => ExtractWaveAudio(videoPath), cancellationToken);
 
@@ -75,7 +82,14 @@ public class AsrService
                 }
             }
 
-            return await TranscribeLocallyAsync(extractedWavePath, options.LocalModelType ?? GgmlType.Base, options.LanguageHint, cancellationToken);
+            var result = await TranscribeLocallyAsync(extractedWavePath, options.LocalModelType ?? GgmlType.Base, options.LanguageHint, cancellationToken);
+            _logger.LogInfo("ASR transcription completed.", BabelLogContext.Create(("videoPath", videoPath), ("cueCount", result.Count), ("mode", options.Mode)));
+            return result;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError("ASR transcription failed.", ex, BabelLogContext.Create(("videoPath", videoPath), ("mode", options.Mode)));
+            throw;
         }
         finally
         {
@@ -144,8 +158,9 @@ public class AsrService
         {
             return await TranscribeWithWhisperAsync(wavePath, localModelType, languageHint, cancellationToken);
         }
-        catch when (!cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
+            _logger.LogWarning("Whisper transcription failed, falling back to Windows Speech.", ex, BabelLogContext.Create(("wavePath", wavePath), ("languageHint", languageHint), ("localModelType", localModelType.ToString())));
             return await RunOnStaThreadAsync(() => TranscribeWithWindowsSpeech(wavePath, languageHint, cancellationToken), cancellationToken);
         }
     }

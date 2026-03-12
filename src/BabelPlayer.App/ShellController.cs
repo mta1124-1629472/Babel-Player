@@ -48,6 +48,7 @@ public sealed class ShellController : IDisposable
     private readonly LibraryBrowserService _libraryBrowserService;
     private readonly ResumePlaybackService _resumePlaybackService;
     private readonly ResumeTrackingCoordinator _resumeTrackingCoordinator;
+    private readonly IBabelLogger _logger;
 
     private bool _autoResumePlaybackAfterCaptionReady;
     private string? _autoResumePlaybackPath;
@@ -61,13 +62,15 @@ public sealed class ShellController : IDisposable
         IPlaybackBackend playbackBackend,
         SubtitleWorkflowController subtitleWorkflowController,
         LibraryBrowserService libraryBrowserService,
-        ResumePlaybackService resumePlaybackService)
+        ResumePlaybackService resumePlaybackService,
+        IBabelLogFactory? logFactory = null)
     {
         _playbackQueueController = playbackQueueController;
         _playbackBackend = playbackBackend;
         _subtitleWorkflowController = subtitleWorkflowController;
         _libraryBrowserService = libraryBrowserService;
         _resumePlaybackService = resumePlaybackService;
+        _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("shell.controller");
         _resumeTrackingCoordinator = new ResumeTrackingCoordinator(playbackBackend, resumePlaybackService);
         _playbackQueueController.SnapshotChanged += HandleQueueSnapshotChanged;
     }
@@ -103,6 +106,7 @@ public sealed class ShellController : IDisposable
         if (!autoplay)
         {
             var added = _playbackQueueController.AddToQueue(entries);
+            _logger.LogInfo("Queued media files.", BabelLogContext.Create(("count", added.Count)));
             return new ShellQueueMediaResult
             {
                 AddedItems = added,
@@ -114,6 +118,7 @@ public sealed class ShellController : IDisposable
         var addedItems = entries.Count > 1
             ? _playbackQueueController.AddToQueue(entries.Skip(1))
             : [];
+        _logger.LogInfo("Play now requested from file list.", BabelLogContext.Create(("path", itemToLoad.Path), ("addedToQueue", addedItems.Count)));
         return new ShellQueueMediaResult
         {
             AddedItems = addedItems,
@@ -157,6 +162,7 @@ public sealed class ShellController : IDisposable
         {
             added = _playbackQueueController.AddFolderToQueue(folderPath, files);
         }
+        _logger.LogInfo("Queued folder.", BabelLogContext.Create(("folderPath", folderPath), ("autoplay", autoplay), ("addedCount", added.Count), ("playNowPath", itemToLoad?.Path)));
 
         return new ShellQueueMediaResult
         {
@@ -202,6 +208,7 @@ public sealed class ShellController : IDisposable
         var added = discoveredFiles.Count > 1
             ? _playbackQueueController.AddToQueue(discoveredFiles.Skip(1))
             : [];
+        _logger.LogInfo("Queued dropped items.", BabelLogContext.Create(("fileCount", discoveredFiles.Count), ("folderCount", pinnedFolders.Count), ("playNowPath", itemToLoad.Path)));
         return new ShellQueueMediaResult
         {
             AddedItems = added,
@@ -213,6 +220,7 @@ public sealed class ShellController : IDisposable
     public ShellQueueMediaResult PlayNow(string path)
     {
         var item = _playbackQueueController.PlayNow(path);
+        _logger.LogInfo("Play now requested.", BabelLogContext.Create(("path", path)));
         return new ShellQueueMediaResult
         {
             ItemToLoad = item,
@@ -223,6 +231,7 @@ public sealed class ShellController : IDisposable
     public ShellQueueMediaResult PlayNext(string path)
     {
         var added = _playbackQueueController.PlayNext([path]);
+        _logger.LogInfo("Play next requested.", BabelLogContext.Create(("path", path), ("added", added.Count)));
         return new ShellQueueMediaResult
         {
             AddedItems = added,
@@ -235,6 +244,7 @@ public sealed class ShellController : IDisposable
     public ShellQueueMediaResult AddToQueue(IEnumerable<string> files)
     {
         var added = _playbackQueueController.AddToQueue(files);
+        _logger.LogInfo("Add to queue requested.", BabelLogContext.Create(("added", added.Count)));
         return new ShellQueueMediaResult
         {
             AddedItems = added,
@@ -256,6 +266,7 @@ public sealed class ShellController : IDisposable
     public void ClearQueue()
     {
         _playbackQueueController.ClearQueue();
+        _logger.LogInfo("Queue cleared.");
     }
 
     public async Task<bool> LoadPlaybackItemAsync(
@@ -265,8 +276,12 @@ public sealed class ShellController : IDisposable
     {
         if (item is null || string.IsNullOrWhiteSpace(item.Path) || !File.Exists(item.Path))
         {
+            _logger.LogWarning("Load playback item skipped because the item was missing.", null, BabelLogContext.Create(("path", item?.Path)));
             return false;
         }
+
+        var operationId = $"media-{Guid.NewGuid():N}";
+        _logger.LogInfo("Media load starting.", BabelLogContext.Create(("operationId", operationId), ("path", item.Path), ("displayName", item.DisplayName)));
 
         ResetCaptionStartupGate();
 
@@ -278,17 +293,26 @@ public sealed class ShellController : IDisposable
 
         _resumeTrackingCoordinator.ResetForMedia(item.Path);
 
-        await _playbackBackend.LoadAsync(item.Path, cancellationToken);
-        await _playbackBackend.SetHardwareDecodingModeAsync(options.HardwareDecodingMode, cancellationToken);
-        await _playbackBackend.SetPlaybackRateAsync(options.PlaybackRate, cancellationToken);
-        await _playbackBackend.SetAspectRatioAsync(options.AspectRatio, cancellationToken);
-        await _playbackBackend.SetAudioDelayAsync(options.AudioDelaySeconds, cancellationToken);
-        await _playbackBackend.SetSubtitleDelayAsync(options.SubtitleDelaySeconds, cancellationToken);
-        await _playbackBackend.SetZoomAsync(0, cancellationToken);
-        await _playbackBackend.SetPanAsync(0, 0, cancellationToken);
-        await _playbackBackend.SetVolumeAsync(options.Volume, cancellationToken);
-        await _subtitleWorkflowController.LoadMediaSubtitlesAsync(item.Path, cancellationToken);
-        return true;
+        try
+        {
+            await _playbackBackend.LoadAsync(item.Path, cancellationToken);
+            await _playbackBackend.SetHardwareDecodingModeAsync(options.HardwareDecodingMode, cancellationToken);
+            await _playbackBackend.SetPlaybackRateAsync(options.PlaybackRate, cancellationToken);
+            await _playbackBackend.SetAspectRatioAsync(options.AspectRatio, cancellationToken);
+            await _playbackBackend.SetAudioDelayAsync(options.AudioDelaySeconds, cancellationToken);
+            await _playbackBackend.SetSubtitleDelayAsync(options.SubtitleDelaySeconds, cancellationToken);
+            await _playbackBackend.SetZoomAsync(0, cancellationToken);
+            await _playbackBackend.SetPanAsync(0, 0, cancellationToken);
+            await _playbackBackend.SetVolumeAsync(options.Volume, cancellationToken);
+            await _subtitleWorkflowController.LoadMediaSubtitlesAsync(item.Path, cancellationToken);
+            _logger.LogInfo("Media load completed.", BabelLogContext.Create(("operationId", operationId), ("path", item.Path)));
+            return true;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError("Media load failed.", ex, BabelLogContext.Create(("operationId", operationId), ("path", item.Path), ("displayName", item.DisplayName)));
+            throw;
+        }
     }
 
     public async Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(PlaybackStateSnapshot snapshot, bool resumeEnabled, CancellationToken cancellationToken = default)
@@ -314,6 +338,7 @@ public sealed class ShellController : IDisposable
 
         var resumePosition = TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, snapshot.Duration.TotalSeconds));
         await _playbackBackend.SeekAsync(resumePosition, cancellationToken);
+        _logger.LogInfo("Resume position applied.", BabelLogContext.Create(("path", snapshot.Path), ("resumePosition", resumePosition)));
         return result with
         {
             ResumePosition = resumePosition
@@ -345,6 +370,7 @@ public sealed class ShellController : IDisposable
 
         ResetCaptionStartupGate();
         var next = _playbackQueueController.AdvanceAfterMediaEnded();
+        _logger.LogInfo("Handled media end.", BabelLogContext.Create(("nextPath", next?.Path), ("resumeEnabled", resumeEnabled)));
         return new ShellMediaEndedResult
         {
             NextItem = next,
@@ -360,6 +386,7 @@ public sealed class ShellController : IDisposable
 
     private void HandleQueueSnapshotChanged(PlaybackQueueSnapshot snapshot)
     {
+        _logger.LogInfo("Queue snapshot changed.", BabelLogContext.Create(("nowPlaying", snapshot.NowPlayingItem?.DisplayName), ("upNextCount", snapshot.QueueItems.Count), ("historyCount", snapshot.HistoryItems.Count)));
         QueueSnapshotChanged?.Invoke(snapshot);
     }
 

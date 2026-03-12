@@ -18,7 +18,7 @@ internal sealed class OpenAiTranscriptionProviderAdapter : ITranscriptionProvide
         ProviderAvailabilityContext context,
         CancellationToken cancellationToken)
     {
-        var service = ProviderAvailabilityUtilities.BuildAsrService(request);
+        var service = ProviderAvailabilityUtilities.BuildAsrService(request, context);
         var apiKey = context.EnvironmentVariableReader("OPENAI_API_KEY") ?? context.CredentialFacade.GetOpenAiApiKey();
         var options = new CaptionGenerationOptions
         {

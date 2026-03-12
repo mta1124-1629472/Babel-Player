@@ -48,6 +48,7 @@ public sealed partial class SubtitleApplicationService
             var selectionKey = _workflowStateStore.Snapshot.SelectedTranslationModelKey;
             var selection = SubtitleWorkflowCatalog.GetTranslationModel(selectionKey);
             var cues = _mediaSessionCoordinator.Snapshot.Transcript.Segments.ToList();
+            _logger.LogInfo("Translating cues.", BabelLogContext.Create(("modelKey", selection.Key), ("cueCount", cues.Count), ("translationEnabled", _workflowStateStore.Snapshot.IsTranslationEnabled)));
 
             if (_workflowStateStore.Snapshot.IsTranslationEnabled
                 && SubtitleWorkflowCatalog.IsCloudTranslationProvider(selection.Provider))
@@ -161,6 +162,7 @@ public sealed partial class SubtitleApplicationService
 
     private async Task HandleCloudServiceFailureAsync(Exception ex)
     {
+        _logger.LogError("Subtitle cloud workflow failed.", ex, BabelLogContext.Create(("translationModel", _workflowStateStore.Snapshot.SelectedTranslationModelKey), ("transcriptionModel", _workflowStateStore.Snapshot.SelectedTranscriptionModelKey)));
         if (ShouldDisableCloudForError(ex))
         {
             var state = _workflowStateStore.Snapshot;
@@ -193,10 +195,12 @@ public sealed partial class SubtitleApplicationService
         {
             PublishStatus($"Preparing {selection.DisplayName}.", $"Preparing {selection.DisplayName}.");
             await _subtitleTranslator.WarmupAsync(selection, cancellationToken);
+            _logger.LogInfo("Local translation runtime warmed up.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
             return true;
         }
         catch (Exception ex)
         {
+            _logger.LogError("Local translation runtime warmup failed.", ex, BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
             PublishStatus(ex.Message, "Local translation model setup failed.");
             return false;
         }
@@ -322,6 +326,7 @@ public sealed partial class SubtitleApplicationService
             _mediaSessionCoordinator.SetSubtitleStatus(overlayStatus);
         }
 
+        _logger.LogInfo("Subtitle workflow status updated.", BabelLogContext.Create(("message", message), ("overlayStatus", overlayStatus)));
         StatusChanged?.Invoke(message);
     }
 
