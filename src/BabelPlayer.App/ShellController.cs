@@ -10,6 +10,7 @@ public sealed record ShellLoadMediaOptions
     public double AudioDelaySeconds { get; init; }
     public double SubtitleDelaySeconds { get; init; }
     public double Volume { get; init; } = 0.8;
+    public bool IsMuted { get; init; }
     public bool ResumeEnabled { get; init; }
     public PlaybackStateSnapshot PreviousPlaybackState { get; init; } = new();
 }
@@ -312,6 +313,7 @@ public sealed class ShellController : IDisposable
             await _playbackBackend.SetZoomAsync(0, cancellationToken);
             await _playbackBackend.SetPanAsync(0, 0, cancellationToken);
             await _playbackBackend.SetVolumeAsync(options.Volume, cancellationToken);
+            await _playbackBackend.SetMuteAsync(options.IsMuted, cancellationToken);
             await _subtitleWorkflowController.LoadMediaSubtitlesAsync(item.Path, cancellationToken);
             _logger.LogInfo("Media load completed.", BabelLogContext.Create(("operationId", operationId), ("path", item.Path)));
             return true;
@@ -418,6 +420,12 @@ public sealed class ShellController : IDisposable
 
     public Task SetMutedAsync(bool muted, CancellationToken cancellationToken = default)
         => _playbackBackend.SetMuteAsync(muted, cancellationToken);
+
+    public async Task ApplyAudioPreferencesAsync(double volume, bool muted, CancellationToken cancellationToken = default)
+    {
+        await _playbackBackend.SetVolumeAsync(volume, cancellationToken);
+        await _playbackBackend.SetMuteAsync(muted, cancellationToken);
+    }
 
     public Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken = default)
         => _playbackBackend.SetPlaybackRateAsync(speed, cancellationToken);

@@ -132,6 +132,7 @@ public sealed partial class MainWindow : Window
     private Slider VolumeSlider = null!;
     private ToggleButton MuteToggleButton = null!;
     private bool _suppressVolumeSliderChanges;
+    private bool _suppressPlaybackSpeedSliderChanges;
     private double _lastLoggedPlaybackStageWidth = -1;
     private double _lastLoggedPlaybackStageHeight = -1;
     private Button LanguageToolsToggleButton = null!;
@@ -143,6 +144,9 @@ public sealed partial class MainWindow : Window
     private ComboBox TranslationModelComboBox = null!;
     private ToggleSwitch TranslationToggleSwitch = null!;
     private ToggleSwitch AutoTranslateToggleSwitch = null!;
+    private TextBlock SubtitleDelayValueText = null!;
+    private Slider PlaybackSpeedSlider = null!;
+    private TextBlock PlaybackSpeedValueText = null!;
     private MenuFlyoutSubItem PlaybackRateFlyoutSubItem = null!;
     private MenuFlyoutSubItem HardwareDecodingFlyoutSubItem = null!;
     private MenuFlyoutSubItem AspectRatioFlyoutSubItem = null!;
@@ -1085,8 +1089,6 @@ public sealed partial class MainWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
-        var importSubsButton = CreateSecondaryTransportButton(new SymbolIcon(Symbol.Edit), "Import subtitles", ImportSubtitle_Click, "Import Subs");
-        secondaryButtons.Children.Add(importSubsButton);
         Grid.SetColumn(secondaryButtons, 1);
         secondaryRow.Children.Add(secondaryButtons);
 
@@ -1298,6 +1300,82 @@ public sealed partial class MainWindow : Window
         };
         SetControlHint(subtitleStyleButton, "Subtitle style");
         subtitleControls.Children.Add(CreateCompactLanguageToolsRow("Subtitle Style", subtitleStyleButton));
+
+        var importSubsButton = new Button
+        {
+            Content = "Import Subs",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        importSubsButton.Click += ImportSubtitle_Click;
+        SetControlHint(importSubsButton, "Import subtitle file");
+        subtitleControls.Children.Add(CreateCompactLanguageToolsRow("Import", importSubsButton));
+
+        var subtitleDelayPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var subtitleDelayBackButton = new Button
+        {
+            Content = "\u2212",
+            MinWidth = 32,
+            Padding = new Thickness(6, 4, 6, 4)
+        };
+        subtitleDelayBackButton.Click += SubtitleDelayBack_Click;
+        SubtitleDelayValueText = new TextBlock
+        {
+            Text = "0.00s",
+            MinWidth = 52,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var subtitleDelayForwardButton = new Button
+        {
+            Content = "+",
+            MinWidth = 32,
+            Padding = new Thickness(6, 4, 6, 4)
+        };
+        subtitleDelayForwardButton.Click += SubtitleDelayForward_Click;
+        var subtitleDelayResetButton = new Button
+        {
+            Content = "Reset",
+            Padding = new Thickness(8, 4, 8, 4)
+        };
+        subtitleDelayResetButton.Click += ResetSubtitleDelay_Click;
+        subtitleDelayPanel.Children.Add(subtitleDelayBackButton);
+        subtitleDelayPanel.Children.Add(SubtitleDelayValueText);
+        subtitleDelayPanel.Children.Add(subtitleDelayForwardButton);
+        subtitleDelayPanel.Children.Add(subtitleDelayResetButton);
+        subtitleControls.Children.Add(CreateCompactLanguageToolsRow("Subtitle Delay", subtitleDelayPanel));
+
+        var playbackSpeedPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        PlaybackSpeedSlider = new Slider
+        {
+            Minimum = 0.25,
+            Maximum = 2.0,
+            StepFrequency = 0.25,
+            SmallChange = 0.25,
+            Value = 1.0,
+            Width = 120
+        };
+        PlaybackSpeedSlider.ValueChanged += PlaybackSpeedSlider_ValueChanged;
+        PlaybackSpeedValueText = new TextBlock
+        {
+            Text = "1.00x",
+            MinWidth = 40,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        playbackSpeedPanel.Children.Add(PlaybackSpeedSlider);
+        playbackSpeedPanel.Children.Add(PlaybackSpeedValueText);
+        subtitleControls.Children.Add(CreateCompactLanguageToolsRow("Playback Speed", playbackSpeedPanel));
+
         LanguageToolsSubtitlesGroup = CreateLanguageToolsSection(
             "Subtitle Display",
             subtitleControls);
@@ -1615,6 +1693,7 @@ public sealed partial class MainWindow : Window
 
         _audioDelaySeconds = settings.AudioDelaySeconds;
         _subtitleDelaySeconds = settings.SubtitleDelaySeconds;
+        SyncSubtitleDelayValueText();
         _selectedAspectRatio = string.IsNullOrWhiteSpace(settings.AspectRatioOverride) ? "auto" : settings.AspectRatioOverride;
         settings = settings with
         {
@@ -2169,7 +2248,7 @@ public sealed partial class MainWindow : Window
         var normalizedVolume = Math.Clamp(e.NewValue / 100d, 0, 1);
         ViewModel.Transport.Volume = normalizedVolume;
         PlayerHost.SetPreferredAudioState(normalizedVolume, MuteToggleButton?.IsChecked == true);
-        _ = _shellController.SetVolumeAsync(normalizedVolume);
+        _ = _shellController.ApplyAudioPreferencesAsync(normalizedVolume, MuteToggleButton?.IsChecked == true);
         if (!_isInitializingShellState)
         {
             SaveCurrentSettings();
@@ -2182,7 +2261,7 @@ public sealed partial class MainWindow : Window
         ViewModel.Transport.IsMuted = isMuted;
         var normalizedVolume = Math.Clamp((VolumeSlider?.Value ?? (ViewModel.Transport.Volume * 100d)) / 100d, 0, 1);
         PlayerHost.SetPreferredAudioState(normalizedVolume, isMuted);
-        _ = _shellController.SetMutedAsync(isMuted);
+        _ = _shellController.ApplyAudioPreferencesAsync(normalizedVolume, isMuted);
         UpdateMuteButtonVisual();
         if (!_isInitializingShellState)
         {
@@ -2215,12 +2294,23 @@ public sealed partial class MainWindow : Window
         SetPlaybackRate(rate);
     }
 
+    private void PlaybackSpeedSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_suppressPlaybackSpeedSliderChanges || Math.Abs(e.NewValue - e.OldValue) < 0.01)
+        {
+            return;
+        }
+
+        SetPlaybackRate(e.NewValue);
+    }
+
     private void SetPlaybackRate(double speed, bool persistSettings = true, bool showStatus = true)
     {
         var clamped = Math.Clamp(speed, 0.25, 2.0);
         ViewModel.Transport.PlaybackRate = clamped;
         _ = _shellController.SetPlaybackRateAsync(clamped);
         UpdatePlaybackRateFlyoutChecks();
+        SyncPlaybackSpeedSlider(clamped);
         if (persistSettings && !_isInitializingShellState)
         {
             SaveCurrentSettings();
@@ -3571,6 +3661,7 @@ public sealed partial class MainWindow : Window
         _subtitleDelaySeconds += delta;
         _ = _shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds);
         UpdateDelayFlyoutLabels();
+        SyncSubtitleDelayValueText();
         SaveCurrentSettings();
         ShowStatus($"Subtitle delay: {_subtitleDelaySeconds:+0.00;-0.00;0.00}s");
     }
@@ -3580,6 +3671,7 @@ public sealed partial class MainWindow : Window
         _subtitleDelaySeconds = 0;
         _ = _shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds);
         UpdateDelayFlyoutLabels();
+        SyncSubtitleDelayValueText();
         SaveCurrentSettings();
         ShowStatus("Subtitle delay reset.");
     }
@@ -3607,6 +3699,30 @@ public sealed partial class MainWindow : Window
     private void SubtitleDelayForward_Click(object sender, RoutedEventArgs e) => AdjustSubtitleDelay(0.05);
 
     private void ResetSubtitleDelay_Click(object sender, RoutedEventArgs e) => ResetSubtitleDelay();
+
+    private void SyncSubtitleDelayValueText()
+    {
+        if (SubtitleDelayValueText is not null)
+        {
+            SubtitleDelayValueText.Text = $"{_subtitleDelaySeconds:+0.00;-0.00;0.00}s";
+        }
+    }
+
+    private void SyncPlaybackSpeedSlider(double speed)
+    {
+        if (PlaybackSpeedSlider is null)
+        {
+            return;
+        }
+
+        _suppressPlaybackSpeedSliderChanges = true;
+        PlaybackSpeedSlider.Value = speed;
+        _suppressPlaybackSpeedSliderChanges = false;
+        if (PlaybackSpeedValueText is not null)
+        {
+            PlaybackSpeedValueText.Text = $"{speed:0.00}x";
+        }
+    }
 
     private void AudioDelayBack_Click(object sender, RoutedEventArgs e) => AdjustAudioDelay(-0.05);
 
@@ -3825,6 +3941,7 @@ public sealed partial class MainWindow : Window
             AudioDelaySeconds = _audioDelaySeconds,
             SubtitleDelaySeconds = _subtitleDelaySeconds,
             Volume = ViewModel.Transport.Volume,
+            IsMuted = ViewModel.Transport.IsMuted,
             ResumeEnabled = ViewModel.Settings.ResumeEnabled,
             PreviousPlaybackState = _shellController.CurrentPlaybackSnapshot
         };
@@ -4586,6 +4703,11 @@ public sealed partial class MainWindow : Window
 
     private async Task ApplyCaptionStartupGateAsync(SubtitleWorkflowSnapshot snapshot)
     {
+        if (GetEffectiveSubtitleRenderMode(snapshot) == SubtitleRenderMode.Off)
+        {
+            return;
+        }
+
         var result = await _shellController.EvaluateCaptionStartupGateAsync(
             snapshot,
             _shellController.CurrentPlaybackSnapshot,
