@@ -4,7 +4,6 @@ using System.Linq;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using BabelPlayer.App;
-using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -34,25 +33,23 @@ public sealed partial class MainWindow : Window
     private const string LibraryQueueDragFormat = "BabelPlayer/LibraryQueuePaths";
     private readonly PlaybackQueueController _playbackQueueController = new();
     private readonly ISubtitleWorkflowShellService _subtitleWorkflowService;
-    private readonly IPlaybackBackend _playbackBackend;
-    private readonly PlaybackBackendCoordinator _playbackBackendCoordinator;
+    private readonly IPlaybackHostRuntime _playbackHostRuntime;
     private readonly IShellPreferencesService _shellPreferencesService;
     private readonly IShellPreferenceCommands _shellPreferenceCommands;
     private readonly IShellLibraryService _shellLibraryService;
-    private readonly ShellProjectionService _shellProjectionService;
+    private readonly IShellProjectionReader _shellProjectionReader;
     private readonly IQueueProjectionReader _queueProjectionReader;
     private readonly IQueueCommands _queueCommands;
     private readonly IShellPlaybackCommands _shellPlaybackCommands;
     private readonly ICredentialSetupService _credentialSetupService;
     private readonly IShortcutProfileService _shortcutProfileService;
     private readonly IShortcutCommandExecutor _shortcutCommandExecutor;
-    private readonly IDisposable _shellControllerLifetime;
+    private readonly IDisposable _shellLifetime;
     private readonly IVideoPresenter _videoPresenter;
     private readonly ISubtitlePresenter _subtitlePresenter;
     private readonly IFilePickerService _filePickerService;
     private readonly WinUIWindowModeService _windowModeService;
-    private readonly WinUICredentialDialogService _credentialDialogService;
-    private readonly IRuntimeBootstrapService _runtimeBootstrapService;
+    private readonly ICredentialDialogService _credentialDialogService;
     private readonly StageCoordinator _stageCoordinator;
     private readonly IBabelLogger _logger;
     private readonly IBabelLogger _statusLogger;
@@ -186,26 +183,24 @@ public sealed partial class MainWindow : Window
         _filePickerService = dependencies.FilePickerService;
         _windowModeService = dependencies.WindowModeService;
         _credentialDialogService = dependencies.CredentialDialogService;
-        _runtimeBootstrapService = dependencies.RuntimeBootstrapService;
         _diagnosticsContext = dependencies.DiagnosticsContext;
         _logger = dependencies.LogFactory.CreateLogger("shell.window");
         _statusLogger = dependencies.LogFactory.CreateLogger("shell.status");
         _subtitleWorkflowService = dependencies.SubtitleWorkflowService;
-        _playbackBackend = dependencies.PlaybackBackend;
-        _playbackBackendCoordinator = dependencies.PlaybackBackendCoordinator;
+        _playbackHostRuntime = dependencies.PlaybackHostRuntime;
         _videoPresenter = dependencies.VideoPresenter;
         _subtitlePresenter = dependencies.SubtitlePresenter;
         _shellPreferencesService = dependencies.ShellPreferencesService;
         _shellPreferenceCommands = dependencies.ShellPreferenceCommands;
         _shellLibraryService = dependencies.ShellLibraryService;
-        _shellProjectionService = dependencies.ShellProjectionService;
+        _shellProjectionReader = dependencies.ShellProjectionReader;
         _queueProjectionReader = dependencies.QueueProjectionReader;
         _queueCommands = dependencies.QueueCommands;
         _shellPlaybackCommands = dependencies.ShellPlaybackCommands;
         _credentialSetupService = dependencies.CredentialSetupService;
         _shortcutProfileService = dependencies.ShortcutProfileService;
         _shortcutCommandExecutor = dependencies.ShortcutCommandExecutor;
-        _shellControllerLifetime = dependencies.ShellControllerLifetime;
+        _shellLifetime = dependencies.ShellLifetime;
         _statusOverlayTimer.Interval = TimeSpan.FromSeconds(4);
         _statusOverlayTimer.Tick += StatusOverlayTimer_Tick;
         BuildShell();
@@ -230,7 +225,7 @@ public sealed partial class MainWindow : Window
         _subtitleWorkflowService.StatusChanged += SubtitleWorkflow_StatusChanged;
         _subtitleWorkflowService.SnapshotChanged += SubtitleWorkflow_SnapshotChanged;
         _shellLibraryService.SnapshotChanged += ShellLibraryService_SnapshotChanged;
-        _shellProjectionService.ProjectionChanged += ShellProjectionService_ProjectionChanged;
+        _shellProjectionReader.ProjectionChanged += ShellProjectionService_ProjectionChanged;
         _queueProjectionReader.QueueSnapshotChanged += ShellController_QueueSnapshotChanged;
 
         Closed += MainWindow_Closed;
@@ -238,7 +233,7 @@ public sealed partial class MainWindow : Window
 
         InitializeShellState();
         _diagnosticsContext.UpdateWindowMode(_windowModeService.CurrentMode.ToString());
-        ApplyShellProjection(_shellProjectionService.Current);
+        ApplyShellProjection(_shellProjectionReader.Current);
         ApplyQueueSnapshot(_queueProjectionReader.QueueSnapshot);
         _logger.LogInfo("Main window initialized.");
         FireAndForget(_subtitleWorkflowService.InitializeAsync());
@@ -427,14 +422,10 @@ public sealed partial class MainWindow : Window
         _subtitleWorkflowService.StatusChanged -= SubtitleWorkflow_StatusChanged;
         _subtitleWorkflowService.SnapshotChanged -= SubtitleWorkflow_SnapshotChanged;
         _shellLibraryService.SnapshotChanged -= ShellLibraryService_SnapshotChanged;
-        _shellProjectionService.ProjectionChanged -= ShellProjectionService_ProjectionChanged;
+        _shellProjectionReader.ProjectionChanged -= ShellProjectionService_ProjectionChanged;
         _queueProjectionReader.QueueSnapshotChanged -= ShellController_QueueSnapshotChanged;
-        _shellProjectionService.Dispose();
         (_subtitlePresenter as IDisposable)?.Dispose();
-        _subtitleWorkflowService.Dispose();
-        _shellControllerLifetime.Dispose();
-        _playbackBackendCoordinator.Dispose();
-        FireAndForget(_playbackBackend.DisposeAsync());
+        _shellLifetime.Dispose();
     }
 
     private void ShellController_QueueSnapshotChanged(PlaybackQueueSnapshot snapshot)
@@ -503,4 +494,3 @@ public sealed partial class MainWindow : Window
     }
 
 }
-

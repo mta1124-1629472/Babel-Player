@@ -1,5 +1,6 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using Whisper.net.Ggml;
 
 namespace BabelPlayer.App.Tests;
 
@@ -84,7 +85,14 @@ internal static class TestWorkflowControllerFactory
                 {
                     Mode = selection.Provider == TranscriptionProvider.Cloud ? CaptionTranscriptionMode.Cloud : CaptionTranscriptionMode.Local,
                     LanguageHint = languageHint,
-                    LocalModelType = selection.LocalModelType,
+                    LocalModelType = selection.LocalModelKey switch
+                    {
+                        "tiny" => Whisper.net.Ggml.GgmlType.Tiny,
+                        "base" => Whisper.net.Ggml.GgmlType.Base,
+                        "small" => Whisper.net.Ggml.GgmlType.Small,
+                        "tiny-en" => Whisper.net.Ggml.GgmlType.TinyEn,
+                        _ => null
+                    },
                     CloudModel = selection.CloudModel
                 },
                 onFinal ?? (_ => { }),

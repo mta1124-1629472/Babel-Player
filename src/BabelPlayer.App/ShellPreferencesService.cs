@@ -25,10 +25,10 @@ public interface IShellPreferencesService
 
 public sealed record ShellPreferencesSnapshot
 {
-    public HardwareDecodingMode HardwareDecodingMode { get; init; } = HardwareDecodingMode.AutoSafe;
-    public SubtitleRenderMode SubtitleRenderMode { get; init; } = SubtitleRenderMode.TranslationOnly;
-    public SubtitleStyleSettings SubtitleStyle { get; init; } = new();
-    public ShortcutProfile ShortcutProfile { get; init; } = ShortcutProfile.CreateDefault();
+    public ShellHardwareDecodingMode HardwareDecodingMode { get; init; } = ShellHardwareDecodingMode.AutoSafe;
+    public ShellSubtitleRenderMode SubtitleRenderMode { get; init; } = ShellSubtitleRenderMode.TranslationOnly;
+    public ShellSubtitleStyle SubtitleStyle { get; init; } = new();
+    public ShellShortcutProfile ShortcutProfile { get; init; } = ShellShortcutProfile.CreateDefault();
     public IReadOnlyList<string> PinnedRoots { get; init; } = [];
     public double VolumeLevel { get; init; } = 0.8;
     public bool IsMuted { get; init; }
@@ -39,32 +39,32 @@ public sealed record ShellPreferencesSnapshot
     public bool ShowBrowserPanel { get; init; }
     public bool ShowPlaylistPanel { get; init; }
     public bool ResumeEnabled { get; init; } = true;
-    public PlaybackWindowMode WindowMode { get; init; } = PlaybackWindowMode.Standard;
-    public SubtitleRenderMode LastNonOffSubtitleRenderMode { get; init; } = SubtitleRenderMode.TranslationOnly;
+    public ShellPlaybackWindowMode WindowMode { get; init; } = ShellPlaybackWindowMode.Standard;
+    public ShellSubtitleRenderMode LastNonOffSubtitleRenderMode { get; init; } = ShellSubtitleRenderMode.TranslationOnly;
     public bool ShowSubtitleSource { get; init; }
 }
 
 public sealed record ShellLayoutPreferencesChange(
     bool ShowBrowserPanel,
     bool ShowPlaylistPanel,
-    PlaybackWindowMode WindowMode);
+    ShellPlaybackWindowMode WindowMode);
 
 public sealed record ShellPlaybackDefaultsChange(
-    HardwareDecodingMode HardwareDecodingMode,
+    ShellHardwareDecodingMode HardwareDecodingMode,
     double PlaybackRate,
     double AudioDelaySeconds,
     double SubtitleDelaySeconds,
     string AspectRatio);
 
 public sealed record ShellSubtitlePresentationChange(
-    SubtitleRenderMode SubtitleRenderMode,
-    SubtitleStyleSettings SubtitleStyle);
+    ShellSubtitleRenderMode SubtitleRenderMode,
+    ShellSubtitleStyle SubtitleStyle);
 
 public sealed record ShellAudioStateChange(
     double VolumeLevel,
     bool IsMuted);
 
-public sealed record ShellShortcutProfileChange(ShortcutProfile ShortcutProfile);
+public sealed record ShellShortcutProfileChange(ShellShortcutProfile ShortcutProfile);
 
 public sealed record ShellResumeEnabledChange(bool ResumeEnabled);
 
@@ -90,7 +90,7 @@ public sealed class ShellPreferencesService : IShellPreferencesService
         {
             ShowBrowserPanel = change.ShowBrowserPanel,
             ShowPlaylistPanel = change.ShowPlaylistPanel,
-            WindowMode = change.WindowMode
+            WindowMode = change.WindowMode.ToCore()
         };
 
         return Persist(updated);
@@ -100,7 +100,7 @@ public sealed class ShellPreferencesService : IShellPreferencesService
     {
         var updated = ToSettings(Current) with
         {
-            HardwareDecodingMode = change.HardwareDecodingMode,
+            HardwareDecodingMode = change.HardwareDecodingMode.ToCore(),
             DefaultPlaybackRate = change.PlaybackRate,
             AudioDelaySeconds = change.AudioDelaySeconds,
             SubtitleDelaySeconds = change.SubtitleDelaySeconds,
@@ -116,8 +116,8 @@ public sealed class ShellPreferencesService : IShellPreferencesService
 
         var updated = ToSettings(Current) with
         {
-            SubtitleRenderMode = change.SubtitleRenderMode,
-            SubtitleStyle = change.SubtitleStyle
+            SubtitleRenderMode = change.SubtitleRenderMode.ToCore(),
+            SubtitleStyle = change.SubtitleStyle.ToCore()
         };
 
         return Persist(updated);
@@ -140,7 +140,7 @@ public sealed class ShellPreferencesService : IShellPreferencesService
 
         var updated = ToSettings(Current) with
         {
-            ShortcutProfile = change.ShortcutProfile
+            ShortcutProfile = change.ShortcutProfile.ToCore()
         };
 
         return Persist(updated);
@@ -202,10 +202,10 @@ public sealed class ShellPreferencesService : IShellPreferencesService
         var subtitleRenderMode = settings.SubtitleRenderMode;
         return new ShellPreferencesSnapshot
         {
-            HardwareDecodingMode = settings.HardwareDecodingMode,
-            SubtitleRenderMode = subtitleRenderMode,
-            SubtitleStyle = settings.SubtitleStyle,
-            ShortcutProfile = settings.ShortcutProfile,
+            HardwareDecodingMode = settings.HardwareDecodingMode.ToShell(),
+            SubtitleRenderMode = subtitleRenderMode.ToShell(),
+            SubtitleStyle = settings.SubtitleStyle.ToShell(),
+            ShortcutProfile = settings.ShortcutProfile.ToShell(),
             PinnedRoots = settings.PinnedRoots.ToArray(),
             VolumeLevel = Math.Clamp(settings.VolumeLevel, 0, 1),
             IsMuted = settings.IsMuted,
@@ -216,10 +216,10 @@ public sealed class ShellPreferencesService : IShellPreferencesService
             ShowBrowserPanel = settings.ShowBrowserPanel,
             ShowPlaylistPanel = settings.ShowPlaylistPanel,
             ResumeEnabled = settings.ResumeEnabled,
-            WindowMode = settings.WindowMode,
+            WindowMode = settings.WindowMode.ToShell(),
             LastNonOffSubtitleRenderMode = subtitleRenderMode == SubtitleRenderMode.Off
-                ? SubtitleRenderMode.TranslationOnly
-                : subtitleRenderMode,
+                ? ShellSubtitleRenderMode.TranslationOnly
+                : subtitleRenderMode.ToShell(),
             ShowSubtitleSource = subtitleRenderMode is SubtitleRenderMode.SourceOnly or SubtitleRenderMode.Dual
         };
     }
@@ -228,10 +228,10 @@ public sealed class ShellPreferencesService : IShellPreferencesService
     {
         return new AppPlayerSettings
         {
-            HardwareDecodingMode = snapshot.HardwareDecodingMode,
-            SubtitleRenderMode = snapshot.SubtitleRenderMode,
-            SubtitleStyle = snapshot.SubtitleStyle,
-            ShortcutProfile = snapshot.ShortcutProfile,
+            HardwareDecodingMode = snapshot.HardwareDecodingMode.ToCore(),
+            SubtitleRenderMode = snapshot.SubtitleRenderMode.ToCore(),
+            SubtitleStyle = snapshot.SubtitleStyle.ToCore(),
+            ShortcutProfile = snapshot.ShortcutProfile.ToCore(),
             PinnedRoots = snapshot.PinnedRoots.ToList(),
             VolumeLevel = Math.Clamp(snapshot.VolumeLevel, 0, 1),
             IsMuted = snapshot.IsMuted,
@@ -242,7 +242,7 @@ public sealed class ShellPreferencesService : IShellPreferencesService
             ShowBrowserPanel = snapshot.ShowBrowserPanel,
             ShowPlaylistPanel = snapshot.ShowPlaylistPanel,
             ResumeEnabled = snapshot.ResumeEnabled,
-            WindowMode = snapshot.WindowMode
+            WindowMode = snapshot.WindowMode.ToCore()
         };
     }
 

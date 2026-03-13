@@ -4,7 +4,7 @@ namespace BabelPlayer.App;
 
 public sealed record ShellLoadMediaOptions
 {
-    public HardwareDecodingMode HardwareDecodingMode { get; init; } = HardwareDecodingMode.AutoSafe;
+    public ShellHardwareDecodingMode HardwareDecodingMode { get; init; } = ShellHardwareDecodingMode.AutoSafe;
     public double PlaybackRate { get; init; } = 1.0;
     public string AspectRatio { get; init; } = "auto";
     public double AudioDelaySeconds { get; init; }
@@ -12,18 +12,25 @@ public sealed record ShellLoadMediaOptions
     public double Volume { get; init; } = 0.8;
     public bool IsMuted { get; init; }
     public bool ResumeEnabled { get; init; }
-    public PlaybackStateSnapshot PreviousPlaybackState { get; init; } = new();
+    public ShellPlaybackStateSnapshot PreviousPlaybackState { get; init; } = new();
 }
 
 public sealed record ShellQueueMediaResult
 {
-    public IReadOnlyList<PlaylistItem> AddedItems { get; init; } = [];
-    public PlaylistItem? ItemToLoad { get; init; }
+    public IReadOnlyList<ShellPlaylistItem> AddedItems { get; init; } = [];
+    public ShellPlaylistItem? ItemToLoad { get; init; }
     public IReadOnlyList<string> PinnedFolders { get; init; } = [];
     public bool RevealBrowserPane { get; init; }
     public ShellPreferencesSnapshot? UpdatedPreferences { get; init; }
     public string? StatusMessage { get; init; }
     public bool IsError { get; init; }
+}
+
+public sealed record ShellQueueSnapshot
+{
+    public ShellPlaylistItem? NowPlayingItem { get; init; }
+    public IReadOnlyList<ShellPlaylistItem> QueueItems { get; init; } = [];
+    public IReadOnlyList<ShellPlaylistItem> HistoryItems { get; init; } = [];
 }
 
 public sealed record ShellPlaybackOpenResult
@@ -34,7 +41,7 @@ public sealed record ShellPlaybackOpenResult
 
 public sealed record ShellMediaEndedResult
 {
-    public PlaylistItem? NextItem { get; init; }
+    public ShellPlaylistItem? NextItem { get; init; }
     public string StatusMessage { get; init; } = "Playback ended.";
 }
 
@@ -67,7 +74,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
     private TimeSpan _autoResumePlaybackPosition = TimeSpan.Zero;
     private bool _autoResumePlaybackFromBeginning = true;
 
-    public event Action<PlaybackQueueSnapshot>? QueueSnapshotChanged;
+    public event Action<ShellQueueSnapshot>? QueueSnapshotChanged;
 
     public ShellController(
         PlaybackQueueController playbackQueueController,
@@ -89,19 +96,19 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _playbackQueueController.SnapshotChanged += HandleQueueSnapshotChanged;
     }
 
-    public PlaybackQueueSnapshot QueueSnapshot => _playbackQueueController.Snapshot;
+    public ShellQueueSnapshot QueueSnapshot => MapQueueSnapshot(_playbackQueueController.Snapshot);
 
-    public PlaylistItem? NowPlayingItem => _playbackQueueController.NowPlayingItem;
+    public ShellPlaylistItem? NowPlayingItem => _playbackQueueController.NowPlayingItem?.ToShell();
 
     public IReadOnlyList<PlaylistItem> QueueItems => _playbackQueueController.QueueItems;
 
     public IReadOnlyList<PlaylistItem> HistoryItems => _playbackQueueController.HistoryItems;
 
-    public PlaybackStateSnapshot CurrentPlaybackSnapshot => _resumeTrackingCoordinator.CurrentSnapshot with
+    public ShellPlaybackStateSnapshot CurrentPlaybackSnapshot => (_resumeTrackingCoordinator.CurrentSnapshot with
     {
         PlaylistIndex = _playbackQueueController.NowPlayingItem is null ? -1 : 0,
         PlaylistCount = _playbackQueueController.QueueItems.Count
-    };
+    }).ToShell();
 
     public ShellQueueMediaResult EnqueueFiles(IEnumerable<string> files, bool autoplay)
     {
@@ -123,7 +130,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
             _logger.LogInfo("Queued media files.", BabelLogContext.Create(("count", added.Count)));
             return new ShellQueueMediaResult
             {
-                AddedItems = added,
+                AddedItems = added.Select(item => item.ToShell()).ToArray(),
                 StatusMessage = $"Queued {added.Count} item(s)."
             };
         }
@@ -135,8 +142,8 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _logger.LogInfo("Play now requested from file list.", BabelLogContext.Create(("path", itemToLoad.Path), ("addedToQueue", addedItems.Count)));
         return new ShellQueueMediaResult
         {
-            AddedItems = addedItems,
-            ItemToLoad = itemToLoad,
+            AddedItems = addedItems.Select(item => item.ToShell()).ToArray(),
+            ItemToLoad = itemToLoad.ToShell(),
             StatusMessage = addedItems.Count > 0
                 ? $"Now playing {itemToLoad.DisplayName}. Added {addedItems.Count} item(s) to Up Next."
                 : $"Now playing {itemToLoad.DisplayName}."
@@ -180,8 +187,8 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
 
         return new ShellQueueMediaResult
         {
-            AddedItems = added,
-            ItemToLoad = itemToLoad,
+            AddedItems = added.Select(item => item.ToShell()).ToArray(),
+            ItemToLoad = itemToLoad?.ToShell(),
             PinnedFolders = [folderPath],
             RevealBrowserPane = true,
             UpdatedPreferences = RevealBrowserPanePreference(),
@@ -227,8 +234,8 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _logger.LogInfo("Queued dropped items.", BabelLogContext.Create(("fileCount", discoveredFiles.Count), ("folderCount", pinnedFolders.Count), ("playNowPath", itemToLoad.Path)));
         return new ShellQueueMediaResult
         {
-            AddedItems = added,
-            ItemToLoad = itemToLoad,
+            AddedItems = added.Select(item => item.ToShell()).ToArray(),
+            ItemToLoad = itemToLoad.ToShell(),
             PinnedFolders = pinnedFolders.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             RevealBrowserPane = pinnedFolders.Count > 0,
             UpdatedPreferences = pinnedFolders.Count > 0 ? RevealBrowserPanePreference() : null
@@ -255,7 +262,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _logger.LogInfo("Play now requested.", BabelLogContext.Create(("path", path)));
         return new ShellQueueMediaResult
         {
-            ItemToLoad = item,
+            ItemToLoad = item.ToShell(),
             StatusMessage = $"Now playing {item.DisplayName}."
         };
     }
@@ -266,7 +273,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _logger.LogInfo("Play next requested.", BabelLogContext.Create(("path", path), ("added", added.Count)));
         return new ShellQueueMediaResult
         {
-            AddedItems = added,
+            AddedItems = added.Select(item => item.ToShell()).ToArray(),
             StatusMessage = added.Count == 0
                 ? "Nothing was added to Up Next."
                 : $"{added[0].DisplayName} will play next."
@@ -279,7 +286,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _logger.LogInfo("Add to queue requested.", BabelLogContext.Create(("added", added.Count)));
         return new ShellQueueMediaResult
         {
-            AddedItems = added,
+            AddedItems = added.Select(item => item.ToShell()).ToArray(),
             StatusMessage = added.Count == 0
                 ? "Nothing was added to Up Next."
                 : $"Queued {added.Count} item(s) in Up Next."
@@ -304,7 +311,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _logger.LogInfo("Added dropped items to queue.", BabelLogContext.Create(("added", added.Count)));
         return new ShellQueueMediaResult
         {
-            AddedItems = added,
+            AddedItems = added.Select(item => item.ToShell()).ToArray(),
             StatusMessage = added.Count == 0
                 ? "Dropped items did not contain supported media files."
                 : $"Queued {added.Count} item(s) in Up Next.",
@@ -312,9 +319,9 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         };
     }
 
-    public PlaylistItem? MovePrevious() => _playbackQueueController.MovePrevious();
+    public ShellPlaylistItem? MovePrevious() => _playbackQueueController.MovePrevious()?.ToShell();
 
-    public PlaylistItem? MoveNext() => _playbackQueueController.MoveNext();
+    public ShellPlaylistItem? MoveNext() => _playbackQueueController.MoveNext()?.ToShell();
 
     public void RemoveQueueItemAt(int index)
     {
@@ -328,7 +335,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
     }
 
     public async Task<bool> LoadPlaybackItemAsync(
-        PlaylistItem? item,
+        ShellPlaylistItem? item,
         ShellLoadMediaOptions options,
         CancellationToken cancellationToken)
     {
@@ -354,7 +361,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         try
         {
             await _playbackBackend.LoadAsync(item.Path, cancellationToken);
-            await _playbackBackend.SetHardwareDecodingModeAsync(options.HardwareDecodingMode, cancellationToken);
+            await _playbackBackend.SetHardwareDecodingModeAsync(options.HardwareDecodingMode.ToCore(), cancellationToken);
             await _playbackBackend.SetPlaybackRateAsync(options.PlaybackRate, cancellationToken);
             await _playbackBackend.SetAspectRatioAsync(options.AspectRatio, cancellationToken);
             await _playbackBackend.SetAudioDelayAsync(options.AudioDelaySeconds, cancellationToken);
@@ -378,7 +385,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
     {
         ArgumentNullException.ThrowIfNull(change);
 
-        await _playbackBackend.SetHardwareDecodingModeAsync(change.HardwareDecodingMode, cancellationToken);
+        await _playbackBackend.SetHardwareDecodingModeAsync(change.HardwareDecodingMode.ToCore(), cancellationToken);
         await _playbackBackend.SetPlaybackRateAsync(change.PlaybackRate, cancellationToken);
         await _playbackBackend.SetAspectRatioAsync(change.AspectRatio, cancellationToken);
         await _playbackBackend.SetAudioDelayAsync(change.AudioDelaySeconds, cancellationToken);
@@ -386,7 +393,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
     }
 
     public async Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(
-        PlaybackStateSnapshot snapshot,
+        ShellPlaybackStateSnapshot snapshot,
         ShellPreferencesSnapshot preferences,
         CancellationToken cancellationToken = default)
     {
@@ -453,7 +460,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _logger.LogInfo("Handled media end.", BabelLogContext.Create(("nextPath", next?.Path), ("resumeEnabled", resumeEnabled)));
         return new ShellMediaEndedResult
         {
-            NextItem = next,
+            NextItem = next?.ToShell(),
             StatusMessage = next is null ? "Playback ended." : $"Now playing {next.DisplayName}."
         };
     }
@@ -467,7 +474,17 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
     private void HandleQueueSnapshotChanged(PlaybackQueueSnapshot snapshot)
     {
         _logger.LogInfo("Queue snapshot changed.", BabelLogContext.Create(("nowPlaying", snapshot.NowPlayingItem?.DisplayName), ("upNextCount", snapshot.QueueItems.Count), ("historyCount", snapshot.HistoryItems.Count)));
-        QueueSnapshotChanged?.Invoke(snapshot);
+        QueueSnapshotChanged?.Invoke(MapQueueSnapshot(snapshot));
+    }
+
+    private static ShellQueueSnapshot MapQueueSnapshot(PlaybackQueueSnapshot snapshot)
+    {
+        return new ShellQueueSnapshot
+        {
+            NowPlayingItem = snapshot.NowPlayingItem?.ToShell(),
+            QueueItems = snapshot.QueueItems.Select(item => item.ToShell()).ToArray(),
+            HistoryItems = snapshot.HistoryItems.Select(item => item.ToShell()).ToArray()
+        };
     }
 
     public Task PlayAsync(CancellationToken cancellationToken = default)
@@ -509,7 +526,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
     public async Task<ShellSubtitleTrackSelectionResult> SelectEmbeddedSubtitleTrackAsync(
         string? currentPath,
         SubtitlePipelineSource currentSubtitleSource,
-        MediaTrackInfo? track,
+        ShellMediaTrack? track,
         CancellationToken cancellationToken = default)
     {
         if (track is null)
@@ -540,7 +557,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
             }
 
             await _playbackBackend.SetSubtitleTrackAsync(null, cancellationToken);
-            var loadResult = await _subtitleWorkflowController.ImportEmbeddedSubtitleTrackAsync(currentPath, track, cancellationToken);
+            var loadResult = await _subtitleWorkflowController.ImportEmbeddedSubtitleTrackAsync(currentPath, track.ToCore(), cancellationToken);
             var imported = loadResult.CueCount > 0;
             _logger.LogInfo(
                 "Embedded text subtitle track imported.",
@@ -576,12 +593,12 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
     public Task SetAspectRatioAsync(string aspectRatio, CancellationToken cancellationToken = default)
         => _playbackBackend.SetAspectRatioAsync(aspectRatio, cancellationToken);
 
-    public Task SetHardwareDecodingModeAsync(HardwareDecodingMode mode, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetHardwareDecodingModeAsync(mode, cancellationToken);
+    public Task SetHardwareDecodingModeAsync(ShellHardwareDecodingMode mode, CancellationToken cancellationToken = default)
+        => _playbackBackend.SetHardwareDecodingModeAsync(mode.ToCore(), cancellationToken);
 
     public Task<ShellWorkflowTransitionResult> PrepareForTranscriptionRefreshAsync(
         SubtitleWorkflowSnapshot snapshot,
-        PlaybackStateSnapshot playbackState,
+        ShellPlaybackStateSnapshot playbackState,
         CancellationToken cancellationToken = default)
     {
         if (snapshot.SubtitleSource != SubtitlePipelineSource.Generated || string.IsNullOrWhiteSpace(playbackState.Path))
@@ -598,7 +615,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
 
     public async Task<ShellWorkflowTransitionResult> EvaluateCaptionStartupGateAsync(
         SubtitleWorkflowSnapshot snapshot,
-        PlaybackStateSnapshot playbackState,
+        ShellPlaybackStateSnapshot playbackState,
         CancellationToken cancellationToken = default)
     {
         var currentPath = playbackState.Path;

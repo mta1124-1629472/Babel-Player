@@ -1,4 +1,4 @@
-namespace BabelPlayer.App;
+namespace BabelPlayer.WinUI;
 
 public sealed class TransportViewModel : ObservableObject
 {

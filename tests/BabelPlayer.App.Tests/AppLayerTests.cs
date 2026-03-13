@@ -1,7 +1,9 @@
 using System.Text.Json;
 using BabelPlayer.App;
 using BabelPlayer.Core;
-using Whisper.net.Ggml;
+using ShortcutProfile = BabelPlayer.App.ShellShortcutProfile;
+using SubtitleRenderMode = BabelPlayer.App.ShellSubtitleRenderMode;
+using SubtitleStyleSettings = BabelPlayer.App.ShellSubtitleStyle;
 
 namespace BabelPlayer.App.Tests;
 
@@ -142,12 +144,12 @@ public sealed class AppLayerTests
         var resumeEntries = JsonSerializer.Deserialize<PlaybackResumeEntry[]>(resumeJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
         Assert.NotNull(settings);
-        Assert.Equal(HardwareDecodingMode.D3D11, settings!.HardwareDecodingMode);
-        Assert.Equal(SubtitleRenderMode.Dual, settings.SubtitleRenderMode);
+        Assert.Equal(BabelPlayer.Core.HardwareDecodingMode.D3D11, settings!.HardwareDecodingMode);
+        Assert.Equal(BabelPlayer.Core.SubtitleRenderMode.Dual, settings.SubtitleRenderMode);
         Assert.Single(settings.PinnedRoots);
         Assert.Equal(0.8, settings.VolumeLevel);
         Assert.False(settings.IsMuted);
-        Assert.Equal(PlaybackWindowMode.PictureInPicture, settings.WindowMode);
+        Assert.Equal(BabelPlayer.Core.PlaybackWindowMode.PictureInPicture, settings.WindowMode);
 
         Assert.NotNull(resumeEntries);
         Assert.Single(resumeEntries!);
@@ -694,7 +696,7 @@ Second sentence
 
         Assert.Equal("local:tiny-multilingual", model.Key);
         Assert.Equal("Local Tiny (multilingual)", model.DisplayName);
-        Assert.Equal(GgmlType.Tiny, model.LocalModelType);
+        Assert.Equal("tiny", model.LocalModelKey);
     }
 
     [Fact]
@@ -718,7 +720,7 @@ Second sentence
                         {
                             Start = TimeSpan.Zero,
                             End = TimeSpan.FromSeconds(1),
-                            SourceText = options.LocalModelType == GgmlType.Small ? "small model cue" : "tiny model cue",
+                    SourceText = options.LocalModelType == Whisper.net.Ggml.GgmlType.Small ? "small model cue" : "tiny model cue",
                             SourceLanguage = "en"
                         }
                     ];
@@ -896,8 +898,8 @@ Hola
         public Task<LlamaCppBootstrapChoice> PromptForLlamaCppBootstrapChoiceAsync(string title, string message, CancellationToken cancellationToken = default)
             => Task.FromResult(LlamaChoice);
 
-        public Task<ShortcutProfile?> EditShortcutsAsync(ShortcutProfile currentProfile, CancellationToken cancellationToken = default)
-            => Task.FromResult<ShortcutProfile?>(currentProfile);
+        public Task<ShellShortcutProfile?> EditShortcutsAsync(ShellShortcutProfile currentProfile, CancellationToken cancellationToken = default)
+            => Task.FromResult<ShellShortcutProfile?>(currentProfile);
     }
 
     private sealed class FakeFilePickerService : IFilePickerService

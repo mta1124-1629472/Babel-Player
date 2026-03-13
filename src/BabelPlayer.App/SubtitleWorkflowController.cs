@@ -9,8 +9,8 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
     private readonly SubtitleWorkflowProjectionAdapter _projectionAdapter;
     private readonly IMediaSessionStore _mediaSessionStore;
     private string? _sourceOnlyOverrideVideoPath;
-    private SubtitleRenderMode _lastVisibilityRestoreMode = SubtitleRenderMode.TranslationOnly;
-    private SubtitleRenderMode _lastRequestedNonOffRenderMode = SubtitleRenderMode.TranslationOnly;
+    private ShellSubtitleRenderMode _lastVisibilityRestoreMode = ShellSubtitleRenderMode.TranslationOnly;
+    private ShellSubtitleRenderMode _lastRequestedNonOffRenderMode = ShellSubtitleRenderMode.TranslationOnly;
 
     public SubtitleWorkflowController(
         SubtitleApplicationService subtitleApplicationService,
@@ -28,7 +28,7 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
 
     public event Action<SubtitleWorkflowSnapshot>? SnapshotChanged;
     public event Action<string>? StatusChanged;
-    public event Action<RuntimeInstallProgress>? RuntimeInstallProgressChanged;
+    public event Action<ShellRuntimeInstallProgress>? RuntimeInstallProgressChanged;
 
     public IMediaSessionStore MediaSessionStore => _mediaSessionStore;
 
@@ -36,19 +36,19 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
 
     public SubtitleWorkflowSnapshot Snapshot => Current;
 
-    public IReadOnlyList<SubtitleCue> CurrentCues => _subtitleApplicationService.CurrentCues;
+    public IReadOnlyList<ShellSubtitleCue> CurrentCues => _subtitleApplicationService.CurrentCues.Select(cue => cue.ToShell()).ToArray();
 
     public bool HasCurrentCues => _subtitleApplicationService.HasCurrentCues;
 
     public SubtitleOverlayPresentation GetOverlayPresentation(
-        SubtitleRenderMode renderMode,
+        ShellSubtitleRenderMode renderMode,
         bool subtitlesVisible = true,
         bool sourceOnlyOverrideForCurrentVideo = false)
     {
         SyncPolicy(renderMode);
         var presentation = _subtitlePresentationProjector.Build(
             _mediaSessionStore.Snapshot,
-            renderMode,
+            renderMode.ToCore(),
             subtitlesVisible,
             sourceOnlyOverrideForCurrentVideo || HasSourceOnlyOverrideForCurrentVideo(Current));
         return new SubtitleOverlayPresentation
@@ -59,8 +59,8 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
         };
     }
 
-    public SubtitleRenderMode GetEffectiveRenderMode(
-        SubtitleRenderMode requestedMode,
+    public ShellSubtitleRenderMode GetEffectiveRenderMode(
+        ShellSubtitleRenderMode requestedMode,
         bool sourceOnlyOverrideForCurrentVideo = false)
     {
         SyncPolicy(requestedMode);
@@ -70,17 +70,17 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
     }
 
     public SubtitleRenderModeCommandResult SelectRenderMode(
-        SubtitleRenderMode selectedMode,
-        SubtitleRenderMode currentRequestedMode)
+        ShellSubtitleRenderMode selectedMode,
+        ShellSubtitleRenderMode currentRequestedMode)
     {
         SyncPolicy(currentRequestedMode);
-        if (selectedMode != SubtitleRenderMode.Off)
+        if (selectedMode != ShellSubtitleRenderMode.Off)
         {
             _lastVisibilityRestoreMode = selectedMode;
         }
 
         if (Current.IsTranslationEnabled
-            && selectedMode == SubtitleRenderMode.SourceOnly
+            && selectedMode == ShellSubtitleRenderMode.SourceOnly
             && !string.IsNullOrWhiteSpace(Current.CurrentVideoPath))
         {
             _sourceOnlyOverrideVideoPath = Current.CurrentVideoPath;
@@ -91,7 +91,7 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
         }
 
         _sourceOnlyOverrideVideoPath = null;
-        if (selectedMode != SubtitleRenderMode.Off)
+        if (selectedMode != ShellSubtitleRenderMode.Off)
         {
             _lastRequestedNonOffRenderMode = selectedMode;
         }
@@ -101,26 +101,26 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
             GetEffectiveRenderMode(selectedMode));
     }
 
-    public SubtitleRenderModeCommandResult ToggleSubtitleVisibility(SubtitleRenderMode currentRequestedMode)
+    public SubtitleRenderModeCommandResult ToggleSubtitleVisibility(ShellSubtitleRenderMode currentRequestedMode)
     {
         SyncPolicy(currentRequestedMode);
         var currentEffectiveMode = GetEffectiveRenderMode(currentRequestedMode);
-        if (currentEffectiveMode != SubtitleRenderMode.Off)
+        if (currentEffectiveMode != ShellSubtitleRenderMode.Off)
         {
             _lastVisibilityRestoreMode = currentEffectiveMode;
-            return new SubtitleRenderModeCommandResult(SubtitleRenderMode.Off, SubtitleRenderMode.Off);
+            return new SubtitleRenderModeCommandResult(ShellSubtitleRenderMode.Off, ShellSubtitleRenderMode.Off);
         }
 
-        var restoreMode = _lastVisibilityRestoreMode == SubtitleRenderMode.Off
+        var restoreMode = _lastVisibilityRestoreMode == ShellSubtitleRenderMode.Off
             ? _lastRequestedNonOffRenderMode
             : _lastVisibilityRestoreMode;
-        if (restoreMode == SubtitleRenderMode.Off)
+        if (restoreMode == ShellSubtitleRenderMode.Off)
         {
-            restoreMode = SubtitleRenderMode.TranslationOnly;
+            restoreMode = ShellSubtitleRenderMode.TranslationOnly;
         }
 
         if (Current.IsTranslationEnabled
-            && restoreMode == SubtitleRenderMode.SourceOnly
+            && restoreMode == ShellSubtitleRenderMode.SourceOnly
             && !string.IsNullOrWhiteSpace(Current.CurrentVideoPath))
         {
             _sourceOnlyOverrideVideoPath = Current.CurrentVideoPath;
@@ -131,7 +131,7 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
         }
 
         _sourceOnlyOverrideVideoPath = null;
-        if (restoreMode != SubtitleRenderMode.Off)
+        if (restoreMode != ShellSubtitleRenderMode.Off)
         {
             _lastRequestedNonOffRenderMode = restoreMode;
             _lastVisibilityRestoreMode = restoreMode;
@@ -145,38 +145,38 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
     public void ExportCurrentSubtitles(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        SubtitleFileService.ExportSrt(path, CurrentCues);
+        SubtitleFileService.ExportSrt(path, CurrentCues.Select(cue => cue.ToCore()).ToArray());
     }
 
     public Task InitializeAsync(CancellationToken cancellationToken = default)
         => _subtitleApplicationService.InitializeAsync(cancellationToken);
 
-    public SubtitleRenderMode ToggleSource(SubtitleRenderMode current)
+    public ShellSubtitleRenderMode ToggleSource(ShellSubtitleRenderMode current)
     {
         return current switch
         {
-            SubtitleRenderMode.Off => SubtitleRenderMode.SourceOnly,
-            SubtitleRenderMode.SourceOnly => SubtitleRenderMode.Off,
-            SubtitleRenderMode.TranslationOnly => SubtitleRenderMode.Dual,
-            SubtitleRenderMode.Dual => SubtitleRenderMode.TranslationOnly,
-            _ => SubtitleRenderMode.TranslationOnly
+            ShellSubtitleRenderMode.Off => ShellSubtitleRenderMode.SourceOnly,
+            ShellSubtitleRenderMode.SourceOnly => ShellSubtitleRenderMode.Off,
+            ShellSubtitleRenderMode.TranslationOnly => ShellSubtitleRenderMode.Dual,
+            ShellSubtitleRenderMode.Dual => ShellSubtitleRenderMode.TranslationOnly,
+            _ => ShellSubtitleRenderMode.TranslationOnly
         };
     }
 
-    public SubtitleRenderMode ToggleTranslation(SubtitleRenderMode current)
+    public ShellSubtitleRenderMode ToggleTranslation(ShellSubtitleRenderMode current)
     {
         return current switch
         {
-            SubtitleRenderMode.Off => SubtitleRenderMode.TranslationOnly,
-            SubtitleRenderMode.SourceOnly => SubtitleRenderMode.Dual,
-            SubtitleRenderMode.TranslationOnly => SubtitleRenderMode.Off,
-            SubtitleRenderMode.Dual => SubtitleRenderMode.SourceOnly,
-            _ => SubtitleRenderMode.TranslationOnly
+            ShellSubtitleRenderMode.Off => ShellSubtitleRenderMode.TranslationOnly,
+            ShellSubtitleRenderMode.SourceOnly => ShellSubtitleRenderMode.Dual,
+            ShellSubtitleRenderMode.TranslationOnly => ShellSubtitleRenderMode.Off,
+            ShellSubtitleRenderMode.Dual => ShellSubtitleRenderMode.SourceOnly,
+            _ => ShellSubtitleRenderMode.TranslationOnly
         };
     }
 
-    public SubtitleStyleSettings UpdateStyle(
-        SubtitleStyleSettings current,
+    public ShellSubtitleStyle UpdateStyle(
+        ShellSubtitleStyle current,
         double? sourceFontSize = null,
         double? translationFontSize = null,
         double? backgroundOpacity = null,
@@ -240,13 +240,13 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
 
     private void HandleRuntimeInstallProgressChanged(RuntimeInstallProgress progress)
     {
-        RuntimeInstallProgressChanged?.Invoke(progress);
+        RuntimeInstallProgressChanged?.Invoke(progress.ToShell());
     }
 
-    private void SyncPolicy(SubtitleRenderMode requestedMode)
+    private void SyncPolicy(ShellSubtitleRenderMode requestedMode)
     {
         ClearSourceOnlyOverrideIfInactive(Current);
-        if (requestedMode != SubtitleRenderMode.Off)
+        if (requestedMode != ShellSubtitleRenderMode.Off)
         {
             _lastRequestedNonOffRenderMode = requestedMode;
             _lastVisibilityRestoreMode = ComputeEffectiveRenderMode(
@@ -255,16 +255,16 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
         }
     }
 
-    private SubtitleRenderMode ResolvePersistedRenderModeForSourceOnly(SubtitleRenderMode currentRequestedMode)
+    private ShellSubtitleRenderMode ResolvePersistedRenderModeForSourceOnly(ShellSubtitleRenderMode currentRequestedMode)
     {
-        if (currentRequestedMode != SubtitleRenderMode.Off)
+        if (currentRequestedMode != ShellSubtitleRenderMode.Off)
         {
             _lastRequestedNonOffRenderMode = currentRequestedMode;
             return currentRequestedMode;
         }
 
-        return _lastRequestedNonOffRenderMode == SubtitleRenderMode.Off
-            ? SubtitleRenderMode.TranslationOnly
+        return _lastRequestedNonOffRenderMode == ShellSubtitleRenderMode.Off
+            ? ShellSubtitleRenderMode.TranslationOnly
             : _lastRequestedNonOffRenderMode;
     }
 
@@ -290,13 +290,13 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
         }
     }
 
-    private SubtitleRenderMode ComputeEffectiveRenderMode(
-        SubtitleRenderMode requestedMode,
+    private ShellSubtitleRenderMode ComputeEffectiveRenderMode(
+        ShellSubtitleRenderMode requestedMode,
         bool sourceOnlyOverrideForCurrentVideo)
     {
         return _subtitlePresentationProjector.GetEffectiveRenderMode(
             _mediaSessionStore.Snapshot,
-            requestedMode,
-            sourceOnlyOverrideForCurrentVideo);
+            requestedMode.ToCore(),
+            sourceOnlyOverrideForCurrentVideo).ToShell();
     }
 }

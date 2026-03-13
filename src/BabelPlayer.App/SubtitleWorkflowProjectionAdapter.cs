@@ -54,8 +54,8 @@ public sealed class SubtitleWorkflowProjectionAdapter : IDisposable
             CurrentSourceLanguage = session.LanguageAnalysis.CurrentSourceLanguage,
             SubtitleSource = session.Transcript.Source,
             OverlayStatus = state.OverlayStatus ?? session.SubtitlePresentation.StatusText,
-            ActiveCue = MediaSessionProjection.ToActiveCue(session),
-            Cues = MediaSessionProjection.ToSubtitleCues(session),
+            ActiveCue = MediaSessionProjection.ToActiveCue(session)?.ToShell(),
+            Cues = MediaSessionProjection.ToSubtitleCues(session).Select(cue => cue.ToShell()).ToArray(),
             CaptionGenerationModeLabel = state.CaptionGenerationModeLabel,
             AvailableTranscriptionModels = SubtitleWorkflowCatalog.AvailableTranscriptionModels,
             AvailableTranslationModels = SubtitleWorkflowCatalog.AvailableTranslationModels

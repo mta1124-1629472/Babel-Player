@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
-using BabelPlayer.Core;
+using BabelPlayer.App;
 
-namespace BabelPlayer.App;
+namespace BabelPlayer.WinUI;
 
 public sealed class MainShellViewModel : ObservableObject
 {

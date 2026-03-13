@@ -1,5 +1,4 @@
 using BabelPlayer.App;
-using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
 
@@ -7,21 +6,20 @@ namespace BabelPlayer.WinUI;
 
 public sealed class PlaybackHostAdapter
 {
-    private readonly IPlaybackBackend _playbackBackend;
+    private readonly IPlaybackHostRuntime _playbackRuntime;
     private readonly IVideoPresenter _videoPresenter;
 
-    public PlaybackHostAdapter(IPlaybackBackend playbackBackend, IVideoPresenter videoPresenter)
+    public PlaybackHostAdapter(IPlaybackHostRuntime playbackRuntime, IVideoPresenter videoPresenter)
     {
-        _playbackBackend = playbackBackend;
+        _playbackRuntime = playbackRuntime;
         _videoPresenter = videoPresenter;
 
-        _playbackBackend.MediaOpened += () => MediaOpened?.Invoke(BuildSnapshot());
-        _playbackBackend.MediaEnded += () => MediaEnded?.Invoke(BuildSnapshot());
-        _playbackBackend.MediaFailed += message => MediaFailed?.Invoke(message);
-        _playbackBackend.TracksChanged += tracks => TracksChanged?.Invoke(tracks);
-        _playbackBackend.RuntimeInstallProgress += progress => RuntimeInstallProgress?.Invoke(progress);
-        _playbackBackend.StateChanged += _ => PlaybackStateChanged?.Invoke(BuildSnapshot());
-        _playbackBackend.Clock.Changed += _ => PlaybackStateChanged?.Invoke(BuildSnapshot());
+        _playbackRuntime.MediaOpened += snapshot => MediaOpened?.Invoke(snapshot);
+        _playbackRuntime.MediaEnded += snapshot => MediaEnded?.Invoke(snapshot);
+        _playbackRuntime.MediaFailed += message => MediaFailed?.Invoke(message);
+        _playbackRuntime.TracksChanged += tracks => TracksChanged?.Invoke(tracks);
+        _playbackRuntime.RuntimeInstallProgress += progress => RuntimeInstallProgress?.Invoke(progress);
+        _playbackRuntime.PlaybackStateChanged += snapshot => PlaybackStateChanged?.Invoke(snapshot);
 
         _videoPresenter.InputActivity += () => InputActivity?.Invoke();
         _videoPresenter.FullscreenExitRequested += () => FullscreenExitRequested?.Invoke();
@@ -42,7 +40,7 @@ public sealed class PlaybackHostAdapter
 
     public void Initialize(Window ownerWindow)
     {
-        _videoPresenter.Initialize(ownerWindow, _playbackBackend);
+        _videoPresenter.Initialize(ownerWindow, _playbackRuntime);
     }
 
     public void RequestHostBoundsSync() => _videoPresenter.RequestBoundsSync();
@@ -57,28 +55,6 @@ public sealed class PlaybackHostAdapter
         {
             hostControl.SetPreferredAudioState(volume, muted);
         }
-    }
-
-    private PlaybackStateSnapshot BuildSnapshot()
-    {
-        return new PlaybackStateSnapshot
-        {
-            Path = _playbackBackend.State.Path,
-            Position = _playbackBackend.Clock.Current.Position,
-            Duration = _playbackBackend.Clock.Current.Duration,
-            VideoWidth = _playbackBackend.State.VideoWidth,
-            VideoHeight = _playbackBackend.State.VideoHeight,
-            VideoDisplayWidth = _playbackBackend.State.VideoDisplayWidth,
-            VideoDisplayHeight = _playbackBackend.State.VideoDisplayHeight,
-            IsPaused = _playbackBackend.Clock.Current.IsPaused,
-            IsMuted = _playbackBackend.State.IsMuted,
-            Volume = _playbackBackend.State.Volume,
-            Speed = _playbackBackend.Clock.Current.Rate,
-            HasVideo = _playbackBackend.State.HasVideo,
-            HasAudio = _playbackBackend.State.HasAudio,
-            IsSeekable = _playbackBackend.Clock.Current.IsSeekable,
-            ActiveHardwareDecoder = _playbackBackend.State.ActiveHardwareDecoder
-        };
     }
 
     private bool HandleShortcutKeyPressed(ShortcutKeyInput input)

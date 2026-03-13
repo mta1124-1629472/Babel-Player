@@ -1,5 +1,3 @@
-using BabelPlayer.Core;
-
 namespace BabelPlayer.App;
 
 public interface IShortcutCommandExecutor
@@ -18,7 +16,7 @@ public enum ShortcutShellAction
 public sealed record ShortcutCommandExecutionResult
 {
     public ShortcutShellAction ShellAction { get; init; }
-    public PlaylistItem? ItemToLoad { get; init; }
+    public ShellPlaylistItem? ItemToLoad { get; init; }
     public string? StatusMessage { get; init; }
     public bool IsError { get; init; }
     public bool RequiresOverlayInteraction { get; init; }

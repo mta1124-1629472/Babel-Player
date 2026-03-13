@@ -16,7 +16,7 @@ public sealed class StageCoordinatorAndProviderCompositionTests
     [Fact]
     public void StageCoordinator_FullscreenOverlayVisibilityChangesSubtitleOffset()
     {
-        var windowModeService = new FakeWindowModeService { CurrentModeValue = PlaybackWindowMode.Fullscreen };
+        var windowModeService = new FakeWindowModeService { CurrentModeValue = ShellPlaybackWindowMode.Fullscreen };
         var videoPresenter = new FakeVideoPresenter(new RectInt32(10, 20, 640, 360));
         var subtitlePresenter = new FakeSubtitlePresenter();
         var overlayWindow = new FakeFullscreenOverlayWindow();
@@ -29,17 +29,17 @@ public sealed class StageCoordinatorAndProviderCompositionTests
             new FakeStageOverlayTimer());
 
         coordinator.PresentSubtitles(
-            new SubtitlePresentationModel
+            new BabelPlayer.WinUI.SubtitlePresentationModel
             {
                 IsVisible = true,
                 PrimaryText = "Hello"
             },
-            new SubtitleStyleSettings { BottomMargin = 10 },
+            new ShellSubtitleStyle { BottomMargin = 10 },
             hasLoadedMedia: true);
 
         Assert.Equal(78, subtitlePresenter.LastBottomOffset);
 
-        coordinator.HandleWindowModeChanged(PlaybackWindowMode.Fullscreen);
+        coordinator.HandleWindowModeChanged(ShellPlaybackWindowMode.Fullscreen);
 
         Assert.True(overlayWindow.IsOverlayVisible);
         Assert.Equal(258, subtitlePresenter.LastBottomOffset);
@@ -51,12 +51,12 @@ public sealed class StageCoordinatorAndProviderCompositionTests
         var coordinator = CreateStageCoordinator(out _, out var subtitlePresenter, out _);
 
         coordinator.PresentSubtitles(
-            new SubtitlePresentationModel
+            new BabelPlayer.WinUI.SubtitlePresentationModel
             {
                 IsVisible = true,
                 PrimaryText = "Hello"
             },
-            new SubtitleStyleSettings(),
+            new ShellSubtitleStyle(),
             hasLoadedMedia: true);
 
         coordinator.HandleWindowActivationChanged(false);
@@ -70,12 +70,12 @@ public sealed class StageCoordinatorAndProviderCompositionTests
         var coordinator = CreateStageCoordinator(out _, out var subtitlePresenter, out _);
 
         coordinator.PresentSubtitles(
-            new SubtitlePresentationModel
+            new BabelPlayer.WinUI.SubtitlePresentationModel
             {
                 IsVisible = true,
                 PrimaryText = "Hello"
             },
-            new SubtitleStyleSettings(),
+            new ShellSubtitleStyle(),
             hasLoadedMedia: true);
 
         using (coordinator.SuppressModalUi())
@@ -89,7 +89,7 @@ public sealed class StageCoordinatorAndProviderCompositionTests
     [Fact]
     public void StageCoordinator_InvalidStageBoundsHidePresentation()
     {
-        var windowModeService = new FakeWindowModeService { CurrentModeValue = PlaybackWindowMode.Standard };
+        var windowModeService = new FakeWindowModeService { CurrentModeValue = ShellPlaybackWindowMode.Standard };
         var videoPresenter = new FakeVideoPresenter(new RectInt32(0, 0, 0, 0));
         var subtitlePresenter = new FakeSubtitlePresenter();
         var coordinator = new StageCoordinator(
@@ -101,12 +101,12 @@ public sealed class StageCoordinatorAndProviderCompositionTests
             new FakeStageOverlayTimer());
 
         coordinator.PresentSubtitles(
-            new SubtitlePresentationModel
+            new BabelPlayer.WinUI.SubtitlePresentationModel
             {
                 IsVisible = true,
                 PrimaryText = "Hello"
             },
-            new SubtitleStyleSettings(),
+            new ShellSubtitleStyle(),
             hasLoadedMedia: true);
 
         Assert.Equal(0, subtitlePresenter.PresentCallCount);
@@ -173,7 +173,7 @@ public sealed class StageCoordinatorAndProviderCompositionTests
         out FakeSubtitlePresenter subtitlePresenter,
         out FakeVideoPresenter videoPresenter)
     {
-        var windowModeService = new FakeWindowModeService { CurrentModeValue = PlaybackWindowMode.Fullscreen };
+        var windowModeService = new FakeWindowModeService { CurrentModeValue = ShellPlaybackWindowMode.Fullscreen };
         videoPresenter = new FakeVideoPresenter(new RectInt32(10, 20, 640, 360));
         subtitlePresenter = new FakeSubtitlePresenter();
         var createdOverlayWindow = new FakeFullscreenOverlayWindow();
@@ -193,13 +193,13 @@ public sealed class StageCoordinatorAndProviderCompositionTests
 
     private sealed class FakeWindowModeService : IWindowModeService
     {
-        public PlaybackWindowMode CurrentModeValue { get; set; }
+        public ShellPlaybackWindowMode CurrentModeValue { get; set; }
 
-        public PlaybackWindowMode CurrentMode => CurrentModeValue;
+        public ShellPlaybackWindowMode CurrentMode => CurrentModeValue;
 
         public DisplayBounds GetCurrentDisplayBounds(bool workArea = false) => new(0, 0, 1920, 1080);
 
-        public Task SetModeAsync(PlaybackWindowMode mode, CancellationToken cancellationToken = default)
+        public Task SetModeAsync(ShellPlaybackWindowMode mode, CancellationToken cancellationToken = default)
         {
             CurrentModeValue = mode;
             return Task.CompletedTask;
@@ -222,7 +222,7 @@ public sealed class StageCoordinatorAndProviderCompositionTests
 
         public FrameworkElement View => _view;
 
-        public void Initialize(Window ownerWindow, IPlaybackBackend playbackBackend)
+        public void Initialize(Window ownerWindow, IPlaybackHostRuntime playbackRuntime)
         {
         }
 
@@ -246,11 +246,11 @@ public sealed class StageCoordinatorAndProviderCompositionTests
             HideCallCount++;
         }
 
-        public void ApplyStyle(SubtitleStyleSettings style)
+        public void ApplyStyle(ShellSubtitleStyle style)
         {
         }
 
-        public void Present(SubtitlePresentationModel model, RectInt32 stageBounds, int bottomOffset)
+        public void Present(BabelPlayer.WinUI.SubtitlePresentationModel model, RectInt32 stageBounds, int bottomOffset)
         {
             PresentCallCount++;
             LastBottomOffset = bottomOffset;

@@ -1,6 +1,11 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
-using Whisper.net.Ggml;
+using HardwareDecodingMode = BabelPlayer.App.ShellHardwareDecodingMode;
+using PlaybackStateSnapshot = BabelPlayer.App.ShellPlaybackStateSnapshot;
+using PlaybackWindowMode = BabelPlayer.App.ShellPlaybackWindowMode;
+using ShortcutProfile = BabelPlayer.App.ShellShortcutProfile;
+using SubtitleRenderMode = BabelPlayer.App.ShellSubtitleRenderMode;
+using SubtitleStyleSettings = BabelPlayer.App.ShellSubtitleStyle;
 
 namespace BabelPlayer.App.Tests;
 
@@ -81,10 +86,10 @@ public sealed class RemainingArchitecturePlanTests
         Assert.True(projection.Subtitle.IsTranslationEnabled);
         Assert.True(projection.Subtitle.IsAutoTranslateEnabled);
 
-        ((MediaTrackInfo[])projection.SelectedTracks.Tracks)[0] = new MediaTrackInfo
+        ((ShellMediaTrack[])projection.SelectedTracks.Tracks)[0] = new ShellMediaTrack
         {
             Id = 1,
-            Kind = MediaTrackKind.Audio,
+            Kind = ShellMediaTrackKind.Audio,
             Title = "mutated",
             Language = "ja",
             IsSelected = true
@@ -355,7 +360,7 @@ public sealed class RemainingArchitecturePlanTests
         var service = new ResumePlaybackService(
             initialEntries: [],
             persistEntries: entries => persisted = entries);
-        var snapshot = new PlaybackStateSnapshot
+        var snapshot = new BabelPlayer.Core.PlaybackStateSnapshot
         {
             Path = "C:\\Media\\movie.mp4",
             Position = TimeSpan.FromMinutes(10),
@@ -590,7 +595,7 @@ public sealed class RemainingArchitecturePlanTests
                 IsCaptionGenerationInProgress = true,
                 Cues =
                 [
-                    new SubtitleCue
+                    new ShellSubtitleCue
                     {
                         Start = TimeSpan.Zero,
                         End = TimeSpan.FromSeconds(2),
@@ -626,10 +631,10 @@ public sealed class RemainingArchitecturePlanTests
         var result = await shell.SelectEmbeddedSubtitleTrackAsync(
             "C:\\Media\\movie.mkv",
             SubtitlePipelineSource.None,
-            new MediaTrackInfo
+            new ShellMediaTrack
             {
                 Id = 7,
-                Kind = MediaTrackKind.Subtitle,
+                Kind = ShellMediaTrackKind.Subtitle,
                 IsTextBased = false
             });
 
@@ -655,10 +660,10 @@ public sealed class RemainingArchitecturePlanTests
         var result = await shell.SelectEmbeddedSubtitleTrackAsync(
             null,
             SubtitlePipelineSource.None,
-            new MediaTrackInfo
+            new ShellMediaTrack
             {
                 Id = 4,
-                Kind = MediaTrackKind.Subtitle,
+                Kind = ShellMediaTrackKind.Subtitle,
                 IsTextBased = true
             });
 
@@ -856,7 +861,7 @@ public sealed class RemainingArchitecturePlanTests
 
             var item = queue.PlayNow(filePath);
             var loaded = await shell.LoadPlaybackItemAsync(
-                item,
+                ToShellPlaylistItem(item),
                 new ShellLoadMediaOptions
                 {
                     Volume = 0.65,
@@ -898,7 +903,7 @@ public sealed class RemainingArchitecturePlanTests
 
             var item = queue.PlayNow(filePath);
             await shell.LoadPlaybackItemAsync(
-                item,
+                ToShellPlaylistItem(item),
                 new ShellLoadMediaOptions
                 {
                     Volume = 0.5,
@@ -997,7 +1002,7 @@ public sealed class RemainingArchitecturePlanTests
 
             var item = queue.PlayNow(filePath);
             var loaded = await shell.LoadPlaybackItemAsync(
-                item,
+                ToShellPlaylistItem(item),
                 new ShellLoadMediaOptions
                 {
                     Volume = 0.5,
@@ -1051,20 +1056,20 @@ public sealed class RemainingArchitecturePlanTests
     {
         var customSettings = new AppPlayerSettings
         {
-            HardwareDecodingMode = HardwareDecodingMode.D3D11,
+            HardwareDecodingMode = BabelPlayer.Core.HardwareDecodingMode.D3D11,
             VolumeLevel = 0.65,
             IsMuted = true,
             DefaultPlaybackRate = 1.25,
             AudioDelaySeconds = 0.3,
             SubtitleDelaySeconds = -0.2,
             AspectRatioOverride = "16:9",
-            SubtitleRenderMode = SubtitleRenderMode.Off,
-            SubtitleStyle = new SubtitleStyleSettings
+            SubtitleRenderMode = BabelPlayer.Core.SubtitleRenderMode.Off,
+            SubtitleStyle = new BabelPlayer.Core.SubtitleStyleSettings
             {
                 SourceFontSize = 28,
                 TranslationFontSize = 30
             },
-            ShortcutProfile = new ShortcutProfile
+            ShortcutProfile = new BabelPlayer.Core.ShortcutProfile
             {
                 Bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
@@ -1075,7 +1080,7 @@ public sealed class RemainingArchitecturePlanTests
             PinnedRoots = ["C:\\FakeVideos"],
             ShowBrowserPanel = true,
             ShowPlaylistPanel = false,
-            WindowMode = PlaybackWindowMode.PictureInPicture
+            WindowMode = BabelPlayer.Core.PlaybackWindowMode.PictureInPicture
         };
         var settingsFacade = new TestSettingsFacade(customSettings);
         var service = new ShellPreferencesService(settingsFacade);
@@ -1105,9 +1110,9 @@ public sealed class RemainingArchitecturePlanTests
     {
         var initialSettings = new AppPlayerSettings
         {
-            HardwareDecodingMode = HardwareDecodingMode.AutoSafe,
-            SubtitleRenderMode = SubtitleRenderMode.Dual,
-            SubtitleStyle = new SubtitleStyleSettings
+            HardwareDecodingMode = BabelPlayer.Core.HardwareDecodingMode.AutoSafe,
+            SubtitleRenderMode = BabelPlayer.Core.SubtitleRenderMode.Dual,
+            SubtitleStyle = new BabelPlayer.Core.SubtitleStyleSettings
             {
                 SourceFontSize = 31,
                 TranslationFontSize = 33
@@ -1122,7 +1127,7 @@ public sealed class RemainingArchitecturePlanTests
             ShowBrowserPanel = true,
             ShowPlaylistPanel = false,
             ResumeEnabled = true,
-            WindowMode = PlaybackWindowMode.Standard
+            WindowMode = BabelPlayer.Core.PlaybackWindowMode.Standard
         };
         var settingsFacade = new TestSettingsFacade(initialSettings);
         var service = new ShellPreferencesService(settingsFacade);
@@ -1149,12 +1154,12 @@ public sealed class RemainingArchitecturePlanTests
         Assert.Equal(PlaybackWindowMode.Standard, snapshot.WindowMode);
 
         Assert.NotNull(settingsFacade.SavedSettings);
-        Assert.Equal(HardwareDecodingMode.D3D11, settingsFacade.SavedSettings!.HardwareDecodingMode);
+        Assert.Equal(BabelPlayer.Core.HardwareDecodingMode.D3D11, settingsFacade.SavedSettings!.HardwareDecodingMode);
         Assert.Equal(1.5, settingsFacade.SavedSettings.DefaultPlaybackRate);
         Assert.Equal(0.25, settingsFacade.SavedSettings.AudioDelaySeconds);
         Assert.Equal(-0.35, settingsFacade.SavedSettings.SubtitleDelaySeconds);
         Assert.Equal("auto", settingsFacade.SavedSettings.AspectRatioOverride);
-        Assert.Equal(SubtitleRenderMode.Dual, settingsFacade.SavedSettings.SubtitleRenderMode);
+        Assert.Equal(BabelPlayer.Core.SubtitleRenderMode.Dual, settingsFacade.SavedSettings.SubtitleRenderMode);
         Assert.Equal(31, settingsFacade.SavedSettings.SubtitleStyle.SourceFontSize);
     }
 
@@ -1170,7 +1175,10 @@ public sealed class RemainingArchitecturePlanTests
         };
         var settingsFacade = new TestSettingsFacade(new AppPlayerSettings
         {
-            ShortcutProfile = initialProfile,
+            ShortcutProfile = new BabelPlayer.Core.ShortcutProfile
+            {
+                Bindings = new Dictionary<string, string>(initialProfile.Bindings, StringComparer.OrdinalIgnoreCase)
+            },
             PinnedRoots = ["C:\\Media"]
         });
         var service = new ShellPreferencesService(settingsFacade);
@@ -1188,7 +1196,7 @@ public sealed class RemainingArchitecturePlanTests
         Assert.Equal("Space", before.ShortcutProfile.Bindings["play_pause"]);
         Assert.Equal("Ctrl+P", after.ShortcutProfile.Bindings["play_pause"]);
         Assert.NotSame(before, after);
-        Assert.Same(updatedProfile, after.ShortcutProfile);
+        Assert.Equal(updatedProfile.Bindings, after.ShortcutProfile.Bindings);
     }
 
     [Fact]
@@ -1395,7 +1403,7 @@ public sealed class RemainingArchitecturePlanTests
     {
         var preferences = new ShellPreferencesService(new TestSettingsFacade(new AppPlayerSettings
         {
-            ShortcutProfile = new ShortcutProfile
+            ShortcutProfile = new BabelPlayer.Core.ShortcutProfile
             {
                 Bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
@@ -1628,6 +1636,299 @@ public sealed class RemainingArchitecturePlanTests
         Assert.DoesNotContain("ShortcutService", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void WinUiProject_DoesNotReferenceCoreProject()
+    {
+        var projectPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.WinUI",
+            "BabelPlayer.WinUI.csproj"));
+        var source = File.ReadAllText(projectPath);
+
+        Assert.DoesNotContain("BabelPlayer.Core.csproj", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WinUiSources_DoNotImportCoreNamespace()
+    {
+        var winUiDirectory = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.WinUI"));
+        var sourceFiles = Directory.GetFiles(winUiDirectory, "*.cs", SearchOption.AllDirectories);
+
+        foreach (var file in sourceFiles)
+        {
+            var source = File.ReadAllText(file);
+            Assert.DoesNotContain("using BabelPlayer.Core;", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("BabelPlayer.Core.", source, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void AppXaml_Source_UsesTelemetrySeamInsteadOfCoreLoggingImplementations()
+    {
+        var sourcePath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.WinUI",
+            "App.xaml.cs"));
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("IAppTelemetryBootstrap", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("using BabelPlayer.Core;", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("BabelLogManager", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppDiagnosticsContext", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShellCompositionRoot_OnlyReturnsInterfacesOrApprovedWinUiLocalServices()
+    {
+        var allowedConcreteTypes = new HashSet<Type>
+        {
+            typeof(BabelPlayer.WinUI.WinUIWindowModeService),
+            typeof(BabelPlayer.WinUI.StageCoordinator)
+        };
+        var properties = typeof(BabelPlayer.WinUI.ShellDependencies).GetProperties();
+
+        foreach (var property in properties)
+        {
+            var propertyType = property.PropertyType;
+            var isAllowed = propertyType.IsInterface
+                || propertyType == typeof(IDisposable)
+                || allowedConcreteTypes.Contains(propertyType);
+
+            Assert.True(isAllowed, $"ShellDependencies.{property.Name} exposes disallowed concrete type {propertyType.FullName}.");
+
+            if (string.Equals(propertyType.Namespace, "BabelPlayer.App", StringComparison.Ordinal))
+            {
+                Assert.True(propertyType.IsInterface, $"ShellDependencies.{property.Name} must not return concrete App implementation {propertyType.FullName} outside the composition root.");
+            }
+        }
+    }
+
+    [Fact]
+    public void AppViewModelDirectory_IsEmptyAfterMoveToWinUi()
+    {
+        var viewModelDirectory = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.App",
+            "ViewModels"));
+
+        if (!Directory.Exists(viewModelDirectory))
+        {
+            return;
+        }
+
+        Assert.Empty(Directory.GetFiles(viewModelDirectory, "*.cs", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void AppPublicShellContractsAndDtos_DoNotExposeForbiddenTypes()
+    {
+        var rootTypes = new[]
+        {
+            typeof(IShellProjectionReader),
+            typeof(ShellProjectionSnapshot),
+            typeof(ShellTransportProjection),
+            typeof(ShellSelectedTracksProjection),
+            typeof(ShellSubtitleProjection),
+            typeof(IPlaybackHostRuntime),
+            typeof(IAppTelemetryBootstrap),
+            typeof(IAppLogFactory),
+            typeof(IAppLogger),
+            typeof(IAppDiagnosticsState),
+            typeof(AppDiagnosticsSnapshot),
+            typeof(PlaybackDiagnosticsSummary),
+            typeof(QueueDiagnosticsSummary),
+            typeof(SubtitleWorkflowDiagnosticsSummary),
+            typeof(IShellPreferencesService),
+            typeof(ShellPreferencesSnapshot),
+            typeof(ShellLayoutPreferencesChange),
+            typeof(ShellPlaybackDefaultsChange),
+            typeof(ShellSubtitlePresentationChange),
+            typeof(ShellAudioStateChange),
+            typeof(ShellShortcutProfileChange),
+            typeof(ShellResumeEnabledChange),
+            typeof(ShellPinnedRootsChange),
+            typeof(IQueueProjectionReader),
+            typeof(IQueueCommands),
+            typeof(IShellPlaybackCommands),
+            typeof(ISubtitleWorkflowShellService),
+            typeof(SubtitleWorkflowSnapshot),
+            typeof(SubtitleOverlayPresentation),
+            typeof(TranscriptionModelSelection),
+            typeof(TranslationModelSelection),
+            typeof(IShellLibraryService),
+            typeof(ShellLibrarySnapshot),
+            typeof(LibraryEntrySnapshot),
+            typeof(ShellLibraryMutationResult),
+            typeof(ICredentialSetupService),
+            typeof(CredentialSetupSnapshot),
+            typeof(IShortcutProfileService),
+            typeof(ShortcutProfileSnapshot),
+            typeof(ShortcutActionDefinition),
+            typeof(ShortcutProfileValidationResult),
+            typeof(ShortcutProfileNormalizationResult),
+            typeof(ShortcutConflict),
+            typeof(ShortcutBindingSnapshot),
+            typeof(IShortcutCommandExecutor),
+            typeof(ShortcutCommandExecutionResult),
+            typeof(ShellMediaTrackKind),
+            typeof(ShellSubtitleRenderMode),
+            typeof(ShellHardwareDecodingMode),
+            typeof(ShellPlaybackWindowMode),
+            typeof(ShellMediaTrack),
+            typeof(ShellSubtitleStyle),
+            typeof(ShellPlaybackStateSnapshot),
+            typeof(ShellShortcutProfile),
+            typeof(ShellPlaylistItem),
+            typeof(ShellSubtitleCue),
+            typeof(ShellRuntimeInstallProgress),
+            typeof(ShellQueueSnapshot),
+            typeof(ShellQueueMediaResult),
+            typeof(ShellLoadMediaOptions),
+            typeof(ShellWorkflowTransitionResult),
+            typeof(ShellPlaybackOpenResult),
+            typeof(ShellMediaEndedResult),
+            typeof(ShellSubtitleTrackSelectionResult)
+        };
+        var visited = new HashSet<Type>();
+
+        foreach (var rootType in rootTypes)
+        {
+            AssertTypeGraphIsShellSafe(rootType, visited);
+        }
+    }
+
+    private static void AssertTypeGraphIsShellSafe(Type type, ISet<Type> visited)
+    {
+        foreach (var candidate in ExpandInspectedTypes(type))
+        {
+            if (!visited.Add(candidate))
+            {
+                continue;
+            }
+
+            Assert.False(IsForbiddenContractType(candidate), $"Forbidden type leaked through shell contract graph: {candidate.FullName}.");
+
+            foreach (var nestedType in candidate.GetNestedTypes(System.Reflection.BindingFlags.Public))
+            {
+                AssertTypeGraphIsShellSafe(nestedType, visited);
+            }
+
+            foreach (var property in candidate.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static))
+            {
+                AssertTypeGraphIsShellSafe(property.PropertyType, visited);
+            }
+
+            foreach (var field in candidate.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static))
+            {
+                AssertTypeGraphIsShellSafe(field.FieldType, visited);
+            }
+
+            foreach (var @event in candidate.GetEvents(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static))
+            {
+                if (@event.EventHandlerType is not null)
+                {
+                    AssertTypeGraphIsShellSafe(@event.EventHandlerType, visited);
+                }
+            }
+
+            foreach (var method in candidate.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                if (method.IsSpecialName)
+                {
+                    continue;
+                }
+
+                AssertTypeGraphIsShellSafe(method.ReturnType, visited);
+                foreach (var parameter in method.GetParameters())
+                {
+                    AssertTypeGraphIsShellSafe(parameter.ParameterType, visited);
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<Type> ExpandInspectedTypes(Type type)
+    {
+        if (type == typeof(void))
+        {
+            yield break;
+        }
+
+        if (type.IsByRef || type.IsPointer || type.HasElementType)
+        {
+            var elementType = type.GetElementType();
+            if (elementType is not null)
+            {
+                foreach (var element in ExpandInspectedTypes(elementType))
+                {
+                    yield return element;
+                }
+            }
+
+            yield break;
+        }
+
+        if (type.IsGenericParameter)
+        {
+            yield break;
+        }
+
+        yield return type;
+
+        foreach (var genericArgument in type.GetGenericArguments())
+        {
+            foreach (var expandedGenericArgument in ExpandInspectedTypes(genericArgument))
+            {
+                yield return expandedGenericArgument;
+            }
+        }
+    }
+
+    private static bool IsForbiddenContractType(Type type)
+    {
+        if (type.Assembly == typeof(string).Assembly)
+        {
+            return false;
+        }
+
+        var namespaceName = type.Namespace ?? string.Empty;
+        var fullName = type.FullName ?? type.Name;
+        return namespaceName.StartsWith("BabelPlayer.Core", StringComparison.Ordinal)
+            || namespaceName.StartsWith("Whisper.net.Ggml", StringComparison.Ordinal)
+            || namespaceName.StartsWith("Microsoft.UI", StringComparison.Ordinal)
+            || namespaceName.StartsWith("Windows.", StringComparison.Ordinal)
+            || namespaceName.StartsWith("WinRT", StringComparison.Ordinal)
+            || fullName.Contains("HWND", StringComparison.OrdinalIgnoreCase)
+            || fullName.Contains("DirectX", StringComparison.OrdinalIgnoreCase)
+            || fullName.Contains("Mpv", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ShellController CreateShellController(
         PlaybackQueueController queue,
         FakeShellPlaybackBackend backend,
@@ -1645,6 +1946,16 @@ public sealed class RemainingArchitecturePlanTests
 
     private static ShellPreferencesService CreateShellPreferencesService()
         => new(new TestSettingsFacade(new AppPlayerSettings()));
+
+    private static ShellPlaylistItem? ToShellPlaylistItem(PlaylistItem? item)
+        => item is null
+            ? null
+            : new ShellPlaylistItem
+            {
+                Path = item.Path,
+                DisplayName = item.DisplayName,
+                IsDirectorySeed = item.IsDirectorySeed
+            };
 
     private static IShellPreferenceCommands CreateShellPreferenceCommands(
         IShellPreferencesService preferences,
@@ -1737,11 +2048,11 @@ public sealed class RemainingArchitecturePlanTests
         public ShellQueueMediaResult PlayNext(string path) => new();
         public ShellQueueMediaResult AddToQueue(IEnumerable<string> files) => new();
         public ShellQueueMediaResult AddDroppedItemsToQueue(IEnumerable<string> files, IEnumerable<string> folders) => new();
-        public PlaylistItem? MovePrevious() => new() { Path = "previous.mp4", DisplayName = "previous.mp4" };
-        public PlaylistItem? MoveNext()
+        public ShellPlaylistItem? MovePrevious() => new() { Path = "previous.mp4", DisplayName = "previous.mp4" };
+        public ShellPlaylistItem? MoveNext()
         {
             MoveNextCalls++;
-            return new PlaylistItem { Path = "next.mp4", DisplayName = "next.mp4" };
+            return new ShellPlaylistItem { Path = "next.mp4", DisplayName = "next.mp4" };
         }
         public void RemoveQueueItemAt(int index) { }
         public void ClearQueue() { }
@@ -1753,13 +2064,13 @@ public sealed class RemainingArchitecturePlanTests
 
         public ShortcutProfileSnapshot Current { get; private set; } = new();
 
-        public ShortcutProfileValidationResult ValidateProfile(ShortcutProfile profile)
+        public ShortcutProfileValidationResult ValidateProfile(ShellShortcutProfile profile)
             => new(true, [], [], []);
 
-        public ShortcutProfileNormalizationResult NormalizeProfile(ShortcutProfile profile)
+        public ShortcutProfileNormalizationResult NormalizeProfile(ShellShortcutProfile profile)
             => new(profile, [], [], []);
 
-        public ShortcutProfileSnapshot ApplyShortcutProfileChange(ShortcutProfile profile)
+        public ShortcutProfileSnapshot ApplyShortcutProfileChange(ShellShortcutProfile profile)
         {
             Current = new ShortcutProfileSnapshot { Profile = profile };
             SnapshotChanged?.Invoke(Current);
@@ -1769,12 +2080,12 @@ public sealed class RemainingArchitecturePlanTests
 
     private sealed class FakeShortcutPlaybackCommands : IShellPlaybackCommands
     {
-        public PlaybackStateSnapshot CurrentPlaybackSnapshot { get; set; } = new();
+        public ShellPlaybackStateSnapshot CurrentPlaybackSnapshot { get; set; } = new();
         public int PlayCalls { get; private set; }
         public double LastPlaybackRate { get; private set; } = 1.0;
 
-        public Task<bool> LoadPlaybackItemAsync(PlaylistItem? item, ShellLoadMediaOptions options, CancellationToken cancellationToken) => Task.FromResult(item is not null);
-        public Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(PlaybackStateSnapshot snapshot, ShellPreferencesSnapshot preferences, CancellationToken cancellationToken = default) => Task.FromResult(new ShellPlaybackOpenResult());
+        public Task<bool> LoadPlaybackItemAsync(ShellPlaylistItem? item, ShellLoadMediaOptions options, CancellationToken cancellationToken) => Task.FromResult(item is not null);
+        public Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(ShellPlaybackStateSnapshot snapshot, ShellPreferencesSnapshot preferences, CancellationToken cancellationToken = default) => Task.FromResult(new ShellPlaybackOpenResult());
         public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled) => new();
         public Task PlayAsync(CancellationToken cancellationToken = default)
         {
@@ -1803,16 +2114,16 @@ public sealed class RemainingArchitecturePlanTests
         }
         public Task SetAudioTrackAsync(int? trackId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetSubtitleTrackAsync(int? trackId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<ShellSubtitleTrackSelectionResult> SelectEmbeddedSubtitleTrackAsync(string? currentPath, SubtitlePipelineSource currentSubtitleSource, MediaTrackInfo? track, CancellationToken cancellationToken = default) => Task.FromResult(new ShellSubtitleTrackSelectionResult());
+        public Task<ShellSubtitleTrackSelectionResult> SelectEmbeddedSubtitleTrackAsync(string? currentPath, SubtitlePipelineSource currentSubtitleSource, ShellMediaTrack? track, CancellationToken cancellationToken = default) => Task.FromResult(new ShellSubtitleTrackSelectionResult());
         public Task SetAudioDelayAsync(double seconds, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetSubtitleDelayAsync(double seconds, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetAspectRatioAsync(string aspectRatio, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetHardwareDecodingModeAsync(HardwareDecodingMode mode, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SetHardwareDecodingModeAsync(ShellHardwareDecodingMode mode, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public void SetResumeTrackingEnabled(bool enabled) { }
         public void ClearResumeHistory() { }
         public void FlushResumeTracking(bool forceRemoveCompleted = false) { }
-        public Task<ShellWorkflowTransitionResult> PrepareForTranscriptionRefreshAsync(SubtitleWorkflowSnapshot snapshot, PlaybackStateSnapshot playbackState, CancellationToken cancellationToken = default) => Task.FromResult(new ShellWorkflowTransitionResult());
-        public Task<ShellWorkflowTransitionResult> EvaluateCaptionStartupGateAsync(SubtitleWorkflowSnapshot snapshot, PlaybackStateSnapshot playbackState, CancellationToken cancellationToken = default) => Task.FromResult(new ShellWorkflowTransitionResult());
+        public Task<ShellWorkflowTransitionResult> PrepareForTranscriptionRefreshAsync(SubtitleWorkflowSnapshot snapshot, ShellPlaybackStateSnapshot playbackState, CancellationToken cancellationToken = default) => Task.FromResult(new ShellWorkflowTransitionResult());
+        public Task<ShellWorkflowTransitionResult> EvaluateCaptionStartupGateAsync(SubtitleWorkflowSnapshot snapshot, ShellPlaybackStateSnapshot playbackState, CancellationToken cancellationToken = default) => Task.FromResult(new ShellWorkflowTransitionResult());
     }
 
     private sealed class FakeTranscriptionProvider : ITranscriptionProvider
@@ -2004,7 +2315,7 @@ public sealed class RemainingArchitecturePlanTests
         public IPlaybackClock Clock => _clock;
         public PlaybackBackendState State { get; private set; } = new();
         public IReadOnlyList<MediaTrackInfo> CurrentTracks { get; private set; } = [];
-        public HardwareDecodingMode HardwareDecodingMode { get; private set; }
+        public BabelPlayer.Core.HardwareDecodingMode HardwareDecodingMode { get; private set; }
         public ClockSnapshot ClockSnapshot
         {
             set => _clock.Set(value);
@@ -2092,7 +2403,7 @@ public sealed class RemainingArchitecturePlanTests
             return Task.CompletedTask;
         }
         public Task SetAspectRatioAsync(string aspectRatio, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SetHardwareDecodingModeAsync(HardwareDecodingMode mode, CancellationToken cancellationToken)
+        public Task SetHardwareDecodingModeAsync(BabelPlayer.Core.HardwareDecodingMode mode, CancellationToken cancellationToken)
         {
             HardwareDecodingMode = mode;
             return Task.CompletedTask;

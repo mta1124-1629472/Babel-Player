@@ -1,14 +1,12 @@
-using BabelPlayer.Core;
-
 namespace BabelPlayer.App;
 
 public interface IQueueProjectionReader
 {
-    event Action<PlaybackQueueSnapshot>? QueueSnapshotChanged;
+    event Action<ShellQueueSnapshot>? QueueSnapshotChanged;
 
-    PlaybackQueueSnapshot QueueSnapshot { get; }
+    ShellQueueSnapshot QueueSnapshot { get; }
 
-    PlaylistItem? NowPlayingItem { get; }
+    ShellPlaylistItem? NowPlayingItem { get; }
 }
 
 public interface IQueueCommands
@@ -27,9 +25,9 @@ public interface IQueueCommands
 
     ShellQueueMediaResult AddDroppedItemsToQueue(IEnumerable<string> files, IEnumerable<string> folders);
 
-    PlaylistItem? MovePrevious();
+    ShellPlaylistItem? MovePrevious();
 
-    PlaylistItem? MoveNext();
+    ShellPlaylistItem? MoveNext();
 
     void RemoveQueueItemAt(int index);
 
@@ -38,15 +36,15 @@ public interface IQueueCommands
 
 public interface IShellPlaybackCommands
 {
-    PlaybackStateSnapshot CurrentPlaybackSnapshot { get; }
+    ShellPlaybackStateSnapshot CurrentPlaybackSnapshot { get; }
 
     Task<bool> LoadPlaybackItemAsync(
-        PlaylistItem? item,
+        ShellPlaylistItem? item,
         ShellLoadMediaOptions options,
         CancellationToken cancellationToken);
 
     Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(
-        PlaybackStateSnapshot snapshot,
+        ShellPlaybackStateSnapshot snapshot,
         ShellPreferencesSnapshot preferences,
         CancellationToken cancellationToken = default);
 
@@ -75,7 +73,7 @@ public interface IShellPlaybackCommands
     Task<ShellSubtitleTrackSelectionResult> SelectEmbeddedSubtitleTrackAsync(
         string? currentPath,
         SubtitlePipelineSource currentSubtitleSource,
-        MediaTrackInfo? track,
+        ShellMediaTrack? track,
         CancellationToken cancellationToken = default);
 
     Task SetAudioDelayAsync(double seconds, CancellationToken cancellationToken = default);
@@ -84,7 +82,7 @@ public interface IShellPlaybackCommands
 
     Task SetAspectRatioAsync(string aspectRatio, CancellationToken cancellationToken = default);
 
-    Task SetHardwareDecodingModeAsync(HardwareDecodingMode mode, CancellationToken cancellationToken = default);
+    Task SetHardwareDecodingModeAsync(ShellHardwareDecodingMode mode, CancellationToken cancellationToken = default);
 
     void SetResumeTrackingEnabled(bool enabled);
 
@@ -94,12 +92,12 @@ public interface IShellPlaybackCommands
 
     Task<ShellWorkflowTransitionResult> PrepareForTranscriptionRefreshAsync(
         SubtitleWorkflowSnapshot snapshot,
-        PlaybackStateSnapshot playbackState,
+        ShellPlaybackStateSnapshot playbackState,
         CancellationToken cancellationToken = default);
 
     Task<ShellWorkflowTransitionResult> EvaluateCaptionStartupGateAsync(
         SubtitleWorkflowSnapshot snapshot,
-        PlaybackStateSnapshot playbackState,
+        ShellPlaybackStateSnapshot playbackState,
         CancellationToken cancellationToken = default);
 }
 
@@ -113,21 +111,21 @@ public interface ISubtitleWorkflowShellService : IDisposable
 
     bool HasCurrentCues { get; }
 
-    SubtitleRenderMode GetEffectiveRenderMode(
-        SubtitleRenderMode requestedMode,
+    ShellSubtitleRenderMode GetEffectiveRenderMode(
+        ShellSubtitleRenderMode requestedMode,
         bool sourceOnlyOverrideForCurrentVideo = false);
 
     SubtitleOverlayPresentation GetOverlayPresentation(
-        SubtitleRenderMode requestedMode,
+        ShellSubtitleRenderMode requestedMode,
         bool subtitlesVisible = true,
         bool sourceOnlyOverrideForCurrentVideo = false);
 
     SubtitleRenderModeCommandResult SelectRenderMode(
-        SubtitleRenderMode selectedMode,
-        SubtitleRenderMode currentRequestedMode);
+        ShellSubtitleRenderMode selectedMode,
+        ShellSubtitleRenderMode currentRequestedMode);
 
     SubtitleRenderModeCommandResult ToggleSubtitleVisibility(
-        SubtitleRenderMode currentRequestedMode);
+        ShellSubtitleRenderMode currentRequestedMode);
 
     Task InitializeAsync(CancellationToken cancellationToken = default);
 
@@ -158,5 +156,5 @@ public interface ISubtitleWorkflowShellService : IDisposable
 }
 
 public sealed record SubtitleRenderModeCommandResult(
-    SubtitleRenderMode RequestedRenderMode,
-    SubtitleRenderMode EffectiveRenderMode);
+    ShellSubtitleRenderMode RequestedRenderMode,
+    ShellSubtitleRenderMode EffectiveRenderMode);

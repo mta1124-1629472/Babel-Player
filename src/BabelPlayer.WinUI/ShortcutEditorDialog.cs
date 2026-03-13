@@ -1,5 +1,4 @@
 using BabelPlayer.App;
-using BabelPlayer.Core;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Text;

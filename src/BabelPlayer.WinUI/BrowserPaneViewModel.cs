@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace BabelPlayer.App;
+namespace BabelPlayer.WinUI;
 
 public sealed class BrowserPaneViewModel : ObservableObject
 {

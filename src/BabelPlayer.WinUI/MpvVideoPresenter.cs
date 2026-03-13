@@ -1,5 +1,4 @@
 using BabelPlayer.App;
-using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
 
@@ -38,9 +37,9 @@ public sealed class MpvVideoPresenter : IVideoPresenter
 
     public FrameworkElement View => _hostControl;
 
-    public void Initialize(Window ownerWindow, IPlaybackBackend playbackBackend)
+    public void Initialize(Window ownerWindow, IPlaybackHostRuntime playbackRuntime)
     {
-        _hostControl.Initialize(ownerWindow, playbackBackend);
+        _hostControl.Initialize(ownerWindow, playbackRuntime);
     }
 
     public void RequestBoundsSync()
