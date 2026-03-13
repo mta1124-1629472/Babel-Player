@@ -1,5 +1,6 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using BabelPlayer.Infrastructure;
 using BabelPlayer.WinUI;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
@@ -15,7 +16,7 @@ public sealed class PlaybackHostAdapterSeamTests
     [Fact]
     public void PlaybackHostAdapter_ComposesMpvBackendWithFakePresenter()
     {
-        var backend = new MpvPlaybackBackend();
+        var backend = new MpvPlaybackBackend(new RuntimeBootstrapService());
         var runtime = new PlaybackHostRuntimeAdapter(backend);
         var presenter = new FakeVideoPresenter();
         var adapter = new PlaybackHostAdapter(runtime, presenter);

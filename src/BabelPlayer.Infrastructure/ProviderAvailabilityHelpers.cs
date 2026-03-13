@@ -1,8 +1,9 @@
+using BabelPlayer.App;
 using BabelPlayer.Core;
 
-namespace BabelPlayer.App;
+namespace BabelPlayer.Infrastructure;
 
-internal static class ProviderAvailabilityUtilities
+internal static class ProviderAvailabilityHelpers
 {
     public static bool HasOpenAiApiKey(ProviderAvailabilityContext context)
     {
@@ -52,37 +53,6 @@ internal static class ProviderAvailabilityUtilities
         }
 
         return null;
-    }
-
-    public static AsrService BuildAsrService(TranscriptionRequest request, ProviderAvailabilityContext context)
-    {
-        var service = new AsrService(
-            request.Options.Mode == CaptionTranscriptionMode.Cloud ? "transcription.cloud" : "transcription.local",
-            context.LogFactory);
-        if (request.OnFinal is not null)
-        {
-            service.OnFinal += request.OnFinal;
-        }
-
-        if (request.OnProgress is not null)
-        {
-            service.OnModelTransferProgress += request.OnProgress;
-        }
-
-        return service;
-    }
-
-    public static Task<IReadOnlyList<string>> TranslateWithMtServiceAsync(
-        IReadOnlyList<string> texts,
-        CloudTranslationOptions? cloud,
-        LocalTranslationOptions? local,
-        CancellationToken cancellationToken,
-        IBabelLogFactory? logFactory = null)
-    {
-        var service = new MtService(logFactory);
-        service.ConfigureCloud(cloud);
-        service.ConfigureLocal(local);
-        return service.TranslateBatchAsync(texts, cancellationToken);
     }
 
     public static CloudTranslationOptions? TryGetGoogleOptions(ProviderAvailabilityContext context)

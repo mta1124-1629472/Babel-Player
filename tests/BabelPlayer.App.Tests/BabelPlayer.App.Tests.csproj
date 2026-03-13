@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\BabelPlayer.App\BabelPlayer.App.csproj" />
     <ProjectReference Include="..\..\src\BabelPlayer.Core\BabelPlayer.Core.csproj" />
+    <ProjectReference Include="..\..\src\BabelPlayer.Infrastructure\BabelPlayer.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\BabelPlayer.WinUI\BabelPlayer.WinUI.csproj" />
     <Using Include="Xunit" />
   </ItemGroup>

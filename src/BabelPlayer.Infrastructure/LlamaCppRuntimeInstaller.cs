@@ -1,25 +1,6 @@
-using System.IO;
-using System.IO.Compression;
-using System.Linq;
-using System.Net.Http;
+using BabelPlayer.App;
 
-namespace BabelPlayer.App;
-
-public sealed class RuntimeInstallProgress
-{
-    public string Stage { get; init; } = string.Empty;
-    public long BytesTransferred { get; init; }
-    public long? TotalBytes { get; init; }
-    public int? ItemsCompleted { get; init; }
-    public int? TotalItems { get; init; }
-
-    public double? ProgressRatio =>
-        TotalBytes is > 0
-            ? (double)BytesTransferred / TotalBytes.Value
-            : TotalItems is > 0 && ItemsCompleted is not null
-                ? (double)ItemsCompleted.Value / TotalItems.Value
-                : null;
-}
+namespace BabelPlayer.Infrastructure;
 
 public static class LlamaCppRuntimeInstaller
 {
@@ -124,7 +105,7 @@ public static class LlamaCppRuntimeInstaller
 
     private static async Task ExtractRuntimeArchiveAsync(string archivePath, string extractDirectory, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
     {
-        using var archive = ZipFile.OpenRead(archivePath);
+        using var archive = System.IO.Compression.ZipFile.OpenRead(archivePath);
         var fileEntries = archive.Entries.Where(entry => !string.IsNullOrWhiteSpace(entry.Name)).ToList();
         var totalItems = fileEntries.Count;
         var completed = 0;

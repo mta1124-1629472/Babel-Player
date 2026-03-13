@@ -1,6 +1,7 @@
+using BabelPlayer.App;
 using BabelPlayer.Core;
 
-namespace BabelPlayer.App;
+namespace BabelPlayer.Infrastructure;
 
 public sealed class RuntimeBootstrapService : IRuntimeBootstrapService
 {

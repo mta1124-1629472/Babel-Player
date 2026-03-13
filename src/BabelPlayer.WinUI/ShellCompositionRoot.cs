@@ -1,4 +1,5 @@
 using BabelPlayer.App;
+using BabelPlayer.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System.IO;
@@ -64,10 +65,13 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
         var credentialDialogService = new WinUICredentialDialogService(rootGrid, shortcutProfileService, suppressDialogPresentation);
         var runtimeBootstrapService = new RuntimeBootstrapService();
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-        var providerComposition = ProviderAvailabilityCompositionFactory.Create(credentialFacade, Environment.GetEnvironmentVariable);
+        var transcriptionEngineFactory = new AsrTranscriptionEngineFactory();
+        var translationEngineFactory = new MtTranslationEngineFactory();
+        var providerCompositionFactory = new ProviderCompositionFactory(transcriptionEngineFactory, translationEngineFactory);
+        var providerComposition = providerCompositionFactory.Create(credentialFacade, Environment.GetEnvironmentVariable);
         var providerAvailabilityService = new ProviderAvailabilityService(providerComposition);
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
-        var aiCredentialCoordinator = AiCredentialCoordinatorFactory.CreateDefault(
+        var aiCredentialCoordinator = new AiCredentialCoordinatorFactory().Create(
             credentialFacade,
             credentialDialogService,
             Environment.GetEnvironmentVariable);
@@ -78,9 +82,13 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             filePickerService,
             Environment.GetEnvironmentVariable);
         var subtitleApplicationService = new SubtitleApplicationService(
-            new DefaultSubtitleSourceResolver(),
+            new DefaultSubtitleSourceResolver(runtimeBootstrapService),
             new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry),
-            new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry),
+            new ProviderBackedSubtitleTranslator(
+                providerComposition.Context,
+                providerComposition.TranslationRegistry,
+                translationEngineFactory,
+                providerComposition.LocalRuntime),
             aiCredentialCoordinator,
             runtimeProvisioner,
             credentialFacade,
@@ -92,7 +100,7 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             new SubtitleWorkflowProjectionAdapter(workflowStateStore, mediaSessionCoordinator.Store),
             new SubtitlePresentationProjector());
         ISubtitleWorkflowShellService subtitleWorkflowService = subtitleWorkflowController;
-        var playbackBackend = new MpvPlaybackBackend();
+        var playbackBackend = new MpvPlaybackBackend(runtimeBootstrapService);
         var playbackBackendCoordinator = new PlaybackBackendCoordinator(playbackBackend, mediaSessionCoordinator);
         var playbackHostRuntime = new PlaybackHostRuntimeAdapter(playbackBackend);
         var videoPresenter = new MpvVideoPresenter(_telemetry.LogFactory);

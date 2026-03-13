@@ -1,5 +1,6 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using BabelPlayer.Infrastructure;
 using HardwareDecodingMode = BabelPlayer.App.ShellHardwareDecodingMode;
 using PlaybackStateSnapshot = BabelPlayer.App.ShellPlaybackStateSnapshot;
 using PlaybackWindowMode = BabelPlayer.App.ShellPlaybackWindowMode;
@@ -184,7 +185,9 @@ public sealed class RemainingArchitecturePlanTests
         var adapter = new FakeTranslationProvider();
         var translator = new ProviderBackedSubtitleTranslator(
             new ProviderAvailabilityContext(new CredentialFacade(new FakeCredentialStore()), _ => null),
-            new TranslationProviderRegistry([adapter]));
+            new TranslationProviderRegistry([adapter]),
+            new MtTranslationEngineFactory(),
+            new FakeLocalModelRuntime());
 
         var translated = await translator.TranslateBatchAsync(
             SubtitleWorkflowCatalog.GetTranslationModel("cloud:deepl"),
@@ -206,7 +209,7 @@ public sealed class RemainingArchitecturePlanTests
         var credentialFacade = new CredentialFacade(new FakeCredentialStore());
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
-        var providerAvailabilityService = new ProviderAvailabilityService(credentialFacade, _ => null);
+        var providerAvailabilityService = CreateProviderAvailabilityService(credentialFacade, _ => null);
         using var service = new SubtitleApplicationService(
             sourceResolver,
             captionGenerator,
@@ -254,7 +257,7 @@ public sealed class RemainingArchitecturePlanTests
             credentialFacade,
             mediaSessionCoordinator,
             workflowStateStore,
-            new ProviderAvailabilityService(credentialFacade, _ => null));
+            CreateProviderAvailabilityService(credentialFacade, _ => null));
 
         workflowStateStore.Update(state => state with
         {
@@ -699,7 +702,7 @@ public sealed class RemainingArchitecturePlanTests
                 credentialFacade,
                 mediaSessionCoordinator,
                 workflowStore,
-                new ProviderAvailabilityService(credentialFacade, _ => null));
+                CreateProviderAvailabilityService(credentialFacade, _ => null));
             using var projectionAdapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaSessionCoordinator.Store);
             using var workflow = new SubtitleWorkflowController(service, projectionAdapter, new SubtitlePresentationProjector());
             using var shell = CreateShellController(
@@ -742,7 +745,7 @@ public sealed class RemainingArchitecturePlanTests
             credentialFacade,
             mediaSessionCoordinator,
             workflowStore,
-            new ProviderAvailabilityService(credentialFacade, _ => null));
+            CreateProviderAvailabilityService(credentialFacade, _ => null));
         using var projectionAdapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaSessionCoordinator.Store);
         using var controller = new SubtitleWorkflowController(service, projectionAdapter, new SubtitlePresentationProjector());
 
@@ -775,7 +778,7 @@ public sealed class RemainingArchitecturePlanTests
             credentialFacade,
             mediaSessionCoordinator,
             workflowStore,
-            new ProviderAvailabilityService(credentialFacade, _ => null));
+            CreateProviderAvailabilityService(credentialFacade, _ => null));
         using var projectionAdapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaSessionCoordinator.Store);
         using var controller = new SubtitleWorkflowController(service, projectionAdapter, new SubtitlePresentationProjector());
 
@@ -1655,6 +1658,42 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
+    public void WinUiProject_ReferencesInfrastructureProject()
+    {
+        var projectPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.WinUI",
+            "BabelPlayer.WinUI.csproj"));
+        var source = File.ReadAllText(projectPath);
+
+        Assert.Contains("BabelPlayer.Infrastructure.csproj", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AppProject_DoesNotReferenceInfrastructureProject()
+    {
+        var projectPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.App",
+            "BabelPlayer.App.csproj"));
+        var source = File.ReadAllText(projectPath);
+
+        Assert.DoesNotContain("BabelPlayer.Infrastructure.csproj", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WinUiSources_DoNotImportCoreNamespace()
     {
         var winUiDirectory = Path.GetFullPath(Path.Combine(
@@ -1673,6 +1712,40 @@ public sealed class RemainingArchitecturePlanTests
             var source = File.ReadAllText(file);
             Assert.DoesNotContain("using BabelPlayer.Core;", source, StringComparison.Ordinal);
             Assert.DoesNotContain("BabelPlayer.Core.", source, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void AppSources_DoNotConstructProviderOrRuntimeInfrastructureDirectly()
+    {
+        var appDirectory = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.App"));
+        var sourceFiles = Directory.GetFiles(appDirectory, "*.cs", SearchOption.AllDirectories);
+        var forbiddenPatterns = new[]
+        {
+            "new AsrService(",
+            "new MtService(",
+            "MtService.",
+            "MpvRuntimeInstaller.InstallAsync",
+            "FfmpegRuntimeInstaller.InstallAsync",
+            "LlamaCppRuntimeInstaller.InstallAsync",
+            "ProviderAvailabilityCompositionFactory.Create"
+        };
+
+        foreach (var file in sourceFiles)
+        {
+            var source = File.ReadAllText(file);
+            foreach (var forbiddenPattern in forbiddenPatterns)
+            {
+                Assert.DoesNotContain(forbiddenPattern, source, StringComparison.Ordinal);
+            }
         }
     }
 
@@ -1947,6 +2020,11 @@ public sealed class RemainingArchitecturePlanTests
     private static ShellPreferencesService CreateShellPreferencesService()
         => new(new TestSettingsFacade(new AppPlayerSettings()));
 
+    private static ProviderAvailabilityService CreateProviderAvailabilityService(
+        CredentialFacade credentialFacade,
+        Func<string, string?> environmentVariableReader)
+        => new(new ProviderCompositionFactory(), credentialFacade, environmentVariableReader);
+
     private static ShellPlaylistItem? ToShellPlaylistItem(PlaylistItem? item)
         => item is null
             ? null
@@ -2200,6 +2278,13 @@ public sealed class RemainingArchitecturePlanTests
             EmbeddedCalls++;
             return Task.FromResult<IReadOnlyList<SubtitleCue>>([]);
         }
+    }
+
+    private sealed class FakeLocalModelRuntime : ILocalModelRuntime
+    {
+        public string RuntimeId => "test";
+
+        public string? ResolveExecutablePath(ProviderAvailabilityContext context) => null;
     }
 
     private sealed class FakeCaptionGenerator : ICaptionGenerator

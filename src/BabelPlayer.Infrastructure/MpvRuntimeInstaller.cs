@@ -1,9 +1,8 @@
-using System.IO;
+using BabelPlayer.App;
 using SharpCompress.Archives;
 using SharpCompress.Common;
-using System.Net.Http;
 
-namespace BabelPlayer.App;
+namespace BabelPlayer.Infrastructure;
 
 public static class MpvRuntimeInstaller
 {

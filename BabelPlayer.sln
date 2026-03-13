@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer.App.Tests", "te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer.WinUI", "src\BabelPlayer.WinUI\BabelPlayer.WinUI.csproj", "{CAB1CC9B-AFC6-4A7E-A621-230BB278F1C2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer.Infrastructure", "src\BabelPlayer.Infrastructure\BabelPlayer.Infrastructure.csproj", "{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -73,6 +75,18 @@ Global
 		{CAB1CC9B-AFC6-4A7E-A621-230BB278F1C2}.Release|x64.Build.0 = Release|x64
 		{CAB1CC9B-AFC6-4A7E-A621-230BB278F1C2}.Release|x86.ActiveCfg = Release|x64
 		{CAB1CC9B-AFC6-4A7E-A621-230BB278F1C2}.Release|x86.Build.0 = Release|x64
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Debug|x64.Build.0 = Debug|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Debug|x86.Build.0 = Debug|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Release|x64.ActiveCfg = Release|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Release|x64.Build.0 = Release|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Release|x86.ActiveCfg = Release|Any CPU
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -81,5 +95,6 @@ Global
 		{3929BC3F-6D04-4E6F-B4AE-BEE68D176F83} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{977D054A-825B-4C78-86FC-C9A9F92C74A8} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{CAB1CC9B-AFC6-4A7E-A621-230BB278F1C2} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{E4D4E761-4BB5-4A57-9AA4-4D9C8BDE5C31} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

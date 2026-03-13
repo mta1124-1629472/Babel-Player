@@ -21,6 +21,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <ProjectReference Include="..\BabelPlayer.App\BabelPlayer.App.csproj" />
+    <ProjectReference Include="..\BabelPlayer.Infrastructure\BabelPlayer.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260209005" />
   </ItemGroup>
 </Project>
