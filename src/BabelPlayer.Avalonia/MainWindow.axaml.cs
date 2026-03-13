@@ -67,6 +67,7 @@ public partial class MainWindow : Window
         _resumePromptTextBlock ??= this.FindControl<TextBlock>("ResumePromptTextBlock");
         _timelineSlider ??= this.FindControl<Slider>("TimelineSlider");
         _volumeSlider ??= this.FindControl<Slider>("VolumeSlider");
+        InitializePanelControls();
 
         if (_videoSurfaceBorder is not null)
         {
@@ -146,6 +147,7 @@ public partial class MainWindow : Window
         _shell.PlaybackHostRuntime.MediaOpened -= HandleMediaOpened;
         _shell.PlaybackHostRuntime.MediaEnded -= HandleMediaEnded;
         _shell.PlaybackHostRuntime.MediaFailed -= HandleMediaFailed;
+        DisposePanelControls();
         _shell.ShellPlaybackCommands.FlushResumeTracking();
         _shell.Dispose();
 
@@ -746,13 +748,7 @@ public partial class MainWindow : Window
         var queueResult = normalizedPaths.Length == 1
             ? _shell.QueueCommands.PlayNow(normalizedPaths[0])
             : _shell.QueueCommands.EnqueueFiles(normalizedPaths, autoplay: true);
-        if (queueResult.ItemToLoad is null)
-        {
-            UpdateStatus(queueResult.StatusMessage ?? "Nothing to load.");
-            return;
-        }
-
-        await OpenQueueItemAsync(queueResult.ItemToLoad, queueResult.StatusMessage ?? statusMessage);
+        await ApplyQueueMutationAsync(queueResult);
     }
 
     private async Task OpenQueueItemAsync(ShellPlaylistItem item, string statusMessage)

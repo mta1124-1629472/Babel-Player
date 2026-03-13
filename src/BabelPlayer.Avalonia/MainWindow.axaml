@@ -285,8 +285,6 @@
                     <ListBox x:Name="PlaylistQueueListBox"
                              Grid.Row="2"
                              DragDrop.AllowDrop="True"
-                             DragOver="PlaylistQueueListBox_DragOver"
-                             Drop="PlaylistQueueListBox_Drop"
                              KeyDown="PlaylistQueueListBox_KeyDown"
                              Background="Transparent"
                              BorderThickness="0">
@@ -298,12 +296,11 @@
                                         CornerRadius="10"
                                         Padding="8"
                                         Margin="0,0,0,8"
-                                        DragDrop.AllowDrop="True"
-                                        DragOver="PlaylistQueueRow_DragOver"
-                                        Drop="PlaylistQueueRow_Drop">
+                                        DragDrop.AllowDrop="True">
                                     <Border.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Remove from Queue"
+                                                      CommandParameter="{Binding}"
                                                       Click="PlaylistRemoveMenuItem_Click" />
                                         </ContextMenu>
                                     </Border.ContextMenu>
@@ -323,6 +320,7 @@
                                                 Background="Transparent"
                                                 BorderThickness="0"
                                                 Padding="0"
+                                                DoubleTapped="PlaylistQueueItemButton_DoubleTapped"
                                                 Click="PlaylistQueueItemButton_Click">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="{Binding DisplayName}"
