@@ -3,12 +3,13 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="using:BabelPlayer.Avalonia"
-        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="720"
+        xmlns:app="using:BabelPlayer.App"
+        mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="840"
         x:Class="BabelPlayer.Avalonia.MainWindow"
         Title="Babel Player"
         DragDrop.AllowDrop="True"
-        Width="1280"
-        Height="720"
+        Width="1440"
+        Height="840"
         Background="#111111">
     <Grid RowDefinitions="Auto,*,Auto" Margin="16">
         <Border Grid.Row="0"
@@ -23,6 +24,18 @@
                     <Button x:Name="OpenButton"
                             Content="Open Video"
                             Click="OpenButton_Click" />
+                    <Button x:Name="BrowserPanelToggleButton"
+                            Margin="8,0,0,0"
+                            Content="Show Browser"
+                            Click="BrowserPanelToggleButton_Click" />
+                    <Button x:Name="PlaylistPanelToggleButton"
+                            Margin="8,0,0,0"
+                            Content="Show Playlist"
+                            Click="PlaylistPanelToggleButton_Click" />
+                    <Button x:Name="AddLibraryRootButton"
+                            Margin="8,0,0,0"
+                            Content="Add Folder"
+                            Click="AddLibraryRootButton_Click" />
                     <TextBlock x:Name="StatusTextBlock"
                                Margin="12,0,0,0"
                                VerticalAlignment="Center"
@@ -141,20 +154,205 @@
             </StackPanel>
         </Border>
 
-        <Border x:Name="VideoSurfaceBorder"
-                Grid.Row="1"
-                Background="Black"
-                CornerRadius="12"
-                ClipToBounds="True">
-            <local:MpvNativeHost x:Name="VideoHost" />
-        </Border>
+        <Grid Grid.Row="1"
+              ColumnDefinitions="Auto,*,Auto"
+              ColumnSpacing="12">
+            <Border x:Name="BrowserPanel"
+                    Grid.Column="0"
+                    Width="320"
+                    IsVisible="False"
+                    Background="#171717"
+                    BorderBrush="#2A2A2A"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="12">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="8">
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Browser"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#F5F5F5" />
+                            <TextBlock Text="Pinned roots and folders"
+                                       FontSize="12"
+                                       Foreground="#8A8A8A" />
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Content="Add Root"
+                                Click="AddLibraryRootButton_Click" />
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1"
+                                  Margin="0,12,0,0">
+                        <ItemsControl x:Name="LibraryEntriesItemsControl">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:LibraryBrowserEntryViewModel">
+                                    <Grid ColumnDefinitions="Auto,*"
+                                          ColumnSpacing="6"
+                                          Margin="{Binding RowMargin}">
+                                        <Button Grid.Column="0"
+                                                Padding="4,0"
+                                                MinWidth="24"
+                                                HorizontalAlignment="Left"
+                                                IsVisible="{Binding CanExpand}"
+                                                Content="{Binding ExpansionGlyph}"
+                                                Click="LibraryExpandButton_Click" />
+                                        <Button Grid.Column="1"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Background="#1E1E1E"
+                                                BorderBrush="#2D2D2D"
+                                                BorderThickness="1"
+                                                CornerRadius="8"
+                                                Padding="10,8"
+                                                Click="LibraryEntryButton_Click">
+                                            <StackPanel Orientation="Horizontal"
+                                                        Spacing="8">
+                                                <Border Background="#303030"
+                                                        CornerRadius="6"
+                                                        Padding="6,2">
+                                                    <TextBlock Text="{Binding KindLabel}"
+                                                               FontSize="11"
+                                                               Foreground="#D7D7D7" />
+                                                </Border>
+                                                <TextBlock Text="{Binding Name}"
+                                                           Foreground="#F0F0F0"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <Border x:Name="VideoSurfaceBorder"
+                    Grid.Column="1"
+                    Background="Black"
+                    CornerRadius="12"
+                    ClipToBounds="True">
+                <local:MpvNativeHost x:Name="VideoHost" />
+            </Border>
+
+            <Border x:Name="PlaylistPanel"
+                    Grid.Column="2"
+                    Width="340"
+                    IsVisible="False"
+                    Background="#171717"
+                    BorderBrush="#2A2A2A"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="12">
+                <Grid RowDefinitions="Auto,Auto,*">
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="8">
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Playlist"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#F5F5F5" />
+                            <TextBlock x:Name="PlaylistSummaryTextBlock"
+                                       Text="Queue is empty"
+                                       FontSize="12"
+                                       Foreground="#8A8A8A" />
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Content="Clear"
+                                Click="ClearPlaylistButton_Click" />
+                    </Grid>
+
+                    <Border Grid.Row="1"
+                            Margin="0,12,0,12"
+                            Background="#223024"
+                            CornerRadius="10"
+                            Padding="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Now Playing"
+                                       FontSize="11"
+                                       Foreground="#B7D5B9" />
+                            <TextBlock x:Name="NowPlayingQueueTextBlock"
+                                       Text="Nothing is playing."
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       Foreground="#F5F5F5"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <ListBox x:Name="PlaylistQueueListBox"
+                             Grid.Row="2"
+                             DragDrop.AllowDrop="True"
+                             DragOver="PlaylistQueueListBox_DragOver"
+                             Drop="PlaylistQueueListBox_Drop"
+                             KeyDown="PlaylistQueueListBox_KeyDown"
+                             Background="Transparent"
+                             BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="app:ShellPlaylistItem">
+                                <Border Background="#1E1E1E"
+                                        BorderBrush="#2D2D2D"
+                                        BorderThickness="1"
+                                        CornerRadius="10"
+                                        Padding="8"
+                                        Margin="0,0,0,8"
+                                        DragDrop.AllowDrop="True"
+                                        DragOver="PlaylistQueueRow_DragOver"
+                                        Drop="PlaylistQueueRow_Drop">
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Remove from Queue"
+                                                      Click="PlaylistRemoveMenuItem_Click" />
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Grid ColumnDefinitions="Auto,*,Auto"
+                                          ColumnSpacing="8">
+                                        <Border Grid.Column="0"
+                                                Background="#2B2B2B"
+                                                CornerRadius="6"
+                                                Padding="8,6"
+                                                PointerPressed="PlaylistDragHandle_PointerPressed">
+                                            <TextBlock Text="::"
+                                                       Foreground="#B8B8B8" />
+                                        </Border>
+                                        <Button Grid.Column="1"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Padding="0"
+                                                Click="PlaylistQueueItemButton_Click">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           Foreground="#F5F5F5"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding Path}"
+                                                           FontSize="11"
+                                                           Foreground="#818181"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="2"
+                                                Content="Remove"
+                                                Click="PlaylistRemoveButton_Click" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
 
         <Border Grid.Row="2"
                 Background="#191919"
                 CornerRadius="12"
                 Padding="12"
                 Margin="0,12,0,0">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,120" RowDefinitions="Auto">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,120"
+                  RowDefinitions="Auto">
                 <Button x:Name="PlayPauseButton"
                         Grid.Row="0"
                         Grid.Column="0"

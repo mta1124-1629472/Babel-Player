@@ -1,3 +1,4 @@
+using System.IO;
 using Avalonia.Controls;
 using BabelPlayer.App;
 using BabelPlayer.Infrastructure;
@@ -12,6 +13,7 @@ public sealed record AvaloniaShellDependencies(
     IQueueProjectionReader QueueProjectionReader,
     IShellProjectionReader ShellProjectionReader,
     IShellPreferencesService ShellPreferencesService,
+    IShellLibraryService ShellLibraryService,
     ResumePlaybackService ResumePlaybackService,
     ISubtitleWorkflowShellService SubtitleWorkflowService,
     ICredentialSetupService CredentialSetupService,
@@ -33,7 +35,7 @@ public sealed class AvaloniaShellCompositionRoot
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
         var filePickerService = new AvaloniaFilePickerService(ownerWindow);
         var credentialDialogService = new AvaloniaCredentialDialogService(ownerWindow);
-        var shellPreferencesService = new ShellPreferencesService(new SettingsFacade());
+        var shellPreferencesService = CreateShellPreferencesService();
         var subtitleInfrastructure = new SubtitleWorkflowInfrastructureFactory().Create(new SubtitleWorkflowInfrastructureRequest(
             credentialFacade,
             credentialDialogService,
@@ -59,6 +61,7 @@ public sealed class AvaloniaShellCompositionRoot
         var shellProjectionReader = new ShellProjectionService(mediaSessionCoordinator.Store);
         var playbackQueueController = new PlaybackQueueController();
         var resumePlaybackService = new ResumePlaybackService();
+        var shellLibraryService = new ShellLibraryService(new LibraryBrowserService(), shellPreferencesService);
         var credentialSetupService = new CredentialSetupService(
             credentialFacade,
             subtitleInfrastructure.ProviderAvailabilityService,
@@ -80,6 +83,7 @@ public sealed class AvaloniaShellCompositionRoot
             shellController,
             shellProjectionReader,
             shellPreferencesService,
+            shellLibraryService,
             resumePlaybackService,
             subtitleWorkflowController,
             credentialSetupService,
@@ -91,6 +95,21 @@ public sealed class AvaloniaShellCompositionRoot
                 playbackBackendCoordinator,
                 subtitleWorkflowController,
                 playbackBackend));
+    }
+
+    private static ShellPreferencesService CreateShellPreferencesService()
+    {
+        var shellPreferencesService = new ShellPreferencesService(new SettingsFacade());
+        var settingsPath = Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "player-settings.json");
+        if (!File.Exists(settingsPath))
+        {
+            shellPreferencesService.ApplyLayoutChange(new ShellLayoutPreferencesChange(
+                false,
+                false,
+                shellPreferencesService.Current.WindowMode));
+        }
+
+        return shellPreferencesService;
     }
 
     private sealed class CompositeShellLifetime : IDisposable
