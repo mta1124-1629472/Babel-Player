@@ -49,6 +49,23 @@ public sealed record ShellSubtitleTrackSelectionResult
     public bool IsError { get; init; }
 }
 
+public sealed record ShellInitializationSnapshot
+{
+    public AppPlayerSettings Settings { get; init; } = new();
+    public double AudioDelaySeconds { get; init; }
+    public double SubtitleDelaySeconds { get; init; }
+    public string SelectedAspectRatio { get; init; } = "auto";
+    public double Volume { get; init; } = 0.8;
+    public bool IsMuted { get; init; }
+    public double PlaybackRate { get; init; } = 1.0;
+    public SubtitleRenderMode LastNonOffSubtitleRenderMode { get; init; } = SubtitleRenderMode.TranslationOnly;
+    public bool ShowSubtitleSource { get; init; }
+    public string DefaultTranscriptionLabel { get; init; } = string.Empty;
+    public string DefaultTranslationLabel { get; init; } = string.Empty;
+    public bool ResumeEnabled { get; init; }
+    public IReadOnlyList<LibraryNode> PinnedRoots { get; init; } = [];
+}
+
 public sealed class ShellController : IDisposable
 {
     private readonly PlaybackQueueController _playbackQueueController;
@@ -56,6 +73,7 @@ public sealed class ShellController : IDisposable
     private readonly SubtitleWorkflowController _subtitleWorkflowController;
     private readonly LibraryBrowserService _libraryBrowserService;
     private readonly ResumePlaybackService _resumePlaybackService;
+    private readonly SettingsFacade _settingsFacade;
     private readonly ResumeTrackingCoordinator _resumeTrackingCoordinator;
     private readonly IBabelLogger _logger;
 
@@ -72,6 +90,7 @@ public sealed class ShellController : IDisposable
         SubtitleWorkflowController subtitleWorkflowController,
         LibraryBrowserService libraryBrowserService,
         ResumePlaybackService resumePlaybackService,
+        SettingsFacade? settingsFacade = null,
         IBabelLogFactory? logFactory = null)
     {
         _playbackQueueController = playbackQueueController;
@@ -79,6 +98,7 @@ public sealed class ShellController : IDisposable
         _subtitleWorkflowController = subtitleWorkflowController;
         _libraryBrowserService = libraryBrowserService;
         _resumePlaybackService = resumePlaybackService;
+        _settingsFacade = settingsFacade ?? new SettingsFacade();
         _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("shell.controller");
         _resumeTrackingCoordinator = new ResumeTrackingCoordinator(playbackBackend, resumePlaybackService);
         _playbackQueueController.SnapshotChanged += HandleQueueSnapshotChanged;
@@ -87,6 +107,56 @@ public sealed class ShellController : IDisposable
     public PlaybackQueueSnapshot QueueSnapshot => _playbackQueueController.Snapshot;
 
     public PlaylistItem? NowPlayingItem => _playbackQueueController.NowPlayingItem;
+
+    public ShellInitializationSnapshot BuildInitializationSnapshot()
+    {
+        var settings = _settingsFacade.Load();
+        if (settings.PinnedRoots.Count == 0)
+        {
+            var defaultVideosPath = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+            var pinnedRoots = Directory.Exists(defaultVideosPath) ? new List<string> { defaultVideosPath } : [];
+            settings = settings with
+            {
+                PinnedRoots = pinnedRoots,
+                ShowBrowserPanel = pinnedRoots.Count > 0,
+                ShowPlaylistPanel = true
+            };
+        }
+
+        settings = settings with { WindowMode = PlaybackWindowMode.Standard };
+
+        var volume = Math.Clamp(settings.VolumeLevel, 0, 1);
+        var aspectRatio = string.IsNullOrWhiteSpace(settings.AspectRatioOverride) ? "auto" : settings.AspectRatioOverride;
+        var lastNonOffMode = settings.SubtitleRenderMode == SubtitleRenderMode.Off
+            ? SubtitleRenderMode.TranslationOnly
+            : settings.SubtitleRenderMode;
+        var showSource = settings.SubtitleRenderMode is SubtitleRenderMode.SourceOnly or SubtitleRenderMode.Dual;
+
+        _resumeTrackingCoordinator.SetEnabled(settings.ResumeEnabled);
+
+        var pinnedRootNodes = _libraryBrowserService.BuildPinnedRoots(settings.PinnedRoots);
+
+        _logger.LogInfo("Built shell initialization snapshot.", BabelLogContext.Create(
+            ("volume", volume), ("muted", settings.IsMuted), ("resumeEnabled", settings.ResumeEnabled),
+            ("pinnedRoots", settings.PinnedRoots.Count)));
+
+        return new ShellInitializationSnapshot
+        {
+            Settings = settings,
+            AudioDelaySeconds = settings.AudioDelaySeconds,
+            SubtitleDelaySeconds = settings.SubtitleDelaySeconds,
+            SelectedAspectRatio = aspectRatio,
+            Volume = volume,
+            IsMuted = settings.IsMuted,
+            PlaybackRate = settings.DefaultPlaybackRate,
+            LastNonOffSubtitleRenderMode = lastNonOffMode,
+            ShowSubtitleSource = showSource,
+            DefaultTranscriptionLabel = SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny-multilingual").DisplayName,
+            DefaultTranslationLabel = SubtitleWorkflowCatalog.GetTranslationModel(null).DisplayName,
+            ResumeEnabled = settings.ResumeEnabled,
+            PinnedRoots = pinnedRootNodes
+        };
+    }
 
     public IReadOnlyList<PlaylistItem> QueueItems => _playbackQueueController.QueueItems;
 

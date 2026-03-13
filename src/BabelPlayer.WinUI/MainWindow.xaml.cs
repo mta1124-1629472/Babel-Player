@@ -232,7 +232,7 @@ public sealed partial class MainWindow : Window
         ApplyShellProjection(_shellProjectionService.Current);
         ApplyQueueSnapshot(_shellController.QueueSnapshot);
         _logger.LogInfo("Main window initialized.");
-        _ = _subtitleWorkflowController.InitializeAsync();
+        FireAndForget(_subtitleWorkflowController.InitializeAsync());
     }
 
     private void BuildShell()
@@ -1530,35 +1530,6 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    private Button CreateSecondaryTransportButton(IconElement icon, string label, RoutedEventHandler handler, string? text = null)
-    {
-        var content = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = text is null ? 0 : 6,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        content.Children.Add(icon);
-        if (!string.IsNullOrWhiteSpace(text))
-        {
-            content.Children.Add(new TextBlock
-            {
-                Text = text,
-                VerticalAlignment = VerticalAlignment.Center
-            });
-        }
-
-        var button = new Button
-        {
-            Content = content,
-            Padding = new Thickness(10, 6, 10, 6),
-            MinHeight = 36
-        };
-        button.Click += handler;
-        SetControlHint(button, label);
-        return button;
-    }
-
     private Flyout CreateSubtitleStyleFlyout()
     {
         var content = new StackPanel
@@ -1678,28 +1649,13 @@ public sealed partial class MainWindow : Window
     private void InitializeShellState()
     {
         _isInitializingShellState = true;
-        var settings = _settingsFacade.Load();
-        if (settings.PinnedRoots.Count == 0)
-        {
-            var defaultVideosPath = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
-            var pinnedRoots = Directory.Exists(defaultVideosPath) ? new List<string> { defaultVideosPath } : [];
-            settings = settings with
-            {
-                PinnedRoots = pinnedRoots,
-                ShowBrowserPanel = pinnedRoots.Count > 0,
-                ShowPlaylistPanel = true
-            };
-        }
+        var snapshot = _shellController.BuildInitializationSnapshot();
 
-        _audioDelaySeconds = settings.AudioDelaySeconds;
-        _subtitleDelaySeconds = settings.SubtitleDelaySeconds;
+        _audioDelaySeconds = snapshot.AudioDelaySeconds;
+        _subtitleDelaySeconds = snapshot.SubtitleDelaySeconds;
         SyncSubtitleDelayValueText();
-        _selectedAspectRatio = string.IsNullOrWhiteSpace(settings.AspectRatioOverride) ? "auto" : settings.AspectRatioOverride;
-        settings = settings with
-        {
-            WindowMode = PlaybackWindowMode.Standard
-        };
-        ViewModel.Settings = settings;
+        _selectedAspectRatio = snapshot.SelectedAspectRatio;
+        ViewModel.Settings = snapshot.Settings;
         RebuildShortcutBindings();
         ViewModel.WindowTitle = "Babel Player";
         ViewModel.WindowSubtitle = string.Empty;
@@ -1708,31 +1664,28 @@ public sealed partial class MainWindow : Window
         ViewModel.ActiveHardwareDecoder = "mpv ready";
         ViewModel.Browser.IsVisible = false;
         ViewModel.Queue.IsVisible = false;
-        ViewModel.Transport.Volume = Math.Clamp(settings.VolumeLevel, 0, 1);
-        ViewModel.Transport.IsMuted = settings.IsMuted;
-        ViewModel.Transport.PlaybackRate = settings.DefaultPlaybackRate;
-        _lastNonOffSubtitleRenderMode = settings.SubtitleRenderMode == SubtitleRenderMode.Off
-            ? SubtitleRenderMode.TranslationOnly
-            : settings.SubtitleRenderMode;
-        ViewModel.SubtitleOverlay.ShowSource = settings.SubtitleRenderMode is SubtitleRenderMode.SourceOnly or SubtitleRenderMode.Dual;
+        ViewModel.Transport.Volume = snapshot.Volume;
+        ViewModel.Transport.IsMuted = snapshot.IsMuted;
+        ViewModel.Transport.PlaybackRate = snapshot.PlaybackRate;
+        _lastNonOffSubtitleRenderMode = snapshot.LastNonOffSubtitleRenderMode;
+        ViewModel.SubtitleOverlay.ShowSource = snapshot.ShowSubtitleSource;
         ViewModel.SubtitleOverlay.TranslationText = "Drop a file or choose Open to start playback.";
-        ViewModel.SelectedTranscriptionLabel = SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny-multilingual").DisplayName;
-        ViewModel.SelectedTranslationLabel = SubtitleWorkflowCatalog.GetTranslationModel(null).DisplayName;
+        ViewModel.SelectedTranscriptionLabel = snapshot.DefaultTranscriptionLabel;
+        ViewModel.SelectedTranslationLabel = snapshot.DefaultTranslationLabel;
         TranslatedSubtitleTextBlock.Text = ViewModel.SubtitleOverlay.TranslationText;
         StatusInfoBar.IsOpen = false;
         StatusInfoBar.Message = ViewModel.StatusMessage;
 
         ThemeToggleMenuItem.IsChecked = true;
         ApplyTheme(isDark: true);
-        VolumeSlider.Value = ViewModel.Transport.Volume * 100d;
-        MuteToggleButton.IsChecked = settings.IsMuted;
-        PlayerHost.SetPreferredAudioState(ViewModel.Transport.Volume, settings.IsMuted);
+        VolumeSlider.Value = snapshot.Volume * 100d;
+        MuteToggleButton.IsChecked = snapshot.IsMuted;
+        PlayerHost.SetPreferredAudioState(snapshot.Volume, snapshot.IsMuted);
         _logger.LogInfo(
             "Configured preferred startup audio state.",
-            BabelLogContext.Create(("volume", ViewModel.Transport.Volume), ("muted", settings.IsMuted)));
-        _shellController.SetResumeTrackingEnabled(settings.ResumeEnabled);
-        ResumePlaybackToggleItem.IsChecked = settings.ResumeEnabled;
-        SetPlaybackRate(settings.DefaultPlaybackRate, persistSettings: false, showStatus: false);
+            BabelLogContext.Create(("volume", snapshot.Volume), ("muted", snapshot.IsMuted)));
+        ResumePlaybackToggleItem.IsChecked = snapshot.ResumeEnabled;
+        SetPlaybackRate(snapshot.PlaybackRate, persistSettings: false, showStatus: false);
         _windowModeService.EnsureInitialStandardBounds();
         _windowModeService.SetModeAsync(PlaybackWindowMode.Standard).GetAwaiter().GetResult();
         ApplyWindowModeChrome(PlaybackWindowMode.Standard);
@@ -1752,7 +1705,7 @@ public sealed partial class MainWindow : Window
         UpdateMuteButtonVisual();
         UpdatePlayPauseButtonVisual();
 
-        foreach (var root in _libraryBrowserService.BuildPinnedRoots(settings.PinnedRoots))
+        foreach (var root in snapshot.PinnedRoots)
         {
             ViewModel.Browser.Roots.Add(root);
         }
@@ -1842,7 +1795,7 @@ public sealed partial class MainWindow : Window
         _subtitleWorkflowController.Dispose();
         _shellController.Dispose();
         _playbackBackendCoordinator.Dispose();
-        _ = _playbackBackend.DisposeAsync();
+        FireAndForget(_playbackBackend.DisposeAsync());
     }
 
     private void ShellController_QueueSnapshotChanged(PlaybackQueueSnapshot snapshot)
@@ -2173,13 +2126,13 @@ public sealed partial class MainWindow : Window
     private void SeekBack_Click(object sender, RoutedEventArgs e)
     {
         RegisterFullscreenOverlayInteraction();
-        _ = _shellController.SeekRelativeAsync(TimeSpan.FromSeconds(-10));
+        FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(-10)));
     }
 
     private void SeekForward_Click(object sender, RoutedEventArgs e)
     {
         RegisterFullscreenOverlayInteraction();
-        _ = _shellController.SeekRelativeAsync(TimeSpan.FromSeconds(10));
+        FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(10)));
     }
 
     private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
@@ -2187,19 +2140,19 @@ public sealed partial class MainWindow : Window
         RegisterFullscreenOverlayInteraction();
         if (ViewModel.Transport.IsPaused)
         {
-            _ = _shellController.PlayAsync();
+            FireAndForget(_shellController.PlayAsync());
             ShowStatus("Playback resumed.");
             return;
         }
 
-        _ = _shellController.PauseAsync();
+        FireAndForget(_shellController.PauseAsync());
         ShowStatus("Playback paused.");
     }
 
     private void PreviousFrame_Click(object sender, RoutedEventArgs e)
     {
         RegisterFullscreenOverlayInteraction();
-        _ = _shellController.StepFrameAsync(forward: false);
+        FireAndForget(_shellController.StepFrameAsync(forward: false));
         ViewModel.Transport.IsPaused = true;
         ShowStatus("Stepped to previous frame.");
     }
@@ -2207,7 +2160,7 @@ public sealed partial class MainWindow : Window
     private void NextFrame_Click(object sender, RoutedEventArgs e)
     {
         RegisterFullscreenOverlayInteraction();
-        _ = _shellController.StepFrameAsync(forward: true);
+        FireAndForget(_shellController.StepFrameAsync(forward: true));
         ViewModel.Transport.IsPaused = true;
         ShowStatus("Stepped to next frame.");
     }
@@ -2219,7 +2172,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _ = _shellController.SeekAsync(TimeSpan.FromSeconds(e.NewValue));
+        FireAndForget(_shellController.SeekAsync(TimeSpan.FromSeconds(e.NewValue)));
         if (_isPositionScrubbing)
         {
             UpdateScrubTimeLabels(e.NewValue, PositionSlider.Maximum);
@@ -2234,7 +2187,7 @@ public sealed partial class MainWindow : Window
         }
 
         RegisterFullscreenOverlayInteraction();
-        _ = _shellController.SeekAsync(TimeSpan.FromSeconds(e.NewValue));
+        FireAndForget(_shellController.SeekAsync(TimeSpan.FromSeconds(e.NewValue)));
         UpdateScrubTimeLabels(e.NewValue, FullscreenPositionSlider.Maximum);
     }
 
@@ -2247,8 +2200,7 @@ public sealed partial class MainWindow : Window
 
         var normalizedVolume = Math.Clamp(e.NewValue / 100d, 0, 1);
         ViewModel.Transport.Volume = normalizedVolume;
-        PlayerHost.SetPreferredAudioState(normalizedVolume, MuteToggleButton?.IsChecked == true);
-        _ = _shellController.ApplyAudioPreferencesAsync(normalizedVolume, MuteToggleButton?.IsChecked == true);
+        FireAndForget(_shellController.ApplyAudioPreferencesAsync(normalizedVolume, MuteToggleButton?.IsChecked == true));
         if (!_isInitializingShellState)
         {
             SaveCurrentSettings();
@@ -2260,8 +2212,7 @@ public sealed partial class MainWindow : Window
         var isMuted = MuteToggleButton.IsChecked == true;
         ViewModel.Transport.IsMuted = isMuted;
         var normalizedVolume = Math.Clamp((VolumeSlider?.Value ?? (ViewModel.Transport.Volume * 100d)) / 100d, 0, 1);
-        PlayerHost.SetPreferredAudioState(normalizedVolume, isMuted);
-        _ = _shellController.ApplyAudioPreferencesAsync(normalizedVolume, isMuted);
+        FireAndForget(_shellController.ApplyAudioPreferencesAsync(normalizedVolume, isMuted));
         UpdateMuteButtonVisual();
         if (!_isInitializingShellState)
         {
@@ -2308,7 +2259,7 @@ public sealed partial class MainWindow : Window
     {
         var clamped = Math.Clamp(speed, 0.25, 2.0);
         ViewModel.Transport.PlaybackRate = clamped;
-        _ = _shellController.SetPlaybackRateAsync(clamped);
+        FireAndForget(_shellController.SetPlaybackRateAsync(clamped));
         UpdatePlaybackRateFlyoutChecks();
         SyncPlaybackSpeedSlider(clamped);
         if (persistSettings && !_isInitializingShellState)
@@ -2386,7 +2337,7 @@ public sealed partial class MainWindow : Window
         if (e.Key == VirtualKey.Escape && _windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen)
         {
             e.Handled = true;
-            _ = ExitFullscreenAsync();
+            FireAndForget(ExitFullscreenAsync());
             return;
         }
 
@@ -2410,7 +2361,7 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        _ = ExecuteShortcutCommandAsync(commandId);
+        FireAndForget(ExecuteShortcutCommandAsync(commandId));
         return true;
     }
 
@@ -2422,27 +2373,27 @@ public sealed partial class MainWindow : Window
                 PlayPauseButton_Click(this, new RoutedEventArgs());
                 break;
             case "seek_back_small":
-                _ = _shellController.SeekRelativeAsync(TimeSpan.FromSeconds(-5));
+                FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(-5)));
                 RegisterFullscreenOverlayInteraction();
                 break;
             case "seek_forward_small":
-                _ = _shellController.SeekRelativeAsync(TimeSpan.FromSeconds(5));
+                FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(5)));
                 RegisterFullscreenOverlayInteraction();
                 break;
             case "seek_back_large":
-                _ = _shellController.SeekRelativeAsync(TimeSpan.FromSeconds(-15));
+                FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(-15)));
                 RegisterFullscreenOverlayInteraction();
                 break;
             case "seek_forward_large":
-                _ = _shellController.SeekRelativeAsync(TimeSpan.FromSeconds(15));
+                FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(15)));
                 RegisterFullscreenOverlayInteraction();
                 break;
             case "previous_frame":
-                _ = _shellController.StepFrameAsync(forward: false);
+                FireAndForget(_shellController.StepFrameAsync(forward: false));
                 RegisterFullscreenOverlayInteraction();
                 break;
             case "next_frame":
-                _ = _shellController.StepFrameAsync(forward: true);
+                FireAndForget(_shellController.StepFrameAsync(forward: true));
                 RegisterFullscreenOverlayInteraction();
                 break;
             case "fullscreen":
@@ -3124,7 +3075,6 @@ public sealed partial class MainWindow : Window
         VolumeSlider.Value = ViewModel.Transport.Volume * 100d;
         _suppressVolumeSliderChanges = false;
         MuteToggleButton.IsChecked = ViewModel.Transport.IsMuted;
-        PlayerHost.SetPreferredAudioState(ViewModel.Transport.Volume, ViewModel.Transport.IsMuted);
         UpdateMuteButtonVisual();
         UpdatePlaybackDiagnostics(projection.Transport);
         UpdatePortraitVideoLanguageToolsState();
@@ -3191,7 +3141,7 @@ public sealed partial class MainWindow : Window
             if (!_isNormalizingWinUITranscriptionSelection
                 && !string.Equals(normalizedTranscriptionKey, snapshot.SelectedTranscriptionModelKey, StringComparison.Ordinal))
             {
-                _ = NormalizeWinUiTranscriptionSelectionAsync(normalizedTranscriptionKey);
+                FireAndForget(NormalizeWinUiTranscriptionSelectionAsync(normalizedTranscriptionKey));
             }
 
             ViewModel.SelectedTranscriptionLabel = normalizedTranscriptionSelection.DisplayName;
@@ -3544,7 +3494,7 @@ public sealed partial class MainWindow : Window
         }
 
         _selectedAspectRatio = aspectRatio;
-        _ = _shellController.SetAspectRatioAsync(aspectRatio);
+        FireAndForget(_shellController.SetAspectRatioAsync(aspectRatio));
         UpdateAspectRatioFlyoutChecks();
         SaveCurrentSettings();
         ShowStatus($"Aspect ratio: {(aspectRatio == "-1" ? "fill" : aspectRatio)}.");
@@ -3602,7 +3552,7 @@ public sealed partial class MainWindow : Window
         {
             HardwareDecodingMode = mode
         };
-        _ = _shellController.SetHardwareDecodingModeAsync(mode);
+        FireAndForget(_shellController.SetHardwareDecodingModeAsync(mode));
         UpdateHardwareDecodingFlyoutChecks();
         SaveCurrentSettings();
         ShowStatus($"Hardware decode: {FormatHardwareDecodingLabel(mode)}.");
@@ -3615,7 +3565,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _ = _shellController.SetAudioTrackAsync(trackId);
+        FireAndForget(_shellController.SetAudioTrackAsync(trackId));
         ApplyTrackSelection(MediaTrackKind.Audio, trackId);
         RebuildAudioTrackFlyout();
         ShowStatus($"Selected audio track: {label}.");
@@ -3659,7 +3609,7 @@ public sealed partial class MainWindow : Window
     private void AdjustSubtitleDelay(double delta)
     {
         _subtitleDelaySeconds += delta;
-        _ = _shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds);
+        FireAndForget(_shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds));
         UpdateDelayFlyoutLabels();
         SyncSubtitleDelayValueText();
         SaveCurrentSettings();
@@ -3669,7 +3619,7 @@ public sealed partial class MainWindow : Window
     private void ResetSubtitleDelay()
     {
         _subtitleDelaySeconds = 0;
-        _ = _shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds);
+        FireAndForget(_shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds));
         UpdateDelayFlyoutLabels();
         SyncSubtitleDelayValueText();
         SaveCurrentSettings();
@@ -3679,7 +3629,7 @@ public sealed partial class MainWindow : Window
     private void AdjustAudioDelay(double delta)
     {
         _audioDelaySeconds += delta;
-        _ = _shellController.SetAudioDelayAsync(_audioDelaySeconds);
+        FireAndForget(_shellController.SetAudioDelayAsync(_audioDelaySeconds));
         UpdateDelayFlyoutLabels();
         SaveCurrentSettings();
         ShowStatus($"Audio delay: {_audioDelaySeconds:+0.00;-0.00;0.00}s");
@@ -3688,7 +3638,7 @@ public sealed partial class MainWindow : Window
     private void ResetAudioDelay()
     {
         _audioDelaySeconds = 0;
-        _ = _shellController.SetAudioDelayAsync(_audioDelaySeconds);
+        FireAndForget(_shellController.SetAudioDelayAsync(_audioDelaySeconds));
         UpdateDelayFlyoutLabels();
         SaveCurrentSettings();
         ShowStatus("Audio delay reset.");
@@ -4439,6 +4389,36 @@ public sealed partial class MainWindow : Window
         _stageCoordinator.HandleStageLayoutChanged();
     }
 
+    private async void FireAndForget(Task task, [System.Runtime.CompilerServices.CallerMemberName] string? caller = null)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Unhandled error in fire-and-forget call from {caller}.", ex);
+        }
+    }
+
+    private async void FireAndForget(ValueTask task, [System.Runtime.CompilerServices.CallerMemberName] string? caller = null)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Unhandled error in fire-and-forget call from {caller}.", ex);
+        }
+    }
+
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct NativePoint
     {
@@ -4562,7 +4542,7 @@ public sealed partial class MainWindow : Window
     {
         if (sender is Slider slider)
         {
-            _ = _shellController.SeekAsync(TimeSpan.FromSeconds(slider.Value));
+            FireAndForget(_shellController.SeekAsync(TimeSpan.FromSeconds(slider.Value)));
         }
 
         _isPositionScrubbing = false;

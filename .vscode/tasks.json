@@ -1,0 +1,114 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "eval: collect responses (sample)",
+      "type": "shell",
+      "command": "${input:evalPythonCommand}",
+      "args": [
+        "eval\\collect_responses.py",
+        "--dataset",
+        "eval\\datasets\\sample_eval_dataset.jsonl",
+        "--output",
+        "eval\\outputs\\responses.jsonl"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "eval: run evaluation",
+      "type": "shell",
+      "command": "${input:evalPythonCommand}",
+      "args": [
+        "eval\\run_evaluation.py",
+        "--data",
+        "eval\\outputs\\responses.jsonl",
+        "--output-json",
+        "eval\\outputs\\evaluation_result.json",
+        "--summary",
+        "eval\\outputs\\evaluation_summary.md"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "eval: run evaluation (strict)",
+      "type": "shell",
+      "command": "${input:evalPythonCommand}",
+      "args": [
+        "eval\\run_evaluation.py",
+        "--strict",
+        "--data",
+        "eval\\outputs\\responses.jsonl",
+        "--output-json",
+        "eval\\outputs\\evaluation_result.json",
+        "--summary",
+        "eval\\outputs\\evaluation_summary.md"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "eval: test",
+      "type": "shell",
+      "command": "${input:evalPythonCommand}",
+      "args": [
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "eval\\tests",
+        "-v"
+      ],
+      "problemMatcher": [],
+      "group": "test"
+    },
+    {
+      "label": "eval: collect responses (adapter)",
+      "type": "shell",
+      "command": "${input:evalPythonCommand}",
+      "args": [
+        "eval\\collect_responses.py",
+        "--dataset",
+        "eval\\datasets\\sample_eval_dataset.jsonl",
+        "--output",
+        "eval\\outputs\\responses.jsonl",
+        "--adapter-cmd",
+        "${input:evalAdapterCommand}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "eval: full (collect + run)",
+      "type": "shell",
+      "dependsOn": [
+        "eval: collect responses (sample)",
+        "eval: run evaluation"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": [],
+      "group": "test"
+    },
+    {
+      "label": "eval: full (adapter + run)",
+      "type": "shell",
+      "dependsOn": [
+        "eval: collect responses (adapter)",
+        "eval: run evaluation"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "evalAdapterCommand",
+      "type": "promptString",
+      "description": "Adapter command that reads one JSON item from stdin and prints one JSON object to stdout",
+      "default": ".\\.venv311\\Scripts\\python eval\\adapter.py"
+    },
+    {
+      "id": "evalPythonCommand",
+      "type": "promptString",
+      "description": "Python executable used for evaluation tasks",
+      "default": ".\\.venv311\\Scripts\\python"
+    }
+  ]
+}

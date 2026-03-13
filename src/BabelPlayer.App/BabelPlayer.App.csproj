@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="BabelPlayer.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\BabelPlayer.Core\BabelPlayer.Core.csproj" />
     <PackageReference Include="SharpCompress" Version="0.40.0" />
   </ItemGroup>

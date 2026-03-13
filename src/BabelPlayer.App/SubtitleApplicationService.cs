@@ -2,7 +2,7 @@ using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
 
-public sealed partial class SubtitleApplicationService : IDisposable
+public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGenerationHost
 {
     private const string DefaultSourceLanguage = "und";
     private const string DefaultTargetLanguage = "en";
@@ -19,10 +19,9 @@ public sealed partial class SubtitleApplicationService : IDisposable
     private readonly IBabelLogger _logger;
     private readonly object _translationSync = new();
     private readonly HashSet<string> _inFlightCueTranslations = [];
-    private readonly GeneratedSubtitleCache _generatedSubtitleCache = new();
+    private readonly CaptionGenerationOrchestrator _captionOrchestrator;
 
     private CancellationTokenSource? _translationCts;
-    private CancellationTokenSource? _captionGenerationCts;
     private readonly string _translationTargetLanguage = DefaultTargetLanguage;
     private readonly string _autoTranslatePreferredSourceLanguage = DefaultTargetLanguage;
     private string? _lastObservedActiveTranscriptSegmentId;
@@ -50,6 +49,12 @@ public sealed partial class SubtitleApplicationService : IDisposable
         _workflowStateStore = workflowStateStore;
         _providerAvailabilityService = providerAvailabilityService;
         _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("subtitles.workflow");
+        _captionOrchestrator = new CaptionGenerationOrchestrator(
+            captionGenerator,
+            _mediaSessionCoordinator,
+            _workflowStateStore,
+            this,
+            _logger);
         _subtitleTranslator.RuntimeStatusChanged += HandleLocalTranslationRuntimeStatus;
         _mediaSessionCoordinator.Store.SnapshotChanged += HandleMediaSessionSnapshotChanged;
         _lastObservedActiveTranscriptSegmentId = _mediaSessionCoordinator.Snapshot.SubtitlePresentation.ActiveTranscriptSegmentId;
@@ -76,7 +81,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
         _mediaSessionCoordinator.Store.SnapshotChanged -= HandleMediaSessionSnapshotChanged;
         _subtitleTranslator.RuntimeStatusChanged -= HandleLocalTranslationRuntimeStatus;
         CancelTranslationWork();
-        CancelCaptionGeneration();
+        _captionOrchestrator.CancelCaptionGeneration();
         _disposed = true;
     }
 
@@ -197,7 +202,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
         _logger.LogInfo("Loading media subtitles.", BabelLogContext.Create(("videoPath", videoPath)));
 
-        CancelCaptionGeneration();
+        _captionOrchestrator.CancelCaptionGeneration();
         CancelTranslationWork();
         UpdateWorkflowState(state => state with
         {
@@ -214,7 +219,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
             return await ImportExternalSubtitlesAsync(sidecarPath, autoLoaded: true, cancellationToken);
         }
 
-        if (TryLoadCachedGeneratedSubtitles(videoPath, _workflowStateStore.Snapshot.SelectedTranscriptionModelKey))
+        if (_captionOrchestrator.TryLoadCachedGeneratedSubtitles(videoPath, _workflowStateStore.Snapshot.SelectedTranscriptionModelKey))
         {
             return await LoadSubtitleCuesAsync(
                 CurrentCues,
@@ -223,7 +228,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
                 cancellationToken);
         }
 
-        return await StartAutomaticCaptionGenerationAsync(videoPath, cancellationToken);
+        return await _captionOrchestrator.StartAutomaticCaptionGenerationAsync(videoPath, cancellationToken);
     }
 
     public async Task<SubtitleLoadResult> ImportExternalSubtitlesAsync(string path, bool autoLoaded = false, CancellationToken cancellationToken = default)
@@ -261,7 +266,7 @@ public sealed partial class SubtitleApplicationService : IDisposable
         ArgumentNullException.ThrowIfNull(track);
         _logger.LogInfo("Importing embedded subtitle track.", BabelLogContext.Create(("videoPath", videoPath), ("trackId", track.Id), ("codec", track.Codec)));
 
-        CancelCaptionGeneration();
+        _captionOrchestrator.CancelCaptionGeneration();
         UpdateWorkflowState(state => state with
         {
             CurrentVideoPath = videoPath
@@ -360,4 +365,10 @@ public sealed partial class SubtitleApplicationService : IDisposable
 
         _ = TranslateCueAsync(activeTranscript, _translationCts?.Token ?? CancellationToken.None);
     }
+
+    void ICaptionGenerationHost.ApplyAutomaticTranslationPreferenceIfNeeded() => ApplyAutomaticTranslationPreferenceIfNeeded();
+    void ICaptionGenerationHost.CancelTranslationWork() => CancelTranslationWork();
+    void ICaptionGenerationHost.InitializeTranslationPreferencesForNewVideo() => InitializeTranslationPreferencesForNewVideo();
+    void ICaptionGenerationHost.PublishStatus(string message, string? overlayStatus) => PublishStatus(message, overlayStatus);
+    Task ICaptionGenerationHost.TranslateCueAsync(TranscriptSegment cue, CancellationToken cancellationToken) => TranslateCueAsync(cue, cancellationToken);
 }

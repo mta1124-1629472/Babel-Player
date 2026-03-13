@@ -122,7 +122,7 @@ public sealed partial class SubtitleApplicationService
             return;
         }
 
-        if (TryLoadCachedGeneratedSubtitles(currentVideoPath, selection.Key))
+        if (_captionOrchestrator.TryLoadCachedGeneratedSubtitles(currentVideoPath, selection.Key))
         {
             if (!suppressStatus)
             {
@@ -143,7 +143,7 @@ public sealed partial class SubtitleApplicationService
             PublishStatus($"Restarting transcription with {selection.DisplayName}.");
         }
 
-        await StartAutomaticCaptionGenerationAsync(currentVideoPath, cancellationToken, preserveCurrentTranslationPreference: true);
+        await _captionOrchestrator.StartAutomaticCaptionGenerationAsync(currentVideoPath, cancellationToken, preserveCurrentTranslationPreference: true);
     }
 
     private async Task<SubtitleLoadResult> LoadSubtitleCuesAsync(
@@ -155,7 +155,7 @@ public sealed partial class SubtitleApplicationService
     {
         _logger.LogInfo("Loading subtitle cues into workflow.", BabelLogContext.Create(("source", source), ("cueCount", cues.Count), ("preserveTranslationPreference", preserveCurrentTranslationPreference)));
         var currentVideoPath = _workflowStateStore.Snapshot.CurrentVideoPath;
-        CancelCaptionGeneration();
+        _captionOrchestrator.CancelCaptionGeneration();
         CancelTranslationWork();
         if (!preserveCurrentTranslationPreference)
         {
@@ -210,114 +210,5 @@ public sealed partial class SubtitleApplicationService
         _ = TranslateAllCuesAsync(cts.Token);
 
         return new SubtitleLoadResult(source, projectedCues.Count, source == SubtitlePipelineSource.Sidecar, false);
-    }
-
-    private async Task<SubtitleLoadResult> StartAutomaticCaptionGenerationAsync(
-        string videoPath,
-        CancellationToken cancellationToken,
-        bool preserveCurrentTranslationPreference = false)
-    {
-        var operationId = $"captions-{Guid.NewGuid():N}";
-        using var activity = BabelTracing.Source.StartActivity("subtitle.generate_captions");
-        activity?.SetTag(BabelTracing.Tags.MediaPath, videoPath);
-        CancelCaptionGeneration();
-        CancelTranslationWork();
-        if (!preserveCurrentTranslationPreference)
-        {
-            InitializeTranslationPreferencesForNewVideo();
-        }
-
-        var transcriptionModel = SubtitleWorkflowCatalog.GetTranscriptionModel(_workflowStateStore.Snapshot.SelectedTranscriptionModelKey);
-        var generationId = _workflowStateStore.Snapshot.ActiveCaptionGenerationId + 1;
-        UpdateWorkflowState(state => state with
-        {
-            CurrentVideoPath = videoPath,
-            ActiveCaptionGenerationId = generationId,
-            ActiveCaptionGenerationModelKey = transcriptionModel.Key,
-            CaptionGenerationModeLabel = transcriptionModel.DisplayName,
-            OverlayStatus = _mediaSessionCoordinator.Snapshot.Translation.IsEnabled
-                ? "Listening to the video audio and building translated captions..."
-                : "Listening to the video audio and building subtitles..."
-        });
-        _mediaSessionCoordinator.ClearTranscriptSegments(SubtitlePipelineSource.Generated, true, null, DefaultSourceLanguage);
-        _mediaSessionCoordinator.SetCaptionGenerationState(true);
-
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _captionGenerationCts = cts;
-        _logger.LogInfo("Automatic caption generation starting.", BabelLogContext.Create(("operationId", operationId), ("videoPath", videoPath), ("modelKey", transcriptionModel.Key), ("preserveTranslationPreference", preserveCurrentTranslationPreference)));
-        activity?.SetTag(BabelTracing.Tags.ModelKey, transcriptionModel.Key);
-        PublishStatus($"Generating captions with {transcriptionModel.DisplayName}.", _workflowStateStore.Snapshot.OverlayStatus);
-
-        try
-        {
-            var generatedCues = await _captionGenerator.GenerateCaptionsAsync(
-                videoPath,
-                transcriptionModel,
-                null,
-                chunk => HandleRecognizedChunk(chunk, generationId),
-                progress => HandleSubtitleModelTransferProgress(progress, generationId),
-                cts.Token);
-
-            if (generationId != _workflowStateStore.Snapshot.ActiveCaptionGenerationId || cts.IsCancellationRequested)
-            {
-                return new SubtitleLoadResult(SubtitlePipelineSource.Generated, CurrentCues.Count, false, true);
-            }
-
-            if (CurrentCues.Count == 0 && generatedCues.Count > 0)
-            {
-                var clonedCues = SubtitleCueSessionMapper.CloneCues(generatedCues);
-                var currentSourceLanguage = SubtitleCueSessionMapper.ApplySourceLanguageToCues(clonedCues, DefaultSourceLanguage);
-                _mediaSessionCoordinator.SetTranscriptSegments(
-                    SubtitleCueSessionMapper.BuildTranscriptSegments(
-                        clonedCues,
-                        SubtitlePipelineSource.Generated,
-                        videoPath,
-                        transcriptionModel.Key,
-                        transcriptionModel.DisplayName,
-                        DefaultSourceLanguage),
-                    SubtitlePipelineSource.Generated,
-                    currentSourceLanguage);
-                ApplyAutomaticTranslationPreferenceIfNeeded();
-            }
-
-            _mediaSessionCoordinator.SetCaptionGenerationState(false);
-            CacheGeneratedSubtitles(videoPath, transcriptionModel.Key, CurrentCues);
-            UpdateWorkflowState(state => state with
-            {
-                OverlayStatus = CurrentCues.Count > 0 ? null : "No speech could be recognized from the video audio."
-            });
-            _logger.LogInfo("Automatic caption generation completed.", BabelLogContext.Create(("operationId", operationId), ("videoPath", videoPath), ("cueCount", CurrentCues.Count), ("modelKey", transcriptionModel.Key)));
-            activity?.SetTag(BabelTracing.Tags.CueCount, CurrentCues.Count);
-            PublishStatus(
-                CurrentCues.Count > 0
-                    ? $"Generated {CurrentCues.Count} caption cues automatically."
-                    : "No speech could be recognized from the video audio.",
-                _workflowStateStore.Snapshot.OverlayStatus);
-        }
-        catch (OperationCanceledException)
-        {
-            _mediaSessionCoordinator.SetCaptionGenerationState(false);
-            _logger.LogInfo("Automatic caption generation canceled.", BabelLogContext.Create(("operationId", operationId), ("videoPath", videoPath), ("modelKey", transcriptionModel.Key)));
-            activity?.SetStatus(ActivityStatusCode.Error, "Canceled");
-        }
-        catch (Exception ex)
-        {
-            if (generationId == _workflowStateStore.Snapshot.ActiveCaptionGenerationId)
-            {
-                _mediaSessionCoordinator.SetCaptionGenerationState(false);
-                UpdateWorkflowState(state => state with
-                {
-                    OverlayStatus = "Automatic caption generation failed. You can still load a manual subtitle file."
-                });
-                _logger.LogError("Automatic caption generation failed.", ex, BabelLogContext.Create(("operationId", operationId), ("videoPath", videoPath), ("modelKey", transcriptionModel.Key)));
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.SetTag(BabelTracing.Tags.ErrorMessage, ex.Message);
-                PublishStatus(
-                    $"Automatic caption generation failed: {ex.Message}",
-                    _workflowStateStore.Snapshot.OverlayStatus);
-            }
-        }
-
-        return new SubtitleLoadResult(SubtitlePipelineSource.Generated, CurrentCues.Count, false, true);
     }
 }

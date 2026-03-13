@@ -938,6 +938,175 @@ public sealed class RemainingArchitecturePlanTests
         Assert.False(projection.Transport.IsMuted);
     }
 
+    [Fact]
+    public async Task ShellController_LoadPlaybackItemAsync_AppliesPlaybackRateAndDelays()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var filePath = Path.Combine(directory.FullName, "test.mp4");
+            File.WriteAllText(filePath, string.Empty);
+
+            var queue = new PlaybackQueueController();
+            var backend = new FakeShellPlaybackBackend();
+            using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            using var shell = new ShellController(
+                queue,
+                backend,
+                workflow,
+                new LibraryBrowserService(),
+                new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+            var item = queue.PlayNow(filePath);
+            var loaded = await shell.LoadPlaybackItemAsync(
+                item,
+                new ShellLoadMediaOptions
+                {
+                    Volume = 0.5,
+                    IsMuted = false,
+                    PlaybackRate = 1.5,
+                    SubtitleDelaySeconds = 0.25,
+                    AudioDelaySeconds = -0.10,
+                    ResumeEnabled = false,
+                    PreviousPlaybackState = new PlaybackStateSnapshot()
+                },
+                CancellationToken.None);
+
+            Assert.True(loaded);
+            Assert.Equal(1.5, backend.LastPlaybackRate);
+            Assert.Equal(0.25, backend.LastSubtitleDelay);
+            Assert.Equal(-0.10, backend.LastAudioDelay);
+            Assert.Single(backend.PlaybackRateHistory);
+            Assert.Single(backend.SubtitleDelayHistory);
+            Assert.Single(backend.AudioDelayHistory);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ShellController_SetPlaybackRateAsync_DelegatesToBackend()
+    {
+        var queue = new PlaybackQueueController();
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
+            queue,
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+        await shell.SetPlaybackRateAsync(0.75);
+        Assert.Equal(0.75, backend.LastPlaybackRate);
+
+        await shell.SetSubtitleDelayAsync(0.50);
+        Assert.Equal(0.50, backend.LastSubtitleDelay);
+
+        await shell.SetAudioDelayAsync(-0.15);
+        Assert.Equal(-0.15, backend.LastAudioDelay);
+    }
+
+    [Fact]
+    public void ShellController_BuildInitializationSnapshot_ReturnsExpectedDefaults()
+    {
+        var customSettings = new AppPlayerSettings
+        {
+            VolumeLevel = 0.65,
+            IsMuted = true,
+            DefaultPlaybackRate = 1.25,
+            AudioDelaySeconds = 0.3,
+            SubtitleDelaySeconds = -0.2,
+            AspectRatioOverride = "16:9",
+            SubtitleRenderMode = SubtitleRenderMode.Dual,
+            ResumeEnabled = true,
+            PinnedRoots = ["C:\\FakeVideos"]
+        };
+        var settingsFacade = new FakeSettingsFacade(customSettings);
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
+            new PlaybackQueueController(),
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }),
+            settingsFacade);
+
+        var snapshot = shell.BuildInitializationSnapshot();
+
+        Assert.Equal(0.65, snapshot.Volume);
+        Assert.True(snapshot.IsMuted);
+        Assert.Equal(1.25, snapshot.PlaybackRate);
+        Assert.Equal(0.3, snapshot.AudioDelaySeconds);
+        Assert.Equal(-0.2, snapshot.SubtitleDelaySeconds);
+        Assert.Equal("16:9", snapshot.SelectedAspectRatio);
+        Assert.Equal(SubtitleRenderMode.Dual, snapshot.LastNonOffSubtitleRenderMode);
+        Assert.True(snapshot.ShowSubtitleSource);
+        Assert.True(snapshot.ResumeEnabled);
+        Assert.Equal(PlaybackWindowMode.Standard, snapshot.Settings.WindowMode);
+        Assert.NotEmpty(snapshot.DefaultTranscriptionLabel);
+        Assert.NotEmpty(snapshot.DefaultTranslationLabel);
+    }
+
+    [Fact]
+    public void ShellController_BuildInitializationSnapshot_FallsBackWhenSubtitleRenderModeIsOff()
+    {
+        var customSettings = new AppPlayerSettings
+        {
+            SubtitleRenderMode = SubtitleRenderMode.Off
+        };
+        var settingsFacade = new FakeSettingsFacade(customSettings);
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
+            new PlaybackQueueController(),
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }),
+            settingsFacade);
+
+        var snapshot = shell.BuildInitializationSnapshot();
+
+        Assert.Equal(SubtitleRenderMode.TranslationOnly, snapshot.LastNonOffSubtitleRenderMode);
+        Assert.False(snapshot.ShowSubtitleSource);
+    }
+
+    [Fact]
+    public void ShellController_BuildInitializationSnapshot_DefaultsAspectRatioWhenBlank()
+    {
+        var customSettings = new AppPlayerSettings
+        {
+            AspectRatioOverride = ""
+        };
+        var settingsFacade = new FakeSettingsFacade(customSettings);
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        using var shell = new ShellController(
+            new PlaybackQueueController(),
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }),
+            settingsFacade);
+
+        var snapshot = shell.BuildInitializationSnapshot();
+
+        Assert.Equal("auto", snapshot.SelectedAspectRatio);
+    }
+
+    private sealed class FakeSettingsFacade : SettingsFacade
+    {
+        private readonly AppPlayerSettings _settings;
+
+        public FakeSettingsFacade(AppPlayerSettings settings) => _settings = settings;
+
+        public override AppPlayerSettings Load() => _settings;
+    }
+
     private sealed class FakeTranscriptionProvider : ITranscriptionProvider
     {
         private readonly bool _shouldFail;
@@ -1102,6 +1271,9 @@ public sealed class RemainingArchitecturePlanTests
         public List<int?> SubtitleTrackSelections { get; } = [];
         public List<double> VolumeHistory { get; } = [];
         public List<bool> MuteHistory { get; } = [];
+        public List<double> PlaybackRateHistory { get; } = [];
+        public List<double> SubtitleDelayHistory { get; } = [];
+        public List<double> AudioDelayHistory { get; } = [];
         public int PauseCallCount { get; private set; }
         public int PlayCallCount { get; private set; }
         public int SubtitleTrackSetCallCount { get; private set; }
@@ -1109,6 +1281,9 @@ public sealed class RemainingArchitecturePlanTests
         public int? LastSubtitleTrackId { get; private set; }
         public double LastVolume { get; private set; }
         public bool LastMuted { get; private set; }
+        public double LastPlaybackRate { get; private set; } = 1.0;
+        public double LastSubtitleDelay { get; private set; }
+        public double LastAudioDelay { get; private set; }
 
         public event Action<PlaybackBackendState>? StateChanged;
         public event Action<IReadOnlyList<MediaTrackInfo>>? TracksChanged;
@@ -1165,7 +1340,12 @@ public sealed class RemainingArchitecturePlanTests
             return Task.CompletedTask;
         }
         public Task SeekRelativeAsync(TimeSpan delta, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken)
+        {
+            LastPlaybackRate = speed;
+            PlaybackRateHistory.Add(speed);
+            return Task.CompletedTask;
+        }
         public Task SetVolumeAsync(double volume, CancellationToken cancellationToken)
         {
             LastVolume = volume;
@@ -1191,8 +1371,18 @@ public sealed class RemainingArchitecturePlanTests
             SubtitleTrackSelections.Add(trackId);
             return Task.CompletedTask;
         }
-        public Task SetAudioDelayAsync(double seconds, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SetSubtitleDelayAsync(double seconds, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SetAudioDelayAsync(double seconds, CancellationToken cancellationToken)
+        {
+            LastAudioDelay = seconds;
+            AudioDelayHistory.Add(seconds);
+            return Task.CompletedTask;
+        }
+        public Task SetSubtitleDelayAsync(double seconds, CancellationToken cancellationToken)
+        {
+            LastSubtitleDelay = seconds;
+            SubtitleDelayHistory.Add(seconds);
+            return Task.CompletedTask;
+        }
         public Task SetAspectRatioAsync(string aspectRatio, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SetHardwareDecodingModeAsync(HardwareDecodingMode mode, CancellationToken cancellationToken)
         {

@@ -5,52 +5,6 @@ using System.Diagnostics;
 
 public sealed partial class SubtitleApplicationService
 {
-    private void HandleRecognizedChunk(TranscriptChunk chunk, int generationId)
-    {
-        if (generationId != _workflowStateStore.Snapshot.ActiveCaptionGenerationId || string.IsNullOrWhiteSpace(chunk.Text))
-        {
-            return;
-        }
-
-        var cue = new SubtitleCue
-        {
-            Start = TimeSpan.FromSeconds(chunk.StartTimeSec),
-            End = TimeSpan.FromSeconds(chunk.EndTimeSec),
-            SourceText = chunk.Text.Trim(),
-            SourceLanguage = SubtitleCueSessionMapper.ResolveSourceLanguage(chunk.Text, DefaultSourceLanguage)
-        };
-        var activeModelKey = _workflowStateStore.Snapshot.ActiveCaptionGenerationModelKey ?? _workflowStateStore.Snapshot.SelectedTranscriptionModelKey;
-        var transcriptionModel = SubtitleWorkflowCatalog.GetTranscriptionModel(activeModelKey);
-        var transcriptSegment = SubtitleCueSessionMapper.BuildTranscriptSegment(
-            cue,
-            SubtitlePipelineSource.Generated,
-            _workflowStateStore.Snapshot.CurrentVideoPath,
-            activeModelKey,
-            transcriptionModel.DisplayName,
-            DefaultSourceLanguage);
-        var currentSourceLanguage = SubtitleCueSessionMapper.ResolveAggregateSourceLanguage(
-            _mediaSessionCoordinator.Snapshot.LanguageAnalysis.CurrentSourceLanguage,
-            cue.SourceLanguage,
-            DefaultSourceLanguage);
-
-        UpdateWorkflowState(state => state with
-        {
-            OverlayStatus = null
-        });
-        _mediaSessionCoordinator.SetCaptionGenerationState(true);
-        _mediaSessionCoordinator.UpsertTranscriptSegment(transcriptSegment, currentSourceLanguage);
-        ApplyAutomaticTranslationPreferenceIfNeeded();
-
-        if (!string.IsNullOrWhiteSpace(_workflowStateStore.Snapshot.CurrentVideoPath))
-        {
-            CacheGeneratedSubtitles(_workflowStateStore.Snapshot.CurrentVideoPath!, activeModelKey, CurrentCues);
-        }
-
-        PublishStatus(
-            $"Generating captions ({_workflowStateStore.Snapshot.CaptionGenerationModeLabel})... captions ready through {SubtitleCueSessionMapper.FormatClock(cue.End)}.");
-        _ = TranslateCueAsync(transcriptSegment, _captionGenerationCts?.Token ?? CancellationToken.None);
-    }
-
     private async Task TranslateAllCuesAsync(CancellationToken cancellationToken)
     {
         try
@@ -255,18 +209,6 @@ public sealed partial class SubtitleApplicationService
         _translationCts = null;
     }
 
-    private void CancelCaptionGeneration()
-    {
-        _captionGenerationCts?.Cancel();
-        _captionGenerationCts?.Dispose();
-        _captionGenerationCts = null;
-        _mediaSessionCoordinator.SetCaptionGenerationState(false);
-        UpdateWorkflowState(state => state with
-        {
-            ActiveCaptionGenerationModelKey = null
-        });
-    }
-
     private void PublishLocalTranslationPreparationStatus()
     {
         var selection = SubtitleWorkflowCatalog.GetTranslationModel(_workflowStateStore.Snapshot.SelectedTranslationModelKey);
@@ -281,17 +223,6 @@ public sealed partial class SubtitleApplicationService
         {
             PublishStatus(message, message);
         }
-    }
-
-    private void HandleSubtitleModelTransferProgress(ModelTransferProgress progress, int generationId)
-    {
-        if (generationId != _workflowStateStore.Snapshot.ActiveCaptionGenerationId)
-        {
-            return;
-        }
-
-        var message = SubtitleCueSessionMapper.FormatSubtitleModelTransferStatus(progress);
-        PublishStatus(message, message);
     }
 
     private void HandleLocalTranslationRuntimeStatus(LocalTranslationRuntimeStatus status)
