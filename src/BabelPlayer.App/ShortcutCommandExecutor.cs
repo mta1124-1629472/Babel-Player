@@ -22,6 +22,7 @@ public sealed record ShortcutCommandExecutionResult
     public string? StatusMessage { get; init; }
     public bool IsError { get; init; }
     public bool RequiresOverlayInteraction { get; init; }
+    public ShellPreferencesSnapshot? UpdatedPreferences { get; init; }
 }
 
 public sealed class ShortcutCommandExecutor : IShortcutCommandExecutor
@@ -29,17 +30,20 @@ public sealed class ShortcutCommandExecutor : IShortcutCommandExecutor
     private readonly IQueueCommands _queueCommands;
     private readonly IShellPlaybackCommands _shellPlaybackCommands;
     private readonly IShellPreferencesService _shellPreferencesService;
+    private readonly IShellPreferenceCommands _shellPreferenceCommands;
     private readonly ISubtitleWorkflowShellService _subtitleWorkflowService;
 
     public ShortcutCommandExecutor(
         IQueueCommands queueCommands,
         IShellPlaybackCommands shellPlaybackCommands,
         IShellPreferencesService shellPreferencesService,
+        IShellPreferenceCommands shellPreferenceCommands,
         ISubtitleWorkflowShellService subtitleWorkflowService)
     {
         _queueCommands = queueCommands;
         _shellPlaybackCommands = shellPlaybackCommands;
         _shellPreferencesService = shellPreferencesService;
+        _shellPreferenceCommands = shellPreferenceCommands;
         _subtitleWorkflowService = subtitleWorkflowService;
     }
 
@@ -101,10 +105,12 @@ public sealed class ShortcutCommandExecutor : IShortcutCommandExecutor
                 {
                     var current = _shellPreferencesService.Current;
                     var muted = !current.IsMuted;
-                    _shellPreferencesService.ApplyAudioStateChange(new ShellAudioStateChange(current.VolumeLevel, muted));
-                    await _shellPlaybackCommands.ApplyAudioPreferencesAsync(current.VolumeLevel, muted, cancellationToken);
+                    var updatedPreferences = await _shellPreferenceCommands.ApplyAudioStateAsync(
+                        new ShellAudioStateChange(current.VolumeLevel, muted),
+                        cancellationToken);
                     return new ShortcutCommandExecutionResult
                     {
+                        UpdatedPreferences = updatedPreferences,
                         StatusMessage = muted ? "Audio muted." : "Audio unmuted."
                     };
                 }
@@ -164,15 +170,16 @@ public sealed class ShortcutCommandExecutor : IShortcutCommandExecutor
     {
         var current = _shellPreferencesService.Current;
         var clampedRate = Math.Clamp(playbackRate, 0.25, 2.0);
-        _shellPreferencesService.ApplyPlaybackDefaultsChange(new ShellPlaybackDefaultsChange(
+        var updatedPreferences = await _shellPreferenceCommands.ApplyPlaybackDefaultsAsync(new ShellPlaybackDefaultsChange(
             current.HardwareDecodingMode,
             clampedRate,
             current.AudioDelaySeconds,
             current.SubtitleDelaySeconds,
-            current.AspectRatio));
-        await _shellPlaybackCommands.SetPlaybackRateAsync(clampedRate, cancellationToken);
+            current.AspectRatio),
+            cancellationToken);
         return new ShortcutCommandExecutionResult
         {
+            UpdatedPreferences = updatedPreferences,
             StatusMessage = $"Playback speed: {clampedRate:0.00}x."
         };
     }
@@ -181,15 +188,16 @@ public sealed class ShortcutCommandExecutor : IShortcutCommandExecutor
     {
         var current = _shellPreferencesService.Current;
         var updatedDelay = current.SubtitleDelaySeconds + delta;
-        _shellPreferencesService.ApplyPlaybackDefaultsChange(new ShellPlaybackDefaultsChange(
+        var updatedPreferences = await _shellPreferenceCommands.ApplyPlaybackDefaultsAsync(new ShellPlaybackDefaultsChange(
             current.HardwareDecodingMode,
             current.PlaybackRate,
             current.AudioDelaySeconds,
             updatedDelay,
-            current.AspectRatio));
-        await _shellPlaybackCommands.SetSubtitleDelayAsync(updatedDelay, cancellationToken);
+            current.AspectRatio),
+            cancellationToken);
         return new ShortcutCommandExecutionResult
         {
+            UpdatedPreferences = updatedPreferences,
             StatusMessage = $"Subtitle delay: {updatedDelay:+0.00;-0.00;0.00}s"
         };
     }
@@ -198,15 +206,16 @@ public sealed class ShortcutCommandExecutor : IShortcutCommandExecutor
     {
         var current = _shellPreferencesService.Current;
         var updatedDelay = current.AudioDelaySeconds + delta;
-        _shellPreferencesService.ApplyPlaybackDefaultsChange(new ShellPlaybackDefaultsChange(
+        var updatedPreferences = await _shellPreferenceCommands.ApplyPlaybackDefaultsAsync(new ShellPlaybackDefaultsChange(
             current.HardwareDecodingMode,
             current.PlaybackRate,
             updatedDelay,
             current.SubtitleDelaySeconds,
-            current.AspectRatio));
-        await _shellPlaybackCommands.SetAudioDelayAsync(updatedDelay, cancellationToken);
+            current.AspectRatio),
+            cancellationToken);
         return new ShortcutCommandExecutionResult
         {
+            UpdatedPreferences = updatedPreferences,
             StatusMessage = $"Audio delay: {updatedDelay:+0.00;-0.00;0.00}s"
         };
     }

@@ -457,11 +457,10 @@ public sealed class RemainingArchitecturePlanTests
             var queue = new PlaybackQueueController();
             var backend = new FakeShellPlaybackBackend();
             using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-            using var shell = new ShellController(
+            using var shell = CreateShellController(
                 queue,
                 backend,
                 workflow,
-                new LibraryBrowserService(),
                 new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
             var queueResult = shell.EnqueueFiles([firstPath, secondPath], autoplay: true);
@@ -500,11 +499,10 @@ public sealed class RemainingArchitecturePlanTests
         var queue = new PlaybackQueueController();
         var backend = new FakeShellPlaybackBackend();
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
+        using var shell = CreateShellController(
             queue,
             backend,
             workflow,
-            new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
         shell.EnqueueFiles(["first.mp4", "second.mp4"], autoplay: false);
@@ -534,11 +532,10 @@ public sealed class RemainingArchitecturePlanTests
             DurationSeconds = 3600,
             UpdatedAt = DateTimeOffset.UtcNow
         };
-        using var shell = new ShellController(
+        using var shell = CreateShellController(
             queue,
             backend,
             workflow,
-            new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [resumeEntry], persistEntries: _ => { }));
 
         var result = await shell.HandleMediaOpenedAsync(
@@ -547,7 +544,10 @@ public sealed class RemainingArchitecturePlanTests
                 Path = "C:\\Media\\movie.mp4",
                 Duration = TimeSpan.FromMinutes(60)
             },
-            resumeEnabled: true);
+            new ShellPreferencesSnapshot
+            {
+                ResumeEnabled = true
+            });
 
         Assert.Equal(TimeSpan.FromSeconds(125), result.ResumePosition);
         Assert.Equal(TimeSpan.FromSeconds(125), backend.LastSeekPosition);
@@ -562,11 +562,10 @@ public sealed class RemainingArchitecturePlanTests
             ClockSnapshot = new ClockSnapshot(TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(5), 1.0, false, true, DateTimeOffset.UtcNow)
         };
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
+        using var shell = CreateShellController(
             queue,
             backend,
             workflow,
-            new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
         var pauseResult = await shell.EvaluateCaptionStartupGateAsync(
@@ -618,11 +617,10 @@ public sealed class RemainingArchitecturePlanTests
         var queue = new PlaybackQueueController();
         var backend = new FakeShellPlaybackBackend();
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
+        using var shell = CreateShellController(
             queue,
             backend,
             workflow,
-            new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
         var result = await shell.SelectEmbeddedSubtitleTrackAsync(
@@ -648,11 +646,10 @@ public sealed class RemainingArchitecturePlanTests
         var queue = new PlaybackQueueController();
         var backend = new FakeShellPlaybackBackend();
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
+        using var shell = CreateShellController(
             queue,
             backend,
             workflow,
-            new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
         var result = await shell.SelectEmbeddedSubtitleTrackAsync(
@@ -700,11 +697,10 @@ public sealed class RemainingArchitecturePlanTests
                 new ProviderAvailabilityService(credentialFacade, _ => null));
             using var projectionAdapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaSessionCoordinator.Store);
             using var workflow = new SubtitleWorkflowController(service, projectionAdapter, new SubtitlePresentationProjector());
-            using var shell = new ShellController(
+            using var shell = CreateShellController(
                 queue,
                 backend,
                 workflow,
-                new LibraryBrowserService(),
                 new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
             var result = await shell.SelectEmbeddedSubtitleTrackAsync(
@@ -802,11 +798,10 @@ public sealed class RemainingArchitecturePlanTests
         var queue = new PlaybackQueueController();
         var backend = new FakeShellPlaybackBackend();
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
+        using var shell = CreateShellController(
             queue,
             backend,
             workflow,
-            new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
         await backend.LoadAsync("C:\\Media\\movie.mp4", CancellationToken.None);
@@ -853,11 +848,10 @@ public sealed class RemainingArchitecturePlanTests
             var queue = new PlaybackQueueController();
             var backend = new FakeShellPlaybackBackend();
             using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-            using var shell = new ShellController(
+            using var shell = CreateShellController(
                 queue,
                 backend,
                 workflow,
-                new LibraryBrowserService(),
                 new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
             var item = queue.PlayNow(filePath);
@@ -896,11 +890,10 @@ public sealed class RemainingArchitecturePlanTests
             var queue = new PlaybackQueueController();
             var backend = new FakeShellPlaybackBackend();
             using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-            using var shell = new ShellController(
+            using var shell = CreateShellController(
                 queue,
                 backend,
                 workflow,
-                new LibraryBrowserService(),
                 new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
             var item = queue.PlayNow(filePath);
@@ -930,11 +923,10 @@ public sealed class RemainingArchitecturePlanTests
         var queue = new PlaybackQueueController();
         var backend = new FakeShellPlaybackBackend();
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
+        using var shell = CreateShellController(
             queue,
             backend,
             workflow,
-            new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
         await shell.ApplyAudioPreferencesAsync(0.3, true);
@@ -997,11 +989,10 @@ public sealed class RemainingArchitecturePlanTests
             var queue = new PlaybackQueueController();
             var backend = new FakeShellPlaybackBackend();
             using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-            using var shell = new ShellController(
+            using var shell = CreateShellController(
                 queue,
                 backend,
                 workflow,
-                new LibraryBrowserService(),
                 new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
             var item = queue.PlayNow(filePath);
@@ -1039,11 +1030,10 @@ public sealed class RemainingArchitecturePlanTests
         var queue = new PlaybackQueueController();
         var backend = new FakeShellPlaybackBackend();
         using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
+        using var shell = CreateShellController(
             queue,
             backend,
             workflow,
-            new LibraryBrowserService(),
             new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
 
         await shell.SetPlaybackRateAsync(0.75);
@@ -1376,7 +1366,12 @@ public sealed class RemainingArchitecturePlanTests
             },
             aiCredentialCoordinator: new FakeAiCredentialCoordinator());
         await workflow.SelectTranslationModelAsync("cloud:deepl");
-        var executor = new ShortcutCommandExecutor(queueCommands, playbackCommands, preferences, workflow);
+        var executor = new ShortcutCommandExecutor(
+            queueCommands,
+            playbackCommands,
+            preferences,
+            CreateShellPreferenceCommands(preferences, playbackCommands),
+            workflow);
 
         var playPause = await executor.ExecuteAsync("play_pause");
         var speedUp = await executor.ExecuteAsync("speed_up");
@@ -1483,11 +1478,10 @@ public sealed class RemainingArchitecturePlanTests
             var queue = new PlaybackQueueController();
             var backend = new FakeShellPlaybackBackend();
             using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-            using var shell = new ShellController(
+            using var shell = CreateShellController(
                 queue,
                 backend,
                 workflow,
-                new LibraryBrowserService(),
                 new ResumePlaybackService());
 
             var queueReader = Assert.IsAssignableFrom<IQueueProjectionReader>(shell);
@@ -1563,6 +1557,60 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
+    public void MainWindowPartials_DoNotDirectlyMutatePreferencesOrReferenceForbiddenConcreteWorkflowTypes()
+    {
+        var winUiDirectory = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.WinUI"));
+        var mainWindowFiles = Directory.GetFiles(winUiDirectory, "MainWindow*.cs", SearchOption.TopDirectoryOnly);
+
+        foreach (var file in mainWindowFiles)
+        {
+            var source = File.ReadAllText(file);
+
+            Assert.DoesNotContain("_shellPreferencesService.Apply", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("SettingsFacade", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("LibraryBrowserService", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("CredentialFacade", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("ShortcutService", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("SubtitleWorkflowController", source, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void RepoAndAgentInstructions_ReferenceShellBoundaryGuardrailsDocument()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            ".."));
+        var requiredReference = "docs/SHELL_BOUNDARY_GUARDRAILS.md";
+        var instructionFiles = new[]
+        {
+            Path.Combine(repoRoot, "AGENTS.md"),
+            Path.Combine(repoRoot, ".github", "copilot-instructions.md"),
+            Path.Combine(repoRoot, ".github", "agents", "refactor-shell.md"),
+            Path.Combine(repoRoot, ".github", "agents", "seam-test.md"),
+            Path.Combine(repoRoot, ".github", "agents", "new-provider.md")
+        };
+
+        foreach (var file in instructionFiles)
+        {
+            var source = File.ReadAllText(file);
+            Assert.Contains(requiredReference, source, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void ShortcutEditorDialog_Source_NoLongerDirectlyReferencesShortcutService()
     {
         var sourcePath = Path.GetFullPath(Path.Combine(
@@ -1579,6 +1627,29 @@ public sealed class RemainingArchitecturePlanTests
 
         Assert.DoesNotContain("ShortcutService", source, StringComparison.Ordinal);
     }
+
+    private static ShellController CreateShellController(
+        PlaybackQueueController queue,
+        FakeShellPlaybackBackend backend,
+        SubtitleWorkflowController workflow,
+        ResumePlaybackService? resumePlaybackService = null)
+    {
+        return new ShellController(
+            queue,
+            backend,
+            workflow,
+            new LibraryBrowserService(),
+            resumePlaybackService ?? new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }),
+            CreateShellPreferencesService());
+    }
+
+    private static ShellPreferencesService CreateShellPreferencesService()
+        => new(new TestSettingsFacade(new AppPlayerSettings()));
+
+    private static IShellPreferenceCommands CreateShellPreferenceCommands(
+        IShellPreferencesService preferences,
+        IShellPlaybackCommands playbackCommands)
+        => new ShellPreferenceCommands(preferences, playbackCommands, new FakeShortcutProfileService());
 
     private sealed class TestSettingsFacade : SettingsFacade
     {
@@ -1676,6 +1747,26 @@ public sealed class RemainingArchitecturePlanTests
         public void ClearQueue() { }
     }
 
+    private sealed class FakeShortcutProfileService : IShortcutProfileService
+    {
+        public event Action<ShortcutProfileSnapshot>? SnapshotChanged;
+
+        public ShortcutProfileSnapshot Current { get; private set; } = new();
+
+        public ShortcutProfileValidationResult ValidateProfile(ShortcutProfile profile)
+            => new(true, [], [], []);
+
+        public ShortcutProfileNormalizationResult NormalizeProfile(ShortcutProfile profile)
+            => new(profile, [], [], []);
+
+        public ShortcutProfileSnapshot ApplyShortcutProfileChange(ShortcutProfile profile)
+        {
+            Current = new ShortcutProfileSnapshot { Profile = profile };
+            SnapshotChanged?.Invoke(Current);
+            return Current;
+        }
+    }
+
     private sealed class FakeShortcutPlaybackCommands : IShellPlaybackCommands
     {
         public PlaybackStateSnapshot CurrentPlaybackSnapshot { get; set; } = new();
@@ -1683,7 +1774,7 @@ public sealed class RemainingArchitecturePlanTests
         public double LastPlaybackRate { get; private set; } = 1.0;
 
         public Task<bool> LoadPlaybackItemAsync(PlaylistItem? item, ShellLoadMediaOptions options, CancellationToken cancellationToken) => Task.FromResult(item is not null);
-        public Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(PlaybackStateSnapshot snapshot, bool resumeEnabled, CancellationToken cancellationToken = default) => Task.FromResult(new ShellPlaybackOpenResult());
+        public Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(PlaybackStateSnapshot snapshot, ShellPreferencesSnapshot preferences, CancellationToken cancellationToken = default) => Task.FromResult(new ShellPlaybackOpenResult());
         public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled) => new();
         public Task PlayAsync(CancellationToken cancellationToken = default)
         {
@@ -1700,6 +1791,11 @@ public sealed class RemainingArchitecturePlanTests
         public Task SeekRelativeAsync(TimeSpan delta, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task StepFrameAsync(bool forward, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ApplyAudioPreferencesAsync(double volume, bool muted, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task ApplyPlaybackDefaultsAsync(ShellPlaybackDefaultsChange change, CancellationToken cancellationToken = default)
+        {
+            LastPlaybackRate = change.PlaybackRate;
+            return Task.CompletedTask;
+        }
         public Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken = default)
         {
             LastPlaybackRate = speed;
