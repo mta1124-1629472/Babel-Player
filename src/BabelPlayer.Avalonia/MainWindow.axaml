@@ -7,6 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="840"
         x:Class="BabelPlayer.Avalonia.MainWindow"
         Title="Babel Player"
+        Icon="/Assets/BabelPlayer.ico"
         DragDrop.AllowDrop="True"
         Width="1440"
         Height="840"
@@ -233,7 +234,8 @@
                     Grid.Column="1"
                     Background="Black"
                     CornerRadius="12"
-                    ClipToBounds="True">
+                    ClipToBounds="True"
+                    DoubleTapped="VideoSurfaceBorder_DoubleTapped">
                 <local:MpvNativeHost x:Name="VideoHost" />
             </Border>
 
@@ -344,12 +346,13 @@
             </Border>
         </Grid>
 
-        <Border Grid.Row="2"
+        <Border x:Name="TransportBarBorder"
+                Grid.Row="2"
                 Background="#191919"
                 CornerRadius="12"
                 Padding="12"
                 Margin="0,12,0,0">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,120"
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,120,Auto"
                   RowDefinitions="Auto">
                 <Button x:Name="PlayPauseButton"
                         Grid.Row="0"
@@ -388,6 +391,12 @@
                         Minimum="0"
                         Maximum="1"
                         Value="0.8" />
+                <Button x:Name="FullscreenButton"
+                        Grid.Row="0"
+                        Grid.Column="6"
+                        Margin="12,0,0,0"
+                        Content="Fullscreen"
+                        Click="FullscreenButton_Click" />
             </Grid>
         </Border>
     </Grid>

@@ -13,7 +13,10 @@ public sealed record AvaloniaShellDependencies(
     IQueueProjectionReader QueueProjectionReader,
     IShellProjectionReader ShellProjectionReader,
     IShellPreferencesService ShellPreferencesService,
+    IWindowModeService WindowModeService,
     IShellLibraryService ShellLibraryService,
+    IShortcutProfileService ShortcutProfileService,
+    IShortcutCommandExecutor ShortcutCommandExecutor,
     ResumePlaybackService ResumePlaybackService,
     ISubtitleWorkflowShellService SubtitleWorkflowService,
     ICredentialSetupService CredentialSetupService,
@@ -36,6 +39,8 @@ public sealed class AvaloniaShellCompositionRoot
         var filePickerService = new AvaloniaFilePickerService(ownerWindow);
         var credentialDialogService = new AvaloniaCredentialDialogService(ownerWindow);
         var shellPreferencesService = CreateShellPreferencesService();
+        var windowModeService = new AvaloniaWindowModeService(ownerWindow);
+        var shortcutProfileService = new ShortcutProfileService(shellPreferencesService);
         var subtitleInfrastructure = new SubtitleWorkflowInfrastructureFactory().Create(new SubtitleWorkflowInfrastructureRequest(
             credentialFacade,
             credentialDialogService,
@@ -75,6 +80,16 @@ public sealed class AvaloniaShellCompositionRoot
             new LibraryBrowserService(),
             resumePlaybackService,
             shellPreferencesService);
+        var shellPreferenceCommands = new ShellPreferenceCommands(
+            shellPreferencesService,
+            shellController,
+            shortcutProfileService);
+        var shortcutCommandExecutor = new ShortcutCommandExecutor(
+            shellController,
+            shellController,
+            shellPreferencesService,
+            shellPreferenceCommands,
+            subtitleWorkflowController);
 
         return new AvaloniaShellDependencies(
             playbackHostRuntime,
@@ -83,7 +98,10 @@ public sealed class AvaloniaShellCompositionRoot
             shellController,
             shellProjectionReader,
             shellPreferencesService,
+            windowModeService,
             shellLibraryService,
+            shortcutProfileService,
+            shortcutCommandExecutor,
             resumePlaybackService,
             subtitleWorkflowController,
             credentialSetupService,
@@ -94,6 +112,7 @@ public sealed class AvaloniaShellCompositionRoot
                 playbackHostRuntime,
                 playbackBackendCoordinator,
                 subtitleWorkflowController,
+                shortcutProfileService as IDisposable,
                 playbackBackend));
     }
 
@@ -107,9 +126,24 @@ public sealed class AvaloniaShellCompositionRoot
                 false,
                 false,
                 shellPreferencesService.Current.WindowMode));
+            shellPreferencesService.ApplyShortcutProfileChange(new ShellShortcutProfileChange(CreateFirstRunShortcutProfile()));
         }
 
         return shellPreferencesService;
+    }
+
+    private static ShellShortcutProfile CreateFirstRunShortcutProfile()
+    {
+        var profile = ShellShortcutProfile.CreateDefault();
+        profile.Bindings["seek_back_small"] = "Left";
+        profile.Bindings["seek_forward_small"] = "Right";
+        profile.Bindings["volume_up"] = "Up";
+        profile.Bindings["volume_down"] = "Down";
+        profile.Bindings["fullscreen"] = "F";
+        profile.Bindings["exit_fullscreen"] = "Escape";
+        profile.Bindings["mute"] = "M";
+        profile.Bindings["subtitle_toggle"] = "S";
+        return profile;
     }
 
     private sealed class CompositeShellLifetime : IDisposable
@@ -119,6 +153,7 @@ public sealed class AvaloniaShellCompositionRoot
         private readonly IDisposable? _playbackHostRuntime;
         private readonly IDisposable? _playbackBackendCoordinator;
         private readonly IDisposable? _subtitleWorkflowService;
+        private readonly IDisposable? _shortcutProfileService;
         private readonly IAsyncDisposable? _playbackBackend;
         private bool _disposed;
 
@@ -128,6 +163,7 @@ public sealed class AvaloniaShellCompositionRoot
             IDisposable? playbackHostRuntime,
             IDisposable? playbackBackendCoordinator,
             IDisposable? subtitleWorkflowService,
+            IDisposable? shortcutProfileService,
             IAsyncDisposable? playbackBackend)
         {
             _shellController = shellController;
@@ -135,6 +171,7 @@ public sealed class AvaloniaShellCompositionRoot
             _playbackHostRuntime = playbackHostRuntime;
             _playbackBackendCoordinator = playbackBackendCoordinator;
             _subtitleWorkflowService = subtitleWorkflowService;
+            _shortcutProfileService = shortcutProfileService;
             _playbackBackend = playbackBackend;
         }
 
@@ -151,6 +188,7 @@ public sealed class AvaloniaShellCompositionRoot
             _playbackHostRuntime?.Dispose();
             _playbackBackendCoordinator?.Dispose();
             _subtitleWorkflowService?.Dispose();
+            _shortcutProfileService?.Dispose();
             _playbackBackend?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }

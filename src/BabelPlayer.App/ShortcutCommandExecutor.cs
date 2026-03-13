@@ -9,6 +9,7 @@ public enum ShortcutShellAction
 {
     None,
     ToggleFullscreen,
+    ExitFullscreen,
     TogglePictureInPicture,
     ToggleSubtitleVisibility
 }
@@ -69,6 +70,12 @@ public sealed class ShortcutCommandExecutor : IShortcutCommandExecutor
                 await _shellPlaybackCommands.SeekRelativeAsync(TimeSpan.FromSeconds(5), cancellationToken);
                 return new ShortcutCommandExecutionResult { RequiresOverlayInteraction = true };
 
+            case "volume_up":
+                return await AdjustVolumeAsync(0.05, cancellationToken);
+
+            case "volume_down":
+                return await AdjustVolumeAsync(-0.05, cancellationToken);
+
             case "seek_back_large":
                 await _shellPlaybackCommands.SeekRelativeAsync(TimeSpan.FromSeconds(-15), cancellationToken);
                 return new ShortcutCommandExecutionResult { RequiresOverlayInteraction = true };
@@ -95,6 +102,9 @@ public sealed class ShortcutCommandExecutor : IShortcutCommandExecutor
 
             case "fullscreen":
                 return new ShortcutCommandExecutionResult { ShellAction = ShortcutShellAction.ToggleFullscreen };
+
+            case "exit_fullscreen":
+                return new ShortcutCommandExecutionResult { ShellAction = ShortcutShellAction.ExitFullscreen };
 
             case "pip":
                 return new ShortcutCommandExecutionResult { ShellAction = ShortcutShellAction.TogglePictureInPicture };
@@ -179,6 +189,20 @@ public sealed class ShortcutCommandExecutor : IShortcutCommandExecutor
         {
             UpdatedPreferences = updatedPreferences,
             StatusMessage = $"Playback speed: {clampedRate:0.00}x."
+        };
+    }
+
+    private async Task<ShortcutCommandExecutionResult> AdjustVolumeAsync(double delta, CancellationToken cancellationToken)
+    {
+        var current = _shellPreferencesService.Current;
+        var updatedVolume = Math.Clamp(current.VolumeLevel + delta, 0, 1);
+        var updatedPreferences = await _shellPreferenceCommands.ApplyAudioStateAsync(
+            new ShellAudioStateChange(updatedVolume, current.IsMuted),
+            cancellationToken);
+        return new ShortcutCommandExecutionResult
+        {
+            UpdatedPreferences = updatedPreferences,
+            StatusMessage = $"Volume: {updatedVolume:P0}."
         };
     }
 

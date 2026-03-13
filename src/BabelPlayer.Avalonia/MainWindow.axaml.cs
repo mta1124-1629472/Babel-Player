@@ -68,6 +68,7 @@ public partial class MainWindow : Window
         _timelineSlider ??= this.FindControl<Slider>("TimelineSlider");
         _volumeSlider ??= this.FindControl<Slider>("VolumeSlider");
         InitializePanelControls();
+        InitializeShortcutAndWindowModeControls();
 
         if (_videoSurfaceBorder is not null)
         {
@@ -148,6 +149,7 @@ public partial class MainWindow : Window
         _shell.PlaybackHostRuntime.MediaEnded -= HandleMediaEnded;
         _shell.PlaybackHostRuntime.MediaFailed -= HandleMediaFailed;
         DisposePanelControls();
+        DisposeShortcutAndWindowModeControls();
         _shell.ShellPlaybackCommands.FlushResumeTracking();
         _shell.Dispose();
 
@@ -167,6 +169,7 @@ public partial class MainWindow : Window
         }
 
         _ = InitializeSubtitleWorkflowAsync();
+        _ = EnsureWindowModeInitializedAsync();
         SyncSubtitleOverlay();
     }
 

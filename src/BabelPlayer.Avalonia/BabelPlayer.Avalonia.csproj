@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\BabelPlayer.Assets\BabelPlayer.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
@@ -28,6 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AvaloniaResource Include="..\BabelPlayer.Assets\BabelPlayer.ico" Link="Assets\BabelPlayer.ico" />
     <Content Include="native\win-x64\libmpv-2.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>libmpv-2.dll</TargetPath>
