@@ -13,6 +13,7 @@ public sealed record AvaloniaShellDependencies(
     IShellProjectionReader ShellProjectionReader,
     IShellPreferencesService ShellPreferencesService,
     ISubtitleWorkflowShellService SubtitleWorkflowService,
+    ICredentialSetupService CredentialSetupService,
     IFilePickerService FilePickerService,
     IDisposable Lifetime) : IDisposable
 {
@@ -56,6 +57,12 @@ public sealed class AvaloniaShellCompositionRoot
         var playbackHostRuntime = new PlaybackHostRuntimeAdapter(playbackBackend);
         var shellProjectionReader = new ShellProjectionService(mediaSessionCoordinator.Store);
         var playbackQueueController = new PlaybackQueueController();
+        var credentialSetupService = new CredentialSetupService(
+            credentialFacade,
+            subtitleInfrastructure.ProviderAvailabilityService,
+            subtitleInfrastructure.AiCredentialCoordinator,
+            subtitleInfrastructure.RuntimeProvisioner,
+            Environment.GetEnvironmentVariable);
         var shellController = new ShellController(
             playbackQueueController,
             playbackBackend,
@@ -72,6 +79,7 @@ public sealed class AvaloniaShellCompositionRoot
             shellProjectionReader,
             shellPreferencesService,
             subtitleWorkflowController,
+            credentialSetupService,
             filePickerService,
             new CompositeShellLifetime(
                 shellController,

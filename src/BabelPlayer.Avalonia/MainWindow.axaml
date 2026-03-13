@@ -16,16 +16,104 @@
                 CornerRadius="12"
                 Padding="12"
                 Margin="0,0,0,12">
-            <DockPanel LastChildFill="False">
-                <Button x:Name="OpenButton"
-                        Content="Open Video"
-                        Click="OpenButton_Click" />
-                <TextBlock x:Name="StatusTextBlock"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Center"
-                           Foreground="#D0D0D0"
-                           Text="Open a local video to begin playback." />
-            </DockPanel>
+            <StackPanel Spacing="10">
+                <WrapPanel Orientation="Horizontal"
+                           ItemHeight="32"
+                           VerticalAlignment="Center">
+                    <Button x:Name="OpenButton"
+                            Content="Open Video"
+                            Click="OpenButton_Click" />
+                    <TextBlock x:Name="StatusTextBlock"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="#D0D0D0"
+                               Text="Open a local video to begin playback." />
+                </WrapPanel>
+
+                <WrapPanel Orientation="Horizontal"
+                           ItemHeight="36"
+                           VerticalAlignment="Center">
+                    <TextBlock Margin="0,0,8,0"
+                               VerticalAlignment="Center"
+                               Foreground="#D0D0D0"
+                               Text="Transcription" />
+                    <ComboBox x:Name="TranscriptionModelComboBox"
+                              Width="280"
+                              Margin="0,0,16,0"
+                              SelectionChanged="TranscriptionModelComboBox_SelectionChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="local:TranscriptionModelOption">
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            ToolTip.Tip="{Binding AvailabilityHint}">
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               VerticalAlignment="Center" />
+                                    <Border Background="#7A2E14"
+                                            CornerRadius="6"
+                                            Padding="6,2"
+                                            IsVisible="{Binding ShowUnavailableIndicator}">
+                                        <TextBlock Text="API key required"
+                                                   Foreground="#FFD7CC"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Margin="0,0,8,0"
+                               VerticalAlignment="Center"
+                               Foreground="#D0D0D0"
+                               Text="Translation" />
+                    <ComboBox x:Name="TranslationModelComboBox"
+                              Width="300"
+                              Margin="0,0,16,0"
+                              SelectionChanged="TranslationModelComboBox_SelectionChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="local:TranslationModelOption">
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            ToolTip.Tip="{Binding AvailabilityHint}">
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               VerticalAlignment="Center" />
+                                    <Border Background="{Binding BadgeBackground}"
+                                            CornerRadius="6"
+                                            Padding="6,2">
+                                        <TextBlock Text="{Binding BadgeText}"
+                                                   Foreground="{Binding BadgeForeground}"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <ToggleSwitch x:Name="AutoTranslateToggleSwitch"
+                                  OffContent="Auto Translate Off"
+                                  OnContent="Auto Translate On"
+                                  Checked="AutoTranslateToggleSwitch_Changed"
+                                  Unchecked="AutoTranslateToggleSwitch_Changed" />
+
+                    <TextBlock Margin="16,0,8,0"
+                               VerticalAlignment="Center"
+                               Foreground="#D0D0D0"
+                               Text="Subtitle Mode" />
+                    <ComboBox x:Name="SubtitleModeComboBox"
+                              Width="180"
+                              SelectionChanged="SubtitleModeComboBox_SelectionChanged">
+                        <ComboBoxItem Content="Off"
+                                      Tag="Off" />
+                        <ComboBoxItem Content="Source Only"
+                                      Tag="SourceOnly" />
+                        <ComboBoxItem Content="Translation Only"
+                                      Tag="TranslationOnly" />
+                        <ComboBoxItem Content="Dual"
+                                      Tag="Dual" />
+                    </ComboBox>
+                </WrapPanel>
+            </StackPanel>
         </Border>
 
         <Border x:Name="VideoSurfaceBorder"

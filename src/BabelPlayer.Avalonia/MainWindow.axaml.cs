@@ -15,6 +15,10 @@ public partial class MainWindow : Window
     private readonly SubtitleOverlayWindow _subtitleOverlay = new();
     private Border? _videoSurfaceBorder;
     private MpvNativeHost? _videoHost;
+    private ComboBox? _transcriptionModelComboBox;
+    private ComboBox? _translationModelComboBox;
+    private ComboBox? _subtitleModeComboBox;
+    private ToggleSwitch? _autoTranslateToggleSwitch;
     private Button? _playPauseButton;
     private TextBlock? _positionTextBlock;
     private TextBlock? _statusTextBlock;
@@ -23,6 +27,7 @@ public partial class MainWindow : Window
     private bool _backendInitialized;
     private bool _subtitleWorkflowInitialized;
     private bool _startupMediaLoaded;
+    private bool _suppressWorkflowControlEvents;
     private bool _updatingTimelineFromProjection;
     private bool _updatingVolumeFromProjection;
     private string? _currentMediaPath;
@@ -46,6 +51,10 @@ public partial class MainWindow : Window
 
         _videoSurfaceBorder ??= this.FindControl<Border>("VideoSurfaceBorder");
         _videoHost ??= this.FindControl<MpvNativeHost>("VideoHost");
+        _transcriptionModelComboBox ??= this.FindControl<ComboBox>("TranscriptionModelComboBox");
+        _translationModelComboBox ??= this.FindControl<ComboBox>("TranslationModelComboBox");
+        _subtitleModeComboBox ??= this.FindControl<ComboBox>("SubtitleModeComboBox");
+        _autoTranslateToggleSwitch ??= this.FindControl<ToggleSwitch>("AutoTranslateToggleSwitch");
         _playPauseButton ??= this.FindControl<Button>("PlayPauseButton");
         _positionTextBlock ??= this.FindControl<TextBlock>("PositionTextBlock");
         _statusTextBlock ??= this.FindControl<TextBlock>("StatusTextBlock");
@@ -82,6 +91,8 @@ public partial class MainWindow : Window
         _shell.SubtitleWorkflowService.SnapshotChanged += HandleSubtitleSnapshotChanged;
         _shell.SubtitleWorkflowService.StatusChanged -= HandleSubtitleStatusChanged;
         _shell.SubtitleWorkflowService.StatusChanged += HandleSubtitleStatusChanged;
+        _shell.CredentialSetupService.SnapshotChanged -= HandleCredentialSetupSnapshotChanged;
+        _shell.CredentialSetupService.SnapshotChanged += HandleCredentialSetupSnapshotChanged;
         _shell.PlaybackHostRuntime.MediaOpened -= HandleMediaOpened;
         _shell.PlaybackHostRuntime.MediaOpened += HandleMediaOpened;
         _shell.PlaybackHostRuntime.MediaEnded -= HandleMediaEnded;
@@ -91,6 +102,7 @@ public partial class MainWindow : Window
 
         EnsureSubtitlesVisible();
         ApplyProjection(_shell.ShellProjectionReader.Current);
+        ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
         ApplySubtitlePresentation(_shell.SubtitleWorkflowService.Current);
         UpdateStatus(File.Exists(GetBundledTestVideoPath())
             ? $"Loading demo clip: {Path.GetFileName(GetBundledTestVideoPath())}"
@@ -123,6 +135,7 @@ public partial class MainWindow : Window
         _shell.ShellProjectionReader.ProjectionChanged -= HandleProjectionChanged;
         _shell.SubtitleWorkflowService.SnapshotChanged -= HandleSubtitleSnapshotChanged;
         _shell.SubtitleWorkflowService.StatusChanged -= HandleSubtitleStatusChanged;
+        _shell.CredentialSetupService.SnapshotChanged -= HandleCredentialSetupSnapshotChanged;
         _shell.PlaybackHostRuntime.MediaOpened -= HandleMediaOpened;
         _shell.PlaybackHostRuntime.MediaEnded -= HandleMediaEnded;
         _shell.PlaybackHostRuntime.MediaFailed -= HandleMediaFailed;
@@ -212,6 +225,11 @@ public partial class MainWindow : Window
         });
     }
 
+    private void HandleCredentialSetupSnapshotChanged(CredentialSetupSnapshot snapshot)
+    {
+        Dispatcher.UIThread.Post(() => ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current));
+    }
+
     private void HandleMediaOpened(BabelPlayer.App.ShellPlaybackStateSnapshot snapshot)
     {
         Dispatcher.UIThread.Post(async () =>
@@ -285,6 +303,51 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ApplyWorkflowSnapshot(SubtitleWorkflowSnapshot snapshot)
+    {
+        _suppressWorkflowControlEvents = true;
+        try
+        {
+            if (_transcriptionModelComboBox is not null)
+            {
+                var options = BuildTranscriptionModelOptions(snapshot).ToArray();
+                _transcriptionModelComboBox.ItemsSource = options;
+                _transcriptionModelComboBox.SelectedItem = options
+                    .FirstOrDefault(option => string.Equals(option.Key, snapshot.SelectedTranscriptionModelKey, StringComparison.Ordinal));
+            }
+
+            if (_translationModelComboBox is not null)
+            {
+                var options = BuildTranslationModelOptions(snapshot).ToArray();
+                _translationModelComboBox.ItemsSource = options;
+                _translationModelComboBox.SelectedItem = options
+                    .FirstOrDefault(option => string.Equals(option.Key, snapshot.SelectedTranslationModelKey, StringComparison.Ordinal));
+            }
+
+            if (_autoTranslateToggleSwitch is not null)
+            {
+                _autoTranslateToggleSwitch.IsChecked = snapshot.AutoTranslateEnabled;
+            }
+
+            if (_subtitleModeComboBox is not null)
+            {
+                var effectiveMode = GetEffectiveSubtitleRenderMode();
+                foreach (var item in _subtitleModeComboBox.Items.OfType<ComboBoxItem>())
+                {
+                    if (TryParseSubtitleMode(item.Tag as string, out var mode) && mode == effectiveMode)
+                    {
+                        _subtitleModeComboBox.SelectedItem = item;
+                        break;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _suppressWorkflowControlEvents = false;
+        }
+    }
+
     private async void OpenButton_Click(object? sender, RoutedEventArgs e)
     {
         try
@@ -312,6 +375,89 @@ public partial class MainWindow : Window
         {
             UpdateStatus($"Open failed: {ex.Message}");
         }
+    }
+
+    private async void TranscriptionModelComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressWorkflowControlEvents || sender is not ComboBox comboBox || comboBox.SelectedItem is not TranscriptionModelOption option)
+        {
+            return;
+        }
+
+        try
+        {
+            await PrepareForTranscriptionRefreshAsync();
+            var applied = await _shell.SubtitleWorkflowService.SelectTranscriptionModelAsync(option.Key, CancellationToken.None);
+            if (!applied)
+            {
+                ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
+                return;
+            }
+
+            ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus($"Transcription model change failed: {ex.Message}");
+            ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
+        }
+    }
+
+    private async void TranslationModelComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressWorkflowControlEvents || sender is not ComboBox comboBox || comboBox.SelectedItem is not TranslationModelOption option)
+        {
+            return;
+        }
+
+        try
+        {
+            var applied = await _shell.SubtitleWorkflowService.SelectTranslationModelAsync(option.Key, CancellationToken.None);
+            ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
+            if (!applied)
+            {
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus($"Translation model change failed: {ex.Message}");
+            ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
+        }
+    }
+
+    private async void AutoTranslateToggleSwitch_Changed(object? sender, RoutedEventArgs e)
+    {
+        if (_suppressWorkflowControlEvents || _autoTranslateToggleSwitch is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _shell.SubtitleWorkflowService.SetAutoTranslateEnabledAsync(_autoTranslateToggleSwitch.IsChecked == true, CancellationToken.None);
+            ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus($"Auto-translate update failed: {ex.Message}");
+            ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
+        }
+    }
+
+    private void SubtitleModeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressWorkflowControlEvents || sender is not ComboBox comboBox || comboBox.SelectedItem is not ComboBoxItem item)
+        {
+            return;
+        }
+
+        if (!TryParseSubtitleMode(item.Tag as string, out var selectedMode))
+        {
+            return;
+        }
+
+        ApplySubtitleRenderMode(selectedMode);
     }
 
     private async void PlayPauseButton_Click(object? sender, RoutedEventArgs e)
@@ -477,6 +623,7 @@ public partial class MainWindow : Window
         {
             await _shell.SubtitleWorkflowService.InitializeAsync(CancellationToken.None);
             _subtitleWorkflowInitialized = true;
+            ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
             ApplySubtitlePresentation(_shell.SubtitleWorkflowService.Current);
         }
         catch (Exception ex)
@@ -558,6 +705,7 @@ public partial class MainWindow : Window
 
     private void ApplySubtitlePresentation(SubtitleWorkflowSnapshot snapshot)
     {
+        ApplyWorkflowSnapshot(snapshot);
         var preferences = _shell.ShellPreferencesService.Current;
         var presentation = _shell.SubtitleWorkflowService.GetOverlayPresentation(
             preferences.SubtitleRenderMode,
@@ -585,9 +733,64 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task PrepareForTranscriptionRefreshAsync()
+    {
+        var result = await _shell.ShellPlaybackCommands.PrepareForTranscriptionRefreshAsync(
+            _shell.SubtitleWorkflowService.Current,
+            _shell.ShellPlaybackCommands.CurrentPlaybackSnapshot,
+            CancellationToken.None);
+        if (!string.IsNullOrWhiteSpace(result.StatusMessage))
+        {
+            UpdateStatus(result.StatusMessage);
+        }
+    }
+
+    private void ApplySubtitleRenderMode(ShellSubtitleRenderMode selectedMode)
+    {
+        var currentPreferences = _shell.ShellPreferencesService.Current;
+        var result = _shell.SubtitleWorkflowService.SelectRenderMode(selectedMode, currentPreferences.SubtitleRenderMode);
+        _shell.ShellPreferencesService.ApplySubtitlePresentationChange(new ShellSubtitlePresentationChange(
+            result.RequestedRenderMode,
+            currentPreferences.SubtitleStyle));
+        ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
+        ApplySubtitlePresentation(_shell.SubtitleWorkflowService.Current);
+        UpdateStatus($"Subtitle mode: {FormatSubtitleRenderModeLabel(result.EffectiveRenderMode)}.");
+    }
+
     private static string GetBundledTestVideoPath()
     {
         return Path.Combine(AppContext.BaseDirectory, "Assets", "test-video.mp4");
+    }
+
+    private ShellSubtitleRenderMode GetEffectiveSubtitleRenderMode()
+    {
+        return _shell.SubtitleWorkflowService.GetEffectiveRenderMode(_shell.ShellPreferencesService.Current.SubtitleRenderMode);
+    }
+
+    private IEnumerable<TranscriptionModelOption> BuildTranscriptionModelOptions(SubtitleWorkflowSnapshot snapshot)
+    {
+        var models = snapshot.AvailableTranscriptionModels.Count > 0
+            ? snapshot.AvailableTranscriptionModels
+            : SubtitleWorkflowCatalog.AvailableTranscriptionModels;
+
+        return models.Select(selection => new TranscriptionModelOption
+        {
+            Selection = selection,
+            Availability = _shell.CredentialSetupService.GetTranscriptionAvailability(selection)
+        });
+    }
+
+    private IEnumerable<TranslationModelOption> BuildTranslationModelOptions(SubtitleWorkflowSnapshot snapshot)
+    {
+        var models = snapshot.AvailableTranslationModels.Count > 0
+            ? snapshot.AvailableTranslationModels
+            : SubtitleWorkflowCatalog.AvailableTranslationModels;
+
+        return models.Select(selection => new TranslationModelOption
+        {
+            Selection = selection,
+            Availability = _shell.CredentialSetupService.GetTranslationAvailability(selection)
+        });
     }
 
     private static IReadOnlyList<string> GetDroppedVideoPaths(IDataObject data)
@@ -621,5 +824,22 @@ public partial class MainWindow : Window
         var value = TimeSpan.FromSeconds(Math.Max(totalSeconds, 0));
         var totalMinutes = (int)value.TotalMinutes;
         return $"{totalMinutes:00}:{value.Seconds:00}";
+    }
+
+    private static bool TryParseSubtitleMode(string? value, out ShellSubtitleRenderMode mode)
+    {
+        return Enum.TryParse(value, ignoreCase: false, out mode);
+    }
+
+    private static string FormatSubtitleRenderModeLabel(ShellSubtitleRenderMode mode)
+    {
+        return mode switch
+        {
+            ShellSubtitleRenderMode.Off => "off",
+            ShellSubtitleRenderMode.SourceOnly => "source only",
+            ShellSubtitleRenderMode.TranslationOnly => "translation only",
+            ShellSubtitleRenderMode.Dual => "dual",
+            _ => "translation only"
+        };
     }
 }
