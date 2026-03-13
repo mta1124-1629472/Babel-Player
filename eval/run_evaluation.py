@@ -88,7 +88,7 @@ def write_summary(result: dict[str, Any], summary_path: Path) -> None:
     summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run(data_path: Path, output_json: Path, summary_md: Path) -> None:
+def run(data_path: Path, output_json: Path, summary_md: Path, strict: bool) -> None:
     evaluators = build_evaluators()
     evaluator_config = build_evaluator_config()
 
@@ -97,7 +97,7 @@ def run(data_path: Path, output_json: Path, summary_md: Path) -> None:
         evaluators=evaluators,
         evaluator_config=evaluator_config,
         output_path=str(output_json),
-        fail_on_evaluator_errors=False,
+        fail_on_evaluator_errors=strict,
         tags={
             "workspace": "Babel-Player",
             "evaluation_profile": "subtitle_quality_local",
@@ -119,9 +119,10 @@ def main() -> None:
     parser.add_argument("--data", default="eval/outputs/responses.jsonl", help="Input JSONL with collected responses")
     parser.add_argument("--output-json", default="eval/outputs/evaluation_result.json", help="Evaluation JSON output")
     parser.add_argument("--summary", default="eval/outputs/evaluation_summary.md", help="Markdown summary output")
+    parser.add_argument("--strict", action="store_true", help="Fail the run if any evaluator errors occur")
     args = parser.parse_args()
 
-    run(Path(args.data), Path(args.output_json), Path(args.summary))
+    run(Path(args.data), Path(args.output_json), Path(args.summary), strict=args.strict)
 
 
 if __name__ == "__main__":

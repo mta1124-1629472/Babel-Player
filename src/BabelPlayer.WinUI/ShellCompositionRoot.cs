@@ -97,12 +97,14 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
         var shellProjectionService = new ShellProjectionService(mediaSessionCoordinator.Store);
         var libraryBrowserService = new LibraryBrowserService();
         var resumePlaybackService = new ResumePlaybackService();
+        var settingsFacade = new SettingsFacade();
         var shellController = new ShellController(
             playbackQueueController,
             playbackBackend,
             subtitleWorkflowController,
             libraryBrowserService,
             resumePlaybackService,
+            settingsFacade,
             _logFactory);
 
         var stageCoordinator = new StageCoordinator(

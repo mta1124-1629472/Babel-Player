@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -26,19 +27,33 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write("\n")
 
 
+def _parse_adapter_command(command: str) -> list[str]:
+    tokens = shlex.split(command, posix=False)
+    if len(tokens) == 0:
+        raise ValueError("Adapter command cannot be empty.")
+    return tokens
+
+
 def run_adapter(command: str, item: dict[str, Any]) -> dict[str, Any]:
     """Executes an external adapter command that reads JSON on stdin and returns JSON on stdout."""
     started = time.perf_counter()
+    parsed_command = _parse_adapter_command(command)
     completed = subprocess.run(
-        command,
+        parsed_command,
         input=json.dumps(item, ensure_ascii=True),
         capture_output=True,
         text=True,
-        shell=True,
+        shell=False,
         check=True,
     )
     latency_ms = (time.perf_counter() - started) * 1000.0
-    result = json.loads(completed.stdout)
+    try:
+        result = json.loads(completed.stdout)
+    except json.JSONDecodeError as ex:
+        stderr = completed.stderr.strip()
+        raise ValueError(
+            f"Adapter output was not valid JSON. stderr='{stderr}' stdout='{completed.stdout.strip()}'"
+        ) from ex
     result["latency_ms"] = float(result.get("latency_ms", latency_ms))
     return result
 

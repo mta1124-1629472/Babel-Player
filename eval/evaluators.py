@@ -17,7 +17,7 @@ class LatencyEvaluator:
     good_threshold_ms: float = 2500.0
     hard_limit_ms: float = 12000.0
 
-    def __call__(self, *, latency_ms: Any = None, **_: Any) -> dict[str, float | bool]:
+    def __call__(self, *, latency_ms: Any = None) -> dict[str, float | bool]:
         try:
             latency = float(latency_ms)
         except (TypeError, ValueError):
@@ -51,7 +51,6 @@ class OutputFormatValidityEvaluator:
         generated_cues: Any = None,
         generated_transcript: Any = None,
         generated_translation: Any = None,
-        **_: Any,
     ) -> dict[str, float | bool]:
         declared_valid = bool(output_format_valid)
         cues_valid = self._validate_cues(generated_cues)
@@ -95,7 +94,7 @@ class OutputFormatValidityEvaluator:
 class SubtitleTimingAlignmentEvaluator:
     penalty_cap_ms: float = 4000.0
 
-    def __call__(self, *, generated_cues: Any = None, reference_cues: Any = None, **_: Any) -> dict[str, float | bool]:
+    def __call__(self, *, generated_cues: Any = None, reference_cues: Any = None) -> dict[str, float | bool]:
         if not isinstance(generated_cues, list) or not isinstance(reference_cues, list):
             return {
                 "timing_alignment_score": 0.0,
@@ -123,6 +122,11 @@ class SubtitleTimingAlignmentEvaluator:
             errors.append(abs(gen_start - ref_start))
             errors.append(abs(gen_end - ref_end))
 
+        cue_count_delta = abs(len(generated_cues) - len(reference_cues))
+        if cue_count_delta > 0:
+            # Penalize missing/extra cues by adding synthetic boundary errors.
+            errors.extend([self.penalty_cap_ms] * (2 * cue_count_delta))
+
         if pair_count == 0:
             return {
                 "timing_alignment_score": 0.0,
@@ -136,7 +140,8 @@ class SubtitleTimingAlignmentEvaluator:
         return {
             "timing_alignment_score": round(max(score, 0.0), 6),
             "timing_alignment_mae_ms": round(mae, 3),
-            "timing_alignment_pass": mae <= 750.0,
+            "timing_alignment_pass": mae <= 750.0 and cue_count_delta == 0,
+            "timing_alignment_cue_count_delta": cue_count_delta,
         }
 
     @staticmethod
@@ -153,7 +158,7 @@ class SubtitleTimingAlignmentEvaluator:
 class TokenF1Evaluator:
     metric_name: str
 
-    def __call__(self, *, response: Any = None, ground_truth: Any = None, **_: Any) -> dict[str, float]:
+    def __call__(self, *, response: Any = None, ground_truth: Any = None) -> dict[str, float]:
         response_tokens = _tokenize(_safe_text(response))
         truth_tokens = _tokenize(_safe_text(ground_truth))
         score = self._token_f1(response_tokens, truth_tokens)

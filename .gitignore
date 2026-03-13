@@ -362,3 +362,13 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 .aider*
+*.prompt.md
+docs/DEVELOPMENT_RULES.md
+docs/MODULE_MAP.md
+
+# Eval generated outputs
+eval/outputs/
+
+# Python virtual environments
+.venv/
+.venv*/

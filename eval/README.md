@@ -42,7 +42,7 @@ Each JSONL row should include at least these fields:
 pip install -r eval/requirements.txt
 ```
 
-2. Collect responses using an adapter command that reads one JSON item from stdin and returns one JSON object on stdout:
+1. Collect responses using an adapter command that reads one JSON item from stdin and returns one JSON object on stdout:
 
 ```powershell
 python eval/collect_responses.py --dataset eval/datasets/sample_eval_dataset.jsonl --output eval/outputs/responses.jsonl --adapter-cmd "python your_adapter.py"
@@ -50,7 +50,7 @@ python eval/collect_responses.py --dataset eval/datasets/sample_eval_dataset.jso
 
 If you do not pass `--adapter-cmd`, mock mode copies generated fields from references.
 
-3. Run evaluation:
+1. Run evaluation:
 
 ```powershell
 python eval/run_evaluation.py --data eval/outputs/responses.jsonl --output-json eval/outputs/evaluation_result.json --summary eval/outputs/evaluation_summary.md

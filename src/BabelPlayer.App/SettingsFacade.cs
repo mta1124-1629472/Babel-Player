@@ -2,9 +2,9 @@ using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
 
-public sealed class SettingsFacade
+public class SettingsFacade
 {
-    public AppPlayerSettings Load() => AppStateStore.LoadSettings();
+    public virtual AppPlayerSettings Load() => AppStateStore.LoadSettings();
 
     public void Save(AppPlayerSettings settings) => AppStateStore.SaveSettings(settings);
 

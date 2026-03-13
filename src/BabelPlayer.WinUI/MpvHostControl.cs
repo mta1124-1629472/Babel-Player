@@ -87,7 +87,7 @@ public sealed class MpvHostControl : UserControl
             _pendingPath = value?.LocalPath;
             if (_initialized && _playbackBackend is not null && !string.IsNullOrWhiteSpace(_pendingPath))
             {
-                _ = _playbackBackend.LoadAsync(_pendingPath, _lifetimeCts.Token);
+                FireAndForget(_playbackBackend.LoadAsync(_pendingPath, _lifetimeCts.Token));
             }
 
             RaisePlaybackStateChanged();
@@ -101,7 +101,7 @@ public sealed class MpvHostControl : UserControl
         {
             if (_initialized && _playbackBackend is not null)
             {
-                _ = _playbackBackend.SeekAsync(value, _lifetimeCts.Token);
+                FireAndForget(_playbackBackend.SeekAsync(value, _lifetimeCts.Token));
             }
         }
     }
@@ -116,7 +116,7 @@ public sealed class MpvHostControl : UserControl
             _volume = Math.Clamp(value, 0, 1);
             if (_initialized && _playbackBackend is not null)
             {
-                _ = _playbackBackend.SetVolumeAsync(_volume, _lifetimeCts.Token);
+                FireAndForget(_playbackBackend.SetVolumeAsync(_volume, _lifetimeCts.Token));
             }
         }
     }
@@ -151,31 +151,31 @@ public sealed class MpvHostControl : UserControl
         {
             if (_playbackBackend is not null)
             {
-                _ = _playbackBackend.SetHardwareDecodingModeAsync(value, _lifetimeCts.Token);
+                FireAndForget(_playbackBackend.SetHardwareDecodingModeAsync(value, _lifetimeCts.Token));
             }
         }
     }
 
-    public void Play() => _ = _playbackBackend?.PlayAsync(_lifetimeCts.Token);
+    public void Play() => FireAndForget(_playbackBackend?.PlayAsync(_lifetimeCts.Token));
 
     public Task PlayAsync() => _playbackBackend?.PlayAsync(_lifetimeCts.Token) ?? Task.CompletedTask;
 
-    public void Pause() => _ = _playbackBackend?.PauseAsync(_lifetimeCts.Token);
+    public void Pause() => FireAndForget(_playbackBackend?.PauseAsync(_lifetimeCts.Token));
 
     public Task PauseAsync() => _playbackBackend?.PauseAsync(_lifetimeCts.Token) ?? Task.CompletedTask;
 
-    public void Stop() => _ = _playbackBackend?.StopAsync(_lifetimeCts.Token);
+    public void Stop() => FireAndForget(_playbackBackend?.StopAsync(_lifetimeCts.Token));
 
-    public void SeekBy(TimeSpan delta) => _ = _playbackBackend?.SeekRelativeAsync(delta, _lifetimeCts.Token);
+    public void SeekBy(TimeSpan delta) => FireAndForget(_playbackBackend?.SeekRelativeAsync(delta, _lifetimeCts.Token));
 
-    public void StepFrame(bool forward) => _ = _playbackBackend?.StepFrameAsync(forward, _lifetimeCts.Token);
+    public void StepFrame(bool forward) => FireAndForget(_playbackBackend?.StepFrameAsync(forward, _lifetimeCts.Token));
 
-    public void SetPlaybackRate(double speed) => _ = _playbackBackend?.SetPlaybackRateAsync(speed, _lifetimeCts.Token);
+    public void SetPlaybackRate(double speed) => FireAndForget(_playbackBackend?.SetPlaybackRateAsync(speed, _lifetimeCts.Token));
 
     public void SetMute(bool muted)
     {
         _isMuted = muted;
-        _ = _playbackBackend?.SetMuteAsync(muted, _lifetimeCts.Token);
+        FireAndForget(_playbackBackend?.SetMuteAsync(muted, _lifetimeCts.Token));
     }
 
     public void SetPreferredAudioState(double volume, bool muted)
@@ -184,23 +184,23 @@ public sealed class MpvHostControl : UserControl
         _isMuted = muted;
     }
 
-    public void SelectAudioTrack(int? trackId) => _ = _playbackBackend?.SetAudioTrackAsync(trackId, _lifetimeCts.Token);
+    public void SelectAudioTrack(int? trackId) => FireAndForget(_playbackBackend?.SetAudioTrackAsync(trackId, _lifetimeCts.Token));
 
-    public void SelectSubtitleTrack(int? trackId) => _ = _playbackBackend?.SetSubtitleTrackAsync(trackId, _lifetimeCts.Token);
+    public void SelectSubtitleTrack(int? trackId) => FireAndForget(_playbackBackend?.SetSubtitleTrackAsync(trackId, _lifetimeCts.Token));
 
-    public void SetAudioDelay(double seconds) => _ = _playbackBackend?.SetAudioDelayAsync(seconds, _lifetimeCts.Token);
+    public void SetAudioDelay(double seconds) => FireAndForget(_playbackBackend?.SetAudioDelayAsync(seconds, _lifetimeCts.Token));
 
-    public void SetSubtitleDelay(double seconds) => _ = _playbackBackend?.SetSubtitleDelayAsync(seconds, _lifetimeCts.Token);
+    public void SetSubtitleDelay(double seconds) => FireAndForget(_playbackBackend?.SetSubtitleDelayAsync(seconds, _lifetimeCts.Token));
 
-    public void SetAspectRatio(string aspectRatio) => _ = _playbackBackend?.SetAspectRatioAsync(aspectRatio, _lifetimeCts.Token);
+    public void SetAspectRatio(string aspectRatio) => FireAndForget(_playbackBackend?.SetAspectRatioAsync(aspectRatio, _lifetimeCts.Token));
 
-    public void SetHardwareDecodingMode(HardwareDecodingMode mode) => _ = _playbackBackend?.SetHardwareDecodingModeAsync(mode, _lifetimeCts.Token);
+    public void SetHardwareDecodingMode(HardwareDecodingMode mode) => FireAndForget(_playbackBackend?.SetHardwareDecodingModeAsync(mode, _lifetimeCts.Token));
 
-    public void SetZoom(double zoom) => _ = _playbackBackend?.SetZoomAsync(zoom, _lifetimeCts.Token);
+    public void SetZoom(double zoom) => FireAndForget(_playbackBackend?.SetZoomAsync(zoom, _lifetimeCts.Token));
 
-    public void SetPan(double x, double y) => _ = _playbackBackend?.SetPanAsync(x, y, _lifetimeCts.Token);
+    public void SetPan(double x, double y) => FireAndForget(_playbackBackend?.SetPanAsync(x, y, _lifetimeCts.Token));
 
-    public void Screenshot(string outputPath) => _ = _playbackBackend?.ScreenshotAsync(outputPath, _lifetimeCts.Token);
+    public void Screenshot(string outputPath) => FireAndForget(_playbackBackend?.ScreenshotAsync(outputPath, _lifetimeCts.Token));
 
     public void RequestHostBoundsSync() => QueueHostBoundsSync();
 
@@ -386,7 +386,6 @@ public sealed class MpvHostControl : UserControl
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            _ = SyncPreferredAudioStateAsync("media-opened");
             RaisePlaybackStateChanged();
             MediaOpened?.Invoke();
         });
@@ -808,6 +807,26 @@ public sealed class MpvHostControl : UserControl
 
             _owner.EndNativeHostSuppression();
             _owner = null;
+        }
+    }
+
+    private async void FireAndForget(Task? task, [System.Runtime.CompilerServices.CallerMemberName] string? caller = null)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Unhandled error in fire-and-forget call from {caller}.", ex);
         }
     }
 }
