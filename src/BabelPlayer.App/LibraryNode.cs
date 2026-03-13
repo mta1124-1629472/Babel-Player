@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 
 namespace BabelPlayer.App;
 
-public sealed class LibraryNode : ObservableObject
+public sealed class LibraryNode : BindableObject
 {
     private bool _isExpanded;
 

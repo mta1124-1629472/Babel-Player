@@ -1,5 +1,3 @@
-using BabelPlayer.Core;
-
 namespace BabelPlayer.App;
 
 public interface IShortcutProfileService
@@ -8,18 +6,18 @@ public interface IShortcutProfileService
 
     ShortcutProfileSnapshot Current { get; }
 
-    ShortcutProfileValidationResult ValidateProfile(ShortcutProfile profile);
+    ShortcutProfileValidationResult ValidateProfile(ShellShortcutProfile profile);
 
-    ShortcutProfileNormalizationResult NormalizeProfile(ShortcutProfile profile);
+    ShortcutProfileNormalizationResult NormalizeProfile(ShellShortcutProfile profile);
 
-    ShortcutProfileSnapshot ApplyShortcutProfileChange(ShortcutProfile profile);
+    ShortcutProfileSnapshot ApplyShortcutProfileChange(ShellShortcutProfile profile);
 }
 
 public sealed record ShortcutBindingSnapshot(string CommandId, string NormalizedGesture);
 
 public sealed record ShortcutProfileSnapshot
 {
-    public ShortcutProfile Profile { get; init; } = ShortcutProfile.CreateDefault();
+    public ShellShortcutProfile Profile { get; init; } = ShellShortcutProfile.CreateDefault();
     public IReadOnlyList<ShortcutBindingSnapshot> NormalizedBindings { get; init; } = [];
     public IReadOnlyList<ShortcutConflict> Conflicts { get; init; } = [];
     public IReadOnlyList<string> UnsupportedCommandIds { get; init; } = [];
@@ -34,7 +32,7 @@ public sealed record ShortcutProfileValidationResult(
     IReadOnlyList<string> InvalidCommandIds);
 
 public sealed record ShortcutProfileNormalizationResult(
-    ShortcutProfile Profile,
+    ShellShortcutProfile Profile,
     IReadOnlyList<ShortcutBindingSnapshot> NormalizedBindings,
     IReadOnlyList<string> UnsupportedCommandIds,
     IReadOnlyList<string> InvalidCommandIds);
@@ -62,12 +60,12 @@ public sealed class ShortcutProfileService : IShortcutProfileService, IDisposabl
 
     public ShortcutProfileSnapshot Current { get; private set; }
 
-    public ShortcutProfileValidationResult ValidateProfile(ShortcutProfile profile)
+    public ShortcutProfileValidationResult ValidateProfile(ShellShortcutProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
 
         var normalization = NormalizeProfile(profile);
-        var normalizedProfile = new ShortcutProfile
+        var normalizedProfile = new ShellShortcutProfile
         {
             Bindings = normalization.NormalizedBindings.ToDictionary(
                 binding => binding.CommandId,
@@ -84,7 +82,7 @@ public sealed class ShortcutProfileService : IShortcutProfileService, IDisposabl
             normalization.InvalidCommandIds);
     }
 
-    public ShortcutProfileNormalizationResult NormalizeProfile(ShortcutProfile profile)
+    public ShortcutProfileNormalizationResult NormalizeProfile(ShellShortcutProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
 
@@ -131,7 +129,7 @@ public sealed class ShortcutProfileService : IShortcutProfileService, IDisposabl
             invalidCommandIds);
     }
 
-    public ShortcutProfileSnapshot ApplyShortcutProfileChange(ShortcutProfile profile)
+    public ShortcutProfileSnapshot ApplyShortcutProfileChange(ShellShortcutProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
 
@@ -150,10 +148,10 @@ public sealed class ShortcutProfileService : IShortcutProfileService, IDisposabl
         SnapshotChanged?.Invoke(Current);
     }
 
-    private ShortcutProfileSnapshot BuildSnapshot(ShortcutProfile profile)
+    private ShortcutProfileSnapshot BuildSnapshot(ShellShortcutProfile profile)
     {
         var normalization = NormalizeProfile(profile);
-        var normalizedProfile = new ShortcutProfile
+        var normalizedProfile = new ShellShortcutProfile
         {
             Bindings = normalization.NormalizedBindings.ToDictionary(
                 binding => binding.CommandId,

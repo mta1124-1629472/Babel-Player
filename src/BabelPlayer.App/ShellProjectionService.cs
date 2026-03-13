@@ -1,6 +1,11 @@
-using BabelPlayer.Core;
-
 namespace BabelPlayer.App;
+
+public interface IShellProjectionReader
+{
+    event Action<ShellProjectionSnapshot>? ProjectionChanged;
+
+    ShellProjectionSnapshot Current { get; }
+}
 
 public sealed record ShellProjectionSnapshot
 {
@@ -32,7 +37,7 @@ public sealed record ShellTransportProjection
 
 public sealed record ShellSelectedTracksProjection
 {
-    public IReadOnlyList<MediaTrackInfo> Tracks { get; init; } = [];
+    public IReadOnlyList<ShellMediaTrack> Tracks { get; init; } = [];
     public int? ActiveAudioTrackId { get; init; }
     public int? ActiveSubtitleTrackId { get; init; }
 }
@@ -50,7 +55,7 @@ public sealed record ShellSubtitleProjection
     public bool IsAutoTranslateEnabled { get; init; }
 }
 
-public sealed class ShellProjectionService : IDisposable
+public sealed class ShellProjectionService : IShellProjectionReader, IDisposable
 {
     private readonly IMediaSessionStore _store;
 
@@ -117,18 +122,7 @@ public sealed class ShellProjectionService : IDisposable
         return new ShellSelectedTracksProjection
         {
             Tracks = snapshot.Streams.Tracks
-                .Select(track => new MediaTrackInfo
-                {
-                    Id = track.Id,
-                    FfIndex = track.FfIndex,
-                    Kind = track.Kind,
-                    Title = track.Title,
-                    Language = track.Language,
-                    Codec = track.Codec,
-                    IsEmbedded = track.IsEmbedded,
-                    IsSelected = track.IsSelected,
-                    IsTextBased = track.IsTextBased
-                })
+                .Select(track => track.ToShell())
                 .ToArray(),
             ActiveAudioTrackId = snapshot.Streams.ActiveAudioTrackId,
             ActiveSubtitleTrackId = snapshot.Streams.ActiveSubtitleTrackId

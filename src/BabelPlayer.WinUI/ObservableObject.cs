@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace BabelPlayer.App;
+namespace BabelPlayer.WinUI;
 
 public abstract class ObservableObject : INotifyPropertyChanged
 {

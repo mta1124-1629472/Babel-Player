@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using BabelPlayer.App;
-using BabelPlayer.Core;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -17,7 +16,7 @@ public sealed class MpvHostControl : UserControl
     private readonly Grid _root;
     private readonly CancellationTokenSource _lifetimeCts = new();
     private Window? _ownerWindow;
-    private IPlaybackBackend? _playbackBackend;
+    private IPlaybackHostRuntime? _playbackRuntime;
     private string? _pendingPath;
     private double _volume = 0.8;
     private bool _isMuted;
@@ -39,7 +38,7 @@ public sealed class MpvHostControl : UserControl
 
     public MpvHostControl(IBabelLogFactory? logFactory = null)
     {
-        _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("shell.mpvHost");
+        _logger = (logFactory ?? NullAppLogFactory.Instance).CreateLogger("shell.mpvHost");
         _root = new Grid();
         Content = _root;
         _hostBoundsRetryTimer = new DispatcherTimer
@@ -66,13 +65,13 @@ public sealed class MpvHostControl : UserControl
     public event Action? FullscreenExitRequested;
     public event Func<ShortcutKeyInput, bool>? ShortcutKeyPressed;
 
-    public void Initialize(Window ownerWindow, IPlaybackBackend playbackBackend)
+    public void Initialize(Window ownerWindow, IPlaybackHostRuntime playbackRuntime)
     {
         ArgumentNullException.ThrowIfNull(ownerWindow);
-        ArgumentNullException.ThrowIfNull(playbackBackend);
+        ArgumentNullException.ThrowIfNull(playbackRuntime);
 
         _ownerWindow = ownerWindow;
-        AttachPlaybackBackend(playbackBackend);
+        AttachPlaybackRuntime(playbackRuntime);
         if (IsLoaded)
         {
             EnsureInitialized();
@@ -81,13 +80,13 @@ public sealed class MpvHostControl : UserControl
 
     public Uri? Source
     {
-        get => string.IsNullOrWhiteSpace(_playbackBackend?.State.Path) ? null : new Uri(_playbackBackend.State.Path);
+        get => string.IsNullOrWhiteSpace(_playbackRuntime?.Current.Path) ? null : new Uri(_playbackRuntime.Current.Path);
         set
         {
             _pendingPath = value?.LocalPath;
-            if (_initialized && _playbackBackend is not null && !string.IsNullOrWhiteSpace(_pendingPath))
+            if (_initialized && _playbackRuntime is not null && !string.IsNullOrWhiteSpace(_pendingPath))
             {
-                FireAndForget(_playbackBackend.LoadAsync(_pendingPath, _lifetimeCts.Token));
+                FireAndForget(_playbackRuntime.LoadAsync(_pendingPath, _lifetimeCts.Token));
             }
 
             RaisePlaybackStateChanged();
@@ -96,27 +95,27 @@ public sealed class MpvHostControl : UserControl
 
     public TimeSpan Position
     {
-        get => _playbackBackend?.Clock.Current.Position ?? TimeSpan.Zero;
+        get => _playbackRuntime?.Current.Position ?? TimeSpan.Zero;
         set
         {
-            if (_initialized && _playbackBackend is not null)
+            if (_initialized && _playbackRuntime is not null)
             {
-                FireAndForget(_playbackBackend.SeekAsync(value, _lifetimeCts.Token));
+                FireAndForget(_playbackRuntime.SeekAsync(value, _lifetimeCts.Token));
             }
         }
     }
 
     public double Volume
     {
-        get => _initialized && _playbackBackend is not null
-            ? Math.Clamp(_playbackBackend.State.Volume, 0, 1)
+        get => _initialized && _playbackRuntime is not null
+            ? Math.Clamp(_playbackRuntime.Current.Volume, 0, 1)
             : _volume;
         set
         {
             _volume = Math.Clamp(value, 0, 1);
-            if (_initialized && _playbackBackend is not null)
+            if (_initialized && _playbackRuntime is not null)
             {
-                FireAndForget(_playbackBackend.SetVolumeAsync(_volume, _lifetimeCts.Token));
+                FireAndForget(_playbackRuntime.SetVolumeAsync(_volume, _lifetimeCts.Token));
             }
         }
     }
@@ -125,57 +124,57 @@ public sealed class MpvHostControl : UserControl
     {
         get
         {
-            var duration = _playbackBackend?.Clock.Current.Duration ?? TimeSpan.Zero;
+            var duration = _playbackRuntime?.Current.Duration ?? TimeSpan.Zero;
             return duration > TimeSpan.Zero ? new Duration(duration) : Duration.Automatic;
         }
     }
 
     public PlaybackStateSnapshot Snapshot => BuildPlaybackSnapshot();
 
-    public double PlaybackRate => _playbackBackend?.Clock.Current.Rate ?? 1.0;
+    public double PlaybackRate => _playbackRuntime?.Current.Speed ?? 1.0;
 
-    public bool IsMuted => _initialized && _playbackBackend is not null
-        ? _playbackBackend.State.IsMuted
+    public bool IsMuted => _initialized && _playbackRuntime is not null
+        ? _playbackRuntime.Current.IsMuted
         : _isMuted;
 
-    public bool IsPaused => _playbackBackend?.Clock.Current.IsPaused ?? true;
+    public bool IsPaused => _playbackRuntime?.Current.IsPaused ?? true;
 
-    public IReadOnlyList<MediaTrackInfo> CurrentTracks => _playbackBackend?.CurrentTracks ?? [];
+    public IReadOnlyList<MediaTrackInfo> CurrentTracks => _playbackRuntime?.CurrentTracks ?? [];
 
-    public string ActiveHardwareDecoder => _playbackBackend?.State.ActiveHardwareDecoder ?? string.Empty;
+    public string ActiveHardwareDecoder => _playbackRuntime?.Current.ActiveHardwareDecoder ?? string.Empty;
 
     public HardwareDecodingMode HardwareDecodingMode
     {
-        get => _playbackBackend?.HardwareDecodingMode ?? HardwareDecodingMode.AutoSafe;
+        get => _playbackRuntime?.HardwareDecodingMode ?? HardwareDecodingMode.AutoSafe;
         set
         {
-            if (_playbackBackend is not null)
+            if (_playbackRuntime is not null)
             {
-                FireAndForget(_playbackBackend.SetHardwareDecodingModeAsync(value, _lifetimeCts.Token));
+                FireAndForget(_playbackRuntime.SetHardwareDecodingModeAsync(value, _lifetimeCts.Token));
             }
         }
     }
 
-    public void Play() => FireAndForget(_playbackBackend?.PlayAsync(_lifetimeCts.Token));
+    public void Play() => FireAndForget(_playbackRuntime?.PlayAsync(_lifetimeCts.Token));
 
-    public Task PlayAsync() => _playbackBackend?.PlayAsync(_lifetimeCts.Token) ?? Task.CompletedTask;
+    public Task PlayAsync() => _playbackRuntime?.PlayAsync(_lifetimeCts.Token) ?? Task.CompletedTask;
 
-    public void Pause() => FireAndForget(_playbackBackend?.PauseAsync(_lifetimeCts.Token));
+    public void Pause() => FireAndForget(_playbackRuntime?.PauseAsync(_lifetimeCts.Token));
 
-    public Task PauseAsync() => _playbackBackend?.PauseAsync(_lifetimeCts.Token) ?? Task.CompletedTask;
+    public Task PauseAsync() => _playbackRuntime?.PauseAsync(_lifetimeCts.Token) ?? Task.CompletedTask;
 
-    public void Stop() => FireAndForget(_playbackBackend?.StopAsync(_lifetimeCts.Token));
+    public void Stop() => FireAndForget(_playbackRuntime?.StopAsync(_lifetimeCts.Token));
 
-    public void SeekBy(TimeSpan delta) => FireAndForget(_playbackBackend?.SeekRelativeAsync(delta, _lifetimeCts.Token));
+    public void SeekBy(TimeSpan delta) => FireAndForget(_playbackRuntime?.SeekRelativeAsync(delta, _lifetimeCts.Token));
 
-    public void StepFrame(bool forward) => FireAndForget(_playbackBackend?.StepFrameAsync(forward, _lifetimeCts.Token));
+    public void StepFrame(bool forward) => FireAndForget(_playbackRuntime?.StepFrameAsync(forward, _lifetimeCts.Token));
 
-    public void SetPlaybackRate(double speed) => FireAndForget(_playbackBackend?.SetPlaybackRateAsync(speed, _lifetimeCts.Token));
+    public void SetPlaybackRate(double speed) => FireAndForget(_playbackRuntime?.SetPlaybackRateAsync(speed, _lifetimeCts.Token));
 
     public void SetMute(bool muted)
     {
         _isMuted = muted;
-        FireAndForget(_playbackBackend?.SetMuteAsync(muted, _lifetimeCts.Token));
+        FireAndForget(_playbackRuntime?.SetMuteAsync(muted, _lifetimeCts.Token));
     }
 
     public void SetPreferredAudioState(double volume, bool muted)
@@ -184,23 +183,23 @@ public sealed class MpvHostControl : UserControl
         _isMuted = muted;
     }
 
-    public void SelectAudioTrack(int? trackId) => FireAndForget(_playbackBackend?.SetAudioTrackAsync(trackId, _lifetimeCts.Token));
+    public void SelectAudioTrack(int? trackId) => FireAndForget(_playbackRuntime?.SetAudioTrackAsync(trackId, _lifetimeCts.Token));
 
-    public void SelectSubtitleTrack(int? trackId) => FireAndForget(_playbackBackend?.SetSubtitleTrackAsync(trackId, _lifetimeCts.Token));
+    public void SelectSubtitleTrack(int? trackId) => FireAndForget(_playbackRuntime?.SetSubtitleTrackAsync(trackId, _lifetimeCts.Token));
 
-    public void SetAudioDelay(double seconds) => FireAndForget(_playbackBackend?.SetAudioDelayAsync(seconds, _lifetimeCts.Token));
+    public void SetAudioDelay(double seconds) => FireAndForget(_playbackRuntime?.SetAudioDelayAsync(seconds, _lifetimeCts.Token));
 
-    public void SetSubtitleDelay(double seconds) => FireAndForget(_playbackBackend?.SetSubtitleDelayAsync(seconds, _lifetimeCts.Token));
+    public void SetSubtitleDelay(double seconds) => FireAndForget(_playbackRuntime?.SetSubtitleDelayAsync(seconds, _lifetimeCts.Token));
 
-    public void SetAspectRatio(string aspectRatio) => FireAndForget(_playbackBackend?.SetAspectRatioAsync(aspectRatio, _lifetimeCts.Token));
+    public void SetAspectRatio(string aspectRatio) => FireAndForget(_playbackRuntime?.SetAspectRatioAsync(aspectRatio, _lifetimeCts.Token));
 
-    public void SetHardwareDecodingMode(HardwareDecodingMode mode) => FireAndForget(_playbackBackend?.SetHardwareDecodingModeAsync(mode, _lifetimeCts.Token));
+    public void SetHardwareDecodingMode(HardwareDecodingMode mode) => FireAndForget(_playbackRuntime?.SetHardwareDecodingModeAsync(mode, _lifetimeCts.Token));
 
-    public void SetZoom(double zoom) => FireAndForget(_playbackBackend?.SetZoomAsync(zoom, _lifetimeCts.Token));
+    public void SetZoom(double zoom) => FireAndForget(_playbackRuntime?.SetZoomAsync(zoom, _lifetimeCts.Token));
 
-    public void SetPan(double x, double y) => FireAndForget(_playbackBackend?.SetPanAsync(x, y, _lifetimeCts.Token));
+    public void SetPan(double x, double y) => FireAndForget(_playbackRuntime?.SetPanAsync(x, y, _lifetimeCts.Token));
 
-    public void Screenshot(string outputPath) => FireAndForget(_playbackBackend?.ScreenshotAsync(outputPath, _lifetimeCts.Token));
+    public void Screenshot(string outputPath) => FireAndForget(_playbackRuntime?.ScreenshotAsync(outputPath, _lifetimeCts.Token));
 
     public void RequestHostBoundsSync() => QueueHostBoundsSync();
 
@@ -233,39 +232,37 @@ public sealed class MpvHostControl : UserControl
             : new RectInt32(x, y, width, height);
     }
 
-    private void AttachPlaybackBackend(IPlaybackBackend playbackBackend)
+    private void AttachPlaybackRuntime(IPlaybackHostRuntime playbackRuntime)
     {
-        if (ReferenceEquals(_playbackBackend, playbackBackend) && _eventsAttached)
+        if (ReferenceEquals(_playbackRuntime, playbackRuntime) && _eventsAttached)
         {
             return;
         }
 
-        DetachPlaybackBackend();
-        _playbackBackend = playbackBackend;
-        _playbackBackend.StateChanged += PlaybackBackend_StateChanged;
-        _playbackBackend.TracksChanged += PlaybackBackend_TracksChanged;
-        _playbackBackend.MediaOpened += PlaybackBackend_MediaOpened;
-        _playbackBackend.MediaEnded += PlaybackBackend_MediaEnded;
-        _playbackBackend.MediaFailed += PlaybackBackend_MediaFailed;
-        _playbackBackend.RuntimeInstallProgress += PlaybackBackend_RuntimeInstallProgress;
-        _playbackBackend.Clock.Changed += PlaybackClock_Changed;
+        DetachPlaybackRuntime();
+        _playbackRuntime = playbackRuntime;
+        _playbackRuntime.PlaybackStateChanged += PlaybackRuntime_StateChanged;
+        _playbackRuntime.TracksChanged += PlaybackRuntime_TracksChanged;
+        _playbackRuntime.MediaOpened += PlaybackRuntime_MediaOpened;
+        _playbackRuntime.MediaEnded += PlaybackRuntime_MediaEnded;
+        _playbackRuntime.MediaFailed += PlaybackRuntime_MediaFailed;
+        _playbackRuntime.RuntimeInstallProgress += PlaybackRuntime_RuntimeInstallProgress;
         _eventsAttached = true;
     }
 
-    private void DetachPlaybackBackend()
+    private void DetachPlaybackRuntime()
     {
-        if (_playbackBackend is null || !_eventsAttached)
+        if (_playbackRuntime is null || !_eventsAttached)
         {
             return;
         }
 
-        _playbackBackend.StateChanged -= PlaybackBackend_StateChanged;
-        _playbackBackend.TracksChanged -= PlaybackBackend_TracksChanged;
-        _playbackBackend.MediaOpened -= PlaybackBackend_MediaOpened;
-        _playbackBackend.MediaEnded -= PlaybackBackend_MediaEnded;
-        _playbackBackend.MediaFailed -= PlaybackBackend_MediaFailed;
-        _playbackBackend.RuntimeInstallProgress -= PlaybackBackend_RuntimeInstallProgress;
-        _playbackBackend.Clock.Changed -= PlaybackClock_Changed;
+        _playbackRuntime.PlaybackStateChanged -= PlaybackRuntime_StateChanged;
+        _playbackRuntime.TracksChanged -= PlaybackRuntime_TracksChanged;
+        _playbackRuntime.MediaOpened -= PlaybackRuntime_MediaOpened;
+        _playbackRuntime.MediaEnded -= PlaybackRuntime_MediaEnded;
+        _playbackRuntime.MediaFailed -= PlaybackRuntime_MediaFailed;
+        _playbackRuntime.RuntimeInstallProgress -= PlaybackRuntime_RuntimeInstallProgress;
         _eventsAttached = false;
     }
 
@@ -288,7 +285,7 @@ public sealed class MpvHostControl : UserControl
 
     private void EnsureInitialized()
     {
-        if (_initialized || _ownerWindow is null || _playbackBackend is null)
+        if (_initialized || _ownerWindow is null || _playbackRuntime is null)
         {
             return;
         }
@@ -333,7 +330,7 @@ public sealed class MpvHostControl : UserControl
         _initialized = true;
         QueueHostBoundsSync();
 
-        _ = _playbackBackend.InitializeAsync(_hwnd, _lifetimeCts.Token)
+        _ = _playbackRuntime.InitializeAsync(_hwnd, _lifetimeCts.Token)
             .ContinueWith(async task =>
             {
                 if (task.IsFaulted)
@@ -349,7 +346,7 @@ public sealed class MpvHostControl : UserControl
                 await SyncPreferredAudioStateAsync("backend-initialized").ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(_pendingPath))
                 {
-                    await _playbackBackend.LoadAsync(_pendingPath, _lifetimeCts.Token);
+                    await _playbackRuntime.LoadAsync(_pendingPath, _lifetimeCts.Token);
                 }
 
                 DispatcherQueue.TryEnqueue(() =>
@@ -364,7 +361,7 @@ public sealed class MpvHostControl : UserControl
             .Unwrap();
     }
 
-    private void PlaybackBackend_StateChanged(PlaybackBackendState state)
+    private void PlaybackRuntime_StateChanged(PlaybackStateSnapshot state)
     {
         DispatcherQueue.TryEnqueue(() =>
         {
@@ -377,12 +374,12 @@ public sealed class MpvHostControl : UserControl
         });
     }
 
-    private void PlaybackBackend_TracksChanged(IReadOnlyList<MediaTrackInfo> tracks)
+    private void PlaybackRuntime_TracksChanged(IReadOnlyList<MediaTrackInfo> tracks)
     {
         DispatcherQueue.TryEnqueue(() => TracksChanged?.Invoke(tracks));
     }
 
-    private void PlaybackBackend_MediaOpened()
+    private void PlaybackRuntime_MediaOpened(PlaybackStateSnapshot snapshot)
     {
         DispatcherQueue.TryEnqueue(() =>
         {
@@ -391,24 +388,19 @@ public sealed class MpvHostControl : UserControl
         });
     }
 
-    private void PlaybackBackend_MediaEnded()
+    private void PlaybackRuntime_MediaEnded(PlaybackStateSnapshot snapshot)
     {
         DispatcherQueue.TryEnqueue(() => MediaEnded?.Invoke());
     }
 
-    private void PlaybackBackend_MediaFailed(string message)
+    private void PlaybackRuntime_MediaFailed(string message)
     {
         DispatcherQueue.TryEnqueue(() => MediaFailed?.Invoke(message));
     }
 
-    private void PlaybackBackend_RuntimeInstallProgress(RuntimeInstallProgress progress)
+    private void PlaybackRuntime_RuntimeInstallProgress(RuntimeInstallProgress progress)
     {
         DispatcherQueue.TryEnqueue(() => RuntimeInstallProgress?.Invoke(progress));
-    }
-
-    private void PlaybackClock_Changed(ClockSnapshot snapshot)
-    {
-        DispatcherQueue.TryEnqueue(RaisePlaybackStateChanged);
     }
 
     private void RaisePlaybackStateChanged()
@@ -418,31 +410,15 @@ public sealed class MpvHostControl : UserControl
 
     private PlaybackStateSnapshot BuildPlaybackSnapshot()
     {
-        var clock = _playbackBackend?.Clock.Current ?? new ClockSnapshot(TimeSpan.Zero, TimeSpan.Zero, 1.0, true, false, DateTimeOffset.UtcNow);
-        var state = _playbackBackend?.State ?? new PlaybackBackendState();
-        return new PlaybackStateSnapshot
-        {
-            Path = state.Path ?? _pendingPath,
-            Position = clock.Position,
-            Duration = clock.Duration,
-            Speed = clock.Rate,
-            IsPaused = clock.IsPaused,
-            IsSeekable = clock.IsSeekable,
-            HasVideo = state.HasVideo,
-            HasAudio = state.HasAudio,
-            VideoWidth = state.VideoWidth,
-            VideoHeight = state.VideoHeight,
-            VideoDisplayWidth = state.VideoDisplayWidth,
-            VideoDisplayHeight = state.VideoDisplayHeight,
-            IsMuted = state.IsMuted,
-            Volume = state.Volume,
-            ActiveHardwareDecoder = state.ActiveHardwareDecoder
-        };
+        var current = _playbackRuntime?.Current;
+        return current is not null
+            ? current with { Path = current.Path ?? _pendingPath }
+            : new PlaybackStateSnapshot { Path = _pendingPath };
     }
 
     private async Task SyncPreferredAudioStateAsync(string reason)
     {
-        if (!_initialized || _playbackBackend is null || _lifetimeCts.IsCancellationRequested)
+        if (!_initialized || _playbackRuntime is null || _lifetimeCts.IsCancellationRequested)
         {
             return;
         }
@@ -455,9 +431,9 @@ public sealed class MpvHostControl : UserControl
                     ("reason", reason),
                     ("volume", _volume),
                     ("muted", _isMuted),
-                    ("path", _playbackBackend.State.Path)));
-            await _playbackBackend.SetVolumeAsync(_volume, _lifetimeCts.Token).ConfigureAwait(false);
-            await _playbackBackend.SetMuteAsync(_isMuted, _lifetimeCts.Token).ConfigureAwait(false);
+                    ("path", _playbackRuntime.Current.Path)));
+            await _playbackRuntime.SetVolumeAsync(_volume, _lifetimeCts.Token).ConfigureAwait(false);
+            await _playbackRuntime.SetMuteAsync(_isMuted, _lifetimeCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -471,7 +447,7 @@ public sealed class MpvHostControl : UserControl
                     ("reason", reason),
                     ("volume", _volume),
                     ("muted", _isMuted),
-                    ("path", _playbackBackend.State.Path)));
+                    ("path", _playbackRuntime.Current.Path)));
         }
     }
 
@@ -521,7 +497,7 @@ public sealed class MpvHostControl : UserControl
                 ("width", bounds.Width),
                 ("height", bounds.Height),
                 ("visible", isVisible),
-                ("path", _playbackBackend?.State.Path)));
+                ("path", _playbackRuntime?.Current.Path)));
 
         NativeMethods.ShowWindow(_hwnd, isVisible ? NativeMethods.SW_SHOW : NativeMethods.SW_HIDE);
         if (isVisible)

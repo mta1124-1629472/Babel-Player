@@ -7,16 +7,16 @@ public readonly record struct DisplayBounds(int X, int Y, int Width, int Height)
 
 public interface IPlaybackHost
 {
-    event Action<PlaybackStateSnapshot>? StateChanged;
-    event Action<IReadOnlyList<MediaTrackInfo>>? TracksChanged;
+    event Action<ShellPlaybackStateSnapshot>? StateChanged;
+    event Action<IReadOnlyList<ShellMediaTrack>>? TracksChanged;
     event Action? MediaOpened;
     event Action? MediaEnded;
     event Action<string>? MediaFailed;
-    event Action<RuntimeInstallProgress>? RuntimeInstallProgress;
+    event Action<ShellRuntimeInstallProgress>? RuntimeInstallProgress;
 
-    PlaybackStateSnapshot Snapshot { get; }
-    IReadOnlyList<MediaTrackInfo> CurrentTracks { get; }
-    HardwareDecodingMode HardwareDecodingMode { get; set; }
+    ShellPlaybackStateSnapshot Snapshot { get; }
+    IReadOnlyList<ShellMediaTrack> CurrentTracks { get; }
+    ShellHardwareDecodingMode HardwareDecodingMode { get; set; }
 
     Task InitializeAsync(nint hostHandle, CancellationToken cancellationToken);
     Task LoadAsync(string path, CancellationToken cancellationToken);
@@ -38,9 +38,9 @@ public interface IPlaybackHost
 
 public interface IWindowModeService
 {
-    PlaybackWindowMode CurrentMode { get; }
+    ShellPlaybackWindowMode CurrentMode { get; }
     DisplayBounds GetCurrentDisplayBounds(bool workArea = false);
-    Task SetModeAsync(PlaybackWindowMode mode, CancellationToken cancellationToken = default);
+    Task SetModeAsync(ShellPlaybackWindowMode mode, CancellationToken cancellationToken = default);
 }
 
 public interface IFilePickerService
@@ -57,7 +57,7 @@ public interface ICredentialDialogService
     Task<string?> PromptForApiKeyAsync(string title, string message, string submitButtonText, CancellationToken cancellationToken = default);
     Task<(string ApiKey, string Region)?> PromptForApiKeyWithRegionAsync(string title, string message, string submitButtonText, CancellationToken cancellationToken = default);
     Task<LlamaCppBootstrapChoice> PromptForLlamaCppBootstrapChoiceAsync(string title, string message, CancellationToken cancellationToken = default);
-    Task<ShortcutProfile?> EditShortcutsAsync(ShortcutProfile currentProfile, CancellationToken cancellationToken = default);
+    Task<ShellShortcutProfile?> EditShortcutsAsync(ShellShortcutProfile currentProfile, CancellationToken cancellationToken = default);
 }
 
 public interface IRuntimeBootstrapService

@@ -4,7 +4,6 @@ using System.Linq;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using BabelPlayer.App;
-using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -574,7 +573,7 @@ public sealed partial class MainWindow
         VideoStageSurface.SizeChanged += VideoStageSurface_SizeChanged;
         PlaybackStage.Children.Add(VideoStageSurface);
 
-        PlayerHost = new PlaybackHostAdapter(_playbackBackend, _videoPresenter);
+        PlayerHost = new PlaybackHostAdapter(_playbackHostRuntime, _videoPresenter);
         VideoStageSurface.Child = PlayerHost.View;
 
         DecoderBadge = new Border

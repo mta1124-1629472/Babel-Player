@@ -1,4 +1,3 @@
-using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 
 namespace BabelPlayer.WinUI;
@@ -6,15 +5,13 @@ namespace BabelPlayer.WinUI;
 public partial class App : Application
 {
     private Window? _window;
-    private readonly BabelLogManager _logManager;
-    private readonly AppDiagnosticsContext _diagnosticsContext;
+    private readonly IAppTelemetryBootstrap _telemetry;
     private readonly IBabelLogger _logger;
 
     public App()
     {
-        _logManager = new BabelLogManager(BabelLogOptions.CreateDefault());
-        _diagnosticsContext = new AppDiagnosticsContext();
-        _logger = _logManager.CreateLogger("app");
+        _telemetry = new AppTelemetryBootstrap();
+        _logger = _telemetry.LogFactory.CreateLogger("app");
         InitializeComponent();
         RegisterGlobalExceptionHandlers();
         _logger.LogInfo("Application constructed.");
@@ -25,15 +22,15 @@ public partial class App : Application
         _logger.LogInfo("Application launch starting.");
         try
         {
-            _window = new MainWindow(new ShellCompositionRoot(_logManager, _diagnosticsContext));
+            _window = new MainWindow(new ShellCompositionRoot(_telemetry));
             _window.Closed += Window_Closed;
             _window.Activate();
             _logger.LogInfo("Application launch completed.");
         }
         catch (Exception ex)
         {
-            _logManager.WriteUnhandledException("app.launch", ex, _diagnosticsContext.Snapshot);
-            _logManager.Flush(TimeSpan.FromSeconds(1));
+            _telemetry.WriteUnhandledException("app.launch", ex);
+            _telemetry.Flush(TimeSpan.FromSeconds(1));
             throw;
         }
     }
@@ -48,41 +45,36 @@ public partial class App : Application
     private void Window_Closed(object sender, WindowEventArgs args)
     {
         _logger.LogInfo("Application shutdown starting.");
-        _logManager.Flush(TimeSpan.FromSeconds(2));
-        _logManager.Dispose();
+        _telemetry.Flush(TimeSpan.FromSeconds(2));
+        _telemetry.Dispose();
     }
 
     private void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
-        _logManager.WriteUnhandledException(
+        _telemetry.WriteUnhandledException(
             "app.unhandled.ui",
             e.Exception,
-            _diagnosticsContext.Snapshot,
             BabelLogContext.Create(("handled", e.Handled)));
-        _logManager.Flush(TimeSpan.FromSeconds(1));
+        _telemetry.Flush(TimeSpan.FromSeconds(1));
     }
 
     private void CurrentDomain_UnhandledException(object? sender, System.UnhandledExceptionEventArgs e)
     {
         if (e.ExceptionObject is Exception exception)
         {
-            _logManager.WriteUnhandledException(
+            _telemetry.WriteUnhandledException(
                 "app.unhandled.domain",
                 exception,
-                _diagnosticsContext.Snapshot,
                 BabelLogContext.Create(("isTerminating", e.IsTerminating)));
         }
 
-        _logManager.Flush(TimeSpan.FromSeconds(1));
+        _telemetry.Flush(TimeSpan.FromSeconds(1));
     }
 
     private void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
-        _logManager.WriteUnhandledException(
-            "app.unobserved-task",
-            e.Exception,
-            _diagnosticsContext.Snapshot);
-        _logManager.Flush(TimeSpan.FromSeconds(1));
+        _telemetry.WriteUnhandledException("app.unobserved-task", e.Exception);
+        _telemetry.Flush(TimeSpan.FromSeconds(1));
         e.SetObserved();
     }
 }

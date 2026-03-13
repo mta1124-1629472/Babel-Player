@@ -1,5 +1,4 @@
 using BabelPlayer.App;
-using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
 
@@ -13,7 +12,7 @@ public interface IVideoPresenter
 
     FrameworkElement View { get; }
 
-    void Initialize(Window ownerWindow, IPlaybackBackend playbackBackend);
+    void Initialize(Window ownerWindow, IPlaybackHostRuntime playbackRuntime);
     void RequestBoundsSync();
     IDisposable SuppressPresentation();
     RectInt32 GetStageBounds(FrameworkElement relativeTo);

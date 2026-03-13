@@ -1,5 +1,3 @@
-using BabelPlayer.Core;
-
 namespace BabelPlayer.App;
 
 public interface IShellPreferenceCommands
@@ -12,7 +10,7 @@ public interface IShellPreferenceCommands
 
     ShellPreferencesSnapshot ApplySubtitlePresentationChange(ShellSubtitlePresentationChange change);
 
-    ShellPreferencesSnapshot ApplyShortcutProfileChange(ShortcutProfile profile);
+    ShellPreferencesSnapshot ApplyShortcutProfileChange(ShellShortcutProfile profile);
 
     ShellResumePreferenceResult ApplyResumeEnabledChange(bool enabled);
 }
@@ -57,7 +55,7 @@ public sealed class ShellPreferenceCommands : IShellPreferenceCommands
     public ShellPreferencesSnapshot ApplySubtitlePresentationChange(ShellSubtitlePresentationChange change)
         => _shellPreferencesService.ApplySubtitlePresentationChange(change);
 
-    public ShellPreferencesSnapshot ApplyShortcutProfileChange(ShortcutProfile profile)
+    public ShellPreferencesSnapshot ApplyShortcutProfileChange(ShellShortcutProfile profile)
     {
         _shortcutProfileService.ApplyShortcutProfileChange(profile);
         return _shellPreferencesService.Current;

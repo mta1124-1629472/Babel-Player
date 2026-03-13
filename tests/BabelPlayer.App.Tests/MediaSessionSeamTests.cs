@@ -1,5 +1,6 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using SubtitleRenderMode = BabelPlayer.App.ShellSubtitleRenderMode;
 
 namespace BabelPlayer.App.Tests;
 

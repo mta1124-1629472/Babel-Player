@@ -1,5 +1,9 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using CoreAppDiagnosticsSnapshot = BabelPlayer.Core.AppDiagnosticsSnapshot;
+using CorePlaybackDiagnosticsSummary = BabelPlayer.Core.PlaybackDiagnosticsSummary;
+using CoreQueueDiagnosticsSummary = BabelPlayer.Core.QueueDiagnosticsSummary;
+using CoreSubtitleWorkflowDiagnosticsSummary = BabelPlayer.Core.SubtitleWorkflowDiagnosticsSummary;
 
 namespace BabelPlayer.App.Tests;
 
@@ -11,7 +15,7 @@ public sealed class LoggingInfrastructureTests
         var context = new AppDiagnosticsContext();
 
         context.UpdateWindowMode("Fullscreen");
-        context.UpdatePlayback(new PlaybackDiagnosticsSummary
+        context.UpdatePlayback(new CorePlaybackDiagnosticsSummary
         {
             CurrentMediaPath = @"C:\media\clip.mp4",
             CurrentMediaDisplayName = "clip.mp4",
@@ -26,14 +30,14 @@ public sealed class LoggingInfrastructureTests
             VideoDisplayWidth = 1920,
             VideoDisplayHeight = 1080
         });
-        context.UpdateQueue(new QueueDiagnosticsSummary
+        context.UpdateQueue(new CoreQueueDiagnosticsSummary
         {
             NowPlayingDisplayName = "clip.mp4",
             NowPlayingPath = @"C:\media\clip.mp4",
             UpNextCount = 3,
             HistoryCount = 1
         });
-        context.UpdateSubtitleWorkflow(new SubtitleWorkflowDiagnosticsSummary
+        context.UpdateSubtitleWorkflow(new CoreSubtitleWorkflowDiagnosticsSummary
         {
             SubtitleSource = "Generated",
             IsCaptionGenerationInProgress = true,
@@ -158,23 +162,23 @@ public sealed class LoggingInfrastructureTests
         manager.WriteUnhandledException(
             "app.unhandled",
             new InvalidOperationException("fatal"),
-            new AppDiagnosticsSnapshot
+            new CoreAppDiagnosticsSnapshot
             {
                 WindowMode = "Standard",
-                Playback = new PlaybackDiagnosticsSummary
+                Playback = new CorePlaybackDiagnosticsSummary
                 {
                     CurrentMediaPath = @"C:\media\clip.mp4",
                     CurrentMediaDisplayName = "clip.mp4",
                     Position = TimeSpan.FromSeconds(14),
                     Duration = TimeSpan.FromSeconds(90)
                 },
-                Queue = new QueueDiagnosticsSummary
+                Queue = new CoreQueueDiagnosticsSummary
                 {
                     NowPlayingDisplayName = "clip.mp4",
                     UpNextCount = 2,
                     HistoryCount = 1
                 },
-            SubtitleWorkflow = new SubtitleWorkflowDiagnosticsSummary
+            SubtitleWorkflow = new CoreSubtitleWorkflowDiagnosticsSummary
             {
                 SubtitleSource = "Sidecar",
                 SelectedTranscriptionModelKey = "local:base-multilingual",

@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
-using BabelPlayer.Core;
 
-namespace BabelPlayer.App;
+namespace BabelPlayer.WinUI;
 
 public sealed class QueuePaneViewModel : ObservableObject
 {

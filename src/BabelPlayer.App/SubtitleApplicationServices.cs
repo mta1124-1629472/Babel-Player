@@ -122,7 +122,7 @@ public sealed class DefaultCaptionGenerator : ICaptionGenerator
             Mode = selection.Provider == TranscriptionProvider.Cloud ? CaptionTranscriptionMode.Cloud : CaptionTranscriptionMode.Local,
             LanguageHint = languageHint,
             OpenAiApiKey = _context.EnvironmentVariableReader("OPENAI_API_KEY") ?? _context.CredentialFacade.GetOpenAiApiKey(),
-            LocalModelType = selection.LocalModelType,
+            LocalModelType = SubtitleWorkflowCatalog.ResolveLocalModelType(selection.LocalModelKey),
             CloudModel = selection.CloudModel
         };
         _logger.LogInfo("Caption generation starting.", BabelLogContext.Create(("videoPath", videoPath), ("modelKey", selection.Key), ("provider", selection.Provider), ("languageHint", languageHint)));

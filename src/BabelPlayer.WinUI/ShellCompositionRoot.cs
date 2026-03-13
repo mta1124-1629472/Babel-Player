@@ -1,5 +1,4 @@
 using BabelPlayer.App;
-using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System.IO;
@@ -18,41 +17,36 @@ public interface IShellCompositionRoot
 
 public sealed record ShellDependencies
 {
-    public required IBabelLogFactory LogFactory { get; init; }
-    public required IAppDiagnosticsContext DiagnosticsContext { get; init; }
+    public required IAppLogFactory LogFactory { get; init; }
+    public required IAppDiagnosticsState DiagnosticsContext { get; init; }
     public required IFilePickerService FilePickerService { get; init; }
     public required WinUIWindowModeService WindowModeService { get; init; }
-    public required WinUICredentialDialogService CredentialDialogService { get; init; }
-    public required IRuntimeBootstrapService RuntimeBootstrapService { get; init; }
-    public required MediaSessionCoordinator MediaSessionCoordinator { get; init; }
+    public required ICredentialDialogService CredentialDialogService { get; init; }
     public required ISubtitleWorkflowShellService SubtitleWorkflowService { get; init; }
-    public required IPlaybackBackend PlaybackBackend { get; init; }
-    public required PlaybackBackendCoordinator PlaybackBackendCoordinator { get; init; }
+    public required IPlaybackHostRuntime PlaybackHostRuntime { get; init; }
     public required IVideoPresenter VideoPresenter { get; init; }
     public required ISubtitlePresenter SubtitlePresenter { get; init; }
     public required IShellPreferencesService ShellPreferencesService { get; init; }
     public required IShellPreferenceCommands ShellPreferenceCommands { get; init; }
     public required IShellLibraryService ShellLibraryService { get; init; }
-    public required ShellProjectionService ShellProjectionService { get; init; }
+    public required IShellProjectionReader ShellProjectionReader { get; init; }
     public required IQueueProjectionReader QueueProjectionReader { get; init; }
     public required IQueueCommands QueueCommands { get; init; }
     public required IShellPlaybackCommands ShellPlaybackCommands { get; init; }
     public required ICredentialSetupService CredentialSetupService { get; init; }
     public required IShortcutProfileService ShortcutProfileService { get; init; }
     public required IShortcutCommandExecutor ShortcutCommandExecutor { get; init; }
-    public required IDisposable ShellControllerLifetime { get; init; }
+    public required IDisposable ShellLifetime { get; init; }
     public required StageCoordinator StageCoordinator { get; init; }
 }
 
 public sealed class ShellCompositionRoot : IShellCompositionRoot
 {
-    private readonly IBabelLogFactory _logFactory;
-    private readonly IAppDiagnosticsContext _diagnosticsContext;
+    private readonly IAppTelemetryBootstrap _telemetry;
 
-    public ShellCompositionRoot(IBabelLogFactory? logFactory = null, IAppDiagnosticsContext? diagnosticsContext = null)
+    public ShellCompositionRoot(IAppTelemetryBootstrap? telemetry = null)
     {
-        _logFactory = logFactory ?? NullBabelLogFactory.Instance;
-        _diagnosticsContext = diagnosticsContext ?? new AppDiagnosticsContext();
+        _telemetry = telemetry ?? new AppTelemetryBootstrap();
     }
 
     public ShellDependencies Create(
@@ -67,48 +61,44 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
         windowModeService.SetWindowIcon(Path.Combine(AppContext.BaseDirectory, "BabelPlayer.ico"));
         var shellPreferencesService = new ShellPreferencesService(new SettingsFacade());
         var shortcutProfileService = new ShortcutProfileService(shellPreferencesService);
-
         var credentialDialogService = new WinUICredentialDialogService(rootGrid, shortcutProfileService, suppressDialogPresentation);
-        var runtimeBootstrapService = new RuntimeBootstrapService(_logFactory);
+        var runtimeBootstrapService = new RuntimeBootstrapService();
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-        var providerComposition = ProviderAvailabilityCompositionFactory.Create(credentialFacade, Environment.GetEnvironmentVariable, _logFactory);
+        var providerComposition = ProviderAvailabilityCompositionFactory.Create(credentialFacade, Environment.GetEnvironmentVariable);
         var providerAvailabilityService = new ProviderAvailabilityService(providerComposition);
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
-        var aiCredentialCoordinator = new DefaultAiCredentialCoordinator(
+        var aiCredentialCoordinator = AiCredentialCoordinatorFactory.CreateDefault(
             credentialFacade,
             credentialDialogService,
-            Environment.GetEnvironmentVariable,
-            MtService.ValidateApiKeyAsync,
-            MtService.ValidateTranslationProviderAsync);
+            Environment.GetEnvironmentVariable);
         var runtimeProvisioner = new DefaultRuntimeProvisioner(
             runtimeBootstrapService,
             credentialFacade,
             credentialDialogService,
             filePickerService,
-            Environment.GetEnvironmentVariable,
-            _logFactory);
+            Environment.GetEnvironmentVariable);
         var subtitleApplicationService = new SubtitleApplicationService(
-            new DefaultSubtitleSourceResolver(_logFactory),
-            new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry, _logFactory),
-            new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry, _logFactory),
+            new DefaultSubtitleSourceResolver(),
+            new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry),
+            new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry),
             aiCredentialCoordinator,
             runtimeProvisioner,
             credentialFacade,
             mediaSessionCoordinator,
             workflowStateStore,
-            providerAvailabilityService,
-            _logFactory);
+            providerAvailabilityService);
         var subtitleWorkflowController = new SubtitleWorkflowController(
             subtitleApplicationService,
             new SubtitleWorkflowProjectionAdapter(workflowStateStore, mediaSessionCoordinator.Store),
             new SubtitlePresentationProjector());
         ISubtitleWorkflowShellService subtitleWorkflowService = subtitleWorkflowController;
-        var playbackBackend = new MpvPlaybackBackend(_logFactory);
+        var playbackBackend = new MpvPlaybackBackend();
         var playbackBackendCoordinator = new PlaybackBackendCoordinator(playbackBackend, mediaSessionCoordinator);
-        var videoPresenter = new MpvVideoPresenter(_logFactory);
+        var playbackHostRuntime = new PlaybackHostRuntimeAdapter(playbackBackend);
+        var videoPresenter = new MpvVideoPresenter(_telemetry.LogFactory);
         var subtitlePresenter = new DetachedWindowSubtitlePresenter(ownerWindow);
         var shellLibraryService = new ShellLibraryService(new LibraryBrowserService(), shellPreferencesService);
-        var shellProjectionService = new ShellProjectionService(mediaSessionCoordinator.Store);
+        IShellProjectionReader shellProjectionReader = new ShellProjectionService(mediaSessionCoordinator.Store);
         var resumePlaybackService = new ResumePlaybackService();
         var credentialSetupService = new CredentialSetupService(
             credentialFacade,
@@ -122,8 +112,7 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             subtitleWorkflowController,
             new LibraryBrowserService(),
             resumePlaybackService,
-            shellPreferencesService,
-            _logFactory);
+            shellPreferencesService);
         var shellPreferenceCommands = new ShellPreferenceCommands(
             shellPreferencesService,
             shellController,
@@ -144,30 +133,76 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
 
         return new ShellDependencies
         {
-            LogFactory = _logFactory,
-            DiagnosticsContext = _diagnosticsContext,
+            LogFactory = _telemetry.LogFactory,
+            DiagnosticsContext = _telemetry.DiagnosticsState,
             FilePickerService = filePickerService,
             WindowModeService = windowModeService,
             CredentialDialogService = credentialDialogService,
-            RuntimeBootstrapService = runtimeBootstrapService,
-            MediaSessionCoordinator = mediaSessionCoordinator,
             SubtitleWorkflowService = subtitleWorkflowService,
-            PlaybackBackend = playbackBackend,
-            PlaybackBackendCoordinator = playbackBackendCoordinator,
+            PlaybackHostRuntime = playbackHostRuntime,
             VideoPresenter = videoPresenter,
             SubtitlePresenter = subtitlePresenter,
             ShellPreferencesService = shellPreferencesService,
             ShellPreferenceCommands = shellPreferenceCommands,
             ShellLibraryService = shellLibraryService,
-            ShellProjectionService = shellProjectionService,
+            ShellProjectionReader = shellProjectionReader,
             QueueProjectionReader = shellController,
             QueueCommands = shellController,
             ShellPlaybackCommands = shellController,
             CredentialSetupService = credentialSetupService,
             ShortcutProfileService = shortcutProfileService,
             ShortcutCommandExecutor = shortcutCommandExecutor,
-            ShellControllerLifetime = shellController,
+            ShellLifetime = new CompositeShellLifetime(
+                shellController,
+                shellProjectionReader as IDisposable,
+                playbackHostRuntime,
+                playbackBackendCoordinator,
+                playbackBackend,
+                subtitleWorkflowService),
             StageCoordinator = stageCoordinator
         };
+    }
+
+    private sealed class CompositeShellLifetime : IDisposable
+    {
+        private readonly IDisposable? _shellController;
+        private readonly IDisposable? _projectionReader;
+        private readonly IDisposable? _playbackHostRuntime;
+        private readonly IDisposable? _playbackBackendCoordinator;
+        private readonly IAsyncDisposable? _playbackBackend;
+        private readonly IDisposable? _subtitleWorkflowService;
+        private bool _disposed;
+
+        public CompositeShellLifetime(
+            IDisposable? shellController,
+            IDisposable? projectionReader,
+            IDisposable? playbackHostRuntime,
+            IDisposable? playbackBackendCoordinator,
+            IAsyncDisposable? playbackBackend,
+            IDisposable? subtitleWorkflowService)
+        {
+            _shellController = shellController;
+            _projectionReader = projectionReader;
+            _playbackHostRuntime = playbackHostRuntime;
+            _playbackBackendCoordinator = playbackBackendCoordinator;
+            _playbackBackend = playbackBackend;
+            _subtitleWorkflowService = subtitleWorkflowService;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _projectionReader?.Dispose();
+            _shellController?.Dispose();
+            _playbackHostRuntime?.Dispose();
+            _playbackBackendCoordinator?.Dispose();
+            _subtitleWorkflowService?.Dispose();
+            _playbackBackend?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
     }
 }

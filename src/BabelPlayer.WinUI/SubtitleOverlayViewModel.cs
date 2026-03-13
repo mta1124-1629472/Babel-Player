@@ -1,4 +1,6 @@
-namespace BabelPlayer.App;
+using BabelPlayer.App;
+
+namespace BabelPlayer.WinUI;
 
 public sealed class SubtitleOverlayViewModel : ObservableObject
 {

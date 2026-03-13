@@ -4,7 +4,6 @@ using System.Linq;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using BabelPlayer.App;
-using BabelPlayer.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -446,5 +445,4 @@ public sealed partial class MainWindow
         return processId == Environment.ProcessId;
     }
 }
-
 

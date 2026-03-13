@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
 
@@ -57,7 +56,7 @@ public sealed class ShortcutService
             key);
     }
 
-    public IReadOnlyList<ShortcutConflict> FindConflicts(ShortcutProfile profile)
+    public IReadOnlyList<ShortcutConflict> FindConflicts(ShellShortcutProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
 

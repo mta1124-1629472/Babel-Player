@@ -16,8 +16,9 @@ public sealed class PlaybackHostAdapterSeamTests
     public void PlaybackHostAdapter_ComposesMpvBackendWithFakePresenter()
     {
         var backend = new MpvPlaybackBackend();
+        var runtime = new PlaybackHostRuntimeAdapter(backend);
         var presenter = new FakeVideoPresenter();
-        var adapter = new PlaybackHostAdapter(backend, presenter);
+        var adapter = new PlaybackHostAdapter(runtime, presenter);
 
         Assert.Same(presenter.View, adapter.View);
 
@@ -48,7 +49,7 @@ public sealed class PlaybackHostAdapterSeamTests
 
         public int SuppressCount { get; private set; }
 
-        public void Initialize(Window ownerWindow, IPlaybackBackend playbackBackend)
+        public void Initialize(Window ownerWindow, IPlaybackHostRuntime playbackRuntime)
         {
         }
 
