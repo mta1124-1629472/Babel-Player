@@ -13,7 +13,6 @@ public interface IShellCompositionRoot
         MainWindow ownerWindow,
         Grid rootGrid,
         PlaybackQueueController playbackQueueController,
-        CredentialFacade credentialFacade,
         Func<IDisposable> suppressDialogPresentation);
 }
 
@@ -26,13 +25,21 @@ public sealed record ShellDependencies
     public required WinUICredentialDialogService CredentialDialogService { get; init; }
     public required IRuntimeBootstrapService RuntimeBootstrapService { get; init; }
     public required MediaSessionCoordinator MediaSessionCoordinator { get; init; }
-    public required SubtitleWorkflowController SubtitleWorkflowController { get; init; }
+    public required ISubtitleWorkflowShellService SubtitleWorkflowService { get; init; }
     public required IPlaybackBackend PlaybackBackend { get; init; }
     public required PlaybackBackendCoordinator PlaybackBackendCoordinator { get; init; }
     public required IVideoPresenter VideoPresenter { get; init; }
     public required ISubtitlePresenter SubtitlePresenter { get; init; }
+    public required IShellPreferencesService ShellPreferencesService { get; init; }
+    public required IShellLibraryService ShellLibraryService { get; init; }
     public required ShellProjectionService ShellProjectionService { get; init; }
-    public required ShellController ShellController { get; init; }
+    public required IQueueProjectionReader QueueProjectionReader { get; init; }
+    public required IQueueCommands QueueCommands { get; init; }
+    public required IShellPlaybackCommands ShellPlaybackCommands { get; init; }
+    public required ICredentialSetupService CredentialSetupService { get; init; }
+    public required IShortcutProfileService ShortcutProfileService { get; init; }
+    public required IShortcutCommandExecutor ShortcutCommandExecutor { get; init; }
+    public required IDisposable ShellControllerLifetime { get; init; }
     public required StageCoordinator StageCoordinator { get; init; }
 }
 
@@ -51,36 +58,40 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
         MainWindow ownerWindow,
         Grid rootGrid,
         PlaybackQueueController playbackQueueController,
-        CredentialFacade credentialFacade,
         Func<IDisposable> suppressDialogPresentation)
     {
+        var credentialFacade = new CredentialFacade();
         var filePickerService = new WinUIFilePickerService(ownerWindow);
         var windowModeService = new WinUIWindowModeService(ownerWindow);
         windowModeService.SetWindowIcon(Path.Combine(AppContext.BaseDirectory, "BabelPlayer.ico"));
+        var shellPreferencesService = new ShellPreferencesService(new SettingsFacade());
+        var shortcutProfileService = new ShortcutProfileService(shellPreferencesService);
 
-        var credentialDialogService = new WinUICredentialDialogService(rootGrid, suppressDialogPresentation);
+        var credentialDialogService = new WinUICredentialDialogService(rootGrid, shortcutProfileService, suppressDialogPresentation);
         var runtimeBootstrapService = new RuntimeBootstrapService(_logFactory);
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
         var providerComposition = ProviderAvailabilityCompositionFactory.Create(credentialFacade, Environment.GetEnvironmentVariable, _logFactory);
         var providerAvailabilityService = new ProviderAvailabilityService(providerComposition);
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+        var aiCredentialCoordinator = new DefaultAiCredentialCoordinator(
+            credentialFacade,
+            credentialDialogService,
+            Environment.GetEnvironmentVariable,
+            MtService.ValidateApiKeyAsync,
+            MtService.ValidateTranslationProviderAsync);
+        var runtimeProvisioner = new DefaultRuntimeProvisioner(
+            runtimeBootstrapService,
+            credentialFacade,
+            credentialDialogService,
+            filePickerService,
+            Environment.GetEnvironmentVariable,
+            _logFactory);
         var subtitleApplicationService = new SubtitleApplicationService(
             new DefaultSubtitleSourceResolver(_logFactory),
             new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry, _logFactory),
             new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry, _logFactory),
-            new DefaultAiCredentialCoordinator(
-                credentialFacade,
-                credentialDialogService,
-                Environment.GetEnvironmentVariable,
-                MtService.ValidateApiKeyAsync,
-                MtService.ValidateTranslationProviderAsync),
-            new DefaultRuntimeProvisioner(
-                runtimeBootstrapService,
-                credentialFacade,
-                credentialDialogService,
-                filePickerService,
-                Environment.GetEnvironmentVariable,
-                _logFactory),
+            aiCredentialCoordinator,
+            runtimeProvisioner,
             credentialFacade,
             mediaSessionCoordinator,
             workflowStateStore,
@@ -90,22 +101,32 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             subtitleApplicationService,
             new SubtitleWorkflowProjectionAdapter(workflowStateStore, mediaSessionCoordinator.Store),
             new SubtitlePresentationProjector());
+        ISubtitleWorkflowShellService subtitleWorkflowService = subtitleWorkflowController;
         var playbackBackend = new MpvPlaybackBackend(_logFactory);
         var playbackBackendCoordinator = new PlaybackBackendCoordinator(playbackBackend, mediaSessionCoordinator);
         var videoPresenter = new MpvVideoPresenter(_logFactory);
         var subtitlePresenter = new DetachedWindowSubtitlePresenter(ownerWindow);
+        var shellLibraryService = new ShellLibraryService(new LibraryBrowserService(), shellPreferencesService);
         var shellProjectionService = new ShellProjectionService(mediaSessionCoordinator.Store);
-        var libraryBrowserService = new LibraryBrowserService();
         var resumePlaybackService = new ResumePlaybackService();
-        var settingsFacade = new SettingsFacade();
+        var credentialSetupService = new CredentialSetupService(
+            credentialFacade,
+            providerAvailabilityService,
+            aiCredentialCoordinator,
+            runtimeProvisioner,
+            Environment.GetEnvironmentVariable);
         var shellController = new ShellController(
             playbackQueueController,
             playbackBackend,
             subtitleWorkflowController,
-            libraryBrowserService,
+            new LibraryBrowserService(),
             resumePlaybackService,
-            settingsFacade,
             _logFactory);
+        var shortcutCommandExecutor = new ShortcutCommandExecutor(
+            shellController,
+            shellController,
+            shellPreferencesService,
+            subtitleWorkflowService);
 
         var stageCoordinator = new StageCoordinator(
             rootGrid,
@@ -123,13 +144,21 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             CredentialDialogService = credentialDialogService,
             RuntimeBootstrapService = runtimeBootstrapService,
             MediaSessionCoordinator = mediaSessionCoordinator,
-            SubtitleWorkflowController = subtitleWorkflowController,
+            SubtitleWorkflowService = subtitleWorkflowService,
             PlaybackBackend = playbackBackend,
             PlaybackBackendCoordinator = playbackBackendCoordinator,
             VideoPresenter = videoPresenter,
             SubtitlePresenter = subtitlePresenter,
+            ShellPreferencesService = shellPreferencesService,
+            ShellLibraryService = shellLibraryService,
             ShellProjectionService = shellProjectionService,
-            ShellController = shellController,
+            QueueProjectionReader = shellController,
+            QueueCommands = shellController,
+            ShellPlaybackCommands = shellController,
+            CredentialSetupService = credentialSetupService,
+            ShortcutProfileService = shortcutProfileService,
+            ShortcutCommandExecutor = shortcutCommandExecutor,
+            ShellControllerLifetime = shellController,
             StageCoordinator = stageCoordinator
         };
     }

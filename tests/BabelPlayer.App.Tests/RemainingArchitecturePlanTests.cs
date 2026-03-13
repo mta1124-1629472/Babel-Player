@@ -340,7 +340,7 @@ public sealed class RemainingArchitecturePlanTests
         var snapshot = adapter.Current;
 
         Assert.Equal("C:\\Media\\sample.mp4", snapshot.CurrentVideoPath);
-        Assert.Equal("local:small", snapshot.SelectedTranscriptionModelKey);
+        Assert.Equal("local:small-multilingual", snapshot.SelectedTranscriptionModelKey);
         Assert.Equal("cloud:deepl", snapshot.SelectedTranslationModelKey);
         Assert.True(snapshot.IsTranslationEnabled);
         Assert.True(snapshot.AutoTranslateEnabled);
@@ -750,6 +750,53 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
+    public void SubtitleWorkflowController_ImplementsShellBoundaryInterface()
+    {
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+
+        var shellService = Assert.IsAssignableFrom<ISubtitleWorkflowShellService>(workflow);
+
+        Assert.Equal(workflow.Current.CurrentVideoPath, shellService.Current.CurrentVideoPath);
+    }
+
+    [Fact]
+    public void SubtitleWorkflowController_TracksSourceOnlyOverrideAndClearsItWhenWorkflowChanges()
+    {
+        var workflowStore = new InMemorySubtitleWorkflowStateStore();
+        var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+        using var service = new SubtitleApplicationService(
+            new FakeSubtitleSourceResolver(),
+            new FakeCaptionGenerator(),
+            new FakeSubtitleTranslator(),
+            new FakeAiCredentialCoordinator(),
+            new FakeRuntimeProvisioner(),
+            credentialFacade,
+            mediaSessionCoordinator,
+            workflowStore,
+            new ProviderAvailabilityService(credentialFacade, _ => null));
+        using var projectionAdapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaSessionCoordinator.Store);
+        using var controller = new SubtitleWorkflowController(service, projectionAdapter, new SubtitlePresentationProjector());
+
+        workflowStore.Update(state => state with { CurrentVideoPath = "C:\\Media\\sample.mp4" });
+        mediaSessionCoordinator.SetTranslationState(enabled: true, autoTranslateEnabled: false);
+
+        var selected = controller.SelectRenderMode(SubtitleRenderMode.SourceOnly, SubtitleRenderMode.TranslationOnly);
+        var hidden = controller.ToggleSubtitleVisibility(SubtitleRenderMode.TranslationOnly);
+        var restored = controller.ToggleSubtitleVisibility(SubtitleRenderMode.Off);
+
+        workflowStore.Update(state => state with { CurrentVideoPath = "C:\\Media\\other.mp4" });
+        var effectiveAfterChange = controller.GetEffectiveRenderMode(SubtitleRenderMode.TranslationOnly);
+
+        Assert.Equal(SubtitleRenderMode.TranslationOnly, selected.RequestedRenderMode);
+        Assert.Equal(SubtitleRenderMode.SourceOnly, selected.EffectiveRenderMode);
+        Assert.Equal(SubtitleRenderMode.Off, hidden.RequestedRenderMode);
+        Assert.Equal(SubtitleRenderMode.TranslationOnly, restored.RequestedRenderMode);
+        Assert.Equal(SubtitleRenderMode.SourceOnly, restored.EffectiveRenderMode);
+        Assert.Equal(SubtitleRenderMode.TranslationOnly, effectiveAfterChange);
+    }
+
+    [Fact]
     public async Task ShellController_CurrentPlaybackSnapshotReflectsBackendState()
     {
         var queue = new PlaybackQueueController();
@@ -1010,101 +1057,666 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
-    public void ShellController_BuildInitializationSnapshot_ReturnsExpectedDefaults()
+    public void ShellPreferencesService_LoadsAndProjectsPersistedSettings()
     {
         var customSettings = new AppPlayerSettings
         {
+            HardwareDecodingMode = HardwareDecodingMode.D3D11,
             VolumeLevel = 0.65,
             IsMuted = true,
             DefaultPlaybackRate = 1.25,
             AudioDelaySeconds = 0.3,
             SubtitleDelaySeconds = -0.2,
             AspectRatioOverride = "16:9",
-            SubtitleRenderMode = SubtitleRenderMode.Dual,
+            SubtitleRenderMode = SubtitleRenderMode.Off,
+            SubtitleStyle = new SubtitleStyleSettings
+            {
+                SourceFontSize = 28,
+                TranslationFontSize = 30
+            },
+            ShortcutProfile = new ShortcutProfile
+            {
+                Bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["play_pause"] = "Space"
+                }
+            },
             ResumeEnabled = true,
-            PinnedRoots = ["C:\\FakeVideos"]
+            PinnedRoots = ["C:\\FakeVideos"],
+            ShowBrowserPanel = true,
+            ShowPlaylistPanel = false,
+            WindowMode = PlaybackWindowMode.PictureInPicture
         };
-        var settingsFacade = new FakeSettingsFacade(customSettings);
-        var backend = new FakeShellPlaybackBackend();
-        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
-            new PlaybackQueueController(),
-            backend,
-            workflow,
-            new LibraryBrowserService(),
-            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }),
-            settingsFacade);
+        var settingsFacade = new TestSettingsFacade(customSettings);
+        var service = new ShellPreferencesService(settingsFacade);
 
-        var snapshot = shell.BuildInitializationSnapshot();
+        var snapshot = service.Current;
 
-        Assert.Equal(0.65, snapshot.Volume);
+        Assert.Equal(0.65, snapshot.VolumeLevel);
         Assert.True(snapshot.IsMuted);
         Assert.Equal(1.25, snapshot.PlaybackRate);
         Assert.Equal(0.3, snapshot.AudioDelaySeconds);
         Assert.Equal(-0.2, snapshot.SubtitleDelaySeconds);
-        Assert.Equal("16:9", snapshot.SelectedAspectRatio);
-        Assert.Equal(SubtitleRenderMode.Dual, snapshot.LastNonOffSubtitleRenderMode);
-        Assert.True(snapshot.ShowSubtitleSource);
-        Assert.True(snapshot.ResumeEnabled);
-        Assert.Equal(PlaybackWindowMode.Standard, snapshot.Settings.WindowMode);
-        Assert.NotEmpty(snapshot.DefaultTranscriptionLabel);
-        Assert.NotEmpty(snapshot.DefaultTranslationLabel);
-    }
-
-    [Fact]
-    public void ShellController_BuildInitializationSnapshot_FallsBackWhenSubtitleRenderModeIsOff()
-    {
-        var customSettings = new AppPlayerSettings
-        {
-            SubtitleRenderMode = SubtitleRenderMode.Off
-        };
-        var settingsFacade = new FakeSettingsFacade(customSettings);
-        var backend = new FakeShellPlaybackBackend();
-        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
-            new PlaybackQueueController(),
-            backend,
-            workflow,
-            new LibraryBrowserService(),
-            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }),
-            settingsFacade);
-
-        var snapshot = shell.BuildInitializationSnapshot();
-
+        Assert.Equal("16:9", snapshot.AspectRatio);
+        Assert.Equal(HardwareDecodingMode.D3D11, snapshot.HardwareDecodingMode);
+        Assert.Equal(SubtitleRenderMode.Off, snapshot.SubtitleRenderMode);
         Assert.Equal(SubtitleRenderMode.TranslationOnly, snapshot.LastNonOffSubtitleRenderMode);
         Assert.False(snapshot.ShowSubtitleSource);
+        Assert.True(snapshot.ResumeEnabled);
+        Assert.Equal(["C:\\FakeVideos"], snapshot.PinnedRoots);
+        Assert.True(snapshot.ShowBrowserPanel);
+        Assert.False(snapshot.ShowPlaylistPanel);
+        Assert.Equal(PlaybackWindowMode.PictureInPicture, snapshot.WindowMode);
+        Assert.Equal("Space", snapshot.ShortcutProfile.Bindings["play_pause"]);
     }
 
     [Fact]
-    public void ShellController_BuildInitializationSnapshot_DefaultsAspectRatioWhenBlank()
+    public void ShellPreferencesService_ApplyChange_PersistsOnlyRequestedFields()
     {
-        var customSettings = new AppPlayerSettings
+        var initialSettings = new AppPlayerSettings
         {
-            AspectRatioOverride = ""
+            HardwareDecodingMode = HardwareDecodingMode.AutoSafe,
+            SubtitleRenderMode = SubtitleRenderMode.Dual,
+            SubtitleStyle = new SubtitleStyleSettings
+            {
+                SourceFontSize = 31,
+                TranslationFontSize = 33
+            },
+            PinnedRoots = ["C:\\Media"],
+            VolumeLevel = 0.65,
+            IsMuted = true,
+            DefaultPlaybackRate = 1.0,
+            AudioDelaySeconds = 0.1,
+            SubtitleDelaySeconds = -0.2,
+            AspectRatioOverride = "4:3",
+            ShowBrowserPanel = true,
+            ShowPlaylistPanel = false,
+            ResumeEnabled = true,
+            WindowMode = PlaybackWindowMode.Standard
         };
-        var settingsFacade = new FakeSettingsFacade(customSettings);
-        var backend = new FakeShellPlaybackBackend();
-        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
-        using var shell = new ShellController(
-            new PlaybackQueueController(),
-            backend,
-            workflow,
-            new LibraryBrowserService(),
-            new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }),
-            settingsFacade);
+        var settingsFacade = new TestSettingsFacade(initialSettings);
+        var service = new ShellPreferencesService(settingsFacade);
 
-        var snapshot = shell.BuildInitializationSnapshot();
+        var snapshot = service.ApplyPlaybackDefaultsChange(new ShellPlaybackDefaultsChange(
+            HardwareDecodingMode.D3D11,
+            1.5,
+            0.25,
+            -0.35,
+            ""));
 
-        Assert.Equal("auto", snapshot.SelectedAspectRatio);
+        Assert.Equal(HardwareDecodingMode.D3D11, snapshot.HardwareDecodingMode);
+        Assert.Equal(1.5, snapshot.PlaybackRate);
+        Assert.Equal(0.25, snapshot.AudioDelaySeconds);
+        Assert.Equal(-0.35, snapshot.SubtitleDelaySeconds);
+        Assert.Equal("auto", snapshot.AspectRatio);
+        Assert.Equal(SubtitleRenderMode.Dual, snapshot.SubtitleRenderMode);
+        Assert.Equal(31, snapshot.SubtitleStyle.SourceFontSize);
+        Assert.Equal(["C:\\Media"], snapshot.PinnedRoots);
+        Assert.Equal(0.65, snapshot.VolumeLevel);
+        Assert.True(snapshot.IsMuted);
+        Assert.True(snapshot.ShowBrowserPanel);
+        Assert.False(snapshot.ShowPlaylistPanel);
+        Assert.Equal(PlaybackWindowMode.Standard, snapshot.WindowMode);
+
+        Assert.NotNull(settingsFacade.SavedSettings);
+        Assert.Equal(HardwareDecodingMode.D3D11, settingsFacade.SavedSettings!.HardwareDecodingMode);
+        Assert.Equal(1.5, settingsFacade.SavedSettings.DefaultPlaybackRate);
+        Assert.Equal(0.25, settingsFacade.SavedSettings.AudioDelaySeconds);
+        Assert.Equal(-0.35, settingsFacade.SavedSettings.SubtitleDelaySeconds);
+        Assert.Equal("auto", settingsFacade.SavedSettings.AspectRatioOverride);
+        Assert.Equal(SubtitleRenderMode.Dual, settingsFacade.SavedSettings.SubtitleRenderMode);
+        Assert.Equal(31, settingsFacade.SavedSettings.SubtitleStyle.SourceFontSize);
     }
 
-    private sealed class FakeSettingsFacade : SettingsFacade
+    [Fact]
+    public void ShellPreferencesService_ApplyShortcutProfile_ReplacesProfileWithoutMutatingSnapshot()
     {
-        private readonly AppPlayerSettings _settings;
+        var initialProfile = new ShortcutProfile
+        {
+            Bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["play_pause"] = "Space"
+            }
+        };
+        var settingsFacade = new TestSettingsFacade(new AppPlayerSettings
+        {
+            ShortcutProfile = initialProfile,
+            PinnedRoots = ["C:\\Media"]
+        });
+        var service = new ShellPreferencesService(settingsFacade);
+        var before = service.Current;
+        var updatedProfile = new ShortcutProfile
+        {
+            Bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["play_pause"] = "Ctrl+P"
+            }
+        };
 
-        public FakeSettingsFacade(AppPlayerSettings settings) => _settings = settings;
+        var after = service.ApplyShortcutProfileChange(new ShellShortcutProfileChange(updatedProfile));
+
+        Assert.Equal("Space", before.ShortcutProfile.Bindings["play_pause"]);
+        Assert.Equal("Ctrl+P", after.ShortcutProfile.Bindings["play_pause"]);
+        Assert.NotSame(before, after);
+        Assert.Same(updatedProfile, after.ShortcutProfile);
+    }
+
+    [Fact]
+    public void ShellPreferencesService_PublishesSnapshotChangedAfterMutation()
+    {
+        var service = new ShellPreferencesService(new TestSettingsFacade(new AppPlayerSettings
+        {
+            PinnedRoots = ["C:\\Media"]
+        }));
+        ShellPreferencesSnapshot? published = null;
+        service.SnapshotChanged += snapshot => published = snapshot;
+
+        var updated = service.ApplyAudioStateChange(new ShellAudioStateChange(0.42, true));
+
+        Assert.Same(updated, published);
+        Assert.NotNull(published);
+        Assert.Equal(0.42, published!.VolumeLevel);
+        Assert.True(published.IsMuted);
+    }
+
+    [Fact]
+    public void ShellLibraryService_InitializesFromPinnedRoots()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "movie.mp4"), string.Empty);
+            var childFolderPath = Directory.CreateDirectory(Path.Combine(root.FullName, "Season 1")).FullName;
+
+            var preferences = new ShellPreferencesService(new TestSettingsFacade(new AppPlayerSettings
+            {
+                PinnedRoots = [root.FullName]
+            }));
+            var service = new ShellLibraryService(new LibraryBrowserService(), preferences);
+
+            var snapshot = service.Current;
+            var rootEntry = Assert.Single(snapshot.Roots);
+
+            Assert.Equal(root.FullName, rootEntry.Path);
+            Assert.True(rootEntry.IsFolder);
+            Assert.Contains(rootEntry.Children, child => string.Equals(child.Path, childFolderPath, StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(rootEntry.Children, child => string.Equals(child.Path, Path.Combine(root.FullName, "movie.mp4"), StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ShellLibraryService_PinAndUnpinRoot_UpdateSnapshotAndPersistPinnedRoots()
+    {
+        var rootA = Directory.CreateTempSubdirectory();
+        var rootB = Directory.CreateTempSubdirectory();
+        try
+        {
+            var settingsFacade = new TestSettingsFacade(new AppPlayerSettings
+            {
+                PinnedRoots = [rootA.FullName]
+            });
+            var preferences = new ShellPreferencesService(settingsFacade);
+            var service = new ShellLibraryService(new LibraryBrowserService(), preferences);
+
+            var pinResult = service.PinRoot(rootB.FullName);
+            Assert.False(pinResult.IsError);
+            Assert.Equal(2, pinResult.Snapshot.Roots.Count);
+            Assert.Contains(preferences.Current.PinnedRoots, path => string.Equals(path, rootB.FullName, StringComparison.OrdinalIgnoreCase));
+
+            var unpinResult = service.UnpinRoot(rootA.FullName);
+            Assert.False(unpinResult.IsError);
+            Assert.Single(unpinResult.Snapshot.Roots);
+            Assert.DoesNotContain(preferences.Current.PinnedRoots, path => string.Equals(path, rootA.FullName, StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(settingsFacade.SavedSettings);
+            Assert.Equal([rootB.FullName], settingsFacade.SavedSettings!.PinnedRoots);
+        }
+        finally
+        {
+            rootA.Delete(recursive: true);
+            rootB.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ShellLibraryService_SetExpanded_RealizesChildrenAndPreservesExpansionState()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var seasonPath = Directory.CreateDirectory(Path.Combine(root.FullName, "Season 1")).FullName;
+            File.WriteAllText(Path.Combine(seasonPath, "episode-01.mp4"), string.Empty);
+            var preferences = new ShellPreferencesService(new TestSettingsFacade(new AppPlayerSettings
+            {
+                PinnedRoots = [root.FullName]
+            }));
+            var service = new ShellLibraryService(new LibraryBrowserService(), preferences);
+
+            var beforeExpand = Assert.Single(service.Current.Roots)
+                .Children
+                .Single(child => string.Equals(child.Path, seasonPath, StringComparison.OrdinalIgnoreCase));
+            Assert.False(beforeExpand.IsExpanded);
+            Assert.Empty(beforeExpand.Children);
+            Assert.True(beforeExpand.HasUnrealizedChildren);
+
+            var result = service.SetExpanded(seasonPath, true);
+            var expanded = Assert.Single(result.Snapshot.Roots)
+                .Children
+                .Single(child => string.Equals(child.Path, seasonPath, StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(expanded.IsExpanded);
+            Assert.False(expanded.HasUnrealizedChildren);
+            Assert.Single(expanded.Children);
+            Assert.Equal(Path.Combine(seasonPath, "episode-01.mp4"), expanded.Children[0].Path);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SubtitleWorkflowProjectionAdapter_ProjectsAvailableModelOptions()
+    {
+        var workflowStore = new InMemorySubtitleWorkflowStateStore();
+        var mediaCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        using var adapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaCoordinator.Store);
+
+        var snapshot = adapter.Current;
+
+        Assert.Equal(
+            SubtitleWorkflowCatalog.AvailableTranscriptionModels.Select(model => model.Key),
+            snapshot.AvailableTranscriptionModels.Select(model => model.Key));
+        Assert.Equal(
+            SubtitleWorkflowCatalog.AvailableTranslationModels.Select(model => model.Key),
+            snapshot.AvailableTranslationModels.Select(model => model.Key));
+    }
+
+    [Fact]
+    public void SubtitleWorkflowProjectionAdapter_CanonicalizesLegacyTranscriptionKeys()
+    {
+        var workflowStore = new InMemorySubtitleWorkflowStateStore();
+        var mediaCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        using var adapter = new SubtitleWorkflowProjectionAdapter(workflowStore, mediaCoordinator.Store);
+
+        workflowStore.Update(state => state with
+        {
+            SelectedTranscriptionModelKey = "local:small"
+        });
+
+        Assert.Equal("local:small-multilingual", adapter.Current.SelectedTranscriptionModelKey);
+        Assert.Equal("Local Small (multilingual)", adapter.Current.SelectedTranscriptionLabel);
+    }
+
+    [Fact]
+    public async Task ShortcutCommandExecutor_RoutesQueuePlaybackAndSubtitleCommands()
+    {
+        var preferences = new ShellPreferencesService(new TestSettingsFacade(new AppPlayerSettings
+        {
+            DefaultPlaybackRate = 1.0,
+            VolumeLevel = 0.8,
+            PinnedRoots = ["C:\\Media"]
+        }));
+        var queueCommands = new FakeQueueCommands();
+        var playbackCommands = new FakeShortcutPlaybackCommands
+        {
+            CurrentPlaybackSnapshot = new PlaybackStateSnapshot { IsPaused = true }
+        };
+        using var workflow = TestWorkflowControllerFactory.Create(
+            credentialFacade: new CredentialFacade(new FakeCredentialStore()),
+            providerAvailabilityService: new FakeProviderAvailabilityService
+            {
+                ConfiguredProviders = new Dictionary<TranslationProvider, bool>
+                {
+                    [TranslationProvider.DeepL] = true
+                }
+            },
+            aiCredentialCoordinator: new FakeAiCredentialCoordinator());
+        await workflow.SelectTranslationModelAsync("cloud:deepl");
+        var executor = new ShortcutCommandExecutor(queueCommands, playbackCommands, preferences, workflow);
+
+        var playPause = await executor.ExecuteAsync("play_pause");
+        var speedUp = await executor.ExecuteAsync("speed_up");
+        var nextItem = await executor.ExecuteAsync("next_item");
+        var subtitleToggle = await executor.ExecuteAsync("subtitle_toggle");
+        var translationToggle = await executor.ExecuteAsync("translation_toggle");
+
+        Assert.Equal(1, playbackCommands.PlayCalls);
+        Assert.Equal("Playback resumed.", playPause.StatusMessage);
+        Assert.Equal(1.25, playbackCommands.LastPlaybackRate);
+        Assert.Equal(1.25, preferences.Current.PlaybackRate);
+        Assert.Equal("next.mp4", nextItem.ItemToLoad?.Path);
+        Assert.Equal(1, queueCommands.MoveNextCalls);
+        Assert.Equal(ShortcutShellAction.ToggleSubtitleVisibility, subtitleToggle.ShellAction);
+        Assert.True(workflow.Snapshot.IsTranslationEnabled);
+        Assert.Equal("Translation enabled.", translationToggle.StatusMessage);
+    }
+
+    [Fact]
+    public void ShortcutProfileService_NormalizesBindingsAndFlagsConflicts()
+    {
+        var preferences = new ShellPreferencesService(new TestSettingsFacade(new AppPlayerSettings
+        {
+            ShortcutProfile = new ShortcutProfile
+            {
+                Bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["play_pause"] = "Shift + Space",
+                    ["mute"] = "Ctrl+",
+                    ["custom"] = "Ctrl+K"
+                }
+            },
+            PinnedRoots = ["C:\\Media"]
+        }));
+        using var service = new ShortcutProfileService(preferences);
+        var conflictingProfile = new ShortcutProfile
+        {
+            Bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["play_pause"] = "Space",
+                ["mute"] = "Space"
+            }
+        };
+
+        var normalization = service.NormalizeProfile(preferences.Current.ShortcutProfile);
+        var validation = service.ValidateProfile(conflictingProfile);
+
+        Assert.Contains(normalization.NormalizedBindings, binding => binding.CommandId == "play_pause" && binding.NormalizedGesture == "Shift+Space");
+        Assert.Contains("custom", normalization.UnsupportedCommandIds);
+        Assert.Contains("mute", normalization.InvalidCommandIds);
+        Assert.False(validation.IsValid);
+        Assert.Single(validation.Conflicts);
+    }
+
+    [Fact]
+    public async Task CredentialSetupService_ReportsReadinessAndDelegatesSetup()
+    {
+        var credentialFacade = new CredentialFacade(new ConfigurableCredentialStore
+        {
+            OpenAiApiKey = "openai-key",
+            TranslationModelKey = "cloud:deepl",
+            SubtitleModelKey = "cloud:gpt-4o-transcribe"
+        });
+        var providerAvailability = new FakeProviderAvailabilityService
+        {
+            ConfiguredProviders = new Dictionary<TranslationProvider, bool>
+            {
+                [TranslationProvider.DeepL] = true
+            }
+        };
+        var credentialCoordinator = new FakeAiCredentialCoordinator();
+        var runtimeProvisioner = new FakeRuntimeProvisioner();
+        var service = new CredentialSetupService(
+            credentialFacade,
+            providerAvailability,
+            credentialCoordinator,
+            runtimeProvisioner,
+            _ => null);
+        CredentialSetupSnapshot? published = null;
+        service.SnapshotChanged += snapshot => published = snapshot;
+
+        var transcriptionAvailability = service.GetTranscriptionAvailability(SubtitleWorkflowCatalog.GetTranscriptionModel("cloud:gpt-4o-transcribe"));
+        var translationAvailability = service.GetTranslationAvailability(SubtitleWorkflowCatalog.GetTranslationModel("local:hymt-1.8b"));
+        var ensured = await service.EnsureTranslationProviderCredentialsAsync(TranslationProvider.DeepL);
+
+        Assert.True(service.Current.HasOpenAiCredentials);
+        Assert.True(service.Current.TranslationProviderConfigured[TranslationProvider.DeepL]);
+        Assert.True(transcriptionAvailability.IsAvailable);
+        Assert.False(translationAvailability.IsAvailable);
+        Assert.True(translationAvailability.RequiresRuntimeBootstrap);
+        Assert.True(ensured);
+        Assert.Equal(1, credentialCoordinator.TranslationCalls);
+        Assert.NotNull(published);
+    }
+
+    [Fact]
+    public async Task ShellController_ImplementsQueueAndPlaybackBoundaryInterfaces()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var firstPath = Path.Combine(directory.FullName, "first.mp4");
+            File.WriteAllText(firstPath, string.Empty);
+            var queue = new PlaybackQueueController();
+            var backend = new FakeShellPlaybackBackend();
+            using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            using var shell = new ShellController(
+                queue,
+                backend,
+                workflow,
+                new LibraryBrowserService(),
+                new ResumePlaybackService());
+
+            var queueReader = Assert.IsAssignableFrom<IQueueProjectionReader>(shell);
+            var queueCommands = Assert.IsAssignableFrom<IQueueCommands>(shell);
+            var playbackCommands = Assert.IsAssignableFrom<IShellPlaybackCommands>(shell);
+
+            var result = queueCommands.EnqueueFiles([firstPath], autoplay: true);
+            var loaded = await playbackCommands.LoadPlaybackItemAsync(
+                result.ItemToLoad,
+                new ShellLoadMediaOptions(),
+                CancellationToken.None);
+
+            Assert.Equal(firstPath, result.ItemToLoad?.Path);
+            Assert.Equal(firstPath, queueReader.QueueSnapshot.NowPlayingItem?.Path);
+            Assert.True(loaded);
+            Assert.Equal(firstPath, Assert.Single(backend.LoadedPaths));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AppBoundaryContracts_DoNotExposeWinUiTypes()
+    {
+        var appFiles = new[]
+        {
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "BabelPlayer.App", "ShellCommandInterfaces.cs")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "BabelPlayer.App", "CredentialSetupService.cs")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "BabelPlayer.App", "ShortcutProfileService.cs")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "BabelPlayer.App", "ShortcutCommandExecutor.cs"))
+        };
+
+        foreach (var file in appFiles)
+        {
+            var source = File.ReadAllText(file);
+            Assert.DoesNotContain("VirtualKey", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("TreeViewNode", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("AppWindow", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("HWND", source, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("DirectX", source, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void MainWindow_Source_NoLongerDirectlyReferencesSettingsLibraryCredentialsShortcutServicesConcreteSubtitleControllerOrStaticSubtitleCatalogLookups()
+    {
+        var sourcePath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.WinUI",
+            "MainWindow.xaml.cs"));
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.DoesNotContain("SettingsFacade", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("LibraryBrowserService", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("CredentialFacade", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShortcutService", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SubtitleWorkflowController", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_subtitleSourceOnlyOverrideVideoPath", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_lastNonOffSubtitleRenderMode", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_selectedAspectRatio", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_audioDelaySeconds", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_subtitleDelaySeconds", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SubtitleWorkflowCatalog.GetTranscriptionModel", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SubtitleWorkflowCatalog.GetTranslationModel", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShortcutEditorDialog_Source_NoLongerDirectlyReferencesShortcutService()
+    {
+        var sourcePath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.WinUI",
+            "ShortcutEditorDialog.cs"));
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.DoesNotContain("ShortcutService", source, StringComparison.Ordinal);
+    }
+
+    private sealed class TestSettingsFacade : SettingsFacade
+    {
+        private AppPlayerSettings _settings;
+
+        public TestSettingsFacade(AppPlayerSettings settings) => _settings = settings;
+
+        public AppPlayerSettings? SavedSettings { get; private set; }
 
         public override AppPlayerSettings Load() => _settings;
+
+        public override void Save(AppPlayerSettings settings)
+        {
+            _settings = settings;
+            SavedSettings = settings;
+        }
+    }
+
+    private sealed class ConfigurableCredentialStore : ICredentialStore
+    {
+        public string? OpenAiApiKey { get; set; }
+        public string? GoogleTranslateApiKey { get; set; }
+        public string? DeepLApiKey { get; set; }
+        public string? MicrosoftTranslatorApiKey { get; set; }
+        public string? MicrosoftTranslatorRegion { get; set; }
+        public string? SubtitleModelKey { get; set; }
+        public string? TranslationModelKey { get; set; }
+        public bool AutoTranslateEnabled { get; set; }
+        public string? LlamaCppServerPath { get; set; }
+        public string? LlamaCppRuntimeVersion { get; set; }
+        public string? LlamaCppRuntimeSource { get; set; }
+
+        public string? GetOpenAiApiKey() => OpenAiApiKey;
+        public void SaveOpenAiApiKey(string apiKey) => OpenAiApiKey = apiKey;
+        public string? GetGoogleTranslateApiKey() => GoogleTranslateApiKey;
+        public void SaveGoogleTranslateApiKey(string apiKey) => GoogleTranslateApiKey = apiKey;
+        public string? GetDeepLApiKey() => DeepLApiKey;
+        public void SaveDeepLApiKey(string apiKey) => DeepLApiKey = apiKey;
+        public string? GetMicrosoftTranslatorApiKey() => MicrosoftTranslatorApiKey;
+        public void SaveMicrosoftTranslatorApiKey(string apiKey) => MicrosoftTranslatorApiKey = apiKey;
+        public string? GetMicrosoftTranslatorRegion() => MicrosoftTranslatorRegion;
+        public void SaveMicrosoftTranslatorRegion(string region) => MicrosoftTranslatorRegion = region;
+        public string? GetSubtitleModelKey() => SubtitleModelKey;
+        public void SaveSubtitleModelKey(string modelKey) => SubtitleModelKey = modelKey;
+        public string? GetTranslationModelKey() => TranslationModelKey;
+        public void SaveTranslationModelKey(string modelKey) => TranslationModelKey = modelKey;
+        public void ClearTranslationModelKey() => TranslationModelKey = null;
+        public bool GetAutoTranslateEnabled() => AutoTranslateEnabled;
+        public void SaveAutoTranslateEnabled(bool enabled) => AutoTranslateEnabled = enabled;
+        public string? GetLlamaCppServerPath() => LlamaCppServerPath;
+        public void SaveLlamaCppServerPath(string path) => LlamaCppServerPath = path;
+        public string? GetLlamaCppRuntimeVersion() => LlamaCppRuntimeVersion;
+        public void SaveLlamaCppRuntimeVersion(string version) => LlamaCppRuntimeVersion = version;
+        public string? GetLlamaCppRuntimeSource() => LlamaCppRuntimeSource;
+        public void SaveLlamaCppRuntimeSource(string source) => LlamaCppRuntimeSource = source;
+    }
+
+    private sealed class FakeProviderAvailabilityService : IProviderAvailabilityService
+    {
+        public Dictionary<TranslationProvider, bool> ConfiguredProviders { get; init; } = [];
+        public string? ResolvedTranscriptionModelKey { get; init; }
+        public string? ResolvedTranslationModelKey { get; init; }
+        public string? ResolvedLlamaCppServerPath { get; init; }
+
+        public string ResolvePersistedTranscriptionModelKey(string? modelKey)
+            => ResolvedTranscriptionModelKey ?? SubtitleWorkflowCatalog.CanonicalizeTranscriptionModelKey(modelKey);
+
+        public string? ResolvePersistedTranslationModelKey(string? modelKey)
+            => ResolvedTranslationModelKey ?? modelKey;
+
+        public bool IsTranslationProviderConfigured(TranslationProvider provider)
+            => ConfiguredProviders.TryGetValue(provider, out var configured) && configured;
+
+        public string? ResolveLlamaCppServerPath() => ResolvedLlamaCppServerPath;
+    }
+
+    private sealed class FakeQueueCommands : IQueueCommands
+    {
+        public int MoveNextCalls { get; private set; }
+
+        public ShellQueueMediaResult EnqueueFiles(IEnumerable<string> files, bool autoplay) => new();
+        public ShellQueueMediaResult EnqueueFolder(string folderPath, bool autoplay) => new();
+        public ShellQueueMediaResult EnqueueDroppedItems(IEnumerable<string> files, IEnumerable<string> folders) => new();
+        public ShellQueueMediaResult PlayNow(string path) => new();
+        public ShellQueueMediaResult PlayNext(string path) => new();
+        public ShellQueueMediaResult AddToQueue(IEnumerable<string> files) => new();
+        public ShellQueueMediaResult AddDroppedItemsToQueue(IEnumerable<string> files, IEnumerable<string> folders) => new();
+        public PlaylistItem? MovePrevious() => new() { Path = "previous.mp4", DisplayName = "previous.mp4" };
+        public PlaylistItem? MoveNext()
+        {
+            MoveNextCalls++;
+            return new PlaylistItem { Path = "next.mp4", DisplayName = "next.mp4" };
+        }
+        public void RemoveQueueItemAt(int index) { }
+        public void ClearQueue() { }
+    }
+
+    private sealed class FakeShortcutPlaybackCommands : IShellPlaybackCommands
+    {
+        public PlaybackStateSnapshot CurrentPlaybackSnapshot { get; set; } = new();
+        public int PlayCalls { get; private set; }
+        public double LastPlaybackRate { get; private set; } = 1.0;
+
+        public Task<bool> LoadPlaybackItemAsync(PlaylistItem? item, ShellLoadMediaOptions options, CancellationToken cancellationToken) => Task.FromResult(item is not null);
+        public Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(PlaybackStateSnapshot snapshot, bool resumeEnabled, CancellationToken cancellationToken = default) => Task.FromResult(new ShellPlaybackOpenResult());
+        public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled) => new();
+        public Task PlayAsync(CancellationToken cancellationToken = default)
+        {
+            PlayCalls++;
+            CurrentPlaybackSnapshot = CurrentPlaybackSnapshot with { IsPaused = false };
+            return Task.CompletedTask;
+        }
+        public Task PauseAsync(CancellationToken cancellationToken = default)
+        {
+            CurrentPlaybackSnapshot = CurrentPlaybackSnapshot with { IsPaused = true };
+            return Task.CompletedTask;
+        }
+        public Task SeekAsync(TimeSpan position, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SeekRelativeAsync(TimeSpan delta, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task StepFrameAsync(bool forward, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task ApplyAudioPreferencesAsync(double volume, bool muted, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken = default)
+        {
+            LastPlaybackRate = speed;
+            return Task.CompletedTask;
+        }
+        public Task SetAudioTrackAsync(int? trackId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SetSubtitleTrackAsync(int? trackId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<ShellSubtitleTrackSelectionResult> SelectEmbeddedSubtitleTrackAsync(string? currentPath, SubtitlePipelineSource currentSubtitleSource, MediaTrackInfo? track, CancellationToken cancellationToken = default) => Task.FromResult(new ShellSubtitleTrackSelectionResult());
+        public Task SetAudioDelayAsync(double seconds, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SetSubtitleDelayAsync(double seconds, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SetAspectRatioAsync(string aspectRatio, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SetHardwareDecodingModeAsync(HardwareDecodingMode mode, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public void SetResumeTrackingEnabled(bool enabled) { }
+        public void ClearResumeHistory() { }
+        public void FlushResumeTracking(bool forceRemoveCompleted = false) { }
+        public Task<ShellWorkflowTransitionResult> PrepareForTranscriptionRefreshAsync(SubtitleWorkflowSnapshot snapshot, PlaybackStateSnapshot playbackState, CancellationToken cancellationToken = default) => Task.FromResult(new ShellWorkflowTransitionResult());
+        public Task<ShellWorkflowTransitionResult> EvaluateCaptionStartupGateAsync(SubtitleWorkflowSnapshot snapshot, PlaybackStateSnapshot playbackState, CancellationToken cancellationToken = default) => Task.FromResult(new ShellWorkflowTransitionResult());
     }
 
     private sealed class FakeTranscriptionProvider : ITranscriptionProvider

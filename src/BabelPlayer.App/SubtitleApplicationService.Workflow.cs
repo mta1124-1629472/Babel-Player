@@ -7,7 +7,8 @@ public sealed partial class SubtitleApplicationService
 {
     private void LoadPersistedSelections()
     {
-        var transcriptionKey = _providerAvailabilityService.ResolvePersistedTranscriptionModelKey(_credentialFacade.GetSubtitleModelKey());
+        var transcriptionKey = SubtitleWorkflowCatalog.CanonicalizeTranscriptionModelKey(
+            _providerAvailabilityService.ResolvePersistedTranscriptionModelKey(_credentialFacade.GetSubtitleModelKey()));
         var translationKey = _providerAvailabilityService.ResolvePersistedTranslationModelKey(_credentialFacade.GetTranslationModelKey());
         var autoTranslateEnabled = _credentialFacade.GetAutoTranslateEnabled();
 

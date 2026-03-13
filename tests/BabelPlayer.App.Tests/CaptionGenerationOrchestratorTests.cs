@@ -75,7 +75,7 @@ public sealed class CaptionGenerationOrchestratorTests
     {
         var orchestrator = CreateOrchestrator();
 
-        Assert.False(orchestrator.TryLoadCachedGeneratedSubtitles("C:\\test.mp4", "local:tiny"));
+        Assert.False(orchestrator.TryLoadCachedGeneratedSubtitles("C:\\test.mp4", SubtitleWorkflowCatalog.DefaultTranscriptionModelKey));
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public sealed class CaptionGenerationOrchestratorTests
 
         await orchestrator.StartAutomaticCaptionGenerationAsync("C:\\test.mp4", CancellationToken.None);
 
-        Assert.True(orchestrator.TryLoadCachedGeneratedSubtitles("C:\\test.mp4", "local:tiny"));
+        Assert.True(orchestrator.TryLoadCachedGeneratedSubtitles("C:\\test.mp4", SubtitleWorkflowCatalog.DefaultTranscriptionModelKey));
         Assert.True(coordinator.Snapshot.Transcript.Segments.Count > 0);
     }
 

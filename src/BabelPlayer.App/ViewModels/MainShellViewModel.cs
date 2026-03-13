@@ -11,7 +11,7 @@ public sealed class MainShellViewModel : ObservableObject
     private bool _isStatusOpen = true;
     private bool _isDarkTheme = true;
     private string _activeHardwareDecoder = string.Empty;
-    private AppPlayerSettings _settings = new();
+    private ShellPreferencesSnapshot _settings = new();
     private string _selectedTranscriptionLabel = SubtitleWorkflowCatalog.GetTranscriptionModel(SubtitleWorkflowCatalog.DefaultTranscriptionModelKey).DisplayName;
     private string _selectedTranslationLabel = SubtitleWorkflowCatalog.GetTranslationModel(null).DisplayName;
     private bool _isTranslationEnabled;
@@ -62,7 +62,7 @@ public sealed class MainShellViewModel : ObservableObject
         set => SetProperty(ref _activeHardwareDecoder, value);
     }
 
-    public AppPlayerSettings Settings
+    public ShellPreferencesSnapshot Settings
     {
         get => _settings;
         set => SetProperty(ref _settings, value);

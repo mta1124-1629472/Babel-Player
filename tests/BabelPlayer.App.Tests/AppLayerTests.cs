@@ -183,7 +183,7 @@ public sealed class AppLayerTests
 
         await controller.InitializeAsync();
 
-        Assert.Equal("local:tiny", controller.Snapshot.SelectedTranscriptionModelKey);
+        Assert.Equal("local:tiny-multilingual", controller.Snapshot.SelectedTranscriptionModelKey);
     }
 
     [Fact]
@@ -673,7 +673,7 @@ Second sentence
 
         Assert.True(controller.Snapshot.IsTranslationEnabled);
         Assert.Equal("cloud:deepl", controller.Snapshot.SelectedTranslationModelKey);
-        Assert.Equal("local:small", controller.Snapshot.SelectedTranscriptionModelKey);
+        Assert.Equal("local:small-multilingual", controller.Snapshot.SelectedTranscriptionModelKey);
     }
 
     [Fact]
@@ -682,8 +682,8 @@ Second sentence
         var baseModel = SubtitleWorkflowCatalog.GetTranscriptionModel("local:base");
         var tinyModel = SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny");
 
-        Assert.Equal("local:base", baseModel.Key);
-        Assert.Equal("Local Base.en", baseModel.DisplayName);
+        Assert.Equal("local:base-multilingual", baseModel.Key);
+        Assert.Equal("Local Base (multilingual)", baseModel.DisplayName);
         Assert.NotEqual(baseModel.Key, tinyModel.Key);
     }
 
@@ -718,7 +718,7 @@ Second sentence
                         {
                             Start = TimeSpan.Zero,
                             End = TimeSpan.FromSeconds(1),
-                            SourceText = options.LocalModelType == GgmlType.SmallEn ? "small model cue" : "tiny model cue",
+                            SourceText = options.LocalModelType == GgmlType.Small ? "small model cue" : "tiny model cue",
                             SourceLanguage = "en"
                         }
                     ];

@@ -6,7 +6,7 @@ public class SettingsFacade
 {
     public virtual AppPlayerSettings Load() => AppStateStore.LoadSettings();
 
-    public void Save(AppPlayerSettings settings) => AppStateStore.SaveSettings(settings);
+    public virtual void Save(AppPlayerSettings settings) => AppStateStore.SaveSettings(settings);
 
     public IReadOnlyList<PlaybackResumeEntry> LoadResumeEntries() => AppStateStore.LoadResumeEntries();
 
