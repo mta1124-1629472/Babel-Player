@@ -1,0 +1,35 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="using:BabelPlayer.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="BabelPlayer.Avalonia.MainWindow"
+        Title="Babel Player"
+        Width="1280"
+        Height="720"
+        Background="#111111">
+    <Grid Margin="16">
+        <Border Background="Black"
+                CornerRadius="12"
+                ClipToBounds="True">
+            <Grid>
+                <local:MpvNativeHost />
+
+                <Border HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Margin="24"
+                        Padding="16,8"
+                        Background="#B3000000"
+                        CornerRadius="8">
+                    <TextBlock Text="Hello World"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               Foreground="White"
+                               FontSize="28"
+                               FontWeight="SemiBold" />
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

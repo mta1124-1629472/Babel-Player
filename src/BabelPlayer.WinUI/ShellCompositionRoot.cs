@@ -73,8 +73,7 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             credentialFacade,
             credentialDialogService,
             filePickerService,
-            Environment.GetEnvironmentVariable,
-            _telemetry.LogFactory));
+            Environment.GetEnvironmentVariable));
         var subtitleApplicationService = new SubtitleApplicationService(
             subtitleInfrastructure.SubtitleSourceResolver,
             subtitleInfrastructure.CaptionGenerator,
