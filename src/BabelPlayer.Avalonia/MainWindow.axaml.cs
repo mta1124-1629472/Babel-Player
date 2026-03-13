@@ -6,6 +6,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using BabelPlayer.App;
+using BabelPlayer.Core;
 
 namespace BabelPlayer.Avalonia;
 
@@ -22,6 +23,8 @@ public partial class MainWindow : Window
     private Button? _playPauseButton;
     private TextBlock? _positionTextBlock;
     private TextBlock? _statusTextBlock;
+    private Border? _resumePromptBorder;
+    private TextBlock? _resumePromptTextBlock;
     private Slider? _timelineSlider;
     private Slider? _volumeSlider;
     private bool _backendInitialized;
@@ -31,6 +34,8 @@ public partial class MainWindow : Window
     private bool _updatingTimelineFromProjection;
     private bool _updatingVolumeFromProjection;
     private string? _currentMediaPath;
+    private PlaybackResumeEntry? _pendingResumeEntry;
+    private string? _pendingResumePath;
 
     public MainWindow()
     {
@@ -58,6 +63,8 @@ public partial class MainWindow : Window
         _playPauseButton ??= this.FindControl<Button>("PlayPauseButton");
         _positionTextBlock ??= this.FindControl<TextBlock>("PositionTextBlock");
         _statusTextBlock ??= this.FindControl<TextBlock>("StatusTextBlock");
+        _resumePromptBorder ??= this.FindControl<Border>("ResumePromptBorder");
+        _resumePromptTextBlock ??= this.FindControl<TextBlock>("ResumePromptTextBlock");
         _timelineSlider ??= this.FindControl<Slider>("TimelineSlider");
         _volumeSlider ??= this.FindControl<Slider>("VolumeSlider");
 
@@ -139,6 +146,7 @@ public partial class MainWindow : Window
         _shell.PlaybackHostRuntime.MediaOpened -= HandleMediaOpened;
         _shell.PlaybackHostRuntime.MediaEnded -= HandleMediaEnded;
         _shell.PlaybackHostRuntime.MediaFailed -= HandleMediaFailed;
+        _shell.ShellPlaybackCommands.FlushResumeTracking();
         _shell.Dispose();
 
         if (_subtitleOverlay.IsVisible)
@@ -234,13 +242,33 @@ public partial class MainWindow : Window
     {
         Dispatcher.UIThread.Post(async () =>
         {
-            var result = await _shell.ShellPlaybackCommands.HandleMediaOpenedAsync(
-                snapshot,
-                _shell.ShellPreferencesService.Current,
-                CancellationToken.None);
-            UpdateStatus(result.ResumePosition is TimeSpan
-                ? $"Resumed {Path.GetFileName(snapshot.Path)}."
-                : result.StatusMessage);
+            var path = snapshot.Path;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                HideResumePrompt();
+                UpdateStatus("Media opened.");
+                return;
+            }
+
+            if (!_shell.ShellPreferencesService.Current.ResumeEnabled)
+            {
+                HideResumePrompt();
+                UpdateStatus($"Now playing {Path.GetFileName(path)}.");
+                return;
+            }
+
+            var entry = _shell.ResumePlaybackService.FindEntry(path, snapshot.Duration);
+            if (entry is null)
+            {
+                HideResumePrompt();
+                UpdateStatus($"Now playing {Path.GetFileName(path)}.");
+                return;
+            }
+
+            _pendingResumeEntry = entry;
+            _pendingResumePath = path;
+            await _shell.ShellPlaybackCommands.PauseAsync(CancellationToken.None);
+            ShowResumePrompt(entry);
         });
     }
 
@@ -248,6 +276,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.UIThread.Post(async () =>
         {
+            HideResumePrompt();
             var result = _shell.ShellPlaybackCommands.HandleMediaEnded(_shell.ShellPreferencesService.Current.ResumeEnabled);
             if (result.NextItem is null)
             {
@@ -261,7 +290,11 @@ public partial class MainWindow : Window
 
     private void HandleMediaFailed(string message)
     {
-        Dispatcher.UIThread.Post(() => UpdateStatus(message));
+        Dispatcher.UIThread.Post(() =>
+        {
+            HideResumePrompt();
+            UpdateStatus(message);
+        });
     }
 
     private void ApplyProjection(BabelPlayer.App.ShellProjectionSnapshot projection)
@@ -579,6 +612,64 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void ResumeButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_pendingResumeEntry is null || string.IsNullOrWhiteSpace(_pendingResumePath))
+        {
+            HideResumePrompt();
+            return;
+        }
+
+        var path = _pendingResumePath;
+        var resumePosition = TimeSpan.FromSeconds(Math.Max(_pendingResumeEntry.PositionSeconds, 0));
+        HideResumePrompt();
+        await _shell.ShellPlaybackCommands.SeekAsync(resumePosition, CancellationToken.None);
+        await _shell.ShellPlaybackCommands.PlayAsync(CancellationToken.None);
+        UpdateStatus($"Resumed {Path.GetFileName(path)} from {FormatClock(resumePosition.TotalSeconds)}.");
+    }
+
+    private async void StartOverButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_pendingResumePath))
+        {
+            HideResumePrompt();
+            return;
+        }
+
+        var path = _pendingResumePath;
+        HideResumePrompt();
+        _shell.ResumePlaybackService.RemoveCompletedEntry(path);
+        await _shell.ShellPlaybackCommands.SeekAsync(TimeSpan.Zero, CancellationToken.None);
+        await _shell.ShellPlaybackCommands.PlayAsync(CancellationToken.None);
+        UpdateStatus($"Starting {Path.GetFileName(path)} from the beginning.");
+    }
+
+    private void ShowResumePrompt(PlaybackResumeEntry entry)
+    {
+        if (_resumePromptTextBlock is not null)
+        {
+            _resumePromptTextBlock.Text = $"Resume from {FormatClock(entry.PositionSeconds)}?";
+        }
+
+        if (_resumePromptBorder is not null)
+        {
+            _resumePromptBorder.IsVisible = true;
+        }
+
+        UpdateStatus($"Resume available at {FormatClock(entry.PositionSeconds)}.");
+    }
+
+    private void HideResumePrompt()
+    {
+        _pendingResumeEntry = null;
+        _pendingResumePath = null;
+
+        if (_resumePromptBorder is not null)
+        {
+            _resumePromptBorder.IsVisible = false;
+        }
+    }
+
     private void SyncSubtitleOverlay()
     {
         if (_videoSurfaceBorder is null)
@@ -666,6 +757,7 @@ public partial class MainWindow : Window
 
     private async Task OpenQueueItemAsync(ShellPlaylistItem item, string statusMessage)
     {
+        HideResumePrompt();
         var loaded = await _shell.ShellPlaybackCommands.LoadPlaybackItemAsync(
             item,
             BuildLoadOptions(),

@@ -12,6 +12,7 @@ public sealed record AvaloniaShellDependencies(
     IQueueProjectionReader QueueProjectionReader,
     IShellProjectionReader ShellProjectionReader,
     IShellPreferencesService ShellPreferencesService,
+    ResumePlaybackService ResumePlaybackService,
     ISubtitleWorkflowShellService SubtitleWorkflowService,
     ICredentialSetupService CredentialSetupService,
     IFilePickerService FilePickerService,
@@ -57,6 +58,7 @@ public sealed class AvaloniaShellCompositionRoot
         var playbackHostRuntime = new PlaybackHostRuntimeAdapter(playbackBackend);
         var shellProjectionReader = new ShellProjectionService(mediaSessionCoordinator.Store);
         var playbackQueueController = new PlaybackQueueController();
+        var resumePlaybackService = new ResumePlaybackService();
         var credentialSetupService = new CredentialSetupService(
             credentialFacade,
             subtitleInfrastructure.ProviderAvailabilityService,
@@ -68,7 +70,7 @@ public sealed class AvaloniaShellCompositionRoot
             playbackBackend,
             subtitleWorkflowController,
             new LibraryBrowserService(),
-            new ResumePlaybackService(),
+            resumePlaybackService,
             shellPreferencesService);
 
         return new AvaloniaShellDependencies(
@@ -78,6 +80,7 @@ public sealed class AvaloniaShellCompositionRoot
             shellController,
             shellProjectionReader,
             shellPreferencesService,
+            resumePlaybackService,
             subtitleWorkflowController,
             credentialSetupService,
             filePickerService,

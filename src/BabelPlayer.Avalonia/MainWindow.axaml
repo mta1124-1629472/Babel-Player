@@ -30,6 +30,31 @@
                                Text="Open a local video to begin playback." />
                 </WrapPanel>
 
+                <Border x:Name="ResumePromptBorder"
+                        IsVisible="False"
+                        Background="#2A1F14"
+                        BorderBrush="#7A522A"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="12,10">
+                    <Grid ColumnDefinitions="*,Auto,Auto"
+                          ColumnSpacing="10">
+                        <TextBlock x:Name="ResumePromptTextBlock"
+                                   Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   Foreground="#F6E7D5"
+                                   Text="Resume from 00:00?" />
+                        <Button x:Name="ResumeButton"
+                                Grid.Column="1"
+                                Content="Resume"
+                                Click="ResumeButton_Click" />
+                        <Button x:Name="StartOverButton"
+                                Grid.Column="2"
+                                Content="Start Over"
+                                Click="StartOverButton_Click" />
+                    </Grid>
+                </Border>
+
                 <WrapPanel Orientation="Horizontal"
                            ItemHeight="36"
                            VerticalAlignment="Center">
