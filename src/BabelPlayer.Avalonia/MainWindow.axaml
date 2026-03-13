@@ -3,32 +3,94 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="using:BabelPlayer.Avalonia"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="720"
         x:Class="BabelPlayer.Avalonia.MainWindow"
         Title="Babel Player"
         Width="1280"
         Height="720"
         Background="#111111">
-    <Grid Margin="16">
-        <Border Background="Black"
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+        <Border Grid.Row="0"
+                Background="#191919"
+                CornerRadius="12"
+                Padding="12"
+                Margin="0,0,0,12">
+            <DockPanel LastChildFill="False">
+                <Button x:Name="OpenButton"
+                        Content="Open Video"
+                        Click="OpenButton_Click" />
+                <TextBlock x:Name="StatusTextBlock"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="#D0D0D0"
+                           Text="Open a local video to begin playback." />
+            </DockPanel>
+        </Border>
+
+        <Border x:Name="VideoSurfaceBorder"
+                Grid.Row="1"
+                Background="Black"
                 CornerRadius="12"
                 ClipToBounds="True">
-            <Grid>
-                <local:MpvNativeHost />
+            <local:MpvNativeHost x:Name="VideoHost" />
+        </Border>
 
-                <Border HorizontalAlignment="Center"
-                        VerticalAlignment="Bottom"
-                        Margin="24"
-                        Padding="16,8"
-                        Background="#B3000000"
-                        CornerRadius="8">
-                    <TextBlock Text="Hello World"
-                               HorizontalAlignment="Center"
-                               TextAlignment="Center"
-                               Foreground="White"
-                               FontSize="28"
-                               FontWeight="SemiBold" />
-                </Border>
+        <Border Grid.Row="2"
+                Background="#191919"
+                CornerRadius="12"
+                Padding="12"
+                Margin="0,12,0,0">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,120" RowDefinitions="Auto,Auto">
+                <Button x:Name="PlayPauseButton"
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        Margin="0,0,8,0"
+                        Content="Play"
+                        Click="PlayPauseButton_Click" />
+                <Button Grid.Row="0"
+                        Grid.Column="1"
+                        Margin="0,0,8,0"
+                        Content="Stop"
+                        Click="StopButton_Click" />
+                <Button Grid.Row="0"
+                        Grid.Column="2"
+                        Margin="0,0,8,0"
+                        Content="-10s"
+                        Click="SeekBackButton_Click" />
+                <Button Grid.Row="0"
+                        Grid.Column="3"
+                        Margin="0,0,12,0"
+                        Content="+10s"
+                        Click="SeekForwardButton_Click" />
+                <TextBlock x:Name="PositionTextBlock"
+                           Grid.Row="0"
+                           Grid.Column="4"
+                           VerticalAlignment="Center"
+                           Foreground="#F5F5F5"
+                           Text="00:00 / 00:00" />
+                <TextBlock Grid.Row="0"
+                           Grid.Column="5"
+                           VerticalAlignment="Center"
+                           Margin="12,0,8,0"
+                           Foreground="#D0D0D0"
+                           Text="Volume" />
+                <Slider x:Name="VolumeSlider"
+                        Grid.Row="0"
+                        Grid.Column="6"
+                        Minimum="0"
+                        Maximum="1"
+                        Value="0.8" />
+
+                <ProgressBar x:Name="TimelineProgressBar"
+                             Grid.Row="1"
+                             Grid.Column="0"
+                             Grid.ColumnSpan="7"
+                             Margin="0,12,0,0"
+                             Minimum="0"
+                             Maximum="1"
+                             Height="8"
+                             Foreground="#4FC3F7"
+                             Background="#2D2D2D" />
             </Grid>
         </Border>
     </Grid>

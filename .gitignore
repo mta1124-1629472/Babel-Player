@@ -372,3 +372,5 @@ eval/outputs/
 # Python virtual environments
 .venv/
 .venv*/
+
+src/BabelPlayer.Avalonia/native/win-x64/libmpv-2.dll
