@@ -6,11 +6,21 @@ namespace BabelPlayer.Avalonia;
 
 public sealed class AvaloniaFilePickerService : IFilePickerService
 {
+    public static readonly IReadOnlyList<string> SupportedVideoExtensions =
+    [
+        ".mp4",
+        ".mkv",
+        ".avi",
+        ".mov",
+        ".webm",
+        ".wmv"
+    ];
+
     private static readonly IReadOnlyList<FilePickerFileType> MediaFileTypes =
     [
         new FilePickerFileType("Media files")
         {
-            Patterns = ["*.mkv", "*.mp4", "*.avi", "*.mov", "*.m4v", "*.webm", "*.mp3", "*.wav", "*.flac", "*.ogg"]
+            Patterns = SupportedVideoExtensions.Select(extension => $"*{extension}").ToArray()
         }
     ];
 
@@ -31,7 +41,7 @@ public sealed class AvaloniaFilePickerService : IFilePickerService
         var files = await _ownerWindow.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Open Video",
-            AllowMultiple = false,
+            AllowMultiple = true,
             FileTypeFilter = MediaFileTypes
         });
 

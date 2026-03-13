@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using BabelPlayer.App;
@@ -16,11 +18,12 @@ public partial class MainWindow : Window
     private Button? _playPauseButton;
     private TextBlock? _positionTextBlock;
     private TextBlock? _statusTextBlock;
-    private ProgressBar? _timelineProgressBar;
+    private Slider? _timelineSlider;
     private Slider? _volumeSlider;
     private bool _backendInitialized;
     private bool _subtitleWorkflowInitialized;
     private bool _startupMediaLoaded;
+    private bool _updatingTimelineFromProjection;
     private bool _updatingVolumeFromProjection;
     private string? _currentMediaPath;
 
@@ -33,6 +36,8 @@ public partial class MainWindow : Window
         PositionChanged += HandleOverlayPositionInvalidated;
         Resized += HandleOverlayPositionInvalidated;
         ScalingChanged += HandleOverlayPositionInvalidated;
+        AddHandler(DragDrop.DragOverEvent, HandleWindowDragOver);
+        AddHandler(DragDrop.DropEvent, HandleWindowDrop);
     }
 
     protected override void OnLoaded(RoutedEventArgs e)
@@ -44,7 +49,7 @@ public partial class MainWindow : Window
         _playPauseButton ??= this.FindControl<Button>("PlayPauseButton");
         _positionTextBlock ??= this.FindControl<TextBlock>("PositionTextBlock");
         _statusTextBlock ??= this.FindControl<TextBlock>("StatusTextBlock");
-        _timelineProgressBar ??= this.FindControl<ProgressBar>("TimelineProgressBar");
+        _timelineSlider ??= this.FindControl<Slider>("TimelineSlider");
         _volumeSlider ??= this.FindControl<Slider>("VolumeSlider");
 
         if (_videoSurfaceBorder is not null)
@@ -63,6 +68,12 @@ public partial class MainWindow : Window
         {
             _volumeSlider.PropertyChanged -= HandleVolumeSliderPropertyChanged;
             _volumeSlider.PropertyChanged += HandleVolumeSliderPropertyChanged;
+        }
+
+        if (_timelineSlider is not null)
+        {
+            _timelineSlider.PropertyChanged -= HandleTimelineSliderPropertyChanged;
+            _timelineSlider.PropertyChanged += HandleTimelineSliderPropertyChanged;
         }
 
         _shell.ShellProjectionReader.ProjectionChanged -= HandleProjectionChanged;
@@ -102,6 +113,11 @@ public partial class MainWindow : Window
         if (_volumeSlider is not null)
         {
             _volumeSlider.PropertyChanged -= HandleVolumeSliderPropertyChanged;
+        }
+
+        if (_timelineSlider is not null)
+        {
+            _timelineSlider.PropertyChanged -= HandleTimelineSliderPropertyChanged;
         }
 
         _shell.ShellProjectionReader.ProjectionChanged -= HandleProjectionChanged;
@@ -242,13 +258,16 @@ public partial class MainWindow : Window
 
         if (_positionTextBlock is not null)
         {
-            _positionTextBlock.Text = $"{transport.CurrentTimeText} / {transport.DurationText}";
+            _positionTextBlock.Text = $"{FormatClock(transport.PositionSeconds)} / {FormatClock(transport.DurationSeconds)}";
         }
 
-        if (_timelineProgressBar is not null)
+        if (_timelineSlider is not null)
         {
-            _timelineProgressBar.Maximum = Math.Max(transport.DurationSeconds, 1);
-            _timelineProgressBar.Value = Math.Clamp(transport.PositionSeconds, 0, _timelineProgressBar.Maximum);
+            _updatingTimelineFromProjection = true;
+            _timelineSlider.Maximum = Math.Max(transport.DurationSeconds, 1);
+            _timelineSlider.Value = Math.Clamp(transport.PositionSeconds, 0, _timelineSlider.Maximum);
+            _timelineSlider.IsEnabled = transport.IsSeekable && !string.IsNullOrWhiteSpace(transport.Path);
+            _updatingTimelineFromProjection = false;
         }
 
         if (_volumeSlider is not null)
@@ -271,8 +290,7 @@ public partial class MainWindow : Window
         try
         {
             var files = await _shell.FilePickerService.PickMediaFilesAsync();
-            var path = files.FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(path))
+            if (files.Count == 0)
             {
                 return;
             }
@@ -288,7 +306,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            await OpenMediaAsync(path, $"Opening {Path.GetFileName(path)}...");
+            await OpenMediaFilesAsync(files, "Opening selected media...");
         }
         catch (Exception ex)
         {
@@ -346,6 +364,65 @@ public partial class MainWindow : Window
         }
 
         _ = _shell.ShellPlaybackCommands.ApplyAudioPreferencesAsync(slider.Value, _shell.ShellProjectionReader.Current.Transport.IsMuted, CancellationToken.None);
+    }
+
+    private void HandleTimelineSliderPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (_updatingTimelineFromProjection || e.Property.Name != nameof(Slider.Value) || !_backendInitialized || sender is not Slider slider)
+        {
+            return;
+        }
+
+        var transport = _shell.ShellProjectionReader.Current.Transport;
+        if (!transport.IsSeekable || string.IsNullOrWhiteSpace(transport.Path))
+        {
+            return;
+        }
+
+        _ = _shell.ShellPlaybackCommands.SeekAsync(TimeSpan.FromSeconds(slider.Value), CancellationToken.None);
+    }
+
+    private void HandleWindowDragOver(object? sender, DragEventArgs e)
+    {
+        var files = GetDroppedVideoPaths(e.Data);
+        e.DragEffects = files.Count > 0 ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void HandleWindowDrop(object? sender, DragEventArgs e)
+    {
+        try
+        {
+            var files = GetDroppedVideoPaths(e.Data);
+            if (files.Count == 0)
+            {
+                UpdateStatus("Drop a supported video file to start playback.");
+                return;
+            }
+
+            if (_videoHost?.HostHandle is > 0 && !_backendInitialized)
+            {
+                await InitializePlaybackAsync(_videoHost.HostHandle);
+            }
+
+            if (!_backendInitialized)
+            {
+                UpdateStatus("Playback surface is not ready yet.");
+                return;
+            }
+
+            await OpenMediaFilesAsync(files, files.Count == 1
+                ? $"Opening {Path.GetFileName(files[0])}..."
+                : $"Opening {files.Count} queued videos...");
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus($"Drop failed: {ex.Message}");
+        }
+        finally
+        {
+            e.Handled = true;
+        }
     }
 
     private void UpdateStatus(string message)
@@ -410,10 +487,27 @@ public partial class MainWindow : Window
 
     private async Task OpenMediaAsync(string path, string statusMessage)
     {
+        await OpenMediaFilesAsync([path], statusMessage);
+    }
+
+    private async Task OpenMediaFilesAsync(IReadOnlyList<string> paths, string statusMessage)
+    {
+        var normalizedPaths = paths
+            .Where(IsSupportedVideoPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedPaths.Length == 0)
+        {
+            UpdateStatus("Select a supported video file.");
+            return;
+        }
+
         UpdateStatus(statusMessage);
         await InitializeSubtitleWorkflowAsync();
 
-        var queueResult = _shell.QueueCommands.PlayNow(path);
+        var queueResult = normalizedPaths.Length == 1
+            ? _shell.QueueCommands.PlayNow(normalizedPaths[0])
+            : _shell.QueueCommands.EnqueueFiles(normalizedPaths, autoplay: true);
         if (queueResult.ItemToLoad is null)
         {
             UpdateStatus(queueResult.StatusMessage ?? "Nothing to load.");
@@ -494,5 +588,38 @@ public partial class MainWindow : Window
     private static string GetBundledTestVideoPath()
     {
         return Path.Combine(AppContext.BaseDirectory, "Assets", "test-video.mp4");
+    }
+
+    private static IReadOnlyList<string> GetDroppedVideoPaths(IDataObject data)
+    {
+        var files = data.GetFiles();
+        if (files is null)
+        {
+            return [];
+        }
+
+        return files
+            .Select(file => file.TryGetLocalPath())
+            .Where(path => !string.IsNullOrWhiteSpace(path) && IsSupportedVideoPath(path))
+            .Cast<string>()
+            .ToArray();
+    }
+
+    private static bool IsSupportedVideoPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var extension = Path.GetExtension(path);
+        return AvaloniaFilePickerService.SupportedVideoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string FormatClock(double totalSeconds)
+    {
+        var value = TimeSpan.FromSeconds(Math.Max(totalSeconds, 0));
+        var totalMinutes = (int)value.TotalMinutes;
+        return $"{totalMinutes:00}:{value.Seconds:00}";
     }
 }
