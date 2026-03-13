@@ -10,6 +10,8 @@ You help extract business logic from `MainWindow.xaml.cs` (and other WinUI shell
 
 `MainWindow.xaml.cs` is a known hotspot (~2500 lines). Any logic that is not pure view wiring (event → command, snapshot → control state) belongs in App layer controllers.
 
+Before planning or editing, read `docs/SHELL_BOUNDARY_GUARDRAILS.md` and apply it as a hard constraint for every `MainWindow*.cs` change.
+
 **Shell = view wiring only:**
 - Subscribe to `ShellProjectionService.ProjectionChanged` events
 - Read immutable `ShellProjectionSnapshot`, `PlaybackQueueSnapshot`, `SubtitleWorkflowSnapshot`
@@ -118,6 +120,7 @@ public void ShellController_DoesExpectedThing()
 
 ## Reference Files
 
+- `docs/SHELL_BOUNDARY_GUARDRAILS.md` — required shell/App guardrails for `MainWindow*.cs`
 - `src/BabelPlayer.App/ShellController.cs` — primary shell-facing controller
 - `src/BabelPlayer.App/ShellProjectionService.cs` — projection types and publisher
 - `src/BabelPlayer.App/MediaSessionCoordinator.cs` — timed mutation boundary

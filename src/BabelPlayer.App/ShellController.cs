@@ -20,6 +20,8 @@ public sealed record ShellQueueMediaResult
     public IReadOnlyList<PlaylistItem> AddedItems { get; init; } = [];
     public PlaylistItem? ItemToLoad { get; init; }
     public IReadOnlyList<string> PinnedFolders { get; init; } = [];
+    public bool RevealBrowserPane { get; init; }
+    public ShellPreferencesSnapshot? UpdatedPreferences { get; init; }
     public string? StatusMessage { get; init; }
     public bool IsError { get; init; }
 }
@@ -57,6 +59,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
     private readonly LibraryBrowserService _libraryBrowserService;
     private readonly ResumePlaybackService _resumePlaybackService;
     private readonly ResumeTrackingCoordinator _resumeTrackingCoordinator;
+    private readonly IShellPreferencesService _shellPreferencesService;
     private readonly IBabelLogger _logger;
 
     private bool _autoResumePlaybackAfterCaptionReady;
@@ -72,6 +75,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         SubtitleWorkflowController subtitleWorkflowController,
         LibraryBrowserService libraryBrowserService,
         ResumePlaybackService resumePlaybackService,
+        IShellPreferencesService shellPreferencesService,
         IBabelLogFactory? logFactory = null)
     {
         _playbackQueueController = playbackQueueController;
@@ -79,6 +83,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _subtitleWorkflowController = subtitleWorkflowController;
         _libraryBrowserService = libraryBrowserService;
         _resumePlaybackService = resumePlaybackService;
+        _shellPreferencesService = shellPreferencesService;
         _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("shell.controller");
         _resumeTrackingCoordinator = new ResumeTrackingCoordinator(playbackBackend, resumePlaybackService);
         _playbackQueueController.SnapshotChanged += HandleQueueSnapshotChanged;
@@ -178,6 +183,8 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
             AddedItems = added,
             ItemToLoad = itemToLoad,
             PinnedFolders = [folderPath],
+            RevealBrowserPane = true,
+            UpdatedPreferences = RevealBrowserPanePreference(),
             StatusMessage = autoplay
                 ? itemToLoad is null
                     ? $"Queued {added.Count} item(s) from {Path.GetFileName(folderPath)}."
@@ -222,8 +229,24 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         {
             AddedItems = added,
             ItemToLoad = itemToLoad,
-            PinnedFolders = pinnedFolders.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            PinnedFolders = pinnedFolders.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            RevealBrowserPane = pinnedFolders.Count > 0,
+            UpdatedPreferences = pinnedFolders.Count > 0 ? RevealBrowserPanePreference() : null
         };
+    }
+
+    private ShellPreferencesSnapshot RevealBrowserPanePreference()
+    {
+        var current = _shellPreferencesService.Current;
+        if (current.ShowBrowserPanel)
+        {
+            return current;
+        }
+
+        return _shellPreferencesService.ApplyLayoutChange(new ShellLayoutPreferencesChange(
+            true,
+            current.ShowPlaylistPanel,
+            current.WindowMode));
     }
 
     public ShellQueueMediaResult PlayNow(string path)
@@ -351,7 +374,21 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         }
     }
 
-    public async Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(PlaybackStateSnapshot snapshot, bool resumeEnabled, CancellationToken cancellationToken = default)
+    public async Task ApplyPlaybackDefaultsAsync(ShellPlaybackDefaultsChange change, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        await _playbackBackend.SetHardwareDecodingModeAsync(change.HardwareDecodingMode, cancellationToken);
+        await _playbackBackend.SetPlaybackRateAsync(change.PlaybackRate, cancellationToken);
+        await _playbackBackend.SetAspectRatioAsync(change.AspectRatio, cancellationToken);
+        await _playbackBackend.SetAudioDelayAsync(change.AudioDelaySeconds, cancellationToken);
+        await _playbackBackend.SetSubtitleDelayAsync(change.SubtitleDelaySeconds, cancellationToken);
+    }
+
+    public async Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(
+        PlaybackStateSnapshot snapshot,
+        ShellPreferencesSnapshot preferences,
+        CancellationToken cancellationToken = default)
     {
         var current = _playbackQueueController.NowPlayingItem;
         var result = new ShellPlaybackOpenResult
@@ -359,9 +396,16 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
             StatusMessage = current is null ? "Media opened." : $"Now playing {current.DisplayName}."
         };
 
-        _resumeTrackingCoordinator.SetEnabled(resumeEnabled);
+        await ApplyPlaybackDefaultsAsync(new ShellPlaybackDefaultsChange(
+            preferences.HardwareDecodingMode,
+            preferences.PlaybackRate,
+            preferences.AudioDelaySeconds,
+            preferences.SubtitleDelaySeconds,
+            preferences.AspectRatio), cancellationToken);
+
+        _resumeTrackingCoordinator.SetEnabled(preferences.ResumeEnabled);
         _resumeTrackingCoordinator.ResetForMedia(snapshot.Path);
-        if (!resumeEnabled)
+        if (!preferences.ResumeEnabled)
         {
             return result;
         }

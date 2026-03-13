@@ -14,6 +14,8 @@ A seam test proves a contract holds between two layers:
 - **Presenter contract**: `IVideoPresenter` or `ISubtitlePresenter` implementations honor their interface contracts.
 - **Orchestrator logic**: `ShellController`, `PlaybackQueueController`, or `SubtitleWorkflowController` methods behave correctly for given inputs.
 
+If the test covers `MainWindow*.cs` boundaries or shell/App ownership, read `docs/SHELL_BOUNDARY_GUARDRAILS.md` first and encode those guardrails directly in source-scan or seam tests.
+
 ## Test Locations
 
 | Test type | Where to add |
@@ -160,6 +162,7 @@ public async Task SubtitleWorkflowController_DeliversCuesFromFakeTranscriber()
 
 ## Reference Files
 
+- `docs/SHELL_BOUNDARY_GUARDRAILS.md` — required shell/App guardrails for source-scan boundary tests
 - `tests/BabelPlayer.App.Tests/MediaSessionSeamTests.cs` — backend→session seam patterns
 - `tests/BabelPlayer.App.Tests/PlaybackHostAdapterSeamTests.cs` — presenter contract patterns  
 - `tests/BabelPlayer.App.Tests/AppLayerTests.cs` — orchestrator unit test patterns

@@ -14,6 +14,8 @@ Babel-Player uses a **capability-based provider registry** (`ProviderAvailabilit
 3. Credential-gated (`CredentialFacade` / `IAiCredentialCoordinator`) if it needs an API key
 4. Surfaced to the shell as a `TranscriptionModelSelection` or `TranslationModelSelection` projection item
 
+If provider work also touches shell wiring or `MainWindow*.cs`, read `docs/SHELL_BOUNDARY_GUARDRAILS.md` first and keep all provider-specific behavior out of WinUI.
+
 ## Provider Interfaces
 
 | Interface | What it does | Where implemented |
@@ -123,6 +125,7 @@ public async Task SubtitleWorkflow_UsesMyServiceTranslator()
 
 ## Reference Files
 
+- `docs/SHELL_BOUNDARY_GUARDRAILS.md` — guardrails when provider changes require shell wiring
 - `src/BabelPlayer.App/OpenAiTranslationProviderAdapter.cs` — cloud translation example
 - `src/BabelPlayer.App/LocalLlamaTranslationProviderAdapter.cs` — local model translation example
 - `src/BabelPlayer.App/LocalTranscriptionProviderAdapter.cs` — local transcription example

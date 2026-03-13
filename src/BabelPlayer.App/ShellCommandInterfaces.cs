@@ -47,7 +47,7 @@ public interface IShellPlaybackCommands
 
     Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(
         PlaybackStateSnapshot snapshot,
-        bool resumeEnabled,
+        ShellPreferencesSnapshot preferences,
         CancellationToken cancellationToken = default);
 
     ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled);
@@ -63,6 +63,8 @@ public interface IShellPlaybackCommands
     Task StepFrameAsync(bool forward, CancellationToken cancellationToken = default);
 
     Task ApplyAudioPreferencesAsync(double volume, bool muted, CancellationToken cancellationToken = default);
+
+    Task ApplyPlaybackDefaultsAsync(ShellPlaybackDefaultsChange change, CancellationToken cancellationToken = default);
 
     Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken = default);
 

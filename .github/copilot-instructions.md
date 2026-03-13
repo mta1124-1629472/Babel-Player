@@ -4,7 +4,7 @@
 
 Babel-Player is a Windows desktop media player (WinUI 3) for local video with embedded subtitle generation and translation workflows. The codebase is organized around a **MediaSession-centered architecture** that keeps timed state authoritative, separates platform concerns, and preserves a future path to cross-platform support.
 
-**See also**: `AGENTS.md` for architectural constraints, `docs/DEVELOPMENT_RULES.md` for operational rules.
+**See also**: `AGENTS.md` for architectural constraints, `docs/DEVELOPMENT_RULES.md` for operational rules, and `docs/SHELL_BOUNDARY_GUARDRAILS.md` for required `MainWindow*.cs` shell/App boundary rules.
 
 ## Quick Start
 
@@ -81,10 +81,11 @@ Do not export `AppWindow`, `HWND`, `DX11Device` from App layer. Use platform-agn
 ## Refactoring Checklist
 
 1. Read `docs/ARCHITECTURE.md`, `docs/MODULE_MAP.md`, `docs/DEVELOPMENT_RULES.md`.
-2. Does this increase Windows lock-in? Call it out explicitly.
-3. Do you introduce new timed state? Use `MediaSessionCoordinator`.
-4. Do you cross layers? Use immutable projections at boundaries.
-5. Add tests proving seams still hold.
+2. If the change touches `MainWindow*.cs` or shell/App seams, read `docs/SHELL_BOUNDARY_GUARDRAILS.md` before editing.
+3. Does this increase Windows lock-in? Call it out explicitly.
+4. Do you introduce new timed state? Use `MediaSessionCoordinator`.
+5. Do you cross layers? Use immutable projections at boundaries.
+6. Add tests proving seams still hold.
 
 ## Testing Strategy
 
@@ -116,3 +117,4 @@ Three focused agents live in `.github/agents/`. Invoke them automatically when t
 - `docs/ARCHITECTURE.md` — Authoritative state definition.
 - `docs/MODULE_MAP.md` — Module ownership & hotspots.
 - `docs/DEVELOPMENT_RULES.md` — Operational rules.
+- `docs/SHELL_BOUNDARY_GUARDRAILS.md` — Required shell boundary guardrails and review checklist for `MainWindow*.cs` changes.

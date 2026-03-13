@@ -31,6 +31,7 @@ public sealed record ShellDependencies
     public required IVideoPresenter VideoPresenter { get; init; }
     public required ISubtitlePresenter SubtitlePresenter { get; init; }
     public required IShellPreferencesService ShellPreferencesService { get; init; }
+    public required IShellPreferenceCommands ShellPreferenceCommands { get; init; }
     public required IShellLibraryService ShellLibraryService { get; init; }
     public required ShellProjectionService ShellProjectionService { get; init; }
     public required IQueueProjectionReader QueueProjectionReader { get; init; }
@@ -121,11 +122,17 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             subtitleWorkflowController,
             new LibraryBrowserService(),
             resumePlaybackService,
+            shellPreferencesService,
             _logFactory);
+        var shellPreferenceCommands = new ShellPreferenceCommands(
+            shellPreferencesService,
+            shellController,
+            shortcutProfileService);
         var shortcutCommandExecutor = new ShortcutCommandExecutor(
             shellController,
             shellController,
             shellPreferencesService,
+            shellPreferenceCommands,
             subtitleWorkflowService);
 
         var stageCoordinator = new StageCoordinator(
@@ -150,6 +157,7 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
             VideoPresenter = videoPresenter,
             SubtitlePresenter = subtitlePresenter,
             ShellPreferencesService = shellPreferencesService,
+            ShellPreferenceCommands = shellPreferenceCommands,
             ShellLibraryService = shellLibraryService,
             ShellProjectionService = shellProjectionService,
             QueueProjectionReader = shellController,

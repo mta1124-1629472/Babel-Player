@@ -105,6 +105,7 @@ Before proposing any architectural change:
    - `docs/ARCHITECTURE.md` (canonical state model).
    - `docs/MODULE_MAP.md` (module ownership and hotspots).
    - `docs/DEVELOPMENT_RULES.md` (detailed constraints).
+   - `docs/SHELL_BOUNDARY_GUARDRAILS.md` when any `MainWindow*.cs` or shell boundary code is involved.
 
 2. **Architectural fit**:
    - [ ] Does this increase Windows lock-in? If yes, justify explicitly in PR.
@@ -162,3 +163,4 @@ Three focused agents exist in `.github/agents/`. Use them automatically when the
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Authoritative state definition and layer design.
 - [docs/MODULE_MAP.md](docs/MODULE_MAP.md) — Module ownership, hotspots, and refactoring boundaries.
 - [docs/DEVELOPMENT_RULES.md](docs/DEVELOPMENT_RULES.md) — Detailed operational rules and constraints (state, platforms, presenters, services, UI).
+- [docs/SHELL_BOUNDARY_GUARDRAILS.md](docs/SHELL_BOUNDARY_GUARDRAILS.md) — Required shell/App boundary guardrails for `MainWindow*.cs` changes and related regression tests.
