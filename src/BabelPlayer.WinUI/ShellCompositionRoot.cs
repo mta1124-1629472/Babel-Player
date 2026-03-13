@@ -44,10 +44,14 @@ public sealed record ShellDependencies
 public sealed class ShellCompositionRoot : IShellCompositionRoot
 {
     private readonly IAppTelemetryBootstrap _telemetry;
+    private readonly ISubtitleWorkflowInfrastructureFactory _subtitleWorkflowInfrastructureFactory;
 
-    public ShellCompositionRoot(IAppTelemetryBootstrap? telemetry = null)
+    public ShellCompositionRoot(
+        IAppTelemetryBootstrap? telemetry = null,
+        ISubtitleWorkflowInfrastructureFactory? subtitleWorkflowInfrastructureFactory = null)
     {
         _telemetry = telemetry ?? new AppTelemetryBootstrap();
+        _subtitleWorkflowInfrastructureFactory = subtitleWorkflowInfrastructureFactory ?? new SubtitleWorkflowInfrastructureFactory();
     }
 
     public ShellDependencies Create(
@@ -63,43 +67,30 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
         var shellPreferencesService = new ShellPreferencesService(new SettingsFacade());
         var shortcutProfileService = new ShortcutProfileService(shellPreferencesService);
         var credentialDialogService = new WinUICredentialDialogService(rootGrid, shortcutProfileService, suppressDialogPresentation);
-        var runtimeBootstrapService = new RuntimeBootstrapService();
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
-        var transcriptionEngineFactory = new AsrTranscriptionEngineFactory();
-        var translationEngineFactory = new MtTranslationEngineFactory();
-        var providerCompositionFactory = new ProviderCompositionFactory(transcriptionEngineFactory, translationEngineFactory);
-        var providerComposition = providerCompositionFactory.Create(credentialFacade, Environment.GetEnvironmentVariable);
-        var providerAvailabilityService = new ProviderAvailabilityService(providerComposition);
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
-        var aiCredentialCoordinator = new AiCredentialCoordinatorFactory().Create(
-            credentialFacade,
-            credentialDialogService,
-            Environment.GetEnvironmentVariable);
-        var runtimeProvisioner = new DefaultRuntimeProvisioner(
-            runtimeBootstrapService,
+        var subtitleInfrastructure = _subtitleWorkflowInfrastructureFactory.Create(new SubtitleWorkflowInfrastructureRequest(
             credentialFacade,
             credentialDialogService,
             filePickerService,
-            Environment.GetEnvironmentVariable);
+            Environment.GetEnvironmentVariable,
+            _telemetry.LogFactory));
         var subtitleApplicationService = new SubtitleApplicationService(
-            new DefaultSubtitleSourceResolver(runtimeBootstrapService),
-            new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry),
-            new ProviderBackedSubtitleTranslator(
-                providerComposition.Context,
-                providerComposition.TranslationRegistry,
-                translationEngineFactory,
-                providerComposition.LocalRuntime),
-            aiCredentialCoordinator,
-            runtimeProvisioner,
+            subtitleInfrastructure.SubtitleSourceResolver,
+            subtitleInfrastructure.CaptionGenerator,
+            subtitleInfrastructure.SubtitleTranslator,
+            subtitleInfrastructure.AiCredentialCoordinator,
+            subtitleInfrastructure.RuntimeProvisioner,
             credentialFacade,
             mediaSessionCoordinator,
             workflowStateStore,
-            providerAvailabilityService);
+            subtitleInfrastructure.ProviderAvailabilityService);
         var subtitleWorkflowController = new SubtitleWorkflowController(
             subtitleApplicationService,
             new SubtitleWorkflowProjectionAdapter(workflowStateStore, mediaSessionCoordinator.Store),
             new SubtitlePresentationProjector());
         ISubtitleWorkflowShellService subtitleWorkflowService = subtitleWorkflowController;
+        var runtimeBootstrapService = subtitleInfrastructure.RuntimeBootstrapService;
         var playbackBackend = new MpvPlaybackBackend(runtimeBootstrapService);
         var playbackBackendCoordinator = new PlaybackBackendCoordinator(playbackBackend, mediaSessionCoordinator);
         var playbackHostRuntime = new PlaybackHostRuntimeAdapter(playbackBackend);
@@ -110,9 +101,9 @@ public sealed class ShellCompositionRoot : IShellCompositionRoot
         var resumePlaybackService = new ResumePlaybackService();
         var credentialSetupService = new CredentialSetupService(
             credentialFacade,
-            providerAvailabilityService,
-            aiCredentialCoordinator,
-            runtimeProvisioner,
+            subtitleInfrastructure.ProviderAvailabilityService,
+            subtitleInfrastructure.AiCredentialCoordinator,
+            subtitleInfrastructure.RuntimeProvisioner,
             Environment.GetEnvironmentVariable);
         var shellController = new ShellController(
             playbackQueueController,

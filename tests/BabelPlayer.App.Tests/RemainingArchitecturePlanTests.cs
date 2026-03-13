@@ -1797,6 +1797,33 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
+    public void ShellCompositionRoot_DelegatesProviderAndRuntimeAssemblyToInfrastructureFactory()
+    {
+        var sourcePath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BabelPlayer.WinUI",
+            "ShellCompositionRoot.cs"));
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("ISubtitleWorkflowInfrastructureFactory", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new RuntimeBootstrapService(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new ProviderCompositionFactory(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new AsrTranscriptionEngineFactory(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new MtTranslationEngineFactory(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new AiCredentialCoordinatorFactory(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new DefaultRuntimeProvisioner(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new DefaultSubtitleSourceResolver(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new DefaultCaptionGenerator(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new ProviderBackedSubtitleTranslator(", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AppViewModelDirectory_IsEmptyAfterMoveToWinUi()
     {
         var viewModelDirectory = Path.GetFullPath(Path.Combine(
