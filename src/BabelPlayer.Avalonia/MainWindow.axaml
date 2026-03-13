@@ -151,6 +151,86 @@
                         <ComboBoxItem Content="Dual"
                                       Tag="Dual" />
                     </ComboBox>
+                    <Button x:Name="SubtitleStyleButton"
+                            Margin="12,0,0,0"
+                            Content="Subtitle Style">
+                        <Button.Flyout>
+                            <Flyout Placement="Bottom"
+                                    Opened="SubtitleStyleFlyout_Opened">
+                                <Border Width="340"
+                                        Background="#202020"
+                                        CornerRadius="12"
+                                        Padding="16">
+                                    <StackPanel Spacing="14">
+                                        <TextBlock Text="Subtitle Style"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#F5F5F5" />
+
+                                        <StackPanel Spacing="6">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Text="Source Font Size"
+                                                           Foreground="#D0D0D0" />
+                                                <TextBlock x:Name="SourceFontSizeValueTextBlock"
+                                                           Grid.Column="1"
+                                                           Foreground="#F5F5F5"
+                                                           Text="28" />
+                                            </Grid>
+                                            <Slider x:Name="SourceFontSizeSlider"
+                                                    Minimum="14"
+                                                    Maximum="48"
+                                                    Value="28" />
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="6">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Text="Translation Font Size"
+                                                           Foreground="#D0D0D0" />
+                                                <TextBlock x:Name="TranslationFontSizeValueTextBlock"
+                                                           Grid.Column="1"
+                                                           Foreground="#F5F5F5"
+                                                           Text="30" />
+                                            </Grid>
+                                            <Slider x:Name="TranslationFontSizeSlider"
+                                                    Minimum="14"
+                                                    Maximum="48"
+                                                    Value="30" />
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="6">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Text="Background Opacity"
+                                                           Foreground="#D0D0D0" />
+                                                <TextBlock x:Name="BackgroundOpacityValueTextBlock"
+                                                           Grid.Column="1"
+                                                           Foreground="#F5F5F5"
+                                                           Text="78%" />
+                                            </Grid>
+                                            <Slider x:Name="BackgroundOpacitySlider"
+                                                    Minimum="0"
+                                                    Maximum="1"
+                                                    Value="0.78" />
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="6">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Text="Bottom Margin"
+                                                           Foreground="#D0D0D0" />
+                                                <TextBlock x:Name="BottomMarginValueTextBlock"
+                                                           Grid.Column="1"
+                                                           Foreground="#F5F5F5"
+                                                           Text="18" />
+                                            </Grid>
+                                            <Slider x:Name="BottomMarginSlider"
+                                                    Minimum="0"
+                                                    Maximum="60"
+                                                    Value="18" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
                 </WrapPanel>
             </StackPanel>
         </Border>
@@ -352,8 +432,8 @@
                 CornerRadius="12"
                 Padding="12"
                 Margin="0,12,0,0">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,120,Auto"
-                  RowDefinitions="Auto">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,120,120,Auto"
+                  RowDefinitions="Auto,Auto">
                 <Button x:Name="PlayPauseButton"
                         Grid.Row="0"
                         Grid.Column="0"
@@ -391,12 +471,46 @@
                         Minimum="0"
                         Maximum="1"
                         Value="0.8" />
+                <ComboBox x:Name="PlaybackRateComboBox"
+                          Grid.Row="0"
+                          Grid.Column="6"
+                          Margin="12,0,0,0"
+                          SelectedIndex="3"
+                          SelectionChanged="PlaybackRateComboBox_SelectionChanged">
+                    <ComboBoxItem Content="0.25x" />
+                    <ComboBoxItem Content="0.5x" />
+                    <ComboBoxItem Content="0.75x" />
+                    <ComboBoxItem Content="1.0x" />
+                    <ComboBoxItem Content="1.25x" />
+                    <ComboBoxItem Content="1.5x" />
+                    <ComboBoxItem Content="1.75x" />
+                    <ComboBoxItem Content="2.0x" />
+                </ComboBox>
                 <Button x:Name="FullscreenButton"
                         Grid.Row="0"
-                        Grid.Column="6"
+                        Grid.Column="7"
                         Margin="12,0,0,0"
                         Content="Fullscreen"
                         Click="FullscreenButton_Click" />
+
+                <WrapPanel Grid.Row="1"
+                           Grid.ColumnSpan="8"
+                           Margin="0,10,0,0"
+                           Orientation="Horizontal"
+                           ItemHeight="30">
+                    <Button x:Name="FullscreenSubtitleModeButton"
+                            Content="Subtitles: Translation"
+                            Click="FullscreenSubtitleModeButton_Click" />
+                    <Button x:Name="FullscreenSubtitleStyleButton"
+                            Margin="8,0,0,0"
+                            Content="Subtitle Style"
+                            Click="FullscreenSubtitleStyleButton_Click" />
+                    <TextBlock x:Name="FullscreenSubtitleSourceTextBlock"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="#D0D0D0"
+                               Text="Subtitle source unavailable." />
+                </WrapPanel>
             </Grid>
         </Border>
     </Grid>

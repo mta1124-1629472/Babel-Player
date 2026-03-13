@@ -9,6 +9,7 @@ namespace BabelPlayer.Avalonia;
 public sealed record AvaloniaShellDependencies(
     IPlaybackHostRuntime PlaybackHostRuntime,
     IShellPlaybackCommands ShellPlaybackCommands,
+    IShellPreferenceCommands ShellPreferenceCommands,
     IQueueCommands QueueCommands,
     IQueueProjectionReader QueueProjectionReader,
     IShellProjectionReader ShellProjectionReader,
@@ -94,6 +95,7 @@ public sealed class AvaloniaShellCompositionRoot
         return new AvaloniaShellDependencies(
             playbackHostRuntime,
             shellController,
+            shellPreferenceCommands,
             shellController,
             shellController,
             shellProjectionReader,
