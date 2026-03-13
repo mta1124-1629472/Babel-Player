@@ -9,11 +9,16 @@ namespace BabelPlayer.WinUI;
 public sealed class WinUICredentialDialogService : ICredentialDialogService
 {
     private readonly FrameworkElement _dialogHost;
+    private readonly IShortcutProfileService _shortcutProfileService;
     private readonly Func<IDisposable>? _modalSuppressionFactory;
 
-    public WinUICredentialDialogService(FrameworkElement dialogHost, Func<IDisposable>? modalSuppressionFactory = null)
+    public WinUICredentialDialogService(
+        FrameworkElement dialogHost,
+        IShortcutProfileService shortcutProfileService,
+        Func<IDisposable>? modalSuppressionFactory = null)
     {
         _dialogHost = dialogHost;
+        _shortcutProfileService = shortcutProfileService;
         _modalSuppressionFactory = modalSuppressionFactory;
     }
 
@@ -103,7 +108,7 @@ public sealed class WinUICredentialDialogService : ICredentialDialogService
         ArgumentNullException.ThrowIfNull(currentProfile);
 
         cancellationToken.ThrowIfCancellationRequested();
-        var dialog = new ShortcutEditorDialog(_dialogHost.XamlRoot, currentProfile);
+        var dialog = new ShortcutEditorDialog(_dialogHost.XamlRoot, _shortcutProfileService, currentProfile);
         var result = await ShowDialogAsync(dialog);
         return result == ContentDialogResult.Primary ? dialog.ResultProfile : null;
     }

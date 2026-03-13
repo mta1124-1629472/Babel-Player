@@ -40,11 +40,12 @@ public sealed class SubtitleWorkflowProjectionAdapter : IDisposable
 
     private static SubtitleWorkflowSnapshot BuildSnapshot(SubtitleWorkflowState state, MediaSessionSnapshot session)
     {
+        var transcriptionModelKey = SubtitleWorkflowCatalog.CanonicalizeTranscriptionModelKey(state.SelectedTranscriptionModelKey);
         return new SubtitleWorkflowSnapshot
         {
             CurrentVideoPath = state.CurrentVideoPath ?? session.Source.Path,
-            SelectedTranscriptionModelKey = state.SelectedTranscriptionModelKey,
-            SelectedTranscriptionLabel = SubtitleWorkflowCatalog.GetTranscriptionModel(state.SelectedTranscriptionModelKey).DisplayName,
+            SelectedTranscriptionModelKey = transcriptionModelKey,
+            SelectedTranscriptionLabel = SubtitleWorkflowCatalog.GetTranscriptionModel(transcriptionModelKey).DisplayName,
             SelectedTranslationModelKey = state.SelectedTranslationModelKey,
             SelectedTranslationLabel = SubtitleWorkflowCatalog.GetTranslationModel(state.SelectedTranslationModelKey).DisplayName,
             IsTranslationEnabled = session.Translation.IsEnabled,
@@ -55,7 +56,9 @@ public sealed class SubtitleWorkflowProjectionAdapter : IDisposable
             OverlayStatus = state.OverlayStatus ?? session.SubtitlePresentation.StatusText,
             ActiveCue = MediaSessionProjection.ToActiveCue(session),
             Cues = MediaSessionProjection.ToSubtitleCues(session),
-            CaptionGenerationModeLabel = state.CaptionGenerationModeLabel
+            CaptionGenerationModeLabel = state.CaptionGenerationModeLabel,
+            AvailableTranscriptionModels = SubtitleWorkflowCatalog.AvailableTranscriptionModels,
+            AvailableTranslationModels = SubtitleWorkflowCatalog.AvailableTranslationModels
         };
     }
 }

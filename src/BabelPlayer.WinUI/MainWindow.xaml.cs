@@ -32,18 +32,22 @@ public sealed partial class MainWindow : Window
     }
 
     private const string LibraryQueueDragFormat = "BabelPlayer/LibraryQueuePaths";
-    private readonly SettingsFacade _settingsFacade = new();
-    private readonly LibraryBrowserService _libraryBrowserService = new();
     private readonly PlaybackQueueController _playbackQueueController = new();
-    private readonly CredentialFacade _credentialFacade = new();
-    private readonly SubtitleWorkflowController _subtitleWorkflowController;
+    private readonly ISubtitleWorkflowShellService _subtitleWorkflowService;
     private readonly IPlaybackBackend _playbackBackend;
     private readonly PlaybackBackendCoordinator _playbackBackendCoordinator;
+    private readonly IShellPreferencesService _shellPreferencesService;
+    private readonly IShellLibraryService _shellLibraryService;
     private readonly ShellProjectionService _shellProjectionService;
-    private readonly ShellController _shellController;
+    private readonly IQueueProjectionReader _queueProjectionReader;
+    private readonly IQueueCommands _queueCommands;
+    private readonly IShellPlaybackCommands _shellPlaybackCommands;
+    private readonly ICredentialSetupService _credentialSetupService;
+    private readonly IShortcutProfileService _shortcutProfileService;
+    private readonly IShortcutCommandExecutor _shortcutCommandExecutor;
+    private readonly IDisposable _shellControllerLifetime;
     private readonly IVideoPresenter _videoPresenter;
     private readonly ISubtitlePresenter _subtitlePresenter;
-    private readonly ShortcutService _shortcutService = new();
     private readonly IFilePickerService _filePickerService;
     private readonly WinUIWindowModeService _windowModeService;
     private readonly WinUICredentialDialogService _credentialDialogService;
@@ -60,7 +64,6 @@ public sealed partial class MainWindow : Window
     private bool _suppressWindowModeButtonChanges;
     private bool _isPositionScrubbing;
     private bool _isInitializingShellState;
-    private bool _isNormalizingWinUITranscriptionSelection;
     private bool _isLanguageToolsExpanded = true;
     private bool _autoCollapsedLanguageToolsForPortraitVideo;
     private bool _isLanguageToolsAutoCollapseOverridden;
@@ -72,14 +75,10 @@ public sealed partial class MainWindow : Window
     private string? _pendingAutoFitPath;
     private string? _lastAutoFitSignature;
     private string? _pendingLibraryLoadPath;
-    private string? _subtitleSourceOnlyOverrideVideoPath;
-    private LibraryNode? _selectedLibraryNode;
-    private SubtitleRenderMode _lastNonOffSubtitleRenderMode = SubtitleRenderMode.TranslationOnly;
-    private string _selectedAspectRatio = "auto";
-    private double _audioDelaySeconds;
-    private double _subtitleDelaySeconds;
+    private LibraryEntrySnapshot? _selectedLibraryNode;
     private MicaBackdrop? _micaBackdrop;
     private readonly Dictionary<string, ResolvedShortcutBinding> _resolvedShortcutBindings = new(StringComparer.OrdinalIgnoreCase);
+    private ShellLibrarySnapshot _currentLibrarySnapshot = new();
     private Border AppTitleBar = null!;
     private TextBlock WindowTitleTextBlock = null!;
     private TextBlock WindowSubtitleTextBlock = null!;
@@ -182,7 +181,6 @@ public sealed partial class MainWindow : Window
             this,
             RootGrid,
             _playbackQueueController,
-            _credentialFacade,
             SuppressDialogPresentation);
         _filePickerService = dependencies.FilePickerService;
         _windowModeService = dependencies.WindowModeService;
@@ -191,13 +189,21 @@ public sealed partial class MainWindow : Window
         _diagnosticsContext = dependencies.DiagnosticsContext;
         _logger = dependencies.LogFactory.CreateLogger("shell.window");
         _statusLogger = dependencies.LogFactory.CreateLogger("shell.status");
-        _subtitleWorkflowController = dependencies.SubtitleWorkflowController;
+        _subtitleWorkflowService = dependencies.SubtitleWorkflowService;
         _playbackBackend = dependencies.PlaybackBackend;
         _playbackBackendCoordinator = dependencies.PlaybackBackendCoordinator;
         _videoPresenter = dependencies.VideoPresenter;
         _subtitlePresenter = dependencies.SubtitlePresenter;
+        _shellPreferencesService = dependencies.ShellPreferencesService;
+        _shellLibraryService = dependencies.ShellLibraryService;
         _shellProjectionService = dependencies.ShellProjectionService;
-        _shellController = dependencies.ShellController;
+        _queueProjectionReader = dependencies.QueueProjectionReader;
+        _queueCommands = dependencies.QueueCommands;
+        _shellPlaybackCommands = dependencies.ShellPlaybackCommands;
+        _credentialSetupService = dependencies.CredentialSetupService;
+        _shortcutProfileService = dependencies.ShortcutProfileService;
+        _shortcutCommandExecutor = dependencies.ShortcutCommandExecutor;
+        _shellControllerLifetime = dependencies.ShellControllerLifetime;
         _statusOverlayTimer.Interval = TimeSpan.FromSeconds(4);
         _statusOverlayTimer.Tick += StatusOverlayTimer_Tick;
         BuildShell();
@@ -219,10 +225,11 @@ public sealed partial class MainWindow : Window
         PlayerHost.InputActivity += PlayerHost_InputActivity;
         PlayerHost.FullscreenExitRequested += PlayerHost_FullscreenExitRequested;
         PlayerHost.ShortcutKeyPressed += PlayerHost_ShortcutKeyPressed;
-        _subtitleWorkflowController.StatusChanged += SubtitleWorkflowController_StatusChanged;
-        _subtitleWorkflowController.SnapshotChanged += SubtitleWorkflowController_SnapshotChanged;
+        _subtitleWorkflowService.StatusChanged += SubtitleWorkflow_StatusChanged;
+        _subtitleWorkflowService.SnapshotChanged += SubtitleWorkflow_SnapshotChanged;
+        _shellLibraryService.SnapshotChanged += ShellLibraryService_SnapshotChanged;
         _shellProjectionService.ProjectionChanged += ShellProjectionService_ProjectionChanged;
-        _shellController.QueueSnapshotChanged += ShellController_QueueSnapshotChanged;
+        _queueProjectionReader.QueueSnapshotChanged += ShellController_QueueSnapshotChanged;
 
         Closed += MainWindow_Closed;
         Activated += MainWindow_Activated;
@@ -230,9 +237,9 @@ public sealed partial class MainWindow : Window
         InitializeShellState();
         _diagnosticsContext.UpdateWindowMode(_windowModeService.CurrentMode.ToString());
         ApplyShellProjection(_shellProjectionService.Current);
-        ApplyQueueSnapshot(_shellController.QueueSnapshot);
+        ApplyQueueSnapshot(_queueProjectionReader.QueueSnapshot);
         _logger.LogInfo("Main window initialized.");
-        FireAndForget(_subtitleWorkflowController.InitializeAsync());
+        FireAndForget(_subtitleWorkflowService.InitializeAsync());
     }
 
     private void BuildShell()
@@ -620,7 +627,7 @@ public sealed partial class MainWindow : Window
             UpdateDelayFlyoutLabels(subtitleDelayFlyoutSubItem, audioDelayFlyoutSubItem);
             themeToggleMenuItem.IsChecked = ViewModel.IsDarkTheme;
             resumePlaybackToggleItem.IsChecked = ViewModel.Settings.ResumeEnabled;
-            exportCurrentSubtitlesFlyoutItem.IsEnabled = _subtitleWorkflowController.Snapshot.Cues.Count > 0;
+        exportCurrentSubtitlesFlyoutItem.IsEnabled = _subtitleWorkflowService.Current.Cues.Count > 0;
         }
 
         return flyout;
@@ -1166,19 +1173,7 @@ public sealed partial class MainWindow : Window
             MinWidth = 220,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
-        foreach (var model in new[]
-                 {
-                     SubtitleWorkflowCatalog.GetTranscriptionModel("local:tiny-multilingual"),
-                     SubtitleWorkflowCatalog.GetTranscriptionModel("local:base-multilingual"),
-                     SubtitleWorkflowCatalog.GetTranscriptionModel("local:small-multilingual"),
-                     SubtitleWorkflowCatalog.GetTranscriptionModel("cloud:gpt-4o-mini-transcribe"),
-                     SubtitleWorkflowCatalog.GetTranscriptionModel("cloud:gpt-4o-transcribe"),
-                     SubtitleWorkflowCatalog.GetTranscriptionModel("cloud:whisper-1")
-                 })
-        {
-            TranscriptionModelComboBox.Items.Add(model);
-        }
-
+        TranscriptionModelComboBox.ItemsSource = Array.Empty<TranscriptionModelSelection>();
         TranscriptionModelComboBox.DisplayMemberPath = nameof(TranscriptionModelSelection.DisplayName);
         TranscriptionModelComboBox.SelectionChanged += TranscriptionModelComboBox_SelectionChanged;
         SetControlHint(TranscriptionModelComboBox, "Transcription model");
@@ -1207,19 +1202,7 @@ public sealed partial class MainWindow : Window
             MinWidth = 220,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
-        foreach (var model in new[]
-                 {
-                     SubtitleWorkflowCatalog.GetTranslationModel("local:hymt-1.8b"),
-                     SubtitleWorkflowCatalog.GetTranslationModel("local:hymt-7b"),
-                     SubtitleWorkflowCatalog.GetTranslationModel("cloud:gpt-5-mini"),
-                     SubtitleWorkflowCatalog.GetTranslationModel("cloud:google-translate"),
-                     SubtitleWorkflowCatalog.GetTranslationModel("cloud:deepl"),
-                     SubtitleWorkflowCatalog.GetTranslationModel("cloud:microsoft-translator")
-                 })
-        {
-            TranslationModelComboBox.Items.Add(model);
-        }
-
+        TranslationModelComboBox.ItemsSource = Array.Empty<TranslationModelSelection>();
         TranslationModelComboBox.DisplayMemberPath = nameof(TranslationModelSelection.DisplayName);
         TranslationModelComboBox.SelectionChanged += TranslationModelComboBox_SelectionChanged;
         TranslationModelComboBox.IsEnabled = false;
@@ -1649,43 +1632,32 @@ public sealed partial class MainWindow : Window
     private void InitializeShellState()
     {
         _isInitializingShellState = true;
-        var snapshot = _shellController.BuildInitializationSnapshot();
-
-        _audioDelaySeconds = snapshot.AudioDelaySeconds;
-        _subtitleDelaySeconds = snapshot.SubtitleDelaySeconds;
-        SyncSubtitleDelayValueText();
-        _selectedAspectRatio = snapshot.SelectedAspectRatio;
-        ViewModel.Settings = snapshot.Settings;
+        var preferences = _shellPreferencesService.Current;
+        ApplyPreferencesSnapshot(preferences);
+        ApplyLibrarySnapshot(_shellLibraryService.Current);
         RebuildShortcutBindings();
         ViewModel.WindowTitle = "Babel Player";
         ViewModel.WindowSubtitle = string.Empty;
         ViewModel.StatusMessage = "Open local media or subtitles to start playback.";
         ViewModel.IsStatusOpen = false;
         ViewModel.ActiveHardwareDecoder = "mpv ready";
-        ViewModel.Browser.IsVisible = false;
-        ViewModel.Queue.IsVisible = false;
-        ViewModel.Transport.Volume = snapshot.Volume;
-        ViewModel.Transport.IsMuted = snapshot.IsMuted;
-        ViewModel.Transport.PlaybackRate = snapshot.PlaybackRate;
-        _lastNonOffSubtitleRenderMode = snapshot.LastNonOffSubtitleRenderMode;
-        ViewModel.SubtitleOverlay.ShowSource = snapshot.ShowSubtitleSource;
         ViewModel.SubtitleOverlay.TranslationText = "Drop a file or choose Open to start playback.";
-        ViewModel.SelectedTranscriptionLabel = snapshot.DefaultTranscriptionLabel;
-        ViewModel.SelectedTranslationLabel = snapshot.DefaultTranslationLabel;
+        ViewModel.SelectedTranscriptionLabel = _subtitleWorkflowService.Current.SelectedTranscriptionLabel;
+        ViewModel.SelectedTranslationLabel = _subtitleWorkflowService.Current.SelectedTranslationLabel;
         TranslatedSubtitleTextBlock.Text = ViewModel.SubtitleOverlay.TranslationText;
         StatusInfoBar.IsOpen = false;
         StatusInfoBar.Message = ViewModel.StatusMessage;
 
         ThemeToggleMenuItem.IsChecked = true;
         ApplyTheme(isDark: true);
-        VolumeSlider.Value = snapshot.Volume * 100d;
-        MuteToggleButton.IsChecked = snapshot.IsMuted;
-        PlayerHost.SetPreferredAudioState(snapshot.Volume, snapshot.IsMuted);
+        VolumeSlider.Value = preferences.VolumeLevel * 100d;
+        MuteToggleButton.IsChecked = preferences.IsMuted;
+        PlayerHost.SetPreferredAudioState(preferences.VolumeLevel, preferences.IsMuted);
         _logger.LogInfo(
             "Configured preferred startup audio state.",
-            BabelLogContext.Create(("volume", snapshot.Volume), ("muted", snapshot.IsMuted)));
-        ResumePlaybackToggleItem.IsChecked = snapshot.ResumeEnabled;
-        SetPlaybackRate(snapshot.PlaybackRate, persistSettings: false, showStatus: false);
+            BabelLogContext.Create(("volume", preferences.VolumeLevel), ("muted", preferences.IsMuted)));
+        ResumePlaybackToggleItem.IsChecked = preferences.ResumeEnabled;
+        SetPlaybackRate(preferences.PlaybackRate, persistSettings: false, showStatus: false);
         _windowModeService.EnsureInitialStandardBounds();
         _windowModeService.SetModeAsync(PlaybackWindowMode.Standard).GetAwaiter().GetResult();
         ApplyWindowModeChrome(PlaybackWindowMode.Standard);
@@ -1705,17 +1677,65 @@ public sealed partial class MainWindow : Window
         UpdateMuteButtonVisual();
         UpdatePlayPauseButtonVisual();
 
-        foreach (var root in snapshot.PinnedRoots)
-        {
-            ViewModel.Browser.Roots.Add(root);
-        }
-
         RebuildLibraryTree();
         SyncPaneLayout(RootGrid.ActualWidth);
         ApplyAdaptiveStandardLayout(RootGrid.ActualHeight);
         PlayerHost.RequestHostBoundsSync();
         UpdateWindowHeader();
         _isInitializingShellState = false;
+    }
+
+    private void ApplyPreferencesSnapshot(ShellPreferencesSnapshot snapshot)
+    {
+        ViewModel.Settings = snapshot;
+        ViewModel.Browser.IsVisible = snapshot.ShowBrowserPanel;
+        ViewModel.Queue.IsVisible = snapshot.ShowPlaylistPanel;
+        ViewModel.Transport.Volume = snapshot.VolumeLevel;
+        ViewModel.Transport.IsMuted = snapshot.IsMuted;
+        ViewModel.Transport.PlaybackRate = snapshot.PlaybackRate;
+        ViewModel.SubtitleOverlay.ShowSource = snapshot.ShowSubtitleSource;
+        SyncSubtitleDelayValueText();
+    }
+
+    private void ApplyLibrarySnapshot(ShellLibrarySnapshot snapshot)
+    {
+        _currentLibrarySnapshot = snapshot;
+        ViewModel.Browser.Roots.Clear();
+        foreach (var root in snapshot.Roots)
+        {
+            ViewModel.Browser.Roots.Add(root);
+        }
+
+        RebuildLibraryTree();
+        if (_selectedLibraryNode is not null
+            && !ContainsLibraryPath(snapshot.Roots, _selectedLibraryNode.Path))
+        {
+            _selectedLibraryNode = null;
+        }
+    }
+
+    private static bool ContainsLibraryPath(IEnumerable<LibraryEntrySnapshot> roots, string path)
+    {
+        foreach (var root in roots)
+        {
+            if (string.Equals(root.Path, path, StringComparison.OrdinalIgnoreCase)
+                || ContainsLibraryPath(root.Children, path))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void ShellLibraryService_SnapshotChanged(ShellLibrarySnapshot snapshot)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ApplyLibrarySnapshot(snapshot);
+            SyncPaneLayout(RootGrid.ActualWidth);
+            UpdateWindowHeader();
+        });
     }
 
     private void UpdateWindowHeader()
@@ -1733,7 +1753,7 @@ public sealed partial class MainWindow : Window
 
     private string? GetActiveWindowSubtitle()
     {
-        if (_shellController.NowPlayingItem is { DisplayName: { Length: > 0 } currentItemName })
+        if (_queueProjectionReader.NowPlayingItem is { DisplayName: { Length: > 0 } currentItemName })
         {
             return currentItemName;
         }
@@ -1785,15 +1805,20 @@ public sealed partial class MainWindow : Window
         _logger.LogInfo("Main window closing.");
         SystemBackdrop = null;
         _micaBackdrop = null;
-        _shellController.FlushResumeTracking();
-        SaveCurrentSettings();
+        _shellPlaybackCommands.FlushResumeTracking();
+        PersistLayoutPreferences();
+        PersistPlaybackDefaults();
+        PersistAudioStatePreferences();
         _stageCoordinator.Dispose();
+        _subtitleWorkflowService.StatusChanged -= SubtitleWorkflow_StatusChanged;
+        _subtitleWorkflowService.SnapshotChanged -= SubtitleWorkflow_SnapshotChanged;
+        _shellLibraryService.SnapshotChanged -= ShellLibraryService_SnapshotChanged;
         _shellProjectionService.ProjectionChanged -= ShellProjectionService_ProjectionChanged;
-        _shellController.QueueSnapshotChanged -= ShellController_QueueSnapshotChanged;
+        _queueProjectionReader.QueueSnapshotChanged -= ShellController_QueueSnapshotChanged;
         _shellProjectionService.Dispose();
         (_subtitlePresenter as IDisposable)?.Dispose();
-        _subtitleWorkflowController.Dispose();
-        _shellController.Dispose();
+        _subtitleWorkflowService.Dispose();
+        _shellControllerLifetime.Dispose();
         _playbackBackendCoordinator.Dispose();
         FireAndForget(_playbackBackend.DisposeAsync());
     }
@@ -1809,36 +1834,54 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(() => ApplyQueueSnapshot(snapshot));
     }
 
-    private void SaveCurrentSettings()
+    private void PersistLayoutPreferences()
     {
-        var pinnedRoots = ViewModel.Browser.Roots.Select(root => root.Path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var updatedSettings = _settingsFacade.UpdatePlaybackDefaults(
-            _settingsFacade.UpdateLayout(
-                ViewModel.Settings,
-                ViewModel.Browser.IsVisible,
-                ViewModel.Queue.IsVisible,
-                _windowModeService.CurrentMode),
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyLayoutChange(new ShellLayoutPreferencesChange(
+            ViewModel.Browser.IsVisible,
+            ViewModel.Queue.IsVisible,
+            _windowModeService.CurrentMode)));
+    }
+
+    private void PersistPlaybackDefaults()
+    {
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyPlaybackDefaultsChange(new ShellPlaybackDefaultsChange(
             ViewModel.Settings.HardwareDecodingMode,
             ViewModel.Transport.PlaybackRate,
-            _audioDelaySeconds,
-            _subtitleDelaySeconds,
-            _selectedAspectRatio);
+            ViewModel.Settings.AudioDelaySeconds,
+            ViewModel.Settings.SubtitleDelaySeconds,
+            ViewModel.Settings.AspectRatio)));
+    }
 
-        ViewModel.Settings = updatedSettings with
-        {
-            PinnedRoots = pinnedRoots,
-            ResumeEnabled = ResumePlaybackToggleItem?.IsChecked == true,
-            VolumeLevel = Math.Clamp((VolumeSlider?.Value ?? (ViewModel.Transport.Volume * 100d)) / 100d, 0, 1),
-            IsMuted = MuteToggleButton?.IsChecked == true
-        };
+    private void PersistSubtitlePresentationPreferences()
+    {
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplySubtitlePresentationChange(new ShellSubtitlePresentationChange(
+            ViewModel.Settings.SubtitleRenderMode,
+            ViewModel.Settings.SubtitleStyle)));
+    }
 
-        _settingsFacade.Save(ViewModel.Settings);
+    private void PersistAudioStatePreferences()
+    {
+        var volume = Math.Clamp((VolumeSlider?.Value ?? (ViewModel.Transport.Volume * 100d)) / 100d, 0, 1);
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyAudioStateChange(new ShellAudioStateChange(
+            volume,
+            MuteToggleButton?.IsChecked == true)));
+    }
+
+    private void PersistShortcutProfile(ShortcutProfile profile)
+    {
+        _shortcutProfileService.ApplyShortcutProfileChange(profile);
+        ApplyPreferencesSnapshot(_shellPreferencesService.Current);
+    }
+
+    private void PersistResumeEnabledPreference(bool resumeEnabled)
+    {
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyResumeEnabledChange(new ShellResumeEnabledChange(resumeEnabled)));
     }
 
     private async void OpenFile_Click(object sender, RoutedEventArgs e)
     {
         var files = await _filePickerService.PickMediaFilesAsync();
-        await ApplyQueueMutationAsync(_shellController.EnqueueFiles(files, autoplay: true));
+        await ApplyQueueMutationAsync(_queueCommands.EnqueueFiles(files, autoplay: true));
     }
 
     private async void OpenFolder_Click(object sender, RoutedEventArgs e)
@@ -1854,7 +1897,18 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        AddPinnedRoot(folder);
+        var result = _shellLibraryService.PinRoot(folder);
+        if (!result.IsError)
+        {
+            ViewModel.Browser.IsVisible = true;
+            BrowserPaneToggle.IsChecked = true;
+            PersistLayoutPreferences();
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.StatusMessage))
+        {
+            ShowStatus(result.StatusMessage, result.IsError);
+        }
     }
 
     private async void QueuePlaylistFolder_Click(object sender, RoutedEventArgs e)
@@ -1872,7 +1926,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var result = await _subtitleWorkflowController.ImportExternalSubtitlesAsync(subtitlePath, autoLoaded: false);
+        var result = await _subtitleWorkflowService.ImportExternalSubtitlesAsync(subtitlePath, autoLoaded: false);
             ShowStatus($"Imported {Path.GetFileName(subtitlePath)} with {result.CueCount} cues.");
         }
         catch (Exception ex)
@@ -1885,14 +1939,14 @@ public sealed partial class MainWindow : Window
     {
         ViewModel.Browser.IsVisible = BrowserPaneToggle.IsChecked == true;
         SyncPaneLayout(RootGrid.ActualWidth);
-        SaveCurrentSettings();
+        PersistLayoutPreferences();
     }
 
     private void PlaylistPaneToggle_Click(object sender, RoutedEventArgs e)
     {
         ViewModel.Queue.IsVisible = PlaylistPaneToggle.IsChecked == true;
         SyncPaneLayout(RootGrid.ActualWidth);
-        SaveCurrentSettings();
+        PersistLayoutPreferences();
     }
 
     private void CloseBrowserPane_Click(object sender, RoutedEventArgs e)
@@ -1900,7 +1954,7 @@ public sealed partial class MainWindow : Window
         ViewModel.Browser.IsVisible = false;
         BrowserPaneToggle.IsChecked = false;
         SyncPaneLayout(RootGrid.ActualWidth);
-        SaveCurrentSettings();
+        PersistLayoutPreferences();
     }
 
     private void ClosePlaylistPane_Click(object sender, RoutedEventArgs e)
@@ -1908,7 +1962,7 @@ public sealed partial class MainWindow : Window
         ViewModel.Queue.IsVisible = false;
         PlaylistPaneToggle.IsChecked = false;
         SyncPaneLayout(RootGrid.ActualWidth);
-        SaveCurrentSettings();
+        PersistLayoutPreferences();
     }
 
     private async void ImmersiveToggleButton_Click(object sender, RoutedEventArgs e)
@@ -1975,105 +2029,27 @@ public sealed partial class MainWindow : Window
     private void ToggleSubtitleVisibility()
     {
         var currentMode = GetEffectiveSubtitleRenderMode();
+        var result = _subtitleWorkflowService.ToggleSubtitleVisibility(ViewModel.Settings.SubtitleRenderMode);
         var subtitlesEnabled = currentMode != SubtitleRenderMode.Off;
-        if (subtitlesEnabled)
-        {
-            _lastNonOffSubtitleRenderMode = currentMode;
-        }
-
-        var nextMode = subtitlesEnabled ? SubtitleRenderMode.Off : _lastNonOffSubtitleRenderMode;
-        ViewModel.Settings = ViewModel.Settings with
-        {
-            SubtitleRenderMode = nextMode
-        };
-        if (nextMode != SubtitleRenderMode.Off)
-        {
-            _lastNonOffSubtitleRenderMode = nextMode;
-        }
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplySubtitlePresentationChange(
+            new ShellSubtitlePresentationChange(result.RequestedRenderMode, ViewModel.Settings.SubtitleStyle)));
 
         UpdateSubtitleVisibility();
         UpdateSubtitleRenderModeFlyoutChecks();
         UpdateOverlayControlState();
-        SaveCurrentSettings();
         ShowStatus(subtitlesEnabled ? "Subtitles hidden." : "Subtitles shown.");
     }
 
-    private static string NormalizeWinUiTranscriptionModelKey(string? modelKey)
+    private SubtitleRenderMode GetEffectiveSubtitleRenderMode()
     {
-        return modelKey switch
-        {
-            "local:tiny" => "local:tiny-multilingual",
-            "local:base" => "local:base-multilingual",
-            "local:small" => "local:small-multilingual",
-            _ => string.IsNullOrWhiteSpace(modelKey)
-                ? "local:tiny-multilingual"
-                : modelKey
-        };
-    }
-
-    private async Task NormalizeWinUiTranscriptionSelectionAsync(string normalizedKey)
-    {
-        if (_isNormalizingWinUITranscriptionSelection)
-        {
-            return;
-        }
-
-        _isNormalizingWinUITranscriptionSelection = true;
-        try
-        {
-            await _subtitleWorkflowController.SelectTranscriptionModelAsync(normalizedKey, suppressStatus: true);
-        }
-        finally
-        {
-            _isNormalizingWinUITranscriptionSelection = false;
-        }
-    }
-
-    private bool HasSourceOnlyOverrideForCurrentVideo(SubtitleWorkflowSnapshot? snapshot = null)
-    {
-        if (_subtitleWorkflowController is null)
-        {
-            return false;
-        }
-
-        snapshot ??= _subtitleWorkflowController.Snapshot;
-        return !string.IsNullOrWhiteSpace(_subtitleSourceOnlyOverrideVideoPath)
-            && !string.IsNullOrWhiteSpace(snapshot.CurrentVideoPath)
-            && string.Equals(_subtitleSourceOnlyOverrideVideoPath, snapshot.CurrentVideoPath, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private void ClearSourceOnlyOverrideIfInactive(SubtitleWorkflowSnapshot snapshot)
-    {
-        if (string.IsNullOrWhiteSpace(_subtitleSourceOnlyOverrideVideoPath))
-        {
-            return;
-        }
-
-        if (!snapshot.IsTranslationEnabled
-            || string.IsNullOrWhiteSpace(snapshot.CurrentVideoPath)
-            || !string.Equals(_subtitleSourceOnlyOverrideVideoPath, snapshot.CurrentVideoPath, StringComparison.OrdinalIgnoreCase))
-        {
-            _subtitleSourceOnlyOverrideVideoPath = null;
-        }
-    }
-
-    private SubtitleRenderMode GetEffectiveSubtitleRenderMode(SubtitleWorkflowSnapshot? snapshot = null)
-    {
-        if (_subtitleWorkflowController is null)
-        {
-            return ViewModel.Settings.SubtitleRenderMode;
-        }
-
-        return _subtitleWorkflowController.GetEffectiveRenderMode(
-            ViewModel.Settings.SubtitleRenderMode,
-            HasSourceOnlyOverrideForCurrentVideo(snapshot));
+        return _subtitleWorkflowService.GetEffectiveRenderMode(ViewModel.Settings.SubtitleRenderMode);
     }
 
     private async void PlaylistList_ItemClick(object sender, ItemClickEventArgs e)
     {
         if (e.ClickedItem is PlaylistItem item)
         {
-            await ApplyQueueMutationAsync(_shellController.PlayNow(item.Path));
+            await ApplyQueueMutationAsync(_queueCommands.PlayNow(item.Path));
         }
     }
 
@@ -2087,7 +2063,7 @@ public sealed partial class MainWindow : Window
     {
         if (e.ClickedItem is PlaylistItem item)
         {
-            await ApplyQueueMutationAsync(_shellController.PlayNow(item.Path));
+            await ApplyQueueMutationAsync(_queueCommands.PlayNow(item.Path));
         }
     }
 
@@ -2104,35 +2080,35 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _shellController.RemoveQueueItemAt(PlaylistList.SelectedIndex);
+        _queueCommands.RemoveQueueItemAt(PlaylistList.SelectedIndex);
     }
 
     private void ClearPlaylist_Click(object sender, RoutedEventArgs e)
     {
-        _shellController.ClearQueue();
+        _queueCommands.ClearQueue();
         ShowStatus("Queue cleared.");
     }
 
     private async void PreviousTrack_Click(object sender, RoutedEventArgs e)
     {
-        await LoadPlaybackItemAsync(_shellController.MovePrevious());
+        await LoadPlaybackItemAsync(_queueCommands.MovePrevious());
     }
 
     private async void NextTrack_Click(object sender, RoutedEventArgs e)
     {
-        await LoadPlaybackItemAsync(_shellController.MoveNext());
+        await LoadPlaybackItemAsync(_queueCommands.MoveNext());
     }
 
     private void SeekBack_Click(object sender, RoutedEventArgs e)
     {
         RegisterFullscreenOverlayInteraction();
-        FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(-10)));
+        FireAndForget(_shellPlaybackCommands.SeekRelativeAsync(TimeSpan.FromSeconds(-10)));
     }
 
     private void SeekForward_Click(object sender, RoutedEventArgs e)
     {
         RegisterFullscreenOverlayInteraction();
-        FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(10)));
+        FireAndForget(_shellPlaybackCommands.SeekRelativeAsync(TimeSpan.FromSeconds(10)));
     }
 
     private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
@@ -2140,19 +2116,19 @@ public sealed partial class MainWindow : Window
         RegisterFullscreenOverlayInteraction();
         if (ViewModel.Transport.IsPaused)
         {
-            FireAndForget(_shellController.PlayAsync());
+            FireAndForget(_shellPlaybackCommands.PlayAsync());
             ShowStatus("Playback resumed.");
             return;
         }
 
-        FireAndForget(_shellController.PauseAsync());
+        FireAndForget(_shellPlaybackCommands.PauseAsync());
         ShowStatus("Playback paused.");
     }
 
     private void PreviousFrame_Click(object sender, RoutedEventArgs e)
     {
         RegisterFullscreenOverlayInteraction();
-        FireAndForget(_shellController.StepFrameAsync(forward: false));
+        FireAndForget(_shellPlaybackCommands.StepFrameAsync(forward: false));
         ViewModel.Transport.IsPaused = true;
         ShowStatus("Stepped to previous frame.");
     }
@@ -2160,7 +2136,7 @@ public sealed partial class MainWindow : Window
     private void NextFrame_Click(object sender, RoutedEventArgs e)
     {
         RegisterFullscreenOverlayInteraction();
-        FireAndForget(_shellController.StepFrameAsync(forward: true));
+        FireAndForget(_shellPlaybackCommands.StepFrameAsync(forward: true));
         ViewModel.Transport.IsPaused = true;
         ShowStatus("Stepped to next frame.");
     }
@@ -2172,7 +2148,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        FireAndForget(_shellController.SeekAsync(TimeSpan.FromSeconds(e.NewValue)));
+        FireAndForget(_shellPlaybackCommands.SeekAsync(TimeSpan.FromSeconds(e.NewValue)));
         if (_isPositionScrubbing)
         {
             UpdateScrubTimeLabels(e.NewValue, PositionSlider.Maximum);
@@ -2187,7 +2163,7 @@ public sealed partial class MainWindow : Window
         }
 
         RegisterFullscreenOverlayInteraction();
-        FireAndForget(_shellController.SeekAsync(TimeSpan.FromSeconds(e.NewValue)));
+        FireAndForget(_shellPlaybackCommands.SeekAsync(TimeSpan.FromSeconds(e.NewValue)));
         UpdateScrubTimeLabels(e.NewValue, FullscreenPositionSlider.Maximum);
     }
 
@@ -2200,10 +2176,10 @@ public sealed partial class MainWindow : Window
 
         var normalizedVolume = Math.Clamp(e.NewValue / 100d, 0, 1);
         ViewModel.Transport.Volume = normalizedVolume;
-        FireAndForget(_shellController.ApplyAudioPreferencesAsync(normalizedVolume, MuteToggleButton?.IsChecked == true));
+        FireAndForget(_shellPlaybackCommands.ApplyAudioPreferencesAsync(normalizedVolume, MuteToggleButton?.IsChecked == true));
         if (!_isInitializingShellState)
         {
-            SaveCurrentSettings();
+            PersistAudioStatePreferences();
         }
     }
 
@@ -2212,11 +2188,11 @@ public sealed partial class MainWindow : Window
         var isMuted = MuteToggleButton.IsChecked == true;
         ViewModel.Transport.IsMuted = isMuted;
         var normalizedVolume = Math.Clamp((VolumeSlider?.Value ?? (ViewModel.Transport.Volume * 100d)) / 100d, 0, 1);
-        FireAndForget(_shellController.ApplyAudioPreferencesAsync(normalizedVolume, isMuted));
+        FireAndForget(_shellPlaybackCommands.ApplyAudioPreferencesAsync(normalizedVolume, isMuted));
         UpdateMuteButtonVisual();
         if (!_isInitializingShellState)
         {
-            SaveCurrentSettings();
+            PersistAudioStatePreferences();
         }
     }
 
@@ -2259,12 +2235,12 @@ public sealed partial class MainWindow : Window
     {
         var clamped = Math.Clamp(speed, 0.25, 2.0);
         ViewModel.Transport.PlaybackRate = clamped;
-        FireAndForget(_shellController.SetPlaybackRateAsync(clamped));
+        FireAndForget(_shellPlaybackCommands.SetPlaybackRateAsync(clamped));
         UpdatePlaybackRateFlyoutChecks();
         SyncPlaybackSpeedSlider(clamped);
         if (persistSettings && !_isInitializingShellState)
         {
-            SaveCurrentSettings();
+            PersistPlaybackDefaults();
         }
 
         if (showStatus)
@@ -2286,10 +2262,10 @@ public sealed partial class MainWindow : Window
         }
 
         await PrepareForTranscriptionRefreshAsync();
-        var applied = await _subtitleWorkflowController.SelectTranscriptionModelAsync(selection.Key);
+        var applied = await _subtitleWorkflowService.SelectTranscriptionModelAsync(selection.Key);
         if (!applied)
         {
-            ApplyWorkflowSnapshot(_subtitleWorkflowController.Snapshot);
+            ApplyWorkflowSnapshot(_subtitleWorkflowService.Current);
         }
     }
 
@@ -2305,10 +2281,10 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var applied = await _subtitleWorkflowController.SelectTranslationModelAsync(selection.Key);
+        var applied = await _subtitleWorkflowService.SelectTranslationModelAsync(selection.Key);
         if (!applied)
         {
-            ApplyWorkflowSnapshot(_subtitleWorkflowController.Snapshot);
+            ApplyWorkflowSnapshot(_subtitleWorkflowService.Current);
         }
     }
 
@@ -2319,7 +2295,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        await _subtitleWorkflowController.SetTranslationEnabledAsync(TranslationToggleSwitch.IsOn);
+        await _subtitleWorkflowService.SetTranslationEnabledAsync(TranslationToggleSwitch.IsOn);
     }
 
     private async void AutoTranslateToggleSwitch_Toggled(object sender, RoutedEventArgs e)
@@ -2329,7 +2305,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        await _subtitleWorkflowController.SetAutoTranslateEnabledAsync(AutoTranslateToggleSwitch.IsOn);
+        await _subtitleWorkflowService.SetAutoTranslateEnabledAsync(AutoTranslateToggleSwitch.IsOn);
     }
 
     private void RootGrid_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
@@ -2367,36 +2343,20 @@ public sealed partial class MainWindow : Window
 
     private async Task ExecuteShortcutCommandAsync(string commandId)
     {
-        switch (commandId)
+        var result = await _shortcutCommandExecutor.ExecuteAsync(commandId);
+        if (result.RequiresOverlayInteraction)
         {
-            case "play_pause":
-                PlayPauseButton_Click(this, new RoutedEventArgs());
-                break;
-            case "seek_back_small":
-                FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(-5)));
-                RegisterFullscreenOverlayInteraction();
-                break;
-            case "seek_forward_small":
-                FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(5)));
-                RegisterFullscreenOverlayInteraction();
-                break;
-            case "seek_back_large":
-                FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(-15)));
-                RegisterFullscreenOverlayInteraction();
-                break;
-            case "seek_forward_large":
-                FireAndForget(_shellController.SeekRelativeAsync(TimeSpan.FromSeconds(15)));
-                RegisterFullscreenOverlayInteraction();
-                break;
-            case "previous_frame":
-                FireAndForget(_shellController.StepFrameAsync(forward: false));
-                RegisterFullscreenOverlayInteraction();
-                break;
-            case "next_frame":
-                FireAndForget(_shellController.StepFrameAsync(forward: true));
-                RegisterFullscreenOverlayInteraction();
-                break;
-            case "fullscreen":
+            RegisterFullscreenOverlayInteraction();
+        }
+
+        if (ShortcutUpdatesPreferences(commandId))
+        {
+            ApplyPreferencesSnapshot(_shellPreferencesService.Current);
+        }
+
+        switch (result.ShellAction)
+        {
+            case ShortcutShellAction.ToggleFullscreen:
                 if (_windowModeService.CurrentMode == PlaybackWindowMode.Fullscreen)
                 {
                     await ExitFullscreenAsync();
@@ -2405,56 +2365,40 @@ public sealed partial class MainWindow : Window
                 {
                     await EnterFullscreenAsync();
                 }
-
                 break;
-            case "pip":
+
+            case ShortcutShellAction.TogglePictureInPicture:
                 await SetWindowModeAsync(_windowModeService.CurrentMode == PlaybackWindowMode.PictureInPicture
                     ? PlaybackWindowMode.Standard
                     : PlaybackWindowMode.PictureInPicture);
                 break;
-            case "mute":
-                MuteToggleButton.IsChecked = !(MuteToggleButton.IsChecked == true);
-                MuteToggleButton_Click(MuteToggleButton, new RoutedEventArgs());
-                break;
-            case "subtitle_delay_back":
-                AdjustSubtitleDelay(-0.05);
-                break;
-            case "subtitle_delay_forward":
-                AdjustSubtitleDelay(0.05);
-                break;
-            case "audio_delay_back":
-                AdjustAudioDelay(-0.05);
-                break;
-            case "audio_delay_forward":
-                AdjustAudioDelay(0.05);
-                break;
-            case "speed_up":
-                SetPlaybackRateShortcut(ViewModel.Transport.PlaybackRate + 0.25);
-                break;
-            case "speed_down":
-                SetPlaybackRateShortcut(ViewModel.Transport.PlaybackRate - 0.25);
-                break;
-            case "speed_reset":
-                SetPlaybackRateShortcut(1.0);
-                break;
-            case "next_item":
-                await LoadPlaybackItemAsync(_shellController.MoveNext());
-                break;
-            case "previous_item":
-                await LoadPlaybackItemAsync(_shellController.MovePrevious());
-                break;
-            case "subtitle_toggle":
+
+            case ShortcutShellAction.ToggleSubtitleVisibility:
                 ToggleSubtitleVisibility();
                 break;
-            case "translation_toggle":
-                TranslationToggleSwitch.IsOn = !TranslationToggleSwitch.IsOn;
-                break;
+        }
+
+        if (result.ItemToLoad is not null)
+        {
+            await LoadPlaybackItemAsync(result.ItemToLoad);
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.StatusMessage))
+        {
+            ShowStatus(result.StatusMessage, result.IsError);
         }
     }
 
-    private void SetPlaybackRateShortcut(double speed)
+    private static bool ShortcutUpdatesPreferences(string commandId)
     {
-        SetPlaybackRate(speed);
+        return commandId is "mute"
+            or "subtitle_delay_back"
+            or "subtitle_delay_forward"
+            or "audio_delay_back"
+            or "audio_delay_forward"
+            or "speed_up"
+            or "speed_down"
+            or "speed_reset";
     }
 
     private bool TryGetShortcutCommand(ShortcutKeyInput input, out string commandId)
@@ -2477,14 +2421,14 @@ public sealed partial class MainWindow : Window
     private void RebuildShortcutBindings()
     {
         _resolvedShortcutBindings.Clear();
-        foreach (var binding in ViewModel.Settings.ShortcutProfile.Bindings)
+        foreach (var binding in _shortcutProfileService.Current.NormalizedBindings)
         {
-            if (!TryResolveShortcutBinding(binding.Key, binding.Value, out var resolved))
+            if (!TryResolveShortcutBinding(binding.CommandId, binding.NormalizedGesture, out var resolved))
             {
                 continue;
             }
 
-            _resolvedShortcutBindings[binding.Key] = resolved;
+            _resolvedShortcutBindings[binding.CommandId] = resolved;
         }
     }
 
@@ -2496,12 +2440,15 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        ShortcutGesture parsed;
-        try
+        var tokens = gestureText
+            .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0)
         {
-            parsed = _shortcutService.ParseGesture(gestureText);
+            return false;
         }
-        catch (FormatException)
+
+        var keyToken = tokens[^1];
+        if (!TryParseShortcutKey(keyToken, out var key))
         {
             return false;
         }
@@ -2509,7 +2456,7 @@ public sealed partial class MainWindow : Window
         var ctrl = false;
         var alt = false;
         var shift = false;
-        foreach (var modifier in parsed.Modifiers)
+        foreach (var modifier in tokens[..^1])
         {
             if (modifier.Equals("Ctrl", StringComparison.OrdinalIgnoreCase) || modifier.Equals("Control", StringComparison.OrdinalIgnoreCase))
             {
@@ -2527,11 +2474,6 @@ public sealed partial class MainWindow : Window
             {
                 return false;
             }
-        }
-
-        if (!TryParseShortcutKey(parsed.Key, out var key))
-        {
-            return false;
         }
 
         binding = new ResolvedShortcutBinding(commandId, key, ctrl, alt, shift);
@@ -2758,7 +2700,7 @@ public sealed partial class MainWindow : Window
         {
             switch (item)
             {
-                case StorageFile file when LibraryBrowserService.IsSupportedMediaFile(file.Path):
+                case StorageFile file when _shellLibraryService.IsSupportedMediaPath(file.Path):
                     files.Add(file.Path);
                     break;
                 case StorageFolder folder:
@@ -2769,8 +2711,7 @@ public sealed partial class MainWindow : Window
 
         if (IsPlaylistDropTarget(sender))
         {
-            var result = _shellController.AddToQueue(
-                files.Concat(folders.SelectMany(folder => _libraryBrowserService.EnumerateMediaFiles(folder, recursive: true))));
+            var result = _queueCommands.AddDroppedItemsToQueue(files, folders);
             if (!string.IsNullOrWhiteSpace(result.StatusMessage))
             {
                 ShowStatus(result.StatusMessage, result.IsError);
@@ -2779,7 +2720,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        await ApplyQueueMutationAsync(_shellController.EnqueueDroppedItems(files, folders));
+        await ApplyQueueMutationAsync(_queueCommands.EnqueueDroppedItems(files, folders));
     }
 
     private void RootGrid_DragOver(object sender, DragEventArgs e)
@@ -2827,28 +2768,16 @@ public sealed partial class MainWindow : Window
 
     private void LibraryTree_Expanding(TreeView sender, TreeViewExpandingEventArgs args)
     {
-        if (args.Node.Content is not LibraryNode node || !node.IsFolder)
+        if (args.Node.Content is not LibraryEntrySnapshot node || !node.IsFolder)
         {
             return;
         }
-
-        if (args.Node.Children.Count > 0 && !args.Node.HasUnrealizedChildren)
-        {
-            return;
-        }
-
-        args.Node.Children.Clear();
-        foreach (var child in _libraryBrowserService.BuildRootNode(node.Path).Children)
-        {
-            args.Node.Children.Add(CreateTreeNode(child));
-        }
-
-        args.Node.HasUnrealizedChildren = false;
+        _shellLibraryService.SetExpanded(node.Path, isExpanded: true);
     }
 
     private async void LibraryTree_ItemInvoked(TreeView sender, TreeViewItemInvokedEventArgs args)
     {
-        if (args.InvokedItem is not LibraryNode node)
+        if (args.InvokedItem is not LibraryEntrySnapshot node)
         {
             return;
         }
@@ -2858,8 +2787,7 @@ public sealed partial class MainWindow : Window
         {
             if (sender.SelectedNode is not null)
             {
-                sender.SelectedNode.IsExpanded = !sender.SelectedNode.IsExpanded;
-                node.IsExpanded = sender.SelectedNode.IsExpanded;
+                _shellLibraryService.SetExpanded(node.Path, !sender.SelectedNode.IsExpanded);
             }
 
             UpdateWindowHeader();
@@ -2871,7 +2799,7 @@ public sealed partial class MainWindow : Window
 
     private async void LibraryTree_SelectionChanged(TreeView sender, TreeViewSelectionChangedEventArgs args)
     {
-        if (sender.SelectedNode?.Content is not LibraryNode node)
+        if (sender.SelectedNode?.Content is not LibraryEntrySnapshot node)
         {
             return;
         }
@@ -2893,7 +2821,7 @@ public sealed partial class MainWindow : Window
     private void LibraryTree_DragItemsStarting(TreeView sender, TreeViewDragItemsStartingEventArgs args)
     {
         var paths = args.Items
-            .OfType<LibraryNode>()
+            .OfType<LibraryEntrySnapshot>()
             .Where(node => !node.IsFolder && !string.IsNullOrWhiteSpace(node.Path))
             .Select(node => node.Path)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -2914,7 +2842,7 @@ public sealed partial class MainWindow : Window
         _isLibraryDragOperationInProgress = false;
     }
 
-    private async Task LoadLibraryNodeAsync(LibraryNode node)
+    private async Task LoadLibraryNodeAsync(LibraryEntrySnapshot node)
     {
         if (node.IsFolder || string.IsNullOrWhiteSpace(node.Path))
         {
@@ -2929,7 +2857,7 @@ public sealed partial class MainWindow : Window
         _pendingLibraryLoadPath = node.Path;
         try
         {
-            await ApplyQueueMutationAsync(_shellController.PlayNow(node.Path));
+            await ApplyQueueMutationAsync(_queueCommands.PlayNow(node.Path));
         }
         finally
         {
@@ -2951,11 +2879,11 @@ public sealed partial class MainWindow : Window
                     ("displayWidth", snapshot.VideoDisplayWidth),
                     ("displayHeight", snapshot.VideoDisplayHeight)));
             PlayerHost.RequestHostBoundsSync();
-            await _shellController.SetAudioDelayAsync(_audioDelaySeconds);
-            await _shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds);
-            await _shellController.SetAspectRatioAsync(_selectedAspectRatio);
+            await _shellPlaybackCommands.SetAudioDelayAsync(ViewModel.Settings.AudioDelaySeconds);
+            await _shellPlaybackCommands.SetSubtitleDelayAsync(ViewModel.Settings.SubtitleDelaySeconds);
+            await _shellPlaybackCommands.SetAspectRatioAsync(ViewModel.Settings.AspectRatio);
             UpdateWindowHeader();
-            var result = await _shellController.HandleMediaOpenedAsync(
+            var result = await _shellPlaybackCommands.HandleMediaOpenedAsync(
                 snapshot,
                 ViewModel.Settings.ResumeEnabled);
             ShowStatus(result.ResumePosition is TimeSpan
@@ -2969,7 +2897,7 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(async () =>
         {
             _logger.LogInfo("Player host media ended.", BabelLogContext.Create(("path", snapshot.Path)));
-            var result = _shellController.HandleMediaEnded(ViewModel.Settings.ResumeEnabled);
+            var result = _shellPlaybackCommands.HandleMediaEnded(ViewModel.Settings.ResumeEnabled);
             if (result.NextItem is null)
             {
                 ShowStatus(result.StatusMessage);
@@ -2984,7 +2912,7 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            _logger.LogError("Player host media failed.", null, BabelLogContext.Create(("message", message), ("path", _shellController.CurrentPlaybackSnapshot.Path)));
+            _logger.LogError("Player host media failed.", null, BabelLogContext.Create(("message", message), ("path", _shellPlaybackCommands.CurrentPlaybackSnapshot.Path)));
             ShowStatus(message, true);
         });
     }
@@ -3021,12 +2949,12 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    private void SubtitleWorkflowController_StatusChanged(string message)
+    private void SubtitleWorkflow_StatusChanged(string message)
     {
         DispatcherQueue.TryEnqueue(() => ShowStatus(message));
     }
 
-    private void SubtitleWorkflowController_SnapshotChanged(SubtitleWorkflowSnapshot snapshot)
+    private void SubtitleWorkflow_SnapshotChanged(SubtitleWorkflowSnapshot snapshot)
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
@@ -3135,35 +3063,26 @@ public sealed partial class MainWindow : Window
         _suppressWorkflowControlEvents = true;
         try
         {
-            ClearSourceOnlyOverrideIfInactive(snapshot);
-            var normalizedTranscriptionKey = NormalizeWinUiTranscriptionModelKey(snapshot.SelectedTranscriptionModelKey);
-            var normalizedTranscriptionSelection = SubtitleWorkflowCatalog.GetTranscriptionModel(normalizedTranscriptionKey);
-            if (!_isNormalizingWinUITranscriptionSelection
-                && !string.Equals(normalizedTranscriptionKey, snapshot.SelectedTranscriptionModelKey, StringComparison.Ordinal))
-            {
-                FireAndForget(NormalizeWinUiTranscriptionSelectionAsync(normalizedTranscriptionKey));
-            }
-
-            ViewModel.SelectedTranscriptionLabel = normalizedTranscriptionSelection.DisplayName;
+            ViewModel.SelectedTranscriptionLabel = snapshot.SelectedTranscriptionLabel;
             ViewModel.SelectedTranslationLabel = snapshot.SelectedTranslationLabel;
             ViewModel.IsTranslationEnabled = snapshot.IsTranslationEnabled;
             ViewModel.IsAutoTranslateEnabled = snapshot.AutoTranslateEnabled;
             ViewModel.SubtitleSource = snapshot.SubtitleSource;
             ViewModel.IsCaptionGenerationInProgress = snapshot.IsCaptionGenerationInProgress;
-            ViewModel.SubtitleOverlay.SelectedTranscriptionLabel = normalizedTranscriptionSelection.DisplayName;
+            ViewModel.SubtitleOverlay.SelectedTranscriptionLabel = snapshot.SelectedTranscriptionLabel;
             ViewModel.SubtitleOverlay.SelectedTranslationLabel = snapshot.SelectedTranslationLabel;
 
             if (TranscriptionModelComboBox is not null)
             {
-                TranscriptionModelComboBox.SelectedItem = TranscriptionModelComboBox.Items
-                    .OfType<TranscriptionModelSelection>()
-                    .FirstOrDefault(item => string.Equals(item.Key, normalizedTranscriptionKey, StringComparison.Ordinal));
+                TranscriptionModelComboBox.ItemsSource = snapshot.AvailableTranscriptionModels;
+                TranscriptionModelComboBox.SelectedItem = snapshot.AvailableTranscriptionModels
+                    .FirstOrDefault(item => string.Equals(item.Key, snapshot.SelectedTranscriptionModelKey, StringComparison.Ordinal));
             }
 
             if (TranslationModelComboBox is not null)
             {
-                TranslationModelComboBox.SelectedItem = TranslationModelComboBox.Items
-                    .OfType<TranslationModelSelection>()
+                TranslationModelComboBox.ItemsSource = snapshot.AvailableTranslationModels;
+                TranslationModelComboBox.SelectedItem = snapshot.AvailableTranslationModels
                     .FirstOrDefault(item => string.Equals(item.Key, snapshot.SelectedTranslationModelKey, StringComparison.Ordinal));
                 TranslationModelComboBox.IsEnabled = snapshot.IsTranslationEnabled;
                 TranslationModelComboBox.Opacity = snapshot.IsTranslationEnabled ? 1 : 0.55;
@@ -3239,12 +3158,12 @@ public sealed partial class MainWindow : Window
     {
         ApplyToggleFlyoutChecks(
             aspectRatioFlyoutSubItem,
-            item => string.Equals(item.Tag as string, _selectedAspectRatio, StringComparison.OrdinalIgnoreCase));
+            item => string.Equals(item.Tag as string, ViewModel.Settings.AspectRatio, StringComparison.OrdinalIgnoreCase));
     }
 
     private void UpdateSubtitleRenderModeFlyoutChecks(SubtitleWorkflowSnapshot? snapshot = null)
     {
-        var checkedMode = GetEffectiveSubtitleRenderMode(snapshot);
+        var checkedMode = GetEffectiveSubtitleRenderMode();
         if (SubtitleModeComboBox is not null)
         {
             foreach (var item in SubtitleModeComboBox.Items.OfType<ComboBoxItem>())
@@ -3316,12 +3235,12 @@ public sealed partial class MainWindow : Window
     {
         if (subtitleDelayFlyoutSubItem is not null)
         {
-            subtitleDelayFlyoutSubItem.Text = $"Subtitle Delay ({_subtitleDelaySeconds:+0.00;-0.00;0.00}s)";
+            subtitleDelayFlyoutSubItem.Text = $"Subtitle Delay ({ViewModel.Settings.SubtitleDelaySeconds:+0.00;-0.00;0.00}s)";
         }
 
         if (audioDelayFlyoutSubItem is not null)
         {
-            audioDelayFlyoutSubItem.Text = $"Audio Delay ({_audioDelaySeconds:+0.00;-0.00;0.00}s)";
+            audioDelayFlyoutSubItem.Text = $"Audio Delay ({ViewModel.Settings.AudioDelaySeconds:+0.00;-0.00;0.00}s)";
         }
     }
 
@@ -3435,14 +3354,13 @@ public sealed partial class MainWindow : Window
 
     private void UpdateSubtitleStyle(Func<SubtitleStyleSettings, SubtitleStyleSettings> updater, string statusMessage)
     {
-        ViewModel.Settings = ViewModel.Settings with
-        {
-            SubtitleStyle = updater(ViewModel.Settings.SubtitleStyle)
-        };
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplySubtitlePresentationChange(
+            new ShellSubtitlePresentationChange(
+                ViewModel.Settings.SubtitleRenderMode,
+                updater(ViewModel.Settings.SubtitleStyle))));
 
         ApplySubtitleStyleSettings();
         UpdateSubtitleVisibility();
-        SaveCurrentSettings();
         ShowStatus(statusMessage);
     }
 
@@ -3493,10 +3411,15 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _selectedAspectRatio = aspectRatio;
-        FireAndForget(_shellController.SetAspectRatioAsync(aspectRatio));
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyPlaybackDefaultsChange(
+            new ShellPlaybackDefaultsChange(
+                ViewModel.Settings.HardwareDecodingMode,
+                ViewModel.Transport.PlaybackRate,
+                ViewModel.Settings.AudioDelaySeconds,
+                ViewModel.Settings.SubtitleDelaySeconds,
+                aspectRatio)));
+        FireAndForget(_shellPlaybackCommands.SetAspectRatioAsync(aspectRatio));
         UpdateAspectRatioFlyoutChecks();
-        SaveCurrentSettings();
         ShowStatus($"Aspect ratio: {(aspectRatio == "-1" ? "fill" : aspectRatio)}.");
     }
 
@@ -3512,33 +3435,13 @@ public sealed partial class MainWindow : Window
 
     private void ApplySubtitleRenderMode(SubtitleRenderMode mode)
     {
-        var translationActive = _subtitleWorkflowController.Snapshot.IsTranslationEnabled;
-        if (translationActive && mode == SubtitleRenderMode.SourceOnly)
-        {
-            _subtitleSourceOnlyOverrideVideoPath = _subtitleWorkflowController.Snapshot.CurrentVideoPath;
-            _lastNonOffSubtitleRenderMode = SubtitleRenderMode.SourceOnly;
-            UpdateSubtitleRenderModeFlyoutChecks();
-            UpdateSubtitleVisibility();
-            UpdateOverlayControlState();
-            ShowStatus("Subtitle mode: source only.");
-            return;
-        }
-
-        _subtitleSourceOnlyOverrideVideoPath = null;
-        if (mode != SubtitleRenderMode.Off)
-        {
-            _lastNonOffSubtitleRenderMode = mode;
-        }
-
-        ViewModel.Settings = ViewModel.Settings with
-        {
-            SubtitleRenderMode = mode
-        };
+        var result = _subtitleWorkflowService.SelectRenderMode(mode, ViewModel.Settings.SubtitleRenderMode);
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplySubtitlePresentationChange(
+            new ShellSubtitlePresentationChange(result.RequestedRenderMode, ViewModel.Settings.SubtitleStyle)));
         UpdateSubtitleRenderModeFlyoutChecks();
         UpdateSubtitleVisibility();
         UpdateOverlayControlState();
-        SaveCurrentSettings();
-        ShowStatus($"Subtitle mode: {FormatSubtitleRenderModeLabel(mode)}.");
+        ShowStatus($"Subtitle mode: {FormatSubtitleRenderModeLabel(result.EffectiveRenderMode)}.");
     }
 
     private void HardwareDecodingFlyoutItem_Click(object sender, RoutedEventArgs e)
@@ -3548,13 +3451,15 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        ViewModel.Settings = ViewModel.Settings with
-        {
-            HardwareDecodingMode = mode
-        };
-        FireAndForget(_shellController.SetHardwareDecodingModeAsync(mode));
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyPlaybackDefaultsChange(
+            new ShellPlaybackDefaultsChange(
+                mode,
+                ViewModel.Transport.PlaybackRate,
+                ViewModel.Settings.AudioDelaySeconds,
+                ViewModel.Settings.SubtitleDelaySeconds,
+                ViewModel.Settings.AspectRatio)));
+        FireAndForget(_shellPlaybackCommands.SetHardwareDecodingModeAsync(mode));
         UpdateHardwareDecodingFlyoutChecks();
-        SaveCurrentSettings();
         ShowStatus($"Hardware decode: {FormatHardwareDecodingLabel(mode)}.");
     }
 
@@ -3565,7 +3470,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        FireAndForget(_shellController.SetAudioTrackAsync(trackId));
+        FireAndForget(_shellPlaybackCommands.SetAudioTrackAsync(trackId));
         ApplyTrackSelection(MediaTrackKind.Audio, trackId);
         RebuildAudioTrackFlyout();
         ShowStatus($"Selected audio track: {label}.");
@@ -3592,8 +3497,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var result = await _shellController.SelectEmbeddedSubtitleTrackAsync(
-            _shellController.CurrentPlaybackSnapshot.Path,
+        var result = await _shellPlaybackCommands.SelectEmbeddedSubtitleTrackAsync(
+            _shellPlaybackCommands.CurrentPlaybackSnapshot.Path,
             ViewModel.SubtitleSource,
             track);
 
@@ -3608,39 +3513,61 @@ public sealed partial class MainWindow : Window
 
     private void AdjustSubtitleDelay(double delta)
     {
-        _subtitleDelaySeconds += delta;
-        FireAndForget(_shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds));
+        var updatedDelay = ViewModel.Settings.SubtitleDelaySeconds + delta;
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyPlaybackDefaultsChange(
+            new ShellPlaybackDefaultsChange(
+                ViewModel.Settings.HardwareDecodingMode,
+                ViewModel.Transport.PlaybackRate,
+                ViewModel.Settings.AudioDelaySeconds,
+                updatedDelay,
+                ViewModel.Settings.AspectRatio)));
+        FireAndForget(_shellPlaybackCommands.SetSubtitleDelayAsync(updatedDelay));
         UpdateDelayFlyoutLabels();
         SyncSubtitleDelayValueText();
-        SaveCurrentSettings();
-        ShowStatus($"Subtitle delay: {_subtitleDelaySeconds:+0.00;-0.00;0.00}s");
+        ShowStatus($"Subtitle delay: {updatedDelay:+0.00;-0.00;0.00}s");
     }
 
     private void ResetSubtitleDelay()
     {
-        _subtitleDelaySeconds = 0;
-        FireAndForget(_shellController.SetSubtitleDelayAsync(_subtitleDelaySeconds));
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyPlaybackDefaultsChange(
+            new ShellPlaybackDefaultsChange(
+                ViewModel.Settings.HardwareDecodingMode,
+                ViewModel.Transport.PlaybackRate,
+                ViewModel.Settings.AudioDelaySeconds,
+                0,
+                ViewModel.Settings.AspectRatio)));
+        FireAndForget(_shellPlaybackCommands.SetSubtitleDelayAsync(0));
         UpdateDelayFlyoutLabels();
         SyncSubtitleDelayValueText();
-        SaveCurrentSettings();
         ShowStatus("Subtitle delay reset.");
     }
 
     private void AdjustAudioDelay(double delta)
     {
-        _audioDelaySeconds += delta;
-        FireAndForget(_shellController.SetAudioDelayAsync(_audioDelaySeconds));
+        var updatedDelay = ViewModel.Settings.AudioDelaySeconds + delta;
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyPlaybackDefaultsChange(
+            new ShellPlaybackDefaultsChange(
+                ViewModel.Settings.HardwareDecodingMode,
+                ViewModel.Transport.PlaybackRate,
+                updatedDelay,
+                ViewModel.Settings.SubtitleDelaySeconds,
+                ViewModel.Settings.AspectRatio)));
+        FireAndForget(_shellPlaybackCommands.SetAudioDelayAsync(updatedDelay));
         UpdateDelayFlyoutLabels();
-        SaveCurrentSettings();
-        ShowStatus($"Audio delay: {_audioDelaySeconds:+0.00;-0.00;0.00}s");
+        ShowStatus($"Audio delay: {updatedDelay:+0.00;-0.00;0.00}s");
     }
 
     private void ResetAudioDelay()
     {
-        _audioDelaySeconds = 0;
-        FireAndForget(_shellController.SetAudioDelayAsync(_audioDelaySeconds));
+        ApplyPreferencesSnapshot(_shellPreferencesService.ApplyPlaybackDefaultsChange(
+            new ShellPlaybackDefaultsChange(
+                ViewModel.Settings.HardwareDecodingMode,
+                ViewModel.Transport.PlaybackRate,
+                0,
+                ViewModel.Settings.SubtitleDelaySeconds,
+                ViewModel.Settings.AspectRatio)));
+        FireAndForget(_shellPlaybackCommands.SetAudioDelayAsync(0));
         UpdateDelayFlyoutLabels();
-        SaveCurrentSettings();
         ShowStatus("Audio delay reset.");
     }
 
@@ -3654,7 +3581,7 @@ public sealed partial class MainWindow : Window
     {
         if (SubtitleDelayValueText is not null)
         {
-            SubtitleDelayValueText.Text = $"{_subtitleDelaySeconds:+0.00;-0.00;0.00}s";
+            SubtitleDelayValueText.Text = $"{ViewModel.Settings.SubtitleDelaySeconds:+0.00;-0.00;0.00}s";
         }
     }
 
@@ -3687,11 +3614,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        ViewModel.Settings = ViewModel.Settings with
-        {
-            ResumeEnabled = item.IsChecked
-        };
-        _shellController.SetResumeTrackingEnabled(item.IsChecked);
+        PersistResumeEnabledPreference(item.IsChecked);
+        _shellPlaybackCommands.SetResumeTrackingEnabled(item.IsChecked);
         if (ResumePlaybackToggleItem is not null && !ReferenceEquals(item, ResumePlaybackToggleItem))
         {
             ResumePlaybackToggleItem.IsChecked = item.IsChecked;
@@ -3699,10 +3623,9 @@ public sealed partial class MainWindow : Window
 
         if (!item.IsChecked)
         {
-            _shellController.ClearResumeHistory();
+            _shellPlaybackCommands.ClearResumeHistory();
         }
 
-        SaveCurrentSettings();
         ShowStatus(item.IsChecked ? "Resume playback enabled." : "Resume playback disabled.");
     }
 
@@ -3781,24 +3704,20 @@ public sealed partial class MainWindow : Window
 
     private async void EditShortcuts_Click(object sender, RoutedEventArgs e)
     {
-        var updatedProfile = await _credentialDialogService.EditShortcutsAsync(ViewModel.Settings.ShortcutProfile);
+        var updatedProfile = await _credentialDialogService.EditShortcutsAsync(_shortcutProfileService.Current.Profile);
         if (updatedProfile is null)
         {
             return;
         }
 
-        ViewModel.Settings = ViewModel.Settings with
-        {
-            ShortcutProfile = updatedProfile
-        };
+        PersistShortcutProfile(updatedProfile);
         RebuildShortcutBindings();
-        SaveCurrentSettings();
         ShowStatus("Keyboard shortcuts updated.");
     }
 
     private async void ExportCurrentSubtitles_Click(object sender, RoutedEventArgs e)
     {
-        if (!_subtitleWorkflowController.HasCurrentCues)
+        if (!_subtitleWorkflowService.HasCurrentCues)
         {
             ShowStatus("No subtitles available to export.");
             return;
@@ -3813,43 +3732,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _subtitleWorkflowController.ExportCurrentSubtitles(exportPath);
+        _subtitleWorkflowService.ExportCurrentSubtitles(exportPath);
         ShowStatus($"Exported subtitles: {Path.GetFileName(exportPath)}");
-    }
-
-    private void AddPinnedRoot(string path)
-    {
-        if (ViewModel.Browser.Roots.Any(root => string.Equals(root.Path, path, StringComparison.OrdinalIgnoreCase)))
-        {
-            return;
-        }
-
-        ViewModel.Browser.Roots.Add(_libraryBrowserService.BuildRootNode(path));
-        ViewModel.Browser.IsVisible = true;
-        BrowserPaneToggle.IsChecked = true;
-        RebuildLibraryTree();
-        SyncPaneLayout(RootGrid.ActualWidth);
-        ShowStatus($"Pinned root added: {path}");
-    }
-
-    private void RemovePinnedRoot(string path)
-    {
-        var existing = ViewModel.Browser.Roots.FirstOrDefault(root => string.Equals(root.Path, path, StringComparison.OrdinalIgnoreCase));
-        if (existing is null)
-        {
-            return;
-        }
-
-        ViewModel.Browser.Roots.Remove(existing);
-        RebuildLibraryTree();
-        if (ViewModel.Browser.Roots.Count == 0)
-        {
-            ViewModel.Browser.IsVisible = false;
-            BrowserPaneToggle.IsChecked = false;
-        }
-
-        SyncPaneLayout(RootGrid.ActualWidth);
-        ShowStatus($"Pinned root removed: {path}");
     }
 
     private async Task QueueFolderIntoPlaylistAsync(bool autoplay)
@@ -3860,14 +3744,20 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        await ApplyQueueMutationAsync(_shellController.EnqueueFolder(folder, autoplay));
+        await ApplyQueueMutationAsync(_queueCommands.EnqueueFolder(folder, autoplay));
     }
 
     private async Task ApplyQueueMutationAsync(ShellQueueMediaResult result)
     {
         foreach (var folder in result.PinnedFolders)
         {
-            AddPinnedRoot(folder);
+            var libraryResult = _shellLibraryService.PinRoot(folder);
+            if (!libraryResult.IsError)
+            {
+                ViewModel.Browser.IsVisible = true;
+                BrowserPaneToggle.IsChecked = true;
+                PersistLayoutPreferences();
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(result.StatusMessage))
@@ -3887,13 +3777,13 @@ public sealed partial class MainWindow : Window
         {
             HardwareDecodingMode = ViewModel.Settings.HardwareDecodingMode,
             PlaybackRate = ViewModel.Transport.PlaybackRate,
-            AspectRatio = _selectedAspectRatio,
-            AudioDelaySeconds = _audioDelaySeconds,
-            SubtitleDelaySeconds = _subtitleDelaySeconds,
+            AspectRatio = ViewModel.Settings.AspectRatio,
+            AudioDelaySeconds = ViewModel.Settings.AudioDelaySeconds,
+            SubtitleDelaySeconds = ViewModel.Settings.SubtitleDelaySeconds,
             Volume = ViewModel.Transport.Volume,
             IsMuted = ViewModel.Transport.IsMuted,
             ResumeEnabled = ViewModel.Settings.ResumeEnabled,
-            PreviousPlaybackState = _shellController.CurrentPlaybackSnapshot
+            PreviousPlaybackState = _shellPlaybackCommands.CurrentPlaybackSnapshot
         };
     }
 
@@ -3904,13 +3794,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _subtitleSourceOnlyOverrideVideoPath = null;
         _isLanguageToolsAutoCollapseOverridden = false;
         _pendingAutoFitPath = item.Path;
         _lastAutoFitSignature = null;
         try
         {
-            var loaded = await _shellController.LoadPlaybackItemAsync(
+            var loaded = await _shellPlaybackCommands.LoadPlaybackItemAsync(
                 item,
                 BuildShellLoadOptions(),
                 CancellationToken.None);
@@ -3975,13 +3864,13 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private TreeViewNode CreateTreeNode(LibraryNode model)
+    private TreeViewNode CreateTreeNode(LibraryEntrySnapshot model)
     {
         var node = new TreeViewNode
         {
             Content = model,
             IsExpanded = model.IsExpanded,
-            HasUnrealizedChildren = model.IsFolder
+            HasUnrealizedChildren = model.HasUnrealizedChildren
         };
 
         if (model.Children.Count > 0)
@@ -4205,7 +4094,7 @@ public sealed partial class MainWindow : Window
         UpdateOverlayControlState();
         if (!_isInitializingShellState)
         {
-            SaveCurrentSettings();
+            PersistLayoutPreferences();
         }
         ShowStatus(mode switch
         {
@@ -4463,10 +4352,9 @@ public sealed partial class MainWindow : Window
 
     private void UpdateSubtitleOverlay(SubtitleWorkflowSnapshot snapshot)
     {
-        var presentation = _subtitleWorkflowController.GetOverlayPresentation(
+        var presentation = _subtitleWorkflowService.GetOverlayPresentation(
             ViewModel.Settings.SubtitleRenderMode,
-            subtitlesVisible: ViewModel.Settings.SubtitleRenderMode != SubtitleRenderMode.Off,
-            sourceOnlyOverrideForCurrentVideo: HasSourceOnlyOverrideForCurrentVideo(snapshot));
+            subtitlesVisible: ViewModel.Settings.SubtitleRenderMode != SubtitleRenderMode.Off);
         ViewModel.SubtitleOverlay.ShowSource = !string.IsNullOrWhiteSpace(presentation.SecondaryText);
         ViewModel.SubtitleOverlay.SourceText = presentation.SecondaryText;
         ViewModel.SubtitleOverlay.TranslationText = presentation.PrimaryText;
@@ -4542,7 +4430,7 @@ public sealed partial class MainWindow : Window
     {
         if (sender is Slider slider)
         {
-            FireAndForget(_shellController.SeekAsync(TimeSpan.FromSeconds(slider.Value)));
+            FireAndForget(_shellPlaybackCommands.SeekAsync(TimeSpan.FromSeconds(slider.Value)));
         }
 
         _isPositionScrubbing = false;
@@ -4646,7 +4534,7 @@ public sealed partial class MainWindow : Window
             return true;
         }
 
-        var result = _shellController.AddToQueue(paths);
+        var result = _queueCommands.AddToQueue(paths);
         ShowStatus(result.StatusMessage
             ?? (paths.Length == 1
                 ? $"Queued {Path.GetFileName(paths[0])}."
@@ -4668,9 +4556,9 @@ public sealed partial class MainWindow : Window
 
     private async Task PrepareForTranscriptionRefreshAsync()
     {
-        var result = await _shellController.PrepareForTranscriptionRefreshAsync(
-            _subtitleWorkflowController.Snapshot,
-            _shellController.CurrentPlaybackSnapshot,
+        var result = await _shellPlaybackCommands.PrepareForTranscriptionRefreshAsync(
+            _subtitleWorkflowService.Current,
+            _shellPlaybackCommands.CurrentPlaybackSnapshot,
             CancellationToken.None);
         if (!string.IsNullOrWhiteSpace(result.StatusMessage))
         {
@@ -4683,14 +4571,14 @@ public sealed partial class MainWindow : Window
 
     private async Task ApplyCaptionStartupGateAsync(SubtitleWorkflowSnapshot snapshot)
     {
-        if (GetEffectiveSubtitleRenderMode(snapshot) == SubtitleRenderMode.Off)
+        if (GetEffectiveSubtitleRenderMode() == SubtitleRenderMode.Off)
         {
             return;
         }
 
-        var result = await _shellController.EvaluateCaptionStartupGateAsync(
+        var result = await _shellPlaybackCommands.EvaluateCaptionStartupGateAsync(
             snapshot,
-            _shellController.CurrentPlaybackSnapshot,
+            _shellPlaybackCommands.CurrentPlaybackSnapshot,
             CancellationToken.None);
         if (!string.IsNullOrWhiteSpace(result.StatusMessage))
         {

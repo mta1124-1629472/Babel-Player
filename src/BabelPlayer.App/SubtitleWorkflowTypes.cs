@@ -72,6 +72,8 @@ public sealed record SubtitleWorkflowSnapshot
     public string CaptionGenerationModeLabel { get; init; } = SubtitleWorkflowCatalog.GetTranscriptionModel(SubtitleWorkflowCatalog.DefaultTranscriptionModelKey).DisplayName;
     public SubtitleCue? ActiveCue { get; init; }
     public IReadOnlyList<SubtitleCue> Cues { get; init; } = [];
+    public IReadOnlyList<TranscriptionModelSelection> AvailableTranscriptionModels { get; init; } = SubtitleWorkflowCatalog.AvailableTranscriptionModels;
+    public IReadOnlyList<TranslationModelSelection> AvailableTranslationModels { get; init; } = SubtitleWorkflowCatalog.AvailableTranslationModels;
 }
 
 public sealed record SubtitleOverlayPresentation
@@ -83,15 +85,44 @@ public sealed record SubtitleOverlayPresentation
 
 public static class SubtitleWorkflowCatalog
 {
-    public const string DefaultTranscriptionModelKey = "local:tiny";
+    public const string DefaultTranscriptionModelKey = "local:tiny-multilingual";
+    public static IReadOnlyList<TranscriptionModelSelection> AvailableTranscriptionModels { get; } =
+    [
+        GetTranscriptionModel("local:tiny-multilingual"),
+        GetTranscriptionModel("local:base-multilingual"),
+        GetTranscriptionModel("local:small-multilingual"),
+        GetTranscriptionModel("cloud:gpt-4o-mini-transcribe"),
+        GetTranscriptionModel("cloud:gpt-4o-transcribe"),
+        GetTranscriptionModel("cloud:whisper-1")
+    ];
 
-    public static TranscriptionModelSelection GetTranscriptionModel(string? modelKey)
+    public static IReadOnlyList<TranslationModelSelection> AvailableTranslationModels { get; } =
+    [
+        GetTranslationModel("local:hymt-1.8b"),
+        GetTranslationModel("local:hymt-7b"),
+        GetTranslationModel("cloud:gpt-5-mini"),
+        GetTranslationModel("cloud:google-translate"),
+        GetTranslationModel("cloud:deepl"),
+        GetTranslationModel("cloud:microsoft-translator")
+    ];
+
+    public static string CanonicalizeTranscriptionModelKey(string? modelKey)
     {
         return modelKey switch
         {
-            "local:tiny" => new TranscriptionModelSelection("local:tiny", "Local Tiny.en", TranscriptionProvider.Local, GgmlType.TinyEn, null),
-            "local:base" => new TranscriptionModelSelection("local:base", "Local Base.en", TranscriptionProvider.Local, GgmlType.BaseEn, null),
-            "local:small" => new TranscriptionModelSelection("local:small", "Local Small.en", TranscriptionProvider.Local, GgmlType.SmallEn, null),
+            "local:tiny" => "local:tiny-multilingual",
+            "local:base" => "local:base-multilingual",
+            "local:small" => "local:small-multilingual",
+            _ => string.IsNullOrWhiteSpace(modelKey)
+                ? DefaultTranscriptionModelKey
+                : modelKey
+        };
+    }
+
+    public static TranscriptionModelSelection GetTranscriptionModel(string? modelKey)
+    {
+        return CanonicalizeTranscriptionModelKey(modelKey) switch
+        {
             "local:tiny-multilingual" => new TranscriptionModelSelection("local:tiny-multilingual", "Local Tiny (multilingual)", TranscriptionProvider.Local, GgmlType.Tiny, null),
             "local:base-multilingual" => new TranscriptionModelSelection("local:base-multilingual", "Local Base (multilingual)", TranscriptionProvider.Local, GgmlType.Base, null),
             "local:small-multilingual" => new TranscriptionModelSelection("local:small-multilingual", "Local Small (multilingual)", TranscriptionProvider.Local, GgmlType.Small, null),

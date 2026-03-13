@@ -6,6 +6,7 @@ using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using System.Linq;
 using Windows.System;
 using CoreVirtualKeyStates = Windows.UI.Core.CoreVirtualKeyStates;
 
@@ -13,18 +14,23 @@ namespace BabelPlayer.WinUI;
 
 internal sealed class ShortcutEditorDialog : ContentDialog
 {
-    private readonly ShortcutService _shortcutService = new();
+    private readonly IShortcutProfileService _shortcutProfileService;
     private readonly Dictionary<string, ShortcutEditorRow> _rows = new(StringComparer.OrdinalIgnoreCase);
     private readonly TextBlock _errorText;
     private readonly TextBlock _captureHintText;
     private readonly InputKeyboardSource _keyboardSource;
     private ShortcutEditorRow? _capturingRow;
 
-    public ShortcutEditorDialog(XamlRoot xamlRoot, ShortcutProfile currentProfile)
+    public ShortcutEditorDialog(
+        XamlRoot xamlRoot,
+        IShortcutProfileService shortcutProfileService,
+        ShortcutProfile currentProfile)
     {
         ArgumentNullException.ThrowIfNull(xamlRoot);
+        ArgumentNullException.ThrowIfNull(shortcutProfileService);
         ArgumentNullException.ThrowIfNull(currentProfile);
 
+        _shortcutProfileService = shortcutProfileService;
         _keyboardSource = InputKeyboardSource.GetForIsland(xamlRoot.ContentIsland);
 
         XamlRoot = xamlRoot;
@@ -63,7 +69,7 @@ internal sealed class ShortcutEditorDialog : ContentDialog
             Spacing = 10
         };
 
-        foreach (var action in ShortcutService.SupportedActions)
+        foreach (var action in _shortcutProfileService.Current.SupportedActions)
         {
             currentProfile.Bindings.TryGetValue(action.CommandId, out var currentBinding);
 
@@ -192,24 +198,45 @@ internal sealed class ShortcutEditorDialog : ContentDialog
                     continue;
                 }
 
-                bindings[row.CommandId] = _shortcutService.Normalize(row.GestureText);
+                bindings[row.CommandId] = row.GestureText;
             }
 
-            var profile = new ShortcutProfile
+            var draftProfile = new ShortcutProfile
             {
                 Bindings = bindings
             };
+            var normalization = _shortcutProfileService.NormalizeProfile(draftProfile);
+            var validation = _shortcutProfileService.ValidateProfile(draftProfile);
 
-            var conflicts = _shortcutService.FindConflicts(profile);
-            if (conflicts.Count > 0)
+            if (validation.UnsupportedCommandIds.Count > 0)
             {
-                var firstConflict = conflicts[0];
+                ShowError($"Unsupported shortcut action: {validation.UnsupportedCommandIds[0]}.");
+                args.Cancel = true;
+                return;
+            }
+
+            if (validation.InvalidCommandIds.Count > 0)
+            {
+                ShowError($"Invalid shortcut for {GetActionLabel(validation.InvalidCommandIds[0])}.");
+                args.Cancel = true;
+                return;
+            }
+
+            if (validation.Conflicts.Count > 0)
+            {
+                var firstConflict = validation.Conflicts[0];
                 ShowError($"Duplicate shortcut: {FormatGestureForDisplay(firstConflict.Gesture)} is assigned to both {GetActionLabel(firstConflict.ExistingAction)} and {GetActionLabel(firstConflict.ConflictingAction)}.");
                 args.Cancel = true;
                 return;
             }
 
-            ResultProfile = profile;
+            ResultProfile = new ShortcutProfile
+            {
+                Bindings = normalization.NormalizedBindings.ToDictionary(
+                    binding => binding.CommandId,
+                    binding => binding.NormalizedGesture,
+                    StringComparer.OrdinalIgnoreCase)
+            };
             ClearError();
         }
         catch (Exception ex) when (ex is FormatException or ArgumentException)
@@ -309,7 +336,7 @@ internal sealed class ShortcutEditorDialog : ContentDialog
 
     private void ApplyProfile(ShortcutProfile profile)
     {
-        foreach (var action in ShortcutService.SupportedActions)
+        foreach (var action in _shortcutProfileService.Current.SupportedActions)
         {
             SetGesture(
                 _rows[action.CommandId],
@@ -328,8 +355,14 @@ internal sealed class ShortcutEditorDialog : ContentDialog
             return;
         }
 
-        var normalized = _shortcutService.Normalize(gestureText);
-        row.GestureText = normalized;
+        var normalization = _shortcutProfileService.NormalizeProfile(new ShortcutProfile
+        {
+            Bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [row.CommandId] = gestureText
+            }
+        });
+        row.GestureText = normalization.NormalizedBindings.FirstOrDefault()?.NormalizedGesture ?? gestureText.Trim();
         UpdateDisplay(row);
     }
 
@@ -485,9 +518,9 @@ internal sealed class ShortcutEditorDialog : ContentDialog
         return state.HasFlag(CoreVirtualKeyStates.Down);
     }
 
-    private static string GetActionLabel(string commandId)
+    private string GetActionLabel(string commandId)
     {
-        foreach (var action in ShortcutService.SupportedActions)
+        foreach (var action in _shortcutProfileService.Current.SupportedActions)
         {
             if (string.Equals(action.CommandId, commandId, StringComparison.OrdinalIgnoreCase))
             {

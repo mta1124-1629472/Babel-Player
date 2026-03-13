@@ -6,7 +6,7 @@ public sealed class BrowserPaneViewModel : ObservableObject
 {
     private bool _isVisible = true;
 
-    public ObservableCollection<LibraryNode> Roots { get; } = [];
+    public ObservableCollection<LibraryEntrySnapshot> Roots { get; } = [];
 
     public bool IsVisible
     {

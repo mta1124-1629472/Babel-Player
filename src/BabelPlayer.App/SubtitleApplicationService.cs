@@ -98,6 +98,7 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
         CancellationToken cancellationToken = default,
         bool suppressStatus = false)
     {
+        modelKey = SubtitleWorkflowCatalog.CanonicalizeTranscriptionModelKey(modelKey);
         var selection = SubtitleWorkflowCatalog.GetTranscriptionModel(modelKey);
         _logger.LogInfo("Selecting transcription model.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
         if (selection.Provider == TranscriptionProvider.Cloud && !await _aiCredentialCoordinator.EnsureOpenAiApiKeyAsync(cancellationToken))
