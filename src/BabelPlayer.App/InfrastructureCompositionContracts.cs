@@ -10,6 +10,27 @@ public interface IProviderCompositionFactory
         IBabelLogFactory? logFactory = null);
 }
 
+public sealed record SubtitleWorkflowInfrastructureRequest(
+    CredentialFacade CredentialFacade,
+    ICredentialDialogService? CredentialDialogService,
+    IFilePickerService? FilePickerService,
+    Func<string, string?> EnvironmentVariableReader,
+    IBabelLogFactory? LogFactory = null);
+
+public sealed record SubtitleWorkflowInfrastructure(
+    IRuntimeBootstrapService RuntimeBootstrapService,
+    IProviderAvailabilityService ProviderAvailabilityService,
+    ISubtitleSourceResolver SubtitleSourceResolver,
+    ICaptionGenerator CaptionGenerator,
+    ISubtitleTranslator SubtitleTranslator,
+    IAiCredentialCoordinator AiCredentialCoordinator,
+    IRuntimeProvisioner RuntimeProvisioner);
+
+public interface ISubtitleWorkflowInfrastructureFactory
+{
+    SubtitleWorkflowInfrastructure Create(SubtitleWorkflowInfrastructureRequest request);
+}
+
 public interface IAiCredentialCoordinatorFactory
 {
     IAiCredentialCoordinator Create(

@@ -26,38 +26,51 @@ internal static class TestWorkflowControllerFactory
         credentialFacade ??= new CredentialFacade();
         mediaSessionCoordinator ??= new MediaSessionCoordinator(new InMemoryMediaSessionStore());
         var environmentReader = environmentVariableReader ?? Environment.GetEnvironmentVariable;
-        var transcriptionEngineFactory = new AsrTranscriptionEngineFactory();
-        var translationEngineFactory = new MtTranslationEngineFactory();
-        var providerCompositionFactory = new ProviderCompositionFactory(transcriptionEngineFactory, translationEngineFactory);
-        var providerComposition = providerAvailabilityService is ProviderAvailabilityService concreteProviderAvailabilityService
-            ? concreteProviderAvailabilityService.Composition
-            : providerCompositionFactory.Create(credentialFacade, environmentReader);
-        var availabilityService = providerAvailabilityService ?? new ProviderAvailabilityService(providerComposition);
+        var infrastructureFactory = new SubtitleWorkflowInfrastructureFactory();
+        var infrastructure = infrastructureFactory.Create(new SubtitleWorkflowInfrastructureRequest(
+            credentialFacade,
+            credentialDialogService,
+            filePickerService,
+            environmentReader));
+        var availabilityService = providerAvailabilityService ?? infrastructure.ProviderAvailabilityService;
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
         var resolvedCaptionGenerator = captionGenerator ?? (transcribeVideoAsync is null
-            ? new DefaultCaptionGenerator(providerComposition.Context, providerComposition.TranscriptionRegistry)
+            ? infrastructure.CaptionGenerator
             : new DelegateCaptionGenerator(transcribeVideoAsync));
+        var resolvedAiCredentialCoordinator = aiCredentialCoordinator;
+        if (resolvedAiCredentialCoordinator is null)
+        {
+            resolvedAiCredentialCoordinator = validateOpenAiApiKeyAsync is null && validateTranslationProviderAsync is null
+                ? infrastructure.AiCredentialCoordinator
+                : new DefaultAiCredentialCoordinator(
+                    credentialFacade,
+                    credentialDialogService,
+                    environmentReader,
+                    validateOpenAiApiKeyAsync ?? ((_, _) => Task.CompletedTask),
+                    validateTranslationProviderAsync ?? ((_, _) => Task.CompletedTask));
+        }
+
+        var resolvedRuntimeProvisioner = runtimeProvisioner;
+        if (resolvedRuntimeProvisioner is null)
+        {
+            resolvedRuntimeProvisioner = runtimeBootstrapService is null
+                ? infrastructure.RuntimeProvisioner
+                : new DefaultRuntimeProvisioner(
+                    runtimeBootstrapService,
+                    credentialFacade,
+                    credentialDialogService,
+                    filePickerService,
+                    environmentReader);
+        }
 
         var subtitleApplicationService = new SubtitleApplicationService(
-            new DefaultSubtitleSourceResolver(runtimeBootstrapService ?? new RuntimeBootstrapService()),
+            runtimeBootstrapService is null
+                ? infrastructure.SubtitleSourceResolver
+                : new DefaultSubtitleSourceResolver(runtimeBootstrapService),
             resolvedCaptionGenerator,
-            subtitleTranslator ?? new ProviderBackedSubtitleTranslator(
-                providerComposition.Context,
-                providerComposition.TranslationRegistry,
-                translationEngineFactory,
-                providerComposition.LocalRuntime),
-            aiCredentialCoordinator ?? new DefaultAiCredentialCoordinator(
-                credentialFacade,
-                credentialDialogService,
-                environmentReader,
-                validateOpenAiApiKeyAsync ?? MtService.ValidateApiKeyAsync,
-                validateTranslationProviderAsync ?? MtService.ValidateTranslationProviderAsync),
-            runtimeProvisioner ?? new DefaultRuntimeProvisioner(
-                runtimeBootstrapService ?? new RuntimeBootstrapService(),
-                credentialFacade,
-                credentialDialogService,
-                filePickerService,
-                environmentReader),
+            subtitleTranslator ?? infrastructure.SubtitleTranslator,
+            resolvedAiCredentialCoordinator,
+            resolvedRuntimeProvisioner,
             credentialFacade,
             mediaSessionCoordinator,
             workflowStateStore,
