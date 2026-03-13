@@ -1,5 +1,6 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using BabelPlayer.Infrastructure;
 using Whisper.net.Ggml;
 
 namespace BabelPlayer.App.Tests;
@@ -25,9 +26,12 @@ internal static class TestWorkflowControllerFactory
         credentialFacade ??= new CredentialFacade();
         mediaSessionCoordinator ??= new MediaSessionCoordinator(new InMemoryMediaSessionStore());
         var environmentReader = environmentVariableReader ?? Environment.GetEnvironmentVariable;
+        var transcriptionEngineFactory = new AsrTranscriptionEngineFactory();
+        var translationEngineFactory = new MtTranslationEngineFactory();
+        var providerCompositionFactory = new ProviderCompositionFactory(transcriptionEngineFactory, translationEngineFactory);
         var providerComposition = providerAvailabilityService is ProviderAvailabilityService concreteProviderAvailabilityService
             ? concreteProviderAvailabilityService.Composition
-            : ProviderAvailabilityCompositionFactory.Create(credentialFacade, environmentReader);
+            : providerCompositionFactory.Create(credentialFacade, environmentReader);
         var availabilityService = providerAvailabilityService ?? new ProviderAvailabilityService(providerComposition);
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
         var resolvedCaptionGenerator = captionGenerator ?? (transcribeVideoAsync is null
@@ -35,9 +39,13 @@ internal static class TestWorkflowControllerFactory
             : new DelegateCaptionGenerator(transcribeVideoAsync));
 
         var subtitleApplicationService = new SubtitleApplicationService(
-            new DefaultSubtitleSourceResolver(),
+            new DefaultSubtitleSourceResolver(runtimeBootstrapService ?? new RuntimeBootstrapService()),
             resolvedCaptionGenerator,
-            subtitleTranslator ?? new ProviderBackedSubtitleTranslator(providerComposition.Context, providerComposition.TranslationRegistry),
+            subtitleTranslator ?? new ProviderBackedSubtitleTranslator(
+                providerComposition.Context,
+                providerComposition.TranslationRegistry,
+                translationEngineFactory,
+                providerComposition.LocalRuntime),
             aiCredentialCoordinator ?? new DefaultAiCredentialCoordinator(
                 credentialFacade,
                 credentialDialogService,

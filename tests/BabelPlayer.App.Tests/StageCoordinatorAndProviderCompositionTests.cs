@@ -1,6 +1,7 @@
 using System.Runtime.Serialization;
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using BabelPlayer.Infrastructure;
 using BabelPlayer.WinUI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -123,7 +124,10 @@ public sealed class StageCoordinatorAndProviderCompositionTests
             File.WriteAllText(llamaPath, string.Empty);
             var credentialStore = new FakeCredentialStore();
             credentialStore.SaveLlamaCppServerPath(llamaPath);
-            var service = new ProviderAvailabilityService(new CredentialFacade(credentialStore), _ => null);
+            var service = new ProviderAvailabilityService(
+                new ProviderCompositionFactory(),
+                new CredentialFacade(credentialStore),
+                _ => null);
 
             Assert.Equal(llamaPath, service.ResolveLlamaCppServerPath());
             Assert.Equal("local:hymt-1.8b", service.ResolvePersistedTranslationModelKey("local:hymt-1.8b"));
@@ -145,7 +149,10 @@ public sealed class StageCoordinatorAndProviderCompositionTests
             var credentialStore = new FakeCredentialStore();
             credentialStore.SaveLlamaCppServerPath(llamaPath);
             var credentialFacade = new CredentialFacade(credentialStore);
-            var availabilityService = new ProviderAvailabilityService(credentialFacade, _ => null);
+            var availabilityService = new ProviderAvailabilityService(
+                new ProviderCompositionFactory(),
+                credentialFacade,
+                _ => null);
             var subtitleTranslator = new RecordingSubtitleTranslator();
             var runtimeProvisioner = new CountingRuntimeProvisioner();
             var controller = TestWorkflowControllerFactory.Create(

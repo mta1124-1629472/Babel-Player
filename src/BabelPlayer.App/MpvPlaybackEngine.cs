@@ -20,6 +20,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement?>> _pendingRequests = new();
     private readonly List<MediaTrackInfo> _tracks = [];
+    private readonly IRuntimeBootstrapService _runtimeBootstrapService;
     private readonly IBabelLogger _logger;
     private CancellationTokenSource? _readerCts;
     private Task? _readerTask;
@@ -32,8 +33,9 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     private int? _selectedAudioTrackId;
     private int? _selectedSubtitleTrackId;
 
-    public MpvPlaybackEngine(IBabelLogFactory? logFactory = null)
+    public MpvPlaybackEngine(IRuntimeBootstrapService runtimeBootstrapService, IBabelLogFactory? logFactory = null)
     {
+        _runtimeBootstrapService = runtimeBootstrapService;
         _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("playback.mpv");
     }
 
@@ -56,7 +58,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         }
 
         _logger.LogInfo("Initializing embedded mpv.", BabelLogContext.Create(("hostHandle", hostHandle), ("hardwareDecodingMode", hardwareDecodingMode)));
-        var mpvExePath = await MpvRuntimeInstaller.InstallAsync(progress => OnRuntimeInstallProgress?.Invoke(progress), cancellationToken);
+        var mpvExePath = await _runtimeBootstrapService.EnsureMpvAsync(progress => OnRuntimeInstallProgress?.Invoke(progress), cancellationToken);
         var pipeName = $"babelplayer-mpv-{Guid.NewGuid():N}";
         var sanitizedHwdec = MapHardwareDecodingMode(hardwareDecodingMode);
 

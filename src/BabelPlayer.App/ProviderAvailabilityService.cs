@@ -108,40 +108,16 @@ public sealed record ProviderAvailabilityComposition(
     TranslationProviderRegistry TranslationRegistry,
     ILocalModelRuntime LocalRuntime);
 
-public static class ProviderAvailabilityCompositionFactory
-{
-    public static ProviderAvailabilityComposition Create(
-        CredentialFacade credentialFacade,
-        Func<string, string?> environmentVariableReader,
-        IBabelLogFactory? logFactory = null)
-    {
-        return new ProviderAvailabilityComposition(
-            new ProviderAvailabilityContext(credentialFacade, environmentVariableReader, logFactory ?? NullBabelLogFactory.Instance),
-            new TranscriptionProviderRegistry(
-            [
-                new WhisperLocalTranscriptionProvider(),
-                new WindowsSpeechFallbackTranscriptionProvider(),
-                new OpenAiTranscriptionProviderAdapter()
-            ]),
-            new TranslationProviderRegistry(
-            [
-                new OpenAiTranslationProviderAdapter(),
-                new GoogleTranslationProviderAdapter(),
-                new DeepLTranslationProviderAdapter(),
-                new MicrosoftTranslationProviderAdapter(),
-                new LocalLlamaTranslationProviderAdapter(TranslationProvider.LocalHyMt15_1_8B),
-                new LocalLlamaTranslationProviderAdapter(TranslationProvider.LocalHyMt15_7B)
-            ]),
-            new LlamaCppRuntimeAdapter());
-    }
-}
-
 public sealed class ProviderAvailabilityService : IProviderAvailabilityService
 {
     private readonly ProviderAvailabilityComposition _composition;
 
-    public ProviderAvailabilityService(CredentialFacade credentialFacade, Func<string, string?> environmentVariableReader, IBabelLogFactory? logFactory = null)
-        : this(ProviderAvailabilityCompositionFactory.Create(credentialFacade, environmentVariableReader, logFactory))
+    public ProviderAvailabilityService(
+        IProviderCompositionFactory compositionFactory,
+        CredentialFacade credentialFacade,
+        Func<string, string?> environmentVariableReader,
+        IBabelLogFactory? logFactory = null)
+        : this(compositionFactory.Create(credentialFacade, environmentVariableReader, logFactory))
     {
     }
 

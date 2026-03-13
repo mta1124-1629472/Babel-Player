@@ -10,11 +10,11 @@ public sealed class MpvPlaybackBackend : IPlaybackBackend
     private readonly IBabelLogger _logger;
     private PlaybackBackendState _state = new();
 
-    public MpvPlaybackBackend(IBabelLogFactory? logFactory = null)
+    public MpvPlaybackBackend(IRuntimeBootstrapService runtimeBootstrapService, IBabelLogFactory? logFactory = null)
     {
         var effectiveLogFactory = logFactory ?? NullBabelLogFactory.Instance;
         _logger = effectiveLogFactory.CreateLogger("playback.backend");
-        _engine = new MpvPlaybackEngine(effectiveLogFactory);
+        _engine = new MpvPlaybackEngine(runtimeBootstrapService, effectiveLogFactory);
         _engine.OnStateChanged += HandleEngineStateChanged;
         _engine.OnTracksChanged += tracks => TracksChanged?.Invoke(tracks);
         _engine.OnMediaOpened += () =>

@@ -1,8 +1,6 @@
-using System.IO;
-using System.IO.Compression;
-using System.Net.Http;
+using BabelPlayer.App;
 
-namespace BabelPlayer.App;
+namespace BabelPlayer.Infrastructure;
 
 public static class FfmpegRuntimeInstaller
 {
@@ -89,7 +87,7 @@ public static class FfmpegRuntimeInstaller
 
     private static async Task ExtractRuntimeArchiveAsync(string archivePath, string extractDirectory, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
     {
-        using var archive = ZipFile.OpenRead(archivePath);
+        using var archive = System.IO.Compression.ZipFile.OpenRead(archivePath);
         var fileEntries = archive.Entries.Where(entry => !string.IsNullOrWhiteSpace(entry.Name)).ToList();
         var totalItems = fileEntries.Count;
         var completed = 0;

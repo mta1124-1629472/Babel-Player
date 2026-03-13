@@ -1,10 +1,11 @@
+using BabelPlayer.App;
 using BabelPlayer.Core;
 
-namespace BabelPlayer.App;
+namespace BabelPlayer.Infrastructure;
 
-public static class AiCredentialCoordinatorFactory
+public sealed class AiCredentialCoordinatorFactory : IAiCredentialCoordinatorFactory
 {
-    public static IAiCredentialCoordinator CreateDefault(
+    public IAiCredentialCoordinator Create(
         CredentialFacade credentialFacade,
         ICredentialDialogService? credentialDialogService,
         Func<string, string?>? environmentVariableReader = null)

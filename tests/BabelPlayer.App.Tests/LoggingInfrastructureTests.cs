@@ -1,5 +1,6 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using BabelPlayer.Infrastructure;
 using CoreAppDiagnosticsSnapshot = BabelPlayer.Core.AppDiagnosticsSnapshot;
 using CorePlaybackDiagnosticsSummary = BabelPlayer.Core.PlaybackDiagnosticsSummary;
 using CoreQueueDiagnosticsSummary = BabelPlayer.Core.QueueDiagnosticsSummary;
@@ -225,6 +226,8 @@ public sealed class LoggingInfrastructureTests
         var translator = new ProviderBackedSubtitleTranslator(
             new ProviderAvailabilityContext(new CredentialFacade(), Environment.GetEnvironmentVariable, factory),
             new TranslationProviderRegistry([new ThrowingTranslationProvider()]),
+            new MtTranslationEngineFactory(),
+            new FakeLocalModelRuntime(),
             factory);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => translator.TranslateBatchAsync(
@@ -267,6 +270,13 @@ public sealed class LoggingInfrastructureTests
 
         public Task<IReadOnlyList<string>> TranslateBatchAsync(TranslationRequest request, ProviderAvailabilityContext context, CancellationToken cancellationToken)
             => throw new InvalidOperationException("translation failure");
+    }
+
+    private sealed class FakeLocalModelRuntime : ILocalModelRuntime
+    {
+        public string RuntimeId => "test";
+
+        public string? ResolveExecutablePath(ProviderAvailabilityContext context) => null;
     }
 
     private sealed class RecordingLogFactory : IBabelLogFactory
