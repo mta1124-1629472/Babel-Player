@@ -37,6 +37,10 @@
                             Margin="8,0,0,0"
                             Content="Add Folder"
                             Click="AddLibraryRootButton_Click" />
+                    <Button x:Name="ImportSubtitlesButton"
+                            Margin="8,0,0,0"
+                            Content="Import Subs"
+                            Click="ImportSubtitlesButton_Click" />
                     <TextBlock x:Name="StatusTextBlock"
                                Margin="12,0,0,0"
                                VerticalAlignment="Center"

@@ -572,6 +572,51 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void ImportSubtitlesButton_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!StorageProvider.CanOpen)
+            {
+                UpdateStatus("Subtitle import is not available on this platform.");
+                return;
+            }
+
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import Subtitles",
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("Subtitle files")
+                    {
+                        Patterns = ["*.srt", "*.ass", "*.ssa", "*.vtt", "*.sub"]
+                    }
+                ]
+            });
+
+            var path = files.FirstOrDefault()?.TryGetLocalPath();
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            var result = await _shell.SubtitleWorkflowService.ImportExternalSubtitlesAsync(path, autoLoaded: false, CancellationToken.None);
+            if (result.CueCount > 0)
+            {
+                UpdateStatus($"Loaded subtitles from {Path.GetFileName(path)}.");
+                ApplySubtitlePresentation(_shell.SubtitleWorkflowService.Current);
+                return;
+            }
+
+            UpdateStatus("No subtitles found in the selected file.");
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus($"Subtitle import failed: {ex.Message}");
+        }
+    }
+
     private async void TranscriptionModelComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_suppressWorkflowControlEvents || sender is not ComboBox comboBox || comboBox.SelectedItem is not TranscriptionModelOption option)
