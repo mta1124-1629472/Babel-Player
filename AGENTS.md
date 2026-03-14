@@ -16,7 +16,7 @@ This file provides guidance to agents when working with code in this repository.
 - Shell is strictly view-only - zero business logic allowed in shell window files (including legacy WinUI MainWindow*.cs)
 - Presenters (IVideoPresenter, ISubtitlePresenter) are stateless adapters - they render only what App layer provides
 - WinUI can ONLY depend on specific approved App interfaces (IShellPreferencesService, IShellLibraryService, etc.)
-- WinUI is deactivated as a supported runtime path and retained only pending migration/removal work.
+- WinUI runtime path is retired; active shell runtime is Avalonia.
 - Forbidden WinUI dependencies: CredentialFacade, ShortcutService, SettingsFacade, LibraryBrowserService, SubtitleWorkflowController, ProviderAvailabilityService, DefaultRuntimeProvisioner, DefaultAiCredentialCoordinator
 - State flow: MediaSession → App projections (immutable snapshots) → Shell observes → Presenter renders
 - Platform-native code (mpv, Win32, DirectX) must be isolated in Infrastructure/Playback layers

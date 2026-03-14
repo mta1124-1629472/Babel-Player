@@ -2,7 +2,7 @@
 
 [Babel Player](https://github.com/mta1124-1629472/Babel-Player/) is a desktop video player for local media with local-first subtitle generation, optional cloud services, and an AI subtitle overlay designed for translation workflows.
 
-The project is migrating from a Windows-only WinUI 3 shell to a cross-platform Avalonia shell backed by libmpv. The **Avalonia shell** (`src/BabelPlayer.Avalonia`) is the supported runtime path. The legacy WinUI shell (`src/BabelPlayer.WinUI`) remains in the solution only for migration/removal work.
+The project has migrated from a Windows-only WinUI 3 shell to a cross-platform Avalonia shell backed by libmpv. The **Avalonia shell** (`src/BabelPlayer.Avalonia`) is the supported runtime path.
 
 Canonical repo:
 - GitHub: [mta1124-1629472/Babel-Player](https://github.com/mta1124-1629472/Babel-Player/)
@@ -58,7 +58,6 @@ What the app does today:
   - local/cloud transcription and translation engines
   - language detection
   - hardware detection
-- `src/BabelPlayer.WinUI` — legacy WinUI 3 shell source retained only for migration/removal work (not a supported runtime path)
 - `tests/BabelPlayer.App.Tests` — unit and seam tests for orchestrators, projections, and state mutations
 
 ### Key Design Principles
