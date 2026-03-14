@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer.Avalonia", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer.Playback.Mpv", "src\BabelPlayer.Playback.Mpv\BabelPlayer.Playback.Mpv.csproj", "{2E6D8A69-4700-48EA-97EA-0438EA506019}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Babel Player", "build\Babel Player.csproj", "{EACB6C2A-43FF-49B7-9DCD-F6A31CC7E844}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -29,6 +31,8 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EACB6C2A-43FF-49B7-9DCD-F6A31CC7E844}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EACB6C2A-43FF-49B7-9DCD-F6A31CC7E844}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C7C8F6C5-4E6E-4A4C-9BA4-111111111111}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C7C8F6C5-4E6E-4A4C-9BA4-111111111111}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C7C8F6C5-4E6E-4A4C-9BA4-111111111111}.Debug|x64.ActiveCfg = Debug|Any CPU
