@@ -193,7 +193,9 @@ public sealed partial class MainWindow
         DispatcherQueue.TryEnqueue(async () =>
         {
             _logger.LogInfo("Player host media ended.", BabelLogContext.Create(("path", snapshot.Path)));
-            var result = _shellPlaybackCommands.HandleMediaEnded(ViewModel.Settings.ResumeEnabled);
+            var result = _shellPlaybackCommands.HandleMediaEnded(
+                ViewModel.Settings.ResumeEnabled,
+                ViewModel.Settings.AutoPlayNextInQueue);
             if (result.NextItem is null)
             {
                 ShowStatus(result.StatusMessage);

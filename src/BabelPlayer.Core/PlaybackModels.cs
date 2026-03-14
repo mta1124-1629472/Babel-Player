@@ -145,5 +145,6 @@ public sealed record AppPlayerSettings
     public bool ShowBrowserPanel { get; init; }
     public bool ShowPlaylistPanel { get; init; }
     public bool ResumeEnabled { get; init; } = true;
+    public bool AutoPlayNextInQueue { get; init; } = true;
     public PlaybackWindowMode WindowMode { get; init; } = PlaybackWindowMode.Standard;
 }

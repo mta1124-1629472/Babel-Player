@@ -536,6 +536,50 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
+    public async Task ShellController_HandleMediaEnded_DoesNotAutoplayNextWhenPolicyDisabled()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var firstPath = Path.Combine(directory.FullName, "first.mp4");
+            var secondPath = Path.Combine(directory.FullName, "second.mp4");
+            File.WriteAllText(firstPath, string.Empty);
+            File.WriteAllText(secondPath, string.Empty);
+            File.WriteAllText(Path.ChangeExtension(firstPath, ".srt"), "1\n00:00:00,000 --> 00:00:01,000\nHello\n");
+
+            var queue = new PlaybackQueueController();
+            var backend = new FakeShellPlaybackBackend();
+            using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            using var shell = CreateShellController(
+                queue,
+                backend,
+                workflow,
+                new ResumePlaybackService(initialEntries: [], persistEntries: _ => { }));
+
+            var queueResult = shell.EnqueueFiles([firstPath, secondPath], autoplay: true);
+            var loaded = await shell.LoadPlaybackItemAsync(
+                queueResult.ItemToLoad,
+                new ShellLoadMediaOptions
+                {
+                    ResumeEnabled = false,
+                    PreviousPlaybackState = new PlaybackStateSnapshot()
+                },
+                CancellationToken.None);
+
+            var ended = shell.HandleMediaEnded(resumeEnabled: true, autoPlayNextInQueue: false);
+
+            Assert.True(loaded);
+            Assert.Null(ended.NextItem);
+            Assert.Equal("Playback ended. Up Next is ready when you are.", ended.StatusMessage);
+            Assert.Equal(firstPath, queue.NowPlayingItem?.Path);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void ShellController_ExposesAndMutatesQueueStateWithoutWindowAccess()
     {
         var queue = new PlaybackQueueController();
@@ -943,8 +987,10 @@ public sealed class RemainingArchitecturePlanTests
             });
 
         Assert.Equal("Generating initial captions before playback starts.", pauseResult.StatusMessage);
+        Assert.True(pauseResult.StartupGateBlocking);
         Assert.Equal(1, backend.PauseCallCount);
         Assert.Equal("Captions ready. Playing with generated subtitles.", resumeResult.StatusMessage);
+        Assert.False(resumeResult.StartupGateBlocking);
         Assert.Equal(1, backend.PlayCallCount);
         Assert.Equal(TimeSpan.Zero, backend.LastSeekPosition);
     }
@@ -2523,7 +2569,7 @@ public sealed class RemainingArchitecturePlanTests
         public Task<bool> LoadPlaybackItemAsync(ShellPlaylistItem? item, ShellLoadMediaOptions options, CancellationToken cancellationToken) => Task.FromResult(item is not null);
         public Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(ShellPlaybackStateSnapshot snapshot, ShellPreferencesSnapshot preferences, CancellationToken cancellationToken = default) => Task.FromResult(new ShellPlaybackOpenResult());
         public Task<ShellResumeDecisionResult> ApplyResumeDecisionAsync(ShellResumeDecision decision, CancellationToken cancellationToken = default) => Task.FromResult(new ShellResumeDecisionResult { DecisionApplied = true, StatusMessage = "ok" });
-        public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled) => new();
+        public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled, bool autoPlayNextInQueue = true) => new();
         public Task PlayAsync(CancellationToken cancellationToken = default)
         {
             PlayCalls++;

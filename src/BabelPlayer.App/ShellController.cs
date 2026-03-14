@@ -70,6 +70,7 @@ public sealed record ShellMediaEndedResult
 public sealed record ShellWorkflowTransitionResult
 {
     public string? StatusMessage { get; init; }
+    public bool? StartupGateBlocking { get; init; }
 }
 
 public sealed record ShellSubtitleTrackSelectionResult
@@ -672,7 +673,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _resumeTrackingCoordinator.Flush(forceRemoveCompleted);
     }
 
-    public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled)
+    public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled, bool autoPlayNextInQueue = true)
     {
         ClearPendingResumeDecision();
         _resumeTrackingCoordinator.SetEnabled(resumeEnabled);
@@ -682,12 +683,18 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         }
 
         ResetCaptionStartupGate();
-        var next = _playbackQueueController.AdvanceAfterMediaEnded();
-        _logger.LogInfo("Handled media end.", BabelLogContext.Create(("nextPath", next?.Path), ("resumeEnabled", resumeEnabled)));
+        var next = autoPlayNextInQueue
+            ? _playbackQueueController.AdvanceAfterMediaEnded()
+            : null;
+        _logger.LogInfo("Handled media end.", BabelLogContext.Create(("nextPath", next?.Path), ("resumeEnabled", resumeEnabled), ("autoPlayNextInQueue", autoPlayNextInQueue)));
         return new ShellMediaEndedResult
         {
             NextItem = next?.ToShell(),
-            StatusMessage = next is null ? "Playback ended." : $"Now playing {next.DisplayName}."
+            StatusMessage = next is null
+                ? autoPlayNextInQueue
+                    ? "Playback ended."
+                    : "Playback ended. Up Next is ready when you are."
+                : $"Now playing {next.DisplayName}."
         };
     }
 
@@ -848,7 +855,10 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         if (string.IsNullOrWhiteSpace(currentPath) || !string.Equals(snapshot.CurrentVideoPath, currentPath, StringComparison.OrdinalIgnoreCase))
         {
             ResetCaptionStartupGate();
-            return new ShellWorkflowTransitionResult();
+            return new ShellWorkflowTransitionResult
+            {
+                StartupGateBlocking = false
+            };
         }
 
         var shouldPauseForInitialCaptions = snapshot.SubtitleSource == SubtitlePipelineSource.Generated
@@ -862,7 +872,10 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
             _autoResumePlaybackPath = currentPath;
             _autoResumePlaybackPosition = TimeSpan.Zero;
             _autoResumePlaybackFromBeginning = true;
-            return await PauseForWorkflowTransitionAsync("Generating initial captions before playback starts.", cancellationToken);
+            return await PauseForWorkflowTransitionAsync(
+                "Generating initial captions before playback starts.",
+                cancellationToken,
+                startupGateBlocking: true);
         }
 
         if (_autoResumePlaybackAfterCaptionReady
@@ -878,25 +891,34 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
             await _playbackBackend.PlayAsync(cancellationToken);
             return new ShellWorkflowTransitionResult
             {
-                StatusMessage = "Captions ready. Playing with generated subtitles."
+                StatusMessage = "Captions ready. Playing with generated subtitles.",
+                StartupGateBlocking = false
             };
         }
 
         if (!snapshot.IsCaptionGenerationInProgress)
         {
             ResetCaptionStartupGate();
+            return new ShellWorkflowTransitionResult
+            {
+                StartupGateBlocking = false
+            };
         }
 
         return new ShellWorkflowTransitionResult();
     }
 
-    private async Task<ShellWorkflowTransitionResult> PauseForWorkflowTransitionAsync(string statusMessage, CancellationToken cancellationToken)
+    private async Task<ShellWorkflowTransitionResult> PauseForWorkflowTransitionAsync(
+        string statusMessage,
+        CancellationToken cancellationToken,
+        bool? startupGateBlocking = null)
     {
         await _playbackBackend.PauseAsync(cancellationToken);
         await WaitForPauseStateAsync(true, cancellationToken);
         return new ShellWorkflowTransitionResult
         {
-            StatusMessage = statusMessage
+            StatusMessage = statusMessage,
+            StartupGateBlocking = startupGateBlocking
         };
     }
 

@@ -13,6 +13,8 @@ public interface IShellPreferenceCommands
     ShellPreferencesSnapshot ApplyShortcutProfileChange(ShellShortcutProfile profile);
 
     ShellResumePreferenceResult ApplyResumeEnabledChange(bool enabled);
+
+    ShellPreferencesSnapshot ApplyAutoPlayNextInQueueChange(bool enabled);
 }
 
 public sealed record ShellResumePreferenceResult(
@@ -73,5 +75,10 @@ public sealed class ShellPreferenceCommands : IShellPreferenceCommands
         }
 
         return new ShellResumePreferenceResult(snapshot, resumeHistoryCleared);
+    }
+
+    public ShellPreferencesSnapshot ApplyAutoPlayNextInQueueChange(bool enabled)
+    {
+        return _shellPreferencesService.ApplyAutoPlayNextInQueueChange(new ShellAutoPlayNextInQueueChange(enabled));
     }
 }

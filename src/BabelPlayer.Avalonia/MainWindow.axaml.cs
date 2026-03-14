@@ -24,9 +24,13 @@ public partial class MainWindow : Window
     private Button? _subtitleStyleButton;
     private Button? _fullscreenSubtitleModeButton;
     private Button? _fullscreenSubtitleStyleButton;
+    private Border? _endActionsBorder;
+    private Button? _replayEndedButton;
+    private Button? _openEndedFileButton;
     private Button? _playPauseButton;
     private TextBlock? _positionTextBlock;
     private TextBlock? _statusTextBlock;
+    private TextBlock? _uxStateBadgeTextBlock;
     private TextBlock? _fullscreenSubtitleSourceTextBlock;
     private Slider? _timelineSlider;
     private Slider? _volumeSlider;
@@ -57,11 +61,14 @@ public partial class MainWindow : Window
     private bool _updatingVolumeFromProjection;
     private bool _updatingPlaybackRateFromProjection;
     private string? _currentMediaPath;
+    private readonly UxShellFlagsController _uxShellFlagsController = new();
+    private UxProjectionResult? _uxProjection;
 
     public MainWindow()
     {
         InitializeComponent();
         _shell = new AvaloniaShellCompositionRoot().Create(this);
+        _uxShellFlagsController.Changed += HandleUxShellFlagsChanged;
         _runtimeProgressCloseTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(750)
@@ -89,9 +96,13 @@ public partial class MainWindow : Window
         _subtitleStyleButton ??= this.FindControl<Button>("SubtitleStyleButton");
         _fullscreenSubtitleModeButton ??= this.FindControl<Button>("FullscreenSubtitleModeButton");
         _fullscreenSubtitleStyleButton ??= this.FindControl<Button>("FullscreenSubtitleStyleButton");
+        _endActionsBorder ??= this.FindControl<Border>("EndActionsBorder");
+        _replayEndedButton ??= this.FindControl<Button>("ReplayEndedButton");
+        _openEndedFileButton ??= this.FindControl<Button>("OpenEndedFileButton");
         _playPauseButton ??= this.FindControl<Button>("PlayPauseButton");
         _positionTextBlock ??= this.FindControl<TextBlock>("PositionTextBlock");
         _statusTextBlock ??= this.FindControl<TextBlock>("StatusTextBlock");
+        _uxStateBadgeTextBlock ??= this.FindControl<TextBlock>("UxStateBadgeTextBlock");
         _fullscreenSubtitleSourceTextBlock ??= this.FindControl<TextBlock>("FullscreenSubtitleSourceTextBlock");
         _timelineSlider ??= this.FindControl<Slider>("TimelineSlider");
         _volumeSlider ??= this.FindControl<Slider>("VolumeSlider");
@@ -105,6 +116,11 @@ public partial class MainWindow : Window
         _backgroundOpacityValueTextBlock ??= this.FindControl<TextBlock>("BackgroundOpacityValueTextBlock");
         _bottomMarginValueTextBlock ??= this.FindControl<TextBlock>("BottomMarginValueTextBlock");
         _subtitleStyleFlyout ??= _subtitleStyleButton is null ? null : FlyoutBase.GetAttachedFlyout(_subtitleStyleButton);
+        if (_subtitleStyleFlyout is not null)
+        {
+            _subtitleStyleFlyout.Closed -= SubtitleStyleFlyout_Closed;
+            _subtitleStyleFlyout.Closed += SubtitleStyleFlyout_Closed;
+        }
         InitializePanelControls();
         InitializeShortcutAndWindowModeControls();
 
@@ -194,6 +210,7 @@ public partial class MainWindow : Window
             : "Open a local video to begin playback.");
         SyncSubtitleOverlay();
         TryShowRuntimeProgressWindow();
+        RecomputeUxProjection();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -256,6 +273,11 @@ public partial class MainWindow : Window
             _runtimeProgressCloseTimer.Stop();
             _runtimeProgressCloseTimer.Tick -= HandleRuntimeProgressCloseTimerTick;
         }
+        if (_subtitleStyleFlyout is not null)
+        {
+            _subtitleStyleFlyout.Closed -= SubtitleStyleFlyout_Closed;
+        }
+        _uxShellFlagsController.Changed -= HandleUxShellFlagsChanged;
         CloseRuntimeProgressWindow();
         DisposePanelControls();
         DisposeShortcutAndWindowModeControls();
@@ -326,7 +348,11 @@ public partial class MainWindow : Window
 
     private void HandleProjectionChanged(BabelPlayer.App.ShellProjectionSnapshot projection)
     {
-        Dispatcher.UIThread.Post(() => ApplyProjection(projection));
+        Dispatcher.UIThread.Post(() =>
+        {
+            ApplyProjection(projection);
+            RecomputeUxProjection();
+        });
     }
 
     private void HandleSubtitleSnapshotChanged(SubtitleWorkflowSnapshot snapshot)
@@ -335,6 +361,7 @@ public partial class MainWindow : Window
         {
             ApplySubtitlePresentation(snapshot);
             await ApplyCaptionStartupGateAsync(snapshot);
+            RecomputeUxProjection();
         });
     }
 
@@ -351,7 +378,11 @@ public partial class MainWindow : Window
 
     private void HandleCredentialSetupSnapshotChanged(CredentialSetupSnapshot snapshot)
     {
-        Dispatcher.UIThread.Post(() => ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current));
+        Dispatcher.UIThread.Post(() =>
+        {
+            ApplyWorkflowSnapshot(_shell.SubtitleWorkflowService.Current);
+            RecomputeUxProjection();
+        });
     }
 
     private void HandleMediaOpened(BabelPlayer.App.ShellPlaybackStateSnapshot snapshot)
@@ -362,11 +393,14 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(path))
             {
                 HideResumePrompt();
+                _uxShellFlagsController.CancelOpenRequest();
                 UpdateStatus("Media opened.");
                 return;
             }
 
             HideResumePrompt();
+            _uxShellFlagsController.CompleteOpenRequest();
+            _uxShellFlagsController.HideEndActions();
             var result = await _shell.ShellPlaybackCommands.HandleMediaOpenedAsync(
                 snapshot,
                 _shell.ShellPreferencesService.Current,
@@ -376,6 +410,7 @@ public partial class MainWindow : Window
                 && result.ResumePosition is TimeSpan resumePosition
                 && !string.IsNullOrWhiteSpace(path))
             {
+                _uxShellFlagsController.ShowResumePrompt(path, resumePosition);
                 await HandlePendingResumeDecisionAsync(path, resumePosition);
                 return;
             }
@@ -390,13 +425,18 @@ public partial class MainWindow : Window
         {
             Title = "Babel Player";
             HideResumePrompt();
-            var result = _shell.ShellPlaybackCommands.HandleMediaEnded(_shell.ShellPreferencesService.Current.ResumeEnabled);
+            var preferences = _shell.ShellPreferencesService.Current;
+            var result = _shell.ShellPlaybackCommands.HandleMediaEnded(
+                preferences.ResumeEnabled,
+                preferences.AutoPlayNextInQueue);
             if (result.NextItem is null)
             {
+                _uxShellFlagsController.ShowEndActions(snapshot.Path);
                 UpdateStatus(result.StatusMessage);
                 return;
             }
 
+            _uxShellFlagsController.HideEndActions();
             await OpenQueueItemAsync(result.NextItem, result.StatusMessage, ShellMediaOpenTrigger.Autoplay);
         });
     }
@@ -407,6 +447,8 @@ public partial class MainWindow : Window
         {
             Title = "Babel Player";
             HideResumePrompt();
+            _uxShellFlagsController.CancelOpenRequest();
+            _uxShellFlagsController.HideEndActions();
             CloseRuntimeProgressWindow();
             UpdateStatus(message);
         });
@@ -472,7 +514,10 @@ public partial class MainWindow : Window
             && !string.Equals(_currentMediaPath, transport.Path, StringComparison.OrdinalIgnoreCase))
         {
             _currentMediaPath = transport.Path;
-            UpdateStatus(Path.GetFileName(transport.Path));
+            if (GetCurrentUxPrimaryState() == UxSessionState.Watching)
+            {
+                UpdateStatus(Path.GetFileName(transport.Path));
+            }
         }
     }
 
@@ -868,6 +913,7 @@ public partial class MainWindow : Window
         }
 
         _runtimeProgressWindow = new RuntimeProgressWindow();
+        _uxShellFlagsController.SetRuntimePromptVisible(true);
         _runtimeProgressWindow.Closed += HandleRuntimeProgressWindowClosed;
         _runtimeProgressWindow.Opened += HandleRuntimeProgressWindowOpened;
         _runtimeProgressWindow.ApplyProgress(_latestRuntimeLabel, _latestRuntimeInstallProgress);
@@ -898,6 +944,7 @@ public partial class MainWindow : Window
         _runtimeProgressWindow = null;
         _runtimeProgressDialogTask = null;
         _closingRuntimeProgressWindow = false;
+        _uxShellFlagsController.SetRuntimePromptVisible(false);
     }
 
     private void ScheduleRuntimeProgressWindowClose()
@@ -936,17 +983,95 @@ public partial class MainWindow : Window
         {
             _statusTextBlock.Text = message;
         }
+
+        _uxShellFlagsController.ShowBanner(message, "info");
     }
 
     private void HideResumePrompt()
     {
         // Resume prompt UI retired; keep method for existing call sites.
+        _uxShellFlagsController.HideResumePrompt();
     }
 
     private async Task HandlePendingResumeDecisionAsync(string path, TimeSpan resumePosition)
     {
         var result = await _shell.ResumeDecisionCoordinator.ResolveAsync(this, path, resumePosition, CancellationToken.None);
+        _uxShellFlagsController.HideResumePrompt();
         UpdateStatus(result.StatusMessage);
+    }
+
+    private void HandleUxShellFlagsChanged(UxShellFlags flags)
+    {
+        RecomputeUxProjection();
+    }
+
+    private void RecomputeUxProjection()
+    {
+        _uxProjection = UxSessionProjector.Project(new UxProjectionContext(
+            _shell.ShellPlaybackCommands.CurrentPlaybackSnapshot,
+            _shell.ShellProjectionReader.Current,
+            _shell.SubtitleWorkflowService.Current,
+            _shell.CredentialSetupService.Current,
+            _uxShellFlagsController.Current));
+        ApplyUxProjectionChrome(_uxProjection);
+    }
+
+    private UxSessionState GetCurrentUxPrimaryState()
+    {
+        return _uxProjection?.Primary ?? UxSessionState.Idle;
+    }
+
+    private void ApplyUxProjectionChrome(UxProjectionResult projection)
+    {
+        if (_uxStateBadgeTextBlock is null)
+        {
+            return;
+        }
+
+        var (isVisible, label) = projection.Primary switch
+        {
+            UxSessionState.Opening => (true, "OPENING"),
+            UxSessionState.Ended => (true, "ENDED"),
+            UxSessionState.Idle => (true, "IDLE"),
+            _ => (false, string.Empty)
+        };
+
+        _uxStateBadgeTextBlock.IsVisible = isVisible;
+        _uxStateBadgeTextBlock.Text = label;
+
+        if (_endActionsBorder is not null)
+        {
+            _endActionsBorder.IsVisible = projection.Overlays.EndActionsVisible;
+        }
+
+        if (_replayEndedButton is not null)
+        {
+            _replayEndedButton.IsEnabled = !string.IsNullOrWhiteSpace(ResolveReplayPath());
+        }
+    }
+
+    private async void ReplayEndedButton_Click(object? sender, RoutedEventArgs e)
+    {
+        var replayPath = ResolveReplayPath();
+        if (string.IsNullOrWhiteSpace(replayPath))
+        {
+            UpdateStatus("Nothing to replay.");
+            return;
+        }
+
+        await OpenMediaAsync(replayPath, $"Replaying {Path.GetFileName(replayPath)}...");
+    }
+
+    private async void OpenEndedFileButton_Click(object? sender, RoutedEventArgs e)
+    {
+        await Dispatcher.UIThread.InvokeAsync(() => OpenButton_Click(sender, e));
+    }
+
+    private string? ResolveReplayPath()
+    {
+        return _uxShellFlagsController.Current.EndedMediaPath
+            ?? _shell.ShellPlaybackCommands.CurrentPlaybackSnapshot.Path
+            ?? _currentMediaPath;
     }
 
     private void SyncSubtitleOverlay()
@@ -1032,10 +1157,16 @@ public partial class MainWindow : Window
     private async Task OpenQueueItemAsync(ShellPlaylistItem item, string statusMessage, ShellMediaOpenTrigger openTrigger = ShellMediaOpenTrigger.Manual)
     {
         HideResumePrompt();
+        _uxShellFlagsController.BeginOpenRequest(item.Path);
         var loaded = await _shell.ShellPlaybackCommands.LoadPlaybackItemAsync(
             item,
             BuildLoadOptions(openTrigger),
             CancellationToken.None);
+        if (!loaded)
+        {
+            _uxShellFlagsController.CancelOpenRequest();
+        }
+
         UpdateStatus(loaded ? statusMessage : $"Unable to open {item.DisplayName}.");
     }
 
@@ -1088,6 +1219,7 @@ public partial class MainWindow : Window
         var preferences = _shell.ShellPreferencesService.Current;
         if (preferences.SubtitleRenderMode == ShellSubtitleRenderMode.Off || !_backendInitialized)
         {
+            _uxShellFlagsController.SetStartupGateBlocking(false);
             return;
         }
 
@@ -1095,6 +1227,11 @@ public partial class MainWindow : Window
             snapshot,
             _shell.ShellPlaybackCommands.CurrentPlaybackSnapshot,
             CancellationToken.None);
+        if (result.StartupGateBlocking is bool startupGateBlocking)
+        {
+            _uxShellFlagsController.SetStartupGateBlocking(startupGateBlocking, snapshot.CurrentVideoPath);
+        }
+
         if (!string.IsNullOrWhiteSpace(result.StatusMessage))
         {
             UpdateStatus(result.StatusMessage);
@@ -1238,7 +1375,13 @@ public partial class MainWindow : Window
 
     private void SubtitleStyleFlyout_Opened(object? sender, EventArgs e)
     {
+        _uxShellFlagsController.SetSubtitlePanelOpen(true);
         ApplySubtitleStyleControls(_shell.ShellPreferencesService.Current.SubtitleStyle);
+    }
+
+    private void SubtitleStyleFlyout_Closed(object? sender, EventArgs e)
+    {
+        _uxShellFlagsController.SetSubtitlePanelOpen(false);
     }
 
     private void SubtitleStyleSlider_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)

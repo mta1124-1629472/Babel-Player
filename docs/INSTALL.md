@@ -8,7 +8,7 @@ Canonical repository:
 ## Requirements
 
 1. Windows with media playback support.
-2. `.NET 8 SDK`.
+2. `.NET 9 SDK`.
 3. Visual Studio 2022 or later is recommended if you want to run and debug from the IDE.
 
 ## Build
@@ -22,12 +22,10 @@ dotnet build BabelPlayer.sln
 ## Run
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
+dotnet run --project src/BabelPlayer.Avalonia
 ```
 
-In Visual Studio, set `BabelPlayer.WinUI` as the startup project.
-
-If `BabelPlayer.WinUI` is already running, close it before rebuilding or rerunning.
+The Avalonia shell is the only supported runtime path.
 
 ## First-run runtime bootstrap
 
@@ -76,7 +74,7 @@ Cloud:
 
 ## Important notes
 
-- The active app is a WinUI 3 desktop application.
+- The active app is the Avalonia desktop shell.
 - The playback shell is mpv-based, not `MediaElement`-based anymore.
 - External subtitle import supports `SRT`, `VTT`, `ASS`, and `SSA`.
 - Embedded subtitle import into the AI pipeline is currently for text-based tracks only.

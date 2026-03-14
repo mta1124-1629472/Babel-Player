@@ -2,7 +2,7 @@
 
 [Babel Player](https://github.com/mta1124-1629472/Babel-Player/) is a desktop video player for local media with local-first subtitle generation, optional cloud services, and an AI subtitle overlay designed for translation workflows.
 
-The project is migrating from a Windows-only WinUI 3 shell to a cross-platform Avalonia shell backed by libmpv. The **Avalonia shell** (`src/BabelPlayer.Avalonia`) is the active development target on the `avalonia-shell` branch. The legacy WinUI shell (`src/BabelPlayer.WinUI`) remains in the solution for reference.
+The project is migrating from a Windows-only WinUI 3 shell to a cross-platform Avalonia shell backed by libmpv. The **Avalonia shell** (`src/BabelPlayer.Avalonia`) is the supported runtime path. The legacy WinUI shell (`src/BabelPlayer.WinUI`) remains in the solution only for migration/removal work.
 
 Canonical repo:
 - GitHub: [mta1124-1629472/Babel-Player](https://github.com/mta1124-1629472/Babel-Player/)
@@ -58,7 +58,7 @@ What the app does today:
   - local/cloud transcription and translation engines
   - language detection
   - hardware detection
-- `src/BabelPlayer.WinUI` — legacy WinUI 3 desktop shell (reference only)
+- `src/BabelPlayer.WinUI` — legacy WinUI 3 shell source retained only for migration/removal work (not a supported runtime path)
 - `tests/BabelPlayer.App.Tests` — unit and seam tests for orchestrators, projections, and state mutations
 
 ### Key Design Principles
@@ -310,14 +310,6 @@ dotnet build BabelPlayer.sln
 dotnet run --project src/BabelPlayer.Avalonia
 ```
 
-### Legacy WinUI shell
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
-```
-
-Or in Visual Studio, set `BabelPlayer.WinUI` as the startup project.
-
 ### Tests
 
 ```powershell
@@ -333,12 +325,12 @@ Tagged GitHub releases publish two Windows distribution formats:
 - EXE installer
   - run the installer and launch Babel Player from the Start menu or desktop shortcut
 
-The portable build and installer are produced from the same WinUI publish output.
+The portable build and installer are produced from the same Avalonia publish output.
 
 ## Known Limitations
 
 - Translation target language is currently English only.
-- The Avalonia shell is the active development target; some WinUI-only features (shortcut editor dialog, some polish items) are still being ported.
+- Avalonia is the only supported runtime shell; WinUI source is retained temporarily for migration/removal work.
 - Cross-platform builds (Linux/macOS) are an architectural goal but not yet validated at runtime.
 - libmpv runtime DLL must be present locally; it is not distributed via NuGet.
 - Embedded subtitle import is implemented for text-based tracks; image-based subtitle tracks are display-only.

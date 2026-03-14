@@ -20,6 +20,8 @@ public interface IShellPreferencesService
 
     ShellPreferencesSnapshot ApplyResumeEnabledChange(ShellResumeEnabledChange change);
 
+    ShellPreferencesSnapshot ApplyAutoPlayNextInQueueChange(ShellAutoPlayNextInQueueChange change);
+
     ShellPreferencesSnapshot ApplyPinnedRootsChange(ShellPinnedRootsChange change);
 }
 
@@ -39,6 +41,7 @@ public sealed record ShellPreferencesSnapshot
     public bool ShowBrowserPanel { get; init; }
     public bool ShowPlaylistPanel { get; init; }
     public bool ResumeEnabled { get; init; } = true;
+    public bool AutoPlayNextInQueue { get; init; } = true;
     public ShellPlaybackWindowMode WindowMode { get; init; } = ShellPlaybackWindowMode.Standard;
     public ShellSubtitleRenderMode LastNonOffSubtitleRenderMode { get; init; } = ShellSubtitleRenderMode.TranslationOnly;
     public bool ShowSubtitleSource { get; init; }
@@ -67,6 +70,8 @@ public sealed record ShellAudioStateChange(
 public sealed record ShellShortcutProfileChange(ShellShortcutProfile ShortcutProfile);
 
 public sealed record ShellResumeEnabledChange(bool ResumeEnabled);
+
+public sealed record ShellAutoPlayNextInQueueChange(bool AutoPlayNextInQueue);
 
 public sealed record ShellPinnedRootsChange(IReadOnlyList<string> PinnedRoots);
 
@@ -156,6 +161,16 @@ public sealed class ShellPreferencesService : IShellPreferencesService
         return Persist(updated);
     }
 
+    public ShellPreferencesSnapshot ApplyAutoPlayNextInQueueChange(ShellAutoPlayNextInQueueChange change)
+    {
+        var updated = ToSettings(Current) with
+        {
+            AutoPlayNextInQueue = change.AutoPlayNextInQueue
+        };
+
+        return Persist(updated);
+    }
+
     public ShellPreferencesSnapshot ApplyPinnedRootsChange(ShellPinnedRootsChange change)
     {
         ArgumentNullException.ThrowIfNull(change.PinnedRoots);
@@ -216,6 +231,7 @@ public sealed class ShellPreferencesService : IShellPreferencesService
             ShowBrowserPanel = settings.ShowBrowserPanel,
             ShowPlaylistPanel = settings.ShowPlaylistPanel,
             ResumeEnabled = settings.ResumeEnabled,
+            AutoPlayNextInQueue = settings.AutoPlayNextInQueue,
             WindowMode = settings.WindowMode.ToShell(),
             LastNonOffSubtitleRenderMode = subtitleRenderMode == SubtitleRenderMode.Off
                 ? ShellSubtitleRenderMode.TranslationOnly
@@ -242,6 +258,7 @@ public sealed class ShellPreferencesService : IShellPreferencesService
             ShowBrowserPanel = snapshot.ShowBrowserPanel,
             ShowPlaylistPanel = snapshot.ShowPlaylistPanel,
             ResumeEnabled = snapshot.ResumeEnabled,
+            AutoPlayNextInQueue = snapshot.AutoPlayNextInQueue,
             WindowMode = snapshot.WindowMode.ToCore()
         };
     }

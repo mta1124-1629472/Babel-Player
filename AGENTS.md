@@ -8,14 +8,15 @@ This file provides guidance to agents when working with code in this repository.
 - Test (unit): `dotnet test tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj`
 - Test (single test): `dotnet test --filter "FullyQualifiedTestName~<TestClass>.<TestMethod>"`
 - Run Avalonia directly: `.\scripts\run-avalonia.ps1`
-- Legacy compatibility wrapper: `.\scripts\run-winui.ps1`
+- WinUI runtime wrapper is deactivated: `.\scripts\run-winui.ps1` hard-fails by design
 
 ## Critical Architecture Patterns (Non-Obvious)
 - MediaSession is the ONLY authoritative timed state - never duplicate timeline/playback position in UI controls
 - ALL timed state changes MUST flow through MediaSessionCoordinator - direct modification causes sync bugs
-- Shell/WinUI is strictly view-only - zero business logic allowed in MainWindow*.cs files
+- Shell is strictly view-only - zero business logic allowed in shell window files (including legacy WinUI MainWindow*.cs)
 - Presenters (IVideoPresenter, ISubtitlePresenter) are stateless adapters - they render only what App layer provides
 - WinUI can ONLY depend on specific approved App interfaces (IShellPreferencesService, IShellLibraryService, etc.)
+- WinUI is deactivated as a supported runtime path and retained only pending migration/removal work.
 - Forbidden WinUI dependencies: CredentialFacade, ShortcutService, SettingsFacade, LibraryBrowserService, SubtitleWorkflowController, ProviderAvailabilityService, DefaultRuntimeProvisioner, DefaultAiCredentialCoordinator
 - State flow: MediaSession → App projections (immutable snapshots) → Shell observes → Presenter renders
 - Platform-native code (mpv, Win32, DirectX) must be isolated in Infrastructure/Playback layers

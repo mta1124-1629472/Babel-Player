@@ -54,7 +54,7 @@ public interface IShellPlaybackCommands
         ShellResumeDecision decision,
         CancellationToken cancellationToken = default);
 
-    ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled);
+    ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled, bool autoPlayNextInQueue = true);
 
     Task PlayAsync(CancellationToken cancellationToken = default);
 

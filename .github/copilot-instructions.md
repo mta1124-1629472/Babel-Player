@@ -2,7 +2,7 @@
 
 ## Overview
 
-Babel-Player is a Windows desktop media player (WinUI 3) for local video with embedded subtitle generation and translation workflows. The codebase is organized around a **MediaSession-centered architecture** that keeps timed state authoritative, separates platform concerns, and preserves a future path to cross-platform support.
+Babel-Player is a desktop media player for local video with embedded subtitle generation and translation workflows. The supported runtime shell is `src/BabelPlayer.Avalonia`. Legacy WinUI source (`src/BabelPlayer.WinUI`) is deactivated and retained only pending migration/removal work. The codebase is organized around a **MediaSession-centered architecture** that keeps timed state authoritative, separates platform concerns, and preserves a future path to cross-platform support.
 
 **See also**: `AGENTS.md` for architectural constraints, `docs/DEVELOPMENT_RULES.md` for operational rules, and `docs/SHELL_BOUNDARY_GUARDRAILS.md` for required `MainWindow*.cs` shell/App boundary rules.
 
@@ -28,7 +28,8 @@ Integration tests require Windows environment. See `tests/` for xUnit/MSTest pat
 ## Architecture at a Glance
 
 ### Layers
-- **Shell** (`BabelPlayer.WinUI`): WinUI visual tree, layout, presenter attachment, event wiring—view logic only.
+- **Shell** (`BabelPlayer.Avalonia`, active runtime): visual tree, layout, presenter attachment, event wiring—view logic only.
+- **Legacy Shell Source** (`BabelPlayer.WinUI`, deactivated): retained only for migration/removal, not a supported runtime path.
 - **App Domain** (`BabelPlayer.App`): `MediaSession` state, `MediaSessionCoordinator` mutations, queue/history, subtitle workflows, shell projections.
 - **Core** (`BabelPlayer.Core`): Reusable services and cross-layer abstractions.
 - **Tests** (`tests/`): Behavioral and seam-validation tests.
