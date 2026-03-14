@@ -80,7 +80,7 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
         }
 
         if (Current.IsTranslationEnabled
-            && selectedMode == ShellSubtitleRenderMode.SourceOnly
+            && selectedMode is ShellSubtitleRenderMode.SourceOnly or ShellSubtitleRenderMode.TranscribeOnly
             && !string.IsNullOrWhiteSpace(Current.CurrentVideoPath))
         {
             _sourceOnlyOverrideVideoPath = Current.CurrentVideoPath;
@@ -120,7 +120,7 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
         }
 
         if (Current.IsTranslationEnabled
-            && restoreMode == ShellSubtitleRenderMode.SourceOnly
+            && restoreMode is ShellSubtitleRenderMode.SourceOnly or ShellSubtitleRenderMode.TranscribeOnly
             && !string.IsNullOrWhiteSpace(Current.CurrentVideoPath))
         {
             _sourceOnlyOverrideVideoPath = Current.CurrentVideoPath;
@@ -155,8 +155,9 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
     {
         return current switch
         {
-            ShellSubtitleRenderMode.Off => ShellSubtitleRenderMode.SourceOnly,
+            ShellSubtitleRenderMode.Off => ShellSubtitleRenderMode.TranscribeOnly,
             ShellSubtitleRenderMode.SourceOnly => ShellSubtitleRenderMode.Off,
+            ShellSubtitleRenderMode.TranscribeOnly => ShellSubtitleRenderMode.Off,
             ShellSubtitleRenderMode.TranslationOnly => ShellSubtitleRenderMode.Dual,
             ShellSubtitleRenderMode.Dual => ShellSubtitleRenderMode.TranslationOnly,
             _ => ShellSubtitleRenderMode.TranslationOnly
@@ -169,6 +170,7 @@ public sealed class SubtitleWorkflowController : ISubtitleWorkflowShellService
         {
             ShellSubtitleRenderMode.Off => ShellSubtitleRenderMode.TranslationOnly,
             ShellSubtitleRenderMode.SourceOnly => ShellSubtitleRenderMode.Dual,
+            ShellSubtitleRenderMode.TranscribeOnly => ShellSubtitleRenderMode.Dual,
             ShellSubtitleRenderMode.TranslationOnly => ShellSubtitleRenderMode.Off,
             ShellSubtitleRenderMode.Dual => ShellSubtitleRenderMode.SourceOnly,
             _ => ShellSubtitleRenderMode.TranslationOnly

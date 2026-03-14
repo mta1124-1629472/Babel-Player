@@ -20,11 +20,14 @@ public sealed class SubtitlePresentationProjector
         var translatedText = snapshot.Translation.IsEnabled
             ? snapshot.SubtitlePresentation.TranslationText?.Trim()
             : null;
-        var statusText = snapshot.SubtitlePresentation.StatusText?.Trim();
+        var hasLoadedSubtitleContent = snapshot.Transcript.Segments.Count > 0 || snapshot.Translation.Segments.Count > 0;
+        var statusText = hasLoadedSubtitleContent
+            ? null
+            : snapshot.SubtitlePresentation.StatusText?.Trim();
 
         return renderMode switch
         {
-            SubtitleRenderMode.SourceOnly => BuildSourceOnlyPresentation(sourceText, statusText),
+            SubtitleRenderMode.SourceOnly or SubtitleRenderMode.TranscribeOnly => BuildSourceOnlyPresentation(sourceText, statusText),
             SubtitleRenderMode.TranslationOnly => BuildTranslationOnlyPresentation(translatedText, statusText),
             SubtitleRenderMode.Dual => BuildDualPresentation(sourceText, translatedText, statusText),
             _ => new SubtitlePresentationModel()
@@ -43,7 +46,9 @@ public sealed class SubtitlePresentationProjector
 
         if (sourceOnlyOverrideForCurrentVideo)
         {
-            return SubtitleRenderMode.SourceOnly;
+            return requestedMode == SubtitleRenderMode.TranscribeOnly
+                ? SubtitleRenderMode.TranscribeOnly
+                : SubtitleRenderMode.SourceOnly;
         }
 
         if (!snapshot.Translation.IsEnabled && requestedMode == SubtitleRenderMode.Dual)

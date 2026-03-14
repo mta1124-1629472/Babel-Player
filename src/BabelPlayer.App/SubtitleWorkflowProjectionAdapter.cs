@@ -56,9 +56,23 @@ public sealed class SubtitleWorkflowProjectionAdapter : IDisposable
             OverlayStatus = state.OverlayStatus ?? session.SubtitlePresentation.StatusText,
             ActiveCue = MediaSessionProjection.ToActiveCue(session)?.ToShell(),
             Cues = MediaSessionProjection.ToSubtitleCues(session).Select(cue => cue.ToShell()).ToArray(),
-            CaptionGenerationModeLabel = state.CaptionGenerationModeLabel,
+            CaptionGenerationModeLabel = ResolveCaptionSourceLabel(state, session),
             AvailableTranscriptionModels = SubtitleWorkflowCatalog.AvailableTranscriptionModels,
             AvailableTranslationModels = SubtitleWorkflowCatalog.AvailableTranslationModels
+        };
+    }
+
+    private static string ResolveCaptionSourceLabel(SubtitleWorkflowState state, MediaSessionSnapshot session)
+    {
+        return session.Transcript.Source switch
+        {
+            SubtitlePipelineSource.Sidecar => "Sidecar subtitles",
+            SubtitlePipelineSource.Manual => "Imported subtitles",
+            SubtitlePipelineSource.EmbeddedTrack => "Embedded subtitle track",
+            SubtitlePipelineSource.Generated => string.IsNullOrWhiteSpace(state.CaptionGenerationModeLabel)
+                ? "Generated captions"
+                : state.CaptionGenerationModeLabel,
+            _ => state.CaptionGenerationModeLabel
         };
     }
 }

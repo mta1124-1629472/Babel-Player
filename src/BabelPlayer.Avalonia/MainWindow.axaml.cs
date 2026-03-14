@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -15,15 +16,16 @@ public partial class MainWindow : Window
 {
     private readonly AvaloniaShellDependencies _shell;
     private readonly SubtitleOverlayWindow _subtitleOverlay = new();
+    private readonly IBrush _standardWindowBackground = new SolidColorBrush(Color.Parse("#111111"));
     private Border? _videoSurfaceBorder;
+    private Grid? _rootLayoutGrid;
+    private Border? _headerChromeBorder;
     private MpvNativeHost? _videoHost;
     private ComboBox? _transcriptionModelComboBox;
     private ComboBox? _translationModelComboBox;
     private ComboBox? _subtitleModeComboBox;
     private ToggleSwitch? _autoTranslateToggleSwitch;
     private Button? _subtitleStyleButton;
-    private Button? _fullscreenSubtitleModeButton;
-    private Button? _fullscreenSubtitleStyleButton;
     private Border? _endActionsBorder;
     private Button? _replayEndedButton;
     private Button? _openEndedFileButton;
@@ -87,6 +89,8 @@ public partial class MainWindow : Window
     {
         base.OnLoaded(e);
 
+        _rootLayoutGrid ??= this.FindControl<Grid>("RootLayoutGrid");
+        _headerChromeBorder ??= this.FindControl<Border>("HeaderChromeBorder");
         _videoSurfaceBorder ??= this.FindControl<Border>("VideoSurfaceBorder");
         _videoHost ??= this.FindControl<MpvNativeHost>("VideoHost");
         _transcriptionModelComboBox ??= this.FindControl<ComboBox>("TranscriptionModelComboBox");
@@ -94,8 +98,6 @@ public partial class MainWindow : Window
         _subtitleModeComboBox ??= this.FindControl<ComboBox>("SubtitleModeComboBox");
         _autoTranslateToggleSwitch ??= this.FindControl<ToggleSwitch>("AutoTranslateToggleSwitch");
         _subtitleStyleButton ??= this.FindControl<Button>("SubtitleStyleButton");
-        _fullscreenSubtitleModeButton ??= this.FindControl<Button>("FullscreenSubtitleModeButton");
-        _fullscreenSubtitleStyleButton ??= this.FindControl<Button>("FullscreenSubtitleStyleButton");
         _endActionsBorder ??= this.FindControl<Border>("EndActionsBorder");
         _replayEndedButton ??= this.FindControl<Button>("ReplayEndedButton");
         _openEndedFileButton ??= this.FindControl<Button>("OpenEndedFileButton");
@@ -552,17 +554,14 @@ public partial class MainWindow : Window
                 var effectiveMode = GetEffectiveSubtitleRenderMode();
                 foreach (var item in _subtitleModeComboBox.Items.OfType<ComboBoxItem>())
                 {
-                    if (TryParseSubtitleMode(item.Tag as string, out var mode) && mode == effectiveMode)
+                    if (TryParseSubtitleMode(item.Tag as string, out var mode)
+                        && (mode == effectiveMode
+                            || (mode == ShellSubtitleRenderMode.TranscribeOnly && effectiveMode == ShellSubtitleRenderMode.SourceOnly)))
                     {
                         _subtitleModeComboBox.SelectedItem = item;
                         break;
                     }
                 }
-            }
-
-            if (_fullscreenSubtitleModeButton is not null)
-            {
-                _fullscreenSubtitleModeButton.Content = $"Subtitles: {FormatSubtitleModeButtonText(GetEffectiveSubtitleRenderMode())}";
             }
 
             if (_fullscreenSubtitleSourceTextBlock is not null)
@@ -588,14 +587,8 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (_videoHost?.HostHandle is > 0 && !_backendInitialized)
+            if (!await EnsurePlaybackBackendReadyAsync())
             {
-                await InitializePlaybackAsync(_videoHost.HostHandle);
-            }
-
-            if (!_backendInitialized)
-            {
-                UpdateStatus("Playback surface is not ready yet.");
                 return;
             }
 
@@ -735,22 +728,6 @@ public partial class MainWindow : Window
         ApplySubtitleRenderMode(selectedMode);
     }
 
-    private void FullscreenSubtitleModeButton_Click(object? sender, RoutedEventArgs e)
-    {
-        CycleSubtitleRenderMode();
-    }
-
-    private void FullscreenSubtitleStyleButton_Click(object? sender, RoutedEventArgs e)
-    {
-        if (_subtitleStyleFlyout is not null && _fullscreenSubtitleStyleButton is not null)
-        {
-            _subtitleStyleFlyout.ShowAt(_fullscreenSubtitleStyleButton);
-            return;
-        }
-
-        UpdateStatus("Subtitle style not available yet.");
-    }
-
     private async void PlayPauseButton_Click(object? sender, RoutedEventArgs e)
     {
         if (!_backendInitialized)
@@ -859,14 +836,8 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (_videoHost?.HostHandle is > 0 && !_backendInitialized)
+            if (!await EnsurePlaybackBackendReadyAsync())
             {
-                await InitializePlaybackAsync(_videoHost.HostHandle);
-            }
-
-            if (!_backendInitialized)
-            {
-                UpdateStatus("Playback surface is not ready yet.");
                 return;
             }
 
@@ -1156,6 +1127,11 @@ public partial class MainWindow : Window
 
     private async Task OpenQueueItemAsync(ShellPlaylistItem item, string statusMessage, ShellMediaOpenTrigger openTrigger = ShellMediaOpenTrigger.Manual)
     {
+        if (!await EnsurePlaybackBackendReadyAsync())
+        {
+            return;
+        }
+
         HideResumePrompt();
         _uxShellFlagsController.BeginOpenRequest(item.Path);
         var loaded = await _shell.ShellPlaybackCommands.LoadPlaybackItemAsync(
@@ -1186,6 +1162,27 @@ public partial class MainWindow : Window
             OpenTrigger = openTrigger,
             PreviousPlaybackState = _shell.ShellPlaybackCommands.CurrentPlaybackSnapshot
         };
+    }
+
+    private async Task<bool> EnsurePlaybackBackendReadyAsync()
+    {
+        if (_backendInitialized)
+        {
+            return true;
+        }
+
+        if (_videoHost?.HostHandle is > 0)
+        {
+            await InitializePlaybackAsync(_videoHost.HostHandle);
+        }
+
+        if (_backendInitialized)
+        {
+            return true;
+        }
+
+        UpdateStatus("Playback surface is not ready yet.");
+        return false;
     }
 
     private void EnsureSubtitlesVisible()
@@ -1354,22 +1351,11 @@ public partial class MainWindow : Window
         return mode switch
         {
             ShellSubtitleRenderMode.Off => "off",
-            ShellSubtitleRenderMode.SourceOnly => "source only",
+            ShellSubtitleRenderMode.SourceOnly => "transcribe only",
             ShellSubtitleRenderMode.TranslationOnly => "translation only",
             ShellSubtitleRenderMode.Dual => "dual",
+            ShellSubtitleRenderMode.TranscribeOnly => "transcribe only",
             _ => "translation only"
-        };
-    }
-
-    private static string FormatSubtitleModeButtonText(ShellSubtitleRenderMode mode)
-    {
-        return mode switch
-        {
-            ShellSubtitleRenderMode.Off => "Off",
-            ShellSubtitleRenderMode.SourceOnly => "Source",
-            ShellSubtitleRenderMode.TranslationOnly => "Translation",
-            ShellSubtitleRenderMode.Dual => "Dual",
-            _ => "Translation"
         };
     }
 

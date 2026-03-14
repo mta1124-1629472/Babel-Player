@@ -505,21 +505,75 @@ public class AsrService
             ?? installed[0];
     }
 
+    /// <summary>
+    /// Extracts audio from a media file and converts it to 16kHz mono 16-bit PCM WAV format
+    /// suitable for ASR processing.
+    /// </summary>
+    /// <param name="mediaPath">Path to the source media file.</param>
+    /// <returns>Path to the generated WAV file.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when mediaPath is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the media file does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when audio extraction fails.</exception>
     private static string ExtractWaveAudio(string mediaPath)
     {
+        // Validate input parameter
+        if (string.IsNullOrWhiteSpace(mediaPath))
+        {
+            throw new ArgumentNullException(nameof(mediaPath), "Media path cannot be null or empty.");
+        }
+
+        // Validate file exists
+        if (!File.Exists(mediaPath))
+        {
+            throw new FileNotFoundException($"Media file not found: {mediaPath}", mediaPath);
+        }
+
+        // Define audio extraction constants for ASR processing
+        // 16kHz mono 16-bit PCM is the standard format for Whisper and similar ASR models
+        const int SampleRate = 16000;
+        const int BitsPerSample = 16;
+        const int Channels = 1;
+        const int ResamplerQuality = 60; // High quality resampling
+
         var workingDirectory = Path.Combine(Path.GetTempPath(), "BabelPlayer");
         Directory.CreateDirectory(workingDirectory);
 
-        var outputPath = Path.Combine(workingDirectory, $"{Path.GetFileNameWithoutExtension(mediaPath)}-{Guid.NewGuid():N}.wav");
+        var outputFileName = $"{Path.GetFileNameWithoutExtension(mediaPath)}-{Guid.NewGuid():N}.wav";
+        var outputPath = Path.Combine(workingDirectory, outputFileName);
 
-        using var reader = new MediaFoundationReader(mediaPath);
-        using var resampler = new MediaFoundationResampler(reader, new WaveFormat(16000, 16, 1))
+        try
         {
-            ResamplerQuality = 60
-        };
+            // Create audio reader and resampler with optimized settings
+            using var reader = new MediaFoundationReader(mediaPath);
+            var targetFormat = new WaveFormat(SampleRate, BitsPerSample, Channels);
+            
+            using var resampler = new MediaFoundationResampler(reader, targetFormat)
+            {
+                ResamplerQuality = ResamplerQuality
+            };
 
-        WaveFileWriter.CreateWaveFile(outputPath, resampler);
-        return outputPath;
+            // Write the resampled audio to WAV file
+            WaveFileWriter.CreateWaveFile(outputPath, resampler);
+            
+            return outputPath;
+        }
+        catch (Exception ex) when (ex is not ArgumentNullException and not FileNotFoundException)
+        {
+            // Clean up partial output file if extraction fails
+            if (File.Exists(outputPath))
+            {
+                try
+                {
+                    File.Delete(outputPath);
+                }
+                catch
+                {
+                    // Ignore cleanup failures - best effort
+                }
+            }
+            
+            throw new InvalidOperationException($"Failed to extract audio from: {mediaPath}", ex);
+        }
     }
 
     private static IReadOnlyList<TranscriptionChunkFile> SplitWaveFile(string wavePath, int maxBytes, TimeSpan segmentLength)

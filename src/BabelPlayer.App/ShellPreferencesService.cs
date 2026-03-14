@@ -236,7 +236,7 @@ public sealed class ShellPreferencesService : IShellPreferencesService
             LastNonOffSubtitleRenderMode = subtitleRenderMode == SubtitleRenderMode.Off
                 ? ShellSubtitleRenderMode.TranslationOnly
                 : subtitleRenderMode.ToShell(),
-            ShowSubtitleSource = subtitleRenderMode is SubtitleRenderMode.SourceOnly or SubtitleRenderMode.Dual
+            ShowSubtitleSource = subtitleRenderMode is SubtitleRenderMode.SourceOnly or SubtitleRenderMode.Dual or SubtitleRenderMode.TranscribeOnly
         };
     }
 

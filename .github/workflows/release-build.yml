@@ -19,133 +19,82 @@ jobs:
         include:
           - runtime: win-x64
             suffix: win-x64
+            nuke_target: ReleaseRuntimeWinX64
           - runtime: win-arm64
             suffix: win-arm64
+            nuke_target: ReleaseRuntimeWinArm64
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
+      - name: Setup .NET SDKs
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: |
+            10.0.x
+            9.0.x
 
-      - name: Restore
-        run: dotnet restore src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj
-
-      - name: Check architecture prerequisites
-        id: arch_precheck
+      - name: Resolve release version tokens
+        id: version
         shell: pwsh
         run: |
-          $skipRuntime = "false"
-          if ("${{ matrix.runtime }}" -eq "win-arm64" -and -not (Test-Path "src/BabelPlayer.Avalonia/native/win-arm64/libmpv-2.dll")) {
-            $skipRuntime = "true"
-            Write-Host "Skipping ARM64 release artifact build because native/win-arm64/libmpv-2.dll is missing."
-          }
-
-          "skip_runtime=$skipRuntime" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Publish Avalonia app
-        if: steps.arch_precheck.outputs.skip_runtime != 'true'
-        run: dotnet publish src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained false
-
-      - name: Package portable archive
-        if: steps.arch_precheck.outputs.skip_runtime != 'true'
-        shell: pwsh
-        run: |
-          $publishDir = (Resolve-Path "src/BabelPlayer.Avalonia/bin/Release/net9.0-windows10.0.22621.0/${{ matrix.runtime }}/publish").Path
           $rawVersion = if ("${{ github.ref }}".StartsWith("refs/tags/")) { "${{ github.ref_name }}" } else { "${{ github.sha }}" }
           $releaseVersion = if ($rawVersion.StartsWith("v")) { $rawVersion.Substring(1) } else { $rawVersion }
-          $archiveDir = (Join-Path (Get-Location) "artifacts")
-          $archivePath = Join-Path $archiveDir "BabelPlayer-$rawVersion-portable-${{ matrix.suffix }}.zip"
-          $installerBaseName = "BabelPlayer-$rawVersion-setup-${{ matrix.suffix }}"
 
-          New-Item -ItemType Directory -Path $archiveDir -Force | Out-Null
-          if (Test-Path $archivePath) {
-            Remove-Item $archivePath -Force
-          }
-
-          Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $archivePath
-          "ARCHIVE_PATH=$archivePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PUBLISH_DIR=$publishDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "RELEASE_VERSION=$releaseVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "INSTALLER_BASENAME=$installerBaseName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "raw_version=$rawVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "release_version=$releaseVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Install Inno Setup
-        if: steps.arch_precheck.outputs.skip_runtime != 'true'
         shell: pwsh
         run: choco install innosetup --no-progress -y
 
-      - name: Build EXE installer
-        if: steps.arch_precheck.outputs.skip_runtime != 'true'
+      - name: Build release artifacts via NUKE
         shell: pwsh
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            throw "ISCC.exe not found at '$iscc'."
-          }
+          ./build.ps1 ${{ matrix.nuke_target }} --configuration Release --release-version ${{ steps.version.outputs.raw_version }}
 
-          & $iscc `
-            "/DMyAppVersion=${{ env.RELEASE_VERSION }}" `
-            "/DMyPublishDir=${{ env.PUBLISH_DIR }}" `
-            "/DMyOutputDir=${{ github.workspace }}\\artifacts" `
-            "/DMyOutputBaseFilename=${{ env.INSTALLER_BASENAME }}" `
-            "installer\BabelPlayer.iss"
-
-          $installerPath = Join-Path "${{ github.workspace }}\artifacts" ("${{ env.INSTALLER_BASENAME }}" + ".exe")
-          "INSTALLER_PATH=$installerPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Debug publish directory contents
-        if: steps.arch_precheck.outputs.skip_runtime != 'true'
+      - name: Resolve NUKE artifact paths
+        id: artifacts
         shell: pwsh
         run: |
-          Write-Host "PUBLISH_DIR=${{ env.PUBLISH_DIR }}"
-          if (Test-Path "${{ env.PUBLISH_DIR }}") {
-            Get-ChildItem -Path "${{ env.PUBLISH_DIR }}" -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
-          }
-          else {
-            throw "Publish directory not found: ${{ env.PUBLISH_DIR }}"
+          $archivePath = Join-Path "${{ github.workspace }}\artifacts" "BabelPlayer-${{ steps.version.outputs.raw_version }}-portable-${{ matrix.suffix }}.zip"
+          $installerPath = Join-Path "${{ github.workspace }}\artifacts" "BabelPlayer-${{ steps.version.outputs.raw_version }}-setup-${{ matrix.suffix }}.exe"
+
+          if (-not (Test-Path $archivePath)) {
+            throw "Expected archive artifact not found: $archivePath"
           }
 
-      - name: Debug artifacts directory contents
-        if: steps.arch_precheck.outputs.skip_runtime != 'true'
-        shell: pwsh
-        run: |
-          $artifactsDir = "${{ github.workspace }}\artifacts"
-          Write-Host "ARTIFACTS_DIR=$artifactsDir"
-          if (Test-Path $artifactsDir) {
-            Get-ChildItem -Path $artifactsDir -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+          if (-not (Test-Path $installerPath)) {
+            throw "Expected installer artifact not found: $installerPath"
           }
-          else {
-            throw "Artifacts directory not found: $artifactsDir"
-          }
+
+          "archive_path=$archivePath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "installer_path=$installerPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload portable artifact
-        if: steps.arch_precheck.outputs.skip_runtime != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: BabelPlayer-portable-${{ matrix.suffix }}
-          path: ${{ env.ARCHIVE_PATH }}
+          path: ${{ steps.artifacts.outputs.archive_path }}
           if-no-files-found: error
 
       - name: Upload installer artifact
-        if: steps.arch_precheck.outputs.skip_runtime != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: BabelPlayer-setup-${{ matrix.suffix }}
-          path: ${{ env.INSTALLER_PATH }}
+          path: ${{ steps.artifacts.outputs.installer_path }}
           if-no-files-found: error
 
       - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/tags/') && steps.arch_precheck.outputs.skip_runtime != 'true'
+        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.ref_name }}"
-          $archive = "${{ env.ARCHIVE_PATH }}"
-          $installer = "${{ env.INSTALLER_PATH }}"
+          $archive = "${{ steps.artifacts.outputs.archive_path }}"
+          $installer = "${{ steps.artifacts.outputs.installer_path }}"
 
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {

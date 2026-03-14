@@ -12,7 +12,9 @@ namespace BabelPlayer.Avalonia;
 public partial class MainWindow
 {
     private const string PlaylistDragDataFormat = "com.babelplayer.avalonia.playlistpath";
+    private const string LibraryDragDataFormat = "com.babelplayer.avalonia.librarypath";
     private static readonly DataFormat<string> PlaylistDragFormat = DataFormat.CreateStringApplicationFormat(PlaylistDragDataFormat);
+    private static readonly DataFormat<string> LibraryDragFormat = DataFormat.CreateStringApplicationFormat(LibraryDragDataFormat);
 
     private readonly ObservableCollection<LibraryBrowserEntryViewModel> _libraryEntries = [];
     private readonly ObservableCollection<ShellPlaylistItem> _playlistQueueItems = [];
@@ -29,6 +31,7 @@ public partial class MainWindow
     private ShellLibrarySnapshot _currentLibrarySnapshot = new();
     private string? _draggedQueuePath;
     private ShellPlaylistItem? _draggedQueueItem;
+    private string? _draggedLibraryPath;
 
     private void InitializePanelControls()
     {
@@ -89,24 +92,26 @@ public partial class MainWindow
 
     private void ApplyPreferencesSnapshot(ShellPreferencesSnapshot snapshot)
     {
+        var fullscreenStage = _shell.WindowModeService.CurrentMode == ShellPlaybackWindowMode.Fullscreen;
+
         if (_browserPanel is not null)
         {
-            _browserPanel.IsVisible = snapshot.ShowBrowserPanel;
+            _browserPanel.IsVisible = !fullscreenStage && snapshot.ShowBrowserPanel;
         }
 
         if (_playlistPanel is not null)
         {
-            _playlistPanel.IsVisible = snapshot.ShowPlaylistPanel;
+            _playlistPanel.IsVisible = !fullscreenStage && snapshot.ShowPlaylistPanel;
         }
 
         if (_browserPanelToggleButton is not null)
         {
-            _browserPanelToggleButton.Content = snapshot.ShowBrowserPanel ? "Hide Browser" : "Show Browser";
+            _browserPanelToggleButton.Content = snapshot.ShowBrowserPanel ? "Hide Library" : "Show Library";
         }
 
         if (_playlistPanelToggleButton is not null)
         {
-            _playlistPanelToggleButton.Content = snapshot.ShowPlaylistPanel ? "Hide Playlist" : "Show Playlist";
+            _playlistPanelToggleButton.Content = snapshot.ShowPlaylistPanel ? "Hide Queue" : "Show Queue";
         }
     }
 
@@ -146,8 +151,8 @@ public partial class MainWindow
         if (_playlistSummaryTextBlock is not null)
         {
             _playlistSummaryTextBlock.Text = snapshot.QueueItems.Count == 0
-                ? "Queue is empty"
-                : $"{snapshot.QueueItems.Count} item(s) up next";
+                ? "Queue is empty. Add media from Library or Open Video."
+                : $"{snapshot.QueueItems.Count} item(s) up next. Double-click or press Enter to play.";
         }
 
         if (_nowPlayingQueueTextBlock is not null)
@@ -221,11 +226,36 @@ public partial class MainWindow
             return;
         }
 
+        await PlayLibraryEntryNowAsync(entry);
+    }
+
+    private async void LibraryPlayNowMenuItem_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { CommandParameter: LibraryBrowserEntryViewModel entry })
+        {
+            return;
+        }
+
+        await PlayLibraryEntryNowAsync(entry);
+    }
+
+    private async void LibraryAddToQueueMenuItem_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { CommandParameter: LibraryBrowserEntryViewModel entry })
+        {
+            return;
+        }
+
+        await AddLibraryEntryToQueueAsync(entry);
+    }
+
+    private async Task PlayLibraryEntryNowAsync(LibraryBrowserEntryViewModel entry)
+    {
         try
         {
             if (entry.IsFolder)
             {
-                await ApplyQueueMutationAsync(_shell.QueueCommands.EnqueueFolder(entry.Path, autoplay: false));
+                await ApplyQueueMutationAsync(_shell.QueueCommands.EnqueueFolder(entry.Path, autoplay: true));
                 return;
             }
 
@@ -237,15 +267,63 @@ public partial class MainWindow
         }
     }
 
-    private async void PlaylistQueueItemButton_Click(object? sender, RoutedEventArgs e)
+    private async Task AddLibraryEntryToQueueAsync(LibraryBrowserEntryViewModel entry)
     {
-        await PlayQueueItemFromSenderAsync(sender);
+        try
+        {
+            if (entry.IsFolder)
+            {
+                await ApplyQueueMutationAsync(_shell.QueueCommands.EnqueueFolder(entry.Path, autoplay: false));
+                return;
+            }
+
+            await ApplyQueueMutationAsync(_shell.QueueCommands.AddToQueue([entry.Path]));
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus($"Queue action failed: {ex.Message}");
+        }
+    }
+
+    private async void LibraryEntryDragHandle_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
+            || sender is not Control control
+            || control.DataContext is not LibraryBrowserEntryViewModel entry)
+        {
+            return;
+        }
+
+        _draggedLibraryPath = entry.Path;
+        var data = new DataTransfer();
+        data.Add(DataTransferItem.Create(LibraryDragFormat, entry.Path));
+
+        try
+        {
+            await DragDrop.DoDragDropAsync(e, data, DragDropEffects.Copy);
+        }
+        finally
+        {
+            _draggedLibraryPath = null;
+        }
+
+        e.Handled = true;
     }
 
     private async void PlaylistQueueItemButton_DoubleTapped(object? sender, TappedEventArgs e)
     {
         await PlayQueueItemFromSenderAsync(sender);
         e.Handled = true;
+    }
+
+    private async void PlaylistPlayButton_Click(object? sender, RoutedEventArgs e)
+    {
+        await PlayQueueItemFromSenderAsync(sender);
+    }
+
+    private async void PlaylistPlayMenuItem_Click(object? sender, RoutedEventArgs e)
+    {
+        await PlayQueueItemFromSenderAsync(sender);
     }
 
     private void ClearPlaylistButton_Click(object? sender, RoutedEventArgs e)
@@ -335,27 +413,57 @@ public partial class MainWindow
 
     private async void PlaylistQueueListBox_DragOver(object? sender, DragEventArgs e)
     {
-        var sourcePath = await GetDraggedQueuePathAsync(e);
-        e.DragEffects = string.IsNullOrWhiteSpace(sourcePath) ? DragDropEffects.None : DragDropEffects.Move;
+        var queuePath = await GetDraggedQueuePathAsync(e);
+        if (!string.IsNullOrWhiteSpace(queuePath))
+        {
+            e.DragEffects = DragDropEffects.Move;
+            e.Handled = true;
+            return;
+        }
+
+        var libraryPath = await GetDraggedLibraryPathAsync(e);
+        e.DragEffects = string.IsNullOrWhiteSpace(libraryPath) ? DragDropEffects.None : DragDropEffects.Copy;
         e.Handled = true;
     }
 
     private async void PlaylistQueueListBox_Drop(object? sender, DragEventArgs e)
     {
-        if (_draggedQueueItem is null)
+        if (_draggedQueueItem is not null)
+        {
+            var sourceIndex = FindQueueItemIndex(_draggedQueueItem);
+            if (sourceIndex < 0)
+            {
+                return;
+            }
+
+            var targetItem = FindQueueItemFromEventSource(e.Source);
+            int? targetIndex = targetItem is null ? null : FindQueueItemIndex(targetItem);
+            await ReorderQueueAsync(sourceIndex, targetIndex);
+            e.Handled = true;
+            return;
+        }
+
+        var libraryPath = await GetDraggedLibraryPathAsync(e);
+        if (string.IsNullOrWhiteSpace(libraryPath))
         {
             return;
         }
 
-        var sourceIndex = FindQueueItemIndex(_draggedQueueItem);
-        if (sourceIndex < 0)
+        var entry = _libraryEntries.FirstOrDefault(candidate => string.Equals(candidate.Path, libraryPath, StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
         {
-            return;
+            entry = new LibraryBrowserEntryViewModel
+            {
+                Name = Path.GetFileName(libraryPath),
+                Path = libraryPath,
+                IsFolder = Directory.Exists(libraryPath),
+                IsExpanded = false,
+                CanExpand = false,
+                RowMargin = default
+            };
         }
 
-        var targetItem = FindQueueItemFromEventSource(e.Source);
-        int? targetIndex = targetItem is null ? null : FindQueueItemIndex(targetItem);
-        await ReorderQueueAsync(sourceIndex, targetIndex);
+        await AddLibraryEntryToQueueAsync(entry);
         e.Handled = true;
     }
 
@@ -367,6 +475,16 @@ public partial class MainWindow
         }
 
         return Task.FromResult(e.DataTransfer.TryGetValue(PlaylistDragFormat));
+    }
+
+    private Task<string?> GetDraggedLibraryPathAsync(DragEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(_draggedLibraryPath))
+        {
+            return Task.FromResult<string?>(_draggedLibraryPath);
+        }
+
+        return Task.FromResult(e.DataTransfer.TryGetValue(LibraryDragFormat));
     }
 
     private async Task ReorderQueueAsync(int sourceIndex, int? targetIndex)
@@ -421,7 +539,14 @@ public partial class MainWindow
 
     private async Task PlayQueueItemFromSenderAsync(object? sender)
     {
-        if (sender is not Control control || control.DataContext is not ShellPlaylistItem item)
+        ShellPlaylistItem? item = sender switch
+        {
+            MenuItem { CommandParameter: ShellPlaylistItem menuItem } => menuItem,
+            Control { DataContext: ShellPlaylistItem controlItem } => controlItem,
+            _ => null
+        };
+
+        if (item is null)
         {
             return;
         }
@@ -441,9 +566,8 @@ public partial class MainWindow
 
     private async Task RunPlaybackQueueCommandAsync(Func<ShellQueueMediaResult> command)
     {
-        if (!_backendInitialized)
+        if (!await EnsurePlaybackBackendReadyAsync())
         {
-            UpdateStatus("Playback surface is not ready yet.");
             return;
         }
 

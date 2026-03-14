@@ -12,8 +12,8 @@
         Width="1440"
         Height="840"
         Background="#111111">
-    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
-        <Border Grid.Row="0"
+    <Grid x:Name="RootLayoutGrid" RowDefinitions="Auto,*,Auto" Margin="16">
+        <Border x:Name="HeaderChromeBorder" Grid.Row="0"
                 Background="#191919"
                 CornerRadius="12"
                 Padding="12"
@@ -27,11 +27,11 @@
                             Click="OpenButton_Click" />
                     <Button x:Name="BrowserPanelToggleButton"
                             Margin="8,0,0,0"
-                            Content="Show Browser"
+                            Content="Show Library"
                             Click="BrowserPanelToggleButton_Click" />
                     <Button x:Name="PlaylistPanelToggleButton"
                             Margin="8,0,0,0"
-                            Content="Show Playlist"
+                            Content="Show Queue"
                             Click="PlaylistPanelToggleButton_Click" />
                     <Button x:Name="AddLibraryRootButton"
                             Margin="8,0,0,0"
@@ -118,8 +118,7 @@
                     <ToggleSwitch x:Name="AutoTranslateToggleSwitch"
                                   OffContent="Auto Translate Off"
                                   OnContent="Auto Translate On"
-                                  Checked="AutoTranslateToggleSwitch_Changed"
-                                  Unchecked="AutoTranslateToggleSwitch_Changed" />
+                                  IsCheckedChanged="AutoTranslateToggleSwitch_Changed" />
 
                     <TextBlock Margin="16,0,8,0"
                                VerticalAlignment="Center"
@@ -130,8 +129,8 @@
                               SelectionChanged="SubtitleModeComboBox_SelectionChanged">
                         <ComboBoxItem Content="Off"
                                       Tag="Off" />
-                        <ComboBoxItem Content="Source Only"
-                                      Tag="SourceOnly" />
+                        <ComboBoxItem Content="Transcribe Only"
+                                      Tag="TranscribeOnly" />
                         <ComboBoxItem Content="Translation Only"
                                       Tag="TranslationOnly" />
                         <ComboBoxItem Content="Dual"
@@ -237,7 +236,7 @@
                     <Grid ColumnDefinitions="*,Auto"
                           ColumnSpacing="8">
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Browser"
+                            <TextBlock Text="Library"
                                        FontSize="16"
                                        FontWeight="SemiBold"
                                        Foreground="#F5F5F5" />
@@ -246,7 +245,7 @@
                                        Foreground="#8A8A8A" />
                         </StackPanel>
                         <Button Grid.Column="1"
-                                Content="Add Root"
+                                Content="Add Folder"
                                 Click="AddLibraryRootButton_Click" />
                     </Grid>
 
@@ -274,11 +273,22 @@
                                                 CornerRadius="8"
                                                 Padding="10,8"
                                                 Click="LibraryEntryButton_Click">
+                                            <Button.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="Play Now"
+                                                              CommandParameter="{Binding}"
+                                                              Click="LibraryPlayNowMenuItem_Click" />
+                                                    <MenuItem Header="Add to Queue"
+                                                              CommandParameter="{Binding}"
+                                                              Click="LibraryAddToQueueMenuItem_Click" />
+                                                </ContextMenu>
+                                            </Button.ContextMenu>
                                             <StackPanel Orientation="Horizontal"
                                                         Spacing="8">
                                                 <Border Background="#303030"
                                                         CornerRadius="6"
-                                                        Padding="6,2">
+                                                    Padding="6,2"
+                                                    PointerPressed="LibraryEntryDragHandle_PointerPressed">
                                                     <TextBlock Text="{Binding KindLabel}"
                                                                FontSize="11"
                                                                Foreground="#D7D7D7" />
@@ -318,7 +328,7 @@
                     <Grid ColumnDefinitions="*,Auto"
                           ColumnSpacing="8">
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Playlist"
+                            <TextBlock Text="Queue"
                                        FontSize="16"
                                        FontWeight="SemiBold"
                                        Foreground="#F5F5F5" />
@@ -367,12 +377,15 @@
                                         DragDrop.AllowDrop="True">
                                     <Border.ContextMenu>
                                         <ContextMenu>
+                                            <MenuItem Header="Play Now"
+                                                      CommandParameter="{Binding}"
+                                                      Click="PlaylistPlayMenuItem_Click" />
                                             <MenuItem Header="Remove from Queue"
                                                       CommandParameter="{Binding}"
                                                       Click="PlaylistRemoveMenuItem_Click" />
                                         </ContextMenu>
                                     </Border.ContextMenu>
-                                    <Grid ColumnDefinitions="Auto,*,Auto"
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto"
                                           ColumnSpacing="8">
                                         <Border Grid.Column="0"
                                                 Background="#2B2B2B"
@@ -382,14 +395,9 @@
                                             <TextBlock Text="::"
                                                        Foreground="#B8B8B8" />
                                         </Border>
-                                        <Button Grid.Column="1"
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Left"
-                                                Background="Transparent"
-                                                BorderThickness="0"
-                                                Padding="0"
-                                                DoubleTapped="PlaylistQueueItemButton_DoubleTapped"
-                                                Click="PlaylistQueueItemButton_Click">
+                                        <Border Grid.Column="1"
+                                            Background="Transparent"
+                                            DoubleTapped="PlaylistQueueItemButton_DoubleTapped">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="{Binding DisplayName}"
                                                            Foreground="#F5F5F5"
@@ -399,8 +407,11 @@
                                                            Foreground="#818181"
                                                            TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
-                                        </Button>
+                                        </Border>
                                         <Button Grid.Column="2"
+                                            Content="Play"
+                                            Click="PlaylistPlayButton_Click" />
+                                        <Button Grid.Column="3"
                                                 Content="Remove"
                                                 Click="PlaylistRemoveButton_Click" />
                                     </Grid>
@@ -484,15 +495,8 @@
                            Margin="0,10,0,0"
                            Orientation="Horizontal"
                            ItemHeight="30">
-                    <Button x:Name="FullscreenSubtitleModeButton"
-                            Content="Subtitles: Translation"
-                            Click="FullscreenSubtitleModeButton_Click" />
-                    <Button x:Name="FullscreenSubtitleStyleButton"
-                            Margin="8,0,0,0"
-                            Content="Subtitle Style"
-                            Click="FullscreenSubtitleStyleButton_Click" />
                     <TextBlock x:Name="FullscreenSubtitleSourceTextBlock"
-                               Margin="12,0,0,0"
+                           Margin="0,0,0,0"
                                VerticalAlignment="Center"
                                Foreground="#D0D0D0"
                                Text="Subtitle source unavailable." />

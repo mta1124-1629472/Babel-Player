@@ -14,7 +14,8 @@ public enum ShellSubtitleRenderMode
     Off,
     SourceOnly,
     TranslationOnly,
-    Dual
+    Dual,
+    TranscribeOnly
 }
 
 public enum ShellHardwareDecodingMode
@@ -195,6 +196,7 @@ internal static class ShellBoundaryMapper
             SubtitleRenderMode.SourceOnly => ShellSubtitleRenderMode.SourceOnly,
             SubtitleRenderMode.TranslationOnly => ShellSubtitleRenderMode.TranslationOnly,
             SubtitleRenderMode.Dual => ShellSubtitleRenderMode.Dual,
+            SubtitleRenderMode.TranscribeOnly => ShellSubtitleRenderMode.TranscribeOnly,
             _ => ShellSubtitleRenderMode.Off
         };
 
@@ -205,6 +207,7 @@ internal static class ShellBoundaryMapper
             ShellSubtitleRenderMode.SourceOnly => SubtitleRenderMode.SourceOnly,
             ShellSubtitleRenderMode.TranslationOnly => SubtitleRenderMode.TranslationOnly,
             ShellSubtitleRenderMode.Dual => SubtitleRenderMode.Dual,
+            ShellSubtitleRenderMode.TranscribeOnly => SubtitleRenderMode.TranscribeOnly,
             _ => SubtitleRenderMode.Off
         };
 

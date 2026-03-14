@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using BabelPlayer.App;
@@ -366,6 +367,8 @@ public partial class MainWindow
                 : "Fullscreen";
         }
 
+        ApplyFullscreenStageLayout();
+
         if (_shell.WindowModeService.CurrentMode == ShellPlaybackWindowMode.Fullscreen)
         {
             SetTransportControlsVisible(true);
@@ -426,13 +429,43 @@ public partial class MainWindow
         _transportBarBorder.IsVisible = visible || _shell.WindowModeService.CurrentMode != ShellPlaybackWindowMode.Fullscreen;
     }
 
+    private void ApplyFullscreenStageLayout()
+    {
+        var fullscreenStage = _shell.WindowModeService.CurrentMode == ShellPlaybackWindowMode.Fullscreen;
+
+        if (_rootLayoutGrid is not null)
+        {
+            _rootLayoutGrid.Margin = fullscreenStage ? new Thickness(0) : new Thickness(16);
+        }
+
+        if (_headerChromeBorder is not null)
+        {
+            _headerChromeBorder.IsVisible = !fullscreenStage;
+        }
+
+        if (_transportBarBorder is not null)
+        {
+            _transportBarBorder.Margin = fullscreenStage ? new Thickness(0) : new Thickness(0, 12, 0, 0);
+            _transportBarBorder.CornerRadius = fullscreenStage ? new CornerRadius(0) : new CornerRadius(12);
+        }
+
+        if (_videoSurfaceBorder is not null)
+        {
+            _videoSurfaceBorder.CornerRadius = fullscreenStage ? new CornerRadius(0) : new CornerRadius(12);
+        }
+
+        Background = fullscreenStage ? Brushes.Black : _standardWindowBackground;
+        ApplyPreferencesSnapshot(_shell.ShellPreferencesService.Current);
+    }
+
     private void CycleSubtitleRenderMode()
     {
         var currentMode = _shell.ShellPreferencesService.Current.SubtitleRenderMode;
         var nextMode = currentMode switch
         {
-            ShellSubtitleRenderMode.Off => ShellSubtitleRenderMode.SourceOnly,
+            ShellSubtitleRenderMode.Off => ShellSubtitleRenderMode.TranscribeOnly,
             ShellSubtitleRenderMode.SourceOnly => ShellSubtitleRenderMode.TranslationOnly,
+            ShellSubtitleRenderMode.TranscribeOnly => ShellSubtitleRenderMode.TranslationOnly,
             ShellSubtitleRenderMode.TranslationOnly => ShellSubtitleRenderMode.Dual,
             ShellSubtitleRenderMode.Dual => ShellSubtitleRenderMode.Off,
             _ => ShellSubtitleRenderMode.TranslationOnly

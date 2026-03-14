@@ -14,7 +14,8 @@ public enum SubtitleRenderMode
     Off,
     SourceOnly,
     TranslationOnly,
-    Dual
+    Dual,
+    TranscribeOnly
 }
 
 public enum HardwareDecodingMode

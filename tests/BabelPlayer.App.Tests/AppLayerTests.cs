@@ -131,9 +131,11 @@ public sealed class AppLayerTests
         };
 
         var toggled = controller.ToggleSource(SubtitleRenderMode.TranslationOnly);
+        var transcribeOnly = controller.ToggleSource(SubtitleRenderMode.Off);
         var updatedStyle = controller.UpdateStyle(currentStyle, sourceFontSize: 32, bottomMargin: 24);
 
         Assert.Equal(SubtitleRenderMode.Dual, toggled);
+        Assert.Equal(SubtitleRenderMode.TranscribeOnly, transcribeOnly);
         Assert.Equal(32, updatedStyle.SourceFontSize);
         Assert.Equal(30, updatedStyle.TranslationFontSize);
         Assert.Equal(0.78, updatedStyle.BackgroundOpacity);
@@ -402,6 +404,7 @@ Hola
             Assert.True(result.UsedSidecar);
             Assert.False(result.UsedGeneratedCaptions);
             Assert.Equal(SubtitlePipelineSource.Sidecar, controller.Snapshot.SubtitleSource);
+            Assert.Equal("Sidecar subtitles", controller.Snapshot.CaptionGenerationModeLabel);
             Assert.Single(controller.Snapshot.Cues);
         }
         finally
@@ -549,6 +552,50 @@ Hola
     }
 
     [Fact]
+    public async Task SubtitleWorkflowController_TranscribeOnlyUsesSourcePresentation()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hola
+""");
+
+            var controller = TestWorkflowControllerFactory.Create(
+                new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
+                environmentVariableReader: _ => null);
+
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
+
+            var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.TranscribeOnly);
+            var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.TranscribeOnly);
+
+            Assert.Equal(SubtitleRenderMode.TranscribeOnly, effectiveMode);
+            Assert.True(presentation.IsVisible);
+            Assert.Equal("Hola", presentation.PrimaryText);
+            Assert.Equal(string.Empty, presentation.SecondaryText);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SubtitleWorkflowController_TranslationOnlyDoesNotFallbackToSourceTextWhenTranslationIsDisabled()
     {
         var directory = Directory.CreateTempSubdirectory();
@@ -586,6 +633,77 @@ Hola
 
             Assert.NotEqual("Hola", presentation.PrimaryText);
             Assert.Equal(string.Empty, presentation.SecondaryText);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_HidesStatusOverlayOnceSubtitleCuesExist()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hola
+""");
+
+            var controller = TestWorkflowControllerFactory.Create(
+                new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
+                environmentVariableReader: _ => null);
+
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            mediaSessionCoordinator.SetSubtitleStatus("Preparing translated subtitles...");
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
+
+            var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.TranslationOnly);
+
+            Assert.Equal(string.Empty, presentation.PrimaryText);
+            Assert.Equal(string.Empty, presentation.SecondaryText);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_ImportedSubtitlesExposeImportedSourceLabel()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var subtitlePath = Path.Combine(directory.FullName, "manual.srt");
+            File.WriteAllText(subtitlePath, """
+1
+00:00:00,000 --> 00:00:02,000
+Bonjour
+""");
+
+            var controller = TestWorkflowControllerFactory.Create(
+                new CredentialFacade(new FakeCredentialStore()),
+                environmentVariableReader: _ => null);
+
+            var result = await controller.ImportExternalSubtitlesAsync(subtitlePath);
+
+            Assert.Equal(SubtitlePipelineSource.Manual, result.Source);
+            Assert.Equal(SubtitlePipelineSource.Manual, controller.Snapshot.SubtitleSource);
+            Assert.Equal("Imported subtitles", controller.Snapshot.CaptionGenerationModeLabel);
         }
         finally
         {
