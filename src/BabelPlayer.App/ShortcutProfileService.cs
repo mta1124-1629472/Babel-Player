@@ -201,7 +201,7 @@ public sealed class ShortcutProfileService : IShortcutProfileService, IDisposabl
 
         return keyToken.Trim() switch
         {
-            "Space" or "Left" or "Right" or "PageUp" or "PageDown" or "F11" or "OemMinus" or "OemPlus" or "OemComma" or "OemPeriod" or "D0"
+            "Space" or "Left" or "Right" or "Up" or "Down" or "Escape" or "PageUp" or "PageDown" or "F11" or "OemMinus" or "OemPlus" or "OemComma" or "OemPeriod" or "D0"
                 => true,
             _ => keyToken.Length == 1 && char.IsLetterOrDigit(keyToken[0])
         };

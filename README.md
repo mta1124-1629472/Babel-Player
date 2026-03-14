@@ -1,8 +1,8 @@
 # Babel Player
 
-[Babel Player](https://github.com/mta1124-1629472/Babel-Player/) is a Windows desktop video player for local media with local-first subtitle generation, optional cloud services, and an AI subtitle overlay designed for translation workflows.
+[Babel Player](https://github.com/mta1124-1629472/Babel-Player/) is a desktop video player for local media with local-first subtitle generation, optional cloud services, and an AI subtitle overlay designed for translation workflows.
 
-The active desktop shell is `src/BabelPlayer.WinUI`.
+The project is migrating from a Windows-only WinUI 3 shell to a cross-platform Avalonia shell backed by libmpv. The **Avalonia shell** (`src/BabelPlayer.Avalonia`) is the active development target on the `avalonia-shell` branch. The legacy WinUI shell (`src/BabelPlayer.WinUI`) remains in the solution for reference.
 
 Canonical repo:
 - GitHub: [mta1124-1629472/Babel-Player](https://github.com/mta1124-1629472/Babel-Player/)
@@ -13,7 +13,7 @@ Canonical repo:
 ## Current Scope
 
 What the app does today:
-- plays local video files in a WinUI 3 desktop shell backed by an embedded mpv runtime
+- plays local video files backed by libmpv (direct P/Invoke via `BabelPlayer.Playback.Mpv`)
 - auto-loads sidecar subtitles when present
 - generates subtitles from audio when no sidecar subtitle file exists
 - supports local and cloud transcription model selection
@@ -23,6 +23,9 @@ What the app does today:
 - can extract text-based embedded subtitle tracks from media into the Babel Player subtitle pipeline
 - exports the current English subtitle result as `SRT`
 - persists model selection, auto-translate preference, API credentials, playback settings, and resume state
+- file browser and playlist panels with drag-and-drop, queue management, and auto-advance
+- configurable keyboard shortcuts with a persisted shortcut profile
+- fullscreen, borderless, and picture-in-picture window modes
 
 ## Screenshots
 
@@ -32,18 +35,42 @@ What the app does today:
 
 ## Architecture
 
-- `src/BabelPlayer.WinUI`
-  - primary WinUI 3 desktop shell
-  - embedded mpv playback surface
-  - playlist, file browser, transport, command bar, overlays, and shortcut editor
-  - file/folder pickers, credential prompts, and window-mode handling
-- `src/BabelPlayer.Core`
+### Projects
+
+- `src/BabelPlayer.Avalonia` — cross-platform Avalonia desktop shell (active development target)
+  - libmpv playback surface via `NativeControlHost`
+  - playlist, file browser, transport bar, toolbar, subtitle overlay, credential prompts
+  - keyboard shortcuts, window-mode handling, fullscreen with auto-hiding controls
+- `src/BabelPlayer.App` — application domain layer
+  - `MediaSession` state model and `MediaSessionCoordinator` mutation boundary
+  - orchestrators: `PlaybackBackendCoordinator`, `SubtitleWorkflowController`, `ShellController`, `PlaybackSessionController`, `PlaylistController`
+  - shell projections, workflow state stores, provider registries
+- `src/BabelPlayer.Infrastructure` — provider adapters and runtime installers
+  - transcription/translation provider composition (`ProviderCompositionFactory`)
+  - runtime bootstrap: mpv, ffmpeg, llama.cpp installers
+  - subtitle source resolution and import
+- `src/BabelPlayer.Playback.Mpv` — libmpv P/Invoke backend
+  - `LibMpvPlaybackBackend` implements `IPlaybackBackend`
+  - `LibMpvNative` P/Invoke declarations and `LibMpvNodeHelpers` marshalling
+- `src/BabelPlayer.Core` — shared platform-agnostic services
   - subtitle parsing and export
   - subtitle cue/state models
-  - local/cloud transcription
-  - local/cloud translation
+  - local/cloud transcription and translation engines
   - language detection
   - hardware detection
+- `src/BabelPlayer.WinUI` — legacy WinUI 3 desktop shell (reference only)
+- `tests/BabelPlayer.App.Tests` — unit and seam tests for orchestrators, projections, and state mutations
+
+### Key Design Principles
+
+- `MediaSession` is the single source of truth for all timed media state
+- `MediaSessionCoordinator` is the sole mutation boundary for timed writes
+- The shell is view-only — it consumes immutable projections, never writes state directly
+- Presenters are stateless adapters that receive pre-decided state from the App layer
+- Platform-native code (WinUI, Win32, DirectX) never leaks into App-layer contracts
+- Provider adapters (transcription, translation, playback) are swappable via narrow interfaces
+
+See `AGENTS.md`, `docs/ARCHITECTURE.md`, and `docs/DEVELOPMENT_RULES.md` for full details.
 
 ## Playback Workflow
 
@@ -121,7 +148,7 @@ These models download on first use and are then reused locally.
 
 ### Cloud transcription
 
-Cloud transcription models are available from the WinUI shell transcription picker:
+Cloud transcription models are available from the transcription picker:
 - `Cloud: GPT-4o Mini Transcribe (faster)`
 - `Cloud: GPT-4o Transcribe`
 - `Cloud: Whisper-1`
@@ -167,7 +194,7 @@ Behavior:
 
 ### Google, DeepL, Microsoft Translator
 
-Cloud translation credentials for these providers are also validated and stored locally when configured from the WinUI translation picker and provider prompts.
+Cloud translation credentials for these providers are also validated and stored locally when configured from the translation picker and provider prompts.
 
 ### llama.cpp / HY-MT
 
@@ -187,9 +214,9 @@ The app surfaces runtime download and extraction progress when it owns the trans
 
 ## Command Surface
 
-The WinUI shell uses a top command bar plus a `Playback` flyout instead of a traditional menu bar.
+The Avalonia shell uses a top toolbar plus transport bar.
 
-### Shell commands
+### Toolbar commands
 
 - `Open`
 - `Folder`
@@ -237,7 +264,7 @@ Default bindings include:
 - next/previous playlist item
 - mute
 
-Use the shortcut editor in the WinUI shell to change and persist them.
+Use the shortcut editor to change and persist them.
 
 ## Playback Controls
 
@@ -267,22 +294,35 @@ Current rendering/playback controls include:
 
 ## Build Requirements
 
-- Windows 10/11 with media support
-- `.NET 8 SDK`
-- Visual Studio 2022 or later recommended for development
+- Windows 10/11 (Linux/macOS support is the migration goal but not yet validated)
+- `.NET 9 SDK`
+- Visual Studio 2022 or later, or any editor with .NET CLI
+- libmpv runtime DLL (`libmpv-2.dll`) expected in `native/win-x64/`
 
 ## Build and Run
 
-From the `babel-player` repository root:
+### Avalonia shell (active)
+
+From the repository root:
 
 ```powershell
 dotnet build BabelPlayer.sln
+dotnet run --project src/BabelPlayer.Avalonia
+```
+
+### Legacy WinUI shell
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
 ```
 
-In Visual Studio, set `BabelPlayer.WinUI` as the startup project.
+Or in Visual Studio, set `BabelPlayer.WinUI` as the startup project.
 
-If `BabelPlayer.WinUI` is already running, close it before rebuilding or rerunning.
+### Tests
+
+```powershell
+dotnet test BabelPlayer.sln
+```
 
 ## Release Artifacts
 
@@ -298,6 +338,9 @@ The portable build and installer are produced from the same WinUI publish output
 ## Known Limitations
 
 - Translation target language is currently English only.
+- The Avalonia shell is the active development target; some WinUI-only features (shortcut editor dialog, some polish items) are still being ported.
+- Cross-platform builds (Linux/macOS) are an architectural goal but not yet validated at runtime.
+- libmpv runtime DLL must be present locally; it is not distributed via NuGet.
 - Embedded subtitle import is implemented for text-based tracks; image-based subtitle tracks are display-only.
 - HY-MT first-use model download exposes milestone status, not byte-level progress.
 - Real-world ffmpeg stream mapping for some containers may still need tuning on edge cases.
