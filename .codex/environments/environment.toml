@@ -8,4 +8,4 @@ script = ""
 [[actions]]
 name = "Run"
 icon = "run"
-command = "dotnet restore BabelPlayer.sln; powershell -ExecutionPolicy Bypass -File .\\scripts\\run-winui.ps1"
+command = "dotnet restore BabelPlayer.sln; powershell -ExecutionPolicy Bypass -File .\\scripts\\run.ps1"

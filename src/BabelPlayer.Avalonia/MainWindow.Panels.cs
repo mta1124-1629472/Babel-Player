@@ -220,13 +220,20 @@ public partial class MainWindow
             return;
         }
 
-        if (entry.IsFolder)
+        try
         {
-            await ApplyQueueMutationAsync(_shell.QueueCommands.EnqueueFolder(entry.Path, autoplay: false));
-            return;
-        }
+            if (entry.IsFolder)
+            {
+                await ApplyQueueMutationAsync(_shell.QueueCommands.EnqueueFolder(entry.Path, autoplay: false));
+                return;
+            }
 
-        await ApplyQueueMutationAsync(_shell.QueueCommands.PlayNow(entry.Path));
+            await RunPlaybackQueueCommandAsync(() => _shell.QueueCommands.PlayNow(entry.Path));
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus($"Library action failed: {ex.Message}");
+        }
     }
 
     private async void PlaylistQueueItemButton_Click(object? sender, RoutedEventArgs e)
@@ -262,7 +269,7 @@ public partial class MainWindow
         }
     }
 
-    private void PlaylistQueueListBox_KeyDown(object? sender, KeyEventArgs e)
+    private async void PlaylistQueueListBox_KeyDown(object? sender, KeyEventArgs e)
     {
         if (_playlistQueueListBox?.SelectedItem is not ShellPlaylistItem item)
         {
@@ -278,7 +285,7 @@ public partial class MainWindow
 
         if (e.Key == Key.Enter)
         {
-            _ = ApplyQueueMutationAsync(_shell.QueueCommands.PlayNow(item.Path));
+            await PlayQueueItemAsync(item);
             e.Handled = true;
         }
     }
@@ -415,12 +422,35 @@ public partial class MainWindow
             return;
         }
 
+        await PlayQueueItemAsync(item);
+    }
+
+    private async Task PlayQueueItemAsync(ShellPlaylistItem item)
+    {
         if (_playlistQueueListBox is not null)
         {
             _playlistQueueListBox.SelectedItem = item;
         }
 
-        await ApplyQueueMutationAsync(_shell.QueueCommands.PlayNow(item.Path));
+        await RunPlaybackQueueCommandAsync(() => _shell.QueueCommands.PlayNow(item.Path));
+    }
+
+    private async Task RunPlaybackQueueCommandAsync(Func<ShellQueueMediaResult> command)
+    {
+        if (!_backendInitialized)
+        {
+            UpdateStatus("Playback surface is not ready yet.");
+            return;
+        }
+
+        try
+        {
+            await ApplyQueueMutationAsync(command());
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus($"Playback failed: {ex.Message}");
+        }
     }
 
     private async Task ApplyQueueMutationAsync(ShellQueueMediaResult result)
