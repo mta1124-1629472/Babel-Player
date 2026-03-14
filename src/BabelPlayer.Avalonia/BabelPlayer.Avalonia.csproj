@@ -46,6 +46,10 @@
     </Content>
   </ItemGroup>
 
+  <Target Name="ValidateX64NativeAssets" BeforeTargets="Build;Publish" Condition="'$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == ''">
+    <Error Condition="!Exists('native\\win-x64\\libmpv-2.dll')" Text="x64 runtime requested, but native asset is missing: src/BabelPlayer.Avalonia/native/win-x64/libmpv-2.dll" />
+  </Target>
+
   <Target Name="ValidateArm64NativeAssets" BeforeTargets="Build;Publish" Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
     <Error Condition="!Exists('native\\win-arm64\\libmpv-2.dll')" Text="ARM64 runtime requested, but native asset is missing: src/BabelPlayer.Avalonia/native/win-arm64/libmpv-2.dll" />
   </Target>
