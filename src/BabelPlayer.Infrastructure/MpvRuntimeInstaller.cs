@@ -1,25 +1,34 @@
 using BabelPlayer.App;
 using SharpCompress.Archives;
 using SharpCompress.Common;
+using System.Runtime.InteropServices;
 
 namespace BabelPlayer.Infrastructure;
 
 public static class MpvRuntimeInstaller
 {
     public const string RuntimeVersion = "0.41.0";
-    public const string RuntimeSource = "https://sourceforge.net/projects/mpv-player-windows/files/release/mpv-0.41.0-x86_64-v3.7z/download";
+    public const string RuntimeSourceX64 = "https://sourceforge.net/projects/mpv-player-windows/files/release/mpv-0.41.0-x86_64-v3.7z/download";
+    public const string RuntimeSourceArm64 = "https://sourceforge.net/projects/mpv-player-windows/files/release/mpv-0.41.0-aarch64-v3.7z/download";
     public const string ReleasePageUrl = "https://sourceforge.net/projects/mpv-player-windows/files/release/";
 
     private static readonly HttpClient HttpClient = new(new HttpClientHandler { AllowAutoRedirect = true });
 
-    public static string GetInstallDirectory() => Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "tools", "mpv", RuntimeVersion);
-    public static string GetInstalledExePath() => Path.Combine(GetInstallDirectory(), "mpv.exe");
-    public static bool IsInstalled() => File.Exists(GetInstalledExePath());
+    public static string GetInstallDirectory(Architecture architecture)
+        => Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "tools", "mpv", RuntimeVersion, RuntimeArchitectureHelper.ToFolderName(architecture));
 
-    public static async Task<string> InstallAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+    public static string GetInstalledExePath(Architecture architecture) => Path.Combine(GetInstallDirectory(architecture), "mpv.exe");
+
+    public static string GetInstalledExePath() => GetInstalledExePath(RuntimeArchitectureHelper.GetCurrentArchitecture());
+
+    public static bool IsInstalled(Architecture architecture) => File.Exists(GetInstalledExePath(architecture));
+
+    public static bool IsInstalled() => IsInstalled(RuntimeArchitectureHelper.GetCurrentArchitecture());
+
+    public static async Task<string> InstallAsync(Architecture architecture, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
     {
-        var finalDirectory = GetInstallDirectory();
-        var finalExePath = GetInstalledExePath();
+        var finalDirectory = GetInstallDirectory(architecture);
+        var finalExePath = GetInstalledExePath(architecture);
         if (File.Exists(finalExePath))
         {
             onProgress?.Invoke(new RuntimeInstallProgress { Stage = "ready" });
@@ -34,7 +43,7 @@ public static class MpvRuntimeInstaller
 
         try
         {
-            await DownloadRuntimeArchiveAsync(RuntimeSource, archivePath, onProgress, cancellationToken);
+            await DownloadRuntimeArchiveAsync(GetRuntimeSource(architecture), archivePath, onProgress, cancellationToken);
             await ExtractRuntimeArchiveAsync(archivePath, extractDirectory, onProgress, cancellationToken);
 
             var extractedExePath = Directory.GetFiles(extractDirectory, "mpv.exe", SearchOption.AllDirectories).FirstOrDefault();
@@ -59,6 +68,16 @@ public static class MpvRuntimeInstaller
         {
             TryDeleteDirectory(tempRoot);
         }
+    }
+
+    private static string GetRuntimeSource(Architecture architecture)
+    {
+        return architecture switch
+        {
+            Architecture.X64 => RuntimeSourceX64,
+            Architecture.Arm64 => RuntimeSourceArm64,
+            _ => throw new NotSupportedException($"mpv runtime bootstrap does not support architecture '{architecture}'.")
+        };
     }
 
     private static async Task DownloadRuntimeArchiveAsync(string url, string destinationPath, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)

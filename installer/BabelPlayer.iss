@@ -37,12 +37,12 @@ DefaultGroupName=Babel Player
 AllowNoIcons=yes
 DisableDirPage=no
 DisableProgramGroupPage=yes
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64compatible arm64
+ArchitecturesInstallIn64BitMode=x64compatible arm64
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayIcon={app}\BabelPlayer.exe
+UninstallDisplayIcon={app}\BabelPlayer.Avalonia.exe
 SetupIconFile=..\src\BabelPlayer.Assets\BabelPlayer.ico
 OutputDir={#MyOutputDir}
 OutputBaseFilename={#MyOutputBaseFilename}
@@ -57,8 +57,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#MyPublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Babel Player"; Filename: "{app}\BabelPlayer.exe"
-Name: "{autodesktop}\Babel Player"; Filename: "{app}\BabelPlayer.exe"; Tasks: desktopicon
+Name: "{group}\Babel Player"; Filename: "{app}\BabelPlayer.Avalonia.exe"
+Name: "{autodesktop}\Babel Player"; Filename: "{app}\BabelPlayer.Avalonia.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\BabelPlayer.exe"; Description: "{cm:LaunchProgram,Babel Player}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\BabelPlayer.Avalonia.exe"; Description: "{cm:LaunchProgram,Babel Player}"; Flags: nowait postinstall skipifsilent

@@ -25,6 +25,11 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
     private readonly string _translationTargetLanguage = DefaultTargetLanguage;
     private readonly string _autoTranslatePreferredSourceLanguage = DefaultTargetLanguage;
     private string? _lastObservedActiveTranscriptSegmentId;
+    private long _translationRunIdCounter;
+    private TranslationRunContext? _activeTranslationRun;
+    private string? _translationRevisionMediaPath;
+    private string _translationRevisionFingerprint = string.Empty;
+    private int _translationTranscriptRevision;
     private bool _disposed;
 
     public SubtitleApplicationService(
@@ -354,6 +359,11 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
 
         _lastObservedActiveTranscriptSegmentId = activeTranscriptId;
         if (!_mediaSessionCoordinator.Snapshot.Translation.IsEnabled || string.IsNullOrWhiteSpace(activeTranscriptId))
+        {
+            return;
+        }
+
+        if (HasActiveTranslationRun() || string.IsNullOrWhiteSpace(_workflowStateStore.Snapshot.SelectedTranslationModelKey))
         {
             return;
         }

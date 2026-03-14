@@ -184,9 +184,7 @@ public sealed partial class MainWindow
             var result = await _shellPlaybackCommands.HandleMediaOpenedAsync(
                 snapshot,
                 ViewModel.Settings);
-            ShowStatus(result.ResumePosition is TimeSpan
-                ? $"Resumed: {Path.GetFileName(snapshot.Path)}"
-                : result.StatusMessage);
+            ShowStatus(result.StatusMessage);
         });
     }
 
@@ -202,7 +200,7 @@ public sealed partial class MainWindow
                 return;
             }
 
-            await LoadPlaybackItemAsync(result.NextItem);
+            await LoadPlaybackItemAsync(result.NextItem, ShellMediaOpenTrigger.Autoplay);
         });
     }
 
@@ -569,7 +567,7 @@ public sealed partial class MainWindow
         ShowStatus(item.IsChecked ? "Resume playback enabled." : "Resume playback disabled.");
     }
 
-    private async Task LoadPlaybackItemAsync(PlaylistItem? item)
+    private async Task LoadPlaybackItemAsync(PlaylistItem? item, ShellMediaOpenTrigger openTrigger = ShellMediaOpenTrigger.Manual)
     {
         if (item is null || string.IsNullOrWhiteSpace(item.Path) || !File.Exists(item.Path))
         {
@@ -583,7 +581,7 @@ public sealed partial class MainWindow
         {
             var loaded = await _shellPlaybackCommands.LoadPlaybackItemAsync(
                 item,
-                BuildShellLoadOptions(),
+                BuildShellLoadOptions(openTrigger),
                 CancellationToken.None);
             if (!loaded)
             {
@@ -600,7 +598,7 @@ public sealed partial class MainWindow
         }
     }
 
-    private ShellLoadMediaOptions BuildShellLoadOptions()
+    private ShellLoadMediaOptions BuildShellLoadOptions(ShellMediaOpenTrigger openTrigger)
     {
         var volume = Math.Clamp((VolumeSlider?.Value ?? (ViewModel.Transport.Volume * 100d)) / 100d, 0, 1);
         return new ShellLoadMediaOptions
@@ -613,6 +611,7 @@ public sealed partial class MainWindow
             Volume = volume,
             IsMuted = MuteToggleButton?.IsChecked == true,
             ResumeEnabled = ViewModel.Settings.ResumeEnabled,
+            OpenTrigger = openTrigger,
             PreviousPlaybackState = _shellPlaybackCommands.CurrentPlaybackSnapshot
         };
     }

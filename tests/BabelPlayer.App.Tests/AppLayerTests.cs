@@ -641,6 +641,264 @@ Hola
     }
 
     [Fact]
+    public async Task SubtitleApplicationService_DisableTranslation_PreventsDelayedRunWrites()
+    {
+        var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+        workflowStateStore.Update(state => state with
+        {
+            SelectedTranslationModelKey = "cloud:deepl"
+        });
+
+        var translator = new DelayedRunSubtitleTranslator();
+        var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+        using var service = new SubtitleApplicationService(
+            new FakeSubtitleSourceResolver(),
+            new FakeCaptionGenerator(),
+            translator,
+            new FakeAiCredentialCoordinator(),
+            new FakeSuccessfulRuntimeProvisioner(),
+            credentialFacade,
+            mediaSessionCoordinator,
+            workflowStateStore,
+            new FakeProviderAvailabilityService());
+
+        mediaSessionCoordinator.SetTranscriptSegments(
+        [
+            new TranscriptSegment
+            {
+                Id = new TranscriptSegmentId("tr:1"),
+                Start = TimeSpan.Zero,
+                End = TimeSpan.FromSeconds(2),
+                Text = "Hola",
+                Language = "es"
+            }
+        ],
+        SubtitlePipelineSource.Sidecar,
+        "es");
+
+        await service.SetTranslationEnabledAsync(true);
+        await WaitForConditionAsync(() => translator.BatchCallCount >= 1);
+
+        await service.SetTranslationEnabledAsync(false);
+        translator.ReleaseFirstBatch(["stale-write"]);
+
+        await Task.Delay(100);
+        Assert.Empty(mediaSessionCoordinator.Snapshot.Translation.Segments);
+    }
+
+    [Fact]
+    public async Task SubtitleApplicationService_StaleRunWrite_IsIgnoredAfterTranscriptRevisionChange()
+    {
+        var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+        workflowStateStore.Update(state => state with
+        {
+            SelectedTranslationModelKey = "cloud:deepl"
+        });
+
+        var translator = new DelayedRunSubtitleTranslator();
+        var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+        using var service = new SubtitleApplicationService(
+            new FakeSubtitleSourceResolver(),
+            new FakeCaptionGenerator(),
+            translator,
+            new FakeAiCredentialCoordinator(),
+            new FakeSuccessfulRuntimeProvisioner(),
+            credentialFacade,
+            mediaSessionCoordinator,
+            workflowStateStore,
+            new FakeProviderAvailabilityService());
+
+        mediaSessionCoordinator.SetTranscriptSegments(
+        [
+            new TranscriptSegment
+            {
+                Id = new TranscriptSegmentId("tr:1"),
+                Start = TimeSpan.Zero,
+                End = TimeSpan.FromSeconds(2),
+                Text = "Hola",
+                Language = "es"
+            }
+        ],
+        SubtitlePipelineSource.Sidecar,
+        "es");
+
+        await service.SetTranslationEnabledAsync(true);
+        await WaitForConditionAsync(() => translator.BatchCallCount >= 1);
+
+        mediaSessionCoordinator.SetTranscriptSegments(
+        [
+            new TranscriptSegment
+            {
+                Id = new TranscriptSegmentId("tr:1"),
+                Start = TimeSpan.Zero,
+                End = TimeSpan.FromSeconds(2),
+                Text = "Adios",
+                Language = "es"
+            }
+        ],
+        SubtitlePipelineSource.Sidecar,
+        "es");
+
+        translator.NextImmediateBatchResult = ["fresh-write"];
+        await service.SetTranslationEnabledAsync(true);
+        await WaitForConditionAsync(() => mediaSessionCoordinator.Snapshot.Translation.Segments.Count == 1);
+
+        translator.ReleaseFirstBatch(["stale-write"]);
+        await Task.Delay(100);
+
+        var translation = Assert.Single(mediaSessionCoordinator.Snapshot.Translation.Segments);
+        Assert.Equal("fresh-write", translation.Text);
+    }
+
+    [Fact]
+    public async Task SubtitleApplicationService_EnableTranslationWithoutModel_DoesNotStartTranslationRun()
+    {
+        var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+
+        var translator = new DelayedRunSubtitleTranslator();
+        var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+        using var service = new SubtitleApplicationService(
+            new FakeSubtitleSourceResolver(),
+            new FakeCaptionGenerator(),
+            translator,
+            new FakeAiCredentialCoordinator(),
+            new FakeSuccessfulRuntimeProvisioner(),
+            credentialFacade,
+            mediaSessionCoordinator,
+            workflowStateStore,
+            new FakeProviderAvailabilityService());
+
+        mediaSessionCoordinator.SetTranscriptSegments(
+        [
+            new TranscriptSegment
+            {
+                Id = new TranscriptSegmentId("tr:1"),
+                Start = TimeSpan.Zero,
+                End = TimeSpan.FromSeconds(2),
+                Text = "Hola",
+                Language = "es"
+            }
+        ],
+        SubtitlePipelineSource.Sidecar,
+        "es");
+
+        await service.SetTranslationEnabledAsync(true);
+        await Task.Delay(100);
+
+        Assert.Equal(0, translator.BatchCallCount);
+        Assert.Equal(0, translator.TranslateCallCount);
+        Assert.Empty(mediaSessionCoordinator.Snapshot.Translation.Segments);
+    }
+
+    [Fact]
+    public async Task SubtitleApplicationService_ActiveFullRun_SuppressesOpportunisticPerCueTranslation()
+    {
+        var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+        workflowStateStore.Update(state => state with
+        {
+            SelectedTranslationModelKey = "cloud:deepl"
+        });
+
+        var translator = new DelayedRunSubtitleTranslator();
+        var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+        using var service = new SubtitleApplicationService(
+            new FakeSubtitleSourceResolver(),
+            new FakeCaptionGenerator(),
+            translator,
+            new FakeAiCredentialCoordinator(),
+            new FakeSuccessfulRuntimeProvisioner(),
+            credentialFacade,
+            mediaSessionCoordinator,
+            workflowStateStore,
+            new FakeProviderAvailabilityService());
+
+        mediaSessionCoordinator.SetTranscriptSegments(
+        [
+            new TranscriptSegment
+            {
+                Id = new TranscriptSegmentId("tr:1"),
+                Start = TimeSpan.Zero,
+                End = TimeSpan.FromSeconds(3),
+                Text = "Hola",
+                Language = "es"
+            }
+        ],
+        SubtitlePipelineSource.Sidecar,
+        "es");
+
+        await service.SetTranslationEnabledAsync(true);
+        await WaitForConditionAsync(() => translator.BatchCallCount >= 1);
+
+        mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromMinutes(5),
+            1.0,
+            false,
+            true,
+            DateTimeOffset.UtcNow));
+        await Task.Delay(100);
+
+        Assert.Equal(0, translator.TranslateCallCount);
+    }
+
+    [Fact]
+    public async Task SubtitleApplicationService_ConcurrentPerCueCallbacksForSameSegment_ResultInSingleWrite()
+    {
+        var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+        var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
+        workflowStateStore.Update(state => state with
+        {
+            SelectedTranslationModelKey = "cloud:deepl"
+        });
+
+        var translator = new BlockingCueSubtitleTranslator();
+        var credentialFacade = new CredentialFacade(new FakeCredentialStore());
+        using var service = new SubtitleApplicationService(
+            new FakeSubtitleSourceResolver(),
+            new FakeCaptionGenerator(),
+            translator,
+            new FakeAiCredentialCoordinator(),
+            new FakeSuccessfulRuntimeProvisioner(),
+            credentialFacade,
+            mediaSessionCoordinator,
+            workflowStateStore,
+            new FakeProviderAvailabilityService());
+
+        mediaSessionCoordinator.SetTranslationState(true, false);
+        mediaSessionCoordinator.SetTranscriptSegments(
+        [
+            new TranscriptSegment
+            {
+                Id = new TranscriptSegmentId("tr:race"),
+                Start = TimeSpan.FromSeconds(10),
+                End = TimeSpan.FromSeconds(12),
+                Text = "Hola",
+                Language = "es"
+            }
+        ],
+        SubtitlePipelineSource.Sidecar,
+        "es");
+
+        var cue = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+        var host = (ICaptionGenerationHost)service;
+        var taskA = host.TranslateCueAsync(cue, CancellationToken.None);
+        await WaitForConditionAsync(() => translator.TranslateCallCount >= 1);
+        var taskB = host.TranslateCueAsync(cue, CancellationToken.None);
+
+        translator.ReleaseTranslate("Hello");
+        await Task.WhenAll(taskA, taskB);
+        await WaitForConditionAsync(() => mediaSessionCoordinator.Snapshot.Translation.Segments.Count == 1);
+
+        Assert.Equal(1, translator.TranslateCallCount);
+        var translation = Assert.Single(mediaSessionCoordinator.Snapshot.Translation.Segments);
+        Assert.Equal(cue.Id, translation.SourceSegmentId);
+    }
+
+    [Fact]
     public async Task SubtitleWorkflowController_AllowsSourceOnlyOverrideForCurrentVideo()
     {
         var directory = Directory.CreateTempSubdirectory();
@@ -926,6 +1184,22 @@ Hola
         };
     }
 
+    private static async Task WaitForConditionAsync(Func<bool> predicate, int timeoutMilliseconds = 3000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+            {
+                return;
+            }
+
+            await Task.Delay(20);
+        }
+
+        Assert.True(predicate(), "Condition was not met within the timeout.");
+    }
+
     private sealed class FakeCredentialStore : ICredentialStore
     {
         private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
@@ -1030,6 +1304,30 @@ Hola
             => null;
     }
 
+    private sealed class FakeSubtitleSourceResolver : ISubtitleSourceResolver
+    {
+        public Task<IReadOnlyList<SubtitleCue>> LoadExternalSubtitleCuesAsync(string path, Action<RuntimeInstallProgress>? onRuntimeProgress, Action<string>? onStatus, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<SubtitleCue>>([]);
+
+        public Task<IReadOnlyList<SubtitleCue>> ExtractEmbeddedSubtitleCuesAsync(string videoPath, MediaTrackInfo track, Action<RuntimeInstallProgress>? onRuntimeProgress, Action<string>? onStatus, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<SubtitleCue>>([]);
+    }
+
+    private sealed class FakeCaptionGenerator : ICaptionGenerator
+    {
+        public Task<IReadOnlyList<SubtitleCue>> GenerateCaptionsAsync(string videoPath, TranscriptionModelSelection selection, string? languageHint, Action<TranscriptChunk>? onFinal, Action<ModelTransferProgress>? onProgress, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<SubtitleCue>>([]);
+    }
+
+    private sealed class FakeAiCredentialCoordinator : IAiCredentialCoordinator
+    {
+        public Task<bool> EnsureOpenAiApiKeyAsync(CancellationToken cancellationToken)
+            => Task.FromResult(true);
+
+        public Task<bool> EnsureTranslationProviderCredentialsAsync(TranslationProvider provider, CancellationToken cancellationToken)
+            => Task.FromResult(true);
+    }
+
     private sealed class ThrowingWarmupSubtitleTranslator : ISubtitleTranslator
     {
         public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged;
@@ -1042,6 +1340,72 @@ Hola
 
         public Task<IReadOnlyList<string>> TranslateBatchAsync(TranslationModelSelection selection, IReadOnlyList<string> texts, CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyList<string>>(texts.ToArray());
+    }
+
+    private sealed class DelayedRunSubtitleTranslator : ISubtitleTranslator
+    {
+        private readonly TaskCompletionSource<IReadOnlyList<string>> _firstBatchCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _batchCallCount;
+        private int _translateCallCount;
+
+        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged;
+
+        public int BatchCallCount => Volatile.Read(ref _batchCallCount);
+        public int TranslateCallCount => Volatile.Read(ref _translateCallCount);
+
+        public IReadOnlyList<string> NextImmediateBatchResult { get; set; } = ["translated"];
+
+        public Task WarmupAsync(TranslationModelSelection selection, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        public Task<string> TranslateAsync(TranslationModelSelection selection, string text, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _translateCallCount);
+            return Task.FromResult(text);
+        }
+
+        public Task<IReadOnlyList<string>> TranslateBatchAsync(TranslationModelSelection selection, IReadOnlyList<string> texts, CancellationToken cancellationToken)
+        {
+            var call = Interlocked.Increment(ref _batchCallCount);
+            if (call == 1)
+            {
+                return _firstBatchCompletion.Task;
+            }
+
+            return Task.FromResult(NextImmediateBatchResult);
+        }
+
+        public void ReleaseFirstBatch(IReadOnlyList<string> results)
+        {
+            _firstBatchCompletion.TrySetResult(results);
+        }
+    }
+
+    private sealed class BlockingCueSubtitleTranslator : ISubtitleTranslator
+    {
+        private readonly TaskCompletionSource<string> _translateCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _translateCallCount;
+
+        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged;
+
+        public int TranslateCallCount => Volatile.Read(ref _translateCallCount);
+
+        public Task WarmupAsync(TranslationModelSelection selection, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        public Task<string> TranslateAsync(TranslationModelSelection selection, string text, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _translateCallCount);
+            return _translateCompletion.Task;
+        }
+
+        public Task<IReadOnlyList<string>> TranslateBatchAsync(TranslationModelSelection selection, IReadOnlyList<string> texts, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<string>>(texts.Select(text => text).ToArray());
+
+        public void ReleaseTranslate(string translated)
+        {
+            _translateCompletion.TrySetResult(translated);
+        }
     }
 
     private sealed class FakeSuccessfulRuntimeProvisioner : IRuntimeProvisioner

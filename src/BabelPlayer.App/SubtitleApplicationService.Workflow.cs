@@ -82,6 +82,7 @@ public sealed partial class SubtitleApplicationService
         var state = _workflowStateStore.Snapshot;
         var isTranslationEnabled = _mediaSessionCoordinator.Snapshot.Translation.IsEnabled;
         _logger.LogInfo("Reprocessing subtitles for translation settings.", BabelLogContext.Create(("translationEnabled", isTranslationEnabled), ("modelKey", state.SelectedTranslationModelKey)));
+        CancelTranslationWork();
         if (isTranslationEnabled && string.IsNullOrWhiteSpace(state.SelectedTranslationModelKey))
         {
             ResetCurrentTranslations();
@@ -99,11 +100,15 @@ public sealed partial class SubtitleApplicationService
             ? "Updating subtitle translation for the current video."
             : "Translation disabled for the current video.");
 
+        if (!isTranslationEnabled)
+        {
+            return;
+        }
+
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _translationCts?.Cancel();
-        _translationCts?.Dispose();
         _translationCts = cts;
-        _ = TranslateAllCuesAsync(cts.Token);
+        var run = BeginTranslationRun(_mediaSessionCoordinator.Snapshot);
+        _ = TranslateAllCuesAsync(run, cts.Token);
     }
 
     private async Task ReprocessCurrentSubtitlesForTranscriptionModelAsync(
@@ -205,11 +210,17 @@ public sealed partial class SubtitleApplicationService
                 ? "Preparing translated subtitles..."
                 : "Preparing source-language subtitles...");
 
+        var translationState = _mediaSessionCoordinator.Snapshot.Translation;
+        if (!translationState.IsEnabled || string.IsNullOrWhiteSpace(_workflowStateStore.Snapshot.SelectedTranslationModelKey))
+        {
+            return new SubtitleLoadResult(source, projectedCues.Count, source == SubtitlePipelineSource.Sidecar, false);
+        }
+
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _translationCts?.Cancel();
-        _translationCts?.Dispose();
+        CancelTranslationWork();
         _translationCts = cts;
-        _ = TranslateAllCuesAsync(cts.Token);
+        var run = BeginTranslationRun(_mediaSessionCoordinator.Snapshot);
+        _ = TranslateAllCuesAsync(run, cts.Token);
 
         return new SubtitleLoadResult(source, projectedCues.Count, source == SubtitlePipelineSource.Sidecar, false);
     }

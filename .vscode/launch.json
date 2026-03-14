@@ -5,7 +5,7 @@
             "name": "PowerShell Launch Script",
             "type": "PowerShell",
             "request": "launch",
-            "script": "dotnet restore BabelPlayer.sln; powershell -ExecutionPolicy Bypass -File .\\scripts\\run.ps1",
+            "script": "dotnet restore src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj; powershell -ExecutionPolicy Bypass -File .\\scripts\\run.ps1",
             "cwd": "${cwd}"
         }
     ]

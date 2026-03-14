@@ -50,6 +50,10 @@ public interface IShellPlaybackCommands
         ShellPreferencesSnapshot preferences,
         CancellationToken cancellationToken = default);
 
+    Task<ShellResumeDecisionResult> ApplyResumeDecisionAsync(
+        ShellResumeDecision decision,
+        CancellationToken cancellationToken = default);
+
     ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled);
 
     Task PlayAsync(CancellationToken cancellationToken = default);

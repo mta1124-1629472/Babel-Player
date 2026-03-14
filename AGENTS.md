@@ -3,11 +3,12 @@
 This file provides guidance to agents when working with code in this repository.
 
 ## Essential Commands
-- Build: `dotnet build BabelPlayer.sln`
+- Build (default): `dotnet build src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj`
 - Run: `powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1`
-- Test (unit): `dotnet test BabelPlayer.sln`
+- Test (unit): `dotnet test tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj`
 - Test (single test): `dotnet test --filter "FullyQualifiedTestName~<TestClass>.<TestMethod>"`
-- Run Avalonia variant: `.\scripts\run-winui.ps1`
+- Run Avalonia directly: `.\scripts\run-avalonia.ps1`
+- Legacy compatibility wrapper: `.\scripts\run-winui.ps1`
 
 ## Critical Architecture Patterns (Non-Obvious)
 - MediaSession is the ONLY authoritative timed state - never duplicate timeline/playback position in UI controls
@@ -41,3 +42,6 @@ This file provides guidance to agents when working with code in this repository.
 - Presenter owning workflow state (e.g., translation choices) breaks statelessness
 - Multiple parallel authoritative timed state models cause sync bugs - route all writes through MediaSessionCoordinator
 - Tight coupling in presenter implementations (e.g., MainWindow calling mpv directly) breaks testability
+
+## Required References
+- Shell/App boundary changes in MainWindow files must follow docs/SHELL_BOUNDARY_GUARDRAILS.md

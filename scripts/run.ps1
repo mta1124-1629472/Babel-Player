@@ -1,7 +1,8 @@
 param(
     [switch]$SkipRestore,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [string]$Runtime
 )
 
-$scriptPath = Join-Path $PSScriptRoot "run-winui.ps1"
-& $scriptPath @PSBoundParameters
+$scriptPath = Join-Path $PSScriptRoot "run-avalonia.ps1"
+& $scriptPath -SkipRestore:$SkipRestore -SkipBuild:$SkipBuild -Runtime $Runtime

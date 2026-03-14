@@ -1,4 +1,5 @@
 using BabelPlayer.App;
+using System.Runtime.InteropServices;
 
 namespace BabelPlayer.Infrastructure;
 
@@ -6,32 +7,41 @@ public static class LlamaCppRuntimeInstaller
 {
     public const string RuntimeVersion = "b8234";
     public const string RuntimeSource = "auto";
-    public const string DownloadUrl = "https://github.com/ggml-org/llama.cpp/releases/download/b8234/llama-b8234-bin-win-cpu-x64.zip";
+    public const string DownloadUrlX64 = "https://github.com/ggml-org/llama.cpp/releases/download/b8234/llama-b8234-bin-win-cpu-x64.zip";
+    public const string DownloadUrlArm64 = "https://github.com/ggml-org/llama.cpp/releases/download/b8234/llama-b8234-bin-win-arm64.zip";
     public const string ReleasePageUrl = "https://github.com/ggml-org/llama.cpp/releases/tag/b8234";
     public const string HyMt18BPageUrl = "https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF";
     public const string HyMt7BPageUrl = "https://huggingface.co/tencent/HY-MT1.5-7B-GGUF";
 
     private static readonly HttpClient HttpClient = new();
 
-    public static string GetInstallDirectory()
+    public static string GetInstallDirectory(Architecture architecture)
     {
-        return Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "tools", "llama.cpp", RuntimeVersion);
+        return Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "tools", "llama.cpp", RuntimeVersion, RuntimeArchitectureHelper.ToFolderName(architecture));
+    }
+
+    public static string GetInstalledServerPath(Architecture architecture)
+    {
+        return Path.Combine(GetInstallDirectory(architecture), "llama-server.exe");
     }
 
     public static string GetInstalledServerPath()
+        => GetInstalledServerPath(RuntimeArchitectureHelper.GetCurrentArchitecture());
+
+    public static bool IsInstalled(Architecture architecture)
     {
-        return Path.Combine(GetInstallDirectory(), "llama-server.exe");
+        return File.Exists(GetInstalledServerPath(architecture));
     }
 
     public static bool IsInstalled()
     {
-        return File.Exists(GetInstalledServerPath());
+        return IsInstalled(RuntimeArchitectureHelper.GetCurrentArchitecture());
     }
 
-    public static async Task<string> InstallAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+    public static async Task<string> InstallAsync(Architecture architecture, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
     {
-        var finalDirectory = GetInstallDirectory();
-        var finalServerPath = GetInstalledServerPath();
+        var finalDirectory = GetInstallDirectory(architecture);
+        var finalServerPath = GetInstalledServerPath(architecture);
         if (File.Exists(finalServerPath))
         {
             onProgress?.Invoke(new RuntimeInstallProgress { Stage = "ready" });
@@ -46,7 +56,7 @@ public static class LlamaCppRuntimeInstaller
 
         try
         {
-            await DownloadRuntimeArchiveAsync(zipPath, onProgress, cancellationToken);
+            await DownloadRuntimeArchiveAsync(GetDownloadUrl(architecture), zipPath, onProgress, cancellationToken);
             await ExtractRuntimeArchiveAsync(zipPath, extractDirectory, onProgress, cancellationToken);
 
             var extractedServerPath = Directory
@@ -75,9 +85,19 @@ public static class LlamaCppRuntimeInstaller
         }
     }
 
-    private static async Task DownloadRuntimeArchiveAsync(string destinationPath, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+    private static string GetDownloadUrl(Architecture architecture)
     {
-        using var response = await HttpClient.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        return architecture switch
+        {
+            Architecture.X64 => DownloadUrlX64,
+            Architecture.Arm64 => DownloadUrlArm64,
+            _ => throw new NotSupportedException($"llama.cpp runtime bootstrap does not support architecture '{architecture}'.")
+        };
+    }
+
+    private static async Task DownloadRuntimeArchiveAsync(string sourceUrl, string destinationPath, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+    {
+        using var response = await HttpClient.GetAsync(sourceUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var totalBytes = response.Content.Headers.ContentLength;

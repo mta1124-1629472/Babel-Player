@@ -2,6 +2,12 @@ using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
 
+public enum ShellMediaOpenTrigger
+{
+    Manual,
+    Autoplay
+}
+
 public sealed record ShellLoadMediaOptions
 {
     public ShellHardwareDecodingMode HardwareDecodingMode { get; init; } = ShellHardwareDecodingMode.AutoSafe;
@@ -12,6 +18,7 @@ public sealed record ShellLoadMediaOptions
     public double Volume { get; init; } = 0.8;
     public bool IsMuted { get; init; }
     public bool ResumeEnabled { get; init; }
+    public ShellMediaOpenTrigger OpenTrigger { get; init; } = ShellMediaOpenTrigger.Manual;
     public ShellPlaybackStateSnapshot PreviousPlaybackState { get; init; } = new();
 }
 
@@ -35,8 +42,23 @@ public sealed record ShellQueueSnapshot
 
 public sealed record ShellPlaybackOpenResult
 {
+    public ShellMediaOpenTrigger OpenTrigger { get; init; } = ShellMediaOpenTrigger.Manual;
     public TimeSpan? ResumePosition { get; init; }
+    public bool ResumeDecisionPending { get; init; }
     public string StatusMessage { get; init; } = "Media opened.";
+}
+
+public enum ShellResumeDecision
+{
+    Resume,
+    StartOver,
+    Dismiss
+}
+
+public sealed record ShellResumeDecisionResult
+{
+    public bool DecisionApplied { get; init; }
+    public string StatusMessage { get; init; } = "No pending resume decision.";
 }
 
 public sealed record ShellMediaEndedResult
@@ -73,6 +95,17 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
     private string? _autoResumePlaybackPath;
     private TimeSpan _autoResumePlaybackPosition = TimeSpan.Zero;
     private bool _autoResumePlaybackFromBeginning = true;
+    private PendingMediaOpenContext? _pendingMediaOpenContext;
+    private PendingResumeDecision? _pendingResumeDecision;
+
+    private sealed record PendingMediaOpenContext(
+        string Path,
+        bool ResumeEnabled,
+        ShellMediaOpenTrigger OpenTrigger);
+
+    private sealed record PendingResumeDecision(
+        string Path,
+        TimeSpan ResumePosition);
 
     public event Action<ShellQueueSnapshot>? QueueSnapshotChanged;
 
@@ -376,6 +409,8 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         }
 
         _resumeTrackingCoordinator.ResetForMedia(item.Path);
+        ClearPendingResumeDecision();
+        SetPendingMediaOpenContext(item.Path, options.ResumeEnabled, options.OpenTrigger);
 
         try
         {
@@ -395,6 +430,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
+            ClearPendingMediaOpenContext(item.Path);
             _logger.LogError("Media load failed.", ex, BabelLogContext.Create(("operationId", operationId), ("path", item.Path), ("displayName", item.DisplayName)));
             throw;
         }
@@ -417,9 +453,12 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         CancellationToken cancellationToken = default)
     {
         var current = _playbackQueueController.NowPlayingItem;
+        var pendingContext = ConsumePendingMediaOpenContext(snapshot.Path);
+        var openTrigger = pendingContext?.OpenTrigger ?? ShellMediaOpenTrigger.Manual;
         var result = new ShellPlaybackOpenResult
         {
-            StatusMessage = current is null ? "Media opened." : $"Now playing {current.DisplayName}."
+            OpenTrigger = openTrigger,
+            StatusMessage = BuildOpenedStatusMessage(current, openTrigger)
         };
 
         await ApplyPlaybackDefaultsAsync(new ShellPlaybackDefaultsChange(
@@ -429,26 +468,193 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
             preferences.SubtitleDelaySeconds,
             preferences.AspectRatio), cancellationToken);
 
-        _resumeTrackingCoordinator.SetEnabled(preferences.ResumeEnabled);
+        var resumeEnabled = pendingContext?.ResumeEnabled ?? preferences.ResumeEnabled;
+
+        _resumeTrackingCoordinator.SetEnabled(resumeEnabled);
         _resumeTrackingCoordinator.ResetForMedia(snapshot.Path);
-        if (!preferences.ResumeEnabled)
+        if (!resumeEnabled)
         {
+            ClearPendingResumeDecision();
             return result;
         }
 
         var entry = _resumePlaybackService.FindEntry(snapshot.Path, snapshot.Duration);
         if (entry is null)
         {
+            ClearPendingResumeDecision();
             return result;
         }
 
         var resumePosition = TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, snapshot.Duration.TotalSeconds));
+
+        if (openTrigger != ShellMediaOpenTrigger.Autoplay)
+        {
+            SetPendingResumeDecision(entry.Path, resumePosition);
+            _logger.LogInfo("Resume decision pending for manual open.", BabelLogContext.Create(("path", snapshot.Path), ("resumePosition", resumePosition)));
+            return result with
+            {
+                ResumePosition = resumePosition,
+                ResumeDecisionPending = true,
+                StatusMessage = BuildResumePromptStatusMessage(current, resumePosition)
+            };
+        }
+
+        ClearPendingResumeDecision();
         await _playbackBackend.SeekAsync(resumePosition, cancellationToken);
         _logger.LogInfo("Resume position applied.", BabelLogContext.Create(("path", snapshot.Path), ("resumePosition", resumePosition)));
         return result with
         {
-            ResumePosition = resumePosition
+            ResumePosition = resumePosition,
+            StatusMessage = BuildResumedStatusMessage(current, openTrigger, resumePosition)
         };
+    }
+
+    public async Task<ShellResumeDecisionResult> ApplyResumeDecisionAsync(
+        ShellResumeDecision decision,
+        CancellationToken cancellationToken = default)
+    {
+        var pending = _pendingResumeDecision;
+        if (pending is null)
+        {
+            return new ShellResumeDecisionResult
+            {
+                DecisionApplied = false,
+                StatusMessage = "No pending resume decision."
+            };
+        }
+
+        var current = _playbackQueueController.NowPlayingItem;
+        if (!string.IsNullOrWhiteSpace(current?.Path)
+            && !string.Equals(current.Path, pending.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            ClearPendingResumeDecision();
+            return new ShellResumeDecisionResult
+            {
+                DecisionApplied = false,
+                StatusMessage = "Resume decision expired due to media change."
+            };
+        }
+
+        var displayName = current?.DisplayName ?? Path.GetFileName(pending.Path);
+
+        switch (decision)
+        {
+            case ShellResumeDecision.Resume:
+                await _playbackBackend.SeekAsync(pending.ResumePosition, cancellationToken);
+                await _playbackBackend.PlayAsync(cancellationToken);
+                ClearPendingResumeDecision();
+                return new ShellResumeDecisionResult
+                {
+                    DecisionApplied = true,
+                    StatusMessage = $"Resumed {displayName} at {pending.ResumePosition:mm\\:ss}."
+                };
+
+            case ShellResumeDecision.StartOver:
+                _resumePlaybackService.RemoveCompletedEntry(pending.Path);
+                await _playbackBackend.SeekAsync(TimeSpan.Zero, cancellationToken);
+                await _playbackBackend.PlayAsync(cancellationToken);
+                ClearPendingResumeDecision();
+                return new ShellResumeDecisionResult
+                {
+                    DecisionApplied = true,
+                    StatusMessage = $"Starting {displayName} from the beginning."
+                };
+
+            default:
+                ClearPendingResumeDecision();
+                return new ShellResumeDecisionResult
+                {
+                    DecisionApplied = true,
+                    StatusMessage = $"Resume skipped for {displayName}."
+                };
+        }
+    }
+
+    private static string BuildOpenedStatusMessage(PlaylistItem? current, ShellMediaOpenTrigger trigger)
+    {
+        if (current is null)
+        {
+            return "Media opened.";
+        }
+
+        return trigger == ShellMediaOpenTrigger.Autoplay
+            ? $"Autoplaying {current.DisplayName}."
+            : $"Now playing {current.DisplayName}.";
+    }
+
+    private static string BuildResumedStatusMessage(PlaylistItem? current, ShellMediaOpenTrigger trigger, TimeSpan resumePosition)
+    {
+        if (current is null)
+        {
+            return trigger == ShellMediaOpenTrigger.Autoplay
+                ? $"Autoplay resumed at {resumePosition:mm\\:ss}."
+                : $"Resumed at {resumePosition:mm\\:ss}.";
+        }
+
+        return trigger == ShellMediaOpenTrigger.Autoplay
+            ? $"Autoplay resumed {current.DisplayName} at {resumePosition:mm\\:ss}."
+            : $"Resumed {current.DisplayName} at {resumePosition:mm\\:ss}.";
+    }
+
+    private static string BuildResumePromptStatusMessage(PlaylistItem? current, TimeSpan resumePosition)
+    {
+        if (current is null)
+        {
+            return $"Resume available at {resumePosition:mm\\:ss}.";
+        }
+
+        return $"Resume available for {current.DisplayName} at {resumePosition:mm\\:ss}.";
+    }
+
+    private void SetPendingMediaOpenContext(string path, bool resumeEnabled, ShellMediaOpenTrigger openTrigger)
+    {
+        _pendingMediaOpenContext = new PendingMediaOpenContext(path, resumeEnabled, openTrigger);
+    }
+
+    private void SetPendingResumeDecision(string path, TimeSpan resumePosition)
+    {
+        _pendingResumeDecision = new PendingResumeDecision(path, resumePosition);
+    }
+
+    private void ClearPendingResumeDecision()
+    {
+        _pendingResumeDecision = null;
+    }
+
+    private PendingMediaOpenContext? ConsumePendingMediaOpenContext(string? path)
+    {
+        var context = _pendingMediaOpenContext;
+        if (context is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(path)
+            && string.Equals(context.Path, path, StringComparison.OrdinalIgnoreCase))
+        {
+            _pendingMediaOpenContext = null;
+            return context;
+        }
+
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            _pendingMediaOpenContext = null;
+        }
+
+        return null;
+    }
+
+    private void ClearPendingMediaOpenContext(string path)
+    {
+        if (_pendingMediaOpenContext is null)
+        {
+            return;
+        }
+
+        if (string.Equals(_pendingMediaOpenContext.Path, path, StringComparison.OrdinalIgnoreCase))
+        {
+            _pendingMediaOpenContext = null;
+        }
     }
 
     public void SetResumeTrackingEnabled(bool enabled)
@@ -468,6 +674,7 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
 
     public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled)
     {
+        ClearPendingResumeDecision();
         _resumeTrackingCoordinator.SetEnabled(resumeEnabled);
         if (resumeEnabled)
         {

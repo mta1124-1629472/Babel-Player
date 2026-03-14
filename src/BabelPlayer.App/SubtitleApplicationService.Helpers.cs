@@ -6,10 +6,15 @@ using System.Diagnostics;
 
 public sealed partial class SubtitleApplicationService
 {
-    private async Task TranslateAllCuesAsync(CancellationToken cancellationToken)
+    private async Task TranslateAllCuesAsync(TranslationRunContext run, CancellationToken cancellationToken)
     {
         try
         {
+            if (!IsRunActive(run))
+            {
+                return;
+            }
+
             var selectionKey = _workflowStateStore.Snapshot.SelectedTranslationModelKey;
             var selection = SubtitleWorkflowCatalog.GetTranslationModel(selectionKey);
             var cues = _mediaSessionCoordinator.Snapshot.Transcript.Segments.ToList();
@@ -25,7 +30,10 @@ public sealed partial class SubtitleApplicationService
                 var translatedTexts = await TranslateCueBatchAsync(selection, cues, cancellationToken);
                 for (var index = 0; index < cues.Count; index++)
                 {
-                    _mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(cues[index], translatedTexts[index]));
+                    if (!TryUpsertTranslationSegment(cues[index], translatedTexts[index], run))
+                    {
+                        return;
+                    }
                 }
             }
             else
@@ -33,11 +41,11 @@ public sealed partial class SubtitleApplicationService
                 foreach (var cue in cues)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    await TranslateCueAsync(cue, cancellationToken);
+                    await TranslateCueAsync(cue, cancellationToken, run);
                 }
             }
 
-            if (!cancellationToken.IsCancellationRequested)
+            if (!cancellationToken.IsCancellationRequested && IsRunActive(run))
             {
                 PublishStatus(isTranslationEnabled
                     ? $"Prepared {CurrentCues.Count} translated subtitle cues."
@@ -51,18 +59,55 @@ public sealed partial class SubtitleApplicationService
         {
             await HandleCloudServiceFailureAsync(ex);
         }
+        finally
+        {
+            EndTranslationRun(run);
+        }
     }
 
-    private async Task TranslateCueAsync(TranscriptSegment cue, CancellationToken cancellationToken)
+    private async Task TranslateCueAsync(TranscriptSegment cue, CancellationToken cancellationToken, TranslationRunContext? run = null)
     {
+        var ownsRun = false;
+        if (run is null)
+        {
+            if (HasActiveTranslationRun())
+            {
+                return;
+            }
+
+            var snapshot = _mediaSessionCoordinator.Snapshot;
+            if (!snapshot.Translation.IsEnabled || string.IsNullOrWhiteSpace(_workflowStateStore.Snapshot.SelectedTranslationModelKey))
+            {
+                return;
+            }
+
+            run = BeginTranslationRun(snapshot);
+            ownsRun = true;
+        }
+
+        if (!IsRunActive(run))
+        {
+            return;
+        }
+
         if (SubtitleCueSessionMapper.HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot))
         {
+            if (ownsRun)
+            {
+                EndTranslationRun(run);
+            }
+
             return;
         }
 
         if (ShouldUseTranscriptDirectly(cue))
         {
-            _mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(cue, cue.Text.Trim()));
+            TryUpsertTranslationSegment(cue, cue.Text.Trim(), run);
+            if (ownsRun)
+            {
+                EndTranslationRun(run);
+            }
+
             return;
         }
 
@@ -79,7 +124,7 @@ public sealed partial class SubtitleApplicationService
             PublishLocalTranslationPreparationStatus();
             var selection = SubtitleWorkflowCatalog.GetTranslationModel(_workflowStateStore.Snapshot.SelectedTranslationModelKey);
             var translated = await _subtitleTranslator.TranslateAsync(selection, cue.Text, cancellationToken);
-            _mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(cue, translated));
+            TryUpsertTranslationSegment(cue, translated, run);
         }
         catch (OperationCanceledException)
         {
@@ -94,6 +139,11 @@ public sealed partial class SubtitleApplicationService
             {
                 _inFlightCueTranslations.Remove(cue.Id.Value);
             }
+
+            if (ownsRun)
+            {
+                EndTranslationRun(run);
+            }
         }
     }
 
@@ -103,7 +153,7 @@ public sealed partial class SubtitleApplicationService
         var isTranslationEnabled = _mediaSessionCoordinator.Snapshot.Translation.IsEnabled;
         if (!isTranslationEnabled || string.IsNullOrWhiteSpace(state.SelectedTranslationModelKey))
         {
-            return true;
+            return false;
         }
 
         return SubtitleCueSessionMapper.IsLanguageCode(cue.Language, _translationTargetLanguage);
@@ -208,6 +258,7 @@ public sealed partial class SubtitleApplicationService
         _translationCts?.Cancel();
         _translationCts?.Dispose();
         _translationCts = null;
+        InvalidateTranslationRun();
     }
 
     private void PublishLocalTranslationPreparationStatus()

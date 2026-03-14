@@ -28,8 +28,6 @@ public partial class MainWindow : Window
     private TextBlock? _positionTextBlock;
     private TextBlock? _statusTextBlock;
     private TextBlock? _fullscreenSubtitleSourceTextBlock;
-    private Border? _resumePromptBorder;
-    private TextBlock? _resumePromptTextBlock;
     private Slider? _timelineSlider;
     private Slider? _volumeSlider;
     private ComboBox? _playbackRateComboBox;
@@ -59,8 +57,6 @@ public partial class MainWindow : Window
     private bool _updatingVolumeFromProjection;
     private bool _updatingPlaybackRateFromProjection;
     private string? _currentMediaPath;
-    private PlaybackResumeEntry? _pendingResumeEntry;
-    private string? _pendingResumePath;
 
     public MainWindow()
     {
@@ -97,8 +93,6 @@ public partial class MainWindow : Window
         _positionTextBlock ??= this.FindControl<TextBlock>("PositionTextBlock");
         _statusTextBlock ??= this.FindControl<TextBlock>("StatusTextBlock");
         _fullscreenSubtitleSourceTextBlock ??= this.FindControl<TextBlock>("FullscreenSubtitleSourceTextBlock");
-        _resumePromptBorder ??= this.FindControl<Border>("ResumePromptBorder");
-        _resumePromptTextBlock ??= this.FindControl<TextBlock>("ResumePromptTextBlock");
         _timelineSlider ??= this.FindControl<Slider>("TimelineSlider");
         _volumeSlider ??= this.FindControl<Slider>("VolumeSlider");
         _playbackRateComboBox ??= this.FindControl<ComboBox>("PlaybackRateComboBox");
@@ -372,25 +366,21 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (!_shell.ShellPreferencesService.Current.ResumeEnabled)
+            HideResumePrompt();
+            var result = await _shell.ShellPlaybackCommands.HandleMediaOpenedAsync(
+                snapshot,
+                _shell.ShellPreferencesService.Current,
+                CancellationToken.None);
+
+            if (result.ResumeDecisionPending
+                && result.ResumePosition is TimeSpan resumePosition
+                && !string.IsNullOrWhiteSpace(path))
             {
-                HideResumePrompt();
-                UpdateStatus($"Now playing {Path.GetFileName(path)}.");
+                await HandlePendingResumeDecisionAsync(path, resumePosition);
                 return;
             }
 
-            var entry = _shell.ResumePlaybackService.FindEntry(path, snapshot.Duration);
-            if (entry is null)
-            {
-                HideResumePrompt();
-                UpdateStatus($"Now playing {Path.GetFileName(path)}.");
-                return;
-            }
-
-            _pendingResumeEntry = entry;
-            _pendingResumePath = path;
-            await _shell.ShellPlaybackCommands.PauseAsync(CancellationToken.None);
-            ShowResumePrompt(entry);
+            UpdateStatus(result.StatusMessage);
         });
     }
 
@@ -407,7 +397,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            await OpenQueueItemAsync(result.NextItem, result.StatusMessage);
+            await OpenQueueItemAsync(result.NextItem, result.StatusMessage, ShellMediaOpenTrigger.Autoplay);
         });
     }
 
@@ -948,62 +938,15 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void ResumeButton_Click(object? sender, RoutedEventArgs e)
-    {
-        if (_pendingResumeEntry is null || string.IsNullOrWhiteSpace(_pendingResumePath))
-        {
-            HideResumePrompt();
-            return;
-        }
-
-        var path = _pendingResumePath;
-        var resumePosition = TimeSpan.FromSeconds(Math.Max(_pendingResumeEntry.PositionSeconds, 0));
-        HideResumePrompt();
-        await _shell.ShellPlaybackCommands.SeekAsync(resumePosition, CancellationToken.None);
-        await _shell.ShellPlaybackCommands.PlayAsync(CancellationToken.None);
-        UpdateStatus($"Resumed {Path.GetFileName(path)} from {FormatClock(resumePosition.TotalSeconds)}.");
-    }
-
-    private async void StartOverButton_Click(object? sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(_pendingResumePath))
-        {
-            HideResumePrompt();
-            return;
-        }
-
-        var path = _pendingResumePath;
-        HideResumePrompt();
-        _shell.ResumePlaybackService.RemoveCompletedEntry(path);
-        await _shell.ShellPlaybackCommands.SeekAsync(TimeSpan.Zero, CancellationToken.None);
-        await _shell.ShellPlaybackCommands.PlayAsync(CancellationToken.None);
-        UpdateStatus($"Starting {Path.GetFileName(path)} from the beginning.");
-    }
-
-    private void ShowResumePrompt(PlaybackResumeEntry entry)
-    {
-        if (_resumePromptTextBlock is not null)
-        {
-            _resumePromptTextBlock.Text = $"Resume from {FormatClock(entry.PositionSeconds)}?";
-        }
-
-        if (_resumePromptBorder is not null)
-        {
-            _resumePromptBorder.IsVisible = true;
-        }
-
-        UpdateStatus($"Resume available at {FormatClock(entry.PositionSeconds)}.");
-    }
-
     private void HideResumePrompt()
     {
-        _pendingResumeEntry = null;
-        _pendingResumePath = null;
+        // Resume prompt UI retired; keep method for existing call sites.
+    }
 
-        if (_resumePromptBorder is not null)
-        {
-            _resumePromptBorder.IsVisible = false;
-        }
+    private async Task HandlePendingResumeDecisionAsync(string path, TimeSpan resumePosition)
+    {
+        var result = await _shell.ResumeDecisionCoordinator.ResolveAsync(this, path, resumePosition, CancellationToken.None);
+        UpdateStatus(result.StatusMessage);
     }
 
     private void SyncSubtitleOverlay()
@@ -1086,17 +1029,17 @@ public partial class MainWindow : Window
         await ApplyQueueMutationAsync(queueResult);
     }
 
-    private async Task OpenQueueItemAsync(ShellPlaylistItem item, string statusMessage)
+    private async Task OpenQueueItemAsync(ShellPlaylistItem item, string statusMessage, ShellMediaOpenTrigger openTrigger = ShellMediaOpenTrigger.Manual)
     {
         HideResumePrompt();
         var loaded = await _shell.ShellPlaybackCommands.LoadPlaybackItemAsync(
             item,
-            BuildLoadOptions(),
+            BuildLoadOptions(openTrigger),
             CancellationToken.None);
         UpdateStatus(loaded ? statusMessage : $"Unable to open {item.DisplayName}.");
     }
 
-    private ShellLoadMediaOptions BuildLoadOptions()
+    private ShellLoadMediaOptions BuildLoadOptions(ShellMediaOpenTrigger openTrigger)
     {
         var preferences = _shell.ShellPreferencesService.Current;
         return new ShellLoadMediaOptions
@@ -1109,6 +1052,7 @@ public partial class MainWindow : Window
             Volume = preferences.VolumeLevel,
             IsMuted = preferences.IsMuted,
             ResumeEnabled = preferences.ResumeEnabled,
+            OpenTrigger = openTrigger,
             PreviousPlaybackState = _shell.ShellPlaybackCommands.CurrentPlaybackSnapshot
         };
     }

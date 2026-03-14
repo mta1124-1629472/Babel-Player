@@ -354,7 +354,7 @@ public partial class MainWindow
         }
 
         var targetItem = FindQueueItemFromEventSource(e.Source);
-        var targetIndex = targetItem is null ? null : FindQueueItemIndex(targetItem);
+        int? targetIndex = targetItem is null ? null : FindQueueItemIndex(targetItem);
         await ReorderQueueAsync(sourceIndex, targetIndex);
         e.Handled = true;
     }

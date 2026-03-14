@@ -218,3 +218,97 @@ internal sealed class LlamaCppBootstrapPromptWindow : Window
         return button;
     }
 }
+
+internal enum ResumeDecisionChoice
+{
+    Resume,
+    StartOver,
+    Dismiss
+}
+
+internal sealed class ResumeDecisionPromptWindow : Window
+{
+    public ResumeDecisionPromptWindow(string displayName, TimeSpan resumePosition)
+    {
+        Title = "Resume Playback";
+        Width = 460;
+        Height = 220;
+        CanResize = false;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Background = new SolidColorBrush(Color.Parse("#151515"));
+
+        var promptText = string.IsNullOrWhiteSpace(displayName)
+            ? $"Resume from {resumePosition:mm\\:ss}?"
+            : $"Resume {displayName} from {resumePosition:mm\\:ss}?";
+
+        var resumeButton = new Button
+        {
+            Content = "Resume",
+            MinWidth = 96
+        };
+        resumeButton.Click += (_, _) =>
+        {
+            Choice = ResumeDecisionChoice.Resume;
+            Close();
+        };
+
+        var startOverButton = new Button
+        {
+            Content = "Start Over",
+            MinWidth = 96
+        };
+        startOverButton.Click += (_, _) =>
+        {
+            Choice = ResumeDecisionChoice.StartOver;
+            Close();
+        };
+
+        var cancelButton = new Button
+        {
+            Content = "Cancel",
+            MinWidth = 96
+        };
+        cancelButton.Click += (_, _) =>
+        {
+            Choice = ResumeDecisionChoice.Dismiss;
+            Close();
+        };
+
+        Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Spacing = 14,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = promptText,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = Brushes.White
+                },
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 10,
+                    Children =
+                    {
+                        cancelButton,
+                        startOverButton,
+                        resumeButton
+                    }
+                }
+            }
+        };
+
+        Closing += (_, _) =>
+        {
+            if (Choice is null)
+            {
+                Choice = ResumeDecisionChoice.Dismiss;
+            }
+        };
+    }
+
+    public ResumeDecisionChoice? Choice { get; private set; }
+}

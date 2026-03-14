@@ -17,16 +17,29 @@ jobs:
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 9.0.x
+
+      - name: Check ARM native prerequisites
+        id: arm_precheck
+        shell: pwsh
+        run: |
+          $hasArmNative = Test-Path "src/BabelPlayer.Avalonia/native/win-arm64/libmpv-2.dll"
+          "has_arm_native=$($hasArmNative.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Restore
-        run: dotnet restore BabelPlayer.sln
+        run: |
+          dotnet restore src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj
+          dotnet restore tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj
 
-      - name: Build
-        run: dotnet build BabelPlayer.sln --configuration Release --no-restore
+      - name: Build Avalonia shell
+        run: dotnet build src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj --configuration Release --no-restore -p:RuntimeIdentifier=win-x64
+
+      - name: Build Avalonia shell (ARM64 scaffolding)
+        if: steps.arm_precheck.outputs.has_arm_native == 'true'
+        run: dotnet build src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj --configuration Release --no-restore -p:RuntimeIdentifier=win-arm64
 
       - name: Test
-        run: dotnet test tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj --configuration Release --no-restore --logger "trx;LogFileName=test-results.trx"
 
       - name: Upload test results
         if: always()

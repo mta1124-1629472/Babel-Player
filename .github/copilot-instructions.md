@@ -10,18 +10,18 @@ Babel-Player is a Windows desktop media player (WinUI 3) for local video with em
 
 ### Build
 ```powershell
-dotnet build BabelPlayer.sln
+dotnet build src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj
 ```
 
 ### Run
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
 ```
-Or in Visual Studio: set `BabelPlayer.WinUI` as startup project and press F5.
+Or in Visual Studio: set `BabelPlayer.Avalonia` as startup project and press F5.
 
 ### Test
 ```powershell
-dotnet test BabelPlayer.sln
+dotnet test tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj
 ```
 Integration tests require Windows environment. See `tests/` for xUnit/MSTest patterns.
 

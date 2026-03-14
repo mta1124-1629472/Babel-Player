@@ -2,12 +2,14 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\BabelPlayer.Assets\BabelPlayer.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <PlatformTarget>x64</PlatformTarget>
+    <PlatformTarget Condition="'$(RuntimeIdentifier)' == 'win-arm64'">ARM64</PlatformTarget>
+    <PlatformTarget Condition="'$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == ''">x64</PlatformTarget>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,7 +32,11 @@
 
   <ItemGroup>
     <AvaloniaResource Include="..\BabelPlayer.Assets\BabelPlayer.ico" Link="Assets\BabelPlayer.ico" />
-    <Content Include="native\win-x64\libmpv-2.dll">
+    <Content Include="native\win-x64\libmpv-2.dll" Condition="Exists('native\\win-x64\\libmpv-2.dll') and ('$(RuntimeIdentifier)' == '' or '$(RuntimeIdentifier)' == 'win-x64')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>libmpv-2.dll</TargetPath>
+    </Content>
+    <Content Include="native\win-arm64\libmpv-2.dll" Condition="Exists('native\\win-arm64\\libmpv-2.dll') and '$(RuntimeIdentifier)' == 'win-arm64'">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>libmpv-2.dll</TargetPath>
     </Content>
@@ -39,4 +45,8 @@
       <TargetPath>Assets\test-video.mp4</TargetPath>
     </Content>
   </ItemGroup>
+
+  <Target Name="ValidateArm64NativeAssets" BeforeTargets="Build;Publish" Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
+    <Error Condition="!Exists('native\\win-arm64\\libmpv-2.dll')" Text="ARM64 runtime requested, but native asset is missing: src/BabelPlayer.Avalonia/native/win-arm64/libmpv-2.dll" />
+  </Target>
 </Project>

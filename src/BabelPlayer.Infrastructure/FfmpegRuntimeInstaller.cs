@@ -1,25 +1,37 @@
 using BabelPlayer.App;
+using System.Runtime.InteropServices;
 
 namespace BabelPlayer.Infrastructure;
 
 public static class FfmpegRuntimeInstaller
 {
     public const string RuntimeVersion = "essentials-2026";
-    public const string RuntimeSource = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
+    public const string RuntimeSourceX64 = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
     public const string ReleasePageUrl = "https://www.gyan.dev/ffmpeg/builds/";
 
     private static readonly HttpClient HttpClient = new(new HttpClientHandler { AllowAutoRedirect = true });
 
-    public static string GetInstallDirectory() => Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "tools", "ffmpeg", RuntimeVersion);
-    public static string GetInstalledFfmpegPath() => Path.Combine(GetInstallDirectory(), "ffmpeg.exe");
-    public static string GetInstalledFfprobePath() => Path.Combine(GetInstallDirectory(), "ffprobe.exe");
-    public static bool IsInstalled() => File.Exists(GetInstalledFfmpegPath()) && File.Exists(GetInstalledFfprobePath());
+    public static string GetInstallDirectory(Architecture architecture)
+        => Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "tools", "ffmpeg", RuntimeVersion, RuntimeArchitectureHelper.ToFolderName(architecture));
 
-    public static async Task<string> InstallAsync(Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+    public static string GetInstalledFfmpegPath(Architecture architecture) => Path.Combine(GetInstallDirectory(architecture), "ffmpeg.exe");
+
+    public static string GetInstalledFfmpegPath() => GetInstalledFfmpegPath(RuntimeArchitectureHelper.GetCurrentArchitecture());
+
+    public static string GetInstalledFfprobePath(Architecture architecture) => Path.Combine(GetInstallDirectory(architecture), "ffprobe.exe");
+
+    public static string GetInstalledFfprobePath() => GetInstalledFfprobePath(RuntimeArchitectureHelper.GetCurrentArchitecture());
+
+    public static bool IsInstalled(Architecture architecture)
+        => File.Exists(GetInstalledFfmpegPath(architecture)) && File.Exists(GetInstalledFfprobePath(architecture));
+
+    public static bool IsInstalled() => IsInstalled(RuntimeArchitectureHelper.GetCurrentArchitecture());
+
+    public static async Task<string> InstallAsync(Architecture architecture, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
     {
-        var finalDirectory = GetInstallDirectory();
-        var finalFfmpeg = GetInstalledFfmpegPath();
-        if (IsInstalled())
+        var finalDirectory = GetInstallDirectory(architecture);
+        var finalFfmpeg = GetInstalledFfmpegPath(architecture);
+        if (IsInstalled(architecture))
         {
             onProgress?.Invoke(new RuntimeInstallProgress { Stage = "ready" });
             return finalFfmpeg;
@@ -33,7 +45,7 @@ public static class FfmpegRuntimeInstaller
 
         try
         {
-            await DownloadArchiveAsync(zipPath, onProgress, cancellationToken);
+            await DownloadArchiveAsync(GetRuntimeSource(architecture), zipPath, onProgress, cancellationToken);
             await ExtractRuntimeArchiveAsync(zipPath, extractDirectory, onProgress, cancellationToken);
 
             var extractedFfmpeg = Directory.GetFiles(extractDirectory, "ffmpeg.exe", SearchOption.AllDirectories).FirstOrDefault();
@@ -59,9 +71,19 @@ public static class FfmpegRuntimeInstaller
         }
     }
 
-    private static async Task DownloadArchiveAsync(string destinationPath, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+    private static string GetRuntimeSource(Architecture architecture)
     {
-        using var response = await HttpClient.GetAsync(RuntimeSource, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        return architecture switch
+        {
+            Architecture.X64 => RuntimeSourceX64,
+            Architecture.Arm64 => throw new NotSupportedException("ffmpeg ARM64 bootstrap source is not configured yet. Configure an ARM64 source URL before enabling automatic ffmpeg bootstrap on ARM."),
+            _ => throw new NotSupportedException($"ffmpeg runtime bootstrap does not support architecture '{architecture}'.")
+        };
+    }
+
+    private static async Task DownloadArchiveAsync(string sourceUrl, string destinationPath, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+    {
+        using var response = await HttpClient.GetAsync(sourceUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var totalBytes = response.Content.Headers.ContentLength;

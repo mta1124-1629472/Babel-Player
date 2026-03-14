@@ -4,6 +4,11 @@ namespace BabelPlayer.App;
 
 public sealed class ResumePlaybackService
 {
+    private static readonly TimeSpan MinimumResumePosition = TimeSpan.FromSeconds(60);
+    private const double MinimumResumeProgressRatio = 0.05;
+    private const double FinalWindowRatio = 0.03;
+    private static readonly TimeSpan MinimumResumeDurationFallback = TimeSpan.FromMinutes(10);
+
     private readonly SettingsFacade _settingsFacade;
     private readonly Action<IReadOnlyList<PlaybackResumeEntry>>? _persistEntries;
     private readonly List<PlaybackResumeEntry> _entries;
@@ -23,8 +28,13 @@ public sealed class ResumePlaybackService
     public PlaybackResumeEntry? BuildEntry(PlaybackStateSnapshot snapshot)
     {
         if (string.IsNullOrWhiteSpace(snapshot.Path)
-            || snapshot.Duration <= TimeSpan.FromMinutes(2)
+            || snapshot.Duration <= TimeSpan.Zero
             || snapshot.Position <= TimeSpan.Zero)
+        {
+            return null;
+        }
+
+        if (!IsMeaningfulResumePosition(snapshot.Position, snapshot.Duration))
         {
             return null;
         }
@@ -54,24 +64,21 @@ public sealed class ResumePlaybackService
             return null;
         }
 
-        return entry.PositionSeconds < TimeSpan.FromMinutes(2).TotalSeconds
-            || entry.PositionSeconds >= duration.TotalSeconds * 0.95
-            ? null
-            : Clone(entry);
+        var position = TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, duration.TotalSeconds));
+        return IsMeaningfulResumePosition(position, duration)
+            ? Clone(entry)
+            : null;
     }
 
     public void Update(PlaybackStateSnapshot snapshot, bool forceRemoveCompleted = false)
     {
-        if (string.IsNullOrWhiteSpace(snapshot.Path) || snapshot.Duration <= TimeSpan.FromMinutes(2))
+        if (string.IsNullOrWhiteSpace(snapshot.Path) || snapshot.Duration <= TimeSpan.Zero)
         {
             return;
         }
 
         _entries.RemoveAll(entry => string.Equals(entry.Path, snapshot.Path, StringComparison.OrdinalIgnoreCase));
-        var completionRatio = snapshot.Duration.TotalSeconds <= 0
-            ? 0
-            : snapshot.Position.TotalSeconds / snapshot.Duration.TotalSeconds;
-        if (forceRemoveCompleted || completionRatio >= 0.95 || snapshot.Position < TimeSpan.FromMinutes(2))
+        if (forceRemoveCompleted || !IsMeaningfulResumePosition(snapshot.Position, snapshot.Duration))
         {
             Persist();
             return;
@@ -126,5 +133,39 @@ public sealed class ResumePlaybackService
             DurationSeconds = entry.DurationSeconds,
             UpdatedAt = entry.UpdatedAt
         };
+    }
+
+    private static bool IsMeaningfulResumePosition(TimeSpan position, TimeSpan duration)
+    {
+        if (duration <= TimeSpan.Zero)
+        {
+            return false;
+        }
+
+        var normalizedPosition = TimeSpan.FromSeconds(Math.Clamp(position.TotalSeconds, 0, duration.TotalSeconds));
+        if (normalizedPosition < MinimumResumePosition)
+        {
+            return false;
+        }
+
+        var minimumDuration = MinimumResumeDurationFallback;
+        if (duration < minimumDuration)
+        {
+            return false;
+        }
+
+        var minimumByPercent = TimeSpan.FromSeconds(duration.TotalSeconds * MinimumResumeProgressRatio);
+        if (normalizedPosition < minimumByPercent)
+        {
+            return false;
+        }
+
+        var finalWindowStart = TimeSpan.FromSeconds(duration.TotalSeconds * (1 - FinalWindowRatio));
+        if (normalizedPosition >= finalWindowStart)
+        {
+            return false;
+        }
+
+        return true;
     }
 }

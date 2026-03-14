@@ -20,7 +20,11 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore
-        run: dotnet restore BabelPlayer.sln
+        run: |
+          dotnet restore src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj
+          dotnet restore tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj
 
       - name: Verify formatting
-        run: dotnet format BabelPlayer.sln --verify-no-changes --no-restore
+        run: |
+          dotnet format src/BabelPlayer.Avalonia/BabelPlayer.Avalonia.csproj --verify-no-changes --no-restore
+          dotnet format tests/BabelPlayer.App.Tests/BabelPlayer.App.Tests.csproj --verify-no-changes --no-restore

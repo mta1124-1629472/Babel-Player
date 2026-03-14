@@ -386,6 +386,40 @@ public sealed class RemainingArchitecturePlanTests
         Assert.Empty(persisted!);
     }
 
+    [Theory]
+    [InlineData(59, 600, false)]
+    [InlineData(60, 600, true)]
+    [InlineData(120, 3000, false)]
+    [InlineData(150, 3000, true)]
+    [InlineData(582, 600, false)]
+    [InlineData(581, 600, true)]
+    [InlineData(120, 300, false)]
+    public void ResumePlaybackService_MeaningfulThresholds_AreApplied(double positionSeconds, double durationSeconds, bool shouldBeEligible)
+    {
+        var path = "C:\\Media\\movie.mp4";
+        var duration = TimeSpan.FromSeconds(durationSeconds);
+        var snapshot = new BabelPlayer.Core.PlaybackStateSnapshot
+        {
+            Path = path,
+            Position = TimeSpan.FromSeconds(positionSeconds),
+            Duration = duration
+        };
+
+        var service = new ResumePlaybackService(initialEntries: [], persistEntries: _ => { });
+
+        service.Update(snapshot);
+        var found = service.FindEntry(path, duration);
+
+        if (shouldBeEligible)
+        {
+            Assert.NotNull(found);
+            Assert.Equal(positionSeconds, found!.PositionSeconds);
+            return;
+        }
+
+        Assert.Null(found);
+    }
+
     [Fact]
     public async Task ResumeTrackingCoordinator_PersistsOnClockCadenceAndFlushesCompletedPlayback()
     {
@@ -536,7 +570,7 @@ public sealed class RemainingArchitecturePlanTests
         var resumeEntry = new PlaybackResumeEntry
         {
             Path = "C:\\Media\\movie.mp4",
-            PositionSeconds = 125,
+            PositionSeconds = 240,
             DurationSeconds = 3600,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -557,8 +591,304 @@ public sealed class RemainingArchitecturePlanTests
                 ResumeEnabled = true
             });
 
-        Assert.Equal(TimeSpan.FromSeconds(125), result.ResumePosition);
-        Assert.Equal(TimeSpan.FromSeconds(125), backend.LastSeekPosition);
+        Assert.Equal(ShellMediaOpenTrigger.Manual, result.OpenTrigger);
+        Assert.Equal(TimeSpan.FromSeconds(240), result.ResumePosition);
+        Assert.True(result.ResumeDecisionPending);
+        Assert.Equal("Resume available for movie.mp4 at 04:00.", result.StatusMessage);
+        Assert.Null(backend.LastSeekPosition);
+    }
+
+    [Fact]
+    public async Task ShellController_ApplyResumeDecision_ResumeSeeksAndPlaysExactlyOnce()
+    {
+        var queue = new PlaybackQueueController();
+        queue.PlayNow("C:\\Media\\movie.mp4");
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        var resumeEntry = new PlaybackResumeEntry
+        {
+            Path = "C:\\Media\\movie.mp4",
+            PositionSeconds = 240,
+            DurationSeconds = 3600,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        using var shell = CreateShellController(
+            queue,
+            backend,
+            workflow,
+            new ResumePlaybackService(initialEntries: [resumeEntry], persistEntries: _ => { }));
+
+        var opened = await shell.HandleMediaOpenedAsync(
+            new PlaybackStateSnapshot
+            {
+                Path = "C:\\Media\\movie.mp4",
+                Duration = TimeSpan.FromMinutes(60)
+            },
+            new ShellPreferencesSnapshot
+            {
+                ResumeEnabled = true
+            });
+
+        Assert.True(opened.ResumeDecisionPending);
+
+        var first = await shell.ApplyResumeDecisionAsync(ShellResumeDecision.Resume);
+        var second = await shell.ApplyResumeDecisionAsync(ShellResumeDecision.Resume);
+
+        Assert.True(first.DecisionApplied);
+        Assert.Equal("Resumed movie.mp4 at 04:00.", first.StatusMessage);
+        Assert.Equal(TimeSpan.FromSeconds(240), backend.LastSeekPosition);
+        Assert.Equal(1, backend.PlayCallCount);
+
+        Assert.False(second.DecisionApplied);
+        Assert.Equal("No pending resume decision.", second.StatusMessage);
+        Assert.Equal(1, backend.PlayCallCount);
+    }
+
+    [Fact]
+    public async Task ShellController_ApplyResumeDecision_StartOverClearsEntryAndSeeksZero()
+    {
+        var queue = new PlaybackQueueController();
+        queue.PlayNow("C:\\Media\\movie.mp4");
+        var backend = new FakeShellPlaybackBackend();
+        using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+        var resumeEntry = new PlaybackResumeEntry
+        {
+            Path = "C:\\Media\\movie.mp4",
+            PositionSeconds = 240,
+            DurationSeconds = 3600,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        var resumeService = new ResumePlaybackService(initialEntries: [resumeEntry], persistEntries: _ => { });
+
+        using var shell = CreateShellController(
+            queue,
+            backend,
+            workflow,
+            resumeService);
+
+        var opened = await shell.HandleMediaOpenedAsync(
+            new PlaybackStateSnapshot
+            {
+                Path = "C:\\Media\\movie.mp4",
+                Duration = TimeSpan.FromMinutes(60)
+            },
+            new ShellPreferencesSnapshot
+            {
+                ResumeEnabled = true
+            });
+
+        Assert.True(opened.ResumeDecisionPending);
+
+        var decision = await shell.ApplyResumeDecisionAsync(ShellResumeDecision.StartOver);
+
+        Assert.True(decision.DecisionApplied);
+        Assert.Equal("Starting movie.mp4 from the beginning.", decision.StatusMessage);
+        Assert.Equal(TimeSpan.Zero, backend.LastSeekPosition);
+        Assert.Equal(1, backend.PlayCallCount);
+        Assert.Null(resumeService.FindEntry("C:\\Media\\movie.mp4", TimeSpan.FromMinutes(60)));
+    }
+
+    [Fact]
+    public async Task ShellController_HandleMediaOpened_UsesLoadResumePolicy_WhenPreferencesChangeAfterLoad()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var mediaPath = Path.Combine(directory.FullName, "movie.mp4");
+            File.WriteAllText(mediaPath, string.Empty);
+
+            var queue = new PlaybackQueueController();
+            var backend = new FakeShellPlaybackBackend();
+            using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            var resumeEntry = new PlaybackResumeEntry
+            {
+                Path = mediaPath,
+                PositionSeconds = 240,
+                DurationSeconds = 3600,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+
+            using var shell = CreateShellController(
+                queue,
+                backend,
+                workflow,
+                new ResumePlaybackService(initialEntries: [resumeEntry], persistEntries: _ => { }));
+
+            var queued = shell.EnqueueFiles([mediaPath], autoplay: true);
+            var loaded = await shell.LoadPlaybackItemAsync(
+                queued.ItemToLoad,
+                new ShellLoadMediaOptions
+                {
+                    ResumeEnabled = false,
+                    OpenTrigger = ShellMediaOpenTrigger.Autoplay,
+                    PreviousPlaybackState = new PlaybackStateSnapshot()
+                },
+                CancellationToken.None);
+
+            Assert.True(loaded);
+
+            var result = await shell.HandleMediaOpenedAsync(
+                new PlaybackStateSnapshot
+                {
+                    Path = mediaPath,
+                    Duration = TimeSpan.FromMinutes(60)
+                },
+                new ShellPreferencesSnapshot
+                {
+                    ResumeEnabled = true
+                });
+
+            Assert.Equal(ShellMediaOpenTrigger.Autoplay, result.OpenTrigger);
+            Assert.Null(result.ResumePosition);
+            Assert.Equal("Autoplaying movie.mp4.", result.StatusMessage);
+            Assert.Null(backend.LastSeekPosition);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ShellController_HandleMediaOpened_ResumesFromLoadPolicyEvenWhenPreferenceIsDisabledAfterLoad()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var mediaPath = Path.Combine(directory.FullName, "movie.mp4");
+            File.WriteAllText(mediaPath, string.Empty);
+
+            var queue = new PlaybackQueueController();
+            var backend = new FakeShellPlaybackBackend();
+            using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            var resumeEntry = new PlaybackResumeEntry
+            {
+                Path = mediaPath,
+                PositionSeconds = 240,
+                DurationSeconds = 3600,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+
+            using var shell = CreateShellController(
+                queue,
+                backend,
+                workflow,
+                new ResumePlaybackService(initialEntries: [resumeEntry], persistEntries: _ => { }));
+
+            var queued = shell.EnqueueFiles([mediaPath], autoplay: true);
+            var loaded = await shell.LoadPlaybackItemAsync(
+                queued.ItemToLoad,
+                new ShellLoadMediaOptions
+                {
+                    ResumeEnabled = true,
+                    OpenTrigger = ShellMediaOpenTrigger.Autoplay,
+                    PreviousPlaybackState = new PlaybackStateSnapshot()
+                },
+                CancellationToken.None);
+
+            Assert.True(loaded);
+
+            var result = await shell.HandleMediaOpenedAsync(
+                new PlaybackStateSnapshot
+                {
+                    Path = mediaPath,
+                    Duration = TimeSpan.FromMinutes(60)
+                },
+                new ShellPreferencesSnapshot
+                {
+                    ResumeEnabled = false
+                });
+
+            Assert.Equal(ShellMediaOpenTrigger.Autoplay, result.OpenTrigger);
+            Assert.Equal(TimeSpan.FromSeconds(240), result.ResumePosition);
+            Assert.False(result.ResumeDecisionPending);
+            Assert.Equal("Autoplay resumed movie.mp4 at 04:00.", result.StatusMessage);
+            Assert.Equal(TimeSpan.FromSeconds(240), backend.LastSeekPosition);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ShellController_HandleMediaOpened_PathMismatchClearsPendingContext()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var mediaPathA = Path.Combine(directory.FullName, "a.mp4");
+            var mediaPathB = Path.Combine(directory.FullName, "b.mp4");
+            File.WriteAllText(mediaPathA, string.Empty);
+            File.WriteAllText(mediaPathB, string.Empty);
+
+            var queue = new PlaybackQueueController();
+            var backend = new FakeShellPlaybackBackend();
+            using var workflow = TestWorkflowControllerFactory.Create(new CredentialFacade(new FakeCredentialStore()), environmentVariableReader: _ => null);
+            var resumeEntry = new PlaybackResumeEntry
+            {
+                Path = mediaPathA,
+                PositionSeconds = 240,
+                DurationSeconds = 3600,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+
+            using var shell = CreateShellController(
+                queue,
+                backend,
+                workflow,
+                new ResumePlaybackService(initialEntries: [resumeEntry], persistEntries: _ => { }));
+
+            var queued = shell.EnqueueFiles([mediaPathA], autoplay: true);
+            var loaded = await shell.LoadPlaybackItemAsync(
+                queued.ItemToLoad,
+                new ShellLoadMediaOptions
+                {
+                    ResumeEnabled = false,
+                    OpenTrigger = ShellMediaOpenTrigger.Autoplay,
+                    PreviousPlaybackState = new PlaybackStateSnapshot()
+                },
+                CancellationToken.None);
+
+            Assert.True(loaded);
+
+            var mismatchResult = await shell.HandleMediaOpenedAsync(
+                new PlaybackStateSnapshot
+                {
+                    Path = mediaPathB,
+                    Duration = TimeSpan.FromMinutes(60)
+                },
+                new ShellPreferencesSnapshot
+                {
+                    ResumeEnabled = true
+                });
+
+            Assert.Equal(ShellMediaOpenTrigger.Manual, mismatchResult.OpenTrigger);
+            Assert.Null(mismatchResult.ResumePosition);
+            Assert.False(mismatchResult.ResumeDecisionPending);
+
+            var correctedResult = await shell.HandleMediaOpenedAsync(
+                new PlaybackStateSnapshot
+                {
+                    Path = mediaPathA,
+                    Duration = TimeSpan.FromMinutes(60)
+                },
+                new ShellPreferencesSnapshot
+                {
+                    ResumeEnabled = true
+                });
+
+            Assert.Equal(ShellMediaOpenTrigger.Manual, correctedResult.OpenTrigger);
+            Assert.Equal(TimeSpan.FromSeconds(240), correctedResult.ResumePosition);
+            Assert.True(correctedResult.ResumeDecisionPending);
+            Assert.Equal("Resume available for a.mp4 at 04:00.", correctedResult.StatusMessage);
+            Assert.Null(backend.LastSeekPosition);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
     }
 
     [Fact]
@@ -2192,6 +2522,7 @@ public sealed class RemainingArchitecturePlanTests
 
         public Task<bool> LoadPlaybackItemAsync(ShellPlaylistItem? item, ShellLoadMediaOptions options, CancellationToken cancellationToken) => Task.FromResult(item is not null);
         public Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(ShellPlaybackStateSnapshot snapshot, ShellPreferencesSnapshot preferences, CancellationToken cancellationToken = default) => Task.FromResult(new ShellPlaybackOpenResult());
+        public Task<ShellResumeDecisionResult> ApplyResumeDecisionAsync(ShellResumeDecision decision, CancellationToken cancellationToken = default) => Task.FromResult(new ShellResumeDecisionResult { DecisionApplied = true, StatusMessage = "ok" });
         public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled) => new();
         public Task PlayAsync(CancellationToken cancellationToken = default)
         {
