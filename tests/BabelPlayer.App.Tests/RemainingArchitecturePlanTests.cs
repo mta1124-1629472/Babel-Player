@@ -1915,36 +1915,7 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
-    public void MainWindow_Source_NoLongerDirectlyReferencesSettingsLibraryCredentialsShortcutServicesConcreteSubtitleControllerOrStaticSubtitleCatalogLookups()
-    {
-        var sourcePath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "..",
-            "src",
-            "BabelPlayer.WinUI",
-            "MainWindow.xaml.cs"));
-        var source = File.ReadAllText(sourcePath);
-
-        Assert.DoesNotContain("SettingsFacade", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("LibraryBrowserService", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("CredentialFacade", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("ShortcutService", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("SubtitleWorkflowController", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("_subtitleSourceOnlyOverrideVideoPath", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("_lastNonOffSubtitleRenderMode", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("_selectedAspectRatio", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("_audioDelaySeconds", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("_subtitleDelaySeconds", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("SubtitleWorkflowCatalog.GetTranscriptionModel", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("SubtitleWorkflowCatalog.GetTranslationModel", source, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void MainWindowPartials_DoNotDirectlyMutatePreferencesOrReferenceForbiddenConcreteWorkflowTypes()
+    public void WinUiSourceDirectory_IsRemoved()
     {
         var winUiDirectory = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -1955,19 +1926,8 @@ public sealed class RemainingArchitecturePlanTests
             "..",
             "src",
             "BabelPlayer.WinUI"));
-        var mainWindowFiles = Directory.GetFiles(winUiDirectory, "MainWindow*.cs", SearchOption.TopDirectoryOnly);
 
-        foreach (var file in mainWindowFiles)
-        {
-            var source = File.ReadAllText(file);
-
-            Assert.DoesNotContain("_shellPreferencesService.Apply", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("SettingsFacade", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("LibraryBrowserService", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("CredentialFacade", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("ShortcutService", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("SubtitleWorkflowController", source, StringComparison.Ordinal);
-        }
+        Assert.False(Directory.Exists(winUiDirectory));
     }
 
     [Fact]
@@ -1998,25 +1958,7 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
-    public void ShortcutEditorDialog_Source_NoLongerDirectlyReferencesShortcutService()
-    {
-        var sourcePath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "..",
-            "src",
-            "BabelPlayer.WinUI",
-            "ShortcutEditorDialog.cs"));
-        var source = File.ReadAllText(sourcePath);
-
-        Assert.DoesNotContain("ShortcutService", source, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WinUiProject_DoesNotReferenceCoreProject()
+    public void WinUiProjectFile_IsRemoved()
     {
         var projectPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -2028,27 +1970,8 @@ public sealed class RemainingArchitecturePlanTests
             "src",
             "BabelPlayer.WinUI",
             "BabelPlayer.WinUI.csproj"));
-        var source = File.ReadAllText(projectPath);
 
-        Assert.DoesNotContain("BabelPlayer.Core.csproj", source, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WinUiProject_ReferencesInfrastructureProject()
-    {
-        var projectPath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "..",
-            "src",
-            "BabelPlayer.WinUI",
-            "BabelPlayer.WinUI.csproj"));
-        var source = File.ReadAllText(projectPath);
-
-        Assert.Contains("BabelPlayer.Infrastructure.csproj", source, StringComparison.Ordinal);
+        Assert.False(File.Exists(projectPath));
     }
 
     [Fact]
@@ -2067,28 +1990,6 @@ public sealed class RemainingArchitecturePlanTests
         var source = File.ReadAllText(projectPath);
 
         Assert.DoesNotContain("BabelPlayer.Infrastructure.csproj", source, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WinUiSources_DoNotImportCoreNamespace()
-    {
-        var winUiDirectory = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "..",
-            "src",
-            "BabelPlayer.WinUI"));
-        var sourceFiles = Directory.GetFiles(winUiDirectory, "*.cs", SearchOption.AllDirectories);
-
-        foreach (var file in sourceFiles)
-        {
-            var source = File.ReadAllText(file);
-            Assert.DoesNotContain("using BabelPlayer.Core;", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("BabelPlayer.Core.", source, StringComparison.Ordinal);
-        }
     }
 
     [Fact]
@@ -2126,9 +2027,9 @@ public sealed class RemainingArchitecturePlanTests
     }
 
     [Fact]
-    public void AppXaml_Source_UsesTelemetrySeamInsteadOfCoreLoggingImplementations()
+    public void WinUiShellSources_AreRemovedFromRepository()
     {
-        var sourcePath = Path.GetFullPath(Path.Combine(
+        var appXamlPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
             "..",
             "..",
@@ -2138,44 +2039,7 @@ public sealed class RemainingArchitecturePlanTests
             "src",
             "BabelPlayer.WinUI",
             "App.xaml.cs"));
-        var source = File.ReadAllText(sourcePath);
-
-        Assert.Contains("IAppTelemetryBootstrap", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("using BabelPlayer.Core;", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("BabelLogManager", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("AppDiagnosticsContext", source, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ShellCompositionRoot_OnlyReturnsInterfacesOrApprovedWinUiLocalServices()
-    {
-        var allowedConcreteTypes = new HashSet<Type>
-        {
-            typeof(BabelPlayer.WinUI.WinUIWindowModeService),
-            typeof(BabelPlayer.WinUI.StageCoordinator)
-        };
-        var properties = typeof(BabelPlayer.WinUI.ShellDependencies).GetProperties();
-
-        foreach (var property in properties)
-        {
-            var propertyType = property.PropertyType;
-            var isAllowed = propertyType.IsInterface
-                || propertyType == typeof(IDisposable)
-                || allowedConcreteTypes.Contains(propertyType);
-
-            Assert.True(isAllowed, $"ShellDependencies.{property.Name} exposes disallowed concrete type {propertyType.FullName}.");
-
-            if (string.Equals(propertyType.Namespace, "BabelPlayer.App", StringComparison.Ordinal))
-            {
-                Assert.True(propertyType.IsInterface, $"ShellDependencies.{property.Name} must not return concrete App implementation {propertyType.FullName} outside the composition root.");
-            }
-        }
-    }
-
-    [Fact]
-    public void ShellCompositionRoot_DelegatesProviderAndRuntimeAssemblyToInfrastructureFactory()
-    {
-        var sourcePath = Path.GetFullPath(Path.Combine(
+        var shellCompositionRootPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
             "..",
             "..",
@@ -2185,22 +2049,13 @@ public sealed class RemainingArchitecturePlanTests
             "src",
             "BabelPlayer.WinUI",
             "ShellCompositionRoot.cs"));
-        var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("ISubtitleWorkflowInfrastructureFactory", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new RuntimeBootstrapService(", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new ProviderCompositionFactory(", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new AsrTranscriptionEngineFactory(", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new MtTranslationEngineFactory(", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new AiCredentialCoordinatorFactory(", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new DefaultRuntimeProvisioner(", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new DefaultSubtitleSourceResolver(", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new DefaultCaptionGenerator(", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new ProviderBackedSubtitleTranslator(", source, StringComparison.Ordinal);
+        Assert.False(File.Exists(appXamlPath));
+        Assert.False(File.Exists(shellCompositionRootPath));
     }
 
     [Fact]
-    public void AppViewModelDirectory_IsEmptyAfterMoveToWinUi()
+    public void AppViewModelDirectory_ContainsNoSourceFiles()
     {
         var viewModelDirectory = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
