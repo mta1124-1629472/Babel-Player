@@ -7,8 +7,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $solutionPath = Join-Path $repoRoot "BabelPlayer.sln"
-$projectPath = Join-Path $repoRoot "src\\BabelPlayer.WinUI\\BabelPlayer.WinUI.csproj"
-$exePath = Join-Path $repoRoot "src\\BabelPlayer.WinUI\\bin\\x64\\Debug\\net8.0-windows10.0.22621.0\\BabelPlayer.exe"
+$projectPath = Join-Path $repoRoot "src\\BabelPlayer.WinUI\\BabelPlayer.Avalonia.csproj"
+$exePath = Join-Path $repoRoot "\src\\BabelPlayer.Avalonia\bin\Debug\net9.0\BabelPlayer.Avalonia.exe"
 
 Push-Location $repoRoot
 try {
