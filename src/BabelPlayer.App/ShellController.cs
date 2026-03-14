@@ -323,6 +323,25 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
 
     public ShellPlaylistItem? MoveNext() => _playbackQueueController.MoveNext()?.ToShell();
 
+    public ShellQueueMediaResult ReorderQueueItem(int sourceIndex, int? targetIndex)
+    {
+        var reordered = _playbackQueueController.ReorderQueueItem(sourceIndex, targetIndex);
+        if (!reordered)
+        {
+            return new ShellQueueMediaResult
+            {
+                IsError = true,
+                StatusMessage = "Unable to reorder queue item."
+            };
+        }
+
+        _logger.LogInfo("Reordered queue item.", BabelLogContext.Create(("sourceIndex", sourceIndex), ("targetIndex", targetIndex)));
+        return new ShellQueueMediaResult
+        {
+            StatusMessage = "Queue order updated."
+        };
+    }
+
     public void RemoveQueueItemAt(int index)
     {
         _playbackQueueController.RemoveQueueItemAt(index);

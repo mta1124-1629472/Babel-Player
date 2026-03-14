@@ -55,6 +55,36 @@ public sealed class AppLayerTests
     }
 
     [Fact]
+    public void PlaybackQueueController_ReorderQueueItem_PreservesNowPlayingAndHistory()
+    {
+        var controller = new PlaybackQueueController();
+
+        controller.PlayNow("now.mp4");
+        controller.AddToQueue(["one.mp4", "two.mp4", "three.mp4"]);
+        controller.PlayNow("current.mp4");
+
+        var reordered = controller.ReorderQueueItem(0, 2);
+
+        Assert.True(reordered);
+        Assert.Equal("current.mp4", controller.NowPlayingItem?.Path);
+        Assert.Equal("now.mp4", controller.HistoryItems[0].Path);
+        Assert.Equal(new[] { "two.mp4", "one.mp4", "three.mp4" }, controller.QueueItems.Select(item => item.Path).ToArray());
+    }
+
+    [Fact]
+    public void PlaybackQueueController_ReorderQueueItem_MovesSingleDuplicatePathEntryByIndex()
+    {
+        var controller = new PlaybackQueueController();
+
+        controller.AddToQueue(["dup.mp4", "unique.mp4", "dup.mp4"]);
+
+        var reordered = controller.ReorderQueueItem(2, 0);
+
+        Assert.True(reordered);
+        Assert.Equal(new[] { "dup.mp4", "dup.mp4", "unique.mp4" }, controller.QueueItems.Select(item => item.Path).ToArray());
+    }
+
+    [Fact]
     public void ShortcutService_FindsConflictsAndNormalizesModifierOrder()
     {
         var service = new ShortcutService();
@@ -444,6 +474,7 @@ Hola
                 environmentVariableReader: _ => null);
 
             await controller.LoadMediaSubtitlesAsync(videoPath);
+            mediaSessionCoordinator.SetTranslationState(true, false);
             var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
             mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
             mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
@@ -467,7 +498,7 @@ Hola
     }
 
     [Fact]
-    public async Task SubtitleWorkflowController_UsesTranslatedFirstPresentationWhenSourceOnlyIsPersisted()
+    public async Task SubtitleWorkflowController_PreservesSourceOnlyEffectiveModeWhenTranslationExists()
     {
         var directory = Directory.CreateTempSubdirectory();
         try
@@ -506,9 +537,9 @@ Hola
             var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.SourceOnly);
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.SourceOnly);
 
-            Assert.Equal(SubtitleRenderMode.TranslationOnly, effectiveMode);
+            Assert.Equal(SubtitleRenderMode.SourceOnly, effectiveMode);
             Assert.True(presentation.IsVisible);
-            Assert.Equal("Hello", presentation.PrimaryText);
+            Assert.Equal("Hola", presentation.PrimaryText);
             Assert.Equal(string.Empty, presentation.SecondaryText);
         }
         finally
@@ -518,7 +549,7 @@ Hola
     }
 
     [Fact]
-    public async Task SubtitleWorkflowController_FallsBackToSourceTextWhenTranslatedTextIsNotReady()
+    public async Task SubtitleWorkflowController_TranslationOnlyDoesNotFallbackToSourceTextWhenTranslationIsDisabled()
     {
         var directory = Directory.CreateTempSubdirectory();
         try
@@ -543,7 +574,6 @@ Hola
 
             await controller.InitializeAsync();
             await controller.LoadMediaSubtitlesAsync(videoPath);
-            mediaSessionCoordinator.SetTranslationState(true, false);
             mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
                 TimeSpan.FromSeconds(1),
                 TimeSpan.FromMinutes(5),
@@ -554,8 +584,55 @@ Hola
 
             var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.TranslationOnly);
 
+            Assert.NotEqual("Hola", presentation.PrimaryText);
+            Assert.Equal(string.Empty, presentation.SecondaryText);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SubtitleWorkflowController_DualModeFallsBackToSourceWhenTranslationIsDisabled()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
+            var videoPath = Path.Combine(directory.FullName, "sample.mp4");
+            var sidecarPath = Path.Combine(directory.FullName, "sample.srt");
+            File.WriteAllText(videoPath, string.Empty);
+            File.WriteAllText(sidecarPath, """
+1
+00:00:00,000 --> 00:00:02,000
+Hola
+""");
+
+            var controller = TestWorkflowControllerFactory.Create(
+                new CredentialFacade(new FakeCredentialStore()),
+                mediaSessionCoordinator: mediaSessionCoordinator,
+                environmentVariableReader: _ => null);
+
+            await controller.LoadMediaSubtitlesAsync(videoPath);
+            var transcript = Assert.Single(mediaSessionCoordinator.Snapshot.Transcript.Segments);
+            mediaSessionCoordinator.UpsertTranslationSegment(CreateTranslationSegment(transcript, "Hello"));
+            mediaSessionCoordinator.SetTranslationState(false, false);
+            mediaSessionCoordinator.ApplyClock(new ClockSnapshot(
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMinutes(5),
+                1.0,
+                false,
+                true,
+                DateTimeOffset.UtcNow));
+
+            var effectiveMode = controller.GetEffectiveRenderMode(SubtitleRenderMode.Dual);
+            var presentation = controller.GetOverlayPresentation(SubtitleRenderMode.Dual);
+
+            Assert.Equal(SubtitleRenderMode.SourceOnly, effectiveMode);
             Assert.True(presentation.IsVisible);
             Assert.Equal("Hola", presentation.PrimaryText);
+            Assert.Equal(string.Empty, presentation.SecondaryText);
         }
         finally
         {

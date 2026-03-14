@@ -152,6 +152,36 @@ public sealed class PlaybackQueueController
         RaiseSnapshotChanged();
     }
 
+    public bool ReorderQueueItem(int sourceIndex, int? targetIndex)
+    {
+        if (sourceIndex < 0 || sourceIndex >= _queueItems.Count)
+        {
+            return false;
+        }
+
+        var item = _queueItems[sourceIndex];
+        _queueItems.RemoveAt(sourceIndex);
+
+        int insertIndex;
+        if (targetIndex is null)
+        {
+            insertIndex = _queueItems.Count;
+        }
+        else
+        {
+            var requestedTarget = targetIndex.Value;
+            insertIndex = Math.Clamp(requestedTarget, 0, _queueItems.Count);
+            if (sourceIndex < requestedTarget)
+            {
+                insertIndex = Math.Max(0, insertIndex - 1);
+            }
+        }
+
+        _queueItems.Insert(insertIndex, item);
+        RaiseSnapshotChanged();
+        return true;
+    }
+
     public void ClearQueue()
     {
         if (_queueItems.Count == 0)

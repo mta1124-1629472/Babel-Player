@@ -2159,6 +2159,7 @@ public sealed class RemainingArchitecturePlanTests
             MoveNextCalls++;
             return new ShellPlaylistItem { Path = "next.mp4", DisplayName = "next.mp4" };
         }
+        public ShellQueueMediaResult ReorderQueueItem(int sourceIndex, int? targetIndex) => new() { StatusMessage = "Queue order updated." };
         public void RemoveQueueItemAt(int index) { }
         public void ClearQueue() { }
     }

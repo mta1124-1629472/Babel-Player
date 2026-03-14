@@ -29,6 +29,8 @@ public interface IQueueCommands
 
     ShellPlaylistItem? MoveNext();
 
+    ShellQueueMediaResult ReorderQueueItem(int sourceIndex, int? targetIndex);
+
     void RemoveQueueItemAt(int index);
 
     void ClearQueue();

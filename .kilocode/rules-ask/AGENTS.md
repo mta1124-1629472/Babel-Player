@@ -1,0 +1,25 @@
+# Project Documentation Rules (Non-Obvious Only)
+
+- The canonical state model is defined in MediaSession (single source of truth); documentation about timeline/playback position should reference this.
+- All timed state changes flow through MediaSessionCoordinator; documentation about playback controls should mention this mediator.
+- Shell/WinUI is strictly view-only; documentation should not attribute business logic to MainWindow*.cs files.
+- Presenters are stateless adapters; documentation should clarify they only render what App layer provides via projections.
+- WinUI can ONLY depend on specific approved App interfaces; documentation should reference ShellInterfaceBoundaryRule.md for the exact list.
+- Forbidden WinUI dependencies (CredentialFacade, ShortcutService, etc.) must never appear in WinUI code; documentation should warn against using them.
+- State flow: MediaSession → App projections (immutable snapshots) → Shell observes → Presenter renders; documentation should follow this data flow.
+- Platform-native code (mpv, Win32, DirectX) is isolated in Infrastructure/Playback layers; documentation should not suggest App layer contains these details.
+- Cross-layer communication requires immutable projections; documentation should emphasize Shell never writes directly to App state.
+- Queue management, playback orchestration, subtitle workflows, credential readiness logic, and shortcut normalization belong in App layer; documentation should reflect this ownership.
+- Preferences are controlled by App layer; documentation should state WinUI only reads preferences via snapshot events and updates through IShellPreferencesService intent methods.
+- Shortcut semantics are controlled by App layer; documentation should explain WinUI only captures keyboard events and forwards them via IShortcutCommandExecutor.
+- Library browsing is projection-based; documentation should clarify WinUI may construct TreeView nodes but queue mutations must not originate in UI layer.
+- Private fields use _camelCase naming; documentation should follow this convention when referencing fields.
+- UI threading: always use async/await; documentation should warn against blocking UI thread.
+- Cross-thread updates use DispatcherQueue for shell observations; documentation should mention this mechanism.
+- Error handling: log exceptions with context via IBabelLogger/ILogger<T>; documentation should reference this pattern.
+- Snapshot-driven UI is preferred over control-local state; documentation should recommend observing projections rather than managing local state.
+- Seam tests validate presenter/backend contracts without full shell; documentation should reference this testing approach.
+- MediaSessionCoordinator tests must cover state transitions; documentation should point to test coverage for state changes.
+- Test MediaSession projections in isolation; documentation should mention this testing strategy.
+- Integration tests require Windows environment (mpv runtime, transcription services); documentation should note this requirement.
+- Test files must be in tests/BabelPlayer.App.Tests/ following *Tests.cs naming; documentation should follow this convention.

@@ -1,0 +1,22 @@
+# Project Debug Rules (Non-Obvious Only)
+
+- MediaSession is the single source of truth for timed state; debugging timeline issues requires checking MediaSessionCoordinator mutations, not UI controls.
+- All timed state changes flow through MediaSessionCoordinator; set breakpoints in its Update methods to trace state changes.
+- Shell layer is view-only; if you see business logic in MainWindow*.cs files, it violates architecture and should be moved to App layer controllers.
+- Presenters are stateless adapters; debugging renderer issues requires checking what App layer passes to them via shell projections.
+- Cross-layer communication uses immutable projections; shell never writes directly to App state; debug by observing snapshot events.
+- Platform-native code (mpv, Win32, DirectX) is isolated in Infrastructure/Playback layers; playback issues often originate here.
+- Seam tests validate presenter/backend contracts without full shell; useful for isolating renderer issues.
+- MediaSessionCoordinator tests must cover state transitions; check tests/BabelPlayer.App.Tests for state transition coverage.
+- Test MediaSession projections in isolation to verify snapshot correctness.
+- Integration tests require Windows environment (mpv runtime, transcription services); they test real playback scenarios.
+- Test files must be in tests/BabelPlayer.App.Tests/ following *Tests.cs naming convention.
+- Private fields use _camelCase naming; useful for debugging and inspection.
+- UI threading: always use async/await; never block UI thread; debugging hangs often reveals blocking calls.
+- Cross-thread updates use DispatcherQueue for shell observations; debug threading issues here.
+- Error handling: log exceptions with context via IBabelLogger/ILogger<T>; check logs for exception details.
+- Snapshot-driven UI preferred over control-local state; debug by examining snapshots rather than UI control state.
+- Forbidden WinUI dependencies: if you see references to CredentialFacade, ShortcutService, etc. in WinUI, it's an architecture violation.
+- WinUI can ONLY depend on specific approved App interfaces; check ShellInterfaceBoundaryRule.md for the list.
+- State flow: MediaSession → App projections (immutable snapshots) → Shell observes → Presenter renders; debug by following this flow.
+- Platform-native code must be isolated; if you see mpv/Win32/DirectX types in App layer, it's a layering violation.

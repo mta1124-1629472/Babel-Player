@@ -28,6 +28,7 @@ public partial class MainWindow
     private ShellQueueSnapshot _currentQueueSnapshot = new();
     private ShellLibrarySnapshot _currentLibrarySnapshot = new();
     private string? _draggedQueuePath;
+    private ShellPlaylistItem? _draggedQueueItem;
 
     private void InitializePanelControls()
     {
@@ -316,6 +317,7 @@ public partial class MainWindow
         }
 
         _draggedQueuePath = item.Path;
+        _draggedQueueItem = item;
         var data = new DataTransfer();
         data.Add(DataTransferItem.Create(PlaylistDragFormat, item.Path));
         try
@@ -325,6 +327,7 @@ public partial class MainWindow
         finally
         {
             _draggedQueuePath = null;
+            _draggedQueueItem = null;
         }
 
         e.Handled = true;
@@ -339,14 +342,20 @@ public partial class MainWindow
 
     private async void PlaylistQueueListBox_Drop(object? sender, DragEventArgs e)
     {
-        var sourcePath = await GetDraggedQueuePathAsync(e);
-        if (string.IsNullOrWhiteSpace(sourcePath))
+        if (_draggedQueueItem is null)
+        {
+            return;
+        }
+
+        var sourceIndex = FindQueueItemIndex(_draggedQueueItem);
+        if (sourceIndex < 0)
         {
             return;
         }
 
         var targetItem = FindQueueItemFromEventSource(e.Source);
-        await ReorderQueueAsync(sourcePath, targetItem?.Path);
+        var targetIndex = targetItem is null ? null : FindQueueItemIndex(targetItem);
+        await ReorderQueueAsync(sourceIndex, targetIndex);
         e.Handled = true;
     }
 
@@ -360,43 +369,38 @@ public partial class MainWindow
         return Task.FromResult(e.DataTransfer.TryGetValue(PlaylistDragFormat));
     }
 
-    private async Task ReorderQueueAsync(string sourcePath, string? targetPath)
+    private async Task ReorderQueueAsync(int sourceIndex, int? targetIndex)
     {
-        var reordered = _currentQueueSnapshot.QueueItems.ToList();
-        var sourceIndex = reordered.FindIndex(item => string.Equals(item.Path, sourcePath, StringComparison.OrdinalIgnoreCase));
-        if (sourceIndex < 0)
-        {
-            return;
-        }
-
-        var sourceItem = reordered[sourceIndex];
-        reordered.RemoveAt(sourceIndex);
-
-        if (string.IsNullOrWhiteSpace(targetPath))
-        {
-            reordered.Add(sourceItem);
-        }
-        else
-        {
-            var targetIndex = reordered.FindIndex(item => string.Equals(item.Path, targetPath, StringComparison.OrdinalIgnoreCase));
-            if (targetIndex < 0)
-            {
-                reordered.Add(sourceItem);
-            }
-            else
-            {
-                reordered.Insert(targetIndex, sourceItem);
-            }
-        }
-
-        _shell.QueueCommands.ClearQueue();
-        var result = _shell.QueueCommands.AddToQueue(reordered.Select(item => item.Path));
+        var result = _shell.QueueCommands.ReorderQueueItem(sourceIndex, targetIndex);
         if (!string.IsNullOrWhiteSpace(result.StatusMessage))
         {
-            UpdateStatus("Queue order updated.");
+            UpdateStatus(result.StatusMessage);
         }
 
         await Task.CompletedTask;
+    }
+
+    private int FindQueueItemIndex(ShellPlaylistItem item)
+    {
+        for (var index = 0; index < _playlistQueueItems.Count; index++)
+        {
+            if (ReferenceEquals(_playlistQueueItems[index], item))
+            {
+                return index;
+            }
+        }
+
+        for (var index = 0; index < _playlistQueueItems.Count; index++)
+        {
+            var candidate = _playlistQueueItems[index];
+            if (string.Equals(candidate.Path, item.Path, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(candidate.DisplayName, item.DisplayName, StringComparison.Ordinal))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private static ShellPlaylistItem? FindQueueItemFromEventSource(object? source)
