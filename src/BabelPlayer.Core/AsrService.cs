@@ -1,5 +1,6 @@
 using NAudio.Wave;
 using System.Net.Http.Headers;
+using System.Runtime.Versioning;
 using System.Speech.Recognition;
 using System.Text.Json;
 using Whisper.net;
@@ -116,6 +117,7 @@ public class AsrService
         }
     }
 
+    [SupportedOSPlatform("windows")]
     public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoWithWindowsSpeechAsync(
         string videoPath,
         string? languageHint,
@@ -161,7 +163,11 @@ public class AsrService
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning("Whisper transcription failed, falling back to Windows Speech.", ex, BabelLogContext.Create(("wavePath", wavePath), ("languageHint", languageHint), ("localModelType", localModelType.ToString())));
-            return await RunOnStaThreadAsync(() => TranscribeWithWindowsSpeech(wavePath, languageHint, cancellationToken), cancellationToken);
+            if (OperatingSystem.IsWindows())
+            {
+                return await RunOnStaThreadAsync(() => TranscribeWithWindowsSpeech(wavePath, languageHint, cancellationToken), cancellationToken);
+            }
+            throw;
         }
     }
 
@@ -317,13 +323,14 @@ public class AsrService
             }
         });
 
-        thread.SetApartmentState(ApartmentState.STA);
+        thread.TrySetApartmentState(ApartmentState.STA);
         thread.Start();
 
         using var _ = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
         return await completion.Task;
     }
 
+    [SupportedOSPlatform("windows")]
     private IReadOnlyList<SubtitleCue> TranscribeWithWindowsSpeech(string wavePath, string? languageHint, CancellationToken cancellationToken)
     {
         var recognizerInfo = SelectRecognizer(languageHint);
@@ -470,6 +477,7 @@ public class AsrService
         return cues.OrderBy(c => c.Start).ToList();
     }
 
+    [SupportedOSPlatform("windows")]
     private static RecognizerInfo SelectRecognizer(string? languageHint)
     {
         var installed = SpeechRecognitionEngine.InstalledRecognizers().ToList();

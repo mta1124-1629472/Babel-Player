@@ -843,7 +843,7 @@ public partial class MainWindow : Window
 
     private void HandleWindowDragOver(object? sender, DragEventArgs e)
     {
-        var files = GetDroppedVideoPaths(e.Data);
+        var files = GetDroppedVideoPaths(e.DataTransfer);
         e.DragEffects = files.Count > 0 ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
@@ -852,7 +852,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var files = GetDroppedVideoPaths(e.Data);
+            var files = GetDroppedVideoPaths(e.DataTransfer);
             if (files.Count == 0)
             {
                 UpdateStatus("Drop a supported video file to start playback.");
@@ -1298,16 +1298,16 @@ public partial class MainWindow : Window
         });
     }
 
-    private static IReadOnlyList<string> GetDroppedVideoPaths(IDataObject data)
+    private static IReadOnlyList<string> GetDroppedVideoPaths(IDataTransfer data)
     {
-        var files = data.GetFiles();
-        if (files is null)
+        var items = data.TryGetFiles();
+        if (items is null)
         {
             return [];
         }
 
-        return files
-            .Select(file => file.TryGetLocalPath())
+        return items
+            .Select(item => item.TryGetLocalPath())
             .Where(path => !string.IsNullOrWhiteSpace(path) && IsSupportedVideoPath(path))
             .Cast<string>()
             .ToArray();

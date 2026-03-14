@@ -2650,11 +2650,11 @@ public sealed class RemainingArchitecturePlanTests
         public double LastAudioDelay { get; private set; }
 
         public event Action<PlaybackBackendState>? StateChanged;
-        public event Action<IReadOnlyList<MediaTrackInfo>>? TracksChanged;
+        public event Action<IReadOnlyList<MediaTrackInfo>>? TracksChanged { add { } remove { } }
         public event Action? MediaOpened;
-        public event Action? MediaEnded;
-        public event Action<string>? MediaFailed;
-        public event Action<RuntimeInstallProgress>? RuntimeInstallProgress;
+        public event Action? MediaEnded { add { } remove { } }
+        public event Action<string>? MediaFailed { add { } remove { } }
+        public event Action<RuntimeInstallProgress>? RuntimeInstallProgress { add { } remove { } }
 
         private readonly FakePlaybackClock _clock = new();
         public IPlaybackClock Clock => _clock;

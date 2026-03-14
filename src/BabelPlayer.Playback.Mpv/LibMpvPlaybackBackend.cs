@@ -26,7 +26,8 @@ public sealed class LibMpvPlaybackBackend : IPlaybackBackend
     public event Action? MediaOpened;
     public event Action? MediaEnded;
     public event Action<string>? MediaFailed;
-    public event Action<RuntimeInstallProgress>? RuntimeInstallProgress;
+    // This backend ships with a bundled native library and never triggers a runtime install.
+    public event Action<RuntimeInstallProgress>? RuntimeInstallProgress { add { } remove { } }
 
     public IPlaybackClock Clock => _clock;
     public PlaybackBackendState State { get { lock (_sync) { return _state; } } }

@@ -54,7 +54,7 @@ jobs:
         if: steps.arch_precheck.outputs.skip_runtime != 'true'
         shell: pwsh
         run: |
-          $publishDir = (Resolve-Path "src/BabelPlayer.Avalonia/bin/Release/net9.0/${{ matrix.runtime }}/publish").Path
+          $publishDir = (Resolve-Path "src/BabelPlayer.Avalonia/bin/Release/net9.0-windows10.0.22621.0/${{ matrix.runtime }}/publish").Path
           $rawVersion = if ("${{ github.ref }}".StartsWith("refs/tags/")) { "${{ github.ref_name }}" } else { "${{ github.sha }}" }
           $releaseVersion = if ($rawVersion.StartsWith("v")) { $rawVersion.Substring(1) } else { $rawVersion }
           $archiveDir = (Join-Path (Get-Location) "artifacts")

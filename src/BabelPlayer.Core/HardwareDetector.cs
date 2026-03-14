@@ -1,10 +1,12 @@
 using System.Management;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace BabelPlayer.Core;
 
 public static class HardwareDetector
 {
+    [SupportedOSPlatform("windows")]
     public static string GetSummary()
     {
         var gpuInfo = GetGpuSummary();
@@ -23,6 +25,7 @@ public static class HardwareDetector
         return "Accelerator: CPU";
     }
 
+    [SupportedOSPlatform("windows")]
     private static (string PreferredGpuName, bool HasDedicatedGpu, bool HasNvidiaGpu) GetGpuSummary()
     {
         try

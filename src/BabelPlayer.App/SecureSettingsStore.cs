@@ -1,9 +1,11 @@
 using System.IO;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace BabelPlayer.App;
 
+[SupportedOSPlatform("windows")]
 public static class SecureSettingsStore
 {
     private static readonly string SettingsDirectory = Path.Combine(

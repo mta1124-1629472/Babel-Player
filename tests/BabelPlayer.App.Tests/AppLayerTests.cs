@@ -1330,7 +1330,7 @@ Hola
 
     private sealed class ThrowingWarmupSubtitleTranslator : ISubtitleTranslator
     {
-        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged;
+        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged { add { } remove { } }
 
         public Task WarmupAsync(TranslationModelSelection selection, CancellationToken cancellationToken)
             => Task.FromException(new InvalidOperationException("warmup failed"));
@@ -1348,7 +1348,7 @@ Hola
         private int _batchCallCount;
         private int _translateCallCount;
 
-        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged;
+        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged { add { } remove { } }
 
         public int BatchCallCount => Volatile.Read(ref _batchCallCount);
         public int TranslateCallCount => Volatile.Read(ref _translateCallCount);
@@ -1386,7 +1386,7 @@ Hola
         private readonly TaskCompletionSource<string> _translateCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _translateCallCount;
 
-        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged;
+        public event Action<LocalTranslationRuntimeStatus>? RuntimeStatusChanged { add { } remove { } }
 
         public int TranslateCallCount => Volatile.Read(ref _translateCallCount);
 

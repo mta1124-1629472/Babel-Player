@@ -13,7 +13,7 @@ if ([string]::IsNullOrWhiteSpace($Runtime)) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repoRoot "src\BabelPlayer.Avalonia\BabelPlayer.Avalonia.csproj"
-$exePath = Join-Path $repoRoot "src\BabelPlayer.Avalonia\bin\Debug\net9.0\$Runtime\BabelPlayer.Avalonia.exe"
+$exePath = Join-Path $repoRoot "src\BabelPlayer.Avalonia\bin\Debug\net9.0-windows10.0.22621.0\$Runtime\BabelPlayer.Avalonia.exe"
 
 Push-Location $repoRoot
 try {
