@@ -1,6 +1,7 @@
 using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
+
 using System.Diagnostics;
 
 public sealed partial class SubtitleApplicationService

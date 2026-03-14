@@ -406,7 +406,7 @@ public sealed partial class MainWindow
             UpdateDelayFlyoutLabels(subtitleDelayFlyoutSubItem, audioDelayFlyoutSubItem);
             themeToggleMenuItem.IsChecked = ViewModel.IsDarkTheme;
             resumePlaybackToggleItem.IsChecked = ViewModel.Settings.ResumeEnabled;
-        exportCurrentSubtitlesFlyoutItem.IsEnabled = _subtitleWorkflowService.Current.Cues.Count > 0;
+            exportCurrentSubtitlesFlyoutItem.IsEnabled = _subtitleWorkflowService.Current.Cues.Count > 0;
         }
 
         return flyout;

@@ -179,14 +179,14 @@ public sealed class LoggingInfrastructureTests
                     UpNextCount = 2,
                     HistoryCount = 1
                 },
-            SubtitleWorkflow = new CoreSubtitleWorkflowDiagnosticsSummary
-            {
-                SubtitleSource = "Sidecar",
-                SelectedTranscriptionModelKey = "local:base-multilingual",
-                SelectedTranslationModelKey = "cloud:gpt-5-mini",
-                IsTranslationEnabled = true,
-                SourceLanguage = "ja"
-            }
+                SubtitleWorkflow = new CoreSubtitleWorkflowDiagnosticsSummary
+                {
+                    SubtitleSource = "Sidecar",
+                    SelectedTranscriptionModelKey = "local:base-multilingual",
+                    SelectedTranslationModelKey = "cloud:gpt-5-mini",
+                    IsTranslationEnabled = true,
+                    SourceLanguage = "ja"
+                }
             });
 
         var content = File.ReadAllText(Path.Combine(directory, "crash.log"));

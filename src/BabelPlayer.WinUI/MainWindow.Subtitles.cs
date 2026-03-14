@@ -31,7 +31,7 @@ public sealed partial class MainWindow
 
         try
         {
-        var result = await _subtitleWorkflowService.ImportExternalSubtitlesAsync(subtitlePath, autoLoaded: false);
+            var result = await _subtitleWorkflowService.ImportExternalSubtitlesAsync(subtitlePath, autoLoaded: false);
             ShowStatus($"Imported {Path.GetFileName(subtitlePath)} with {result.CueCount} cues.");
         }
         catch (Exception ex)
