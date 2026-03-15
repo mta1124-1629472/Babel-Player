@@ -57,3 +57,10 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+###############################################################################
+# Shell scripts — always LF, always executable
+# Prevents CRLF corruption and "bad interpreter" errors on Linux/macOS
+###############################################################################
+*.sh        text eol=lf diff
+build.sh    text eol=lf eol=lf
+linux/*.sh  text eol=lf
