@@ -17,7 +17,7 @@ public sealed class LibMpvPlaybackBackend : IPlaybackBackend
     private bool _initialized;
     private PlaybackBackendState _state = new() { Volume = 0.8 };
     private ClockSnapshot _clockSnapshot = new(TimeSpan.Zero, TimeSpan.Zero, 1.0, true, false, DateTimeOffset.UtcNow);
-    private HardwareDecodingMode _hardwareDecodingMode = HardwareDecodingMode.AutoSafe;
+    private HardwareDecodingMode _hardwareDecodingMode = HardwareDecodingMode.Auto;
     private int? _selectedAudioTrackId;
     private int? _selectedSubtitleTrackId;
 
@@ -445,10 +445,13 @@ public sealed class LibMpvPlaybackBackend : IPlaybackBackend
 
     private static string MapHardwareDecodingMode(HardwareDecodingMode mode) => mode switch
     {
-        HardwareDecodingMode.D3D11 => "d3d11va",
-        HardwareDecodingMode.Nvdec => "nvdec",
+        HardwareDecodingMode.Auto     => "auto",
+        HardwareDecodingMode.AutoSafe => "auto-safe",
+        HardwareDecodingMode.D3D11    => "d3d11va",
+        HardwareDecodingMode.Nvdec    => "nvdec",
+        HardwareDecodingMode.Cuda     => "cuda",
         HardwareDecodingMode.Software => "no",
-        _ => "auto-safe"
+        _                             => "auto"
     };
 
     private sealed class BackendPlaybackClock : IPlaybackClock

@@ -20,10 +20,12 @@ public enum SubtitleRenderMode
 
 public enum HardwareDecodingMode
 {
-    AutoSafe,
-    D3D11,
-    Nvdec,
-    Software
+    Auto,        // "auto" — tries all available decoders
+    AutoSafe,    // "auto-safe" — conservative default
+    D3D11,       // "d3d11va" — Direct3D 11 VA (AMD/Intel/NVIDIA on Windows)
+    Nvdec,       // "nvdec" — NVIDIA NVDEC explicit
+    Cuda,        // "cuda" — NVIDIA CUDA copy mode (full CUDA path)
+    Software     // "no" — software decode only
 }
 
 public enum PlaybackWindowMode
@@ -132,7 +134,7 @@ public sealed class ShortcutProfile
 
 public sealed record AppPlayerSettings
 {
-    public HardwareDecodingMode HardwareDecodingMode { get; init; } = HardwareDecodingMode.AutoSafe;
+    public HardwareDecodingMode HardwareDecodingMode { get; init; } = HardwareDecodingMode.Auto;
     public SubtitleRenderMode SubtitleRenderMode { get; init; } = SubtitleRenderMode.TranslationOnly;
     public SubtitleStyleSettings SubtitleStyle { get; init; } = new();
     public ShortcutProfile ShortcutProfile { get; init; } = ShortcutProfile.CreateDefault();
