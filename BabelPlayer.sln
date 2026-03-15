@@ -105,6 +105,7 @@ Global
 		{2E6D8A69-4700-48EA-97EA-0438EA506019}.Release|x64.Build.0 = Release|Any CPU
 		{2E6D8A69-4700-48EA-97EA-0438EA506019}.Release|x86.ActiveCfg = Release|Any CPU
 		{2E6D8A69-4700-48EA-97EA-0438EA506019}.Release|x86.Build.0 = Release|Any CPU
+		{EACB6C2A-43FF-49B7-9DCD-F6A31CC7E844} = {969E6808-B545-4324-B4DD-F71155852524}
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
