@@ -36,9 +36,9 @@ class Build : NukeBuild
 
     // libmpv dev packages from https://github.com/shinchiro/mpv-winbuild-cmake/releases
     // Update URL + SHA256 together whenever bumping the mpv version.
-    const string LibMpvArchiveX64        = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-x86_64-20260307-git-f9190e5.7z";
-    const string LibMpvArchiveX64Sha256  = "274db632b4a1849f392e2044bbeafd1e7079acd04b3eb281a03a9769a1c48bf6";
-    const string LibMpvArchiveArm64      = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-aarch64-20260307-git-f9190e5.7z";
+    const string LibMpvArchiveX64         = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-x86_64-20260307-git-f9190e5.7z";
+    const string LibMpvArchiveX64Sha256   = "274db632b4a1849f392e2044bbeafd1e7079acd04b3eb281a03a9769a1c48bf6";
+    const string LibMpvArchiveArm64       = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-aarch64-20260307-git-f9190e5.7z";
     const string LibMpvArchiveArm64Sha256 = "faefb9d3c75d19df1d52d86f9316340f472ba81c76d3c400362d82c61ab11b39";
 
     [Parameter("Release version token for artifact names. Defaults to tag name or commit SHA when available")]
@@ -132,21 +132,36 @@ class Build : NukeBuild
 
     Target ReleaseRuntimeWinX64   => _ => _.DependsOn(PackagePortableWinX64,   BuildInstallerWinX64);
     Target ReleaseRuntimeWinArm64 => _ => _.DependsOn(PackagePortableWinArm64, BuildInstallerWinArm64);
-    Target ReleasePackage         => _ => _.DependsOn(ReleaseRuntimeWinX64,    ReleaseRuntimeWinArm64, ReleaseRuntimeLinuxX64);
 
     // ── Linux targets ──────────────────────────────────────────────────────────
-    // libmpv is a system package on Linux (apt install libmpv-dev / libmpv2).
-    // No native asset bundling needed — users must have libmpv installed.
+    // libmpv is a system package on Linux (apt install libmpv2).
+    // AppImageBuilder.sh bundles it into the AppImage for zero-dependency distribution.
 
     Target PublishLinuxX64 => _ => _
         .DependsOn(Restore)
         .Executes(() => PublishRuntime("linux-x64"));
 
+    Target PublishLinuxArm64 => _ => _
+        .DependsOn(Restore)
+        .Executes(() => PublishRuntime("linux-arm64"));
+
     Target PackagePortableLinuxX64 => _ => _
         .DependsOn(PublishLinuxX64)
         .Executes(() => PackagePortableTar("linux-x64"));
 
-    Target ReleaseRuntimeLinuxX64 => _ => _.DependsOn(PackagePortableLinuxX64);
+    Target PackagePortableLinuxArm64 => _ => _
+        .DependsOn(PublishLinuxArm64)
+        .Executes(() => PackagePortableTar("linux-arm64"));
+
+    Target ReleaseRuntimeLinuxX64   => _ => _.DependsOn(PackagePortableLinuxX64);
+    Target ReleaseRuntimeLinuxArm64 => _ => _.DependsOn(PackagePortableLinuxArm64);
+
+    // ── Full release ────────────────────────────────────────────────────────────
+    Target ReleasePackage => _ => _.DependsOn(
+        ReleaseRuntimeWinX64,
+        ReleaseRuntimeWinArm64,
+        ReleaseRuntimeLinuxX64,
+        ReleaseRuntimeLinuxArm64);
 
     // ── Native asset fetch targets (Windows only) ──────────────────────────────
 
@@ -190,7 +205,6 @@ class Build : NukeBuild
         Directory.CreateDirectory(ArtifactsDirectory);
         var archivePath = ArtifactsDirectory / $"BabelPlayer-{GetRawVersionToken()}-portable-{runtime}.tar.gz";
         if (File.Exists(archivePath)) File.Delete(archivePath);
-        // Use tar (available on all modern Linux and GitHub Actions ubuntu runners)
         ProcessTasks.StartProcess("tar", $"-czf \"{archivePath}\" -C \"{publishDir}\" .")
             .AssertZeroExitCode();
         Console.WriteLine($"Portable archive: {archivePath}");
@@ -238,10 +252,11 @@ class Build : NukeBuild
 
     static string GetRuntimeSuffix(string runtime) => runtime switch
     {
-        "win-x64"   => "win-x64",
-        "win-arm64" => "win-arm64",
-        "linux-x64" => "linux-x64",
-        _           => runtime.Replace(' ', '-')
+        "win-x64"     => "win-x64",
+        "win-arm64"   => "win-arm64",
+        "linux-x64"   => "linux-x64",
+        "linux-arm64" => "linux-arm64",
+        _             => runtime.Replace(' ', '-')
     };
 
     static string GetInnoSetupExecutablePath()

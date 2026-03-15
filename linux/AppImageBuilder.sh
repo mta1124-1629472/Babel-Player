@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
 # AppImageBuilder.sh
-# Packages the published linux-x64 output into a self-contained AppImage.
+# Packages the published linux output into a self-contained AppImage.
 #
 # Prerequisites (installed automatically by the CI job, or manually for local builds):
-#   - appimagetool  (downloaded from GitHub Releases)
+#   - appimagetool  (downloaded automatically from GitHub Releases)
 #   - libmpv2 / libmpv.so.2  (apt install libmpv2)
 #
 # Usage:
-#   bash linux/AppImageBuilder.sh <publish_dir> <output_dir> <version>
+#   bash linux/AppImageBuilder.sh <publish_dir> <output_dir> <version> [arch]
 #
-# Example:
-#   bash linux/AppImageBuilder.sh artifacts/publish/linux-x64 artifacts v1.0.0
+# arch defaults to x86_64. Use aarch64 for arm64 builds.
+#
+# Examples:
+#   bash linux/AppImageBuilder.sh artifacts/publish/linux-x64   artifacts v1.0.0
+#   bash linux/AppImageBuilder.sh artifacts/publish/linux-arm64 artifacts v1.0.0 aarch64
 
 set -euo pipefail
 
-PUBLISH_DIR="${1:?Usage: $0 <publish_dir> <output_dir> <version>}"
-OUTPUT_DIR="${2:?Usage: $0 <publish_dir> <output_dir> <version>}"
-VERSION="${3:?Usage: $0 <publish_dir> <output_dir> <version>}"
+PUBLISH_DIR="${1:?Usage: $0 <publish_dir> <output_dir> <version> [arch]}"
+OUTPUT_DIR="${2:?Usage: $0 <publish_dir> <output_dir> <version> [arch]}"
+VERSION="${3:?Usage: $0 <publish_dir> <output_dir> <version> [arch]}"
+ARCH="${4:-x86_64}"   # x86_64 or aarch64
+
+# Map arch to dotnet runtime suffix for output filename
+if [ "$ARCH" = "aarch64" ]; then
+    RUNTIME_SUFFIX="linux-arm64"
+else
+    RUNTIME_SUFFIX="linux-x64"
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -24,7 +35,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APPDIR="$(mktemp -d)/BabelPlayer.AppDir"
 mkdir -p "$APPDIR"
 
-echo "[AppImage] Building AppDir at $APPDIR ..."
+echo "[AppImage] Building AppDir at $APPDIR (arch=$ARCH, runtime=$RUNTIME_SUFFIX) ..."
 
 # ── 1. Copy published output ─────────────────────────────────────────────────
 mkdir -p "$APPDIR/usr/bin"
@@ -35,13 +46,22 @@ mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 cp -r "$PUBLISH_DIR/"* "$APPDIR/usr/bin/"
 
 # ── 2. Bundle libmpv ─────────────────────────────────────────────────────────
-# Locate libmpv.so.2 on the build machine and bundle it so the AppImage is
-# self-contained (users don't need libmpv installed).
+if [ "$ARCH" = "aarch64" ]; then
+    LIB_SEARCH_PATHS=(
+        /usr/lib/aarch64-linux-gnu/libmpv.so.2
+        /usr/lib/libmpv.so.2
+        /usr/local/lib/libmpv.so.2
+    )
+else
+    LIB_SEARCH_PATHS=(
+        /usr/lib/x86_64-linux-gnu/libmpv.so.2
+        /usr/lib/libmpv.so.2
+        /usr/local/lib/libmpv.so.2
+    )
+fi
+
 LIBMPV_PATH=""
-for candidate in \
-    /usr/lib/x86_64-linux-gnu/libmpv.so.2 \
-    /usr/lib/libmpv.so.2 \
-    /usr/local/lib/libmpv.so.2; do
+for candidate in "${LIB_SEARCH_PATHS[@]}"; do
     if [ -f "$candidate" ]; then
         LIBMPV_PATH="$candidate"
         break
@@ -49,7 +69,6 @@ for candidate in \
 done
 
 if [ -z "$LIBMPV_PATH" ]; then
-    # Try ldconfig as fallback
     LIBMPV_PATH=$(ldconfig -p 2>/dev/null | grep 'libmpv.so.2' | awk '{print $NF}' | head -1 || true)
 fi
 
@@ -60,7 +79,6 @@ fi
 
 echo "[AppImage] Bundling libmpv from $LIBMPV_PATH"
 cp "$LIBMPV_PATH" "$APPDIR/usr/lib/libmpv.so.2"
-# Also copy any libmpv.so symlink target if needed
 REAL_LIBMPV="$(readlink -f "$LIBMPV_PATH")"
 if [ "$REAL_LIBMPV" != "$LIBMPV_PATH" ]; then
     cp "$REAL_LIBMPV" "$APPDIR/usr/lib/$(basename "$REAL_LIBMPV")"
@@ -70,18 +88,15 @@ fi
 cp "$SCRIPT_DIR/BabelPlayer.desktop" "$APPDIR/BabelPlayer.desktop"
 cp "$SCRIPT_DIR/BabelPlayer.desktop" "$APPDIR/usr/share/applications/BabelPlayer.desktop"
 
-# Use the .ico converted to PNG, or fall back to a placeholder
 ICON_SRC="$REPO_ROOT/src/BabelPlayer.Assets/BabelPlayer.png"
 if [ ! -f "$ICON_SRC" ]; then
-    # Convert .ico to .png using ImageMagick if available
     ICO_SRC="$REPO_ROOT/src/BabelPlayer.Assets/BabelPlayer.ico"
     if command -v convert &>/dev/null && [ -f "$ICO_SRC" ]; then
         convert "${ICO_SRC}[0]" "$REPO_ROOT/src/BabelPlayer.Assets/BabelPlayer.png"
         ICON_SRC="$REPO_ROOT/src/BabelPlayer.Assets/BabelPlayer.png"
     else
-        # Create a minimal 256x256 placeholder PNG using Python
         python3 -c "
-import struct, zlib, base64
+import struct, zlib
 def png_chunk(tag, data):
     return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
 w, h = 256, 256
@@ -108,22 +123,22 @@ exec "$HERE/usr/bin/BabelPlayer.Avalonia" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
 
-# ── 5. Download appimagetool if not present ───────────────────────────────────
+# ── 5. Download appimagetool for the correct arch if not present ────────────────
 APPIMAGETOOL="$(command -v appimagetool || true)"
 if [ -z "$APPIMAGETOOL" ]; then
-    echo "[AppImage] Downloading appimagetool..."
-    APPIMAGETOOL="/tmp/appimagetool"
+    echo "[AppImage] Downloading appimagetool for $ARCH..."
+    APPIMAGETOOL="/tmp/appimagetool-${ARCH}"
     curl -fsSL -o "$APPIMAGETOOL" \
-        "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+        "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH}.AppImage"
     chmod +x "$APPIMAGETOOL"
 fi
 
 # ── 6. Build AppImage ────────────────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR"
-OUTPUT_FILE="$OUTPUT_DIR/BabelPlayer-${VERSION}-linux-x64.AppImage"
+OUTPUT_FILE="$OUTPUT_DIR/BabelPlayer-${VERSION}-${RUNTIME_SUFFIX}.AppImage"
 
-echo "[AppImage] Running appimagetool..."
-ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" "$OUTPUT_FILE"
+echo "[AppImage] Running appimagetool (ARCH=$ARCH)..."
+ARCH=$ARCH "$APPIMAGETOOL" "$APPDIR" "$OUTPUT_FILE"
 chmod +x "$OUTPUT_FILE"
 
 echo "[AppImage] Done: $OUTPUT_FILE"

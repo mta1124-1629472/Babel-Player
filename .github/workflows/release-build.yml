@@ -85,16 +85,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          $tag     = "${{ github.ref_name }}"
-          $archive = "${{ steps.artifacts.outputs.archive_path }}"
+          $tag       = "${{ github.ref_name }}"
+          $archive   = "${{ steps.artifacts.outputs.archive_path }}"
           $installer = "${{ steps.artifacts.outputs.installer_path }}"
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) { gh release upload $tag $archive $installer --clobber }
           else { gh release create $tag $archive $installer --generate-notes --title $tag }
 
-  # ── Linux x64 (AppImage) ──────────────────────────────────────────────────
+  # ── Linux (x64 + arm64 AppImages) ───────────────────────────────────────────
   publish-linux:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            runtime: linux-x64
+            arch: x86_64
+            suffix: linux-x64
+            nuke_target: PublishLinuxX64
+          - runner: ubuntu-24.04-arm
+            runtime: linux-arm64
+            arch: aarch64
+            suffix: linux-arm64
+            nuke_target: PublishLinuxArm64
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
@@ -125,19 +139,20 @@ jobs:
             echo "raw_version=${{ github.sha }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Publish linux-x64
-        run: ./build.sh PublishLinuxX64 --configuration Release --release-version ${{ steps.version.outputs.raw_version }}
+      - name: Publish ${{ matrix.runtime }}
+        run: ./build.sh ${{ matrix.nuke_target }} --configuration Release --release-version ${{ steps.version.outputs.raw_version }}
 
       - name: Build AppImage
         run: |
           bash linux/AppImageBuilder.sh \
-            artifacts/publish/linux-x64 \
+            artifacts/publish/${{ matrix.runtime }} \
             artifacts \
-            ${{ steps.version.outputs.raw_version }}
+            ${{ steps.version.outputs.raw_version }} \
+            ${{ matrix.arch }}
 
       - name: Verify AppImage exists
         run: |
-          APPIMAGE="artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-linux-x64.AppImage"
+          APPIMAGE="artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-${{ matrix.suffix }}.AppImage"
           if [ ! -f "$APPIMAGE" ]; then
             echo "ERROR: AppImage not found at $APPIMAGE" >&2
             exit 1
@@ -147,8 +162,8 @@ jobs:
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BabelPlayer-appimage-linux-x64
-          path: artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-linux-x64.AppImage
+          name: BabelPlayer-appimage-${{ matrix.suffix }}
+          path: artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-${{ matrix.suffix }}.AppImage
           if-no-files-found: error
 
       - name: Upload to GitHub Release
@@ -157,7 +172,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
-          APPIMAGE="artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-linux-x64.AppImage"
+          APPIMAGE="artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-${{ matrix.suffix }}.AppImage"
           if gh release view "$TAG" &>/dev/null; then
             gh release upload "$TAG" "$APPIMAGE" --clobber
           else
