@@ -21,7 +21,7 @@ public sealed class SubtitleWorkflowInfrastructureFactory : ISubtitleWorkflowInf
 
         var runtimeBootstrapService = new RuntimeBootstrapService(request.LogFactory);
         var providerComposition = _providerCompositionFactory.Create(
-            request.CredentialFacade,
+            request.CredentialStore,
             request.EnvironmentVariableReader,
             request.LogFactory);
         var providerAvailabilityService = new ProviderAvailabilityService(providerComposition);
@@ -39,12 +39,12 @@ public sealed class SubtitleWorkflowInfrastructureFactory : ISubtitleWorkflowInf
                 providerComposition.LocalRuntime,
                 request.LogFactory),
             _aiCredentialCoordinatorFactory.Create(
-                request.CredentialFacade,
+                request.CredentialStore,
                 request.CredentialDialogService,
                 request.EnvironmentVariableReader),
             new DefaultRuntimeProvisioner(
                 runtimeBootstrapService,
-                request.CredentialFacade,
+                request.CredentialStore,
                 request.CredentialDialogService,
                 request.FilePickerService,
                 request.EnvironmentVariableReader));
