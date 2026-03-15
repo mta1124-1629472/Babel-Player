@@ -57,5 +57,3 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
-src/BabelPlayer.Avalonia/native/win-x64/libmpv-2.dll filter=lfs diff=lfs merge=lfs -text
-src/BabelPlayer.Avalonia/native/win-arm64/libmpv-2.dll filter=lfs diff=lfs merge=lfs -text
