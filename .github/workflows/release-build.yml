@@ -66,14 +66,14 @@ jobs:
           "installer_path=$installer" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload portable artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: BabelPlayer-portable-${{ matrix.suffix }}
           path: ${{ steps.artifacts.outputs.archive_path }}
           if-no-files-found: error
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: BabelPlayer-setup-${{ matrix.suffix }}
           path: ${{ steps.artifacts.outputs.installer_path }}
@@ -160,7 +160,7 @@ jobs:
           echo "AppImage size: $(du -sh $APPIMAGE | cut -f1)"
 
       - name: Upload AppImage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: BabelPlayer-appimage-${{ matrix.suffix }}
           path: artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-${{ matrix.suffix }}.AppImage
