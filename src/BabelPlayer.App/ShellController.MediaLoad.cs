@@ -1,3 +1,5 @@
+using BabelPlayer.Core;
+
 namespace BabelPlayer.App;
 
 /// <summary>
@@ -113,9 +115,9 @@ public sealed partial class ShellController
                 BabelLogContext.Create(("path", snapshot.Path), ("pos", pos)));
             return result with
             {
-                ResumePosition       = pos,
+                ResumePosition        = pos,
                 ResumeDecisionPending = true,
-                StatusMessage        = BuildResumePromptStatusMessage(current, pos)
+                StatusMessage         = BuildResumePromptStatusMessage(current, pos)
             };
         }
 
@@ -170,8 +172,6 @@ public sealed partial class ShellController
 
     public void FlushResumeTracking(bool forceRemoveCompleted = false) =>
         _resumeTrackingCoordinator.Flush(forceRemoveCompleted);
-
-    // ── Status message builders ───────────────────────────────────────────────
 
     private static string BuildOpenedStatusMessage(Core.PlaylistItem? item, ShellMediaOpenTrigger trigger) =>
         item is null ? "Media opened."

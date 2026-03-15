@@ -29,11 +29,13 @@ public sealed class DefaultCaptionGenerator : ICaptionGenerator
         {
             Mode = selection.Provider == TranscriptionProvider.Cloud ? CaptionTranscriptionMode.Cloud : CaptionTranscriptionMode.Local,
             LanguageHint = languageHint,
-            OpenAiApiKey = _context.EnvironmentVariableReader("OPENAI_API_KEY") ?? _context.CredentialFacade.GetOpenAiApiKey(),
+            OpenAiApiKey = _context.EnvironmentVariableReader("OPENAI_API_KEY") ?? _context.CredentialStore.GetOpenAiApiKey(),
             LocalModelType = SubtitleWorkflowCatalog.ResolveLocalModelType(selection.LocalModelKey),
             CloudModel = selection.CloudModel
         };
-        _logger.LogInfo("Caption generation starting.", BabelLogContext.Create(("videoPath", videoPath), ("modelKey", selection.Key), ("provider", selection.Provider), ("languageHint", languageHint)));
+        _logger.LogInfo("Caption generation starting.", BabelLogContext.Create(
+            ("videoPath", videoPath), ("modelKey", selection.Key),
+            ("provider", selection.Provider), ("languageHint", languageHint)));
 
         foreach (var provider in providers)
         {
@@ -43,21 +45,22 @@ public sealed class DefaultCaptionGenerator : ICaptionGenerator
                     new TranscriptionRequest(videoPath, options, onFinal, onProgress),
                     _context,
                     cancellationToken);
-                _logger.LogInfo("Caption generation completed.", BabelLogContext.Create(("videoPath", videoPath), ("modelKey", selection.Key), ("cueCount", result.Count), ("providerAdapter", provider.Id)));
+                _logger.LogInfo("Caption generation completed.", BabelLogContext.Create(
+                    ("videoPath", videoPath), ("modelKey", selection.Key),
+                    ("cueCount", result.Count), ("providerAdapter", provider.Id)));
                 return result;
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 failures ??= [];
                 failures.Add(ex);
-                _logger.LogWarning("Caption generation provider failed.", ex, BabelLogContext.Create(("videoPath", videoPath), ("modelKey", selection.Key), ("providerAdapter", provider.Id)));
+                _logger.LogWarning("Caption generation provider failed.", ex, BabelLogContext.Create(
+                    ("videoPath", videoPath), ("modelKey", selection.Key), ("providerAdapter", provider.Id)));
             }
         }
 
         if (failures is { Count: > 0 })
-        {
             throw new AggregateException($"No transcription provider completed for {selection.DisplayName}.", failures);
-        }
 
         throw new InvalidOperationException($"No transcription provider is available for {selection.DisplayName}.");
     }

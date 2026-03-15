@@ -11,9 +11,7 @@ public sealed partial class SubtitleApplicationService
         try
         {
             if (!IsRunActive(run))
-            {
                 return;
-            }
 
             var selectionKey = _workflowStateStore.Snapshot.SelectedTranslationModelKey;
             var selection = SubtitleWorkflowCatalog.GetTranslationModel(selectionKey);
@@ -31,9 +29,7 @@ public sealed partial class SubtitleApplicationService
                 for (var index = 0; index < cues.Count; index++)
                 {
                     if (!TryUpsertTranslationSegment(cues[index], translatedTexts[index], run))
-                    {
                         return;
-                    }
                 }
             }
             else
@@ -71,32 +67,23 @@ public sealed partial class SubtitleApplicationService
         if (run is null)
         {
             if (HasActiveTranslationRun())
-            {
                 return;
-            }
 
             var snapshot = _mediaSessionCoordinator.Snapshot;
             if (!snapshot.Translation.IsEnabled || string.IsNullOrWhiteSpace(_workflowStateStore.Snapshot.SelectedTranslationModelKey))
-            {
                 return;
-            }
 
             run = BeginTranslationRun(snapshot);
             ownsRun = true;
         }
 
         if (!IsRunActive(run))
-        {
             return;
-        }
 
         if (SubtitleCueSessionMapper.HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot))
         {
             if (ownsRun)
-            {
                 EndTranslationRun(run);
-            }
-
             return;
         }
 
@@ -104,19 +91,15 @@ public sealed partial class SubtitleApplicationService
         {
             TryUpsertTranslationSegment(cue, cue.Text.Trim(), run);
             if (ownsRun)
-            {
                 EndTranslationRun(run);
-            }
-
             return;
         }
 
         lock (_translationSync)
         {
-            if (SubtitleCueSessionMapper.HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot) || !_inFlightCueTranslations.Add(cue.Id.Value))
-            {
+            if (SubtitleCueSessionMapper.HasTranslatedSegment(cue, _mediaSessionCoordinator.Snapshot)
+                || !_inFlightCueTranslations.Add(cue.Id.Value))
                 return;
-            }
         }
 
         try
@@ -141,9 +124,7 @@ public sealed partial class SubtitleApplicationService
             }
 
             if (ownsRun)
-            {
                 EndTranslationRun(run);
-            }
         }
     }
 
@@ -152,9 +133,7 @@ public sealed partial class SubtitleApplicationService
         var state = _workflowStateStore.Snapshot;
         var isTranslationEnabled = _mediaSessionCoordinator.Snapshot.Translation.IsEnabled;
         if (!isTranslationEnabled || string.IsNullOrWhiteSpace(state.SelectedTranslationModelKey))
-        {
             return false;
-        }
 
         return SubtitleCueSessionMapper.IsLanguageCode(cue.Language, _translationTargetLanguage);
     }
@@ -182,18 +161,18 @@ public sealed partial class SubtitleApplicationService
 
     private async Task HandleCloudServiceFailureAsync(Exception ex)
     {
-        _logger.LogError("Subtitle cloud workflow failed.", ex, BabelLogContext.Create(("translationModel", _workflowStateStore.Snapshot.SelectedTranslationModelKey), ("transcriptionModel", _workflowStateStore.Snapshot.SelectedTranscriptionModelKey)));
+        _logger.LogError("Subtitle cloud workflow failed.", ex, BabelLogContext.Create(
+            ("translationModel", _workflowStateStore.Snapshot.SelectedTranslationModelKey),
+            ("transcriptionModel", _workflowStateStore.Snapshot.SelectedTranscriptionModelKey)));
         if (SubtitleCueSessionMapper.ShouldDisableCloudForError(ex))
         {
             var state = _workflowStateStore.Snapshot;
             if (SubtitleWorkflowCatalog.IsCloudTranslationProvider(SubtitleWorkflowCatalog.GetTranslationModel(state.SelectedTranslationModelKey).Provider))
-            {
                 RestoreTranslationSelection(null);
-            }
 
             if (SubtitleWorkflowCatalog.GetTranscriptionModel(state.SelectedTranscriptionModelKey).Provider == TranscriptionProvider.Cloud)
             {
-                _credentialFacade.SaveSubtitleModelKey(SubtitleWorkflowCatalog.DefaultTranscriptionModelKey);
+                _credentialStore.SaveSubtitleModelKey(SubtitleWorkflowCatalog.DefaultTranscriptionModelKey);
                 UpdateWorkflowState(current => current with
                 {
                     SelectedTranscriptionModelKey = SubtitleWorkflowCatalog.DefaultTranscriptionModelKey,
@@ -234,13 +213,9 @@ public sealed partial class SubtitleApplicationService
         });
 
         if (string.IsNullOrWhiteSpace(previousModelKey))
-        {
-            _credentialFacade.ClearTranslationModelKey();
-        }
+            _credentialStore.ClearTranslationModelKey();
         else
-        {
-            _credentialFacade.SaveTranslationModelKey(previousModelKey);
-        }
+            _credentialStore.SaveTranslationModelKey(previousModelKey);
     }
 
     private void ResetCurrentTranslations()
@@ -272,9 +247,7 @@ public sealed partial class SubtitleApplicationService
         };
 
         if (!string.IsNullOrWhiteSpace(message) && string.IsNullOrWhiteSpace(_workflowStateStore.Snapshot.OverlayStatus))
-        {
             PublishStatus(message, message);
-        }
     }
 
     private void HandleLocalTranslationRuntimeStatus(LocalTranslationRuntimeStatus status)
@@ -318,10 +291,7 @@ public sealed partial class SubtitleApplicationService
     {
         if (overlayStatus is not null)
         {
-            UpdateWorkflowState(state => state with
-            {
-                OverlayStatus = overlayStatus
-            });
+            UpdateWorkflowState(state => state with { OverlayStatus = overlayStatus });
             _mediaSessionCoordinator.SetSubtitleStatus(overlayStatus);
         }
 

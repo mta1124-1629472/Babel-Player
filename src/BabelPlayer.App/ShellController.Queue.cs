@@ -1,3 +1,5 @@
+using BabelPlayer.Core;
+
 namespace BabelPlayer.App;
 
 /// <summary>
@@ -23,8 +25,8 @@ public sealed partial class ShellController
             };
         }
 
-        var item     = _playbackQueueController.PlayNow(entries[0]);
-        var queued   = entries.Count > 1 ? _playbackQueueController.AddToQueue(entries.Skip(1)) : [];
+        var item   = _playbackQueueController.PlayNow(entries[0]);
+        var queued = entries.Count > 1 ? _playbackQueueController.AddToQueue(entries.Skip(1)) : [];
         _logger.LogInfo("Play now from file list.",
             BabelLogContext.Create(("path", item.Path), ("addedToQueue", queued.Count)));
         return new ShellQueueMediaResult
@@ -52,8 +54,8 @@ public sealed partial class ShellController
         {
             itemToLoad = _playbackQueueController.PlayNow(new Core.PlaylistItem
             {
-                Path        = files[0],
-                DisplayName = System.IO.Path.GetFileName(files[0]),
+                Path            = files[0],
+                DisplayName     = System.IO.Path.GetFileName(files[0]),
                 IsDirectorySeed = true
             });
             added = files.Count > 1
@@ -74,12 +76,12 @@ public sealed partial class ShellController
 
         return new ShellQueueMediaResult
         {
-            AddedItems        = added.Select(i => i.ToShell()).ToArray(),
-            ItemToLoad        = itemToLoad?.ToShell(),
-            PinnedFolders     = [folderPath],
-            RevealBrowserPane = true,
-            UpdatedPreferences= RevealBrowserPanePreference(),
-            StatusMessage     = autoplay
+            AddedItems         = added.Select(i => i.ToShell()).ToArray(),
+            ItemToLoad         = itemToLoad?.ToShell(),
+            PinnedFolders      = [folderPath],
+            RevealBrowserPane  = true,
+            UpdatedPreferences = RevealBrowserPanePreference(),
+            StatusMessage      = autoplay
                 ? itemToLoad is null
                     ? $"Queued {added.Count} item(s) from {System.IO.Path.GetFileName(folderPath)}."
                     : added.Count > 0
@@ -205,8 +207,6 @@ public sealed partial class ShellController
         _playbackQueueController.ClearQueue();
         _logger.LogInfo("Queue cleared.");
     }
-
-    // ── Internal ─────────────────────────────────────────────────────────────
 
     private static ShellQueueMediaResult Error(string message) =>
         new() { IsError = true, StatusMessage = message };

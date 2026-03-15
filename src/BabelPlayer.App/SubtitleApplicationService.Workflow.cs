@@ -9,9 +9,9 @@ public sealed partial class SubtitleApplicationService
     private void LoadPersistedSelections()
     {
         var transcriptionKey = SubtitleWorkflowCatalog.CanonicalizeTranscriptionModelKey(
-            _providerAvailabilityService.ResolvePersistedTranscriptionModelKey(_credentialFacade.GetSubtitleModelKey()));
-        var translationKey = _providerAvailabilityService.ResolvePersistedTranslationModelKey(_credentialFacade.GetTranslationModelKey());
-        var autoTranslateEnabled = _credentialFacade.GetAutoTranslateEnabled();
+            _providerAvailabilityService.ResolvePersistedTranscriptionModelKey(_credentialStore.GetSubtitleModelKey()));
+        var translationKey = _providerAvailabilityService.ResolvePersistedTranslationModelKey(_credentialStore.GetTranslationModelKey());
+        var autoTranslateEnabled = _credentialStore.GetAutoTranslateEnabled();
 
         UpdateWorkflowState(state => state with
         {
@@ -26,25 +26,18 @@ public sealed partial class SubtitleApplicationService
     {
         _logger.LogInfo("Ensuring translation provider is ready.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
         if (selection.Provider is not (TranslationProvider.LocalHyMt15_1_8B or TranslationProvider.LocalHyMt15_7B))
-        {
             return await _aiCredentialCoordinator.EnsureTranslationProviderCredentialsAsync(selection.Provider, cancellationToken);
-        }
 
         if (_providerAvailabilityService.ResolveLlamaCppServerPath() is null
             && !await _runtimeProvisioner.EnsureLlamaCppRuntimeReadyAsync(HandleLlamaRuntimeInstallProgress, cancellationToken))
-        {
             return false;
-        }
 
         return await WarmupSelectedLocalTranslationRuntimeAsync(selection, cancellationToken);
     }
 
     private void InitializeTranslationPreferencesForNewVideo()
     {
-        UpdateWorkflowState(state => state with
-        {
-            CurrentVideoTranslationPreferenceLocked = false
-        });
+        UpdateWorkflowState(state => state with { CurrentVideoTranslationPreferenceLocked = false });
         SetTranslationEnabledForCurrentVideo(false);
     }
 
@@ -53,9 +46,7 @@ public sealed partial class SubtitleApplicationService
         var state = _workflowStateStore.Snapshot;
         var session = _mediaSessionCoordinator.Snapshot;
         if (state.CurrentVideoTranslationPreferenceLocked)
-        {
             return;
-        }
 
         if (!session.Translation.AutoTranslateEnabled || string.IsNullOrWhiteSpace(state.SelectedTranslationModelKey))
         {
@@ -65,9 +56,7 @@ public sealed partial class SubtitleApplicationService
 
         if (string.IsNullOrWhiteSpace(session.LanguageAnalysis.CurrentSourceLanguage)
             || string.Equals(session.LanguageAnalysis.CurrentSourceLanguage, DefaultSourceLanguage, StringComparison.OrdinalIgnoreCase))
-        {
             return;
-        }
 
         SetTranslationEnabledForCurrentVideo(!SubtitleCueSessionMapper.IsLanguageCode(session.LanguageAnalysis.CurrentSourceLanguage, _autoTranslatePreferredSourceLanguage));
     }
@@ -81,7 +70,8 @@ public sealed partial class SubtitleApplicationService
     {
         var state = _workflowStateStore.Snapshot;
         var isTranslationEnabled = _mediaSessionCoordinator.Snapshot.Translation.IsEnabled;
-        _logger.LogInfo("Reprocessing subtitles for translation settings.", BabelLogContext.Create(("translationEnabled", isTranslationEnabled), ("modelKey", state.SelectedTranslationModelKey)));
+        _logger.LogInfo("Reprocessing subtitles for translation settings.", BabelLogContext.Create(
+            ("translationEnabled", isTranslationEnabled), ("modelKey", state.SelectedTranslationModelKey)));
         CancelTranslationWork();
         if (isTranslationEnabled && string.IsNullOrWhiteSpace(state.SelectedTranslationModelKey))
         {
@@ -91,9 +81,7 @@ public sealed partial class SubtitleApplicationService
         }
 
         if (!HasCurrentCues)
-        {
             return;
-        }
 
         ResetCurrentTranslations();
         PublishStatus(isTranslationEnabled
@@ -101,9 +89,7 @@ public sealed partial class SubtitleApplicationService
             : "Translation disabled for the current video.");
 
         if (!isTranslationEnabled)
-        {
             return;
-        }
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _translationCts = cts;
@@ -116,25 +102,21 @@ public sealed partial class SubtitleApplicationService
         CancellationToken cancellationToken,
         bool suppressStatus)
     {
-        _logger.LogInfo("Reprocessing subtitles for transcription model.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider), ("suppressStatus", suppressStatus)));
+        _logger.LogInfo("Reprocessing subtitles for transcription model.", BabelLogContext.Create(
+            ("modelKey", selection.Key), ("provider", selection.Provider), ("suppressStatus", suppressStatus)));
         var session = _mediaSessionCoordinator.Snapshot;
         var currentVideoPath = _workflowStateStore.Snapshot.CurrentVideoPath;
         if (session.Transcript.Source != SubtitlePipelineSource.Generated || string.IsNullOrWhiteSpace(currentVideoPath))
         {
             if (!suppressStatus)
-            {
                 PublishStatus($"Selected transcription model: {selection.DisplayName}.");
-            }
-
             return;
         }
 
         if (_captionOrchestrator.TryLoadCachedGeneratedSubtitles(currentVideoPath, selection.Key))
         {
             if (!suppressStatus)
-            {
                 PublishStatus($"Loaded cached captions for {selection.DisplayName}.");
-            }
 
             await LoadSubtitleCuesAsync(
                 CurrentCues,
@@ -146,9 +128,7 @@ public sealed partial class SubtitleApplicationService
         }
 
         if (!suppressStatus)
-        {
             PublishStatus($"Restarting transcription with {selection.DisplayName}.");
-        }
 
         await _captionOrchestrator.StartAutomaticCaptionGenerationAsync(currentVideoPath, cancellationToken, preserveCurrentTranslationPreference: true);
     }
@@ -160,19 +140,15 @@ public sealed partial class SubtitleApplicationService
         CancellationToken cancellationToken,
         bool preserveCurrentTranslationPreference = false)
     {
-        _logger.LogInfo("Loading subtitle cues into workflow.", BabelLogContext.Create(("source", source), ("cueCount", cues.Count), ("preserveTranslationPreference", preserveCurrentTranslationPreference)));
+        _logger.LogInfo("Loading subtitle cues into workflow.", BabelLogContext.Create(
+            ("source", source), ("cueCount", cues.Count), ("preserveTranslationPreference", preserveCurrentTranslationPreference)));
         var currentVideoPath = _workflowStateStore.Snapshot.CurrentVideoPath;
         _captionOrchestrator.CancelCaptionGeneration();
         CancelTranslationWork();
         if (!preserveCurrentTranslationPreference)
-        {
             InitializeTranslationPreferencesForNewVideo();
-        }
 
-        UpdateWorkflowState(state => state with
-        {
-            OverlayStatus = null
-        });
+        UpdateWorkflowState(state => state with { OverlayStatus = null });
 
         var projectedCues = SubtitleCueSessionMapper.CloneCues(cues);
         lock (_translationSync)
@@ -212,9 +188,7 @@ public sealed partial class SubtitleApplicationService
 
         var translationState = _mediaSessionCoordinator.Snapshot.Translation;
         if (!translationState.IsEnabled || string.IsNullOrWhiteSpace(_workflowStateStore.Snapshot.SelectedTranslationModelKey))
-        {
             return new SubtitleLoadResult(source, projectedCues.Count, source == SubtitlePipelineSource.Sidecar, false);
-        }
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         CancelTranslationWork();

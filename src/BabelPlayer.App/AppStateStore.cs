@@ -1,6 +1,5 @@
 using System.IO;
 using System.Text.Json;
-using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
 
@@ -12,8 +11,13 @@ public static class AppStateStore
         PropertyNameCaseInsensitive = true
     };
 
-    private static string SettingsPath => Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "player-settings.json");
-    private static string ResumePath => Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "playback-state.json");
+    private static string AppDataDirectory =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BabelPlayer");
+
+    private static string SettingsPath => Path.Combine(AppDataDirectory, "player-settings.json");
+    private static string ResumePath   => Path.Combine(AppDataDirectory, "playback-state.json");
 
     public static AppPlayerSettings LoadSettings()
     {
@@ -40,9 +44,7 @@ public static class AppStateStore
         try
         {
             if (!File.Exists(path))
-            {
                 return fallback;
-            }
 
             var json = File.ReadAllText(path);
             return JsonSerializer.Deserialize<T>(json, JsonOptions) ?? fallback;

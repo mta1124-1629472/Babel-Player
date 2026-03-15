@@ -1,3 +1,5 @@
+using BabelPlayer.Core;
+
 namespace BabelPlayer.App;
 
 /// <summary>
@@ -7,7 +9,6 @@ namespace BabelPlayer.App;
 /// </summary>
 public sealed partial class ShellController
 {
-    // State is isolated here; shared only through Reset (called from MediaLoad partial).
     private bool    _autoResumePlaybackAfterCaptionReady;
     private string? _autoResumePlaybackPath;
     private TimeSpan _autoResumePlaybackPosition = TimeSpan.Zero;
@@ -18,7 +19,7 @@ public sealed partial class ShellController
         ShellPlaybackStateSnapshot playbackState,
         CancellationToken cancellationToken = default)
     {
-        if (snapshot.SubtitleSource != Core.SubtitlePipelineSource.Generated ||
+        if (snapshot.SubtitleSource != SubtitlePipelineSource.Generated ||
             string.IsNullOrWhiteSpace(playbackState.Path))
             return Task.FromResult(new ShellWorkflowTransitionResult());
 
@@ -46,7 +47,7 @@ public sealed partial class ShellController
             return new ShellWorkflowTransitionResult { StartupGateBlocking = false };
         }
 
-        var shouldPause = snapshot.SubtitleSource == Core.SubtitlePipelineSource.Generated
+        var shouldPause = snapshot.SubtitleSource == SubtitlePipelineSource.Generated
             && snapshot.IsCaptionGenerationInProgress
             && snapshot.Cues.Count == 0
             && playbackState.Position <= TimeSpan.FromSeconds(2);
