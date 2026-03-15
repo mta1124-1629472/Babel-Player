@@ -2,700 +2,121 @@ using BabelPlayer.Core;
 
 namespace BabelPlayer.App;
 
-public enum ShellMediaOpenTrigger
-{
-    Manual,
-    Autoplay
-}
+// ── DTOs & enums ────────────────────────────────────────────────────────────
+
+public enum ShellMediaOpenTrigger { Manual, Autoplay }
+
+public enum ShellResumeDecision { Resume, StartOver, Dismiss }
 
 public sealed record ShellLoadMediaOptions
 {
     public ShellHardwareDecodingMode HardwareDecodingMode { get; init; } = ShellHardwareDecodingMode.AutoSafe;
-    public double PlaybackRate { get; init; } = 1.0;
-    public string AspectRatio { get; init; } = "auto";
-    public double AudioDelaySeconds { get; init; }
-    public double SubtitleDelaySeconds { get; init; }
-    public double Volume { get; init; } = 0.8;
-    public bool IsMuted { get; init; }
-    public bool ResumeEnabled { get; init; }
-    public ShellMediaOpenTrigger OpenTrigger { get; init; } = ShellMediaOpenTrigger.Manual;
-    public ShellPlaybackStateSnapshot PreviousPlaybackState { get; init; } = new();
+    public double PlaybackRate        { get; init; } = 1.0;
+    public string AspectRatio         { get; init; } = "auto";
+    public double AudioDelaySeconds   { get; init; }
+    public double SubtitleDelaySeconds{ get; init; }
+    public double Volume              { get; init; } = 0.8;
+    public bool   IsMuted             { get; init; }
+    public bool   ResumeEnabled       { get; init; }
+    public ShellMediaOpenTrigger        OpenTrigger          { get; init; } = ShellMediaOpenTrigger.Manual;
+    public ShellPlaybackStateSnapshot   PreviousPlaybackState{ get; init; } = new();
 }
 
 public sealed record ShellQueueMediaResult
 {
-    public IReadOnlyList<ShellPlaylistItem> AddedItems { get; init; } = [];
-    public ShellPlaylistItem? ItemToLoad { get; init; }
-    public IReadOnlyList<string> PinnedFolders { get; init; } = [];
-    public bool RevealBrowserPane { get; init; }
-    public ShellPreferencesSnapshot? UpdatedPreferences { get; init; }
-    public string? StatusMessage { get; init; }
-    public bool IsError { get; init; }
+    public IReadOnlyList<ShellPlaylistItem> AddedItems     { get; init; } = [];
+    public ShellPlaylistItem?               ItemToLoad     { get; init; }
+    public IReadOnlyList<string>            PinnedFolders  { get; init; } = [];
+    public bool                             RevealBrowserPane { get; init; }
+    public ShellPreferencesSnapshot?        UpdatedPreferences{ get; init; }
+    public string?                          StatusMessage  { get; init; }
+    public bool                             IsError        { get; init; }
 }
 
 public sealed record ShellQueueSnapshot
 {
-    public ShellPlaylistItem? NowPlayingItem { get; init; }
-    public IReadOnlyList<ShellPlaylistItem> QueueItems { get; init; } = [];
-    public IReadOnlyList<ShellPlaylistItem> HistoryItems { get; init; } = [];
+    public ShellPlaylistItem?               NowPlayingItem { get; init; }
+    public IReadOnlyList<ShellPlaylistItem> QueueItems     { get; init; } = [];
+    public IReadOnlyList<ShellPlaylistItem> HistoryItems   { get; init; } = [];
 }
 
 public sealed record ShellPlaybackOpenResult
 {
-    public ShellMediaOpenTrigger OpenTrigger { get; init; } = ShellMediaOpenTrigger.Manual;
-    public TimeSpan? ResumePosition { get; init; }
-    public bool ResumeDecisionPending { get; init; }
-    public string StatusMessage { get; init; } = "Media opened.";
-}
-
-public enum ShellResumeDecision
-{
-    Resume,
-    StartOver,
-    Dismiss
+    public ShellMediaOpenTrigger OpenTrigger         { get; init; } = ShellMediaOpenTrigger.Manual;
+    public TimeSpan?             ResumePosition      { get; init; }
+    public bool                  ResumeDecisionPending{ get; init; }
+    public string                StatusMessage       { get; init; } = "Media opened.";
 }
 
 public sealed record ShellResumeDecisionResult
 {
-    public bool DecisionApplied { get; init; }
-    public string StatusMessage { get; init; } = "No pending resume decision.";
+    public bool   DecisionApplied { get; init; }
+    public string StatusMessage   { get; init; } = "No pending resume decision.";
 }
 
 public sealed record ShellMediaEndedResult
 {
-    public ShellPlaylistItem? NextItem { get; init; }
-    public string StatusMessage { get; init; } = "Playback ended.";
+    public ShellPlaylistItem? NextItem      { get; init; }
+    public string             StatusMessage { get; init; } = "Playback ended.";
 }
 
 public sealed record ShellWorkflowTransitionResult
 {
-    public string? StatusMessage { get; init; }
-    public bool? StartupGateBlocking { get; init; }
+    public string? StatusMessage      { get; init; }
+    public bool?   StartupGateBlocking{ get; init; }
 }
 
 public sealed record ShellSubtitleTrackSelectionResult
 {
-    public int? SelectedSubtitleTrackId { get; init; }
-    public bool TrackSelectionChanged { get; init; }
-    public string StatusMessage { get; init; } = string.Empty;
-    public bool IsError { get; init; }
+    public int?   SelectedSubtitleTrackId{ get; init; }
+    public bool   TrackSelectionChanged  { get; init; }
+    public string StatusMessage          { get; init; } = string.Empty;
+    public bool   IsError               { get; init; }
 }
 
-public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IShellPlaybackCommands, IDisposable
-{
-    private readonly PlaybackQueueController _playbackQueueController;
-    private readonly IPlaybackBackend _playbackBackend;
-    private readonly SubtitleWorkflowController _subtitleWorkflowController;
-    private readonly LibraryBrowserService _libraryBrowserService;
-    private readonly ResumePlaybackService _resumePlaybackService;
-    private readonly ResumeTrackingCoordinator _resumeTrackingCoordinator;
-    private readonly IShellPreferencesService _shellPreferencesService;
-    private readonly IBabelLogger _logger;
+// ── Core partial class — fields, constructor, Dispose, queue projection ─────
 
-    private bool _autoResumePlaybackAfterCaptionReady;
-    private string? _autoResumePlaybackPath;
-    private TimeSpan _autoResumePlaybackPosition = TimeSpan.Zero;
-    private bool _autoResumePlaybackFromBeginning = true;
+public sealed partial class ShellController : IQueueProjectionReader, IQueueCommands, IShellPlaybackCommands, IDisposable
+{
+    private readonly PlaybackQueueController      _playbackQueueController;
+    private readonly IPlaybackBackend             _playbackBackend;
+    private readonly SubtitleWorkflowController   _subtitleWorkflowController;
+    private readonly LibraryBrowserService        _libraryBrowserService;
+    private readonly ResumePlaybackService        _resumePlaybackService;
+    private readonly ResumeTrackingCoordinator    _resumeTrackingCoordinator;
+    private readonly IShellPreferencesService     _shellPreferencesService;
+    private readonly IBabelLogger                 _logger;
+
+    // pending-state fields used across partials
     private PendingMediaOpenContext? _pendingMediaOpenContext;
-    private PendingResumeDecision? _pendingResumeDecision;
+    private PendingResumeDecision?   _pendingResumeDecision;
 
     private sealed record PendingMediaOpenContext(
-        string Path,
-        bool ResumeEnabled,
-        ShellMediaOpenTrigger OpenTrigger);
+        string Path, bool ResumeEnabled, ShellMediaOpenTrigger OpenTrigger);
 
     private sealed record PendingResumeDecision(
-        string Path,
-        TimeSpan ResumePosition);
+        string Path, TimeSpan ResumePosition);
 
     public event Action<ShellQueueSnapshot>? QueueSnapshotChanged;
 
     public ShellController(
-        PlaybackQueueController playbackQueueController,
-        IPlaybackBackend playbackBackend,
-        SubtitleWorkflowController subtitleWorkflowController,
-        LibraryBrowserService libraryBrowserService,
-        ResumePlaybackService resumePlaybackService,
-        IShellPreferencesService shellPreferencesService,
-        IBabelLogFactory? logFactory = null)
+        PlaybackQueueController      playbackQueueController,
+        IPlaybackBackend             playbackBackend,
+        SubtitleWorkflowController   subtitleWorkflowController,
+        LibraryBrowserService        libraryBrowserService,
+        ResumePlaybackService        resumePlaybackService,
+        IShellPreferencesService     shellPreferencesService,
+        IBabelLogFactory?            logFactory = null)
     {
-        _playbackQueueController = playbackQueueController;
-        _playbackBackend = playbackBackend;
+        _playbackQueueController    = playbackQueueController;
+        _playbackBackend            = playbackBackend;
         _subtitleWorkflowController = subtitleWorkflowController;
-        _libraryBrowserService = libraryBrowserService;
-        _resumePlaybackService = resumePlaybackService;
-        _shellPreferencesService = shellPreferencesService;
+        _libraryBrowserService      = libraryBrowserService;
+        _resumePlaybackService      = resumePlaybackService;
+        _shellPreferencesService    = shellPreferencesService;
         _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger("shell.controller");
-        _resumeTrackingCoordinator = new ResumeTrackingCoordinator(playbackBackend, resumePlaybackService);
+        _resumeTrackingCoordinator  = new ResumeTrackingCoordinator(playbackBackend, resumePlaybackService);
         _playbackQueueController.SnapshotChanged += HandleQueueSnapshotChanged;
-    }
-
-    public ShellQueueSnapshot QueueSnapshot => MapQueueSnapshot(_playbackQueueController.Snapshot);
-
-    public ShellPlaylistItem? NowPlayingItem => _playbackQueueController.NowPlayingItem?.ToShell();
-
-    public IReadOnlyList<PlaylistItem> QueueItems => _playbackQueueController.QueueItems;
-
-    public IReadOnlyList<PlaylistItem> HistoryItems => _playbackQueueController.HistoryItems;
-
-    public ShellPlaybackStateSnapshot CurrentPlaybackSnapshot => (_resumeTrackingCoordinator.CurrentSnapshot with
-    {
-        PlaylistIndex = _playbackQueueController.NowPlayingItem is null ? -1 : 0,
-        PlaylistCount = _playbackQueueController.QueueItems.Count
-    }).ToShell();
-
-    public ShellQueueMediaResult EnqueueFiles(IEnumerable<string> files, bool autoplay)
-    {
-        var entries = files
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .ToList();
-        if (entries.Count == 0)
-        {
-            return new ShellQueueMediaResult
-            {
-                StatusMessage = "No supported media files were selected.",
-                IsError = true
-            };
-        }
-
-        if (!autoplay)
-        {
-            var added = _playbackQueueController.AddToQueue(entries);
-            _logger.LogInfo("Queued media files.", BabelLogContext.Create(("count", added.Count)));
-            return new ShellQueueMediaResult
-            {
-                AddedItems = added.Select(item => item.ToShell()).ToArray(),
-                StatusMessage = $"Queued {added.Count} item(s)."
-            };
-        }
-
-        var itemToLoad = _playbackQueueController.PlayNow(entries[0]);
-        var addedItems = entries.Count > 1
-            ? _playbackQueueController.AddToQueue(entries.Skip(1))
-            : [];
-        _logger.LogInfo("Play now requested from file list.", BabelLogContext.Create(("path", itemToLoad.Path), ("addedToQueue", addedItems.Count)));
-        return new ShellQueueMediaResult
-        {
-            AddedItems = addedItems.Select(item => item.ToShell()).ToArray(),
-            ItemToLoad = itemToLoad.ToShell(),
-            StatusMessage = addedItems.Count > 0
-                ? $"Now playing {itemToLoad.DisplayName}. Added {addedItems.Count} item(s) to Up Next."
-                : $"Now playing {itemToLoad.DisplayName}."
-        };
-    }
-
-    public ShellQueueMediaResult EnqueueFolder(string folderPath, bool autoplay)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(folderPath);
-
-        var files = _libraryBrowserService.EnumerateMediaFiles(folderPath, recursive: true)
-            .ToList();
-        if (files.Count == 0)
-        {
-            return new ShellQueueMediaResult
-            {
-                StatusMessage = $"No new supported media files were found in {folderPath}.",
-                IsError = true
-            };
-        }
-
-        PlaylistItem? itemToLoad = null;
-        IReadOnlyList<PlaylistItem> added;
-        if (autoplay)
-        {
-            itemToLoad = _playbackQueueController.PlayNow(new PlaylistItem
-            {
-                Path = files[0],
-                DisplayName = Path.GetFileName(files[0]),
-                IsDirectorySeed = true
-            });
-            added = files.Count > 1
-                ? _playbackQueueController.AddFolderToQueue(folderPath, files.Skip(1))
-                : [];
-        }
-        else
-        {
-            added = _playbackQueueController.AddFolderToQueue(folderPath, files);
-        }
-        _logger.LogInfo("Queued folder.", BabelLogContext.Create(("folderPath", folderPath), ("autoplay", autoplay), ("addedCount", added.Count), ("playNowPath", itemToLoad?.Path)));
-
-        return new ShellQueueMediaResult
-        {
-            AddedItems = added.Select(item => item.ToShell()).ToArray(),
-            ItemToLoad = itemToLoad?.ToShell(),
-            PinnedFolders = [folderPath],
-            RevealBrowserPane = true,
-            UpdatedPreferences = RevealBrowserPanePreference(),
-            StatusMessage = autoplay
-                ? itemToLoad is null
-                    ? $"Queued {added.Count} item(s) from {Path.GetFileName(folderPath)}."
-                    : added.Count > 0
-                        ? $"Now playing {itemToLoad.DisplayName}. Added {added.Count} item(s) from {Path.GetFileName(folderPath)} to Up Next."
-                        : $"Now playing {itemToLoad.DisplayName}."
-                : $"Queued {added.Count} item(s) from {Path.GetFileName(folderPath)}."
-        };
-    }
-
-    public ShellQueueMediaResult EnqueueDroppedItems(IEnumerable<string> files, IEnumerable<string> folders)
-    {
-        List<string> discoveredFiles = [];
-        List<string> pinnedFolders = [];
-
-        foreach (var file in files.Where(LibraryBrowserService.IsSupportedMediaFile))
-        {
-            discoveredFiles.Add(file);
-        }
-
-        foreach (var folder in folders.Where(path => !string.IsNullOrWhiteSpace(path)))
-        {
-            pinnedFolders.Add(folder);
-            discoveredFiles.AddRange(_libraryBrowserService.EnumerateMediaFiles(folder, recursive: true));
-        }
-
-        if (discoveredFiles.Count == 0)
-        {
-            return new ShellQueueMediaResult
-            {
-                StatusMessage = "Dropped items did not contain supported media files.",
-                IsError = true
-            };
-        }
-
-        var itemToLoad = _playbackQueueController.PlayNow(discoveredFiles[0]);
-        var added = discoveredFiles.Count > 1
-            ? _playbackQueueController.AddToQueue(discoveredFiles.Skip(1))
-            : [];
-        _logger.LogInfo("Queued dropped items.", BabelLogContext.Create(("fileCount", discoveredFiles.Count), ("folderCount", pinnedFolders.Count), ("playNowPath", itemToLoad.Path)));
-        return new ShellQueueMediaResult
-        {
-            AddedItems = added.Select(item => item.ToShell()).ToArray(),
-            ItemToLoad = itemToLoad.ToShell(),
-            PinnedFolders = pinnedFolders.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-            RevealBrowserPane = pinnedFolders.Count > 0,
-            UpdatedPreferences = pinnedFolders.Count > 0 ? RevealBrowserPanePreference() : null
-        };
-    }
-
-    private ShellPreferencesSnapshot RevealBrowserPanePreference()
-    {
-        var current = _shellPreferencesService.Current;
-        if (current.ShowBrowserPanel)
-        {
-            return current;
-        }
-
-        return _shellPreferencesService.ApplyLayoutChange(new ShellLayoutPreferencesChange(
-            true,
-            current.ShowPlaylistPanel,
-            current.WindowMode));
-    }
-
-    public ShellQueueMediaResult PlayNow(string path)
-    {
-        var item = _playbackQueueController.PlayNow(path);
-        _logger.LogInfo("Play now requested.", BabelLogContext.Create(("path", path)));
-        return new ShellQueueMediaResult
-        {
-            ItemToLoad = item.ToShell(),
-            StatusMessage = $"Now playing {item.DisplayName}."
-        };
-    }
-
-    public ShellQueueMediaResult PlayNext(string path)
-    {
-        var added = _playbackQueueController.PlayNext([path]);
-        _logger.LogInfo("Play next requested.", BabelLogContext.Create(("path", path), ("added", added.Count)));
-        return new ShellQueueMediaResult
-        {
-            AddedItems = added.Select(item => item.ToShell()).ToArray(),
-            StatusMessage = added.Count == 0
-                ? "Nothing was added to Up Next."
-                : $"{added[0].DisplayName} will play next."
-        };
-    }
-
-    public ShellQueueMediaResult AddToQueue(IEnumerable<string> files)
-    {
-        var added = _playbackQueueController.AddToQueue(files);
-        _logger.LogInfo("Add to queue requested.", BabelLogContext.Create(("added", added.Count)));
-        return new ShellQueueMediaResult
-        {
-            AddedItems = added.Select(item => item.ToShell()).ToArray(),
-            StatusMessage = added.Count == 0
-                ? "Nothing was added to Up Next."
-                : $"Queued {added.Count} item(s) in Up Next."
-        };
-    }
-
-    public ShellQueueMediaResult AddDroppedItemsToQueue(IEnumerable<string> files, IEnumerable<string> folders)
-    {
-        List<string> discoveredFiles = [];
-
-        foreach (var file in files.Where(LibraryBrowserService.IsSupportedMediaFile))
-        {
-            discoveredFiles.Add(file);
-        }
-
-        foreach (var folder in folders.Where(path => !string.IsNullOrWhiteSpace(path)))
-        {
-            discoveredFiles.AddRange(_libraryBrowserService.EnumerateMediaFiles(folder, recursive: true));
-        }
-
-        var added = _playbackQueueController.AddToQueue(discoveredFiles.Distinct(StringComparer.OrdinalIgnoreCase));
-        _logger.LogInfo("Added dropped items to queue.", BabelLogContext.Create(("added", added.Count)));
-        return new ShellQueueMediaResult
-        {
-            AddedItems = added.Select(item => item.ToShell()).ToArray(),
-            StatusMessage = added.Count == 0
-                ? "Dropped items did not contain supported media files."
-                : $"Queued {added.Count} item(s) in Up Next.",
-            IsError = added.Count == 0
-        };
-    }
-
-    public ShellPlaylistItem? MovePrevious() => _playbackQueueController.MovePrevious()?.ToShell();
-
-    public ShellPlaylistItem? MoveNext() => _playbackQueueController.MoveNext()?.ToShell();
-
-    public ShellQueueMediaResult ReorderQueueItem(int sourceIndex, int? targetIndex)
-    {
-        var reordered = _playbackQueueController.ReorderQueueItem(sourceIndex, targetIndex);
-        if (!reordered)
-        {
-            return new ShellQueueMediaResult
-            {
-                IsError = true,
-                StatusMessage = "Unable to reorder queue item."
-            };
-        }
-
-        _logger.LogInfo("Reordered queue item.", BabelLogContext.Create(("sourceIndex", sourceIndex), ("targetIndex", targetIndex)));
-        return new ShellQueueMediaResult
-        {
-            StatusMessage = "Queue order updated."
-        };
-    }
-
-    public void RemoveQueueItemAt(int index)
-    {
-        _playbackQueueController.RemoveQueueItemAt(index);
-    }
-
-    public void ClearQueue()
-    {
-        _playbackQueueController.ClearQueue();
-        _logger.LogInfo("Queue cleared.");
-    }
-
-    public async Task<bool> LoadPlaybackItemAsync(
-        ShellPlaylistItem? item,
-        ShellLoadMediaOptions options,
-        CancellationToken cancellationToken)
-    {
-        if (item is null || string.IsNullOrWhiteSpace(item.Path) || !File.Exists(item.Path))
-        {
-            _logger.LogWarning("Load playback item skipped because the item was missing.", null, BabelLogContext.Create(("path", item?.Path)));
-            return false;
-        }
-
-        var operationId = $"media-{Guid.NewGuid():N}";
-        _logger.LogInfo("Media load starting.", BabelLogContext.Create(("operationId", operationId), ("path", item.Path), ("displayName", item.DisplayName)));
-
-        ResetCaptionStartupGate();
-
-        _resumeTrackingCoordinator.SetEnabled(options.ResumeEnabled);
-        if (options.ResumeEnabled)
-        {
-            _resumeTrackingCoordinator.Flush();
-        }
-
-        _resumeTrackingCoordinator.ResetForMedia(item.Path);
-        ClearPendingResumeDecision();
-        SetPendingMediaOpenContext(item.Path, options.ResumeEnabled, options.OpenTrigger);
-
-        try
-        {
-            await _playbackBackend.LoadAsync(item.Path, cancellationToken);
-            await _playbackBackend.SetHardwareDecodingModeAsync(options.HardwareDecodingMode.ToCore(), cancellationToken);
-            await _playbackBackend.SetPlaybackRateAsync(options.PlaybackRate, cancellationToken);
-            await _playbackBackend.SetAspectRatioAsync(options.AspectRatio, cancellationToken);
-            await _playbackBackend.SetAudioDelayAsync(options.AudioDelaySeconds, cancellationToken);
-            await _playbackBackend.SetSubtitleDelayAsync(options.SubtitleDelaySeconds, cancellationToken);
-            await _playbackBackend.SetZoomAsync(0, cancellationToken);
-            await _playbackBackend.SetPanAsync(0, 0, cancellationToken);
-            await _playbackBackend.SetVolumeAsync(options.Volume, cancellationToken);
-            await _playbackBackend.SetMuteAsync(options.IsMuted, cancellationToken);
-            await _subtitleWorkflowController.LoadMediaSubtitlesAsync(item.Path, cancellationToken);
-            _logger.LogInfo("Media load completed.", BabelLogContext.Create(("operationId", operationId), ("path", item.Path)));
-            return true;
-        }
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            ClearPendingMediaOpenContext(item.Path);
-            _logger.LogError("Media load failed.", ex, BabelLogContext.Create(("operationId", operationId), ("path", item.Path), ("displayName", item.DisplayName)));
-            throw;
-        }
-    }
-
-    public async Task ApplyPlaybackDefaultsAsync(ShellPlaybackDefaultsChange change, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(change);
-
-        await _playbackBackend.SetHardwareDecodingModeAsync(change.HardwareDecodingMode.ToCore(), cancellationToken);
-        await _playbackBackend.SetPlaybackRateAsync(change.PlaybackRate, cancellationToken);
-        await _playbackBackend.SetAspectRatioAsync(change.AspectRatio, cancellationToken);
-        await _playbackBackend.SetAudioDelayAsync(change.AudioDelaySeconds, cancellationToken);
-        await _playbackBackend.SetSubtitleDelayAsync(change.SubtitleDelaySeconds, cancellationToken);
-    }
-
-    public async Task<ShellPlaybackOpenResult> HandleMediaOpenedAsync(
-        ShellPlaybackStateSnapshot snapshot,
-        ShellPreferencesSnapshot preferences,
-        CancellationToken cancellationToken = default)
-    {
-        var current = _playbackQueueController.NowPlayingItem;
-        var pendingContext = ConsumePendingMediaOpenContext(snapshot.Path);
-        var openTrigger = pendingContext?.OpenTrigger ?? ShellMediaOpenTrigger.Manual;
-        var result = new ShellPlaybackOpenResult
-        {
-            OpenTrigger = openTrigger,
-            StatusMessage = BuildOpenedStatusMessage(current, openTrigger)
-        };
-
-        await ApplyPlaybackDefaultsAsync(new ShellPlaybackDefaultsChange(
-            preferences.HardwareDecodingMode,
-            preferences.PlaybackRate,
-            preferences.AudioDelaySeconds,
-            preferences.SubtitleDelaySeconds,
-            preferences.AspectRatio), cancellationToken);
-
-        var resumeEnabled = pendingContext?.ResumeEnabled ?? preferences.ResumeEnabled;
-
-        _resumeTrackingCoordinator.SetEnabled(resumeEnabled);
-        _resumeTrackingCoordinator.ResetForMedia(snapshot.Path);
-        if (!resumeEnabled)
-        {
-            ClearPendingResumeDecision();
-            return result;
-        }
-
-        var entry = _resumePlaybackService.FindEntry(snapshot.Path, snapshot.Duration);
-        if (entry is null)
-        {
-            ClearPendingResumeDecision();
-            return result;
-        }
-
-        var resumePosition = TimeSpan.FromSeconds(Math.Clamp(entry.PositionSeconds, 0, snapshot.Duration.TotalSeconds));
-
-        if (openTrigger != ShellMediaOpenTrigger.Autoplay)
-        {
-            SetPendingResumeDecision(entry.Path, resumePosition);
-            _logger.LogInfo("Resume decision pending for manual open.", BabelLogContext.Create(("path", snapshot.Path), ("resumePosition", resumePosition)));
-            return result with
-            {
-                ResumePosition = resumePosition,
-                ResumeDecisionPending = true,
-                StatusMessage = BuildResumePromptStatusMessage(current, resumePosition)
-            };
-        }
-
-        ClearPendingResumeDecision();
-        await _playbackBackend.SeekAsync(resumePosition, cancellationToken);
-        _logger.LogInfo("Resume position applied.", BabelLogContext.Create(("path", snapshot.Path), ("resumePosition", resumePosition)));
-        return result with
-        {
-            ResumePosition = resumePosition,
-            StatusMessage = BuildResumedStatusMessage(current, openTrigger, resumePosition)
-        };
-    }
-
-    public async Task<ShellResumeDecisionResult> ApplyResumeDecisionAsync(
-        ShellResumeDecision decision,
-        CancellationToken cancellationToken = default)
-    {
-        var pending = _pendingResumeDecision;
-        if (pending is null)
-        {
-            return new ShellResumeDecisionResult
-            {
-                DecisionApplied = false,
-                StatusMessage = "No pending resume decision."
-            };
-        }
-
-        var current = _playbackQueueController.NowPlayingItem;
-        if (!string.IsNullOrWhiteSpace(current?.Path)
-            && !string.Equals(current.Path, pending.Path, StringComparison.OrdinalIgnoreCase))
-        {
-            ClearPendingResumeDecision();
-            return new ShellResumeDecisionResult
-            {
-                DecisionApplied = false,
-                StatusMessage = "Resume decision expired due to media change."
-            };
-        }
-
-        var displayName = current?.DisplayName ?? Path.GetFileName(pending.Path);
-
-        switch (decision)
-        {
-            case ShellResumeDecision.Resume:
-                await _playbackBackend.SeekAsync(pending.ResumePosition, cancellationToken);
-                await _playbackBackend.PlayAsync(cancellationToken);
-                ClearPendingResumeDecision();
-                return new ShellResumeDecisionResult
-                {
-                    DecisionApplied = true,
-                    StatusMessage = $"Resumed {displayName} at {pending.ResumePosition:mm\\:ss}."
-                };
-
-            case ShellResumeDecision.StartOver:
-                _resumePlaybackService.RemoveCompletedEntry(pending.Path);
-                await _playbackBackend.SeekAsync(TimeSpan.Zero, cancellationToken);
-                await _playbackBackend.PlayAsync(cancellationToken);
-                ClearPendingResumeDecision();
-                return new ShellResumeDecisionResult
-                {
-                    DecisionApplied = true,
-                    StatusMessage = $"Starting {displayName} from the beginning."
-                };
-
-            default:
-                ClearPendingResumeDecision();
-                return new ShellResumeDecisionResult
-                {
-                    DecisionApplied = true,
-                    StatusMessage = $"Resume skipped for {displayName}."
-                };
-        }
-    }
-
-    private static string BuildOpenedStatusMessage(PlaylistItem? current, ShellMediaOpenTrigger trigger)
-    {
-        if (current is null)
-        {
-            return "Media opened.";
-        }
-
-        return trigger == ShellMediaOpenTrigger.Autoplay
-            ? $"Autoplaying {current.DisplayName}."
-            : $"Now playing {current.DisplayName}.";
-    }
-
-    private static string BuildResumedStatusMessage(PlaylistItem? current, ShellMediaOpenTrigger trigger, TimeSpan resumePosition)
-    {
-        if (current is null)
-        {
-            return trigger == ShellMediaOpenTrigger.Autoplay
-                ? $"Autoplay resumed at {resumePosition:mm\\:ss}."
-                : $"Resumed at {resumePosition:mm\\:ss}.";
-        }
-
-        return trigger == ShellMediaOpenTrigger.Autoplay
-            ? $"Autoplay resumed {current.DisplayName} at {resumePosition:mm\\:ss}."
-            : $"Resumed {current.DisplayName} at {resumePosition:mm\\:ss}.";
-    }
-
-    private static string BuildResumePromptStatusMessage(PlaylistItem? current, TimeSpan resumePosition)
-    {
-        if (current is null)
-        {
-            return $"Resume available at {resumePosition:mm\\:ss}.";
-        }
-
-        return $"Resume available for {current.DisplayName} at {resumePosition:mm\\:ss}.";
-    }
-
-    private void SetPendingMediaOpenContext(string path, bool resumeEnabled, ShellMediaOpenTrigger openTrigger)
-    {
-        _pendingMediaOpenContext = new PendingMediaOpenContext(path, resumeEnabled, openTrigger);
-    }
-
-    private void SetPendingResumeDecision(string path, TimeSpan resumePosition)
-    {
-        _pendingResumeDecision = new PendingResumeDecision(path, resumePosition);
-    }
-
-    private void ClearPendingResumeDecision()
-    {
-        _pendingResumeDecision = null;
-    }
-
-    private PendingMediaOpenContext? ConsumePendingMediaOpenContext(string? path)
-    {
-        var context = _pendingMediaOpenContext;
-        if (context is null)
-        {
-            return null;
-        }
-
-        if (!string.IsNullOrWhiteSpace(path)
-            && string.Equals(context.Path, path, StringComparison.OrdinalIgnoreCase))
-        {
-            _pendingMediaOpenContext = null;
-            return context;
-        }
-
-        if (!string.IsNullOrWhiteSpace(path))
-        {
-            _pendingMediaOpenContext = null;
-        }
-
-        return null;
-    }
-
-    private void ClearPendingMediaOpenContext(string path)
-    {
-        if (_pendingMediaOpenContext is null)
-        {
-            return;
-        }
-
-        if (string.Equals(_pendingMediaOpenContext.Path, path, StringComparison.OrdinalIgnoreCase))
-        {
-            _pendingMediaOpenContext = null;
-        }
-    }
-
-    public void SetResumeTrackingEnabled(bool enabled)
-    {
-        _resumeTrackingCoordinator.SetEnabled(enabled);
-    }
-
-    public void ClearResumeHistory()
-    {
-        _resumePlaybackService.Clear();
-    }
-
-    public void FlushResumeTracking(bool forceRemoveCompleted = false)
-    {
-        _resumeTrackingCoordinator.Flush(forceRemoveCompleted);
-    }
-
-    public ShellMediaEndedResult HandleMediaEnded(bool resumeEnabled, bool autoPlayNextInQueue = true)
-    {
-        ClearPendingResumeDecision();
-        _resumeTrackingCoordinator.SetEnabled(resumeEnabled);
-        if (resumeEnabled)
-        {
-            _resumeTrackingCoordinator.Flush(forceRemoveCompleted: true);
-        }
-
-        ResetCaptionStartupGate();
-        var next = autoPlayNextInQueue
-            ? _playbackQueueController.AdvanceAfterMediaEnded()
-            : null;
-        _logger.LogInfo("Handled media end.", BabelLogContext.Create(("nextPath", next?.Path), ("resumeEnabled", resumeEnabled), ("autoPlayNextInQueue", autoPlayNextInQueue)));
-        return new ShellMediaEndedResult
-        {
-            NextItem = next?.ToShell(),
-            StatusMessage = next is null
-                ? autoPlayNextInQueue
-                    ? "Playback ended."
-                    : "Playback ended. Up Next is ready when you are."
-                : $"Now playing {next.DisplayName}."
-        };
     }
 
     public void Dispose()
@@ -704,243 +125,82 @@ public sealed class ShellController : IQueueProjectionReader, IQueueCommands, IS
         _resumeTrackingCoordinator.Dispose();
     }
 
+    // ── IQueueProjectionReader ───────────────────────────────────────────────
+
+    public ShellQueueSnapshot QueueSnapshot =>
+        MapQueueSnapshot(_playbackQueueController.Snapshot);
+
+    public ShellPlaylistItem? NowPlayingItem =>
+        _playbackQueueController.NowPlayingItem?.ToShell();
+
+    public IReadOnlyList<PlaylistItem> QueueItems =>
+        _playbackQueueController.QueueItems;
+
+    public IReadOnlyList<PlaylistItem> HistoryItems =>
+        _playbackQueueController.HistoryItems;
+
+    public ShellPlaybackStateSnapshot CurrentPlaybackSnapshot =>
+        (_resumeTrackingCoordinator.CurrentSnapshot with
+        {
+            PlaylistIndex = _playbackQueueController.NowPlayingItem is null ? -1 : 0,
+            PlaylistCount = _playbackQueueController.QueueItems.Count
+        }).ToShell();
+
+    // ── Internal helpers shared across partials ──────────────────────────────
+
     private void HandleQueueSnapshotChanged(PlaybackQueueSnapshot snapshot)
     {
-        _logger.LogInfo("Queue snapshot changed.", BabelLogContext.Create(("nowPlaying", snapshot.NowPlayingItem?.DisplayName), ("upNextCount", snapshot.QueueItems.Count), ("historyCount", snapshot.HistoryItems.Count)));
+        _logger.LogInfo("Queue snapshot changed.",
+            BabelLogContext.Create(
+                ("nowPlaying",    snapshot.NowPlayingItem?.DisplayName),
+                ("upNextCount",   snapshot.QueueItems.Count),
+                ("historyCount",  snapshot.HistoryItems.Count)));
         QueueSnapshotChanged?.Invoke(MapQueueSnapshot(snapshot));
     }
 
-    private static ShellQueueSnapshot MapQueueSnapshot(PlaybackQueueSnapshot snapshot)
+    private static ShellQueueSnapshot MapQueueSnapshot(PlaybackQueueSnapshot snapshot) => new()
     {
-        return new ShellQueueSnapshot
-        {
-            NowPlayingItem = snapshot.NowPlayingItem?.ToShell(),
-            QueueItems = snapshot.QueueItems.Select(item => item.ToShell()).ToArray(),
-            HistoryItems = snapshot.HistoryItems.Select(item => item.ToShell()).ToArray()
-        };
+        NowPlayingItem = snapshot.NowPlayingItem?.ToShell(),
+        QueueItems     = snapshot.QueueItems.Select(i => i.ToShell()).ToArray(),
+        HistoryItems   = snapshot.HistoryItems.Select(i => i.ToShell()).ToArray()
+    };
+
+    private ShellPreferencesSnapshot RevealBrowserPanePreference()
+    {
+        var current = _shellPreferencesService.Current;
+        if (current.ShowBrowserPanel) return current;
+        return _shellPreferencesService.ApplyLayoutChange(new ShellLayoutPreferencesChange(
+            true, current.ShowPlaylistPanel, current.WindowMode));
     }
 
-    public Task PlayAsync(CancellationToken cancellationToken = default)
-        => _playbackBackend.PlayAsync(cancellationToken);
+    private void SetPendingMediaOpenContext(string path, bool resumeEnabled, ShellMediaOpenTrigger trigger)
+        => _pendingMediaOpenContext = new PendingMediaOpenContext(path, resumeEnabled, trigger);
 
-    public Task PauseAsync(CancellationToken cancellationToken = default)
-        => _playbackBackend.PauseAsync(cancellationToken);
-
-    public Task SeekAsync(TimeSpan position, CancellationToken cancellationToken = default)
-        => _playbackBackend.SeekAsync(position, cancellationToken);
-
-    public Task SeekRelativeAsync(TimeSpan delta, CancellationToken cancellationToken = default)
-        => _playbackBackend.SeekRelativeAsync(delta, cancellationToken);
-
-    public Task StepFrameAsync(bool forward, CancellationToken cancellationToken = default)
-        => _playbackBackend.StepFrameAsync(forward, cancellationToken);
-
-    public Task SetVolumeAsync(double volume, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetVolumeAsync(volume, cancellationToken);
-
-    public Task SetMutedAsync(bool muted, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetMuteAsync(muted, cancellationToken);
-
-    public async Task ApplyAudioPreferencesAsync(double volume, bool muted, CancellationToken cancellationToken = default)
+    private PendingMediaOpenContext? ConsumePendingMediaOpenContext(string? path)
     {
-        await _playbackBackend.SetVolumeAsync(volume, cancellationToken);
-        await _playbackBackend.SetMuteAsync(muted, cancellationToken);
+        var ctx = _pendingMediaOpenContext;
+        if (ctx is null) return null;
+        if (!string.IsNullOrWhiteSpace(path) &&
+            string.Equals(ctx.Path, path, StringComparison.OrdinalIgnoreCase))
+        {
+            _pendingMediaOpenContext = null;
+            return ctx;
+        }
+        if (!string.IsNullOrWhiteSpace(path))
+            _pendingMediaOpenContext = null;
+        return null;
     }
 
-    public Task SetPlaybackRateAsync(double speed, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetPlaybackRateAsync(speed, cancellationToken);
-
-    public Task SetAudioTrackAsync(int? trackId, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetAudioTrackAsync(trackId, cancellationToken);
-
-    public Task SetSubtitleTrackAsync(int? trackId, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetSubtitleTrackAsync(trackId, cancellationToken);
-
-    public async Task<ShellSubtitleTrackSelectionResult> SelectEmbeddedSubtitleTrackAsync(
-        string? currentPath,
-        SubtitlePipelineSource currentSubtitleSource,
-        ShellMediaTrack? track,
-        CancellationToken cancellationToken = default)
+    private void ClearPendingMediaOpenContext(string path)
     {
-        if (track is null)
-        {
-            await _playbackBackend.SetSubtitleTrackAsync(null, cancellationToken);
-            if (currentSubtitleSource == SubtitlePipelineSource.EmbeddedTrack && !string.IsNullOrWhiteSpace(currentPath))
-            {
-                await _subtitleWorkflowController.LoadMediaSubtitlesAsync(currentPath, cancellationToken);
-            }
-
-            _logger.LogInfo("Embedded subtitle track disabled.", BabelLogContext.Create(("path", currentPath), ("subtitleSource", currentSubtitleSource.ToString())));
-            return new ShellSubtitleTrackSelectionResult
-            {
-                TrackSelectionChanged = true,
-                StatusMessage = "Embedded subtitle track disabled."
-            };
-        }
-
-        if (track.IsTextBased)
-        {
-            if (string.IsNullOrWhiteSpace(currentPath))
-            {
-                return new ShellSubtitleTrackSelectionResult
-                {
-                    StatusMessage = "Open a video first.",
-                    IsError = true
-                };
-            }
-
-            await _playbackBackend.SetSubtitleTrackAsync(null, cancellationToken);
-            var loadResult = await _subtitleWorkflowController.ImportEmbeddedSubtitleTrackAsync(currentPath, track.ToCore(), cancellationToken);
-            var imported = loadResult.CueCount > 0;
-            _logger.LogInfo(
-                "Embedded text subtitle track imported.",
-                BabelLogContext.Create(("path", currentPath), ("trackId", track.Id), ("cueCount", loadResult.CueCount)));
-            return new ShellSubtitleTrackSelectionResult
-            {
-                TrackSelectionChanged = true,
-                StatusMessage = imported
-                    ? $"Imported embedded subtitle track {track.Id}."
-                    : "Embedded subtitle import failed.",
-                IsError = !imported
-            };
-        }
-
-        await _playbackBackend.SetSubtitleTrackAsync(track.Id, cancellationToken);
-        _logger.LogInfo(
-            "Embedded image subtitle track selected for direct playback.",
-            BabelLogContext.Create(("path", currentPath), ("trackId", track.Id)));
-        return new ShellSubtitleTrackSelectionResult
-        {
-            SelectedSubtitleTrackId = track.Id,
-            TrackSelectionChanged = true,
-            StatusMessage = "Selected image-based embedded subtitle track for direct playback."
-        };
+        if (_pendingMediaOpenContext is not null &&
+            string.Equals(_pendingMediaOpenContext.Path, path, StringComparison.OrdinalIgnoreCase))
+            _pendingMediaOpenContext = null;
     }
 
-    public Task SetAudioDelayAsync(double seconds, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetAudioDelayAsync(seconds, cancellationToken);
+    private void SetPendingResumeDecision(string path, TimeSpan position)
+        => _pendingResumeDecision = new PendingResumeDecision(path, position);
 
-    public Task SetSubtitleDelayAsync(double seconds, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetSubtitleDelayAsync(seconds, cancellationToken);
-
-    public Task SetAspectRatioAsync(string aspectRatio, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetAspectRatioAsync(aspectRatio, cancellationToken);
-
-    public Task SetHardwareDecodingModeAsync(ShellHardwareDecodingMode mode, CancellationToken cancellationToken = default)
-        => _playbackBackend.SetHardwareDecodingModeAsync(mode.ToCore(), cancellationToken);
-
-    public Task<ShellWorkflowTransitionResult> PrepareForTranscriptionRefreshAsync(
-        SubtitleWorkflowSnapshot snapshot,
-        ShellPlaybackStateSnapshot playbackState,
-        CancellationToken cancellationToken = default)
-    {
-        if (snapshot.SubtitleSource != SubtitlePipelineSource.Generated || string.IsNullOrWhiteSpace(playbackState.Path))
-        {
-            return Task.FromResult(new ShellWorkflowTransitionResult());
-        }
-
-        _autoResumePlaybackAfterCaptionReady = true;
-        _autoResumePlaybackPath = playbackState.Path;
-        _autoResumePlaybackPosition = playbackState.Position;
-        _autoResumePlaybackFromBeginning = false;
-        return PauseForWorkflowTransitionAsync("Refreshing captions for the selected transcription model.", cancellationToken);
-    }
-
-    public async Task<ShellWorkflowTransitionResult> EvaluateCaptionStartupGateAsync(
-        SubtitleWorkflowSnapshot snapshot,
-        ShellPlaybackStateSnapshot playbackState,
-        CancellationToken cancellationToken = default)
-    {
-        var currentPath = playbackState.Path;
-        if (string.IsNullOrWhiteSpace(currentPath) || !string.Equals(snapshot.CurrentVideoPath, currentPath, StringComparison.OrdinalIgnoreCase))
-        {
-            ResetCaptionStartupGate();
-            return new ShellWorkflowTransitionResult
-            {
-                StartupGateBlocking = false
-            };
-        }
-
-        var shouldPauseForInitialCaptions = snapshot.SubtitleSource == SubtitlePipelineSource.Generated
-            && snapshot.IsCaptionGenerationInProgress
-            && snapshot.Cues.Count == 0
-            && playbackState.Position <= TimeSpan.FromSeconds(2);
-
-        if (shouldPauseForInitialCaptions && !_autoResumePlaybackAfterCaptionReady)
-        {
-            _autoResumePlaybackAfterCaptionReady = true;
-            _autoResumePlaybackPath = currentPath;
-            _autoResumePlaybackPosition = TimeSpan.Zero;
-            _autoResumePlaybackFromBeginning = true;
-            return await PauseForWorkflowTransitionAsync(
-                "Generating initial captions before playback starts.",
-                cancellationToken,
-                startupGateBlocking: true);
-        }
-
-        if (_autoResumePlaybackAfterCaptionReady
-            && string.Equals(_autoResumePlaybackPath, currentPath, StringComparison.OrdinalIgnoreCase)
-            && snapshot.Cues.Count > 0)
-        {
-            _autoResumePlaybackAfterCaptionReady = false;
-            _autoResumePlaybackPath = null;
-            var resumePosition = _autoResumePlaybackFromBeginning ? TimeSpan.Zero : _autoResumePlaybackPosition;
-            _autoResumePlaybackPosition = TimeSpan.Zero;
-            _autoResumePlaybackFromBeginning = true;
-            await _playbackBackend.SeekAsync(resumePosition, cancellationToken);
-            await _playbackBackend.PlayAsync(cancellationToken);
-            return new ShellWorkflowTransitionResult
-            {
-                StatusMessage = "Captions ready. Playing with generated subtitles.",
-                StartupGateBlocking = false
-            };
-        }
-
-        if (!snapshot.IsCaptionGenerationInProgress)
-        {
-            ResetCaptionStartupGate();
-            return new ShellWorkflowTransitionResult
-            {
-                StartupGateBlocking = false
-            };
-        }
-
-        return new ShellWorkflowTransitionResult();
-    }
-
-    private async Task<ShellWorkflowTransitionResult> PauseForWorkflowTransitionAsync(
-        string statusMessage,
-        CancellationToken cancellationToken,
-        bool? startupGateBlocking = null)
-    {
-        await _playbackBackend.PauseAsync(cancellationToken);
-        await WaitForPauseStateAsync(true, cancellationToken);
-        return new ShellWorkflowTransitionResult
-        {
-            StatusMessage = statusMessage,
-            StartupGateBlocking = startupGateBlocking
-        };
-    }
-
-    private async Task WaitForPauseStateAsync(bool paused, CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (_playbackBackend.Clock.Current.IsPaused == paused)
-            {
-                return;
-            }
-
-            await Task.Delay(50, cancellationToken);
-        }
-    }
-
-    private void ResetCaptionStartupGate()
-    {
-        _autoResumePlaybackAfterCaptionReady = false;
-        _autoResumePlaybackPath = null;
-        _autoResumePlaybackPosition = TimeSpan.Zero;
-        _autoResumePlaybackFromBeginning = true;
-    }
+    private void ClearPendingResumeDecision()
+        => _pendingResumeDecision = null;
 }
