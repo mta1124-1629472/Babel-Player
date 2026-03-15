@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using Nuke.Common;
 using Nuke.Common.Execution;
 using Nuke.Common.IO;
@@ -33,11 +34,13 @@ class Build : NukeBuild
     string DefaultRuntime => RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
     string _rawVersionToken = string.Empty;
 
-    // libmpv dev packages from https://sourceforge.net/projects/mpv-player-windows/files/libmpv/
-    // x64: v3 (AVX2-optimised) build; arm64: standard aarch64 build (no v3 variant available).
-    // Update these filenames when bumping MpvRuntimeInstaller.RuntimeVersion.
-    const string LibMpvArchiveX64   = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20260201-git-40d2947.7z/download";
-    const string LibMpvArchiveArm64 = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-aarch64-20260201-git-40d2947.7z/download";
+    // libmpv dev packages from https://github.com/shinchiro/mpv-winbuild-cmake/releases
+    // Update URL + SHA256 together whenever bumping the mpv version.
+    const string LibMpvArchiveX64      = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-x86_64-20260307-git-f9190e5.7z";
+    const string LibMpvArchiveX64Sha256 = "274db632b4a1849f392e2044bbeafd1e7079acd04b3eb281a03a9769a1c48bf6";
+
+    const string LibMpvArchiveArm64      = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-aarch64-20260307-git-f9190e5.7z";
+    const string LibMpvArchiveArm64Sha256 = "faefb9d3c75d19df1d52d86f9316340f472ba81c76d3c400362d82c61ab11b39";
 
     [Parameter("Release version token for artifact names. Defaults to tag name or commit SHA when available")]
     readonly string ReleaseVersion = string.Empty;
@@ -139,15 +142,14 @@ class Build : NukeBuild
     Target ReleasePackage => _ => _
         .DependsOn(ReleaseRuntimeWinX64, ReleaseRuntimeWinArm64);
 
-    // Fetches both native assets (convenience target for local dev after a fresh clone)
     Target FetchNativeAssets => _ => _
         .DependsOn(FetchNativeX64Asset, FetchNativeArm64Asset);
 
     Target FetchNativeX64Asset => _ => _
-        .Executes(() => FetchLibMpvDll("win-x64", LibMpvArchiveX64, NativeX64Asset));
+        .Executes(() => FetchLibMpvDll("win-x64", LibMpvArchiveX64, LibMpvArchiveX64Sha256, NativeX64Asset));
 
     Target FetchNativeArm64Asset => _ => _
-        .Executes(() => FetchLibMpvDll("win-arm64", LibMpvArchiveArm64, NativeArm64Asset));
+        .Executes(() => FetchLibMpvDll("win-arm64", LibMpvArchiveArm64, LibMpvArchiveArm64Sha256, NativeArm64Asset));
 
     void PublishRuntime(string runtime)
     {
@@ -168,9 +170,7 @@ class Build : NukeBuild
 
         var archivePath = GetPortableArchivePath(runtime);
         if (File.Exists(archivePath))
-        {
             File.Delete(archivePath);
-        }
 
         ZipFile.CreateFromDirectory(publishDir, archivePath, CompressionLevel.Optimal, includeBaseDirectory: false);
     }
@@ -182,7 +182,7 @@ class Build : NukeBuild
         Directory.CreateDirectory(ArtifactsDirectory);
 
         var installerBaseName = GetInstallerBaseName(runtime);
-        var installerVersion = GetInstallerVersion();
+        var installerVersion  = GetInstallerVersion();
         var innoSetupExecutable = GetInnoSetupExecutablePath();
         var arguments =
             $"/DMyAppVersion={installerVersion} /DMyPublishDir=\"{publishDir}\" /DMyOutputDir=\"{ArtifactsDirectory}\" /DMyOutputBaseFilename={installerBaseName} \"{InstallerScript}\"";
@@ -192,42 +192,27 @@ class Build : NukeBuild
     }
 
     AbsolutePath GetPortableArchivePath(string runtime)
-    {
-        return ArtifactsDirectory / $"BabelPlayer-{GetRawVersionToken()}-portable-{GetRuntimeSuffix(runtime)}.zip";
-    }
+        => ArtifactsDirectory / $"BabelPlayer-{GetRawVersionToken()}-portable-{GetRuntimeSuffix(runtime)}.zip";
 
     string GetInstallerBaseName(string runtime)
-    {
-        return $"BabelPlayer-{GetRawVersionToken()}-setup-{GetRuntimeSuffix(runtime)}";
-    }
+        => $"BabelPlayer-{GetRawVersionToken()}-setup-{GetRuntimeSuffix(runtime)}";
 
     string GetInstallerVersion()
     {
-        var rawVersionToken = GetRawVersionToken();
-        return rawVersionToken.StartsWith("v", StringComparison.OrdinalIgnoreCase) && rawVersionToken.Length > 1
-            ? rawVersionToken[1..]
-            : rawVersionToken;
+        var raw = GetRawVersionToken();
+        return raw.StartsWith("v", StringComparison.OrdinalIgnoreCase) && raw.Length > 1 ? raw[1..] : raw;
     }
 
     string GetRawVersionToken()
     {
-        if (!string.IsNullOrWhiteSpace(_rawVersionToken))
-        {
-            return _rawVersionToken;
-        }
+        if (!string.IsNullOrWhiteSpace(_rawVersionToken)) return _rawVersionToken;
 
         if (!string.IsNullOrWhiteSpace(ReleaseVersion))
-        {
-            _rawVersionToken = ReleaseVersion.Trim();
-            return _rawVersionToken;
-        }
+            return _rawVersionToken = ReleaseVersion.Trim();
 
         var githubRefName = Environment.GetEnvironmentVariable("GITHUB_REF_NAME");
         if (!string.IsNullOrWhiteSpace(githubRefName))
-        {
-            _rawVersionToken = githubRefName.Trim();
-            return _rawVersionToken;
-        }
+            return _rawVersionToken = githubRefName.Trim();
 
         var githubSha = Environment.GetEnvironmentVariable("GITHUB_SHA");
         if (!string.IsNullOrWhiteSpace(githubSha))
@@ -236,32 +221,24 @@ class Build : NukeBuild
             return _rawVersionToken[..Math.Min(12, _rawVersionToken.Length)];
         }
 
-        _rawVersionToken = "dev";
-        return _rawVersionToken;
+        return _rawVersionToken = "dev";
     }
 
-    static string GetRuntimeSuffix(string runtime)
+    static string GetRuntimeSuffix(string runtime) => runtime switch
     {
-        return runtime switch
-        {
-            "win-x64" => "win-x64",
-            "win-arm64" => "win-arm64",
-            _ => runtime.Replace(' ', '-')
-        };
-    }
+        "win-x64"   => "win-x64",
+        "win-arm64" => "win-arm64",
+        _           => runtime.Replace(' ', '-')
+    };
 
     static string GetInnoSetupExecutablePath()
     {
         var explicitPath = Environment.GetEnvironmentVariable("INNO_SETUP_EXE");
-        if (!string.IsNullOrWhiteSpace(explicitPath))
-        {
-            return explicitPath;
-        }
-
+        if (!string.IsNullOrWhiteSpace(explicitPath)) return explicitPath;
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Inno Setup 6", "ISCC.exe");
     }
 
-    static void FetchLibMpvDll(string runtime, string downloadUrl, AbsolutePath destinationPath)
+    static void FetchLibMpvDll(string runtime, string downloadUrl, string expectedSha256, AbsolutePath destinationPath)
     {
         var destFile = new FileInfo(destinationPath);
         if (destFile.Exists && destFile.Length > 1_000_000)
@@ -270,35 +247,41 @@ class Build : NukeBuild
             return;
         }
 
-        Console.WriteLine($"[{runtime}] Fetching libmpv archive from SourceForge...");
+        Console.WriteLine($"[{runtime}] Fetching libmpv archive from GitHub Releases...");
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
 
-        var tempId   = Guid.NewGuid().ToString("N");
-        var tempZip  = Path.Combine(Path.GetTempPath(), $"libmpv-{runtime}-{tempId}.7z");
-        var tempDir  = Path.Combine(Path.GetTempPath(), $"libmpv-extract-{runtime}-{tempId}");
+        var tempId  = Guid.NewGuid().ToString("N");
+        var tempZip = Path.Combine(Path.GetTempPath(), $"libmpv-{runtime}-{tempId}.7z");
+        var tempDir = Path.Combine(Path.GetTempPath(), $"libmpv-extract-{runtime}-{tempId}");
 
         try
         {
-            // curl is available on all Windows CI runners (Windows 10+) and local dev machines
             Console.WriteLine($"[{runtime}] Downloading {downloadUrl} ...");
             ProcessTasks.StartProcess("curl", $"-L --retry 3 --retry-delay 5 -o \"{tempZip}\" \"{downloadUrl}\"")
                 .AssertZeroExitCode();
 
             var zipInfo = new FileInfo(tempZip);
             if (!zipInfo.Exists || zipInfo.Length < 1_000_000)
+                throw new Exception($"[{runtime}] Downloaded archive is too small ({zipInfo.Length} bytes). Expected a valid .7z from GitHub Releases.");
+
+            // SHA256 integrity check
+            Console.WriteLine($"[{runtime}] Verifying SHA256...");
+            using (var sha256 = SHA256.Create())
+            using (var stream = File.OpenRead(tempZip))
             {
-                throw new Exception($"[{runtime}] Downloaded archive appears invalid or too small ({zipInfo.Length} bytes). Check the SourceForge URL.");
+                var hashBytes = sha256.ComputeHash(stream);
+                var actualHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+                if (!string.Equals(actualHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new Exception($"[{runtime}] SHA256 mismatch!\n  Expected: {expectedSha256}\n  Actual:   {actualHash}");
             }
+            Console.WriteLine($"[{runtime}] SHA256 OK. Extracting libmpv-2.dll...");
 
-            Console.WriteLine($"[{runtime}] Download complete ({zipInfo.Length / 1024 / 1024} MB). Extracting libmpv-2.dll...");
             Directory.CreateDirectory(tempDir);
-
-            // 7z is pre-installed on GitHub Actions windows-latest runners and ships with Git for Windows
             ProcessTasks.StartProcess("7z", $"e \"{tempZip}\" -o\"{tempDir}\" libmpv-2.dll -r -y")
                 .AssertZeroExitCode();
 
             var extracted = Directory.GetFiles(tempDir, "libmpv-2.dll", SearchOption.AllDirectories).FirstOrDefault()
-                ?? throw new Exception($"[{runtime}] libmpv-2.dll was not found inside the downloaded archive. The archive layout may have changed.");
+                ?? throw new Exception($"[{runtime}] libmpv-2.dll not found inside the archive. Layout may have changed.");
 
             File.Copy(extracted, destinationPath, overwrite: true);
 
@@ -306,30 +289,22 @@ class Build : NukeBuild
             Console.WriteLine($"[{runtime}] libmpv-2.dll placed at {destinationPath} ({finalSize / 1024 / 1024} MB).");
 
             if (finalSize < 1_000_000)
-            {
-                throw new Exception($"[{runtime}] Extracted libmpv-2.dll is suspiciously small ({finalSize} bytes) — extraction may have failed.");
-            }
+                throw new Exception($"[{runtime}] Extracted libmpv-2.dll is too small ({finalSize} bytes) — extraction may have failed.");
         }
         finally
         {
-            if (File.Exists(tempZip))        try { File.Delete(tempZip); } catch { }
-            if (Directory.Exists(tempDir))   try { Directory.Delete(tempDir, recursive: true); } catch { }
+            if (File.Exists(tempZip))       try { File.Delete(tempZip); }                      catch { }
+            if (Directory.Exists(tempDir))  try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
 
     static void DeleteDirectoryIfExists(AbsolutePath path)
     {
-        if (Directory.Exists(path))
-        {
-            Directory.Delete(path, recursive: true);
-        }
+        if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
     }
 
     static void EnsureDirectoryExists(AbsolutePath path, string errorMessage)
     {
-        if (!Directory.Exists(path))
-        {
-            throw new Exception(errorMessage);
-        }
+        if (!Directory.Exists(path)) throw new Exception(errorMessage);
     }
 }
