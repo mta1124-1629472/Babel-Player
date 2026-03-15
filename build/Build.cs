@@ -33,6 +33,12 @@ class Build : NukeBuild
     string DefaultRuntime => RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
     string _rawVersionToken = string.Empty;
 
+    // mpv 0.41.0 libmpv-only dev packages (contains libmpv-2.dll without the full mpv.exe bundle)
+    // These are the shimmed libmpv shared library builds from the same SourceForge project used by MpvRuntimeInstaller.
+    // Version is intentionally kept in sync with MpvRuntimeInstaller.RuntimeVersion = "0.41.0".
+    const string LibMpvArchiveX64   = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20250209-git-a40958a.7z/download";
+    const string LibMpvArchiveArm64 = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-aarch64-v3-20250209-git-a40958a.7z/download";
+
     [Parameter("Release version token for artifact names. Defaults to tag name or commit SHA when available")]
     readonly string ReleaseVersion = string.Empty;
 
@@ -91,11 +97,11 @@ class Build : NukeBuild
         });
 
     Target PublishWinX64 => _ => _
-        .DependsOn(Restore, ValidateNativeX64Asset)
+        .DependsOn(Restore, FetchNativeX64Asset)
         .Executes(() => PublishRuntime("win-x64"));
 
     Target PublishWinArm64 => _ => _
-        .DependsOn(Restore, ValidateNativeArm64Asset)
+        .DependsOn(Restore, FetchNativeArm64Asset)
         .Executes(() => PublishRuntime("win-arm64"));
 
     Target PackagePortableWinX64 => _ => _
@@ -133,20 +139,15 @@ class Build : NukeBuild
     Target ReleasePackage => _ => _
         .DependsOn(ReleaseRuntimeWinX64, ReleaseRuntimeWinArm64);
 
-    Target ValidateNativeAssets => _ => _
-        .DependsOn(ValidateNativeX64Asset, ValidateNativeArm64Asset);
+    // Fetches both native assets (convenience target for local dev after a fresh clone)
+    Target FetchNativeAssets => _ => _
+        .DependsOn(FetchNativeX64Asset, FetchNativeArm64Asset);
 
-    Target ValidateNativeX64Asset => _ => _
-        .Executes(() =>
-        {
-            EnsureNativeAssetExists(NativeX64Asset, "native/win-x64/libmpv-2.dll");
-        });
+    Target FetchNativeX64Asset => _ => _
+        .Executes(() => FetchLibMpvDll("win-x64", LibMpvArchiveX64, NativeX64Asset));
 
-    Target ValidateNativeArm64Asset => _ => _
-        .Executes(() =>
-        {
-            EnsureNativeAssetExists(NativeArm64Asset, "native/win-arm64/libmpv-2.dll");
-        });
+    Target FetchNativeArm64Asset => _ => _
+        .Executes(() => FetchLibMpvDll("win-arm64", LibMpvArchiveArm64, NativeArm64Asset));
 
     void PublishRuntime(string runtime)
     {
@@ -260,6 +261,62 @@ class Build : NukeBuild
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Inno Setup 6", "ISCC.exe");
     }
 
+    static void FetchLibMpvDll(string runtime, string downloadUrl, AbsolutePath destinationPath)
+    {
+        var destFile = new FileInfo(destinationPath);
+        if (destFile.Exists && destFile.Length > 1_000_000)
+        {
+            Console.WriteLine($"[{runtime}] libmpv-2.dll already present ({destFile.Length / 1024 / 1024} MB), skipping download.");
+            return;
+        }
+
+        Console.WriteLine($"[{runtime}] Fetching libmpv archive from SourceForge...");
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+
+        var tempId   = Guid.NewGuid().ToString("N");
+        var tempZip  = Path.Combine(Path.GetTempPath(), $"libmpv-{runtime}-{tempId}.7z");
+        var tempDir  = Path.Combine(Path.GetTempPath(), $"libmpv-extract-{runtime}-{tempId}");
+
+        try
+        {
+            // curl is available on all Windows CI runners (Windows 10+) and local dev machines
+            Console.WriteLine($"[{runtime}] Downloading {downloadUrl} ...");
+            ProcessTasks.StartProcess("curl", $"-L --retry 3 --retry-delay 5 -o \"{tempZip}\" \"{downloadUrl}\"")
+                .AssertZeroExitCode();
+
+            var zipInfo = new FileInfo(tempZip);
+            if (!zipInfo.Exists || zipInfo.Length < 100_000)
+            {
+                throw new Exception($"[{runtime}] Downloaded archive appears invalid or too small ({zipInfo.Length} bytes). Check the SourceForge URL.");
+            }
+
+            Console.WriteLine($"[{runtime}] Download complete ({zipInfo.Length / 1024 / 1024} MB). Extracting libmpv-2.dll...");
+            Directory.CreateDirectory(tempDir);
+
+            // 7z is pre-installed on GitHub Actions windows-latest runners and ships with Git for Windows
+            ProcessTasks.StartProcess("7z", $"e \"{tempZip}\" -o\"{tempDir}\" libmpv-2.dll -r -y")
+                .AssertZeroExitCode();
+
+            var extracted = Directory.GetFiles(tempDir, "libmpv-2.dll", SearchOption.AllDirectories).FirstOrDefault()
+                ?? throw new Exception($"[{runtime}] libmpv-2.dll was not found inside the downloaded archive. The archive layout may have changed.");
+
+            File.Copy(extracted, destinationPath, overwrite: true);
+
+            var finalSize = new FileInfo(destinationPath).Length;
+            Console.WriteLine($"[{runtime}] libmpv-2.dll placed at {destinationPath} ({finalSize / 1024 / 1024} MB).");
+
+            if (finalSize < 1_000_000)
+            {
+                throw new Exception($"[{runtime}] Extracted libmpv-2.dll is suspiciously small ({finalSize} bytes) — extraction may have failed.");
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempZip))        try { File.Delete(tempZip); } catch { }
+            if (Directory.Exists(tempDir))   try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
     static void DeleteDirectoryIfExists(AbsolutePath path)
     {
         if (Directory.Exists(path))
@@ -273,14 +330,6 @@ class Build : NukeBuild
         if (!Directory.Exists(path))
         {
             throw new Exception(errorMessage);
-        }
-    }
-
-    static void EnsureNativeAssetExists(AbsolutePath path, string relativePath)
-    {
-        if (!File.Exists(path))
-        {
-            throw new Exception($"Required native asset is missing: {relativePath}");
         }
     }
 }
