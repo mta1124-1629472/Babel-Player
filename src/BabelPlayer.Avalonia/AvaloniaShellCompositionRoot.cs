@@ -37,7 +37,7 @@ public sealed class AvaloniaShellCompositionRoot
         var audioExtractor = CreateAudioExtractor(settingsStore);
         var windowsSpeech = CreateWindowsSpeechTranscriber();
 
-        var credentialFacade = new CredentialFacade();
+        var credentialStore = CredentialStoreFactory.Create();
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
         var filePickerService = new AvaloniaFilePickerService(ownerWindow);
@@ -47,7 +47,7 @@ public sealed class AvaloniaShellCompositionRoot
         var shortcutProfileService = new ShortcutProfileService(shellPreferencesService);
         var subtitleInfrastructure = new SubtitleWorkflowInfrastructureFactory().Create(
             new SubtitleWorkflowInfrastructureRequest(
-                credentialFacade,
+                credentialStore,
                 credentialDialogService,
                 filePickerService,
                 Environment.GetEnvironmentVariable));
@@ -57,7 +57,7 @@ public sealed class AvaloniaShellCompositionRoot
             subtitleInfrastructure.SubtitleTranslator,
             subtitleInfrastructure.AiCredentialCoordinator,
             subtitleInfrastructure.RuntimeProvisioner,
-            credentialFacade,
+            credentialStore,
             mediaSessionCoordinator,
             workflowStateStore,
             subtitleInfrastructure.ProviderAvailabilityService);
@@ -73,7 +73,7 @@ public sealed class AvaloniaShellCompositionRoot
         var resumePlaybackService = new ResumePlaybackService();
         var shellLibraryService = new ShellLibraryService(new LibraryBrowserService(), shellPreferencesService);
         var credentialSetupService = new CredentialSetupService(
-            credentialFacade,
+            credentialStore,
             subtitleInfrastructure.ProviderAvailabilityService,
             subtitleInfrastructure.AiCredentialCoordinator,
             subtitleInfrastructure.RuntimeProvisioner,

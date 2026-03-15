@@ -7,11 +7,11 @@ using BabelPlayer.Core;
 namespace BabelPlayer.App;
 
 /// <summary>
-/// Windows implementation of <see cref="ISettingsStore"/>.
+/// Windows implementation of <see cref="ISettingsStore"/> and <see cref="ICredentialStore"/>.
 /// Sensitive values are encrypted with DPAPI (<see cref="ProtectedData"/>).
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed class SecureSettingsStore : ISettingsStore
+public sealed class SecureSettingsStore : ISettingsStore, ICredentialStore
 {
     private static readonly string SettingsDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -43,7 +43,7 @@ public sealed class SecureSettingsStore : ISettingsStore
     public string? GetLlamaCppRuntimeSource() =>
         ReadPlaintextSetting(LlamaCppRuntimeSourcePath);
 
-    // ── Windows-specific extras (direct call still fine inside App layer) ────
+    // ── ICredentialStore ─────────────────────────────────────────────────────
 
     public string? GetOpenAiApiKey()
     {
