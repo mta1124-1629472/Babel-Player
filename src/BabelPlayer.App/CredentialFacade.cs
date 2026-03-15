@@ -1,3 +1,5 @@
+using System.Runtime.Versioning;
+
 namespace BabelPlayer.App;
 
 public interface ICredentialStore
@@ -27,39 +29,55 @@ public interface ICredentialStore
     void SaveLlamaCppRuntimeSource(string source);
 }
 
+/// <summary>
+/// Windows implementation: delegates to <see cref="SecureSettingsStore"/> (DPAPI).
+/// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class SecureCredentialStore : ICredentialStore
 {
-    public string? GetOpenAiApiKey() => SecureSettingsStore.GetOpenAiApiKey();
-    public void SaveOpenAiApiKey(string apiKey) => SecureSettingsStore.SaveOpenAiApiKey(apiKey);
-    public string? GetGoogleTranslateApiKey() => SecureSettingsStore.GetGoogleTranslateApiKey();
-    public void SaveGoogleTranslateApiKey(string apiKey) => SecureSettingsStore.SaveGoogleTranslateApiKey(apiKey);
-    public string? GetDeepLApiKey() => SecureSettingsStore.GetDeepLApiKey();
-    public void SaveDeepLApiKey(string apiKey) => SecureSettingsStore.SaveDeepLApiKey(apiKey);
-    public string? GetMicrosoftTranslatorApiKey() => SecureSettingsStore.GetMicrosoftTranslatorApiKey();
-    public void SaveMicrosoftTranslatorApiKey(string apiKey) => SecureSettingsStore.SaveMicrosoftTranslatorApiKey(apiKey);
-    public string? GetMicrosoftTranslatorRegion() => SecureSettingsStore.GetMicrosoftTranslatorRegion();
-    public void SaveMicrosoftTranslatorRegion(string region) => SecureSettingsStore.SaveMicrosoftTranslatorRegion(region);
-    public string? GetSubtitleModelKey() => SecureSettingsStore.GetSubtitleModelKey();
-    public void SaveSubtitleModelKey(string modelKey) => SecureSettingsStore.SaveSubtitleModelKey(modelKey);
-    public string? GetTranslationModelKey() => SecureSettingsStore.GetTranslationModelKey();
-    public void SaveTranslationModelKey(string modelKey) => SecureSettingsStore.SaveTranslationModelKey(modelKey);
-    public void ClearTranslationModelKey() => SecureSettingsStore.ClearTranslationModelKey();
-    public bool GetAutoTranslateEnabled() => SecureSettingsStore.GetAutoTranslateEnabled();
-    public void SaveAutoTranslateEnabled(bool enabled) => SecureSettingsStore.SaveAutoTranslateEnabled(enabled);
-    public string? GetLlamaCppServerPath() => SecureSettingsStore.GetLlamaCppServerPath();
-    public void SaveLlamaCppServerPath(string path) => SecureSettingsStore.SaveLlamaCppServerPath(path);
-    public string? GetLlamaCppRuntimeVersion() => SecureSettingsStore.GetLlamaCppRuntimeVersion();
-    public void SaveLlamaCppRuntimeVersion(string version) => SecureSettingsStore.SaveLlamaCppRuntimeVersion(version);
-    public string? GetLlamaCppRuntimeSource() => SecureSettingsStore.GetLlamaCppRuntimeSource();
-    public void SaveLlamaCppRuntimeSource(string source) => SecureSettingsStore.SaveLlamaCppRuntimeSource(source);
+    private readonly SecureSettingsStore _store;
+
+    public SecureCredentialStore(SecureSettingsStore store)
+    {
+        _store = store;
+    }
+
+    public string? GetOpenAiApiKey()                              => _store.GetOpenAiApiKey();
+    public void    SaveOpenAiApiKey(string apiKey)                => _store.SaveOpenAiApiKey(apiKey);
+    public string? GetGoogleTranslateApiKey()                     => _store.GetGoogleTranslateApiKey();
+    public void    SaveGoogleTranslateApiKey(string apiKey)       => _store.SaveGoogleTranslateApiKey(apiKey);
+    public string? GetDeepLApiKey()                               => _store.GetDeepLApiKey();
+    public void    SaveDeepLApiKey(string apiKey)                 => _store.SaveDeepLApiKey(apiKey);
+    public string? GetMicrosoftTranslatorApiKey()                 => _store.GetMicrosoftTranslatorApiKey();
+    public void    SaveMicrosoftTranslatorApiKey(string apiKey)   => _store.SaveMicrosoftTranslatorApiKey(apiKey);
+    public string? GetMicrosoftTranslatorRegion()                 => _store.GetMicrosoftTranslatorRegion();
+    public void    SaveMicrosoftTranslatorRegion(string region)   => _store.SaveMicrosoftTranslatorRegion(region);
+    public string? GetSubtitleModelKey()                          => _store.GetSubtitleModelKey();
+    public void    SaveSubtitleModelKey(string modelKey)          => _store.SaveSubtitleModelKey(modelKey);
+    public string? GetTranslationModelKey()                       => _store.GetTranslationModelKey();
+    public void    SaveTranslationModelKey(string modelKey)       => _store.SaveTranslationModelKey(modelKey);
+    public void    ClearTranslationModelKey()                     => _store.ClearTranslationModelKey();
+    public bool    GetAutoTranslateEnabled()                      => _store.GetAutoTranslateEnabled();
+    public void    SaveAutoTranslateEnabled(bool enabled)         => _store.SaveAutoTranslateEnabled(enabled);
+    public string? GetLlamaCppServerPath()                        => _store.GetLlamaCppServerPath();
+    public void    SaveLlamaCppServerPath(string path)            => _store.SaveLlamaCppServerPath(path);
+    public string? GetLlamaCppRuntimeVersion()                    => _store.GetLlamaCppRuntimeVersion();
+    public void    SaveLlamaCppRuntimeVersion(string version)     => _store.SaveLlamaCppRuntimeVersion(version);
+    public string? GetLlamaCppRuntimeSource()                     => _store.GetLlamaCppRuntimeSource();
+    public void    SaveLlamaCppRuntimeSource(string source)       => _store.SaveLlamaCppRuntimeSource(source);
 }
 
 public sealed class CredentialFacade
 {
     private readonly ICredentialStore _store;
 
+    /// <summary>
+    /// Default constructor — selects the correct store for the current OS.
+    /// Windows: DPAPI-backed <see cref="SecureCredentialStore"/>.
+    /// Linux/macOS: AES-256-GCM <see cref="XdgCredentialStore"/>.
+    /// </summary>
     public CredentialFacade()
-        : this(new SecureCredentialStore())
+        : this(CreateDefaultStore())
     {
     }
 
@@ -68,37 +86,35 @@ public sealed class CredentialFacade
         _store = store;
     }
 
-    public string? GetOpenAiApiKey() => _store.GetOpenAiApiKey();
-    public void SaveOpenAiApiKey(string apiKey) => _store.SaveOpenAiApiKey(apiKey);
+    private static ICredentialStore CreateDefaultStore()
+    {
+        if (OperatingSystem.IsWindows())
+            return new SecureCredentialStore(new SecureSettingsStore());
 
-    public string? GetGoogleTranslateApiKey() => _store.GetGoogleTranslateApiKey();
-    public void SaveGoogleTranslateApiKey(string apiKey) => _store.SaveGoogleTranslateApiKey(apiKey);
+        return new XdgCredentialStore();
+    }
 
-    public string? GetDeepLApiKey() => _store.GetDeepLApiKey();
-    public void SaveDeepLApiKey(string apiKey) => _store.SaveDeepLApiKey(apiKey);
-
-    public string? GetMicrosoftTranslatorApiKey() => _store.GetMicrosoftTranslatorApiKey();
-    public void SaveMicrosoftTranslatorApiKey(string apiKey) => _store.SaveMicrosoftTranslatorApiKey(apiKey);
-
-    public string? GetMicrosoftTranslatorRegion() => _store.GetMicrosoftTranslatorRegion();
-    public void SaveMicrosoftTranslatorRegion(string region) => _store.SaveMicrosoftTranslatorRegion(region);
-
-    public string? GetSubtitleModelKey() => _store.GetSubtitleModelKey();
-    public void SaveSubtitleModelKey(string modelKey) => _store.SaveSubtitleModelKey(modelKey);
-
-    public string? GetTranslationModelKey() => _store.GetTranslationModelKey();
-    public void SaveTranslationModelKey(string modelKey) => _store.SaveTranslationModelKey(modelKey);
-    public void ClearTranslationModelKey() => _store.ClearTranslationModelKey();
-
-    public bool GetAutoTranslateEnabled() => _store.GetAutoTranslateEnabled();
-    public void SaveAutoTranslateEnabled(bool enabled) => _store.SaveAutoTranslateEnabled(enabled);
-
-    public string? GetLlamaCppServerPath() => _store.GetLlamaCppServerPath();
-    public void SaveLlamaCppServerPath(string path) => _store.SaveLlamaCppServerPath(path);
-
-    public string? GetLlamaCppRuntimeVersion() => _store.GetLlamaCppRuntimeVersion();
-    public void SaveLlamaCppRuntimeVersion(string version) => _store.SaveLlamaCppRuntimeVersion(version);
-
-    public string? GetLlamaCppRuntimeSource() => _store.GetLlamaCppRuntimeSource();
-    public void SaveLlamaCppRuntimeSource(string source) => _store.SaveLlamaCppRuntimeSource(source);
+    public string? GetOpenAiApiKey()                              => _store.GetOpenAiApiKey();
+    public void    SaveOpenAiApiKey(string apiKey)                => _store.SaveOpenAiApiKey(apiKey);
+    public string? GetGoogleTranslateApiKey()                     => _store.GetGoogleTranslateApiKey();
+    public void    SaveGoogleTranslateApiKey(string apiKey)       => _store.SaveGoogleTranslateApiKey(apiKey);
+    public string? GetDeepLApiKey()                               => _store.GetDeepLApiKey();
+    public void    SaveDeepLApiKey(string apiKey)                 => _store.SaveDeepLApiKey(apiKey);
+    public string? GetMicrosoftTranslatorApiKey()                 => _store.GetMicrosoftTranslatorApiKey();
+    public void    SaveMicrosoftTranslatorApiKey(string apiKey)   => _store.SaveMicrosoftTranslatorApiKey(apiKey);
+    public string? GetMicrosoftTranslatorRegion()                 => _store.GetMicrosoftTranslatorRegion();
+    public void    SaveMicrosoftTranslatorRegion(string region)   => _store.SaveMicrosoftTranslatorRegion(region);
+    public string? GetSubtitleModelKey()                          => _store.GetSubtitleModelKey();
+    public void    SaveSubtitleModelKey(string modelKey)          => _store.SaveSubtitleModelKey(modelKey);
+    public string? GetTranslationModelKey()                       => _store.GetTranslationModelKey();
+    public void    SaveTranslationModelKey(string modelKey)       => _store.SaveTranslationModelKey(modelKey);
+    public void    ClearTranslationModelKey()                     => _store.ClearTranslationModelKey();
+    public bool    GetAutoTranslateEnabled()                      => _store.GetAutoTranslateEnabled();
+    public void    SaveAutoTranslateEnabled(bool enabled)         => _store.SaveAutoTranslateEnabled(enabled);
+    public string? GetLlamaCppServerPath()                        => _store.GetLlamaCppServerPath();
+    public void    SaveLlamaCppServerPath(string path)            => _store.SaveLlamaCppServerPath(path);
+    public string? GetLlamaCppRuntimeVersion()                    => _store.GetLlamaCppRuntimeVersion();
+    public void    SaveLlamaCppRuntimeVersion(string version)     => _store.SaveLlamaCppRuntimeVersion(version);
+    public string? GetLlamaCppRuntimeSource()                     => _store.GetLlamaCppRuntimeSource();
+    public void    SaveLlamaCppRuntimeSource(string source)       => _store.SaveLlamaCppRuntimeSource(source);
 }
