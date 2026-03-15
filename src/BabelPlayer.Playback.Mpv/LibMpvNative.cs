@@ -100,7 +100,11 @@ internal struct MpvEventEndFile
 
 internal static class LibMpvNative
 {
-    private const string MpvLibrary = "libmpv-2.dll";
+    // On Windows the bundled DLL is libmpv-2.dll.
+    // On Linux the system package provides libmpv.so.2.
+    // Using "libmpv" (no extension) lets the .NET native library resolver
+    // apply the correct OS-specific prefix/suffix automatically.
+    private const string MpvLibrary = "libmpv";
 
     [DllImport(MpvLibrary, CallingConvention = CallingConvention.Cdecl)]
     internal static extern IntPtr mpv_create();

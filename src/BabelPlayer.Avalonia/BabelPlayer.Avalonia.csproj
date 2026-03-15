@@ -1,13 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
-    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <TargetFramework>net9.0</TargetFramework>
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\BabelPlayer.Assets\BabelPlayer.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Windows-specific exe settings -->
+    <OutputType Condition="$([MSBuild]::IsOSPlatform('Windows'))">WinExe</OutputType>
+    <OutputType Condition="!$([MSBuild]::IsOSPlatform('Windows'))">Exe</OutputType>
+    <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
+    <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">..\BabelPlayer.Assets\BabelPlayer.ico</ApplicationIcon>
+    <!-- Architecture targeting for Windows -->
     <PlatformTarget Condition="'$(RuntimeIdentifier)' == 'win-arm64'">ARM64</PlatformTarget>
     <PlatformTarget Condition="'$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == ''">x64</PlatformTarget>
   </PropertyGroup>
@@ -31,7 +34,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="..\BabelPlayer.Assets\BabelPlayer.ico" Link="Assets\BabelPlayer.ico" />
+    <AvaloniaResource Include="..\BabelPlayer.Assets\BabelPlayer.ico" Link="Assets\BabelPlayer.ico" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <!-- Windows bundled libmpv-2.dll -->
     <Content Include="native\win-x64\libmpv-2.dll" Condition="Exists('native\\win-x64\\libmpv-2.dll') and ('$(RuntimeIdentifier)' == '' or '$(RuntimeIdentifier)' == 'win-x64')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>libmpv-2.dll</TargetPath>
@@ -40,17 +44,19 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>libmpv-2.dll</TargetPath>
     </Content>
+    <!-- Linux: libmpv is a system package, not bundled -->
     <Content Include="Assets\test-video.mp4">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>Assets\test-video.mp4</TargetPath>
     </Content>
   </ItemGroup>
 
-  <Target Name="ValidateX64NativeAssets" BeforeTargets="Build;Publish" Condition="'$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == ''">
+  <!-- Windows native asset validation -->
+  <Target Name="ValidateX64NativeAssets" BeforeTargets="Build;Publish" Condition="$([MSBuild]::IsOSPlatform('Windows')) and ('$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == '')">
     <Error Condition="!Exists('native\\win-x64\\libmpv-2.dll')" Text="x64 runtime requested, but native asset is missing: src/BabelPlayer.Avalonia/native/win-x64/libmpv-2.dll" />
   </Target>
 
-  <Target Name="ValidateArm64NativeAssets" BeforeTargets="Build;Publish" Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
+  <Target Name="ValidateArm64NativeAssets" BeforeTargets="Build;Publish" Condition="$([MSBuild]::IsOSPlatform('Windows')) and '$(RuntimeIdentifier)' == 'win-arm64'">
     <Error Condition="!Exists('native\\win-arm64\\libmpv-2.dll')" Text="ARM64 runtime requested, but native asset is missing: src/BabelPlayer.Avalonia/native/win-arm64/libmpv-2.dll" />
   </Target>
 </Project>

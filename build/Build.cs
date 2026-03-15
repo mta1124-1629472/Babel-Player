@@ -29,17 +29,16 @@ class Build : NukeBuild
     AbsolutePath PublishDirectory => RootDirectory / "artifacts" / "publish";
     AbsolutePath TestResultsDirectory => RootDirectory / "artifacts" / "test-results";
     AbsolutePath InstallerScript => RootDirectory / "installer" / "BabelPlayer.iss";
-    AbsolutePath NativeX64Asset => RootDirectory / "src" / "BabelPlayer.Avalonia" / "native" / "win-x64" / "libmpv-2.dll";
+    AbsolutePath NativeX64Asset   => RootDirectory / "src" / "BabelPlayer.Avalonia" / "native" / "win-x64"   / "libmpv-2.dll";
     AbsolutePath NativeArm64Asset => RootDirectory / "src" / "BabelPlayer.Avalonia" / "native" / "win-arm64" / "libmpv-2.dll";
     string DefaultRuntime => RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
     string _rawVersionToken = string.Empty;
 
     // libmpv dev packages from https://github.com/shinchiro/mpv-winbuild-cmake/releases
     // Update URL + SHA256 together whenever bumping the mpv version.
-    const string LibMpvArchiveX64       = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-x86_64-20260307-git-f9190e5.7z";
-    const string LibMpvArchiveX64Sha256 = "274db632b4a1849f392e2044bbeafd1e7079acd04b3eb281a03a9769a1c48bf6";
-
-    const string LibMpvArchiveArm64       = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-aarch64-20260307-git-f9190e5.7z";
+    const string LibMpvArchiveX64        = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-x86_64-20260307-git-f9190e5.7z";
+    const string LibMpvArchiveX64Sha256  = "274db632b4a1849f392e2044bbeafd1e7079acd04b3eb281a03a9769a1c48bf6";
+    const string LibMpvArchiveArm64      = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-aarch64-20260307-git-f9190e5.7z";
     const string LibMpvArchiveArm64Sha256 = "faefb9d3c75d19df1d52d86f9316340f472ba81c76d3c400362d82c61ab11b39";
 
     [Parameter("Release version token for artifact names. Defaults to tag name or commit SHA when available")]
@@ -55,7 +54,6 @@ class Build : NukeBuild
                 DeleteDirectoryIfExists(projectDirectory / "bin");
                 DeleteDirectoryIfExists(projectDirectory / "obj");
             }
-
             DeleteDirectoryIfExists(PublishDirectory);
             DeleteDirectoryIfExists(TestResultsDirectory);
         });
@@ -63,8 +61,7 @@ class Build : NukeBuild
     Target Restore => _ => _
         .Executes(() =>
         {
-            DotNetRestore(settings => settings
-                .SetProjectFile(Solution));
+            DotNetRestore(settings => settings.SetProjectFile(Solution));
         });
 
     Target Compile => _ => _
@@ -99,6 +96,8 @@ class Build : NukeBuild
                 .AssertZeroExitCode();
         });
 
+    // ── Windows targets ────────────────────────────────────────────────────────
+
     Target PublishWinX64 => _ => _
         .DependsOn(Restore, FetchNativeX64Asset)
         .Executes(() => PublishRuntime("win-x64"));
@@ -131,14 +130,25 @@ class Build : NukeBuild
         .DependsOn(PublishWinArm64, EnsureInnoSetup)
         .Executes(() => BuildInstaller("win-arm64"));
 
-    Target ReleaseRuntimeWinX64 => _ => _
-        .DependsOn(PackagePortableWinX64, BuildInstallerWinX64);
+    Target ReleaseRuntimeWinX64   => _ => _.DependsOn(PackagePortableWinX64,   BuildInstallerWinX64);
+    Target ReleaseRuntimeWinArm64 => _ => _.DependsOn(PackagePortableWinArm64, BuildInstallerWinArm64);
+    Target ReleasePackage         => _ => _.DependsOn(ReleaseRuntimeWinX64,    ReleaseRuntimeWinArm64, ReleaseRuntimeLinuxX64);
 
-    Target ReleaseRuntimeWinArm64 => _ => _
-        .DependsOn(PackagePortableWinArm64, BuildInstallerWinArm64);
+    // ── Linux targets ──────────────────────────────────────────────────────────
+    // libmpv is a system package on Linux (apt install libmpv-dev / libmpv2).
+    // No native asset bundling needed — users must have libmpv installed.
 
-    Target ReleasePackage => _ => _
-        .DependsOn(ReleaseRuntimeWinX64, ReleaseRuntimeWinArm64);
+    Target PublishLinuxX64 => _ => _
+        .DependsOn(Restore)
+        .Executes(() => PublishRuntime("linux-x64"));
+
+    Target PackagePortableLinuxX64 => _ => _
+        .DependsOn(PublishLinuxX64)
+        .Executes(() => PackagePortableTar("linux-x64"));
+
+    Target ReleaseRuntimeLinuxX64 => _ => _.DependsOn(PackagePortableLinuxX64);
+
+    // ── Native asset fetch targets (Windows only) ──────────────────────────────
 
     Target FetchNativeAssets => _ => _
         .DependsOn(FetchNativeX64Asset, FetchNativeArm64Asset);
@@ -148,6 +158,8 @@ class Build : NukeBuild
 
     Target FetchNativeArm64Asset => _ => _
         .Executes(() => FetchLibMpvDll("win-arm64", LibMpvArchiveArm64, LibMpvArchiveArm64Sha256, NativeArm64Asset));
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
     void PublishRuntime(string runtime)
     {
@@ -163,30 +175,38 @@ class Build : NukeBuild
     void PackagePortable(string runtime)
     {
         var publishDir = PublishDirectory / runtime;
-        EnsureDirectoryExists(publishDir, $"Publish output is missing for runtime '{runtime}' at '{publishDir}'.");
+        EnsureDirectoryExists(publishDir, $"Publish output missing for '{runtime}' at '{publishDir}'.");
         Directory.CreateDirectory(ArtifactsDirectory);
-
         var archivePath = GetPortableArchivePath(runtime);
-        if (File.Exists(archivePath))
-            File.Delete(archivePath);
-
+        if (File.Exists(archivePath)) File.Delete(archivePath);
         ZipFile.CreateFromDirectory(publishDir, archivePath, CompressionLevel.Optimal, includeBaseDirectory: false);
+        Console.WriteLine($"Portable archive: {archivePath}");
+    }
+
+    void PackagePortableTar(string runtime)
+    {
+        var publishDir = PublishDirectory / runtime;
+        EnsureDirectoryExists(publishDir, $"Publish output missing for '{runtime}' at '{publishDir}'.");
+        Directory.CreateDirectory(ArtifactsDirectory);
+        var archivePath = ArtifactsDirectory / $"BabelPlayer-{GetRawVersionToken()}-portable-{runtime}.tar.gz";
+        if (File.Exists(archivePath)) File.Delete(archivePath);
+        // Use tar (available on all modern Linux and GitHub Actions ubuntu runners)
+        ProcessTasks.StartProcess("tar", $"-czf \"{archivePath}\" -C \"{publishDir}\" .")
+            .AssertZeroExitCode();
+        Console.WriteLine($"Portable archive: {archivePath}");
     }
 
     void BuildInstaller(string runtime)
     {
         var publishDir = PublishDirectory / runtime;
-        EnsureDirectoryExists(publishDir, $"Publish output is missing for runtime '{runtime}' at '{publishDir}'.");
+        EnsureDirectoryExists(publishDir, $"Publish output missing for '{runtime}' at '{publishDir}'.");
         Directory.CreateDirectory(ArtifactsDirectory);
-
         var installerBaseName   = GetInstallerBaseName(runtime);
         var installerVersion    = GetInstallerVersion();
         var innoSetupExecutable = GetInnoSetupExecutablePath();
         var arguments =
             $"/DMyAppVersion={installerVersion} /DMyPublishDir=\"{publishDir}\" /DMyOutputDir=\"{ArtifactsDirectory}\" /DMyOutputBaseFilename={installerBaseName} \"{InstallerScript}\"";
-
-        ProcessTasks.StartProcess(innoSetupExecutable, arguments)
-            .AssertZeroExitCode();
+        ProcessTasks.StartProcess(innoSetupExecutable, arguments).AssertZeroExitCode();
     }
 
     AbsolutePath GetPortableArchivePath(string runtime)
@@ -205,17 +225,14 @@ class Build : NukeBuild
     {
         if (!string.IsNullOrWhiteSpace(_rawVersionToken)) return _rawVersionToken;
         if (!string.IsNullOrWhiteSpace(ReleaseVersion))   return _rawVersionToken = ReleaseVersion.Trim();
-
         var githubRefName = Environment.GetEnvironmentVariable("GITHUB_REF_NAME");
-        if (!string.IsNullOrWhiteSpace(githubRefName)) return _rawVersionToken = githubRefName.Trim();
-
+        if (!string.IsNullOrWhiteSpace(githubRefName))    return _rawVersionToken = githubRefName.Trim();
         var githubSha = Environment.GetEnvironmentVariable("GITHUB_SHA");
         if (!string.IsNullOrWhiteSpace(githubSha))
         {
             _rawVersionToken = githubSha.Trim();
             return _rawVersionToken[..Math.Min(12, _rawVersionToken.Length)];
         }
-
         return _rawVersionToken = "dev";
     }
 
@@ -223,6 +240,7 @@ class Build : NukeBuild
     {
         "win-x64"   => "win-x64",
         "win-arm64" => "win-arm64",
+        "linux-x64" => "linux-x64",
         _           => runtime.Replace(' ', '-')
     };
 
@@ -233,20 +251,14 @@ class Build : NukeBuild
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Inno Setup 6", "ISCC.exe");
     }
 
-    /// <summary>
-    /// Resolves the 7-Zip executable path by checking PATH first, then common
-    /// install locations (7-Zip standalone, Git for Windows bundled 7z).
-    /// </summary>
     static string Find7ZipExecutable()
     {
-        // 1. Already on PATH
         var fromPath = Environment.GetEnvironmentVariable("PATH")
             ?.Split(Path.PathSeparator)
             .Select(dir => Path.Combine(dir, "7z.exe"))
             .FirstOrDefault(File.Exists);
         if (fromPath != null) return fromPath;
 
-        // 2. Standard 7-Zip install locations
         var programFiles = new[]
         {
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
@@ -258,12 +270,10 @@ class Build : NukeBuild
             if (File.Exists(candidate)) return candidate;
         }
 
-        // 3. Git for Windows bundles a 7z.exe in its usr/bin and mingw64/bin
         var gitRoot = Environment.GetEnvironmentVariable("PATH")
             ?.Split(Path.PathSeparator)
             .Select(dir =>
             {
-                // Walk up from e.g. C:\Program Files\Git\cmd  ->  C:\Program Files\Git
                 var d = new DirectoryInfo(dir);
                 while (d?.Parent != null)
                 {
