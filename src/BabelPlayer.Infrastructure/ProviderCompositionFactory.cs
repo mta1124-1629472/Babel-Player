@@ -1,6 +1,6 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
-using CoreTranslationProvider = BabelPlayer.Core.ITranslationProvider;
+using AppTranslationProvider = BabelPlayer.App.ITranslationProvider;
 
 namespace BabelPlayer.Infrastructure;
 
@@ -130,7 +130,7 @@ internal sealed class OpenAiTranscriptionProviderAdapter : ITranscriptionProvide
     }
 }
 
-internal sealed class OpenAiTranslationProviderAdapter : CoreTranslationProvider
+internal sealed class OpenAiTranslationProviderAdapter : AppTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 
@@ -157,7 +157,7 @@ internal sealed class OpenAiTranslationProviderAdapter : CoreTranslationProvider
     }
 }
 
-internal sealed class GoogleTranslationProviderAdapter : CoreTranslationProvider
+internal sealed class GoogleTranslationProviderAdapter : AppTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 
@@ -183,7 +183,7 @@ internal sealed class GoogleTranslationProviderAdapter : CoreTranslationProvider
     }
 }
 
-internal sealed class DeepLTranslationProviderAdapter : CoreTranslationProvider
+internal sealed class DeepLTranslationProviderAdapter : AppTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 
@@ -209,7 +209,7 @@ internal sealed class DeepLTranslationProviderAdapter : CoreTranslationProvider
     }
 }
 
-internal sealed class MicrosoftTranslationProviderAdapter : CoreTranslationProvider
+internal sealed class MicrosoftTranslationProviderAdapter : AppTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 
@@ -235,7 +235,7 @@ internal sealed class MicrosoftTranslationProviderAdapter : CoreTranslationProvi
     }
 }
 
-internal sealed class LocalLlamaTranslationProviderAdapter : CoreTranslationProvider
+internal sealed class LocalLlamaTranslationProviderAdapter : AppTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 
