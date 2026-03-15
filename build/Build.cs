@@ -33,11 +33,11 @@ class Build : NukeBuild
     string DefaultRuntime => RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
     string _rawVersionToken = string.Empty;
 
-    // mpv 0.41.0 libmpv-only dev packages (contains libmpv-2.dll without the full mpv.exe bundle)
-    // These are the shimmed libmpv shared library builds from the same SourceForge project used by MpvRuntimeInstaller.
-    // Version is intentionally kept in sync with MpvRuntimeInstaller.RuntimeVersion = "0.41.0".
-    const string LibMpvArchiveX64   = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20250209-git-a40958a.7z/download";
-    const string LibMpvArchiveArm64 = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-aarch64-v3-20250209-git-a40958a.7z/download";
+    // libmpv dev packages from https://sourceforge.net/projects/mpv-player-windows/files/libmpv/
+    // x64: v3 (AVX2-optimised) build; arm64: standard aarch64 build (no v3 variant available).
+    // Update these filenames when bumping MpvRuntimeInstaller.RuntimeVersion.
+    const string LibMpvArchiveX64   = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20260201-git-40d2947.7z/download";
+    const string LibMpvArchiveArm64 = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-aarch64-20260201-git-40d2947.7z/download";
 
     [Parameter("Release version token for artifact names. Defaults to tag name or commit SHA when available")]
     readonly string ReleaseVersion = string.Empty;
@@ -285,7 +285,7 @@ class Build : NukeBuild
                 .AssertZeroExitCode();
 
             var zipInfo = new FileInfo(tempZip);
-            if (!zipInfo.Exists || zipInfo.Length < 100_000)
+            if (!zipInfo.Exists || zipInfo.Length < 1_000_000)
             {
                 throw new Exception($"[{runtime}] Downloaded archive appears invalid or too small ({zipInfo.Length} bytes). Check the SourceForge URL.");
             }
