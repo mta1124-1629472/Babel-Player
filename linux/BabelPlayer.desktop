@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Babel Player
+Comment=AI-powered video player with transcription and translation
+Exec=BabelPlayer.Avalonia %f
+Icon=babel-player
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Player;
+MimeType=video/mp4;video/x-matroska;video/webm;video/avi;video/quicktime;video/x-msvideo;video/mpeg;audio/mpeg;audio/flac;audio/ogg;
+StartupNotify=true
+StartupWMClass=BabelPlayer.Avalonia

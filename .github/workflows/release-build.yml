@@ -10,7 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  publish-avalonia:
+  # ── Windows (x64 + arm64) ──────────────────────────────────────────────────
+  publish-windows:
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -35,15 +36,12 @@ jobs:
             10.0.x
             9.0.x
 
-      - name: Resolve release version tokens
+      - name: Resolve release version token
         id: version
         shell: pwsh
         run: |
           $rawVersion = if ("${{ github.ref }}".StartsWith("refs/tags/")) { "${{ github.ref_name }}" } else { "${{ github.sha }}" }
-          $releaseVersion = if ($rawVersion.StartsWith("v")) { $rawVersion.Substring(1) } else { $rawVersion }
-
           "raw_version=$rawVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "release_version=$releaseVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Install Inno Setup
         shell: pwsh
@@ -51,26 +49,21 @@ jobs:
 
       - name: Build release artifacts via NUKE
         shell: pwsh
-        run: |
-          ./build.ps1 ${{ matrix.nuke_target }} --configuration Release --release-version ${{ steps.version.outputs.raw_version }}
+        run: ./build.ps1 ${{ matrix.nuke_target }} --configuration Release --release-version ${{ steps.version.outputs.raw_version }}
 
-      - name: Resolve NUKE artifact paths
+      - name: Resolve artifact paths
         id: artifacts
         shell: pwsh
         run: |
-          $archivePath = Join-Path "${{ github.workspace }}\artifacts" "BabelPlayer-${{ steps.version.outputs.raw_version }}-portable-${{ matrix.suffix }}.zip"
-          $installerPath = Join-Path "${{ github.workspace }}\artifacts" "BabelPlayer-${{ steps.version.outputs.raw_version }}-setup-${{ matrix.suffix }}.exe"
-
-          if (-not (Test-Path $archivePath)) {
-            throw "Expected archive artifact not found: $archivePath"
-          }
-
-          if (-not (Test-Path $installerPath)) {
-            throw "Expected installer artifact not found: $installerPath"
-          }
-
-          "archive_path=$archivePath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "installer_path=$installerPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $v = "${{ steps.version.outputs.raw_version }}"
+          $s = "${{ matrix.suffix }}"
+          $base = "${{ github.workspace }}\artifacts"
+          $archive   = "$base\BabelPlayer-$v-portable-$s.zip"
+          $installer = "$base\BabelPlayer-$v-setup-$s.exe"
+          if (-not (Test-Path $archive))   { throw "Missing: $archive" }
+          if (-not (Test-Path $installer)) { throw "Missing: $installer" }
+          "archive_path=$archive"     | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "installer_path=$installer" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
@@ -86,20 +79,87 @@ jobs:
           path: ${{ steps.artifacts.outputs.installer_path }}
           if-no-files-found: error
 
-      - name: Create GitHub release
+      - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag     = "${{ github.ref_name }}"
           $archive = "${{ steps.artifacts.outputs.archive_path }}"
           $installer = "${{ steps.artifacts.outputs.installer_path }}"
-
           gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $archive $installer --clobber
-          }
-          else {
-            gh release create $tag $archive $installer --generate-notes --title $tag
-          }
+          if ($LASTEXITCODE -eq 0) { gh release upload $tag $archive $installer --clobber }
+          else { gh release create $tag $archive $installer --generate-notes --title $tag }
+
+  # ── Linux x64 (AppImage) ──────────────────────────────────────────────────
+  publish-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDKs
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+            9.0.x
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libmpv2 \
+            libmpv-dev \
+            imagemagick \
+            fuse
+
+      - name: Resolve release version token
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "raw_version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "raw_version=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish linux-x64
+        run: ./build.sh PublishLinuxX64 --configuration Release --release-version ${{ steps.version.outputs.raw_version }}
+
+      - name: Build AppImage
+        run: |
+          bash linux/AppImageBuilder.sh \
+            artifacts/publish/linux-x64 \
+            artifacts \
+            ${{ steps.version.outputs.raw_version }}
+
+      - name: Verify AppImage exists
+        run: |
+          APPIMAGE="artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-linux-x64.AppImage"
+          if [ ! -f "$APPIMAGE" ]; then
+            echo "ERROR: AppImage not found at $APPIMAGE" >&2
+            exit 1
+          fi
+          echo "AppImage size: $(du -sh $APPIMAGE | cut -f1)"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BabelPlayer-appimage-linux-x64
+          path: artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-linux-x64.AppImage
+          if-no-files-found: error
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          APPIMAGE="artifacts/BabelPlayer-${{ steps.version.outputs.raw_version }}-linux-x64.AppImage"
+          if gh release view "$TAG" &>/dev/null; then
+            gh release upload "$TAG" "$APPIMAGE" --clobber
+          else
+            gh release create "$TAG" "$APPIMAGE" --generate-notes --title "$TAG"
+          fi
