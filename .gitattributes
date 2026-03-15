@@ -33,13 +33,28 @@
 #*.sqlproj   merge=binary
 #*.wwaproj   merge=binary
 ###############################################################################
-# behavior for image files
-#
-# image files are treated as binary by default.
+# Binary image files — never normalize line endings or diff as text
 ###############################################################################
-#*.jpg   binary
-#*.png   binary
-#*.gif   binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.bmp    binary
+*.tiff   binary
+*.webp   binary
+###############################################################################
+# Binary build outputs and native libraries — never normalize
+###############################################################################
+*.dll    binary
+*.exe    binary
+*.so     binary
+*.dylib  binary
+*.pdb    binary
+*.nupkg  binary
+*.zip    binary
+*.tar    binary
+*.gz     binary
 ###############################################################################
 # diff behavior for common document formats
 # 
@@ -61,6 +76,6 @@
 # Shell scripts — always LF, always executable
 # Prevents CRLF corruption and "bad interpreter" errors on Linux/macOS
 ###############################################################################
-*.sh        text eol=lf diff
-build.sh    text eol=lf eol=lf
+*.sh        text eol=lf
+build.sh    text eol=lf
 linux/*.sh  text eol=lf
