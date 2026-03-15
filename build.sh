@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_PROJECT_FILE="$SCRIPT_DIR/build/Babel Player.csproj"
+BUILD_PROJECT_FILE="$SCRIPT_DIR/build/BabelPlayer.Build.csproj"
 TEMP_DIRECTORY="$SCRIPT_DIR/.nuke/temp"
 DOTNET_GLOBAL_FILE="$SCRIPT_DIR/global.json"
 DOTNET_INSTALL_URL="https://dot.net/v1/dotnet-install.sh"
