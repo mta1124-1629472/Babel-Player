@@ -1,6 +1,7 @@
 using System.IO;
 using Avalonia.Controls;
 using BabelPlayer.App;
+using BabelPlayer.Core;
 using BabelPlayer.Infrastructure;
 using BabelPlayer.Playback.Mpv;
 
@@ -35,12 +36,13 @@ public sealed class AvaloniaShellCompositionRoot
 {
     public AvaloniaShellDependencies Create(Window ownerWindow)
     {
+        var settingsStore = CreateSettingsStore();
         var credentialFacade = new CredentialFacade();
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
         var filePickerService = new AvaloniaFilePickerService(ownerWindow);
         var credentialDialogService = new AvaloniaCredentialDialogService(ownerWindow);
-        var shellPreferencesService = CreateShellPreferencesService();
+        var shellPreferencesService = CreateShellPreferencesService(settingsStore);
         var windowModeService = new AvaloniaWindowModeService(ownerWindow);
         var shortcutProfileService = new ShortcutProfileService(shellPreferencesService);
         var subtitleInfrastructure = new SubtitleWorkflowInfrastructureFactory().Create(new SubtitleWorkflowInfrastructureRequest(
@@ -121,10 +123,20 @@ public sealed class AvaloniaShellCompositionRoot
                 playbackBackend));
     }
 
-    private static ShellPreferencesService CreateShellPreferencesService()
+    /// <summary>
+    /// Returns the correct <see cref="ISettingsStore"/> for the current OS.
+    /// Windows: DPAPI-backed <see cref="SecureSettingsStore"/>.
+    /// Linux/macOS: plain-text XDG <see cref="XdgSettingsStore"/>.
+    /// </summary>
+    private static ISettingsStore CreateSettingsStore() =>
+        OperatingSystem.IsWindows()
+            ? new SecureSettingsStore()
+            : new XdgSettingsStore();
+
+    private static ShellPreferencesService CreateShellPreferencesService(ISettingsStore settingsStore)
     {
         var shellPreferencesService = new ShellPreferencesService(new SettingsFacade());
-        var settingsPath = Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "player-settings.json");
+        var settingsPath = Path.Combine(settingsStore.GetAppDataDirectory(), "player-settings.json");
         if (!File.Exists(settingsPath))
         {
             shellPreferencesService.ApplyLayoutChange(new ShellLayoutPreferencesChange(
@@ -182,11 +194,7 @@ public sealed class AvaloniaShellCompositionRoot
 
         public void Dispose()
         {
-            if (_disposed)
-            {
-                return;
-            }
-
+            if (_disposed) return;
             _disposed = true;
             _projectionReader?.Dispose();
             _shellController?.Dispose();
