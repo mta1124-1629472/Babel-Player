@@ -1,5 +1,6 @@
 using BabelPlayer.App;
 using BabelPlayer.Core;
+using CoreTranslationProvider = BabelPlayer.Core.ITranslationProvider;
 
 namespace BabelPlayer.Infrastructure;
 
@@ -17,12 +18,12 @@ public sealed class ProviderCompositionFactory : IProviderCompositionFactory
     }
 
     public ProviderAvailabilityComposition Create(
-        CredentialFacade credentialFacade,
+        ICredentialStore credentialStore,
         Func<string, string?> environmentVariableReader,
         IBabelLogFactory? logFactory = null)
     {
         return new ProviderAvailabilityComposition(
-            new ProviderAvailabilityContext(credentialFacade, environmentVariableReader, logFactory ?? NullBabelLogFactory.Instance),
+            new ProviderAvailabilityContext(credentialStore, environmentVariableReader, logFactory ?? NullBabelLogFactory.Instance),
             new TranscriptionProviderRegistry(
             [
                 new WhisperLocalTranscriptionProvider(_transcriptionEngineFactory),
@@ -116,7 +117,7 @@ internal sealed class OpenAiTranscriptionProviderAdapter : ITranscriptionProvide
         ProviderAvailabilityContext context,
         CancellationToken cancellationToken)
     {
-        var apiKey = context.EnvironmentVariableReader("OPENAI_API_KEY") ?? context.CredentialFacade.GetOpenAiApiKey();
+        var apiKey = context.EnvironmentVariableReader("OPENAI_API_KEY") ?? context.CredentialStore.GetOpenAiApiKey();
         var options = new CaptionGenerationOptions
         {
             Mode = request.Options.Mode,
@@ -129,7 +130,7 @@ internal sealed class OpenAiTranscriptionProviderAdapter : ITranscriptionProvide
     }
 }
 
-internal sealed class OpenAiTranslationProviderAdapter : ITranslationProvider
+internal sealed class OpenAiTranslationProviderAdapter : CoreTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 
@@ -148,7 +149,7 @@ internal sealed class OpenAiTranslationProviderAdapter : ITranslationProvider
         ProviderAvailabilityContext context,
         CancellationToken cancellationToken)
     {
-        var apiKey = context.EnvironmentVariableReader("OPENAI_API_KEY") ?? context.CredentialFacade.GetOpenAiApiKey();
+        var apiKey = context.EnvironmentVariableReader("OPENAI_API_KEY") ?? context.CredentialStore.GetOpenAiApiKey();
         var service = _engineFactory.Create(context.LogFactory);
         service.ConfigureCloud(new CloudTranslationOptions(CloudTranslationProvider.OpenAi, apiKey!.Trim(), request.Selection.CloudModel));
         service.ConfigureLocal(null);
@@ -156,7 +157,7 @@ internal sealed class OpenAiTranslationProviderAdapter : ITranslationProvider
     }
 }
 
-internal sealed class GoogleTranslationProviderAdapter : ITranslationProvider
+internal sealed class GoogleTranslationProviderAdapter : CoreTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 
@@ -182,7 +183,7 @@ internal sealed class GoogleTranslationProviderAdapter : ITranslationProvider
     }
 }
 
-internal sealed class DeepLTranslationProviderAdapter : ITranslationProvider
+internal sealed class DeepLTranslationProviderAdapter : CoreTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 
@@ -208,7 +209,7 @@ internal sealed class DeepLTranslationProviderAdapter : ITranslationProvider
     }
 }
 
-internal sealed class MicrosoftTranslationProviderAdapter : ITranslationProvider
+internal sealed class MicrosoftTranslationProviderAdapter : CoreTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 
@@ -234,7 +235,7 @@ internal sealed class MicrosoftTranslationProviderAdapter : ITranslationProvider
     }
 }
 
-internal sealed class LocalLlamaTranslationProviderAdapter : ITranslationProvider
+internal sealed class LocalLlamaTranslationProviderAdapter : CoreTranslationProvider
 {
     private readonly ITranslationEngineFactory _engineFactory;
 

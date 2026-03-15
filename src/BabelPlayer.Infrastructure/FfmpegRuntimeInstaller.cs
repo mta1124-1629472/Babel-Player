@@ -1,3 +1,4 @@
+using BabelPlayer.App;
 using BabelPlayer.Core;
 using System.Runtime.InteropServices;
 
@@ -84,7 +85,6 @@ public static class FfmpegRuntimeInstaller
 
             CopyDirectory(binRoot, finalDirectory);
 
-            // On Linux/macOS ensure the binaries are executable
             if (!OperatingSystem.IsWindows())
             {
                 SetExecutable(Path.Combine(finalDirectory, FfmpegBinaryName));
@@ -116,7 +116,6 @@ public static class FfmpegRuntimeInstaller
     {
         try
         {
-            // chmod +x equivalent via mono/dotnet on Unix
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "chmod",

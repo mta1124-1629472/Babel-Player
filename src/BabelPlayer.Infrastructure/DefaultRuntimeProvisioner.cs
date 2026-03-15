@@ -7,7 +7,7 @@ namespace BabelPlayer.Infrastructure;
 public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
 {
     private readonly IRuntimeBootstrapService _runtimeBootstrapService;
-    private readonly CredentialFacade? _credentialFacade;
+    private readonly ICredentialStore? _credentialStore;
     private readonly ICredentialDialogService? _credentialDialogService;
     private readonly IFilePickerService? _filePickerService;
     private readonly Func<string, string?> _environmentVariableReader;
@@ -15,14 +15,14 @@ public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
 
     public DefaultRuntimeProvisioner(
         IRuntimeBootstrapService runtimeBootstrapService,
-        CredentialFacade? credentialFacade = null,
+        ICredentialStore? credentialStore = null,
         ICredentialDialogService? credentialDialogService = null,
         IFilePickerService? filePickerService = null,
         Func<string, string?>? environmentVariableReader = null,
         IBabelLogFactory? logFactory = null)
     {
         _runtimeBootstrapService = runtimeBootstrapService;
-        _credentialFacade = credentialFacade;
+        _credentialStore = credentialStore;
         _credentialDialogService = credentialDialogService;
         _filePickerService = filePickerService;
         _environmentVariableReader = environmentVariableReader ?? Environment.GetEnvironmentVariable;
@@ -64,9 +64,9 @@ public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
                         return false;
                     }
 
-                    _credentialFacade?.SaveLlamaCppServerPath(serverPath);
-                    _credentialFacade?.SaveLlamaCppRuntimeVersion(LlamaCppRuntimeInstaller.RuntimeVersion);
-                    _credentialFacade?.SaveLlamaCppRuntimeSource(LlamaCppRuntimeInstaller.RuntimeSource);
+                    _credentialStore?.SaveLlamaCppServerPath(serverPath);
+                    _credentialStore?.SaveLlamaCppRuntimeVersion(LlamaCppRuntimeInstaller.RuntimeVersion);
+                    _credentialStore?.SaveLlamaCppRuntimeSource(LlamaCppRuntimeInstaller.RuntimeSource);
                     _logger.LogInfo("llama.cpp runtime installed automatically.", BabelLogContext.Create(("serverPath", serverPath)));
                     return true;
                 }
@@ -87,8 +87,8 @@ public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
                         return false;
                     }
 
-                    _credentialFacade?.SaveLlamaCppServerPath(selectedPath);
-                    _credentialFacade?.SaveLlamaCppRuntimeSource("manual");
+                    _credentialStore?.SaveLlamaCppServerPath(selectedPath);
+                    _credentialStore?.SaveLlamaCppRuntimeSource("manual");
                     _logger.LogInfo("llama.cpp runtime path selected manually.", BabelLogContext.Create(("serverPath", selectedPath)));
                     return true;
                 }
@@ -113,7 +113,7 @@ public sealed class DefaultRuntimeProvisioner : IRuntimeProvisioner
             return configuredPath;
         }
 
-        configuredPath = _credentialFacade?.GetLlamaCppServerPath();
+        configuredPath = _credentialStore?.GetLlamaCppServerPath();
         if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
         {
             return configuredPath;

@@ -6,12 +6,12 @@ namespace BabelPlayer.Infrastructure;
 public sealed class AiCredentialCoordinatorFactory : IAiCredentialCoordinatorFactory
 {
     public IAiCredentialCoordinator Create(
-        CredentialFacade credentialFacade,
+        ICredentialStore credentialStore,
         ICredentialDialogService? credentialDialogService,
         Func<string, string?>? environmentVariableReader = null)
     {
         return new DefaultAiCredentialCoordinator(
-            credentialFacade,
+            credentialStore,
             credentialDialogService,
             environmentVariableReader ?? Environment.GetEnvironmentVariable,
             MtService.ValidateApiKeyAsync,
