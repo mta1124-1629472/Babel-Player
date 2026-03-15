@@ -36,10 +36,10 @@ class Build : NukeBuild
 
     // libmpv dev packages from https://github.com/shinchiro/mpv-winbuild-cmake/releases
     // Update URL + SHA256 together whenever bumping the mpv version.
-    const string LibMpvArchiveX64      = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-x86_64-20260307-git-f9190e5.7z";
+    const string LibMpvArchiveX64       = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-x86_64-20260307-git-f9190e5.7z";
     const string LibMpvArchiveX64Sha256 = "274db632b4a1849f392e2044bbeafd1e7079acd04b3eb281a03a9769a1c48bf6";
 
-    const string LibMpvArchiveArm64      = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-aarch64-20260307-git-f9190e5.7z";
+    const string LibMpvArchiveArm64       = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260307/mpv-dev-aarch64-20260307-git-f9190e5.7z";
     const string LibMpvArchiveArm64Sha256 = "faefb9d3c75d19df1d52d86f9316340f472ba81c76d3c400362d82c61ab11b39";
 
     [Parameter("Release version token for artifact names. Defaults to tag name or commit SHA when available")]
@@ -120,9 +120,7 @@ class Build : NukeBuild
         {
             var innoSetupExecutable = GetInnoSetupExecutablePath();
             if (!File.Exists(innoSetupExecutable))
-            {
                 throw new Exception($"ISCC.exe not found at '{innoSetupExecutable}'. Install Inno Setup 6 or set INNO_SETUP_EXE.");
-            }
         });
 
     Target BuildInstallerWinX64 => _ => _
@@ -181,8 +179,8 @@ class Build : NukeBuild
         EnsureDirectoryExists(publishDir, $"Publish output is missing for runtime '{runtime}' at '{publishDir}'.");
         Directory.CreateDirectory(ArtifactsDirectory);
 
-        var installerBaseName = GetInstallerBaseName(runtime);
-        var installerVersion  = GetInstallerVersion();
+        var installerBaseName   = GetInstallerBaseName(runtime);
+        var installerVersion    = GetInstallerVersion();
         var innoSetupExecutable = GetInnoSetupExecutablePath();
         var arguments =
             $"/DMyAppVersion={installerVersion} /DMyPublishDir=\"{publishDir}\" /DMyOutputDir=\"{ArtifactsDirectory}\" /DMyOutputBaseFilename={installerBaseName} \"{InstallerScript}\"";
@@ -206,13 +204,10 @@ class Build : NukeBuild
     string GetRawVersionToken()
     {
         if (!string.IsNullOrWhiteSpace(_rawVersionToken)) return _rawVersionToken;
-
-        if (!string.IsNullOrWhiteSpace(ReleaseVersion))
-            return _rawVersionToken = ReleaseVersion.Trim();
+        if (!string.IsNullOrWhiteSpace(ReleaseVersion))   return _rawVersionToken = ReleaseVersion.Trim();
 
         var githubRefName = Environment.GetEnvironmentVariable("GITHUB_REF_NAME");
-        if (!string.IsNullOrWhiteSpace(githubRefName))
-            return _rawVersionToken = githubRefName.Trim();
+        if (!string.IsNullOrWhiteSpace(githubRefName)) return _rawVersionToken = githubRefName.Trim();
 
         var githubSha = Environment.GetEnvironmentVariable("GITHUB_SHA");
         if (!string.IsNullOrWhiteSpace(githubSha))
@@ -236,6 +231,63 @@ class Build : NukeBuild
         var explicitPath = Environment.GetEnvironmentVariable("INNO_SETUP_EXE");
         if (!string.IsNullOrWhiteSpace(explicitPath)) return explicitPath;
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Inno Setup 6", "ISCC.exe");
+    }
+
+    /// <summary>
+    /// Resolves the 7-Zip executable path by checking PATH first, then common
+    /// install locations (7-Zip standalone, Git for Windows bundled 7z).
+    /// </summary>
+    static string Find7ZipExecutable()
+    {
+        // 1. Already on PATH
+        var fromPath = Environment.GetEnvironmentVariable("PATH")
+            ?.Split(Path.PathSeparator)
+            .Select(dir => Path.Combine(dir, "7z.exe"))
+            .FirstOrDefault(File.Exists);
+        if (fromPath != null) return fromPath;
+
+        // 2. Standard 7-Zip install locations
+        var programFiles = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+        };
+        foreach (var pf in programFiles)
+        {
+            var candidate = Path.Combine(pf, "7-Zip", "7z.exe");
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        // 3. Git for Windows bundles a 7z.exe in its usr/bin and mingw64/bin
+        var gitRoot = Environment.GetEnvironmentVariable("PATH")
+            ?.Split(Path.PathSeparator)
+            .Select(dir =>
+            {
+                // Walk up from e.g. C:\Program Files\Git\cmd  ->  C:\Program Files\Git
+                var d = new DirectoryInfo(dir);
+                while (d?.Parent != null)
+                {
+                    if (d.Name.Equals("Git", StringComparison.OrdinalIgnoreCase) ||
+                        d.Name.StartsWith("Git", StringComparison.OrdinalIgnoreCase))
+                        return d.FullName;
+                    d = d.Parent;
+                }
+                return null;
+            })
+            .FirstOrDefault(r => r != null);
+
+        if (gitRoot != null)
+        {
+            foreach (var rel in new[] { @"usr\bin\7z.exe", @"mingw64\bin\7z.exe" })
+            {
+                var candidate = Path.Combine(gitRoot, rel);
+                if (File.Exists(candidate)) return candidate;
+            }
+        }
+
+        throw new Exception(
+            "7-Zip (7z.exe) could not be found. " +
+            "Install 7-Zip from https://www.7-zip.org/ or add its folder to PATH.");
     }
 
     static void FetchLibMpvDll(string runtime, string downloadUrl, string expectedSha256, AbsolutePath destinationPath)
@@ -262,26 +314,26 @@ class Build : NukeBuild
 
             var zipInfo = new FileInfo(tempZip);
             if (!zipInfo.Exists || zipInfo.Length < 1_000_000)
-                throw new Exception($"[{runtime}] Downloaded archive is too small ({zipInfo.Length} bytes). Expected a valid .7z from GitHub Releases.");
+                throw new Exception($"[{runtime}] Downloaded archive is too small ({zipInfo.Length} bytes).");
 
-            // SHA256 integrity check
             Console.WriteLine($"[{runtime}] Verifying SHA256...");
             using (var sha256 = SHA256.Create())
             using (var stream = File.OpenRead(tempZip))
             {
-                var hashBytes = sha256.ComputeHash(stream);
-                var actualHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+                var actualHash = BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
                 if (!string.Equals(actualHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
                     throw new Exception($"[{runtime}] SHA256 mismatch!\n  Expected: {expectedSha256}\n  Actual:   {actualHash}");
             }
             Console.WriteLine($"[{runtime}] SHA256 OK. Extracting libmpv-2.dll...");
 
             Directory.CreateDirectory(tempDir);
-            ProcessTasks.StartProcess("7z", $"e \"{tempZip}\" -o\"{tempDir}\" libmpv-2.dll -r -y")
+            var sevenZip = Find7ZipExecutable();
+            Console.WriteLine($"[{runtime}] Using 7z at: {sevenZip}");
+            ProcessTasks.StartProcess(sevenZip, $"e \"{tempZip}\" -o\"{tempDir}\" libmpv-2.dll -r -y")
                 .AssertZeroExitCode();
 
             var extracted = Directory.GetFiles(tempDir, "libmpv-2.dll", SearchOption.AllDirectories).FirstOrDefault()
-                ?? throw new Exception($"[{runtime}] libmpv-2.dll not found inside the archive. Layout may have changed.");
+                ?? throw new Exception($"[{runtime}] libmpv-2.dll not found inside the archive.");
 
             File.Copy(extracted, destinationPath, overwrite: true);
 
@@ -289,12 +341,12 @@ class Build : NukeBuild
             Console.WriteLine($"[{runtime}] libmpv-2.dll placed at {destinationPath} ({finalSize / 1024 / 1024} MB).");
 
             if (finalSize < 1_000_000)
-                throw new Exception($"[{runtime}] Extracted libmpv-2.dll is too small ({finalSize} bytes) — extraction may have failed.");
+                throw new Exception($"[{runtime}] Extracted DLL is too small ({finalSize} bytes).");
         }
         finally
         {
-            if (File.Exists(tempZip))       try { File.Delete(tempZip); }                      catch { }
-            if (Directory.Exists(tempDir))  try { Directory.Delete(tempDir, recursive: true); } catch { }
+            if (File.Exists(tempZip))      try { File.Delete(tempZip); }                      catch { }
+            if (Directory.Exists(tempDir)) try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
 
