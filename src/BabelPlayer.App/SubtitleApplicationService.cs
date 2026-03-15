@@ -13,7 +13,7 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
     private readonly IAiCredentialCoordinator _aiCredentialCoordinator;
     private readonly IRuntimeProvisioner _runtimeProvisioner;
     private readonly IProviderAvailabilityService _providerAvailabilityService;
-    private readonly CredentialFacade _credentialFacade;
+    private readonly ICredentialStore _credentialStore;
     private readonly MediaSessionCoordinator _mediaSessionCoordinator;
     private readonly ISubtitleWorkflowStateStore _workflowStateStore;
     private readonly IBabelLogger _logger;
@@ -38,7 +38,7 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
         ISubtitleTranslator subtitleTranslator,
         IAiCredentialCoordinator aiCredentialCoordinator,
         IRuntimeProvisioner runtimeProvisioner,
-        CredentialFacade credentialFacade,
+        ICredentialStore credentialStore,
         MediaSessionCoordinator mediaSessionCoordinator,
         ISubtitleWorkflowStateStore workflowStateStore,
         IProviderAvailabilityService providerAvailabilityService,
@@ -49,7 +49,7 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
         _subtitleTranslator = subtitleTranslator;
         _aiCredentialCoordinator = aiCredentialCoordinator;
         _runtimeProvisioner = runtimeProvisioner;
-        _credentialFacade = credentialFacade;
+        _credentialStore = credentialStore;
         _mediaSessionCoordinator = mediaSessionCoordinator;
         _workflowStateStore = workflowStateStore;
         _providerAvailabilityService = providerAvailabilityService;
@@ -79,9 +79,7 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
     public void Dispose()
     {
         if (_disposed)
-        {
             return;
-        }
 
         _mediaSessionCoordinator.Store.SnapshotChanged -= HandleMediaSessionSnapshotChanged;
         _subtitleTranslator.RuntimeStatusChanged -= HandleLocalTranslationRuntimeStatus;
@@ -94,7 +92,9 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
     {
         cancellationToken.ThrowIfCancellationRequested();
         LoadPersistedSelections();
-        _logger.LogInfo("Subtitle application service initialized.", BabelLogContext.Create(("transcriptionModel", _workflowStateStore.Snapshot.SelectedTranscriptionModelKey), ("translationModel", _workflowStateStore.Snapshot.SelectedTranslationModelKey)));
+        _logger.LogInfo("Subtitle application service initialized.", BabelLogContext.Create(
+            ("transcriptionModel", _workflowStateStore.Snapshot.SelectedTranscriptionModelKey),
+            ("translationModel", _workflowStateStore.Snapshot.SelectedTranslationModelKey)));
         return Task.CompletedTask;
     }
 
@@ -105,18 +105,17 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
     {
         modelKey = SubtitleWorkflowCatalog.CanonicalizeTranscriptionModelKey(modelKey);
         var selection = SubtitleWorkflowCatalog.GetTranscriptionModel(modelKey);
-        _logger.LogInfo("Selecting transcription model.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
-        if (selection.Provider == TranscriptionProvider.Cloud && !await _aiCredentialCoordinator.EnsureOpenAiApiKeyAsync(cancellationToken))
+        _logger.LogInfo("Selecting transcription model.", BabelLogContext.Create(
+            ("modelKey", selection.Key), ("provider", selection.Provider)));
+        if (selection.Provider == TranscriptionProvider.Cloud
+            && !await _aiCredentialCoordinator.EnsureOpenAiApiKeyAsync(cancellationToken))
         {
             if (!suppressStatus)
-            {
                 PublishStatus("Cloud transcription model selection canceled.");
-            }
-
             return false;
         }
 
-        _credentialFacade.SaveSubtitleModelKey(selection.Key);
+        _credentialStore.SaveSubtitleModelKey(selection.Key);
         UpdateWorkflowState(state => state with
         {
             SelectedTranscriptionModelKey = selection.Key,
@@ -130,15 +129,16 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
     public async Task<bool> SelectTranslationModelAsync(string modelKey, CancellationToken cancellationToken = default)
     {
         var selection = SubtitleWorkflowCatalog.GetTranslationModel(modelKey);
-        _logger.LogInfo("Selecting translation model.", BabelLogContext.Create(("modelKey", selection.Key), ("provider", selection.Provider)));
-        if (selection.Provider == TranslationProvider.None || !await EnsureTranslationProviderReadyAsync(selection, cancellationToken))
+        _logger.LogInfo("Selecting translation model.", BabelLogContext.Create(
+            ("modelKey", selection.Key), ("provider", selection.Provider)));
+        if (selection.Provider == TranslationProvider.None
+            || !await EnsureTranslationProviderReadyAsync(selection, cancellationToken))
         {
             PublishStatus("Translation model selection canceled.");
             return false;
         }
 
-        var previousModelKey = _workflowStateStore.Snapshot.SelectedTranslationModelKey;
-        _credentialFacade.SaveTranslationModelKey(selection.Key);
+        _credentialStore.SaveTranslationModelKey(selection.Key);
         UpdateWorkflowState(state => state with
         {
             SelectedTranslationModelKey = selection.Key
@@ -146,9 +146,7 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
 
         PublishStatus($"Selected translation model: {selection.DisplayName}.");
         if (_mediaSessionCoordinator.Snapshot.Translation.IsEnabled)
-        {
             await ReprocessCurrentSubtitlesForTranslationSettingsAsync(cancellationToken);
-        }
 
         return true;
     }
@@ -193,7 +191,7 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
             return;
         }
 
-        _credentialFacade.SaveAutoTranslateEnabled(enabled);
+        _credentialStore.SaveAutoTranslateEnabled(enabled);
         UpdateWorkflowState(state => state with
         {
             CurrentVideoTranslationPreferenceLocked = false
@@ -221,9 +219,7 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
 
         var sidecarPath = Path.ChangeExtension(videoPath, ".srt");
         if (File.Exists(sidecarPath))
-        {
             return await ImportExternalSubtitlesAsync(sidecarPath, autoLoaded: true, cancellationToken);
-        }
 
         if (_captionOrchestrator.TryLoadCachedGeneratedSubtitles(videoPath, _workflowStateStore.Snapshot.SelectedTranscriptionModelKey))
         {
@@ -270,13 +266,11 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
         ArgumentNullException.ThrowIfNull(track);
-        _logger.LogInfo("Importing embedded subtitle track.", BabelLogContext.Create(("videoPath", videoPath), ("trackId", track.Id), ("codec", track.Codec)));
+        _logger.LogInfo("Importing embedded subtitle track.", BabelLogContext.Create(
+            ("videoPath", videoPath), ("trackId", track.Id), ("codec", track.Codec)));
 
         _captionOrchestrator.CancelCaptionGeneration();
-        UpdateWorkflowState(state => state with
-        {
-            CurrentVideoPath = videoPath
-        });
+        UpdateWorkflowState(state => state with { CurrentVideoPath = videoPath });
 
         try
         {
@@ -295,7 +289,8 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
         }
         catch (Exception ex)
         {
-            _logger.LogError("Embedded subtitle import failed.", ex, BabelLogContext.Create(("videoPath", videoPath), ("trackId", track.Id), ("codec", track.Codec)));
+            _logger.LogError("Embedded subtitle import failed.", ex, BabelLogContext.Create(
+                ("videoPath", videoPath), ("trackId", track.Id), ("codec", track.Codec)));
             PublishStatus(ex.Message, "Embedded subtitle import failed.");
             return new SubtitleLoadResult(SubtitlePipelineSource.None, 0, false, false);
         }
@@ -353,26 +348,18 @@ public sealed partial class SubtitleApplicationService : IDisposable, ICaptionGe
     {
         var activeTranscriptId = snapshot.SubtitlePresentation.ActiveTranscriptSegmentId;
         if (string.Equals(_lastObservedActiveTranscriptSegmentId, activeTranscriptId, StringComparison.Ordinal))
-        {
             return;
-        }
 
         _lastObservedActiveTranscriptSegmentId = activeTranscriptId;
         if (!_mediaSessionCoordinator.Snapshot.Translation.IsEnabled || string.IsNullOrWhiteSpace(activeTranscriptId))
-        {
             return;
-        }
 
         if (HasActiveTranslationRun() || string.IsNullOrWhiteSpace(_workflowStateStore.Snapshot.SelectedTranslationModelKey))
-        {
             return;
-        }
 
         var activeTranscript = SubtitleCueSessionMapper.GetActiveTranscriptSegment(snapshot);
         if (activeTranscript is null || SubtitleCueSessionMapper.HasTranslatedSegment(activeTranscript, snapshot))
-        {
             return;
-        }
 
         _ = TranslateCueAsync(activeTranscript, _translationCts?.Token ?? CancellationToken.None);
     }

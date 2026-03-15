@@ -5,13 +5,13 @@ namespace BabelPlayer.App;
 public interface IProviderCompositionFactory
 {
     ProviderAvailabilityComposition Create(
-        CredentialFacade credentialFacade,
+        ICredentialStore credentialStore,
         Func<string, string?> environmentVariableReader,
         IBabelLogFactory? logFactory = null);
 }
 
 public sealed record SubtitleWorkflowInfrastructureRequest(
-    CredentialFacade CredentialFacade,
+    ICredentialStore CredentialStore,
     ICredentialDialogService? CredentialDialogService,
     IFilePickerService? FilePickerService,
     Func<string, string?> EnvironmentVariableReader,
@@ -34,7 +34,7 @@ public interface ISubtitleWorkflowInfrastructureFactory
 public interface IAiCredentialCoordinatorFactory
 {
     IAiCredentialCoordinator Create(
-        CredentialFacade credentialFacade,
+        ICredentialStore credentialStore,
         ICredentialDialogService? credentialDialogService,
         Func<string, string?>? environmentVariableReader = null);
 }

@@ -3,7 +3,7 @@ using BabelPlayer.Core;
 namespace BabelPlayer.App;
 
 public sealed record ProviderAvailabilityContext(
-    CredentialFacade CredentialFacade,
+    ICredentialStore CredentialStore,
     Func<string, string?> EnvironmentVariableReader,
     IBabelLogFactory? LogFactory = null);
 
@@ -114,10 +114,10 @@ public sealed class ProviderAvailabilityService : IProviderAvailabilityService
 
     public ProviderAvailabilityService(
         IProviderCompositionFactory compositionFactory,
-        CredentialFacade credentialFacade,
+        ICredentialStore credentialStore,
         Func<string, string?> environmentVariableReader,
         IBabelLogFactory? logFactory = null)
-        : this(compositionFactory.Create(credentialFacade, environmentVariableReader, logFactory))
+        : this(compositionFactory.Create(credentialStore, environmentVariableReader, logFactory))
     {
     }
 

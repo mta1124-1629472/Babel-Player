@@ -40,20 +40,20 @@ public sealed record CredentialSelectionAvailability(
 
 public sealed class CredentialSetupService : ICredentialSetupService
 {
-    private readonly CredentialFacade _credentialFacade;
+    private readonly ICredentialStore _credentialStore;
     private readonly IProviderAvailabilityService _providerAvailabilityService;
     private readonly IAiCredentialCoordinator _aiCredentialCoordinator;
     private readonly IRuntimeProvisioner _runtimeProvisioner;
     private readonly Func<string, string?> _environmentVariableReader;
 
     public CredentialSetupService(
-        CredentialFacade credentialFacade,
+        ICredentialStore credentialStore,
         IProviderAvailabilityService providerAvailabilityService,
         IAiCredentialCoordinator aiCredentialCoordinator,
         IRuntimeProvisioner runtimeProvisioner,
         Func<string, string?> environmentVariableReader)
     {
-        _credentialFacade = credentialFacade;
+        _credentialStore = credentialStore;
         _providerAvailabilityService = providerAvailabilityService;
         _aiCredentialCoordinator = aiCredentialCoordinator;
         _runtimeProvisioner = runtimeProvisioner;
@@ -159,8 +159,8 @@ public sealed class CredentialSetupService : ICredentialSetupService
                 provider => provider,
                 provider => _providerAvailabilityService.IsTranslationProviderConfigured(provider));
         var selectedTranscription = SubtitleWorkflowCatalog.GetTranscriptionModel(
-            _providerAvailabilityService.ResolvePersistedTranscriptionModelKey(_credentialFacade.GetSubtitleModelKey()));
-        var selectedTranslationKey = _providerAvailabilityService.ResolvePersistedTranslationModelKey(_credentialFacade.GetTranslationModelKey());
+            _providerAvailabilityService.ResolvePersistedTranscriptionModelKey(_credentialStore.GetSubtitleModelKey()));
+        var selectedTranslationKey = _providerAvailabilityService.ResolvePersistedTranslationModelKey(_credentialStore.GetTranslationModelKey());
         var selectedTranslation = SubtitleWorkflowCatalog.GetTranslationModel(selectedTranslationKey);
 
         return new CredentialSetupSnapshot
@@ -176,6 +176,6 @@ public sealed class CredentialSetupService : ICredentialSetupService
     private bool HasOpenAiCredentials()
     {
         return !string.IsNullOrWhiteSpace(_environmentVariableReader("OPENAI_API_KEY"))
-            || !string.IsNullOrWhiteSpace(_credentialFacade.GetOpenAiApiKey());
+            || !string.IsNullOrWhiteSpace(_credentialStore.GetOpenAiApiKey());
     }
 }
