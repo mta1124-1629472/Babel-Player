@@ -12,6 +12,8 @@ public static class FfmpegRuntimeInstaller
 
     private static readonly HttpClient HttpClient = new(new HttpClientHandler { AllowAutoRedirect = true });
 
+    private static readonly ISettingsStore DefaultSettingsStore = new SecureSettingsStore();
+
     /// <summary>Returns the ffmpeg binary name for the current OS ("ffmpeg" on Linux/macOS, "ffmpeg.exe" on Windows).</summary>
     private static string FfmpegBinaryName =>
         OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
@@ -40,6 +42,27 @@ public static class FfmpegRuntimeInstaller
 
     public static bool IsInstalled(ISettingsStore settingsStore)
         => IsInstalled(settingsStore, RuntimeArchitectureHelper.GetCurrentArchitecture());
+
+    public static string GetInstallDirectory(Architecture architecture) =>
+        GetInstallDirectory(DefaultSettingsStore, architecture);
+
+    public static string GetInstalledFfmpegPath(Architecture architecture) =>
+        GetInstalledFfmpegPath(DefaultSettingsStore, architecture);
+
+    public static string GetInstalledFfprobePath(Architecture architecture) =>
+        GetInstalledFfprobePath(DefaultSettingsStore, architecture);
+
+    public static bool IsInstalled(Architecture architecture) =>
+        IsInstalled(DefaultSettingsStore, architecture);
+
+    public static bool IsInstalled() =>
+        IsInstalled(DefaultSettingsStore);
+
+    public static async Task<string> InstallAsync(
+        Architecture architecture,
+        Action<RuntimeInstallProgress>? onProgress,
+        CancellationToken cancellationToken) =>
+        await InstallAsync(DefaultSettingsStore, architecture, onProgress, cancellationToken);
 
     public static async Task<string> InstallAsync(
         ISettingsStore settingsStore,

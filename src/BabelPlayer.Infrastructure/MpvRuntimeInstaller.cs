@@ -14,28 +14,41 @@ public static class MpvRuntimeInstaller
 
     private static readonly HttpClient HttpClient = new(new HttpClientHandler { AllowAutoRedirect = true });
 
-    public static string GetInstallDirectory(Architecture architecture)
-        => Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "tools", "mpv", RuntimeVersion, RuntimeArchitectureHelper.ToFolderName(architecture));
+    private static readonly ISettingsStore DefaultSettingsStore = new SecureSettingsStore();
 
-    public static string GetInstalledExePath(Architecture architecture) => Path.Combine(GetInstallDirectory(architecture), "mpv.exe");
+    public static string GetInstallDirectory(ISettingsStore settingsStore, Architecture architecture)
+        => Path.Combine(settingsStore.GetAppDataDirectory(), "tools", "mpv", RuntimeVersion, RuntimeArchitectureHelper.ToFolderName(architecture));
+
+    public static string GetInstallDirectory(Architecture architecture) =>
+        GetInstallDirectory(DefaultSettingsStore, architecture);
+
+    public static string GetInstalledExePath(ISettingsStore settingsStore, Architecture architecture) =>
+        Path.Combine(GetInstallDirectory(settingsStore, architecture), "mpv.exe");
+
+    public static string GetInstalledExePath(Architecture architecture) =>
+        GetInstalledExePath(DefaultSettingsStore, architecture);
 
     public static string GetInstalledExePath() => GetInstalledExePath(RuntimeArchitectureHelper.GetCurrentArchitecture());
 
-    public static bool IsInstalled(Architecture architecture) => File.Exists(GetInstalledExePath(architecture));
+    public static bool IsInstalled(ISettingsStore settingsStore, Architecture architecture) =>
+        File.Exists(GetInstalledExePath(settingsStore, architecture));
+
+    public static bool IsInstalled(Architecture architecture) =>
+        IsInstalled(DefaultSettingsStore, architecture);
 
     public static bool IsInstalled() => IsInstalled(RuntimeArchitectureHelper.GetCurrentArchitecture());
 
-    public static async Task<string> InstallAsync(Architecture architecture, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+    public static async Task<string> InstallAsync(ISettingsStore settingsStore, Architecture architecture, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
     {
-        var finalDirectory = GetInstallDirectory(architecture);
-        var finalExePath = GetInstalledExePath(architecture);
+        var finalDirectory = GetInstallDirectory(settingsStore, architecture);
+        var finalExePath = GetInstalledExePath(settingsStore, architecture);
         if (File.Exists(finalExePath))
         {
             onProgress?.Invoke(new RuntimeInstallProgress { Stage = "ready" });
             return finalExePath;
         }
 
-        var tempRoot = Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "temp", "mpv", $"{RuntimeVersion}-{Guid.NewGuid():N}");
+        var tempRoot = Path.Combine(settingsStore.GetAppDataDirectory(), "temp", "mpv", $"{RuntimeVersion}-{Guid.NewGuid():N}");
         var archivePath = Path.Combine(tempRoot, "mpv-runtime.7z");
         var extractDirectory = Path.Combine(tempRoot, "extract");
         Directory.CreateDirectory(tempRoot);
@@ -69,6 +82,9 @@ public static class MpvRuntimeInstaller
             TryDeleteDirectory(tempRoot);
         }
     }
+
+    public static async Task<string> InstallAsync(Architecture architecture, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken) =>
+        await InstallAsync(DefaultSettingsStore, architecture, onProgress, cancellationToken);
 
     private static string GetRuntimeSource(Architecture architecture)
     {

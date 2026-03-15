@@ -8,7 +8,7 @@ internal static class ProviderAvailabilityHelpers
     public static bool HasOpenAiApiKey(ProviderAvailabilityContext context)
     {
         return !string.IsNullOrWhiteSpace(context.EnvironmentVariableReader("OPENAI_API_KEY"))
-               || !string.IsNullOrWhiteSpace(context.CredentialFacade.GetOpenAiApiKey());
+               || !string.IsNullOrWhiteSpace(context.CredentialStore.GetOpenAiApiKey());
     }
 
     public static string? ResolveLlamaCppServerPath(ProviderAvailabilityContext context)
@@ -19,7 +19,7 @@ internal static class ProviderAvailabilityHelpers
             return configuredPath;
         }
 
-        configuredPath = context.CredentialFacade.GetLlamaCppServerPath();
+        configuredPath = context.CredentialStore.GetLlamaCppServerPath();
         if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
         {
             return configuredPath;
@@ -59,7 +59,7 @@ internal static class ProviderAvailabilityHelpers
     {
         var apiKey = context.EnvironmentVariableReader("GOOGLE_TRANSLATE_API_KEY")
                      ?? context.EnvironmentVariableReader("GOOGLE_CLOUD_TRANSLATE_API_KEY")
-                     ?? context.CredentialFacade.GetGoogleTranslateApiKey();
+                     ?? context.CredentialStore.GetGoogleTranslateApiKey();
         return string.IsNullOrWhiteSpace(apiKey)
             ? null
             : new CloudTranslationOptions(CloudTranslationProvider.Google, apiKey.Trim());
@@ -68,7 +68,7 @@ internal static class ProviderAvailabilityHelpers
     public static CloudTranslationOptions? TryGetDeepLOptions(ProviderAvailabilityContext context)
     {
         var apiKey = context.EnvironmentVariableReader("DEEPL_API_KEY")
-                     ?? context.CredentialFacade.GetDeepLApiKey();
+                     ?? context.CredentialStore.GetDeepLApiKey();
         return string.IsNullOrWhiteSpace(apiKey)
             ? null
             : new CloudTranslationOptions(CloudTranslationProvider.DeepL, apiKey.Trim());
@@ -78,10 +78,10 @@ internal static class ProviderAvailabilityHelpers
     {
         var apiKey = context.EnvironmentVariableReader("MICROSOFT_TRANSLATOR_API_KEY")
                      ?? context.EnvironmentVariableReader("AZURE_TRANSLATOR_KEY")
-                     ?? context.CredentialFacade.GetMicrosoftTranslatorApiKey();
+                     ?? context.CredentialStore.GetMicrosoftTranslatorApiKey();
         var region = context.EnvironmentVariableReader("MICROSOFT_TRANSLATOR_REGION")
                      ?? context.EnvironmentVariableReader("AZURE_TRANSLATOR_REGION")
-                     ?? context.CredentialFacade.GetMicrosoftTranslatorRegion();
+                     ?? context.CredentialStore.GetMicrosoftTranslatorRegion();
 
         return string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(region)
             ? null

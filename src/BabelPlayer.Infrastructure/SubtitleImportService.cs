@@ -8,6 +8,9 @@ namespace BabelPlayer.Infrastructure;
 
 internal static class SubtitleImportService
 {
+    private static readonly ISettingsStore DefaultSettingsStore = new SecureSettingsStore();
+
+    static SubtitleImportService() => Directory.CreateDirectory(GetCacheDirectory());
     public static async Task<IReadOnlyList<SubtitleCue>> LoadExternalSubtitleCuesAsync(
         string path,
         IRuntimeBootstrapService runtimeBootstrapService,
@@ -109,5 +112,6 @@ internal static class SubtitleImportService
         return Path.Combine(GetCacheDirectory(), "embedded", $"{hash}.srt");
     }
 
-    private static string GetCacheDirectory() => Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "cache", "subtitles");
+    private static string GetCacheDirectory() =>
+        Path.Combine(DefaultSettingsStore.GetAppDataDirectory(), "cache", "subtitles");
 }

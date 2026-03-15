@@ -15,40 +15,45 @@ public static class LlamaCppRuntimeInstaller
 
     private static readonly HttpClient HttpClient = new();
 
-    public static string GetInstallDirectory(Architecture architecture)
-    {
-        return Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "tools", "llama.cpp", RuntimeVersion, RuntimeArchitectureHelper.ToFolderName(architecture));
-    }
+    private static readonly ISettingsStore DefaultSettingsStore = new SecureSettingsStore();
 
-    public static string GetInstalledServerPath(Architecture architecture)
-    {
-        return Path.Combine(GetInstallDirectory(architecture), "llama-server.exe");
-    }
+    public static string GetInstallDirectory(ISettingsStore settingsStore, Architecture architecture)
+        => Path.Combine(settingsStore.GetAppDataDirectory(), "tools", "llama.cpp", RuntimeVersion, RuntimeArchitectureHelper.ToFolderName(architecture));
+
+    public static string GetInstallDirectory(Architecture architecture) =>
+        GetInstallDirectory(DefaultSettingsStore, architecture);
+
+    public static string GetInstalledServerPath(ISettingsStore settingsStore, Architecture architecture)
+        => Path.Combine(GetInstallDirectory(settingsStore, architecture), "llama-server.exe");
+
+    public static string GetInstalledServerPath(Architecture architecture) =>
+        GetInstalledServerPath(DefaultSettingsStore, architecture);
 
     public static string GetInstalledServerPath()
         => GetInstalledServerPath(RuntimeArchitectureHelper.GetCurrentArchitecture());
 
-    public static bool IsInstalled(Architecture architecture)
-    {
-        return File.Exists(GetInstalledServerPath(architecture));
-    }
+    public static bool IsInstalled(ISettingsStore settingsStore, Architecture architecture)
+        => File.Exists(GetInstalledServerPath(settingsStore, architecture));
+
+    public static bool IsInstalled(Architecture architecture) =>
+        IsInstalled(DefaultSettingsStore, architecture);
 
     public static bool IsInstalled()
     {
         return IsInstalled(RuntimeArchitectureHelper.GetCurrentArchitecture());
     }
 
-    public static async Task<string> InstallAsync(Architecture architecture, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
+    public static async Task<string> InstallAsync(ISettingsStore settingsStore, Architecture architecture, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken)
     {
-        var finalDirectory = GetInstallDirectory(architecture);
-        var finalServerPath = GetInstalledServerPath(architecture);
+        var finalDirectory = GetInstallDirectory(settingsStore, architecture);
+        var finalServerPath = GetInstalledServerPath(settingsStore, architecture);
         if (File.Exists(finalServerPath))
         {
             onProgress?.Invoke(new RuntimeInstallProgress { Stage = "ready" });
             return finalServerPath;
         }
 
-        var tempRoot = Path.Combine(SecureSettingsStore.GetAppDataDirectory(), "temp", "llama.cpp", $"{RuntimeVersion}-{Guid.NewGuid():N}");
+        var tempRoot = Path.Combine(settingsStore.GetAppDataDirectory(), "temp", "llama.cpp", $"{RuntimeVersion}-{Guid.NewGuid():N}");
         var zipPath = Path.Combine(tempRoot, "llama-runtime.zip");
         var extractDirectory = Path.Combine(tempRoot, "extract");
         Directory.CreateDirectory(tempRoot);
@@ -84,6 +89,9 @@ public static class LlamaCppRuntimeInstaller
             TryDeleteDirectory(tempRoot);
         }
     }
+
+    public static async Task<string> InstallAsync(Architecture architecture, Action<RuntimeInstallProgress>? onProgress, CancellationToken cancellationToken) =>
+        await InstallAsync(DefaultSettingsStore, architecture, onProgress, cancellationToken);
 
     private static string GetDownloadUrl(Architecture architecture)
     {
