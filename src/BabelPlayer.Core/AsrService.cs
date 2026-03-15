@@ -1,7 +1,6 @@
 using NAudio.Wave;
 using System.Net.Http.Headers;
 using System.Runtime.Versioning;
-using System.Speech.Recognition;
 using System.Text.Json;
 using Whisper.net;
 using Whisper.net.Ggml;
@@ -50,19 +49,35 @@ public class AsrService
 
     private static readonly SemaphoreSlim WhisperFactoryGate = new(1, 1);
     private readonly IBabelLogger _logger;
+    private readonly IWindowsSpeechTranscriber _windowsSpeech;
 
-    public AsrService(string category = "transcription.asr", IBabelLogFactory? logFactory = null)
+    public AsrService(
+        IWindowsSpeechTranscriber? windowsSpeech = null,
+        string category = "transcription.asr",
+        IBabelLogFactory? logFactory = null)
     {
+        _windowsSpeech = windowsSpeech ?? new NullWindowsSpeechTranscriber();
         _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger(category);
     }
+
+    // Convenience ctor for callers that don't need to supply a transcriber
+    public AsrService(string category, IBabelLogFactory? logFactory = null)
+        : this(null, category, logFactory) { }
 
     public event Action<TranscriptChunk>? OnFinal;
     public event Action<ModelTransferProgress>? OnModelTransferProgress;
 
-    public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoAsync(string videoPath, CaptionGenerationOptions options, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoAsync(
+        string videoPath,
+        CaptionGenerationOptions options,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
-        _logger.LogInfo("ASR transcription starting.", BabelLogContext.Create(("videoPath", videoPath), ("mode", options.Mode), ("cloudModel", options.CloudModel), ("localModelType", options.LocalModelType?.ToString())));
+        _logger.LogInfo("ASR transcription starting.", BabelLogContext.Create(
+            ("videoPath", videoPath),
+            ("mode", options.Mode),
+            ("cloudModel", options.CloudModel),
+            ("localModelType", options.LocalModelType?.ToString())));
 
         var extractedWavePath = await Task.Run(() => ExtractWaveAudio(videoPath), cancellationToken);
 
@@ -76,20 +91,28 @@ public class AsrService
                 }
                 catch
                 {
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        throw;
-                    }
+                    if (cancellationToken.IsCancellationRequested) throw;
                 }
             }
 
-            var result = await TranscribeLocallyAsync(extractedWavePath, options.LocalModelType ?? GgmlType.Base, options.LanguageHint, cancellationToken);
-            _logger.LogInfo("ASR transcription completed.", BabelLogContext.Create(("videoPath", videoPath), ("cueCount", result.Count), ("mode", options.Mode)));
+            var result = await TranscribeLocallyAsync(
+                extractedWavePath,
+                options.LocalModelType ?? GgmlType.Base,
+                options.LanguageHint,
+                cancellationToken);
+
+            _logger.LogInfo("ASR transcription completed.", BabelLogContext.Create(
+                ("videoPath", videoPath),
+                ("cueCount", result.Count),
+                ("mode", options.Mode)));
+
             return result;
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            _logger.LogError("ASR transcription failed.", ex, BabelLogContext.Create(("videoPath", videoPath), ("mode", options.Mode)));
+            _logger.LogError("ASR transcription failed.", ex, BabelLogContext.Create(
+                ("videoPath", videoPath),
+                ("mode", options.Mode)));
             throw;
         }
         finally
@@ -117,7 +140,11 @@ public class AsrService
         }
     }
 
-    [SupportedOSPlatform("windows")]
+    /// <summary>
+    /// Transcribes using the Windows Speech Recognition engine via the injected
+    /// <see cref="IWindowsSpeechTranscriber"/>. On non-Windows platforms this
+    /// returns an empty list (NullWindowsSpeechTranscriber).
+    /// </summary>
     public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoWithWindowsSpeechAsync(
         string videoPath,
         string? languageHint,
@@ -128,7 +155,7 @@ public class AsrService
 
         try
         {
-            return await RunOnStaThreadAsync(() => TranscribeWithWindowsSpeech(extractedWavePath, languageHint, cancellationToken), cancellationToken);
+            return await _windowsSpeech.TranscribeAsync(extractedWavePath, languageHint, cancellationToken);
         }
         finally
         {
@@ -154,7 +181,11 @@ public class AsrService
         }
     }
 
-    private async Task<IReadOnlyList<SubtitleCue>> TranscribeLocallyAsync(string wavePath, GgmlType localModelType, string? languageHint, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<SubtitleCue>> TranscribeLocallyAsync(
+        string wavePath,
+        GgmlType localModelType,
+        string? languageHint,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -162,16 +193,28 @@ public class AsrService
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            _logger.LogWarning("Whisper transcription failed, falling back to Windows Speech.", ex, BabelLogContext.Create(("wavePath", wavePath), ("languageHint", languageHint), ("localModelType", localModelType.ToString())));
-            if (OperatingSystem.IsWindows())
+            _logger.LogWarning(
+                "Whisper transcription failed, falling back to Windows Speech.",
+                ex,
+                BabelLogContext.Create(
+                    ("wavePath", wavePath),
+                    ("languageHint", languageHint),
+                    ("localModelType", localModelType.ToString())));
+
+            if (_windowsSpeech.IsAvailable)
             {
-                return await RunOnStaThreadAsync(() => TranscribeWithWindowsSpeech(wavePath, languageHint, cancellationToken), cancellationToken);
+                return await _windowsSpeech.TranscribeAsync(wavePath, languageHint, cancellationToken);
             }
+
             throw;
         }
     }
 
-    private async Task<IReadOnlyList<SubtitleCue>> TranscribeWithWhisperAsync(string wavePath, GgmlType localModelType, string? languageHint, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<SubtitleCue>> TranscribeWithWhisperAsync(
+        string wavePath,
+        GgmlType localModelType,
+        string? languageHint,
+        CancellationToken cancellationToken)
     {
         var factory = await GetWhisperFactoryAsync(localModelType, cancellationToken);
         using var audioStream = File.OpenRead(wavePath);
@@ -180,16 +223,11 @@ public class AsrService
             .SplitOnWord();
 
         if (string.IsNullOrWhiteSpace(languageHint))
-        {
             builder.WithLanguageDetection();
-        }
         else
-        {
             builder.WithLanguage(NormalizeWhisperLanguage(languageHint));
-        }
 
         using var processor = builder.Build();
-
         var cues = new List<SubtitleCue>();
 
         await foreach (var segment in processor.ProcessAsync(audioStream, cancellationToken))
@@ -197,17 +235,16 @@ public class AsrService
             cancellationToken.ThrowIfCancellationRequested();
 
             var text = segment.Text?.Trim();
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(text)) continue;
 
             var cue = new SubtitleCue
             {
                 Start = segment.Start,
                 End = segment.End,
                 SourceText = text,
-                SourceLanguage = string.IsNullOrWhiteSpace(segment.Language) ? LanguageDetector.Detect(text) : segment.Language
+                SourceLanguage = string.IsNullOrWhiteSpace(segment.Language)
+                    ? LanguageDetector.Detect(text)
+                    : segment.Language
             };
 
             cues.Add(cue);
@@ -219,20 +256,18 @@ public class AsrService
 
     private static readonly Dictionary<GgmlType, WhisperFactory> WhisperFactories = [];
 
-    private async Task<WhisperFactory> GetWhisperFactoryAsync(GgmlType localModelType, CancellationToken cancellationToken)
+    private async Task<WhisperFactory> GetWhisperFactoryAsync(
+        GgmlType localModelType,
+        CancellationToken cancellationToken)
     {
         if (WhisperFactories.TryGetValue(localModelType, out var existingFactory))
-        {
             return existingFactory;
-        }
 
         await WhisperFactoryGate.WaitAsync(cancellationToken);
         try
         {
             if (WhisperFactories.TryGetValue(localModelType, out existingFactory))
-            {
                 return existingFactory;
-            }
 
             var whisperModelPath = ModelManager.GetAsrModelPath(localModelType);
             if (!File.Exists(whisperModelPath))
@@ -258,7 +293,11 @@ public class AsrService
         }
     }
 
-    private async Task CopyModelStreamWithProgressAsync(Stream source, Stream destination, GgmlType localModelType, CancellationToken cancellationToken)
+    private async Task CopyModelStreamWithProgressAsync(
+        Stream source,
+        Stream destination,
+        GgmlType localModelType,
+        CancellationToken cancellationToken)
     {
         long? totalBytes = source.CanSeek ? source.Length : null;
         var buffer = new byte[1024 * 128];
@@ -275,7 +314,8 @@ public class AsrService
         await destination.FlushAsync(cancellationToken);
     }
 
-    private void PublishModelTransferProgress(string stage, GgmlType localModelType, long bytesTransferred, long? totalBytes)
+    private void PublishModelTransferProgress(
+        string stage, GgmlType localModelType, long bytesTransferred, long? totalBytes)
     {
         OnModelTransferProgress?.Invoke(new ModelTransferProgress
         {
@@ -288,11 +328,7 @@ public class AsrService
 
     private static string NormalizeWhisperLanguage(string? languageHint)
     {
-        if (string.IsNullOrWhiteSpace(languageHint))
-        {
-            return "auto";
-        }
-
+        if (string.IsNullOrWhiteSpace(languageHint)) return "auto";
         var normalized = languageHint.Trim().ToLowerInvariant();
         return normalized switch
         {
@@ -302,103 +338,10 @@ public class AsrService
         };
     }
 
-    private static async Task<T> RunOnStaThreadAsync<T>(Func<T> work, CancellationToken cancellationToken)
-    {
-        var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    completion.TrySetCanceled(cancellationToken);
-                    return;
-                }
-
-                completion.TrySetResult(work());
-            }
-            catch (Exception ex)
-            {
-                completion.TrySetException(ex);
-            }
-        });
-
-        thread.TrySetApartmentState(ApartmentState.STA);
-        thread.Start();
-
-        using var _ = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
-        return await completion.Task;
-    }
-
-    [SupportedOSPlatform("windows")]
-    private IReadOnlyList<SubtitleCue> TranscribeWithWindowsSpeech(string wavePath, string? languageHint, CancellationToken cancellationToken)
-    {
-        var recognizerInfo = SelectRecognizer(languageHint);
-        using var recognizer = new SpeechRecognitionEngine(recognizerInfo);
-        using var waitHandle = new ManualResetEventSlim(false);
-
-        Exception? failure = null;
-        var cues = new List<SubtitleCue>();
-
-        recognizer.LoadGrammar(new DictationGrammar());
-        recognizer.SetInputToWaveFile(wavePath);
-
-        recognizer.SpeechRecognized += (_, args) =>
-        {
-            if (cancellationToken.IsCancellationRequested || args.Result.Audio is null)
-            {
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(args.Result.Text) || args.Result.Confidence < 0.30f)
-            {
-                return;
-            }
-
-            var start = args.Result.Audio.AudioPosition;
-            var end = start + args.Result.Audio.Duration;
-            var text = args.Result.Text.Trim();
-
-            var cue = new SubtitleCue
-            {
-                Start = start,
-                End = end,
-                SourceText = text,
-                SourceLanguage = LanguageDetector.Detect(text)
-            };
-
-            cues.Add(cue);
-            PublishFinalChunk(cue);
-        };
-
-        recognizer.RecognizeCompleted += (_, args) =>
-        {
-            failure = args.Error;
-            waitHandle.Set();
-        };
-
-        recognizer.RecognizeAsync(RecognizeMode.Multiple);
-
-        while (!waitHandle.Wait(TimeSpan.FromMilliseconds(200)))
-        {
-            if (!cancellationToken.IsCancellationRequested)
-            {
-                continue;
-            }
-
-            recognizer.RecognizeAsyncCancel();
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-
-        if (failure is not null)
-        {
-            throw failure;
-        }
-
-        return cues;
-    }
-
-    private async Task<IReadOnlyList<SubtitleCue>> TranscribeWithCloudAsync(string wavePath, CaptionGenerationOptions options, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<SubtitleCue>> TranscribeWithCloudAsync(
+        string wavePath,
+        CaptionGenerationOptions options,
+        CancellationToken cancellationToken)
     {
         var cues = new List<SubtitleCue>();
         var chunks = SplitWaveFile(wavePath, maxBytes: 24 * 1024 * 1024, segmentLength: TimeSpan.FromMinutes(10));
@@ -423,35 +366,26 @@ public class AsrService
                 form.Add(new StringContent("segment"), "timestamp_granularities[]");
 
                 if (!string.IsNullOrWhiteSpace(options.LanguageHint))
-                {
                     form.Add(new StringContent(options.LanguageHint), "language");
-                }
 
                 request.Content = form;
 
                 using var response = await HttpClient.SendAsync(request, cancellationToken);
                 var payload = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (!response.IsSuccessStatusCode)
-                {
-                    throw new InvalidOperationException($"Cloud subtitle generation failed: {(int)response.StatusCode} {response.ReasonPhrase}.");
-                }
+                    throw new InvalidOperationException(
+                        $"Cloud subtitle generation failed: {(int)response.StatusCode} {response.ReasonPhrase}.");
 
                 using var document = JsonDocument.Parse(payload);
-                if (!document.RootElement.TryGetProperty("segments", out var segments))
-                {
-                    continue;
-                }
+                if (!document.RootElement.TryGetProperty("segments", out var segments)) continue;
 
                 foreach (var segment in segments.EnumerateArray())
                 {
                     var text = segment.GetProperty("text").GetString()?.Trim();
-                    if (string.IsNullOrWhiteSpace(text))
-                    {
-                        continue;
-                    }
+                    if (string.IsNullOrWhiteSpace(text)) continue;
 
                     var start = chunk.Offset + TimeSpan.FromSeconds(segment.GetProperty("start").GetDouble());
-                    var end = chunk.Offset + TimeSpan.FromSeconds(segment.GetProperty("end").GetDouble());
+                    var end   = chunk.Offset + TimeSpan.FromSeconds(segment.GetProperty("end").GetDouble());
 
                     var cue = new SubtitleCue
                     {
@@ -469,126 +403,67 @@ public class AsrService
         finally
         {
             foreach (var chunk in chunks.Where(c => c.IsTemporary))
-            {
                 TryDeleteFile(chunk.Path);
-            }
         }
 
         return cues.OrderBy(c => c.Start).ToList();
     }
 
-    [SupportedOSPlatform("windows")]
-    private static RecognizerInfo SelectRecognizer(string? languageHint)
-    {
-        var installed = SpeechRecognitionEngine.InstalledRecognizers().ToList();
-        if (installed.Count == 0)
-        {
-            throw new InvalidOperationException("No Windows speech recognition engine is installed and Whisper local transcription was unavailable.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(languageHint))
-        {
-            var exactCulture = installed.FirstOrDefault(r => string.Equals(r.Culture.Name, languageHint, StringComparison.OrdinalIgnoreCase));
-            if (exactCulture is not null)
-            {
-                return exactCulture;
-            }
-
-            var sameLanguage = installed.FirstOrDefault(r => string.Equals(r.Culture.TwoLetterISOLanguageName, languageHint, StringComparison.OrdinalIgnoreCase));
-            if (sameLanguage is not null)
-            {
-                return sameLanguage;
-            }
-        }
-
-        return installed.FirstOrDefault(r => string.Equals(r.Culture.Name, "en-US", StringComparison.OrdinalIgnoreCase))
-            ?? installed[0];
-    }
-
     /// <summary>
-    /// Extracts audio from a media file and converts it to 16kHz mono 16-bit PCM WAV format
+    /// Extracts audio from a media file and converts it to 16 kHz mono 16-bit PCM WAV
     /// suitable for ASR processing.
     /// </summary>
-    /// <param name="mediaPath">Path to the source media file.</param>
-    /// <returns>Path to the generated WAV file.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when mediaPath is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the media file does not exist.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when audio extraction fails.</exception>
     private static string ExtractWaveAudio(string mediaPath)
     {
-        // Validate input parameter
         if (string.IsNullOrWhiteSpace(mediaPath))
-        {
             throw new ArgumentNullException(nameof(mediaPath), "Media path cannot be null or empty.");
-        }
-
-        // Validate file exists
         if (!File.Exists(mediaPath))
-        {
             throw new FileNotFoundException($"Media file not found: {mediaPath}", mediaPath);
-        }
 
-        // Define audio extraction constants for ASR processing
-        // 16kHz mono 16-bit PCM is the standard format for Whisper and similar ASR models
         const int SampleRate = 16000;
         const int BitsPerSample = 16;
         const int Channels = 1;
-        const int ResamplerQuality = 60; // High quality resampling
+        const int ResamplerQuality = 60;
 
         var workingDirectory = Path.Combine(Path.GetTempPath(), "BabelPlayer");
         Directory.CreateDirectory(workingDirectory);
 
-        var outputFileName = $"{Path.GetFileNameWithoutExtension(mediaPath)}-{Guid.NewGuid():N}.wav";
-        var outputPath = Path.Combine(workingDirectory, outputFileName);
+        var outputPath = Path.Combine(
+            workingDirectory,
+            $"{Path.GetFileNameWithoutExtension(mediaPath)}-{Guid.NewGuid():N}.wav");
 
         try
         {
-            // Create audio reader and resampler with optimized settings
             using var reader = new MediaFoundationReader(mediaPath);
             var targetFormat = new WaveFormat(SampleRate, BitsPerSample, Channels);
-            
             using var resampler = new MediaFoundationResampler(reader, targetFormat)
             {
                 ResamplerQuality = ResamplerQuality
             };
-
-            // Write the resampled audio to WAV file
             WaveFileWriter.CreateWaveFile(outputPath, resampler);
-            
             return outputPath;
         }
         catch (Exception ex) when (ex is not ArgumentNullException and not FileNotFoundException)
         {
-            // Clean up partial output file if extraction fails
-            if (File.Exists(outputPath))
-            {
-                try
-                {
-                    File.Delete(outputPath);
-                }
-                catch
-                {
-                    // Ignore cleanup failures - best effort
-                }
-            }
-            
+            TryDeleteFile(outputPath);
             throw new InvalidOperationException($"Failed to extract audio from: {mediaPath}", ex);
         }
     }
 
-    private static IReadOnlyList<TranscriptionChunkFile> SplitWaveFile(string wavePath, int maxBytes, TimeSpan segmentLength)
+    private static IReadOnlyList<TranscriptionChunkFile> SplitWaveFile(
+        string wavePath, int maxBytes, TimeSpan segmentLength)
     {
         var fileInfo = new FileInfo(wavePath);
         if (fileInfo.Length <= maxBytes)
-        {
             return [new TranscriptionChunkFile(wavePath, TimeSpan.Zero, false)];
-        }
 
         var chunks = new List<TranscriptionChunkFile>();
         using var reader = new WaveFileReader(wavePath);
 
         var bytesPerSecond = reader.WaveFormat.AverageBytesPerSecond;
-        var bytesPerChunk = (int)Math.Max(bytesPerSecond, Math.Min(maxBytes - (512 * 1024), segmentLength.TotalSeconds * bytesPerSecond));
+        var bytesPerChunk = (int)Math.Max(
+            bytesPerSecond,
+            Math.Min(maxBytes - (512 * 1024), segmentLength.TotalSeconds * bytesPerSecond));
         bytesPerChunk -= bytesPerChunk % reader.WaveFormat.BlockAlign;
 
         var buffer = new byte[bytesPerChunk];
@@ -598,16 +473,14 @@ public class AsrService
         while (reader.Position < reader.Length)
         {
             var bytesRead = reader.Read(buffer, 0, buffer.Length);
-            if (bytesRead <= 0)
-            {
-                break;
-            }
+            if (bytesRead <= 0) break;
 
-            var tempPath = Path.Combine(Path.GetTempPath(), "BabelPlayer", $"{Path.GetFileNameWithoutExtension(wavePath)}-part-{index++:D4}.wav");
+            var tempPath = Path.Combine(
+                Path.GetTempPath(), "BabelPlayer",
+                $"{Path.GetFileNameWithoutExtension(wavePath)}-part-{index++:D4}.wav");
+
             using (var writer = new WaveFileWriter(tempPath, reader.WaveFormat))
-            {
                 writer.Write(buffer, 0, bytesRead);
-            }
 
             chunks.Add(new TranscriptionChunkFile(tempPath, offset, true));
             offset += TimeSpan.FromSeconds((double)bytesRead / bytesPerSecond);
@@ -618,30 +491,33 @@ public class AsrService
 
     private void PublishFinalChunk(SubtitleCue cue)
     {
-        var chunk = new TranscriptChunk
+        OnFinal?.Invoke(new TranscriptChunk
         {
             Text = cue.SourceText,
             StartTimeSec = cue.Start.TotalSeconds,
             EndTimeSec = cue.End.TotalSeconds,
             IsFinal = true
-        };
-
-        OnFinal?.Invoke(chunk);
+        });
     }
 
     private static void TryDeleteFile(string path)
     {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch
-        {
-        }
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch { }
     }
 
     private sealed record TranscriptionChunkFile(string Path, TimeSpan Offset, bool IsTemporary);
+
+    // ---------------------------------------------------------------------------
+    // Nested null-object so AsrService has a safe default without requiring the
+    // App layer to be referenced from Core.
+    // ---------------------------------------------------------------------------
+    private sealed class NullWindowsSpeechTranscriber : IWindowsSpeechTranscriber
+    {
+        public bool IsAvailable => false;
+
+        public Task<IReadOnlyList<SubtitleCue>> TranscribeAsync(
+            string wavePath, string? languageHint, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<SubtitleCue>>(Array.Empty<SubtitleCue>());
+    }
 }
