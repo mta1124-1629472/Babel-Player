@@ -28,46 +28,46 @@ public sealed class XdgCredentialStore : ICredentialStore
     private static readonly string MsTranslatorApiKeyPath    = Path.Combine(ConfigDir, "microsoft-translator-api-key.enc");
 
     // ── Non-sensitive (plain text) ────────────────────────────────────────────
-    private static readonly string MsTranslatorRegionPath    = Path.Combine(ConfigDir, "microsoft-translator-region.txt");
-    private static readonly string LlamaCppServerPath        = Path.Combine(ConfigDir, "llama-server-path.txt");
-    private static readonly string LlamaCppRuntimeVersionPath= Path.Combine(ConfigDir, "llama-runtime-version.txt");
-    private static readonly string LlamaCppRuntimeSourcePath = Path.Combine(ConfigDir, "llama-runtime-source.txt");
-    private static readonly string SubtitleModelPath         = Path.Combine(ConfigDir, "subtitle-model.txt");
-    private static readonly string TranslationModelPath      = Path.Combine(ConfigDir, "translation-model.txt");
-    private static readonly string AutoTranslatePath         = Path.Combine(ConfigDir, "auto-translate-enabled.txt");
+    private static readonly string MsTranslatorRegionPath     = Path.Combine(ConfigDir, "microsoft-translator-region.txt");
+    private static readonly string LlamaCppServerPath         = Path.Combine(ConfigDir, "llama-server-path.txt");
+    private static readonly string LlamaCppRuntimeVersionPath = Path.Combine(ConfigDir, "llama-runtime-version.txt");
+    private static readonly string LlamaCppRuntimeSourcePath  = Path.Combine(ConfigDir, "llama-runtime-source.txt");
+    private static readonly string SubtitleModelPath          = Path.Combine(ConfigDir, "subtitle-model.txt");
+    private static readonly string TranslationModelPath       = Path.Combine(ConfigDir, "translation-model.txt");
+    private static readonly string AutoTranslatePath          = Path.Combine(ConfigDir, "auto-translate-enabled.txt");
 
     // ── ICredentialStore ─────────────────────────────────────────────────────
 
-    public string? GetOpenAiApiKey()                  => ReadEncrypted(OpenAiApiKeyPath, nameof(OpenAiApiKeyPath));
-    public void    SaveOpenAiApiKey(string apiKey)    => WriteEncrypted(OpenAiApiKeyPath, nameof(OpenAiApiKeyPath), apiKey);
+    public string? GetOpenAiApiKey()               => ReadEncrypted(OpenAiApiKeyPath, nameof(OpenAiApiKeyPath));
+    public void    SaveOpenAiApiKey(string apiKey) => WriteEncrypted(OpenAiApiKeyPath, nameof(OpenAiApiKeyPath), apiKey);
 
-    public string? GetGoogleTranslateApiKey()                      => ReadEncrypted(GoogleTranslateApiKeyPath, nameof(GoogleTranslateApiKeyPath));
-    public void    SaveGoogleTranslateApiKey(string apiKey)        => WriteEncrypted(GoogleTranslateApiKeyPath, nameof(GoogleTranslateApiKeyPath), apiKey);
+    public string? GetGoogleTranslateApiKey()                  => ReadEncrypted(GoogleTranslateApiKeyPath, nameof(GoogleTranslateApiKeyPath));
+    public void    SaveGoogleTranslateApiKey(string apiKey)    => WriteEncrypted(GoogleTranslateApiKeyPath, nameof(GoogleTranslateApiKeyPath), apiKey);
 
     public string? GetDeepLApiKey()               => ReadEncrypted(DeepLApiKeyPath, nameof(DeepLApiKeyPath));
     public void    SaveDeepLApiKey(string apiKey) => WriteEncrypted(DeepLApiKeyPath, nameof(DeepLApiKeyPath), apiKey);
 
-    public string? GetMicrosoftTranslatorApiKey()                   => ReadEncrypted(MsTranslatorApiKeyPath, nameof(MsTranslatorApiKeyPath));
-    public void    SaveMicrosoftTranslatorApiKey(string apiKey)     => WriteEncrypted(MsTranslatorApiKeyPath, nameof(MsTranslatorApiKeyPath), apiKey);
+    public string? GetMicrosoftTranslatorApiKey()                => ReadEncrypted(MsTranslatorApiKeyPath, nameof(MsTranslatorApiKeyPath));
+    public void    SaveMicrosoftTranslatorApiKey(string apiKey)  => WriteEncrypted(MsTranslatorApiKeyPath, nameof(MsTranslatorApiKeyPath), apiKey);
 
-    public string? GetMicrosoftTranslatorRegion()                   => ReadPlaintext(MsTranslatorRegionPath);
-    public void    SaveMicrosoftTranslatorRegion(string region)     => WritePlaintext(MsTranslatorRegionPath, region);
+    public string? GetMicrosoftTranslatorRegion()                => ReadPlaintext(MsTranslatorRegionPath);
+    public void    SaveMicrosoftTranslatorRegion(string region)  => WritePlaintext(MsTranslatorRegionPath, region);
 
-    public string? GetLlamaCppServerPath()                          => ReadPlaintext(LlamaCppServerPath);
-    public void    SaveLlamaCppServerPath(string path)              => WritePlaintext(LlamaCppServerPath, path);
+    public string? GetLlamaCppServerPath()                       => ReadPlaintext(LlamaCppServerPath);
+    public void    SaveLlamaCppServerPath(string path)           => WritePlaintext(LlamaCppServerPath, path);
 
-    public string? GetLlamaCppRuntimeVersion()                      => ReadPlaintext(LlamaCppRuntimeVersionPath);
-    public void    SaveLlamaCppRuntimeVersion(string version)       => WritePlaintext(LlamaCppRuntimeVersionPath, version);
+    public string? GetLlamaCppRuntimeVersion()                   => ReadPlaintext(LlamaCppRuntimeVersionPath);
+    public void    SaveLlamaCppRuntimeVersion(string version)    => WritePlaintext(LlamaCppRuntimeVersionPath, version);
 
-    public string? GetLlamaCppRuntimeSource()                       => ReadPlaintext(LlamaCppRuntimeSourcePath);
-    public void    SaveLlamaCppRuntimeSource(string source)         => WritePlaintext(LlamaCppRuntimeSourcePath, source);
+    public string? GetLlamaCppRuntimeSource()                    => ReadPlaintext(LlamaCppRuntimeSourcePath);
+    public void    SaveLlamaCppRuntimeSource(string source)      => WritePlaintext(LlamaCppRuntimeSourcePath, source);
 
-    public string? GetSubtitleModelKey()                            => ReadPlaintext(SubtitleModelPath);
-    public void    SaveSubtitleModelKey(string modelKey)            => WritePlaintext(SubtitleModelPath, modelKey);
+    public string? GetSubtitleModelKey()                         => ReadPlaintext(SubtitleModelPath);
+    public void    SaveSubtitleModelKey(string modelKey)         => WritePlaintext(SubtitleModelPath, modelKey);
 
-    public string? GetTranslationModelKey()                         => ReadPlaintext(TranslationModelPath);
-    public void    SaveTranslationModelKey(string modelKey)         => WritePlaintext(TranslationModelPath, modelKey);
-    public void    ClearTranslationModelKey()                       => TryDelete(TranslationModelPath);
+    public string? GetTranslationModelKey()                      => ReadPlaintext(TranslationModelPath);
+    public void    SaveTranslationModelKey(string modelKey)      => WritePlaintext(TranslationModelPath, modelKey);
+    public void    ClearTranslationModelKey()                    => TryDelete(TranslationModelPath);
 
     public bool GetAutoTranslateEnabled()
     {
@@ -80,14 +80,8 @@ public sealed class XdgCredentialStore : ICredentialStore
 
     // ── Encryption helpers ───────────────────────────────────────────────────
 
-    /// <summary>
-    /// Derives a 32-byte AES-256 key that is unique per field and per user/machine.
-    /// Using the field name as HKDF "info" ensures each field has a distinct key
-    /// even though the same IKM is used everywhere.
-    /// </summary>
     private static byte[] DeriveKey(string fieldName)
     {
-        // IKM: machine-id file (Linux) or MachineName fallback, mixed with username
         var machineId = ReadMachineId();
         var username  = Environment.UserName ?? "default";
         var ikm       = Encoding.UTF8.GetBytes(machineId + "\0" + username);
@@ -99,19 +93,14 @@ public sealed class XdgCredentialStore : ICredentialStore
 
     private static string ReadMachineId()
     {
-        // Linux standard location
-        const string machineIdPath = "/etc/machine-id";
-        if (File.Exists(machineIdPath))
+        const string linuxPath = "/etc/machine-id";
+        if (File.Exists(linuxPath))
         {
-            try { return File.ReadAllText(machineIdPath).Trim(); }
-            catch { /* fallthrough */ }
+            try { return File.ReadAllText(linuxPath).Trim(); }
+            catch { }
         }
 
-        // macOS fallback
-        const string macOsIdPath = "/var/db/com.apple.xpc.launchd/db.plist";
-        return File.Exists(macOsIdPath)
-            ? Environment.MachineName
-            : Environment.MachineName;
+        return Environment.MachineName;
     }
 
     private static void WriteEncrypted(string path, string fieldName, string value)
@@ -119,9 +108,9 @@ public sealed class XdgCredentialStore : ICredentialStore
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         Directory.CreateDirectory(ConfigDir);
 
-        var key       = DeriveKey(fieldName);
-        var nonce     = new byte[AesGcm.NonceByteSizes.MaxSize];   // 12 bytes
-        var plaintext = Encoding.UTF8.GetBytes(value.Trim());
+        var key        = DeriveKey(fieldName);
+        var nonce      = new byte[AesGcm.NonceByteSizes.MaxSize];  // 12 bytes
+        var plaintext  = Encoding.UTF8.GetBytes(value.Trim());
         var ciphertext = new byte[plaintext.Length];
         var tag        = new byte[AesGcm.TagByteSizes.MaxSize];    // 16 bytes
 
@@ -132,9 +121,9 @@ public sealed class XdgCredentialStore : ICredentialStore
 
         // Layout: [nonce 12][tag 16][ciphertext]
         var blob = new byte[nonce.Length + tag.Length + ciphertext.Length];
-        Buffer.BlockCopy(nonce,      0, blob, 0,                             nonce.Length);
-        Buffer.BlockCopy(tag,        0, blob, nonce.Length,                  tag.Length);
-        Buffer.BlockCopy(ciphertext, 0, blob, nonce.Length + tag.Length,     ciphertext.Length);
+        Buffer.BlockCopy(nonce,      0, blob, 0,                         nonce.Length);
+        Buffer.BlockCopy(tag,        0, blob, nonce.Length,              tag.Length);
+        Buffer.BlockCopy(ciphertext, 0, blob, nonce.Length + tag.Length, ciphertext.Length);
 
         File.WriteAllBytes(path, blob);
     }
@@ -145,9 +134,9 @@ public sealed class XdgCredentialStore : ICredentialStore
 
         try
         {
-            var blob  = File.ReadAllBytes(path);
-            const int nonceLen = 12;
-            const int tagLen   = 16;
+            var blob = File.ReadAllBytes(path);
+            const int nonceLen  = 12;
+            const int tagLen    = 16;
             const int headerLen = nonceLen + tagLen;
 
             if (blob.Length <= headerLen) return null;
@@ -161,17 +150,16 @@ public sealed class XdgCredentialStore : ICredentialStore
             using var aes = new AesGcm(key, tagLen);
             aes.Decrypt(nonce, ciphertext, tag, plaintext);
 
-            var value = Encoding.UTF8.GetString(plaintext).Trim();
-            return string.IsNullOrWhiteSpace(value) ? null : value;
+            var v = Encoding.UTF8.GetString(plaintext).Trim();
+            return string.IsNullOrWhiteSpace(v) ? null : v;
         }
         catch
         {
-            // Wrong key, corruption, or tampered data — treat as missing
             return null;
         }
     }
 
-    // ── Plaintext helpers ────────────────────────────────────────────────────
+    // ── Plaintext helpers ───────────────────────────────────────────────────
 
     private static string? ReadPlaintext(string path)
     {
