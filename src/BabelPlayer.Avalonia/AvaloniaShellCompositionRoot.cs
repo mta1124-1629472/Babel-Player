@@ -26,10 +26,7 @@ public sealed record AvaloniaShellDependencies(
     IFilePickerService FilePickerService,
     IDisposable Lifetime) : IDisposable
 {
-    public void Dispose()
-    {
-        Lifetime.Dispose();
-    }
+    public void Dispose() => Lifetime.Dispose();
 }
 
 public sealed class AvaloniaShellCompositionRoot
@@ -37,6 +34,9 @@ public sealed class AvaloniaShellCompositionRoot
     public AvaloniaShellDependencies Create(Window ownerWindow)
     {
         var settingsStore = CreateSettingsStore();
+        var audioExtractor = CreateAudioExtractor(settingsStore);
+        var windowsSpeech = CreateWindowsSpeechTranscriber();
+
         var credentialFacade = new CredentialFacade();
         var mediaSessionCoordinator = new MediaSessionCoordinator(new InMemoryMediaSessionStore());
         var workflowStateStore = new InMemorySubtitleWorkflowStateStore();
@@ -45,11 +45,12 @@ public sealed class AvaloniaShellCompositionRoot
         var shellPreferencesService = CreateShellPreferencesService(settingsStore);
         var windowModeService = new AvaloniaWindowModeService(ownerWindow);
         var shortcutProfileService = new ShortcutProfileService(shellPreferencesService);
-        var subtitleInfrastructure = new SubtitleWorkflowInfrastructureFactory().Create(new SubtitleWorkflowInfrastructureRequest(
-            credentialFacade,
-            credentialDialogService,
-            filePickerService,
-            Environment.GetEnvironmentVariable));
+        var subtitleInfrastructure = new SubtitleWorkflowInfrastructureFactory().Create(
+            new SubtitleWorkflowInfrastructureRequest(
+                credentialFacade,
+                credentialDialogService,
+                filePickerService,
+                Environment.GetEnvironmentVariable));
         var subtitleApplicationService = new SubtitleApplicationService(
             subtitleInfrastructure.SubtitleSourceResolver,
             subtitleInfrastructure.CaptionGenerator,
@@ -123,15 +124,35 @@ public sealed class AvaloniaShellCompositionRoot
                 playbackBackend));
     }
 
-    /// <summary>
-    /// Returns the correct <see cref="ISettingsStore"/> for the current OS.
-    /// Windows: DPAPI-backed <see cref="SecureSettingsStore"/>.
-    /// Linux/macOS: plain-text XDG <see cref="XdgSettingsStore"/>.
-    /// </summary>
+    /// <summary>Picks the right settings store for the current OS.</summary>
     private static ISettingsStore CreateSettingsStore() =>
         OperatingSystem.IsWindows()
             ? new SecureSettingsStore()
             : new XdgSettingsStore();
+
+    /// <summary>
+    /// Windows: MediaFoundation (primary) → FFmpeg (fallback, uses managed install).
+    /// Linux/macOS: FFmpeg only (system or managed install).
+    /// </summary>
+    private static IAudioExtractor CreateAudioExtractor(ISettingsStore settingsStore)
+    {
+        var managedFfmpegPath = FfmpegRuntimeInstaller.IsInstalled(settingsStore)
+            ? FfmpegRuntimeInstaller.GetInstalledFfmpegPath(settingsStore)
+            : "ffmpeg"; // fall back to system PATH
+
+        var ffmpeg = new FfmpegAudioExtractor(managedFfmpegPath);
+
+        if (OperatingSystem.IsWindows())
+            return new CompositeAudioExtractor(new MediaFoundationAudioExtractor(), ffmpeg);
+
+        return ffmpeg;
+    }
+
+    /// <summary>Returns Windows Speech transcriber on Windows, no-op stub elsewhere.</summary>
+    private static IWindowsSpeechTranscriber CreateWindowsSpeechTranscriber() =>
+        OperatingSystem.IsWindows()
+            ? new WindowsSpeechTranscriber()
+            : new NullWindowsSpeechTranscriber();
 
     private static ShellPreferencesService CreateShellPreferencesService(ISettingsStore settingsStore)
     {
@@ -140,10 +161,9 @@ public sealed class AvaloniaShellCompositionRoot
         if (!File.Exists(settingsPath))
         {
             shellPreferencesService.ApplyLayoutChange(new ShellLayoutPreferencesChange(
-                false,
-                false,
-                shellPreferencesService.Current.WindowMode));
-            shellPreferencesService.ApplyShortcutProfileChange(new ShellShortcutProfileChange(CreateFirstRunShortcutProfile()));
+                false, false, shellPreferencesService.Current.WindowMode));
+            shellPreferencesService.ApplyShortcutProfileChange(
+                new ShellShortcutProfileChange(CreateFirstRunShortcutProfile()));
         }
 
         return shellPreferencesService;
@@ -152,13 +172,13 @@ public sealed class AvaloniaShellCompositionRoot
     private static ShellShortcutProfile CreateFirstRunShortcutProfile()
     {
         var profile = ShellShortcutProfile.CreateDefault();
-        profile.Bindings["seek_back_small"] = "Left";
+        profile.Bindings["seek_back_small"]  = "Left";
         profile.Bindings["seek_forward_small"] = "Right";
-        profile.Bindings["volume_up"] = "Up";
+        profile.Bindings["volume_up"]   = "Up";
         profile.Bindings["volume_down"] = "Down";
-        profile.Bindings["fullscreen"] = "F";
+        profile.Bindings["fullscreen"]  = "F";
         profile.Bindings["exit_fullscreen"] = "Escape";
-        profile.Bindings["mute"] = "M";
+        profile.Bindings["mute"]            = "M";
         profile.Bindings["subtitle_toggle"] = "S";
         return profile;
     }

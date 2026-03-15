@@ -1,6 +1,5 @@
 using NAudio.Wave;
 using System.Net.Http.Headers;
-using System.Runtime.Versioning;
 using System.Text.Json;
 using Whisper.net;
 using Whisper.net.Ggml;
@@ -50,19 +49,22 @@ public class AsrService
     private static readonly SemaphoreSlim WhisperFactoryGate = new(1, 1);
     private readonly IBabelLogger _logger;
     private readonly IWindowsSpeechTranscriber _windowsSpeech;
+    private readonly IAudioExtractor _audioExtractor;
 
     public AsrService(
+        IAudioExtractor? audioExtractor = null,
         IWindowsSpeechTranscriber? windowsSpeech = null,
         string category = "transcription.asr",
         IBabelLogFactory? logFactory = null)
     {
+        _audioExtractor = audioExtractor ?? new FfmpegFallbackAudioExtractor();
         _windowsSpeech = windowsSpeech ?? new NullWindowsSpeechTranscriber();
         _logger = (logFactory ?? NullBabelLogFactory.Instance).CreateLogger(category);
     }
 
-    // Convenience ctor for callers that don't need to supply a transcriber
+    // Convenience ctor for callers that don't supply platform services
     public AsrService(string category, IBabelLogFactory? logFactory = null)
-        : this(null, category, logFactory) { }
+        : this(null, null, category, logFactory) { }
 
     public event Action<TranscriptChunk>? OnFinal;
     public event Action<ModelTransferProgress>? OnModelTransferProgress;
@@ -79,7 +81,7 @@ public class AsrService
             ("cloudModel", options.CloudModel),
             ("localModelType", options.LocalModelType?.ToString())));
 
-        var extractedWavePath = await Task.Run(() => ExtractWaveAudio(videoPath), cancellationToken);
+        var extractedWavePath = await Task.Run(() => _audioExtractor.Extract(videoPath), cancellationToken);
 
         try
         {
@@ -128,7 +130,7 @@ public class AsrService
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
-        var extractedWavePath = await Task.Run(() => ExtractWaveAudio(videoPath), cancellationToken);
+        var extractedWavePath = await Task.Run(() => _audioExtractor.Extract(videoPath), cancellationToken);
 
         try
         {
@@ -140,18 +142,13 @@ public class AsrService
         }
     }
 
-    /// <summary>
-    /// Transcribes using the Windows Speech Recognition engine via the injected
-    /// <see cref="IWindowsSpeechTranscriber"/>. On non-Windows platforms this
-    /// returns an empty list (NullWindowsSpeechTranscriber).
-    /// </summary>
     public async Task<IReadOnlyList<SubtitleCue>> TranscribeVideoWithWindowsSpeechAsync(
         string videoPath,
         string? languageHint,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
-        var extractedWavePath = await Task.Run(() => ExtractWaveAudio(videoPath), cancellationToken);
+        var extractedWavePath = await Task.Run(() => _audioExtractor.Extract(videoPath), cancellationToken);
 
         try
         {
@@ -169,7 +166,7 @@ public class AsrService
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
-        var extractedWavePath = await Task.Run(() => ExtractWaveAudio(videoPath), cancellationToken);
+        var extractedWavePath = await Task.Run(() => _audioExtractor.Extract(videoPath), cancellationToken);
 
         try
         {
@@ -202,9 +199,7 @@ public class AsrService
                     ("localModelType", localModelType.ToString())));
 
             if (_windowsSpeech.IsAvailable)
-            {
                 return await _windowsSpeech.TranscribeAsync(wavePath, languageHint, cancellationToken);
-            }
 
             throw;
         }
@@ -233,7 +228,6 @@ public class AsrService
         await foreach (var segment in processor.ProcessAsync(audioStream, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             var text = segment.Text?.Trim();
             if (string.IsNullOrWhiteSpace(text)) continue;
 
@@ -257,8 +251,7 @@ public class AsrService
     private static readonly Dictionary<GgmlType, WhisperFactory> WhisperFactories = [];
 
     private async Task<WhisperFactory> GetWhisperFactoryAsync(
-        GgmlType localModelType,
-        CancellationToken cancellationToken)
+        GgmlType localModelType, CancellationToken cancellationToken)
     {
         if (WhisperFactories.TryGetValue(localModelType, out var existingFactory))
             return existingFactory;
@@ -274,9 +267,7 @@ public class AsrService
             {
                 PublishModelTransferProgress("downloading", localModelType, 0, null);
                 await using var modelStream = await WhisperGgmlDownloader.Default.GetGgmlModelAsync(
-                    localModelType,
-                    QuantizationType.Q5_0,
-                    cancellationToken);
+                    localModelType, QuantizationType.Q5_0, cancellationToken);
                 await using var fileStream = File.Create(whisperModelPath);
                 await CopyModelStreamWithProgressAsync(modelStream, fileStream, localModelType, cancellationToken);
             }
@@ -294,10 +285,7 @@ public class AsrService
     }
 
     private async Task CopyModelStreamWithProgressAsync(
-        Stream source,
-        Stream destination,
-        GgmlType localModelType,
-        CancellationToken cancellationToken)
+        Stream source, Stream destination, GgmlType localModelType, CancellationToken cancellationToken)
     {
         long? totalBytes = source.CanSeek ? source.Length : null;
         var buffer = new byte[1024 * 128];
@@ -339,9 +327,7 @@ public class AsrService
     }
 
     private async Task<IReadOnlyList<SubtitleCue>> TranscribeWithCloudAsync(
-        string wavePath,
-        CaptionGenerationOptions options,
-        CancellationToken cancellationToken)
+        string wavePath, CaptionGenerationOptions options, CancellationToken cancellationToken)
     {
         var cues = new List<SubtitleCue>();
         var chunks = SplitWaveFile(wavePath, maxBytes: 24 * 1024 * 1024, segmentLength: TimeSpan.FromMinutes(10));
@@ -409,47 +395,6 @@ public class AsrService
         return cues.OrderBy(c => c.Start).ToList();
     }
 
-    /// <summary>
-    /// Extracts audio from a media file and converts it to 16 kHz mono 16-bit PCM WAV
-    /// suitable for ASR processing.
-    /// </summary>
-    private static string ExtractWaveAudio(string mediaPath)
-    {
-        if (string.IsNullOrWhiteSpace(mediaPath))
-            throw new ArgumentNullException(nameof(mediaPath), "Media path cannot be null or empty.");
-        if (!File.Exists(mediaPath))
-            throw new FileNotFoundException($"Media file not found: {mediaPath}", mediaPath);
-
-        const int SampleRate = 16000;
-        const int BitsPerSample = 16;
-        const int Channels = 1;
-        const int ResamplerQuality = 60;
-
-        var workingDirectory = Path.Combine(Path.GetTempPath(), "BabelPlayer");
-        Directory.CreateDirectory(workingDirectory);
-
-        var outputPath = Path.Combine(
-            workingDirectory,
-            $"{Path.GetFileNameWithoutExtension(mediaPath)}-{Guid.NewGuid():N}.wav");
-
-        try
-        {
-            using var reader = new MediaFoundationReader(mediaPath);
-            var targetFormat = new WaveFormat(SampleRate, BitsPerSample, Channels);
-            using var resampler = new MediaFoundationResampler(reader, targetFormat)
-            {
-                ResamplerQuality = ResamplerQuality
-            };
-            WaveFileWriter.CreateWaveFile(outputPath, resampler);
-            return outputPath;
-        }
-        catch (Exception ex) when (ex is not ArgumentNullException and not FileNotFoundException)
-        {
-            TryDeleteFile(outputPath);
-            throw new InvalidOperationException($"Failed to extract audio from: {mediaPath}", ex);
-        }
-    }
-
     private static IReadOnlyList<TranscriptionChunkFile> SplitWaveFile(
         string wavePath, int maxBytes, TimeSpan segmentLength)
     {
@@ -502,22 +447,29 @@ public class AsrService
 
     private static void TryDeleteFile(string path)
     {
-        try { if (File.Exists(path)) File.Delete(path); }
-        catch { }
+        try { if (File.Exists(path)) File.Delete(path); } catch { }
     }
 
     private sealed record TranscriptionChunkFile(string Path, TimeSpan Offset, bool IsTemporary);
 
-    // ---------------------------------------------------------------------------
-    // Nested null-object so AsrService has a safe default without requiring the
-    // App layer to be referenced from Core.
-    // ---------------------------------------------------------------------------
+    // Nested null-objects keep AsrService self-contained with safe defaults.
     private sealed class NullWindowsSpeechTranscriber : IWindowsSpeechTranscriber
     {
         public bool IsAvailable => false;
-
         public Task<IReadOnlyList<SubtitleCue>> TranscribeAsync(
             string wavePath, string? languageHint, CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyList<SubtitleCue>>(Array.Empty<SubtitleCue>());
+    }
+
+    /// <summary>
+    /// Minimal FFmpeg-based extractor used as the default when no extractor is injected.
+    /// On Windows, callers in the App layer should inject <see cref="CompositeAudioExtractor"/>
+    /// (MediaFoundation → FFmpeg) for best compatibility.
+    /// </summary>
+    private sealed class FfmpegFallbackAudioExtractor : IAudioExtractor
+    {
+        private readonly FfmpegAudioExtractor _inner = new();
+        public bool IsAvailable => _inner.IsAvailable;
+        public string Extract(string mediaPath) => _inner.Extract(mediaPath);
     }
 }
