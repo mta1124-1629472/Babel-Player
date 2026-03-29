@@ -19,8 +19,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly IMediaTransport? _injectedSegmentPlayer;
     private IMediaTransport? _segmentPlayer;
     private bool _subscribedToPlayerEvents;
-    private readonly EventHandler _segmentEndedHandler;
-    private readonly EventHandler<Exception> _segmentErrorHandler;
+    private readonly EventHandler? _segmentEndedHandler;
+    private readonly EventHandler<Exception>? _segmentErrorHandler;
 
     [ObservableProperty]
     private WorkflowSessionSnapshot _currentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
