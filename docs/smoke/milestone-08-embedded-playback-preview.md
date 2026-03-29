@@ -4,7 +4,7 @@
 - Milestone: `08`
 - Name: `Embedded Playback and In-Context Preview`
 - Date: `2026-03-29`
-- Status: `partial`
+- Status: `complete`
 
 ## Gate Summary
 - [x] Generated dialogue can be previewed in media context reliably
