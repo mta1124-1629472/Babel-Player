@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Babel.Deck")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8bb2a98c4607740a1bfa3abe9ad7551b00591999")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c5ddc475ebbb70c99af6bd31b97783e2878a2e4e")]
 [assembly: System.Reflection.AssemblyProductAttribute("Babel.Deck")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Babel.Deck")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
