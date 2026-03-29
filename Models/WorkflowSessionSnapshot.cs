@@ -15,6 +15,7 @@ public sealed record WorkflowSessionSnapshot(
     string? TranscriptPath = null,
     DateTimeOffset? TranscribedAtUtc = null,
     string? TranslationPath = null,
+    string? SourceLanguage = null,
     string? TargetLanguage = null,
     DateTimeOffset? TranslatedAtUtc = null,
     string? TtsPath = null,

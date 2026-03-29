@@ -189,6 +189,7 @@ asyncio.run(translate())
 
     public async Task<TranslationResult> TranslateSingleSegmentAsync(
         string text,
+        string segmentId,
         string translationJsonPath,
         string outputJsonPath,
         string sourceLanguage,
@@ -254,7 +255,7 @@ asyncio.run(translate())
             var psi = new ProcessStartInfo
             {
                 FileName = _pythonPath,
-                Arguments = $"\"{scriptPath}\" \"{text}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{translationJsonPath}\" \"{""}\"",
+                Arguments = $"\"{scriptPath}\" \"{text}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{translationJsonPath}\" \"{segmentId}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,

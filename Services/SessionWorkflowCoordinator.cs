@@ -274,6 +274,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
         {
             Stage = SessionWorkflowStage.Translated,
             TranslationPath = translationPath,
+            SourceLanguage = sourceLanguage,
             TargetLanguage = targetLanguage,
             TranslatedAtUtc = nowUtc,
             StatusMessage = $"Translated {result.Segments.Count} segments to {targetLanguage}. Ready for TTS/dubbing.",
@@ -318,6 +319,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
             throw new InvalidOperationException($"TTS failed: {errorMsg}");
         }
 
+        _log.Info($"TTS complete: {ttsPath}, size: {result.FileSizeBytes} bytes");
+
+        var segmentsDir = Path.Combine(ttsDir, "segments");
+        Directory.CreateDirectory(segmentsDir);
+
         var nowUtc = DateTimeOffset.UtcNow;
         CurrentSession = CurrentSession with
         {
@@ -325,20 +331,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
             TtsPath = ttsPath,
             TtsVoice = voice,
             TtsGeneratedAtUtc = nowUtc,
-            StatusMessage = $"TTS generated ({voice}). Dubbing complete.",
-        };
-
-        _log.Info($"TTS complete: {ttsPath}, size: {result.FileSizeBytes} bytes");
-
-        var segmentsDir = Path.Combine(ttsDir, "segments");
-        Directory.CreateDirectory(segmentsDir);
-
-        CurrentSession = CurrentSession with
-        {
-            Stage = SessionWorkflowStage.TtsGenerated,
-            TtsPath = ttsPath,
-            TtsVoice = voice,
-            TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
             TtsSegmentsPath = segmentsDir,
             TtsSegmentAudioPaths = new Dictionary<string, string>(),
             StatusMessage = $"TTS generated ({voice}). Dubbing complete.",
@@ -455,17 +447,25 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
 
         _translationService ??= new TranslationService(_log);
 
-        var sourceLanguage = "es";
+        var sourceLanguage = CurrentSession.SourceLanguage ?? "es";
         var targetLanguage = CurrentSession.TargetLanguage ?? "en";
 
         _log.Info($"Regenerating translation for segment {segmentId}: {sourceText.Substring(0, Math.Min(30, sourceText.Length))}...");
 
         var result = await _translationService.TranslateSingleSegmentAsync(
             sourceText,
+            segmentId,
             CurrentSession.TranslationPath,
             CurrentSession.TranslationPath,
             sourceLanguage,
             targetLanguage);
+
+        if (!result.Success)
+        {
+            var errorMsg = result.ErrorMessage ?? "Unknown translation error";
+            _log.Error($"Segment translation regeneration failed: {errorMsg}", new Exception(errorMsg));
+            throw new InvalidOperationException($"Segment translation regeneration failed: {errorMsg}");
+        }
 
         _log.Info($"Segment translation regenerated: {segmentId}");
         CurrentSession = CurrentSession with
@@ -520,7 +520,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
         foreach (var seg in transcriptSegments.EnumerateArray())
         {
             var start = seg.GetProperty("start").GetDouble();
-            var id = start == (int)start ? $"segment_{start:0.0}" : $"segment_{start}";
+            var id = SegmentId(start);
             
             var end = seg.GetProperty("end").GetDouble();
             
@@ -543,6 +543,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
 
         return segments;
     }
+
+    // Stable segment ID derived from start time — must match the format written by TranslationService.
+    // Python: f"segment_{start}" → e.g. "segment_0.0", "segment_3.68"
+    internal static string SegmentId(double start) =>
+        start == (int)start
+            ? FormattableString.Invariant($"segment_{start:0.0}")
+            : FormattableString.Invariant($"segment_{start}");
 
     private string GetSessionDirectory()
     {

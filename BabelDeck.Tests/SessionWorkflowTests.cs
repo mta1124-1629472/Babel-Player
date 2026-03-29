@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
 using Babel.Deck.Models;
@@ -665,6 +667,177 @@ public class SessionWorkflowTests : IDisposable
         }
     }
 
+    // --- Bug regression tests ---
+
+    [Fact]
+    public async Task RegenerateSegmentTranslation_ActuallyWritesNewTextToSegment()
+    {
+        // Bug 1: segmentId was never passed to the Python script, so the segment was never updated.
+        // Strategy: corrupt a segment's translatedText to a sentinel, regenerate it, verify sentinel is gone.
+        var stateFilePath = Path.Combine(_testStateDir, "session_regen_sentinel.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        var translationPath = coordinator.CurrentSession.TranslationPath!;
+
+        // Get the first segment's ID
+        var jsonBefore = await File.ReadAllTextAsync(translationPath);
+        var dataBefore = JsonSerializer.Deserialize<JsonElement>(jsonBefore);
+        var firstSeg = dataBefore.GetProperty("segments")[0];
+        var segmentId = firstSeg.GetProperty("id").GetString()!;
+
+        // Corrupt the segment's translatedText to a known sentinel
+        const string sentinel = "CORRUPTED_SENTINEL_DO_NOT_PERSIST";
+        var corrupted = JsonSerializer.Deserialize<JsonElement>(jsonBefore);
+        using var ms = new System.IO.MemoryStream();
+        using var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true });
+        RewriteJsonWithCorruptedSegment(corrupted, segmentId, sentinel, writer);
+        writer.Flush();
+        await File.WriteAllBytesAsync(translationPath, ms.ToArray());
+
+        await coordinator.RegenerateSegmentTranslationAsync(segmentId);
+
+        var jsonAfter = await File.ReadAllTextAsync(translationPath);
+        var dataAfter = JsonSerializer.Deserialize<JsonElement>(jsonAfter);
+        var segAfter = dataAfter.GetProperty("segments").EnumerateArray()
+            .First(s => s.GetProperty("id").GetString() == segmentId);
+
+        Assert.NotEqual(sentinel, segAfter.GetProperty("translatedText").GetString());
+    }
+
+    private static void RewriteJsonWithCorruptedSegment(
+        JsonElement root, string targetId, string sentinel, Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject();
+        foreach (var prop in root.EnumerateObject())
+        {
+            if (prop.Name != "segments")
+            {
+                prop.WriteTo(writer);
+                continue;
+            }
+            writer.WritePropertyName("segments");
+            writer.WriteStartArray();
+            foreach (var seg in prop.Value.EnumerateArray())
+            {
+                var id = seg.GetProperty("id").GetString();
+                if (id == targetId)
+                {
+                    writer.WriteStartObject();
+                    foreach (var sp in seg.EnumerateObject())
+                    {
+                        if (sp.Name == "translatedText")
+                            writer.WriteString("translatedText", sentinel);
+                        else
+                            sp.WriteTo(writer);
+                    }
+                    writer.WriteEndObject();
+                }
+                else
+                {
+                    seg.WriteTo(writer);
+                }
+            }
+            writer.WriteEndArray();
+        }
+        writer.WriteEndObject();
+    }
+
+    [Fact]
+    public async Task TranslateTranscript_PersistsSourceLanguageToSnapshot()
+    {
+        // Bug 4: SourceLanguage was never stored in the snapshot, so RegenerateSegmentTranslationAsync
+        // always used hardcoded "es" regardless of what language was originally used.
+        var stateFilePath = Path.Combine(_testStateDir, "session_sourcelang.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        Assert.Equal("es", coordinator.CurrentSession.SourceLanguage);
+        Assert.Equal("en", coordinator.CurrentSession.TargetLanguage);
+    }
+
+    [Fact]
+    public async Task TranslateTranscript_ThenReopen_PreservesSourceLanguage()
+    {
+        // Bug 4 regression: SourceLanguage must survive a session reopen.
+        var stateFilePath = Path.Combine(_testStateDir, "session_sourcelang_reopen.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        Assert.Equal("es", coordinator.CurrentSession.SourceLanguage);
+    }
+
+    [Fact]
+    public async Task GenerateTts_SetsSegmentTrackingStructures()
+    {
+        // Bug 3: GenerateTtsAsync set CurrentSession twice; first write was discarded.
+        // Verify the final snapshot has TtsSegmentsPath and an empty TtsSegmentAudioPaths dict.
+        var stateFilePath = Path.Combine(_testStateDir, "session_tts_tracking.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
+
+        Assert.NotNull(coordinator.CurrentSession.TtsSegmentsPath);
+        Assert.NotNull(coordinator.CurrentSession.TtsSegmentAudioPaths);
+        Assert.Empty(coordinator.CurrentSession.TtsSegmentAudioPaths);
+    }
+
+    [Fact]
+    public async Task RegenerateSegmentTranslation_ThrowsOnFailedTranslation()
+    {
+        // Bug 2: result.Success was never checked, so a failed translation was treated as success.
+        // Use a nonexistent segment ID to trigger the "segment not found" error path.
+        var stateFilePath = Path.Combine(_testStateDir, "session_regen_fail.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coordinator.RegenerateSegmentTranslationAsync("segment_nonexistent"));
+    }
+
     [Fact]
     public void RegeneratedAndUntouchedSegments_RemainDistinct()
     {
@@ -699,6 +872,6 @@ public class SessionWorkflowTests : IDisposable
         Assert.Equal(secondSegmentId, secondAfter.SegmentId);
         
         Assert.True(firstAfter.HasTtsAudio);
-        Assert.True(secondAfter.HasTtsAudio);
+        Assert.False(secondAfter.HasTtsAudio);
     }
 }

@@ -5,7 +5,8 @@
       "Bash(do echo:*)",
       "Read(//d/Dev/Babel-Deck/**)",
       "Bash(done)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Skill(update-config)"
     ]
   }
 }
