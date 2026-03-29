@@ -1,0 +1,326 @@
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+
+namespace Babel.Deck.Services;
+
+/// <summary>
+/// Embedded media transport using libmpv with GPU-accelerated rendering into a native window.
+/// Unlike LibMpvHeadlessTransport, this renders video into an HWND provided via the --wid option,
+/// using libmpv's own GPU pipeline (OpenGL/D3D11 under the hood).
+/// </summary>
+public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
+{
+    private IntPtr _handle = IntPtr.Zero;
+    private bool _disposed;
+    private bool _isLoaded;
+    private bool _isPaused;
+    private bool _hasEnded;
+
+    private delegate IntPtr mpv_create_delegate();
+    private delegate int mpv_initialize_delegate(IntPtr handle);
+    private delegate int mpv_set_option_string_delegate(IntPtr handle, string name, string value);
+    private delegate int mpv_command_string_delegate(IntPtr handle, string command);
+    private delegate int mpv_get_property_string_delegate(IntPtr handle, string name, out string result);
+    private delegate void mpv_terminate_destroy_delegate(IntPtr handle);
+
+    private mpv_create_delegate? _mpv_create;
+    private mpv_initialize_delegate? _mpv_initialize;
+    private mpv_set_option_string_delegate? _mpv_set_option_string;
+    private mpv_command_string_delegate? _mpv_command_string;
+    private mpv_get_property_string_delegate? _mpv_get_property_string;
+    private mpv_terminate_destroy_delegate? _mpv_terminate_destroy;
+
+    private IntPtr _dllHandle = IntPtr.Zero;
+
+    /// <summary>
+    /// The native window handle (HWND) that libmpv renders video into.
+    /// Must be set before calling <see cref="Load"/> if video rendering is desired.
+    /// If null/zero, behaves like a headless transport with audio.
+    /// </summary>
+    public IntPtr WindowHandle { get; set; }
+
+#pragma warning disable CS0067
+    public event EventHandler? Ended;
+    public event EventHandler<Exception>? ErrorOccurred;
+#pragma warning restore CS0067
+
+    public LibMpvEmbeddedTransport()
+    {
+        _dllHandle = LoadLibMpvDll();
+        if (_dllHandle == IntPtr.Zero)
+            throw new DllNotFoundException("libmpv DLL not found.");
+
+        LoadLibMpvFunctions();
+
+        _handle = _mpv_create!();
+        if (_handle == IntPtr.Zero)
+            throw new InvalidOperationException("Failed to create libmpv context.");
+
+        // Use gpu-accelerated video output (renders into wid if set)
+        SetOption("vo", "gpu");
+        // Keep audio enabled for source media preview
+        SetOption("idle", "yes");
+        SetOption("keep-open", "yes");
+        // Start paused so the user controls when playback begins
+        SetOption("pause", "yes");
+
+        if (_mpv_initialize!(_handle) != 0)
+            throw new InvalidOperationException("Failed to initialize libmpv.");
+
+        _isLoaded = false;
+        _isPaused = true;
+        _hasEnded = false;
+    }
+
+    /// <summary>
+    /// Attaches the libmpv render output to the given native window handle.
+    /// Must be called after construction and before Load for video to appear.
+    /// </summary>
+    public void AttachToWindow(IntPtr hwnd)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(LibMpvEmbeddedTransport));
+        WindowHandle = hwnd;
+        // Set wid property — libmpv will render into this window
+        var widStr = hwnd.ToInt64().ToString();
+        _mpv_command_string!(_handle, $"set wid {widStr}");
+    }
+
+    /// <summary>
+    /// Detaches from the native window. Video output stops but audio may continue.
+    /// </summary>
+    public void DetachFromWindow()
+    {
+        if (_disposed) return;
+        _mpv_command_string!(_handle, "set wid 0");
+        WindowHandle = IntPtr.Zero;
+    }
+
+    public void Load(string filePath)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(LibMpvEmbeddedTransport));
+
+        if (_isLoaded)
+            UnloadInternal();
+
+        string normalizedPath = filePath.Replace("\\", "/");
+        string command = $"loadfile \"{normalizedPath}\"";
+        int result = _mpv_command_string!(_handle, command);
+
+        if (result < 0)
+            throw new InvalidOperationException($"Failed to load file: {filePath} (result: {result})");
+
+        _isLoaded = true;
+        _isPaused = true;
+        _hasEnded = false;
+    }
+
+    public void Play()
+    {
+        if (!_isLoaded || _disposed)
+            throw new ObjectDisposedException(nameof(LibMpvEmbeddedTransport));
+
+        // Wait for media to be ready by polling duration
+        for (int i = 0; i < 20; i++)
+        {
+            if (Duration > 0) break;
+            System.Threading.Thread.Sleep(50);
+        }
+
+        int result = _mpv_command_string!(_handle, "set pause no");
+        if (result < 0)
+        {
+            result = _mpv_command_string!(_handle, "set_property pause no");
+            if (result < 0)
+                throw new InvalidOperationException($"Failed to play (result: {result}).");
+        }
+
+        _isPaused = false;
+    }
+
+    public void Pause()
+    {
+        if (!_isLoaded || _disposed)
+            throw new ObjectDisposedException(nameof(LibMpvEmbeddedTransport));
+
+        int result = _mpv_command_string!(_handle, "set pause yes");
+        if (result < 0)
+        {
+            result = _mpv_command_string!(_handle, "set_property pause yes");
+            if (result < 0)
+                throw new InvalidOperationException("Failed to set pause state.");
+        }
+
+        _isPaused = true;
+    }
+
+    public void Seek(long positionMs)
+    {
+        if (!_isLoaded || _disposed)
+            throw new ObjectDisposedException(nameof(LibMpvEmbeddedTransport));
+
+        // libmpv seek uses seconds by default
+        double positionSec = positionMs / 1000.0;
+        string command = $"seek {positionSec:F3} absolute";
+        if (_mpv_command_string!(_handle, command) < 0)
+            throw new InvalidOperationException($"Failed to seek to {positionMs}ms.");
+    }
+
+    public long CurrentTime
+    {
+        get
+        {
+            if (!_isLoaded || _disposed) return 0;
+
+            if (_mpv_get_property_string!(_handle, "time-pos", out string? timePosStr) >= 0 &&
+                double.TryParse(timePosStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double timePos))
+            {
+                return (long)(timePos * 1000);
+            }
+
+            return 0;
+        }
+    }
+
+    public long Duration
+    {
+        get
+        {
+            if (!_isLoaded || _disposed) return 0;
+
+            if (_mpv_get_property_string!(_handle, "duration", out string? durationStr) >= 0 &&
+                double.TryParse(durationStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double duration))
+            {
+                return (long)(duration * 1000);
+            }
+
+            return 0;
+        }
+    }
+
+    public bool HasEnded
+    {
+        get
+        {
+            if (!_isLoaded || _disposed) return false;
+
+            if (_mpv_get_property_string!(_handle, "eof-reached", out string? eofStr) >= 0 &&
+                bool.TryParse(eofStr, out bool eofReached))
+            {
+                _hasEnded = eofReached;
+            }
+
+            return _hasEnded;
+        }
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (_handle != IntPtr.Zero)
+            {
+                _mpv_terminate_destroy!(_handle);
+                _handle = IntPtr.Zero;
+            }
+
+            if (_dllHandle != IntPtr.Zero)
+            {
+                NativeLibrary.Free(_dllHandle);
+                _dllHandle = IntPtr.Zero;
+            }
+
+            _disposed = true;
+        }
+    }
+
+    ~LibMpvEmbeddedTransport()
+    {
+        Dispose(false);
+    }
+
+    private void UnloadInternal()
+    {
+        if (_isLoaded && !_isPaused)
+            Pause();
+
+        _mpv_command_string!(_handle, "stop");
+        _isLoaded = false;
+        _isPaused = true;
+        _hasEnded = false;
+    }
+
+    private IntPtr LoadLibMpvDll()
+    {
+        try
+        {
+            string baseDir = AppContext.BaseDirectory;
+            string solutionRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", ".."));
+            string nativeDir = Path.Combine(solutionRoot, "native", "win-x64");
+
+            string[] possibleNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
+            foreach (string dllName in possibleNames)
+            {
+                string path = Path.Combine(nativeDir, dllName);
+                if (File.Exists(path))
+                {
+                    IntPtr handle = NativeLibrary.Load(path);
+                    if (handle != IntPtr.Zero) return handle;
+                }
+            }
+
+            foreach (string dllName in possibleNames)
+            {
+                string path = Path.Combine(baseDir, dllName);
+                if (File.Exists(path))
+                {
+                    IntPtr handle = NativeLibrary.Load(path);
+                    if (handle != IntPtr.Zero) return handle;
+                }
+            }
+        }
+        catch
+        {
+            // Fall through to default loading
+        }
+
+        string[] fallbackNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
+        foreach (string dllName in fallbackNames)
+        {
+            IntPtr handle = NativeLibrary.Load(dllName);
+            if (handle != IntPtr.Zero) return handle;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    private void LoadLibMpvFunctions()
+    {
+        _mpv_create = LoadFunction<mpv_create_delegate>("mpv_create");
+        _mpv_initialize = LoadFunction<mpv_initialize_delegate>("mpv_initialize");
+        _mpv_set_option_string = LoadFunction<mpv_set_option_string_delegate>("mpv_set_option_string");
+        _mpv_command_string = LoadFunction<mpv_command_string_delegate>("mpv_command_string");
+        _mpv_get_property_string = LoadFunction<mpv_get_property_string_delegate>("mpv_get_property_string");
+        _mpv_terminate_destroy = LoadFunction<mpv_terminate_destroy_delegate>("mpv_terminate_destroy");
+    }
+
+    private T LoadFunction<T>(string functionName) where T : Delegate
+    {
+        IntPtr funcPtr = NativeLibrary.GetExport(_dllHandle, functionName);
+        if (funcPtr == IntPtr.Zero)
+            throw new MissingMethodException($"Failed to find libmpv function: {functionName}");
+        return Marshal.GetDelegateForFunctionPointer<T>(funcPtr);
+    }
+
+    private void SetOption(string name, string value)
+    {
+        if (_mpv_set_option_string!(_handle, name, value) < 0)
+            throw new InvalidOperationException($"Failed to set libmpv option: {name}={value}");
+    }
+}

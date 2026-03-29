@@ -1,43 +1,128 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Babel.Deck.ViewModels"
+        xmlns:v="using:Babel.Deck.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
         x:Class="Babel.Deck.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Babel Deck">
+        Title="Babel Deck"
+        MinWidth="900" MinHeight="500">
 
-    <Border Padding="24">
-        <StackPanel Spacing="12">
-            <TextBlock FontSize="28" FontWeight="SemiBold" Text="Babel Deck" />
-            <TextBlock TextWrapping="Wrap"
-                       Text="Milestone 1 foundation only. This build proves app boot, session ownership, persistence basics, and logging. Media ingest, transcription, translation, TTS, and preview are not implemented yet." />
+    <Grid RowDefinitions="Auto,*,Auto">
 
-            <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0">
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="Current stage" FontWeight="SemiBold" />
-                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Coordinator.CurrentSession.Stage}" />
-
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="Session id" FontWeight="SemiBold" />
-                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Coordinator.CurrentSession.SessionId}" />
-
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="Session source" FontWeight="SemiBold" />
-                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Coordinator.SessionSource}" />
-
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="Workflow status" FontWeight="SemiBold" />
-                <TextBlock Grid.Row="3" Grid.Column="1" TextWrapping="Wrap" Text="{Binding Coordinator.CurrentSession.StatusMessage}" />
-
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="State file" FontWeight="SemiBold" />
-                <TextBlock Grid.Row="4" Grid.Column="1" TextWrapping="Wrap" Text="{Binding Coordinator.StateFilePath}" />
-
-                <TextBlock Grid.Row="5" Grid.Column="0" Text="Log file" FontWeight="SemiBold" />
-                <TextBlock Grid.Row="5" Grid.Column="1" TextWrapping="Wrap" Text="{Binding Coordinator.LogFilePath}" />
+        <!-- Top: Session info bar -->
+        <Border Grid.Row="0" Padding="12,8" Background="#20808080">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" FontSize="18" FontWeight="SemiBold" Text="Babel Deck" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Margin="16,0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                           Text="{Binding Coordinator.CurrentSession.StatusMessage}" />
+                <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.6"
+                           Text="{Binding Coordinator.CurrentSession.Stage, StringFormat='Stage: {0}'}" />
             </Grid>
+        </Border>
 
-            <TextBlock TextWrapping="Wrap"
-                       Text="{Binding Coordinator.PersistenceStatus}" />
-        </StackPanel>
-    </Border>
+        <!-- Middle: Main content area -->
+        <Grid Grid.Row="1" ColumnDefinitions="360,*">
+
+            <!-- Left panel: Segment list -->
+            <Border Grid.Column="0" BorderBrush="#40808080" BorderThickness="0,0,1,0">
+                <Grid RowDefinitions="Auto,*">
+                    <Border Grid.Row="0" Padding="12,8" Background="#10808080">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" FontWeight="SemiBold" Text="Segments" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="Refresh"
+                                    Command="{Binding Playback.LoadSegmentsCommand}" />
+                        </Grid>
+                    </Border>
+
+                    <ListBox Grid.Row="1" x:Name="SegmentList"
+                             ItemsSource="{Binding Playback.Segments}"
+                             SelectedItem="{Binding Playback.SelectedSegment}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="8,6" BorderBrush="#20808080" BorderThickness="0,0,0,1">
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" FontWeight="SemiBold"
+                                                       Text="{Binding StartSeconds, StringFormat='⏱ {0:F1}s'}" />
+                                            <TextBlock Grid.Column="1" Opacity="0.5"
+                                                       Text="{Binding EndSeconds, StringFormat='→ {0:F1}s'}" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding SourceText}" TextWrapping="Wrap"
+                                                   MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                   Opacity="0.7" FontSize="12" />
+                                        <TextBlock Text="{Binding TranslatedText}" TextWrapping="Wrap"
+                                                   MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                   FontSize="12" FontStyle="Italic" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock FontSize="11" Opacity="0.5">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="TTS: {0}">
+                                                        <Binding Path="HasTtsAudio" />
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- Right panel: Video + controls -->
+            <Grid Grid.Column="1" RowDefinitions="*,Auto,Auto">
+
+                <!-- Video surface -->
+                <Border Grid.Row="0" Background="Black" Margin="4">
+                    <v:MpvVideoView x:Name="VideoView" />
+                </Border>
+
+                <!-- Playback controls -->
+                <Border Grid.Row="1" Padding="8,4">
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <Button Content="▶ Source"
+                                Command="{Binding Playback.PlaySourceAtSegmentCommand}"
+                                CommandParameter="{Binding Playback.SelectedSegment}"
+                                IsEnabled="{Binding Playback.SelectedSegment, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                        <Button Content="▶ Dubbed"
+                                Command="{Binding Playback.PlayDubbedSegmentCommand}"
+                                CommandParameter="{Binding Playback.SelectedSegment}"
+                                IsEnabled="{Binding Playback.SelectedSegment, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                        <Button Content="▶▶ All Dubbed"
+                                Command="{Binding Playback.PlayAllDubbedCommand}" />
+                        <Button Content="⏹ Stop"
+                                Command="{Binding Playback.StopPlaybackCommand}" />
+                        <Separator />
+                        <Button Content="↻ Regen Translation"
+                                Command="{Binding Playback.RegenerateTranslationCommand}"
+                                CommandParameter="{Binding Playback.SelectedSegment}"
+                                IsEnabled="{Binding Playback.SelectedSegment, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Status bar -->
+                <Border Grid.Row="2" Padding="8,4" Background="#10808080">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="{Binding Playback.StatusText}"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="12" />
+                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="12" Opacity="0.6"
+                                   Text="{Binding Playback.PlaybackState, StringFormat='State: {0}'}" />
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Bottom: Persistence info -->
+        <Border Grid.Row="2" Padding="8,4" Background="#10808080">
+            <TextBlock Text="{Binding Coordinator.PersistenceStatus}" FontSize="11" Opacity="0.5" />
+        </Border>
+
+    </Grid>
 
 </Window>

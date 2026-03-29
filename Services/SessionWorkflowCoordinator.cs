@@ -25,6 +25,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly EventHandler? _segmentEndedHandler;
     private readonly EventHandler<Exception>? _segmentErrorHandler;
 
+    private IMediaTransport? _sourceMediaPlayer;
+    private readonly IMediaTransport? _injectedSourcePlayer;
+
     [ObservableProperty]
     private WorkflowSessionSnapshot _currentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
 
@@ -40,11 +43,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private PlaybackState _playbackState;
 
-    public SessionWorkflowCoordinator(SessionSnapshotStore store, AppLog log, IMediaTransport? segmentPlayer = null)
+    public SessionWorkflowCoordinator(SessionSnapshotStore store, AppLog log, IMediaTransport? segmentPlayer = null, IMediaTransport? sourcePlayer = null)
     {
         _store = store;
         _log = log;
         _injectedSegmentPlayer = segmentPlayer;
+        _injectedSourcePlayer = sourcePlayer;
         
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) =>
@@ -192,6 +196,43 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
     }
 
+    public async Task PlaySourceMediaAtSegmentAsync(string segmentId)
+    {
+        if (CurrentSession is null)
+            throw new InvalidOperationException("No active session.");
+
+        if (string.IsNullOrEmpty(CurrentSession.IngestedMediaPath))
+            throw new InvalidOperationException("No media loaded.");
+
+        if (!File.Exists(CurrentSession.IngestedMediaPath))
+            throw new FileNotFoundException($"Ingested media not found: {CurrentSession.IngestedMediaPath}");
+
+        var segments = await GetSegmentWorkflowListAsync();
+        var target = segments.Find(s => s.SegmentId == segmentId);
+        if (target is null)
+            throw new InvalidOperationException($"Segment not found: {segmentId}");
+
+        var player = GetOrCreateSourcePlayer();
+        player.Load(CurrentSession.IngestedMediaPath);
+        player.Seek((long)(target.StartSeconds * 1000));
+        await Task.Run(() => player.Play());
+        _log.Info($"Playing source media at segment {segmentId} ({target.StartSeconds:F1}s)");
+    }
+
+    public void StopSourceMedia()
+    {
+        _sourceMediaPlayer?.Pause();
+    }
+
+    private IMediaTransport GetOrCreateSourcePlayer()
+    {
+        if (_sourceMediaPlayer is not null) return _sourceMediaPlayer;
+        _sourceMediaPlayer = _injectedSourcePlayer ?? new LibMpvEmbeddedTransport();
+        return _sourceMediaPlayer;
+    }
+
+    public IMediaTransport? SourceMediaPlayer => _sourceMediaPlayer;
+
     public void Dispose()
     {
         _sequenceCts?.Cancel();
@@ -210,6 +251,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         if (_injectedSegmentPlayer is null)
         {
             _segmentPlayer?.Dispose();
+        }
+
+        if (_injectedSourcePlayer is null)
+        {
+            _sourceMediaPlayer?.Dispose();
         }
     }
 
