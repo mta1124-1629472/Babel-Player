@@ -1,0 +1,60 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "build",
+                "BabelDeck.csproj",
+                "--no-restore",
+                "--no-incremental",
+                // Ask dotnet build to generate full paths for file names.
+                "/property:GenerateFullPaths=true",
+                // Do not generate summary otherwise it leads to duplicate errors in the Problems panel
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "never",
+                "close": true,
+                "panel": "shared",
+                "clear": true,
+                "echo": false,
+                "focus": false
+            },
+            "problemMatcher": "$msCompile",
+            "detail": "Compiler for C#"
+        },
+        {
+            "label": "clean",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "clean",
+                "BabelDeck.csproj",
+                "--no-restore"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "never",
+                "close": true,
+                "panel": "shared",
+                "clear": true,
+                "echo": false,
+                "focus": false
+            },
+            "problemMatcher": "$msCompile",
+            "detail": "Clean project"
+        }
+    ]
+}

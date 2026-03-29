@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Babel.Deck.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -19,6 +21,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly IMediaTransport? _injectedSegmentPlayer;
     private IMediaTransport? _segmentPlayer;
     private bool _subscribedToPlayerEvents;
+    private CancellationTokenSource? _sequenceCts;
     private readonly EventHandler? _segmentEndedHandler;
     private readonly EventHandler<Exception>? _segmentErrorHandler;
 
@@ -34,15 +37,29 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private string? _activeTtsSegmentId;
 
+    [ObservableProperty]
+    private PlaybackState _playbackState;
+
     public SessionWorkflowCoordinator(SessionSnapshotStore store, AppLog log, IMediaTransport? segmentPlayer = null)
     {
         _store = store;
         _log = log;
         _injectedSegmentPlayer = segmentPlayer;
+        _subscribedToPlayerEvents = false;
         
         // Create event handler delegates once for proper unsubscription
-        _segmentEndedHandler = (_, _) => ActiveTtsSegmentId = null;
-        _segmentErrorHandler = (_, ex) => ActiveTtsSegmentId = null;
+        _segmentEndedHandler = (_, _) =>
+        {
+            ActiveTtsSegmentId = null;
+            if (PlaybackState == PlaybackState.PlayingSingleSegment)
+                PlaybackState = PlaybackState.Idle;
+        };
+        _segmentErrorHandler = (_, _) =>
+        {
+            ActiveTtsSegmentId = null;
+            if (PlaybackState == PlaybackState.PlayingSingleSegment)
+                PlaybackState = PlaybackState.Idle;
+        };
     }
 
     private IMediaTransport GetOrCreateSegmentPlayer()
@@ -73,7 +90,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         if (!File.Exists(audioPath))
             throw new FileNotFoundException($"TTS audio file not found: {audioPath}", audioPath);
 
-        StopSegmentTts();
+        _sequenceCts?.Cancel();
+        _segmentPlayer?.Pause();
+        ActiveTtsSegmentId = null;
+
+        PlaybackState = PlaybackState.PlayingSingleSegment;
 
         var player = GetOrCreateSegmentPlayer();
         player.Load(audioPath);
@@ -81,8 +102,67 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         await Task.Run(() => player.Play());
     }
 
-    public void StopSegmentTts()
+    public async Task PlayAllDubbedSegmentsAsync()
     {
+        // Cancel any running single-segment or sequence playback
+        _sequenceCts?.Cancel();
+        _sequenceCts = new CancellationTokenSource();
+        var token = _sequenceCts.Token;
+
+        PlaybackState = PlaybackState.PlayingSequence;
+
+        try
+        {
+            var segments = await GetSegmentWorkflowListAsync();
+            var dubbed = segments
+                .Where(s => s.HasTtsAudio)
+                .OrderBy(s => s.StartSeconds)
+                .ToList();
+
+            var player = GetOrCreateSegmentPlayer();
+
+            foreach (var segment in dubbed)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var paths = CurrentSession.TtsSegmentAudioPaths;
+                if (paths is null || !paths.TryGetValue(segment.SegmentId, out var audioPath))
+                    continue;
+
+                if (!File.Exists(audioPath))
+                {
+                    _log.Warning($"Segment TTS artifact missing during sequence: {audioPath}");
+                    continue;
+                }
+
+                player.Load(audioPath);
+                ActiveTtsSegmentId = segment.SegmentId;
+                await Task.Run(() => player.Play(), token);
+
+                // Wait for this segment to end or for cancellation
+                while (!player.HasEnded)
+                {
+                    token.ThrowIfCancellationRequested();
+                    await Task.Delay(50, token);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled by StopPlayback() or a new playback starting — exit cleanly
+        }
+        finally
+        {
+            ActiveTtsSegmentId = null;
+            // Only reset to Idle if still in PlayingSequence — don't overwrite single-segment state
+            if (PlaybackState == PlaybackState.PlayingSequence)
+                PlaybackState = PlaybackState.Idle;
+        }
+    }
+
+    public void StopPlayback()
+    {
+        _sequenceCts?.Cancel();
         try
         {
             _segmentPlayer?.Pause();
@@ -90,11 +170,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         finally
         {
             ActiveTtsSegmentId = null;
+            PlaybackState = PlaybackState.Idle;
         }
     }
 
     public void Dispose()
     {
+        _sequenceCts?.Cancel();
+        _sequenceCts?.Dispose();
+        _sequenceCts = null;
+
         // Unsubscribe from events only if we previously subscribed
         if (_subscribedToPlayerEvents && _segmentPlayer is not null)
         {
