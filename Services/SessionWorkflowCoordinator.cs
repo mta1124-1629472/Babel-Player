@@ -8,13 +8,16 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Babel.Deck.Services;
 
-public sealed partial class SessionWorkflowCoordinator : ObservableObject
+public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisposable
 {
     private readonly SessionSnapshotStore _store;
     private readonly AppLog _log;
     private TranscriptionService? _transcriptionService;
     private TranslationService? _translationService;
     private TtsService? _ttsService;
+
+    private readonly IMediaTransport? _injectedSegmentPlayer;
+    private IMediaTransport? _segmentPlayer;
 
     [ObservableProperty]
     private WorkflowSessionSnapshot _currentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
@@ -25,10 +28,62 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
     [ObservableProperty]
     private string _persistenceStatus = "Persistence has not run yet.";
 
-    public SessionWorkflowCoordinator(SessionSnapshotStore store, AppLog log)
+    [ObservableProperty]
+    private string? _activeTtsSegmentId;
+
+    public SessionWorkflowCoordinator(SessionSnapshotStore store, AppLog log, IMediaTransport? segmentPlayer = null)
     {
         _store = store;
         _log = log;
+        _injectedSegmentPlayer = segmentPlayer;
+    }
+
+    private IMediaTransport GetOrCreateSegmentPlayer()
+    {
+        if (_segmentPlayer is not null) return _segmentPlayer;
+        _segmentPlayer = _injectedSegmentPlayer ?? new LibMpvHeadlessTransport(suppressAudio: false);
+        _segmentPlayer.Ended += (_, _) => ActiveTtsSegmentId = null;
+        _segmentPlayer.ErrorOccurred += (_, _) => ActiveTtsSegmentId = null;
+        return _segmentPlayer;
+    }
+
+    public async Task PlaySegmentTtsAsync(string segmentId)
+    {
+        if (CurrentSession is null)
+            throw new InvalidOperationException("No active session.");
+
+        var paths = CurrentSession.TtsSegmentAudioPaths;
+        if (paths is null || !paths.TryGetValue(segmentId, out var audioPath))
+            throw new InvalidOperationException($"No TTS audio path for segment '{segmentId}'.");
+
+        if (!File.Exists(audioPath))
+            throw new FileNotFoundException($"TTS audio file not found: {audioPath}", audioPath);
+
+        StopSegmentTts();
+
+        var player = GetOrCreateSegmentPlayer();
+        player.Load(audioPath);
+        ActiveTtsSegmentId = segmentId;
+        await Task.Run(() => player.Play());
+    }
+
+    public void StopSegmentTts()
+    {
+        try
+        {
+            _segmentPlayer?.Pause();
+        }
+        finally
+        {
+            ActiveTtsSegmentId = null;
+        }
+    }
+
+    public void Dispose()
+    {
+        // Only dispose if we created the player; injected players are owned by the caller.
+        if (_injectedSegmentPlayer is null)
+            _segmentPlayer?.Dispose();
     }
 
     public string StateFilePath => _store.StateFilePath;

@@ -49,7 +49,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
     public event EventHandler<Exception>? ErrorOccurred;
 #pragma warning restore CS0067
     
-    public LibMpvHeadlessTransport()
+    public LibMpvHeadlessTransport(bool suppressAudio = true)
     {
         // Try to load libmpv DLL
         _dllHandle = LoadLibMpvDll();
@@ -57,20 +57,21 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         {
             throw new DllNotFoundException("libmpv DLL not found. Please ensure libmpv is installed and accessible.");
         }
-        
+
         // Load function pointers
         LoadLibMpvFunctions();
-        
+
         // Create libmpv context
         _handle = _mpv_create!();
         if (_handle == IntPtr.Zero)
         {
             throw new InvalidOperationException("Failed to create libmpv context.");
         }
-        
+
         // Set options for headless operation
         SetOption("vo", "null");   // Null video output
-        SetOption("ao", "null");   // Null audio output
+        if (suppressAudio)
+            SetOption("ao", "null");   // Null audio output (headless / test mode)
         SetOption("idle", "yes");  // Wait for commands instead of exiting
         
         // Initialize libmpv

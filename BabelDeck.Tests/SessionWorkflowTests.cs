@@ -877,4 +877,148 @@ public class SessionWorkflowTests : IDisposable
         Assert.True(firstAfter.HasTtsAudio);
         Assert.False(secondAfter.HasTtsAudio);
     }
+
+    // --- Milestone 7.4: Segment-Level TTS Playback ---
+
+    [Fact]
+    public async Task PlaySegmentTtsAsync_LoadsCorrectFile()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_play_7_4.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var fake = new FakeSegmentPlayer();
+        var coordinator = new SessionWorkflowCoordinator(store, log, fake);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
+
+        var segments = await coordinator.GetSegmentWorkflowListAsync();
+        var firstSegmentId = segments[0].SegmentId;
+        await coordinator.RegenerateSegmentTtsAsync(firstSegmentId);
+
+        var expectedPath = coordinator.CurrentSession.TtsSegmentAudioPaths![firstSegmentId];
+
+        await coordinator.PlaySegmentTtsAsync(firstSegmentId);
+
+        Assert.Equal(expectedPath, fake.LastLoadedPath);
+        Assert.True(fake.PlayCalled);
+        Assert.Equal(firstSegmentId, coordinator.ActiveTtsSegmentId);
+    }
+
+    [Fact]
+    public async Task PlaySegmentTtsAsync_MissingArtifact_Throws()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_play_missing_7_4.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var fake = new FakeSegmentPlayer();
+        var coordinator = new SessionWorkflowCoordinator(store, log, fake);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
+
+        var segments = await coordinator.GetSegmentWorkflowListAsync();
+        var firstSegmentId = segments[0].SegmentId;
+        await coordinator.RegenerateSegmentTtsAsync(firstSegmentId);
+
+        var audioPath = coordinator.CurrentSession.TtsSegmentAudioPaths![firstSegmentId];
+        File.Delete(audioPath);
+
+        await Assert.ThrowsAsync<FileNotFoundException>(
+            () => coordinator.PlaySegmentTtsAsync(firstSegmentId));
+    }
+
+    [Fact]
+    public async Task StopSegmentTts_ClearsActiveSegment()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_stop_7_4.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var fake = new FakeSegmentPlayer();
+        var coordinator = new SessionWorkflowCoordinator(store, log, fake);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
+
+        var segments = await coordinator.GetSegmentWorkflowListAsync();
+        var firstSegmentId = segments[0].SegmentId;
+        await coordinator.RegenerateSegmentTtsAsync(firstSegmentId);
+
+        await coordinator.PlaySegmentTtsAsync(firstSegmentId);
+        Assert.NotNull(coordinator.ActiveTtsSegmentId);
+
+        coordinator.StopSegmentTts();
+
+        Assert.Null(coordinator.ActiveTtsSegmentId);
+        Assert.True(fake.PauseCalled);
+    }
+
+    [Fact]
+    public async Task PlaySegmentTtsAsync_AfterReopen_UsesPersistedPath()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_play_reopen_7_4.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
+
+        var segments = await coordinator.GetSegmentWorkflowListAsync();
+        var firstSegmentId = segments[0].SegmentId;
+        await coordinator.RegenerateSegmentTtsAsync(firstSegmentId);
+
+        var expectedPath = coordinator.CurrentSession.TtsSegmentAudioPaths![firstSegmentId];
+
+        // Reopen
+        var fake2 = new FakeSegmentPlayer();
+        coordinator = new SessionWorkflowCoordinator(store, log, fake2);
+        coordinator.Initialize();
+
+        await coordinator.PlaySegmentTtsAsync(firstSegmentId);
+
+        Assert.Equal(expectedPath, fake2.LastLoadedPath);
+        Assert.True(fake2.PlayCalled);
+    }
+}
+
+internal sealed class FakeSegmentPlayer : IMediaTransport
+{
+    public string? LastLoadedPath { get; private set; }
+    public bool PlayCalled { get; private set; }
+    public bool PauseCalled { get; private set; }
+
+    public void Load(string filePath) => LastLoadedPath = filePath;
+    public void Play() => PlayCalled = true;
+    public void Pause() { PauseCalled = true; PlayCalled = false; }
+    public void Seek(long positionMs) { }
+    public long CurrentTime => 0;
+    public long Duration => 5000;
+    public bool HasEnded => false;
+#pragma warning disable CS0067
+    public event EventHandler? Ended;
+    public event EventHandler<Exception>? ErrorOccurred;
+#pragma warning restore CS0067
+    public void Dispose() { }
 }
