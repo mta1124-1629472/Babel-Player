@@ -141,20 +141,55 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         try
         {
             IsBusy = true;
-            StatusText = "Transcribing…";
-            await _coordinator.TranscribeMediaAsync();
+            var stage = _coordinator.CurrentSession.Stage;
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] Starting. Current stage: {stage}, SourceLanguage: {_coordinator.CurrentSession.SourceLanguage ?? "(null)"}");
 
-            StatusText = "Translating…";
-            await _coordinator.TranslateTranscriptAsync();
+            if (stage < SessionWorkflowStage.Transcribed
+                || _coordinator.CurrentSession.SourceLanguage is null or "unknown")
+            {
+                StatusText = "Transcribing audio…";
+                System.Diagnostics.Debug.WriteLine("[Pipeline] Running transcription…");
+                await _coordinator.TranscribeMediaAsync();
+                System.Diagnostics.Debug.WriteLine($"[Pipeline] Transcription done. Language: {_coordinator.CurrentSession.SourceLanguage}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[Pipeline] Skipping transcription (already done).");
+            }
 
-            StatusText = "Generating dubbed audio…";
-            await _coordinator.GenerateTtsAsync();
+            stage = _coordinator.CurrentSession.Stage;
+            if (stage < SessionWorkflowStage.Translated)
+            {
+                StatusText = $"Translating ({_coordinator.CurrentSession.SourceLanguage} → en)…";
+                System.Diagnostics.Debug.WriteLine("[Pipeline] Running translation…");
+                await _coordinator.TranslateTranscriptAsync();
+                System.Diagnostics.Debug.WriteLine("[Pipeline] Translation done.");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[Pipeline] Skipping translation (already done).");
+            }
+
+            stage = _coordinator.CurrentSession.Stage;
+            if (stage < SessionWorkflowStage.TtsGenerated)
+            {
+                StatusText = "Generating dubbed audio…";
+                System.Diagnostics.Debug.WriteLine("[Pipeline] Running TTS…");
+                await _coordinator.GenerateTtsAsync();
+                System.Diagnostics.Debug.WriteLine("[Pipeline] TTS done.");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[Pipeline] Skipping TTS (already done).");
+            }
 
             StatusText = "Loading segments…";
             await LoadSegmentsAsync();
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] Complete. {Segments.Count} segments loaded.");
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] Failed: {ex}");
             StatusText = $"Pipeline failed: {ex.Message}";
         }
         finally

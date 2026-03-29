@@ -217,7 +217,8 @@ print('Transcription complete')
             _log.Info($"Transcription completed: {outputJsonPath}");
 
             var jsonContent = await File.ReadAllTextAsync(outputJsonPath);
-            var transcriptionData = JsonSerializer.Deserialize<TranscriptionJson>(jsonContent);
+            var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var transcriptionData = JsonSerializer.Deserialize<TranscriptionJson>(jsonContent, jsonOptions);
 
             var segments = new List<TranscriptSegment>();
             if (transcriptionData?.Segments != null)

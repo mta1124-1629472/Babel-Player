@@ -159,11 +159,14 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         if (!_isLoaded || _disposed)
             throw new ObjectDisposedException(nameof(LibMpvEmbeddedTransport));
 
-        // libmpv seek uses seconds by default
+        var dur = Duration;
+        if (dur > 0 && positionMs > dur)
+            positionMs = dur;
+
         double positionSec = positionMs / 1000.0;
         string command = $"seek {positionSec:F3} absolute";
-        if (_mpv_command_string!(_handle, command) < 0)
-            throw new InvalidOperationException($"Failed to seek to {positionMs}ms.");
+        _mpv_command_string!(_handle, command);
+        // Don't throw on seek failure — libmpv may reject seeks near end-of-file
     }
 
     public long CurrentTime

@@ -34,12 +34,11 @@ public partial class MainWindow : Window
                     _embeddedTransport = embedded;
                     embedded.AttachToWindow(hwnd);
 
-                    // Resume prior session if media is already loaded
+                    // Load prior session media (paused) so it's ready for playback
                     var ingestedPath = vm.Coordinator.CurrentSession.IngestedMediaPath;
                     if (!string.IsNullOrEmpty(ingestedPath) && System.IO.File.Exists(ingestedPath))
                     {
                         embedded.Load(ingestedPath);
-                        embedded.Play();
                     }
                 }
             }
