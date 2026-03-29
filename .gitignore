@@ -1,11 +1,62 @@
 bin/
 obj/
 .vs/
+.vscode/
 TestResults/
 *.user
 *.suo
 *.userosscache
 *.rsuser
 
-# VS Code local task/debug settings if you don't want machine-specific config committed
-# .vscode/
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio cache/options
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# NuGet Packages
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+
+# Test Coverage
+coverage*.json
+coverage*.xml
+*.coverage
+*.coveragexml
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Application data (session artifacts, logs, etc.)
+**/LocalApplicationData/
+**/AppData/Local/BabelDeck/
