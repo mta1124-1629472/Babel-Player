@@ -18,6 +18,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     private readonly IMediaTransport? _injectedSegmentPlayer;
     private IMediaTransport? _segmentPlayer;
+    private bool _subscribedToPlayerEvents;
+    private readonly EventHandler _segmentEndedHandler;
+    private readonly EventHandler<Exception> _segmentErrorHandler;
 
     [ObservableProperty]
     private WorkflowSessionSnapshot _currentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
@@ -36,14 +39,25 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _store = store;
         _log = log;
         _injectedSegmentPlayer = segmentPlayer;
+        
+        // Create event handler delegates once for proper unsubscription
+        _segmentEndedHandler = (_, _) => ActiveTtsSegmentId = null;
+        _segmentErrorHandler = (_, _) => ActiveTtsSegmentId = null;
     }
 
     private IMediaTransport GetOrCreateSegmentPlayer()
     {
         if (_segmentPlayer is not null) return _segmentPlayer;
         _segmentPlayer = _injectedSegmentPlayer ?? new LibMpvHeadlessTransport(suppressAudio: false);
-        _segmentPlayer.Ended += (_, _) => ActiveTtsSegmentId = null;
-        _segmentPlayer.ErrorOccurred += (_, _) => ActiveTtsSegmentId = null;
+        
+        // Subscribe to events only once and track subscription state
+        if (!_subscribedToPlayerEvents)
+        {
+            _segmentPlayer.Ended += _segmentEndedHandler;
+            _segmentPlayer.ErrorOccurred += _segmentErrorHandler;
+            _subscribedToPlayerEvents = true;
+        }
+        
         return _segmentPlayer;
     }
 
@@ -81,9 +95,19 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void Dispose()
     {
+        // Unsubscribe from events only if we previously subscribed
+        if (_subscribedToPlayerEvents && _segmentPlayer is not null)
+        {
+            _segmentPlayer.Ended -= _segmentEndedHandler;
+            _segmentPlayer.ErrorOccurred -= _segmentErrorHandler;
+            _subscribedToPlayerEvents = false;
+        }
+
         // Only dispose if we created the player; injected players are owned by the caller.
         if (_injectedSegmentPlayer is null)
+        {
             _segmentPlayer?.Dispose();
+        }
     }
 
     public string StateFilePath => _store.StateFilePath;
