@@ -9,7 +9,7 @@ namespace Babel.Deck.Views;
 /// Avalonia control that hosts a native Win32 child window for libmpv video rendering.
 /// Uses NativeControlHost to embed a native HWND that libmpv renders into via its --wid option.
 /// </summary>
-public class MpvVideoView : NativeControlHost
+public partial class MpvVideoView : NativeControlHost
 {
     private IntPtr _childHwnd = IntPtr.Zero;
 
@@ -63,28 +63,22 @@ public class MpvVideoView : NativeControlHost
         base.DestroyNativeControlCore(control);
     }
 
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern IntPtr CreateWindowExW(
+    [LibraryImport("user32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial IntPtr CreateWindowExW(
         uint dwExStyle, string lpClassName, string lpWindowName,
         uint dwStyle, int x, int y, int nWidth, int nHeight,
         IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyWindow(IntPtr hWnd);
+    private static partial bool DestroyWindow(IntPtr hWnd);
 }
 
 /// <summary>
 /// Simple platform handle wrapper.
 /// </summary>
-internal sealed class PlatformHandle : IPlatformHandle
+internal sealed class PlatformHandle(IntPtr handle, string descriptor) : IPlatformHandle
 {
-    public PlatformHandle(IntPtr handle, string descriptor)
-    {
-        Handle = handle;
-        HandleDescriptor = descriptor;
-    }
-
-    public IntPtr Handle { get; }
-    public string HandleDescriptor { get; }
+    public IntPtr Handle { get; } = handle;
+    public string HandleDescriptor { get; } = descriptor;
 }

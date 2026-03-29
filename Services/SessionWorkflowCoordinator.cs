@@ -569,6 +569,45 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var segmentsDir = Path.Combine(ttsDir, "segments");
         Directory.CreateDirectory(segmentsDir);
 
+        // Generate per-segment TTS audio for dubbed playback
+        var segmentAudioPaths = new Dictionary<string, string>();
+        try
+        {
+            var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
+            var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
+            var segments = translationData.GetProperty("segments");
+
+            foreach (var seg in segments.EnumerateArray())
+            {
+                var id = seg.GetProperty("id").GetString();
+                var textProp = seg.GetProperty("translatedText");
+                var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
+
+                if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(id))
+                    continue;
+
+                var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
+
+                _log.Info($"Generating TTS for segment {id}: {text.Substring(0, Math.Min(30, text.Length))}...");
+
+                var segResult = await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, voice);
+
+                if (segResult.Success && File.Exists(segmentAudioPath))
+                {
+                    segmentAudioPaths[id] = segmentAudioPath;
+                    _log.Info($"Segment TTS generated: {id} -> {segmentAudioPath}");
+                }
+                else
+                {
+                    _log.Warning($"Segment TTS failed or file missing: {id}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Error generating per-segment TTS: {ex.Message}", ex);
+        }
+
         var nowUtc = DateTimeOffset.UtcNow;
         CurrentSession = CurrentSession with
         {
@@ -577,7 +616,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TtsVoice = voice,
             TtsGeneratedAtUtc = nowUtc,
             TtsSegmentsPath = segmentsDir,
-            TtsSegmentAudioPaths = new Dictionary<string, string>(),
+            TtsSegmentAudioPaths = segmentAudioPaths,
             StatusMessage = $"TTS generated ({voice}). Dubbing complete.",
         };
 

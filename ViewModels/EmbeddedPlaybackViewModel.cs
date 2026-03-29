@@ -151,6 +151,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 System.Diagnostics.Debug.WriteLine("[Pipeline] Running transcription…");
                 await _coordinator.TranscribeMediaAsync();
                 System.Diagnostics.Debug.WriteLine($"[Pipeline] Transcription done. Language: {_coordinator.CurrentSession.SourceLanguage}");
+                StatusText = "Transcription complete. Loading segments…";
+                await LoadSegmentsAsync();
+                System.Diagnostics.Debug.WriteLine($"[Pipeline] Segments loaded after transcription: {Segments.Count}");
             }
             else
             {
@@ -164,6 +167,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 System.Diagnostics.Debug.WriteLine("[Pipeline] Running translation…");
                 await _coordinator.TranslateTranscriptAsync();
                 System.Diagnostics.Debug.WriteLine("[Pipeline] Translation done.");
+                StatusText = "Translation complete. Refreshing segments…";
+                await LoadSegmentsAsync();
+                System.Diagnostics.Debug.WriteLine($"[Pipeline] Segments loaded after translation: {Segments.Count}");
             }
             else
             {
