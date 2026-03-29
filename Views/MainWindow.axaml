@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
         x:Class="Babel.Deck.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/babeldeck.ico"
         Title="Babel Deck"
         MinWidth="900" MinHeight="500">
 
@@ -16,7 +16,10 @@
         <!-- Top: Session info bar -->
         <Border Grid.Row="0" Padding="12,8" Background="#20808080">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Grid.Column="0" FontSize="18" FontWeight="SemiBold" Text="Babel Deck" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Babel Deck" VerticalAlignment="Center" />
+                    <Button x:Name="OpenMediaButton" Content="📂 Open Media" Click="OnOpenMediaClick" VerticalAlignment="Center" />
+                </StackPanel>
                 <TextBlock Grid.Column="1" Margin="16,0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                            Text="{Binding Coordinator.CurrentSession.StatusMessage}" />
                 <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.6"

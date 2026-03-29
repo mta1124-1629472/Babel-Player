@@ -14,7 +14,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private readonly SessionWorkflowCoordinator _coordinator;
 
     [ObservableProperty]
-    private ObservableCollection<WorkflowSegmentState> _segments = new();
+    private ObservableCollection<WorkflowSegmentState> _segments = [];
 
     [ObservableProperty]
     private WorkflowSegmentState? _selectedSegment;

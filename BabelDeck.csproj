@@ -25,4 +25,10 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.0-rc1" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="native\win-x64\libmpv-2.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

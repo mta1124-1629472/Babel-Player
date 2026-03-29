@@ -224,7 +224,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _sourceMediaPlayer?.Pause();
     }
 
-    private IMediaTransport GetOrCreateSourcePlayer()
+    public IMediaTransport GetOrCreateSourcePlayer()
     {
         if (_sourceMediaPlayer is not null) return _sourceMediaPlayer;
         _sourceMediaPlayer = _injectedSourcePlayer ?? new LibMpvEmbeddedTransport();
