@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Xunit;
 using Babel.Deck.Models;
 using Babel.Deck.Services;
+using Babel.Deck.ViewModels;
 
 namespace BabelDeck.Tests;
 
@@ -434,5 +435,89 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
         // Fresh session has no media loaded
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => coordinator.PlaySourceMediaAtSegmentAsync("any-id"));
+    }
+}
+
+public sealed class SegmentInspectionTests
+{
+    private static EmbeddedPlaybackViewModel CreatePlaybackVm()
+    {
+        var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.log"));
+        var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.json");
+        var store = new SessionSnapshotStore(storePath, log);
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+        return new EmbeddedPlaybackViewModel(coordinator);
+    }
+
+    [Fact]
+    public void IsVisible_FalseWhenNoSegmentSelected()
+    {
+        var playback = CreatePlaybackVm();
+        var inspection = new SegmentInspectionViewModel(playback);
+
+        Assert.False(inspection.IsVisible);
+        Assert.Equal("", inspection.SourceText);
+        Assert.Equal("", inspection.TranslatedText);
+        Assert.Equal("", inspection.TimingLabel);
+        Assert.Equal("", inspection.SegmentId);
+    }
+
+    [Fact]
+    public void Refresh_PopulatesAllProperties()
+    {
+        var playback = CreatePlaybackVm();
+        var inspection = new SegmentInspectionViewModel(playback);
+
+        var segment = new WorkflowSegmentState(
+            "segment_1.5", 1.5, 4.0, "Hello world", true, "Hola mundo", true);
+
+        inspection.Refresh(segment);
+
+        Assert.True(inspection.IsVisible);
+        Assert.Equal("segment_1.5", inspection.SegmentId);
+        Assert.Equal("Hello world", inspection.SourceText);
+        Assert.Equal("Hola mundo", inspection.TranslatedText);
+        Assert.True(inspection.HasTranslation);
+        Assert.True(inspection.HasTtsAudio);
+        Assert.Equal("1.5s → 4.0s (2.5s)", inspection.TimingLabel);
+    }
+
+    [Fact]
+    public void Refresh_ClearsWhenNull()
+    {
+        var playback = CreatePlaybackVm();
+        var inspection = new SegmentInspectionViewModel(playback);
+
+        var segment = new WorkflowSegmentState(
+            "segment_0.0", 0.0, 2.0, "Some text", false, null, false);
+        inspection.Refresh(segment);
+        Assert.True(inspection.IsVisible);
+
+        inspection.Refresh(null);
+        Assert.False(inspection.IsVisible);
+        Assert.Equal("", inspection.SourceText);
+        Assert.Equal("", inspection.TranslatedText);
+        Assert.Equal("", inspection.SegmentId);
+    }
+
+    [Fact]
+    public void SelectedSegmentChange_UpdatesInspection()
+    {
+        var playback = CreatePlaybackVm();
+        var inspection = new SegmentInspectionViewModel(playback);
+
+        var segment = new WorkflowSegmentState(
+            "segment_5.0", 5.0, 8.0, "Source line", true, "Translated line", false);
+
+        playback.SelectedSegment = segment;
+
+        Assert.True(inspection.IsVisible);
+        Assert.Equal("Source line", inspection.SourceText);
+        Assert.Equal("Translated line", inspection.TranslatedText);
+        Assert.False(inspection.HasTtsAudio);
+
+        playback.SelectedSegment = null;
+        Assert.False(inspection.IsVisible);
     }
 }

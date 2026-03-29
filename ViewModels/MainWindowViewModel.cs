@@ -8,9 +8,12 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         Coordinator = coordinator;
         Playback = new EmbeddedPlaybackViewModel(coordinator);
+        Inspection = new SegmentInspectionViewModel(Playback);
     }
 
     public SessionWorkflowCoordinator Coordinator { get; }
 
     public EmbeddedPlaybackViewModel Playback { get; }
+
+    public SegmentInspectionViewModel Inspection { get; }
 }

@@ -1,16 +1,21 @@
 # Babel Deck
 
-Babel Deck is a dubbing-oriented desktop application being rebuilt as a disciplined sequence of vertical slices.
+[![Sponsor](https://img.shields.io/github/sponsors/mta1124-1629472?label=Sponsor&logo=GitHub)](https://github.com/sponsors/mta1124-1629472)
+[![CI](https://github.com/mta1124-1629472/Babel-Deck/actions/workflows/ci.yml/badge.svg)](https://github.com/mta1124-1629472/Babel-Player/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/mta1124-1629472/Babel-Deck)](https://github.com/mta1124-1629472/Babel-Player/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows-blue)](#run)
+[![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
+
+Babel Deck is an Avalonia/.NET desktop media player for language learning. It can load local media, generate captions, translate subtitles, and synthesize dubbed speech through cloud or local inference paths depending on what is installed on the machine.
 
 The core product chain is:
 
 `source media -> timed transcript -> translated/adapted dialogue -> spoken dubbed output -> in-context preview and refinement`
 
-This repo is intentionally being shaped around that chain rather than around a generic media-player identity or speculative architecture work.
 
 ## Current posture
 
-The project is in an early rebuild phase.
+The project is in an early build phase.
 
 The main goal right now is to prove the core workflow in the right order, with truthful states and tight scope control. The repo should prefer narrow working slices over broad partial systems.
 

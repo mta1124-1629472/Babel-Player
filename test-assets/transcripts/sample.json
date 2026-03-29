@@ -1,0 +1,11 @@
+{
+  "segments": [
+    { "start": 0.13, "end": 2.83, "text": "Hoy vamos a hacer un ejercicio" },
+    { "start": 2.83, "end": 5.53, "text": "de audio comprensión con un personaje" },
+    { "start": 5.53, "end": 7.33, "text": "histórico muy importante, hispano" },
+    { "start": 7.33, "end": 10.03, "text": "americano, hola, soy Brenda romanillo, tu" },
+    { "start": 10.03, "end": 12.73, "text": "profesora de español de ole Spanish" },
+    { "start": 12.73, "end": 15.43, "text": "y directora del programa de Spanish" },
+    { "start": 15.43, "end": 16.42, "text": "fluency club. En" }
+  ]
+}

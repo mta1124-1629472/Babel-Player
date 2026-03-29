@@ -1,0 +1,61 @@
+name: Release Win x64
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish-win-x64:
+    name: Publish Windows x64 Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore BabelPlayer.slnx -r win-x64
+
+      - name: Publish desktop app (Release / win-x64)
+        run: >
+          dotnet publish Babel.Desktop/Babel.Desktop.csproj
+          --configuration Release
+          -r win-x64
+          /p:PublishProfile=Release-win-x64
+
+      - name: Package publish output
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $publishDir = "Babel.Desktop/bin/Release/net10.0/win-x64/publish"
+          if (-not (Test-Path $publishDir)) {
+            throw "Publish output not found at $publishDir"
+          }
+
+          New-Item -ItemType Directory -Path "artifacts" -Force | Out-Null
+          $zipPath = "artifacts/Babel-Player-$tag-win-x64.zip"
+          Compress-Archive -Path "$publishDir/*" -DestinationPath $zipPath -Force
+          "ZIP_PATH=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: babel-player-${{ github.ref_name }}-win-x64
+          path: ${{ env.ZIP_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_PATH }}
+          generate_release_notes: true

@@ -414,6 +414,20 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
+    public void InjectTestTranscript(string transcriptPath, string? translationPath = null)
+    {
+        CurrentSession = CurrentSession with
+        {
+            Stage = translationPath != null ? SessionWorkflowStage.Translated : SessionWorkflowStage.Transcribed,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+            StatusMessage = translationPath != null
+                ? "Test transcript and translation injected."
+                : "Test transcript injected.",
+        };
+        SaveCurrentSession();
+    }
+
     public async Task TranscribeMediaAsync()
     {
         if (string.IsNullOrEmpty(CurrentSession.IngestedMediaPath))
