@@ -60,6 +60,14 @@ _ReSharper*/
 !**/packages/build/
 *.nuget.props
 *.nuget.targets
+*.nuget-temp/
+!**/nuget-temp/build/
+!**/nuget-temp/run/
+!**/nuget-temp/tools/
+!**/nuget-temp/content/
+!**/nuget-temp/ref/
+!**/nuget-temp/lib/
+!**/nuget-temp/runtimes/
 
 # Test Coverage
 coverage*.json
