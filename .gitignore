@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+TestResults/
+*.user
+*.suo
+*.userosscache
+*.rsuser
+
+# VS Code local task/debug settings if you don't want machine-specific config committed
+# .vscode/
