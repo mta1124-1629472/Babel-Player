@@ -42,7 +42,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) => ActiveTtsSegmentId = null;
-        _segmentErrorHandler = (_, _) => ActiveTtsSegmentId = null;
+        _segmentErrorHandler = (_, ex) => ActiveTtsSegmentId = null;
     }
 
     private IMediaTransport GetOrCreateSegmentPlayer()
