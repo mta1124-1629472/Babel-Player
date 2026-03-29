@@ -145,9 +145,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 await Task.Run(() => player.Play(), token);
 
                 // Wait for this segment to end or for cancellation
-                // Add timeout protection: segment duration + 5 second grace period
-                var segmentDuration = segment.EndSeconds - segment.StartSeconds;
-                var maxWaitSeconds = segmentDuration + 5.0;
+                // Add timeout protection: use actual TTS audio duration + 10 second grace period
+                var audioDurationSeconds = player.Duration / 1000.0;
+                var maxWaitSeconds = Math.Max(audioDurationSeconds + 10.0, 15.0); // Minimum 15s for edge cases
                 var startTime = DateTimeOffset.UtcNow;
                 
                 while (!player.HasEnded)
@@ -157,7 +157,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     var elapsed = (DateTimeOffset.UtcNow - startTime).TotalSeconds;
                     if (elapsed > maxWaitSeconds)
                     {
-                        _log.Warning($"Segment playback timeout after {elapsed:F1}s (expected ~{segmentDuration:F1}s): {segment.SegmentId}");
+                        _log.Warning($"Segment playback timeout after {elapsed:F1}s (expected ~{audioDurationSeconds:F1}s): {segment.SegmentId}");
                         break;
                     }
                     
@@ -706,8 +706,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             var textProp = seg.GetProperty("text");
             var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() ?? "" : "";
 
-            var hasTranslation = translationTexts != null && translationTexts.ContainsKey(id);
-            var translatedText = hasTranslation ? translationTexts[id] : null;
+            string? translatedText = null;
+            var hasTranslation = translationTexts != null && translationTexts.TryGetValue(id, out translatedText);
             var hasTtsAudio = ttsSegmentPaths != null && ttsSegmentPaths.ContainsKey(id);
 
             segments.Add(new WorkflowSegmentState(

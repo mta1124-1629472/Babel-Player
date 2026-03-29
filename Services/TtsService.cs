@@ -5,18 +5,12 @@ using System.Threading.Tasks;
 
 namespace Babel.Deck.Services;
 
-public sealed class TtsService
+public sealed class TtsService(AppLog log)
 {
-    private readonly AppLog _log;
-    private readonly string _pythonPath;
+    private readonly AppLog _log = log;
+    private readonly string _pythonPath = FindPythonPath();
 
-    public TtsService(AppLog log)
-    {
-        _log = log;
-        _pythonPath = FindPythonPath();
-    }
-
-    private string FindPythonPath()
+    private static string FindPythonPath()
     {
         var possiblePaths = new[]
         {
@@ -118,11 +112,7 @@ asyncio.run(generate())
                 CreateNoWindow = true
             };
 
-            using var proc = Process.Start(psi);
-            if (proc == null)
-            {
-                throw new InvalidOperationException("Failed to start TTS process.");
-            }
+            using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start TTS process.");
 
             var stdout = await proc.StandardOutput.ReadToEndAsync();
             var stderr = await proc.StandardError.ReadToEndAsync();
@@ -193,7 +183,7 @@ asyncio.run(generate())
 
         try
         {
-            _log.Info($"Starting segment TTS generation: {text.Substring(0, Math.Min(30, text.Length))}... -> {outputAudioPath}");
+            _log.Info($"Starting segment TTS generation: {text[..Math.Min(30, text.Length)]}... -> {outputAudioPath}");
 
             var psi = new ProcessStartInfo
             {
@@ -205,11 +195,7 @@ asyncio.run(generate())
                 CreateNoWindow = true
             };
 
-            using var proc = Process.Start(psi);
-            if (proc == null)
-            {
-                throw new InvalidOperationException("Failed to start TTS process.");
-            }
+            using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start TTS process.");
 
             var stdout = await proc.StandardOutput.ReadToEndAsync();
             var stderr = await proc.StandardError.ReadToEndAsync();
