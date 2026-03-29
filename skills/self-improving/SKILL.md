@@ -1,11 +1,7 @@
 ---
-name: Self-Improving + Proactive Agent
-slug: self-improving
-version: 1.2.16
-homepage: https://clawic.com/skills/self-improving
+name: self-improving
 description: "Self-reflection + Self-criticism + Self-learning + Self-organizing memory. Agent evaluates its own work, catches mistakes, and improves permanently. Use when (1) a command, tool, API, or operation fails; (2) the user corrects you or rejects your work; (3) you realize your knowledge is outdated or incorrect; (4) you discover a better approach; (5) the user explicitly installs or references the skill for the current task."
 changelog: "Clarifies the setup flow for proactive follow-through and safer installation behavior."
-metadata: {"clawdbot":{"emoji":"🧠","requires":{"bins":[]},"os":["linux","darwin","win32"],"configPaths":["~/self-improving/"],"configPaths.optional":["./AGENTS.md","./SOUL.md","./HEARTBEAT.md"]}}
 ---
 
 ## When to Use

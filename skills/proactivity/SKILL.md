@@ -1,11 +1,7 @@
 ---
-name: Proactivity (Proactive Agent)
-slug: proactivity
-version: 1.0.1
-homepage: https://clawic.com/skills/proactivity
+name: proactivity   
 description: Anticipates needs, keeps work moving, and improves through use so the agent gets more proactive over time.
 changelog: "Strengthens proactive behavior with reverse prompting, self-healing, working-buffer recovery, and clearer SOUL and AGENTS setup."
-metadata: {"clawdbot":{"emoji":"⚡","requires":{"bins":[]},"os":["linux","darwin","win32"],"configPaths":["~/proactivity/"],"configPaths.optional":["./AGENTS.md","./TOOLS.md","./SOUL.md","./HEARTBEAT.md"]}}
 ---
 
 ## Architecture
