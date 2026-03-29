@@ -45,7 +45,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _store = store;
         _log = log;
         _injectedSegmentPlayer = segmentPlayer;
-        _subscribedToPlayerEvents = false;
         
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) =>
@@ -90,7 +89,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         if (!File.Exists(audioPath))
             throw new FileNotFoundException($"TTS audio file not found: {audioPath}", audioPath);
 
-        _sequenceCts?.Cancel();
+        var oldCts = _sequenceCts;
+        _sequenceCts = null;
+        oldCts?.Cancel();
+        oldCts?.Dispose();
+        
         _segmentPlayer?.Pause();
         ActiveTtsSegmentId = null;
 
@@ -105,9 +108,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public async Task PlayAllDubbedSegmentsAsync()
     {
         // Cancel any running single-segment or sequence playback
-        _sequenceCts?.Cancel();
+        var oldCts = _sequenceCts;
         _sequenceCts = new CancellationTokenSource();
         var token = _sequenceCts.Token;
+        oldCts?.Cancel();
+        oldCts?.Dispose();
 
         PlaybackState = PlaybackState.PlayingSequence;
 
@@ -140,9 +145,22 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 await Task.Run(() => player.Play(), token);
 
                 // Wait for this segment to end or for cancellation
+                // Add timeout protection: segment duration + 5 second grace period
+                var segmentDuration = segment.EndSeconds - segment.StartSeconds;
+                var maxWaitSeconds = segmentDuration + 5.0;
+                var startTime = DateTimeOffset.UtcNow;
+                
                 while (!player.HasEnded)
                 {
                     token.ThrowIfCancellationRequested();
+                    
+                    var elapsed = (DateTimeOffset.UtcNow - startTime).TotalSeconds;
+                    if (elapsed > maxWaitSeconds)
+                    {
+                        _log.Warning($"Segment playback timeout after {elapsed:F1}s (expected ~{segmentDuration:F1}s): {segment.SegmentId}");
+                        break;
+                    }
+                    
                     await Task.Delay(50, token);
                 }
             }

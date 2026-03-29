@@ -992,6 +992,7 @@ public class SessionWorkflowTests : IDisposable
         var expectedPath = coordinator.CurrentSession.TtsSegmentAudioPaths![firstSegmentId];
 
         // Reopen
+        coordinator.Dispose();
         var fake2 = new FakeSegmentPlayer();
         coordinator = new SessionWorkflowCoordinator(store, log, fake2);
         coordinator.Initialize();
@@ -1186,6 +1187,7 @@ public class SessionWorkflowTests : IDisposable
 
         var expectedPath = coordinator.CurrentSession.TtsSegmentAudioPaths![segments[0].SegmentId];
 
+        coordinator.Dispose();
         var fake2 = new FakeSegmentPlayer(simulateInstantEnd: true);
         coordinator = new SessionWorkflowCoordinator(store, log, fake2);
         coordinator.Initialize();
