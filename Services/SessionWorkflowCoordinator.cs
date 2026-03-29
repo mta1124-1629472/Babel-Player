@@ -475,7 +475,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
         SaveCurrentSession();
     }
 
-    public List<WorkflowSegmentState> GetSegmentWorkflowList()
+    public async Task<List<WorkflowSegmentState>> GetSegmentWorkflowListAsync()
     {
         if (string.IsNullOrEmpty(CurrentSession.TranscriptPath) || !File.Exists(CurrentSession.TranscriptPath))
         {
@@ -484,24 +484,20 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
 
         var segments = new List<WorkflowSegmentState>();
 
-        var transcriptJson = File.ReadAllText(CurrentSession.TranscriptPath);
+        var transcriptJson = await File.ReadAllTextAsync(CurrentSession.TranscriptPath);
         var transcriptData = JsonSerializer.Deserialize<JsonElement>(transcriptJson);
         var transcriptSegments = transcriptData.GetProperty("segments");
 
-        Dictionary<string, string>? ttsSegmentPaths = null;
-        if (CurrentSession.TtsSegmentAudioPaths != null)
-        {
-            ttsSegmentPaths = CurrentSession.TtsSegmentAudioPaths;
-        }
+        var ttsSegmentPaths = CurrentSession.TtsSegmentAudioPaths;
 
         Dictionary<string, string>? translationTexts = null;
         if (!string.IsNullOrEmpty(CurrentSession.TranslationPath) && File.Exists(CurrentSession.TranslationPath))
         {
             translationTexts = new Dictionary<string, string>();
-            var translationJson = File.ReadAllText(CurrentSession.TranslationPath);
+            var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
             var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
             var translationSegments = translationData.GetProperty("segments");
-            
+
             foreach (var seg in translationSegments.EnumerateArray())
             {
                 var id = seg.GetProperty("id").GetString();
@@ -509,7 +505,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
                 {
                     var textProp = seg.GetProperty("translatedText");
                     var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
-                    if (text != null)
+                    // Only count non-empty translations; empty string means the translation call failed.
+                    if (!string.IsNullOrWhiteSpace(text))
                     {
                         translationTexts[id] = text;
                     }
@@ -521,9 +518,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
         {
             var start = seg.GetProperty("start").GetDouble();
             var id = SegmentId(start);
-            
+
             var end = seg.GetProperty("end").GetDouble();
-            
+
             var textProp = seg.GetProperty("text");
             var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() ?? "" : "";
 

@@ -602,7 +602,7 @@ public class SessionWorkflowTests : IDisposable
     }
 
     [Fact]
-    public void BuildSegmentWorkflowList_ReflectsArtifactState()
+    public async Task BuildSegmentWorkflowList_ReflectsArtifactState()
     {
         var stateFilePath = Path.Combine(_testStateDir, "session_segment_list.json");
         _lastStateFilePath = stateFilePath;
@@ -614,14 +614,14 @@ public class SessionWorkflowTests : IDisposable
         coordinator.Initialize();
 
         coordinator.LoadMedia(_testMediaPath);
-        coordinator.TranscribeMediaAsync().GetAwaiter().GetResult();
-        coordinator.TranslateTranscriptAsync("en", "es").GetAwaiter().GetResult();
-        coordinator.GenerateTtsAsync().GetAwaiter().GetResult();
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
 
-        var segmentsList = coordinator.GetSegmentWorkflowList();
+        var segmentsList = await coordinator.GetSegmentWorkflowListAsync();
 
         Assert.NotEmpty(segmentsList);
-        
+
         var firstSegment = segmentsList[0];
         Assert.NotNull(firstSegment.SegmentId);
         Assert.True(firstSegment.StartSeconds >= 0);
@@ -629,10 +629,13 @@ public class SessionWorkflowTests : IDisposable
         Assert.False(string.IsNullOrEmpty(firstSegment.SourceText));
         Assert.True(firstSegment.HasTranslation);
         Assert.NotNull(firstSegment.TranslatedText);
+        // HasTtsAudio is false here: GenerateTtsAsync initialises TtsSegmentAudioPaths to an
+        // empty dictionary. Only explicit RegenerateSegmentTtsAsync calls populate it.
+        Assert.False(firstSegment.HasTtsAudio);
     }
 
     [Fact]
-    public void Reopen_ReconstructsMixedSegmentState()
+    public async Task Reopen_ReconstructsMixedSegmentState()
     {
         var stateFilePath = Path.Combine(_testStateDir, "session_mixed_reopen.json");
         _lastStateFilePath = stateFilePath;
@@ -644,17 +647,17 @@ public class SessionWorkflowTests : IDisposable
         coordinator.Initialize();
 
         coordinator.LoadMedia(_testMediaPath);
-        coordinator.TranscribeMediaAsync().GetAwaiter().GetResult();
-        coordinator.TranslateTranscriptAsync("en", "es").GetAwaiter().GetResult();
-        coordinator.GenerateTtsAsync().GetAwaiter().GetResult();
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
 
-        var segmentsBefore = coordinator.GetSegmentWorkflowList();
+        var segmentsBefore = await coordinator.GetSegmentWorkflowListAsync();
         var sessionId = coordinator.CurrentSession.SessionId;
 
         coordinator = new SessionWorkflowCoordinator(store, log);
         coordinator.Initialize();
 
-        var segmentsAfter = coordinator.GetSegmentWorkflowList();
+        var segmentsAfter = await coordinator.GetSegmentWorkflowListAsync();
 
         Assert.Equal(sessionId, coordinator.CurrentSession.SessionId);
         Assert.Equal(segmentsBefore.Count, segmentsAfter.Count);
@@ -839,7 +842,7 @@ public class SessionWorkflowTests : IDisposable
     }
 
     [Fact]
-    public void RegeneratedAndUntouchedSegments_RemainDistinct()
+    public async Task RegeneratedAndUntouchedSegments_RemainDistinct()
     {
         var stateFilePath = Path.Combine(_testStateDir, "session_distinct.json");
         _lastStateFilePath = stateFilePath;
@@ -851,26 +854,26 @@ public class SessionWorkflowTests : IDisposable
         coordinator.Initialize();
 
         coordinator.LoadMedia(_testMediaPath);
-        coordinator.TranscribeMediaAsync().GetAwaiter().GetResult();
-        coordinator.TranslateTranscriptAsync("en", "es").GetAwaiter().GetResult();
-        coordinator.GenerateTtsAsync().GetAwaiter().GetResult();
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
 
-        var segmentsBefore = coordinator.GetSegmentWorkflowList();
+        var segmentsBefore = await coordinator.GetSegmentWorkflowListAsync();
         Assert.True(segmentsBefore.Count >= 2, "Need at least 2 segments");
 
         var firstSegmentId = segmentsBefore[0].SegmentId;
         var secondSegmentId = segmentsBefore[1].SegmentId;
 
-        coordinator.RegenerateSegmentTtsAsync(firstSegmentId).GetAwaiter().GetResult();
+        await coordinator.RegenerateSegmentTtsAsync(firstSegmentId);
 
-        var segmentsAfter = coordinator.GetSegmentWorkflowList();
+        var segmentsAfter = await coordinator.GetSegmentWorkflowListAsync();
 
         var firstAfter = segmentsAfter[0];
         var secondAfter = segmentsAfter[1];
 
         Assert.Equal(firstSegmentId, firstAfter.SegmentId);
         Assert.Equal(secondSegmentId, secondAfter.SegmentId);
-        
+
         Assert.True(firstAfter.HasTtsAudio);
         Assert.False(secondAfter.HasTtsAudio);
     }
