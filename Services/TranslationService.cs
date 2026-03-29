@@ -161,6 +161,7 @@ asyncio.run(translate())
             var segments = new List<TranslatedSegment>();
             if (translationData?.Segments != null)
             {
+                _log.Info($"Translation JSON parsed: {translationData.Segments.Count} segments found");
                 foreach (var seg in translationData.Segments)
                 {
                     segments.Add(new TranslatedSegment(
@@ -170,7 +171,12 @@ asyncio.run(translate())
                         seg.TranslatedText ?? ""));
                 }
             }
+            else
+            {
+                _log.Warning("Translation JSON parsing failed or no segments found");
+            }
 
+            _log.Info($"TranslationResult created with {segments.Count} segments");
             return new TranslationResult(
                 true,
                 segments,

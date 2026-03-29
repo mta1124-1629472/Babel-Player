@@ -584,22 +584,33 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
 
                 if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(id))
+                {
+                    _log.Info($"Skipping segment {id}: empty text or ID");
                     continue;
+                }
 
                 var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
 
                 _log.Info($"Generating TTS for segment {id}: {text.Substring(0, Math.Min(30, text.Length))}...");
 
-                var segResult = await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, voice);
+                try
+                {
+                    var segResult = await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, voice);
 
-                if (segResult.Success && File.Exists(segmentAudioPath))
-                {
-                    segmentAudioPaths[id] = segmentAudioPath;
-                    _log.Info($"Segment TTS generated: {id} -> {segmentAudioPath}");
+                    if (segResult.Success && File.Exists(segmentAudioPath))
+                    {
+                        segmentAudioPaths[id] = segmentAudioPath;
+                        _log.Info($"Segment TTS generated: {id} -> {segmentAudioPath}");
+                    }
+                    else
+                    {
+                        _log.Warning($"Segment TTS failed or file missing: {id}");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    _log.Warning($"Segment TTS failed or file missing: {id}");
+                    _log.Error($"Segment TTS generation failed for {id}: {ex.Message}", ex);
+                    // Continue with next segment instead of crashing
                 }
             }
         }

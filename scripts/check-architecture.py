@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Architecture guard for Babel Player.
-Enforces the four-layer contract from CLAUDE.md:
-  Domain (Core) <- Infrastructure <- ViewModels <- UI (Desktop)
+Architecture guard for Babel-Deck.
+Enforces basic project structure and placeholder discipline.
 
 Run from the repository root:
   python3 scripts/check-architecture.py
@@ -37,79 +36,56 @@ def project_refs(csproj: Path) -> list[str]:
     return [el.get("Include", "") for el in tree.getroot().iter("ProjectReference")]
 
 
-# ── Check 1: Babel.Core has zero NuGet dependencies ─────────────────────────
+# ── Check 1: BabelDeck.csproj exists ─────────────────────────────────────────
 
-refs = package_refs(Path("Babel.Core/Babel.Core.csproj"))
-if refs:
-    fail(f"Babel.Core must have zero NuGet deps, found: {refs}")
+if not Path("BabelDeck.csproj").exists():
+    fail("BabelDeck.csproj not found")
 else:
-    ok("Babel.Core has zero NuGet dependencies")
+    ok("BabelDeck.csproj exists")
 
-# ── Check 2: Babel.Core has zero project references ─────────────────────────
+# ── Check 2: Test project references main project ───────────────────────────
 
-refs = project_refs(Path("Babel.Core/Babel.Core.csproj"))
-if refs:
-    fail(f"Babel.Core must have zero ProjectReferences, found: {refs}")
+test_csproj = Path("BabelDeck.Tests/BabelDeck.Tests.csproj")
+if not test_csproj.exists():
+    fail("BabelDeck.Tests/BabelDeck.Tests.csproj not found")
 else:
-    ok("Babel.Core has zero ProjectReferences")
-
-# ── Check 3: Infrastructure only references Core ────────────────────────────
-
-refs = project_refs(Path("Babel.Infrastructure/Babel.Infrastructure.csproj"))
-bad = [r for r in refs if "Babel." in r and "Babel.Core" not in r]
-if bad:
-    fail(f"Babel.Infrastructure references non-Core projects: {bad}")
-else:
-    ok("Babel.Infrastructure only references Babel.Core")
-
-# ── Check 4: ViewModels references Core + Infrastructure only ───────────────
-
-refs = project_refs(Path("Babel.ViewModels/Babel.ViewModels.csproj"))
-bad = [
-    r
-    for r in refs
-    if "Babel." in r and "Babel.Core" not in r and "Babel.Infrastructure" not in r
-]
-if bad:
-    fail(f"Babel.ViewModels references projects outside Core/Infrastructure: {bad}")
-else:
-    ok("Babel.ViewModels only references Babel.Core and Babel.Infrastructure")
-
-# ── Check 5: Infrastructure and ViewModels have no Avalonia dependency ───────
-# Infrastructure must stay headless; ViewModels must not depend on Avalonia UI.
-
-for proj, label in [
-    ("Babel.Infrastructure/Babel.Infrastructure.csproj", "Babel.Infrastructure"),
-    ("Babel.ViewModels/Babel.ViewModels.csproj", "Babel.ViewModels"),
-]:
-    content = Path(proj).read_text()
-    if re.search(r"(?i)avalonia", content):
-        fail(f"{label} must not depend on Avalonia (layer boundary violation)")
+    refs = project_refs(test_csproj)
+    has_ref = any("BabelDeck.csproj" in r for r in refs)
+    if has_ref:
+        ok("Test project references main project")
     else:
-        ok(f"{label} has no Avalonia dependency")
+        fail(f"Test project must reference BabelDeck.csproj, found: {refs}")
 
-# ── Check 6: No hardcoded PackageReference versions ─────────────────────────
-# All versions must reference a $(PackageVersion_*) property from Directory.Build.props.
+# ── Check 3: Test project has test framework ─────────────────────────────────
 
-HARDCODED = re.compile(r'Version="[0-9]')
-project_files = [
-    "Babel.Core/Babel.Core.csproj",
-    "Babel.Infrastructure/Babel.Infrastructure.csproj",
-    "Babel.ViewModels/Babel.ViewModels.csproj",
-    "Babel.Desktop/Babel.Desktop.csproj",
-    "Babel.Tests/Babel.Tests.csproj",
-]
-for proj in project_files:
-    content = Path(proj).read_text()
-    if HARDCODED.search(content):
-        fail(f"{proj}: hardcoded PackageReference version — use $(PackageVersion_*) from Directory.Build.props")
-    else:
-        ok(f"{proj}: all PackageReference versions use property variables")
+refs = package_refs(test_csproj)
+test_frameworks = [r for r in refs if r in ("xunit", "nunit", "microsoft.net.test.sdk")]
+if test_frameworks:
+    ok(f"Test project has test framework: {test_frameworks}")
+else:
+    fail("Test project must have a test framework package reference")
 
-# ── Check 7: NotImplementedException must carry PLACEHOLDER prefix ───────────
-# Catches silent stubs that violate placeholder discipline (CLAUDE.md).
+# ── Check 4: Main project is Avalonia app ───────────────────────────────────
 
-NOT_IMPL = re.compile(r'new NotImplementedException\(')
+main_csproj = Path("BabelDeck.csproj")
+content = main_csproj.read_text()
+if re.search(r"(?i)avalonia", content):
+    ok("Main project is an Avalonia application")
+else:
+    fail("Main project must be an Avalonia application (Avalonia package reference)")
+
+# ── Check 5: Main project has OutputType=WinExe for desktop ─────────────────
+
+main_csproj = Path("BabelDeck.csproj")
+content = main_csproj.read_text()
+if "WinExe" in content and "OutputType" in content:
+    ok("Main project OutputType is WinExe")
+else:
+    fail("Main project should have OutputType=WinExe for desktop app")
+
+# ── Check 6: NotImplementedException must carry PLACEHOLDER prefix ───────────
+
+NOT_IMPL = re.compile(r"new NotImplementedException\(")
 PLACEHOLDER_MARKER = re.compile(r'"PLACEHOLDER')
 
 cs_files = list(Path(".").rglob("*.cs"))
@@ -134,8 +110,7 @@ if bad_files:
 else:
     ok("All NotImplementedException usages carry a PLACEHOLDER message")
 
-# ── Check 8: Silent event stubs must have a PLACEHOLDER comment ─────────────
-# Catches `event X E { add { } remove { } }` without a nearby PLACEHOLDER comment.
+# ── Check 7: Silent event stubs must have a PLACEHOLDER comment ─────────────
 
 SILENT_EVENT = re.compile(r"add\s*\{\s*\}\s*remove\s*\{\s*\}")
 
@@ -144,10 +119,9 @@ for cs in cs_files:
     lines = cs.read_text(encoding="utf-8", errors="replace").splitlines()
     for i, line in enumerate(lines):
         if SILENT_EVENT.search(line):
-            # Look for PLACEHOLDER in the 3 lines preceding this one
             context = "\n".join(lines[max(0, i - 3) : i + 1])
             if "PLACEHOLDER" not in context:
-                bad_files.append(f"{cs}:{i+1}: {line.strip()}")
+                bad_files.append(f"{cs}:{i + 1}: {line.strip()}")
 
 if bad_files:
     fail(

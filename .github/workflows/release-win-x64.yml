@@ -30,19 +30,20 @@ jobs:
           dotnet publish BabelDeck.csproj
           --configuration Release
           -r win-x64
-          /p:PublishProfile=Release-win-x64
+          --self-contained false
+          -o ./publish
 
       - name: Package publish output
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $publishDir = "D:\Dev\Babel-Deck\bin\Release\net10.0"
+          $publishDir = "${{ github.workspace }}/publish"
           if (-not (Test-Path $publishDir)) {
             throw "Publish output not found at $publishDir"
           }
 
-          New-Item -ItemType Directory -Path "artifacts" -Force | Out-Null
-          $zipPath = "artifacts/Babel-Player-$tag-win-x64.zip"
+          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+          $zipPath = "dist/Babel-Deck-$tag-win-x64.zip"
           Compress-Archive -Path "$publishDir/*" -DestinationPath $zipPath -Force
           "ZIP_PATH=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Append
 

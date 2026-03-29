@@ -23,12 +23,12 @@ jobs:
       - name: Restore
         run: dotnet restore Babel-Deck.sln
 
-      - name: Build (TreatWarningsAsErrors enforced)
+      - name: Build
         run: dotnet build Babel-Deck.sln --no-restore --configuration Release
 
       - name: Test
         run: >
-          dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj
+          dotnet test BabelDeck.Tests
           --no-build
           --configuration Release
           --logger "trx;LogFileName=results.trx"
