@@ -467,15 +467,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             Stage = SessionWorkflowStage.Transcribed,
             TranscriptPath = transcriptPath,
+            SourceLanguage = result.Language,
             TranscribedAtUtc = nowUtc,
-            StatusMessage = $"Transcribed {result.Segments.Count} segments. Ready for translation.",
+            StatusMessage = $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
         };
 
         _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
         SaveCurrentSession();
     }
 
-    public async Task TranslateTranscriptAsync(string targetLanguage = "en", string sourceLanguage = "es")
+    public async Task TranslateTranscriptAsync(string targetLanguage = "en", string? sourceLanguage = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranscriptPath))
         {
@@ -487,6 +488,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new FileNotFoundException($"Transcript file not found: {CurrentSession.TranscriptPath}");
         }
 
+        var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
+
         _translationService ??= new TranslationService(_log);
 
         var sessionDir = GetSessionDirectory();
@@ -496,12 +499,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var fileName = Path.GetFileNameWithoutExtension(CurrentSession.TranscriptPath);
         var translationPath = Path.Combine(translationDir, $"{fileName}_{targetLanguage}.json");
 
-        _log.Info($"Starting translation: {CurrentSession.TranscriptPath} ({sourceLanguage} -> {targetLanguage})");
+        _log.Info($"Starting translation: {CurrentSession.TranscriptPath} ({src} -> {targetLanguage})");
 
         var result = await _translationService.TranslateAsync(
             CurrentSession.TranscriptPath,
             translationPath,
-            sourceLanguage,
+            src,
             targetLanguage);
 
         if (!result.Success)
@@ -516,13 +519,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             Stage = SessionWorkflowStage.Translated,
             TranslationPath = translationPath,
-            SourceLanguage = sourceLanguage,
+            SourceLanguage = src,
             TargetLanguage = targetLanguage,
             TranslatedAtUtc = nowUtc,
             StatusMessage = $"Translated {result.Segments.Count} segments to {targetLanguage}. Ready for TTS/dubbing.",
         };
 
-        _log.Info($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
+        _log.Info($"Translation complete: {result.Segments.Count} segments, {src} -> {targetLanguage}");
         SaveCurrentSession();
     }
 

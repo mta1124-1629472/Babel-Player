@@ -22,7 +22,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnVideoHandleReady(object? sender, IntPtr hwnd)
+    private void OnVideoHandleReady(object? sender, IntPtr hwnd)
     {
         if (DataContext is MainWindowViewModel vm)
         {
@@ -34,24 +34,12 @@ public partial class MainWindow : Window
                     _embeddedTransport = embedded;
                     embedded.AttachToWindow(hwnd);
 
-                    // Auto-load test video for smoke testing
-                    var testVideo = @"D:\Dev\Babel-Deck\test-assets\video\sample.mp4";
-                    var testTranscript = @"D:\Dev\Babel-Deck\test-assets\transcripts\sample.json";
-                    var testTranslation = @"D:\Dev\Babel-Deck\test-assets\transcripts\sample-translation.json";
-
-                    if (System.IO.File.Exists(testVideo))
+                    // Resume prior session if media is already loaded
+                    var ingestedPath = vm.Coordinator.CurrentSession.IngestedMediaPath;
+                    if (!string.IsNullOrEmpty(ingestedPath) && System.IO.File.Exists(ingestedPath))
                     {
-                        vm.Coordinator.LoadMedia(testVideo);
-                        vm.Coordinator.InjectTestTranscript(testTranscript, testTranslation);
-
-                        var ingestedPath = vm.Coordinator.CurrentSession.IngestedMediaPath;
-                        if (!string.IsNullOrEmpty(ingestedPath) && System.IO.File.Exists(ingestedPath))
-                            embedded.Load(ingestedPath);
-                        else
-                            embedded.Load(testVideo);
-
+                        embedded.Load(ingestedPath);
                         embedded.Play();
-                        await vm.Playback.LoadSegmentsCommand.ExecuteAsync(null);
                     }
                 }
             }

@@ -209,6 +209,37 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task TranscribeMediaAsync_PersistsDetectedLanguage()
+    {
+        var (coordinator, _, _, _) =
+            await OpenCaseFromTemplateAsync("transcribed", nameof(TranscribeMediaAsync_PersistsDetectedLanguage));
+
+        Assert.NotNull(coordinator.CurrentSession.SourceLanguage);
+        Assert.NotEmpty(coordinator.CurrentSession.SourceLanguage);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task TranslateTranscriptAsync_NoSourceLangParam_UsesSessionLanguage()
+    {
+        // "transcribed" template has SourceLanguage set (after fix); translate without specifying source.
+        var (coordinator, _, _, _) =
+            await OpenCaseFromTemplateAsync("transcribed", nameof(TranslateTranscriptAsync_NoSourceLangParam_UsesSessionLanguage));
+
+        var detectedLang = coordinator.CurrentSession.SourceLanguage;
+        Assert.NotNull(detectedLang);
+
+        await coordinator.TranslateTranscriptAsync();
+
+        Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
+        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
+        Assert.True(File.Exists(coordinator.CurrentSession.TranslationPath));
+        Assert.Equal(detectedLang, coordinator.CurrentSession.SourceLanguage);
+        Assert.Equal("en", coordinator.CurrentSession.TargetLanguage);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task RegenerateSegmentTranslation_ActuallyWritesNewTextToSegment()
     {
         var (coordinator, _, _, _) =

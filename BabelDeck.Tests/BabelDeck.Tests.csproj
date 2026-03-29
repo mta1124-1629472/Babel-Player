@@ -27,8 +27,8 @@
     <None Include="..\native\win-x64\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!-- Copy test media to output directory -->
-  <ItemGroup>
+  <!-- Copy test media to output directory (optional — file may not be committed) -->
+  <ItemGroup Condition="Exists('..\test-assets\video\sample.mp4')">
     <None Include="..\test-assets\video\sample.mp4" Link="test-assets\video\sample.mp4" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -136,6 +136,34 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private async Task RunPipelineAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            StatusText = "Transcribing…";
+            await _coordinator.TranscribeMediaAsync();
+
+            StatusText = "Translating…";
+            await _coordinator.TranslateTranscriptAsync();
+
+            StatusText = "Generating dubbed audio…";
+            await _coordinator.GenerateTtsAsync();
+
+            StatusText = "Loading segments…";
+            await LoadSegmentsAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Pipeline failed: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
     private async Task RegenerateTranslationAsync(WorkflowSegmentState? segment)
     {
         if (segment is null) return;

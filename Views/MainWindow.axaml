@@ -18,7 +18,11 @@
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Babel Deck" VerticalAlignment="Center" />
-                    <Button x:Name="OpenMediaButton" Content="📂 Open Media" Click="OnOpenMediaClick" VerticalAlignment="Center" />
+                    <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" VerticalAlignment="Center" />
+                    <Button Content="Run Pipeline"
+                            Command="{Binding Playback.RunPipelineCommand}"
+                            IsEnabled="{Binding !Playback.IsBusy}"
+                            VerticalAlignment="Center" />
                 </StackPanel>
                 <TextBlock Grid.Column="1" Margin="16,0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                            Text="{Binding Coordinator.CurrentSession.StatusMessage}" />

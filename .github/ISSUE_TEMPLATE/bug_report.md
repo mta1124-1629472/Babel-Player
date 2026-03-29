@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Create a report to help us improve the Babel Player
+about: Create a report to help us improve the Babel Deck
 title: "[BUG]"
 labels: bug, invalid
 assignees: mta1124-1629472, Copilot
@@ -21,13 +21,9 @@ Please describe your system's hardware "mixture" so we can analyze the allocatio
 - **CPU:** (e.g., AMD Ryzen 5900X - No iGPU)
 - **iGPU:** (e.g., Intel Iris Xe - Drivers Installed [Yes/No])
 - **dGPU:** (e.g., NVIDIA RTX 4080 - 16GB VRAM)
-- **NPU:** (e.g., Intel AI Boost / None)
+- **NPU:**
 - **Available System RAM:** (e.g., 32GB)
 
-##  AI Settings
-- **Execution Target:** (Auto / Cloud / CPU / GPU / NPU)
-- **TTS Provider:** (Gemini / Piper)
-- **Transcription Model:** (Whisper Base / Medium / Large)
 
 ##  Observed Behavior
 - **Expected:** (What should have happened)
@@ -35,10 +31,10 @@ Please describe your system's hardware "mixture" so we can analyze the allocatio
 
 ## 📄 Logs & Screenshots
 If applicable, add screenshots to help explain your problem. 
-Please attach the terminal output or the log file from: `%LocalAppData%/BabelPlayer/logs/`
+Please attach the terminal output or the log file from: `%LocalAppData%/BabelDeck/logs/`
 
 ##  Environment
-- **Babel Player Version:** (e.g., v0.1.2-alpha)
+- **Babel Deck Version:** (e.g., v0.1.2-alpha)
 - **OS:** (e.g., Windows 11 23H2)
 - **Driver Version:** (e.g., NVIDIA 551.23 / Intel 31.0.101)
 
