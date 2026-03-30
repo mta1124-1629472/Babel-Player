@@ -587,6 +587,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
             var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
+            // NOTE: "segments", "id", "translatedText" — these property names are part of an explicit
+            // Python/C# artifact contract. Must match TranslationService.py output exactly.
             var segments = translationData.GetProperty("segments");
 
             foreach (var seg in segments.EnumerateArray())
@@ -661,6 +663,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
         var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
         
+        // NOTE: "segments", "id", "translatedText" — Python/C# artifact contract.
         var segments = translationData.GetProperty("segments");
         string? segmentText = null;
         
@@ -733,6 +736,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
         var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
         
+        // NOTE: "segments", "id", "text" — Python/C# artifact contract.
         var segments = translationData.GetProperty("segments");
         string? sourceText = null;
         
@@ -791,12 +795,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         var segments = new List<WorkflowSegmentState>();
 
+        // NOTE: Transcript JSON format (from TranscriptionService) — Python/C# artifact contract:
+        // "segments", "start", "end", "text"
         var transcriptJson = await File.ReadAllTextAsync(CurrentSession.TranscriptPath);
         var transcriptData = JsonSerializer.Deserialize<JsonElement>(transcriptJson);
         var transcriptSegments = transcriptData.GetProperty("segments");
 
         var ttsSegmentPaths = CurrentSession.TtsSegmentAudioPaths;
 
+        // NOTE: Translation JSON format (from TranslationService) — Python/C# artifact contract:
+        // "segments", "id", "text", "translatedText"
         Dictionary<string, string>? translationTexts = null;
         if (!string.IsNullOrEmpty(CurrentSession.TranslationPath) && File.Exists(CurrentSession.TranslationPath))
         {

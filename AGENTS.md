@@ -126,6 +126,19 @@ Do not hard-code WSL-only assumptions or introduce deployment complexity that ou
 Do not scatter product state across views, random services, and helper classes.
 A clear coordinator or equivalent owner should drive workflow progression.
 
+### 12. Treat Python/C# boundary field names as explicit serialization contracts
+Python/C# boundary field names are an explicit serialization contract — not an implementation detail.
+
+Do not rely on implicit .NET casing assumptions (PascalCase by default) when crossing the Python/C# boundary.
+When Python emits snake_case or camelCase, C# consumers must match that contract deliberately with hardcoded property names.
+Any change to cross-language JSON/artifact field names must be updated on both producer (Python) and consumer (C#) sides together.
+
+This applies to:
+- JSON files written by Python scripts and consumed by C#
+- Dynamic JSON parsing via `GetProperty()` with string literals
+- DTOs and typed deserialization
+- Dictionary keys crossing the boundary
+
 ---
 
 ## Allowed Work

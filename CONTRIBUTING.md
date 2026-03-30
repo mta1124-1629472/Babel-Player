@@ -168,6 +168,17 @@ When touching Python-backed inference work:
 - avoid baking WSL-only assumptions into the main app unless the current milestone explicitly requires them
 - treat containers and NVIDIA-managed serving as optional deployment paths until the local workflow has been proven
 - keep model downloads, runtime assets, and application source concerns separate
+- **JSON field contracts:** Python/C# boundary field names are explicit serialization contracts — not implementation details. Do not rely on implicit .NET casing. When Python emits snake_case or camelCase, C# must match deliberately. Any change to cross-language JSON field names must be updated on both sides together.
+
+### JSON artifact contracts
+
+When Python writes JSON that C# reads, the field names form an explicit contract:
+
+- Python: writes `translatedText`, `sourceLanguage`, `segments`
+- C#: reads via `GetProperty("translatedText")` or typed DTOs with matching names
+
+Changes to these field names must be made on both Python (producer) and C# (consumer) sides simultaneously.
+Do not use implicit .NET PascalCase conventions at Python/C# boundaries.
 
 ### Historical preservation
 

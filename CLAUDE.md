@@ -51,3 +51,4 @@ Both skills are active for this session and should be used throughout:
 - **Smoke notes:** Live in `docs/smoke/milestone-NN-label.md`. Status must be `complete`, `partial`, or `failed` — nothing vague.
 - **Scope discipline:** AGENTS.md rules are non-negotiable. Refactors, abstractions, and scope expansion require explicit justification against the current milestone.
 - **Fake readiness is forbidden:** Use explicit placeholders or disabled states — never silent fallback or pretend-complete UI.
+- **Python/C# JSON contracts:** Field names crossing the Python/C# boundary are explicit serialization contracts. Do not rely on implicit .NET casing. Python emits camelCase/snake_case, C# must match with hardcoded strings or explicit `[JsonPropertyName]` attributes.
