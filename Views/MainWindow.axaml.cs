@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -20,6 +21,24 @@ public partial class MainWindow : Window
         {
             videoView.HandleReady += OnVideoHandleReady;
         }
+    }
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (DataContext is MainWindowViewModel vm)
+        {
+            vm.Playback.PropertyChanged += OnPlaybackPropertyChanged;
+        }
+    }
+
+    private void OnPlaybackPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(EmbeddedPlaybackViewModel.SelectedSegment)) return;
+        var item = (sender as EmbeddedPlaybackViewModel)?.SelectedSegment;
+        if (item == null) return;
+        var list = this.FindControl<ListBox>("SegmentList");
+        list?.ScrollIntoView(item);
     }
 
     private void OnVideoHandleReady(object? sender, IntPtr hwnd)

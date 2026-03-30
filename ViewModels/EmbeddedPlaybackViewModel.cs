@@ -16,6 +16,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private readonly SessionWorkflowCoordinator _coordinator;
     private string? _lastKnownSourceMediaPath;
     private bool _isUpdatingPositionFromTimer;
+    private bool _isUpdatingActiveSegment;
     private WorkflowSegmentState? _lastDubbedSegment;
 
     [ObservableProperty]
@@ -93,7 +94,17 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         SourcePositionMs = player.CurrentTime;
         _isUpdatingPositionFromTimer = false;
 
+        UpdateActiveSegment();
         if (IsDubModeOn) UpdateDubMode();
+    }
+
+    private void UpdateActiveSegment()
+    {
+        var currentSeg = FindSegmentAt(SourcePositionMs / 1000.0);
+        if (currentSeg?.SegmentId == SelectedSegment?.SegmentId) return;
+        _isUpdatingActiveSegment = true;
+        SelectedSegment = currentSeg;
+        _isUpdatingActiveSegment = false;
     }
 
     partial void OnSourcePositionMsChanged(double value)
@@ -104,6 +115,48 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         {
             _coordinator.StopTtsPlayback();
             _lastDubbedSegment = null;
+        }
+    }
+
+    partial void OnSelectedSegmentChanged(WorkflowSegmentState? value)
+    {
+        if (_isUpdatingActiveSegment || value == null || !IsSourceMediaLoaded) return;
+        _ = SeekAndPlayAsync(value);
+    }
+
+    private async Task SeekAndPlayAsync(WorkflowSegmentState segment)
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null)
+        {
+            // Player not yet initialised — fall back to full load path
+            await PlaySourceAtSegmentAsync(segment);
+            return;
+        }
+
+        player.Seek((long)(segment.StartSeconds * 1000));
+
+        if (IsSourcePaused)
+        {
+            try
+            {
+                await Task.Run(() => player.Play());
+                IsSourcePaused = false;
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Play failed: {ex.Message}";
+                return;
+            }
+        }
+
+        // Immediately sync dub mode to the new segment without waiting for the next timer tick
+        if (IsDubModeOn)
+        {
+            _coordinator.StopTtsPlayback();
+            _lastDubbedSegment = segment;
+            if (segment.HasTtsAudio)
+                _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId);
         }
     }
 
@@ -155,6 +208,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                     // Media switched — auto-play triggered by MainWindow code-behind
                     IsSourcePaused = false;
                     _lastDubbedSegment = null;
+                    _isUpdatingActiveSegment = true;
+                    SelectedSegment = null;
+                    _isUpdatingActiveSegment = false;
                     _ = LoadSegmentsAsync();
                 }
                 break;

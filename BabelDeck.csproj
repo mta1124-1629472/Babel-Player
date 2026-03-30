@@ -32,7 +32,9 @@
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
   </None>
+</ItemGroup>
 
+<ItemGroup Condition="Exists('tools\win-x64\ffmpeg.exe')">
   <None Include="tools\win-x64\ffmpeg.exe">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
