@@ -201,6 +201,24 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         }
     }
 
+    public double Volume
+    {
+        get
+        {
+            if (_disposed || _handle == IntPtr.Zero) return 1.0;
+            if (_mpv_get_property_string!(_handle, "volume", out string? volStr) >= 0 &&
+                double.TryParse(volStr, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out double vol))
+                return Math.Clamp(vol / 100.0, 0.0, 1.0);
+            return 1.0;
+        }
+        set
+        {
+            if (_disposed || _handle == IntPtr.Zero) return;
+            _mpv_command_string!(_handle, $"set volume {Math.Clamp(value, 0.0, 1.0) * 100:F0}");
+        }
+    }
+
     public bool HasEnded
     {
         get

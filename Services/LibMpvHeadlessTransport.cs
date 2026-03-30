@@ -305,6 +305,13 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         }
     }
     
+    private double _volume = 1.0;
+    public double Volume
+    {
+        get => _volume;
+        set => _volume = Math.Clamp(value, 0.0, 1.0);
+    }
+
     public bool HasEnded
     {
         get

@@ -81,16 +81,35 @@
             </Border>
 
             <!-- Column 1: Video + controls -->
-            <Grid Grid.Column="1" RowDefinitions="*,Auto,Auto">
+            <Grid Grid.Column="1" RowDefinitions="*,Auto,Auto,Auto">
 
                 <!-- Video surface -->
                 <Border Grid.Row="0" Background="Black" Margin="4">
                     <v:MpvVideoView x:Name="VideoView" />
                 </Border>
 
-                <!-- Playback controls -->
+                <!-- Scrub bar -->
                 <Border Grid.Row="1" Padding="8,4">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <TextBlock Grid.Column="0" Text="{Binding Playback.SourcePositionFormatted}"
+                                   VerticalAlignment="Center" FontSize="11" Opacity="0.7" Width="36" />
+                        <Slider Grid.Column="1"
+                                Minimum="0"
+                                Maximum="{Binding Playback.SourceDurationMs}"
+                                Value="{Binding Playback.SourcePositionMs, Mode=TwoWay}"
+                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="{Binding Playback.SourceDurationFormatted}"
+                                   VerticalAlignment="Center" FontSize="11" Opacity="0.7" Width="36" TextAlignment="Right" />
+                    </Grid>
+                </Border>
+
+                <!-- Playback controls -->
+                <Border Grid.Row="2" Padding="8,4">
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <Button Content="{Binding Playback.PlayPauseSourceLabel}"
+                                Command="{Binding Playback.PlayPauseSourceCommand}"
+                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
                         <Button Content="▶ Source"
                                 Command="{Binding Playback.PlaySourceAtSegmentCommand}"
                                 CommandParameter="{Binding Playback.SelectedSegment}"
@@ -98,9 +117,10 @@
                         <Button Content="▶ Dubbed"
                                 Command="{Binding Playback.PlayDubbedSegmentCommand}"
                                 CommandParameter="{Binding Playback.SelectedSegment}"
-                                IsEnabled="{Binding Playback.SelectedSegment, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                IsEnabled="{Binding Playback.CanPlayDubbedSegment}" />
                         <Button Content="▶▶ All Dubbed"
-                                Command="{Binding Playback.PlayAllDubbedCommand}" />
+                                Command="{Binding Playback.PlayAllDubbedCommand}"
+                                IsEnabled="{Binding Playback.HasSegments}" />
                         <Button Content="⏹ Stop"
                                 Command="{Binding Playback.StopPlaybackCommand}" />
                         <Separator />
@@ -108,11 +128,17 @@
                                 Command="{Binding Playback.RegenerateTranslationCommand}"
                                 CommandParameter="{Binding Playback.SelectedSegment}"
                                 IsEnabled="{Binding Playback.SelectedSegment, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                        <Separator />
+                        <TextBlock Text="Vol" VerticalAlignment="Center" FontSize="11" Opacity="0.7" />
+                        <Slider Minimum="0" Maximum="1"
+                                Value="{Binding Playback.SourceVolume, Mode=TwoWay}"
+                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                Width="80" VerticalAlignment="Center" />
                     </StackPanel>
                 </Border>
 
                 <!-- Status bar -->
-                <Border Grid.Row="2" Padding="8,4" Background="#10808080">
+                <Border Grid.Row="3" Padding="8,4" Background="#10808080">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="{Binding Playback.StatusText}"
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="12" />

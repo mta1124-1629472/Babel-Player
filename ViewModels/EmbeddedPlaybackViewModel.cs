@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Babel.Deck.Models;
@@ -12,15 +13,15 @@ namespace Babel.Deck.ViewModels;
 public partial class EmbeddedPlaybackViewModel : ViewModelBase
 {
     private readonly SessionWorkflowCoordinator _coordinator;
+    private string? _lastKnownSourceMediaPath;
+    private bool _isUpdatingPositionFromTimer;
 
     [ObservableProperty]
     private ObservableCollection<WorkflowSegmentState> _segments = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanPlayDubbedSegment))]
     private WorkflowSegmentState? _selectedSegment;
-
-    [ObservableProperty]
-    private bool _isSourcePlaying;
 
     [ObservableProperty]
     private bool _hasSegments;
@@ -31,10 +32,34 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isBusy;
 
+    [ObservableProperty]
+    private bool _isSourceMediaLoaded;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlayPauseSourceLabel))]
+    private bool _isSourcePaused = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SourcePositionFormatted))]
+    private double _sourcePositionMs;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SourceDurationFormatted))]
+    private double _sourceDurationMs;
+
+    [ObservableProperty]
+    private double _sourceVolume = 1.0;
+
     public EmbeddedPlaybackViewModel(SessionWorkflowCoordinator coordinator)
     {
         _coordinator = coordinator;
+        _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
+        _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        timer.Tick += OnPositionTimerTick;
+        timer.Start();
     }
 
     public SessionWorkflowCoordinator Coordinator => _coordinator;
@@ -42,6 +67,40 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public PlaybackState PlaybackState => _coordinator.PlaybackState;
 
     public string? ActiveTtsSegmentId => _coordinator.ActiveTtsSegmentId;
+
+    public bool CanPlayDubbedSegment => SelectedSegment?.HasTtsAudio == true;
+
+    public string PlayPauseSourceLabel => IsSourcePaused ? "▶ Play" : "⏸ Pause";
+
+    public string SourcePositionFormatted => FormatMs(SourcePositionMs);
+    public string SourceDurationFormatted => FormatMs(SourceDurationMs);
+
+    private static string FormatMs(double ms) =>
+        ms <= 0 ? "0:00" : TimeSpan.FromMilliseconds(ms).ToString(@"m\:ss");
+
+    private void OnPositionTimerTick(object? sender, EventArgs e)
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null || player.Duration == 0) return;
+
+        _isUpdatingPositionFromTimer = true;
+        SourceDurationMs = player.Duration;
+        SourcePositionMs = player.CurrentTime;
+        _isUpdatingPositionFromTimer = false;
+    }
+
+    partial void OnSourcePositionMsChanged(double value)
+    {
+        if (_isUpdatingPositionFromTimer) return;
+        _coordinator.SourceMediaPlayer?.Seek((long)value);
+    }
+
+    partial void OnSourceVolumeChanged(double value)
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player != null)
+            player.Volume = value;
+    }
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -53,6 +112,48 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             case nameof(SessionWorkflowCoordinator.ActiveTtsSegmentId):
                 OnPropertyChanged(nameof(ActiveTtsSegmentId));
                 break;
+            case nameof(SessionWorkflowCoordinator.CurrentSession):
+                var newPath = _coordinator.CurrentSession.SourceMediaPath;
+                IsSourceMediaLoaded = !string.IsNullOrEmpty(_coordinator.CurrentSession.IngestedMediaPath);
+                if (newPath != _lastKnownSourceMediaPath)
+                {
+                    _lastKnownSourceMediaPath = newPath;
+                    // Media switched — auto-play triggered by MainWindow code-behind
+                    IsSourcePaused = false;
+                    _ = LoadSegmentsAsync();
+                }
+                break;
+        }
+    }
+
+    [RelayCommand]
+    private async Task PlayPauseSourceAsync()
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null)
+        {
+            var ingestedPath = _coordinator.CurrentSession.IngestedMediaPath;
+            if (string.IsNullOrEmpty(ingestedPath)) return;
+            player = _coordinator.GetOrCreateSourcePlayer();
+            player.Load(ingestedPath);
+        }
+
+        if (IsSourcePaused)
+        {
+            try
+            {
+                await Task.Run(() => player.Play());
+                IsSourcePaused = false;
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Play failed: {ex.Message}";
+            }
+        }
+        else
+        {
+            player.Pause();
+            IsSourcePaused = true;
         }
     }
 
@@ -80,14 +181,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         if (segment is null) return;
         try
         {
-            IsSourcePlaying = true;
             StatusText = $"Playing source at {segment.StartSeconds:F1}s…";
             await _coordinator.PlaySourceMediaAtSegmentAsync(segment.SegmentId);
+            IsSourcePaused = false;
         }
         catch (Exception ex)
         {
             StatusText = $"Source playback failed: {ex.Message}";
-            IsSourcePlaying = false;
         }
     }
 
@@ -131,7 +231,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         _coordinator.StopPlayback();
         _coordinator.StopSourceMedia();
-        IsSourcePlaying = false;
+        IsSourcePaused = true;
         StatusText = "Playback stopped.";
     }
 

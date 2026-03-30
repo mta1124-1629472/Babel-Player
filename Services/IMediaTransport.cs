@@ -47,6 +47,11 @@ public interface IMediaTransport : IDisposable
     bool HasEnded { get; }
     
     /// <summary>
+    /// Gets or sets the playback volume (0.0 = silent, 1.0 = 100%).
+    /// </summary>
+    double Volume { get; set; }
+
+    /// <summary>
     /// Event raised when media playback ends.
     /// </summary>
     event EventHandler? Ended;

@@ -156,7 +156,8 @@ asyncio.run(translate())
             _log.Info($"Translation completed: {outputJsonPath}");
 
             var jsonContent = await File.ReadAllTextAsync(outputJsonPath);
-            var translationData = JsonSerializer.Deserialize<TranslationJson>(jsonContent);
+            var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var translationData = JsonSerializer.Deserialize<TranslationJson>(jsonContent, jsonOptions);
 
             var segments = new List<TranslatedSegment>();
             if (translationData?.Segments != null)
@@ -288,7 +289,8 @@ asyncio.run(translate())
             _log.Info($"Single segment translation completed: {translationJsonPath}");
 
             var jsonContent = await File.ReadAllTextAsync(translationJsonPath);
-            var translationData = JsonSerializer.Deserialize<TranslationJson>(jsonContent);
+            var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var translationData = JsonSerializer.Deserialize<TranslationJson>(jsonContent, jsonOptions);
 
             var segments = new List<TranslatedSegment>();
             if (translationData?.Segments != null)
