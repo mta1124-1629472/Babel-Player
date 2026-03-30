@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Babel.Player.Services;
@@ -34,11 +35,28 @@ public partial class MainWindow : Window
 
     private void OnPlaybackPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(EmbeddedPlaybackViewModel.SelectedSegment)) return;
-        var item = (sender as EmbeddedPlaybackViewModel)?.SelectedSegment;
-        if (item == null) return;
-        var list = this.FindControl<ListBox>("SegmentList");
-        list?.ScrollIntoView(item);
+        switch (e.PropertyName)
+        {
+            case nameof(EmbeddedPlaybackViewModel.SelectedSegment):
+                var item = (sender as EmbeddedPlaybackViewModel)?.SelectedSegment;
+                if (item != null)
+                    this.FindControl<ListBox>("SegmentList")?.ScrollIntoView(item);
+                break;
+            case nameof(EmbeddedPlaybackViewModel.IsFullscreen):
+                if (DataContext is MainWindowViewModel vm)
+                    WindowState = vm.Playback.IsFullscreen ? WindowState.FullScreen : WindowState.Normal;
+                break;
+        }
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key == Key.Escape && DataContext is MainWindowViewModel vm && vm.Playback.IsFullscreen)
+        {
+            vm.Playback.IsFullscreen = false;
+            e.Handled = true;
+        }
     }
 
     private void OnVideoHandleReady(object? sender, IntPtr hwnd)

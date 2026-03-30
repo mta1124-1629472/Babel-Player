@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -50,11 +52,24 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private double _sourceDurationMs;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(VolumeIconLabel))]
     private double _sourceVolume = 1.0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(VolumeIconLabel))]
+    private bool _isMuted;
+
+    [ObservableProperty]
+    private bool _isFullscreen;
+
+    [ObservableProperty]
+    private string _selectedPlaybackRate = "1x";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DubModeLabel))]
     private bool _isDubModeOn;
+
+    private double _preMuteVolume = 1.0;
 
     public EmbeddedPlaybackViewModel(SessionWorkflowCoordinator coordinator)
     {
@@ -74,7 +89,18 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     public string? ActiveTtsSegmentId => _coordinator.ActiveTtsSegmentId;
 
-    public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6" : "\u23F8";
+    public static IReadOnlyList<string> PlaybackRateOptions { get; } =
+        ["0.25x", "0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x"];
+
+    public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6\uFE0E" : "\u23F8\uFE0E";
+
+    public string VolumeIconLabel => IsMuted || SourceVolume == 0
+        ? "\U0001F507"
+        : SourceVolume < 0.10
+            ? "\U0001F508"
+            : SourceVolume < 0.51
+                ? "\U0001F509"
+                : "\U0001F50A";
 
     public string DubModeLabel => IsDubModeOn ? "🎙 Dub: On" : "🎙 Dub: Off";
 
@@ -162,9 +188,19 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnSourceVolumeChanged(double value)
     {
+        if (IsMuted && value > 0) IsMuted = false;
         var player = _coordinator.SourceMediaPlayer;
-        if (player != null)
-            player.Volume = value;
+        if (player != null) player.Volume = value;
+    }
+
+    partial void OnSelectedPlaybackRateChanged(string value)
+    {
+        var num = value.TrimEnd('x');
+        if (double.TryParse(num, NumberStyles.Float, CultureInfo.InvariantCulture, out double rate))
+        {
+            var player = _coordinator.SourceMediaPlayer;
+            if (player != null) player.PlaybackRate = rate;
+        }
     }
 
     partial void OnIsDubModeOnChanged(bool value)
@@ -250,6 +286,43 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     [RelayCommand]
     private void ToggleDubMode() => IsDubModeOn = !IsDubModeOn;
+
+    [RelayCommand]
+    private void SkipBackward()
+    {
+        if (!HasSegments) return;
+        var currentSec = SourcePositionMs / 1000.0;
+        var prev = Segments.LastOrDefault(s => s.EndSeconds <= currentSec - 0.1);
+        if (prev != null) _ = SeekAndPlayAsync(prev);
+    }
+
+    [RelayCommand]
+    private void SkipForward()
+    {
+        if (!HasSegments) return;
+        var currentSec = SourcePositionMs / 1000.0;
+        var next = Segments.FirstOrDefault(s => s.StartSeconds > currentSec + 0.1);
+        if (next != null) _ = SeekAndPlayAsync(next);
+    }
+
+    [RelayCommand]
+    private void ToggleMute()
+    {
+        if (IsMuted)
+        {
+            IsMuted = false;
+            SourceVolume = _preMuteVolume > 0 ? _preMuteVolume : 1.0;
+        }
+        else
+        {
+            _preMuteVolume = SourceVolume;
+            IsMuted = true;
+            SourceVolume = 0;
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleFullscreen() => IsFullscreen = !IsFullscreen;
 
     [RelayCommand]
     private async Task LoadSegmentsAsync()

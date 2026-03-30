@@ -14,7 +14,8 @@
     <Grid RowDefinitions="Auto,*,Auto">
 
         <!-- Top: Session info bar -->
-        <Border Grid.Row="0" Padding="12,8" Background="#20808080">
+        <Border Grid.Row="0" Padding="12,8" Background="#20808080"
+                IsVisible="{Binding !Playback.IsFullscreen}">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Babel Player" VerticalAlignment="Center" />
@@ -35,7 +36,8 @@
         <Grid Grid.Row="1" ColumnDefinitions="300,*">
 
             <!-- Column 0: Segment list -->
-            <Border Grid.Column="0" BorderBrush="#40808080" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" BorderBrush="#40808080" BorderThickness="0,0,1,0"
+                    IsVisible="{Binding !Playback.IsFullscreen}">
                 <Grid RowDefinitions="Auto,*">
                     <Border Grid.Row="0" Padding="12,8" Background="#10808080">
                         <Grid ColumnDefinitions="*,Auto">
@@ -107,23 +109,39 @@
                 <!-- Playback controls -->
                 <Border Grid.Row="2" Padding="8,4">
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <Button Content="&#x23EA;&#xFE0E;"
+                                Command="{Binding Playback.SkipBackwardCommand}"
+                                IsEnabled="{Binding Playback.HasSegments}" />
                         <Button Content="{Binding Playback.PlayPauseSourceLabel}"
                                 Command="{Binding Playback.PlayPauseSourceCommand}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
+                        <Button Content="&#x23E9;&#xFE0E;"
+                                Command="{Binding Playback.SkipForwardCommand}"
+                                IsEnabled="{Binding Playback.HasSegments}" />
                         <Button Content="{Binding Playback.DubModeLabel}"
                                 Command="{Binding Playback.ToggleDubModeCommand}"
                                 IsEnabled="{Binding Playback.HasSegments}" />
                         <Separator />
-                        <TextBlock Text="Vol" VerticalAlignment="Center" FontSize="11" Opacity="0.7" />
+                        <Button Content="{Binding Playback.VolumeIconLabel}"
+                                Command="{Binding Playback.ToggleMuteCommand}"
+                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
                         <Slider Minimum="0" Maximum="1"
                                 Value="{Binding Playback.SourceVolume, Mode=TwoWay}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                 Width="80" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding Playback.PlaybackRateOptions}"
+                                  SelectedItem="{Binding Playback.SelectedPlaybackRate, Mode=TwoWay}"
+                                  Width="70"
+                                  IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
+                        <Button Content="&#x26F6;"
+                                Command="{Binding Playback.ToggleFullscreenCommand}"
+                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
                     </StackPanel>
                 </Border>
 
                 <!-- Status bar -->
-                <Border Grid.Row="3" Padding="8,4" Background="#10808080">
+                <Border Grid.Row="3" Padding="8,4" Background="#10808080"
+                        IsVisible="{Binding !Playback.IsFullscreen}">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="{Binding Playback.StatusText}"
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="12" />
@@ -136,7 +154,8 @@
         </Grid>
 
         <!-- Bottom: Persistence info -->
-        <Border Grid.Row="2" Padding="8,4" Background="#10808080">
+        <Border Grid.Row="2" Padding="8,4" Background="#10808080"
+                IsVisible="{Binding !Playback.IsFullscreen}">
             <TextBlock Text="{Binding Coordinator.PersistenceStatus}" FontSize="11" Opacity="0.5" />
         </Border>
 

@@ -52,6 +52,11 @@ public interface IMediaTransport : IDisposable
     double Volume { get; set; }
 
     /// <summary>
+    /// Gets or sets the playback rate (1.0 = normal speed, 2.0 = double speed, etc.)
+    /// </summary>
+    double PlaybackRate { get; set; }
+
+    /// <summary>
     /// Event raised when media playback ends.
     /// </summary>
     event EventHandler? Ended;

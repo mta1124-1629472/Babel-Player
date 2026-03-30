@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 
@@ -215,6 +216,19 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             if (_disposed || _handle == IntPtr.Zero) return;
             _mpv_command_string!(_handle, $"set volume {Math.Clamp(value, 0.0, 1.0) * 100:F0}");
         }
+    }
+
+    public double PlaybackRate
+    {
+        get
+        {
+            if (_disposed || _handle == IntPtr.Zero) return 1.0;
+            var str = GetPropertyString("speed");
+            if (str != null && double.TryParse(str, NumberStyles.Float, CultureInfo.InvariantCulture, out double spd))
+                return spd;
+            return 1.0;
+        }
+        set => _mpv_command_string!(_handle, $"set speed {Math.Clamp(value, 0.1, 4.0):F2}");
     }
 
     public bool HasEnded
