@@ -97,6 +97,8 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresFfmpeg")]
+    [Trait("Category", "RequiresPython")]
     public async Task TranscribeMedia_ThenReopen_ReusesTranscript()
     {
         var (coordinator, _, _, _) =
@@ -109,6 +111,8 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresFfmpeg")]
+    [Trait("Category", "RequiresPython")]
     public async Task ReopenWithMissingTranscript_SurfacesDegradedState()
     {
         var (coordinator, store, log, _) =
@@ -128,6 +132,8 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresPython")]
+    [Trait("Category", "RequiresExternalTranslation")]
     public async Task TranslateTranscript_ThenReopen_ReusesTranslation()
     {
         var (coordinator, _, _, _) =
@@ -142,6 +148,8 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresPython")]
+    [Trait("Category", "RequiresExternalTranslation")]
     public async Task ReopenWithMissingTranslation_SurfacesDegradedState()
     {
         var (coordinator, store, log, _) =
@@ -161,6 +169,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresPython")]
     public async Task GenerateTts_ThenReopen_ReusesAudio()
     {
         var (coordinator, _, _, _) =
@@ -175,6 +184,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresPython")]
     public async Task ReopenWithMissingTts_SurfacesDegradedState()
     {
         var (coordinator, store, log, _) =
@@ -390,6 +400,7 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresPython")]
     public async Task PlaySourceMediaAtSegment_LoadsAndSeeks()
     {
         var (coordinator, sourcePlayer, _) = await CreateCaseWithSourcePlayerAsync(
@@ -408,6 +419,7 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresPython")]
     public async Task PlaySourceMediaAtSegment_InvalidSegment_Throws()
     {
         var (coordinator, _, _) = await CreateCaseWithSourcePlayerAsync(
@@ -418,6 +430,7 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresPython")]
     public async Task StopSourceMedia_PausesPlayer()
     {
         var (coordinator, sourcePlayer, _) = await CreateCaseWithSourcePlayerAsync(
@@ -433,6 +446,7 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresPython")]
     public async Task SourceMediaPlayer_Property_ReturnsInjectedPlayer()
     {
         var (coordinator, sourcePlayer, _) = await CreateCaseWithSourcePlayerAsync(
@@ -446,6 +460,7 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "RequiresPython")]
     public async Task Dispose_CleansUpSourcePlayer()
     {
         var (coordinator, sourcePlayer, _) = await CreateCaseWithSourcePlayerAsync(
