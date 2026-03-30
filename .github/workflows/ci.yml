@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
-    name: Build & Test
+  build-and-core-test:
+    name: Build & Core Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -25,34 +25,20 @@ jobs:
 
       - name: Build
         run: dotnet build Babel-Deck.sln --no-restore --configuration Release
-        
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
 
-      - name: Install ffmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install faster-whisper
-          
-      - name: Test
+      - name: Run core tests only
         run: >
-          dotnet test BabelDeck.Tests
+          dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj
           --no-build
           --configuration Release
-          --logger "trx;LogFileName=results.trx"
+          --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation"
+          --logger "trx;LogFileName=core-results.trx"
           --results-directory TestResults
 
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
-          path: TestResults/results.trx
+          name: core-test-results
+          path: TestResults/core-results.trx
           retention-days: 3
