@@ -50,15 +50,25 @@ public sealed class SessionSnapshotStore
         }
         catch (Exception ex)
         {
-            _log.Error($"Failed to load session snapshot from {StateFilePath}.", ex);
-            throw;
+            // Non-JSON I/O failures (permissions, locked file, etc.) — degrade gracefully
+            // rather than crashing startup. The corrupt file is left in place for diagnosis.
+            _log.Error($"Failed to load session snapshot from {StateFilePath}. Starting fresh.", ex);
+            return new SessionSnapshotLoadResult(null, $"Failed to load session snapshot: {ex.Message}. A new session was created.");
         }
     }
 
     public void Save(WorkflowSessionSnapshot snapshot)
     {
-        var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
-        File.WriteAllText(StateFilePath, json);
+        try
+        {
+            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
+            File.WriteAllText(StateFilePath, json);
+        }
+        catch (Exception ex)
+        {
+            // Save failure is non-fatal — log and continue. The in-memory session is still valid.
+            _log.Error($"Failed to save session snapshot to {StateFilePath}.", ex);
+        }
     }
 
     private string RecoverUnreadableState(string statusMessage, Exception? ex = null)
