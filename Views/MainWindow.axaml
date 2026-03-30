@@ -4,27 +4,21 @@
         xmlns:v="using:Babel.Player.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="650"
         x:Class="Babel.Player.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/babelplayer.ico"
         Title="Babel Player"
+        Width="1100" Height="650"
         MinWidth="900" MinHeight="500">
 
     <Grid RowDefinitions="Auto,*,Auto">
 
-        <!-- Top: Session info bar -->
+        <!-- Top: Session info bar (title + status only; media buttons live in controls row) -->
         <Border Grid.Row="0" Padding="12,8" Background="#20808080"
                 IsVisible="{Binding !Playback.IsFullscreen}">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Babel Player" VerticalAlignment="Center" />
-                    <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" VerticalAlignment="Center" />
-                    <Button Content="Run Pipeline"
-                            Command="{Binding Playback.RunPipelineCommand}"
-                            IsEnabled="{Binding !Playback.IsBusy}"
-                            VerticalAlignment="Center" />
-                </StackPanel>
+                <TextBlock Grid.Column="0" FontSize="18" FontWeight="SemiBold" Text="Babel Player" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Margin="16,0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                            Text="{Binding Coordinator.CurrentSession.StatusMessage}" />
                 <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.6"
@@ -33,65 +27,92 @@
         </Border>
 
         <!-- Middle: Main content area -->
-        <Grid Grid.Row="1" ColumnDefinitions="300,*">
+        <!-- Column 0 is Auto so it collapses when the segment pane Border is hidden -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
 
-            <!-- Column 0: Segment list -->
-            <Border Grid.Column="0" BorderBrush="#40808080" BorderThickness="0,0,1,0"
-                    IsVisible="{Binding !Playback.IsFullscreen}">
-                <Grid RowDefinitions="Auto,*">
-                    <Border Grid.Row="0" Padding="12,8" Background="#10808080">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" FontWeight="SemiBold" Text="Segments" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Content="Refresh"
-                                    Command="{Binding Playback.LoadSegmentsCommand}" />
-                        </Grid>
-                    </Border>
+            <!-- Column 0: Segment list (collapsible) + pull tab (always visible) -->
+            <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto">
 
-                    <ListBox Grid.Row="1" x:Name="SegmentList"
-                             ItemsSource="{Binding Playback.Segments}"
-                             SelectedItem="{Binding Playback.SelectedSegment}"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Padding="8,6" BorderBrush="#20808080" BorderThickness="0,0,0,1">
-                                    <StackPanel Spacing="4">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" FontWeight="SemiBold"
-                                                       Text="{Binding StartSeconds, StringFormat='⏱ {0:F1}s'}" />
-                                            <TextBlock Grid.Column="1" Opacity="0.5"
-                                                       Text="{Binding EndSeconds, StringFormat='→ {0:F1}s'}" />
-                                        </Grid>
-                                        <TextBlock Text="{Binding SourceText}" TextWrapping="Wrap"
-                                                   Opacity="0.7" FontSize="12" />
-                                        <TextBlock Text="{Binding TranslatedText}" TextWrapping="Wrap"
-                                                   FontSize="12" FontStyle="Italic" />
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock FontSize="11" Opacity="0.5">
-                                                <TextBlock.Text>
-                                                    <MultiBinding StringFormat="TTS: {0}">
-                                                        <Binding Path="HasTtsAudio" />
-                                                    </MultiBinding>
-                                                </TextBlock.Text>
-                                            </TextBlock>
+                <!-- Pane content — collapses to zero width when IsSegmentPaneVisible=false -->
+                <Border Grid.Column="0" Width="300" BorderBrush="#40808080" BorderThickness="0,0,0,0"
+                        IsVisible="{Binding Playback.IsSegmentPaneVisible}">
+                    <Grid RowDefinitions="Auto,*">
+                        <Border Grid.Row="0" Padding="12,8" Background="#10808080">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" FontWeight="SemiBold" Text="Segments" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Content="Refresh"
+                                        Command="{Binding Playback.LoadSegmentsCommand}" />
+                            </Grid>
+                        </Border>
+
+                        <ListBox Grid.Row="1" x:Name="SegmentList"
+                                 ItemsSource="{Binding Playback.Segments}"
+                                 SelectedItem="{Binding Playback.SelectedSegment}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="8,6" BorderBrush="#20808080" BorderThickness="0,0,0,1">
+                                        <StackPanel Spacing="4">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0" FontWeight="SemiBold"
+                                                           Text="{Binding StartSeconds, StringFormat='⏱ {0:F1}s'}" />
+                                                <TextBlock Grid.Column="1" Opacity="0.5"
+                                                           Text="{Binding EndSeconds, StringFormat='→ {0:F1}s'}" />
+                                            </Grid>
+                                            <TextBlock Text="{Binding SourceText}" TextWrapping="Wrap"
+                                                       Opacity="0.7" FontSize="12" />
+                                            <TextBlock Text="{Binding TranslatedText}" TextWrapping="Wrap"
+                                                       FontSize="12" FontStyle="Italic" />
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock FontSize="11" Opacity="0.5">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="TTS: {0}">
+                                                            <Binding Path="HasTtsAudio" />
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                            </StackPanel>
                                         </StackPanel>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </Grid>
-            </Border>
-
-            <!-- Column 1: Video + controls -->
-            <Grid Grid.Column="1" RowDefinitions="*,Auto,Auto,Auto">
-
-                <!-- Video surface -->
-                <Border Grid.Row="0" Background="Black" Margin="4">
-                    <v:MpvVideoView x:Name="VideoView" />
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Border>
 
-                <!-- Scrub bar -->
-                <Border Grid.Row="1" Padding="8,4">
+                <!-- Pull tab — arrow shows which way the pane will move on click:
+                     ◄ = open (collapse left)   ► = closed (expand right)
+                     Hides with the playback controls in fullscreen mode. -->
+                <Button Grid.Column="1"
+                        Content="{Binding Playback.SegmentPaneToggleLabel}"
+                        Command="{Binding Playback.ToggleSegmentPaneCommand}"
+                        IsVisible="{Binding Playback.IsPullTabVisible}"
+                        VerticalAlignment="Center"
+                        Padding="2,20"
+                        BorderBrush="#40808080" BorderThickness="1,1,1,1"
+                        ToolTip.Tip="Toggle segment panel" />
+
+            </Grid>
+
+            <!-- Column 1: Video + controls -->
+            <!-- Controls are in separate rows outside the NativeControlHost area.
+                 Win32 child HWNDs always render above Avalonia's composition layer,
+                 so controls placed inside the video Grid would be visually hidden. -->
+            <Grid Grid.Column="1" x:Name="VideoAreaGrid" RowDefinitions="*,Auto,Auto,Auto">
+
+                <!-- Video surface -->
+                <Grid Grid.Row="0">
+                    <Border Background="Black" Margin="4">
+                        <v:MpvVideoView x:Name="VideoView" />
+                    </Border>
+                    <!-- Transparent overlay to capture PointerMoved events over the native
+                         NativeControlHost (Win32 HWND does not bubble Avalonia input) -->
+                    <Panel x:Name="VideoOverlayPanel" Background="Transparent" />
+                </Grid>
+
+                <!-- Scrub bar (auto-hides in fullscreen; always visible in windowed mode) -->
+                <Border Grid.Row="1" Padding="8,4"
+                        IsVisible="{Binding Playback.IsControlsVisible}">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <TextBlock Grid.Column="0" Text="{Binding Playback.SourcePositionFormatted}"
                                    VerticalAlignment="Center" FontSize="11" Opacity="0.7" Width="36" />
@@ -106,9 +127,17 @@
                     </Grid>
                 </Border>
 
-                <!-- Playback controls -->
-                <Border Grid.Row="2" Padding="8,4">
+                <!-- Playback controls (auto-hides in fullscreen; always visible in windowed mode) -->
+                <Border Grid.Row="2" Padding="8,4"
+                        IsVisible="{Binding Playback.IsControlsVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <!-- Open Media + Run Pipeline live here permanently so they are
+                             accessible in both windowed mode and fullscreen -->
+                        <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" />
+                        <Button Content="Run Pipeline"
+                                Command="{Binding Playback.RunPipelineCommand}"
+                                IsEnabled="{Binding !Playback.IsBusy}" />
+                        <Separator />
                         <Button Content="&#x23EA;&#xFE0E;"
                                 Command="{Binding Playback.SkipBackwardCommand}"
                                 IsEnabled="{Binding Playback.HasSegments}" />

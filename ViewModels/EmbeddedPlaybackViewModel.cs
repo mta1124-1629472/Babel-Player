@@ -60,7 +60,16 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _isMuted;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
     private bool _isFullscreen;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SegmentPaneToggleLabel))]
+    private bool _isSegmentPaneVisible = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
+    private bool _isControlsVisible = true;
 
     [ObservableProperty]
     private string _selectedPlaybackRate = "1x";
@@ -70,6 +79,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _isDubModeOn;
 
     private double _preMuteVolume = 1.0;
+    private bool _preFullscreenSegmentPaneVisible = true;
+
+    private readonly DispatcherTimer _controlsHideTimer;
+    private const int ControlsHideDelayMs = 3000;
 
     public EmbeddedPlaybackViewModel(SessionWorkflowCoordinator coordinator)
     {
@@ -81,6 +94,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         timer.Tick += OnPositionTimerTick;
         timer.Start();
+
+        _controlsHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ControlsHideDelayMs) };
+        _controlsHideTimer.Tick += OnControlsHideTimerTick;
     }
 
     public SessionWorkflowCoordinator Coordinator => _coordinator;
@@ -91,6 +107,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     public static IReadOnlyList<string> PlaybackRateOptions { get; } =
         ["0.25x", "0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x"];
+
+    public string SegmentPaneToggleLabel => IsSegmentPaneVisible ? "\u25C4" : "\u25BA";
+
+    // Visible always in windowed mode; follows controls auto-hide in fullscreen
+    public bool IsPullTabVisible => !IsFullscreen || IsControlsVisible;
 
     public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6\uFE0E" : "\u23F8\uFE0E";
 
@@ -212,6 +233,50 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         }
     }
 
+    partial void OnIsFullscreenChanged(bool value)
+    {
+        if (value)
+        {
+            _preFullscreenSegmentPaneVisible = IsSegmentPaneVisible;
+            IsSegmentPaneVisible = false;
+            NotifyControlsActivity();   // show controls briefly then start countdown
+        }
+        else
+        {
+            IsSegmentPaneVisible = _preFullscreenSegmentPaneVisible;
+            _controlsHideTimer.Stop();
+            IsControlsVisible = true;   // always visible outside fullscreen
+        }
+    }
+
+    partial void OnIsSourcePausedChanged(bool value)
+    {
+        if (value)
+        {
+            _controlsHideTimer.Stop();
+            IsControlsVisible = true;
+        }
+        else
+        {
+            NotifyControlsActivity();
+        }
+    }
+
+    public void NotifyControlsActivity()
+    {
+        IsControlsVisible = true;
+        _controlsHideTimer.Stop();
+        // Only auto-hide in fullscreen; controls are always visible in windowed mode
+        if (!IsSourcePaused && IsFullscreen)
+            _controlsHideTimer.Start();
+    }
+
+    private void OnControlsHideTimerTick(object? sender, EventArgs e)
+    {
+        _controlsHideTimer.Stop();
+        IsControlsVisible = false;
+    }
+
     private WorkflowSegmentState? FindSegmentAt(double positionSeconds)
         => Segments.FirstOrDefault(s => positionSeconds >= s.StartSeconds && positionSeconds < s.EndSeconds);
 
@@ -323,6 +388,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     [RelayCommand]
     private void ToggleFullscreen() => IsFullscreen = !IsFullscreen;
+
+    [RelayCommand]
+    private void ToggleSegmentPane() => IsSegmentPaneVisible = !IsSegmentPaneVisible;
 
     [RelayCommand]
     private async Task LoadSegmentsAsync()

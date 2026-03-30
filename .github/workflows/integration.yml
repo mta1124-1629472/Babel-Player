@@ -35,7 +35,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install faster-whisper googletrans==4.0.0rc1
+          pip install faster-whisper googletrans==3.1.0a0 edge_tts
 
       - name: Restore
         run: dotnet restore Babel-Player.sln

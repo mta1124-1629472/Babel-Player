@@ -30,7 +30,20 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel vm)
         {
             vm.Playback.PropertyChanged += OnPlaybackPropertyChanged;
+
+            // Subscribe to PointerMoved on the transparent overlay Panel that sits above the
+            // NativeControlHost (MpvVideoView). The native Win32 HWND does not bubble Avalonia
+            // pointer events to parent controls, so we capture on the managed overlay instead.
+            var overlay = this.FindControl<Panel>("VideoOverlayPanel");
+            if (overlay is not null)
+                overlay.PointerMoved += OnVideoAreaPointerMoved;
         }
+    }
+
+    private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+            vm.Playback.NotifyControlsActivity();
     }
 
     private void OnPlaybackPropertyChanged(object? sender, PropertyChangedEventArgs e)
