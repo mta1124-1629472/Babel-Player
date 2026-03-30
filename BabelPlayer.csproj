@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <Compile Remove="BabelPlayer.Tests\**" />
-    <Compile Remove="BabelDeck.Tests\**" />
+    <Compile Remove="BabelPlayer.Tests\**" />
   </ItemGroup>
 
   <ItemGroup>
