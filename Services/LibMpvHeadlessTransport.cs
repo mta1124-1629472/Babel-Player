@@ -26,17 +26,19 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
     private delegate int mpv_initialize_delegate(IntPtr handle);
     private delegate int mpv_set_option_string_delegate(IntPtr handle, string name, string value);
     private delegate int mpv_command_string_delegate(IntPtr handle, string command);
-    private delegate int mpv_get_property_string_delegate(IntPtr handle, string name, out string result);
+    private delegate IntPtr mpv_get_property_string_delegate(IntPtr handle, string name);
+    private delegate void mpv_free_delegate(IntPtr data);
     private delegate void mpv_terminate_destroy_delegate(IntPtr handle);
     // Simplified wait event delegate without the output parameter we're not using
     private delegate int mpv_wait_event_delegate(IntPtr handle, double timeout);
-    
+
     // Libmpv function instances (initialized by LoadLibMpvFunctions in constructor)
     private mpv_create_delegate? _mpv_create;
     private mpv_initialize_delegate? _mpv_initialize;
     private mpv_set_option_string_delegate? _mpv_set_option_string;
     private mpv_command_string_delegate? _mpv_command_string;
     private mpv_get_property_string_delegate? _mpv_get_property_string;
+    private mpv_free_delegate? _mpv_free;
     private mpv_terminate_destroy_delegate? _mpv_terminate_destroy;
     private mpv_wait_event_delegate? _mpv_wait_event;
     
@@ -150,8 +152,18 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         _mpv_set_option_string = LoadFunction<mpv_set_option_string_delegate>("mpv_set_option_string");
         _mpv_command_string = LoadFunction<mpv_command_string_delegate>("mpv_command_string");
         _mpv_get_property_string = LoadFunction<mpv_get_property_string_delegate>("mpv_get_property_string");
+        _mpv_free = LoadFunction<mpv_free_delegate>("mpv_free");
         _mpv_terminate_destroy = LoadFunction<mpv_terminate_destroy_delegate>("mpv_terminate_destroy");
         _mpv_wait_event = LoadFunction<mpv_wait_event_delegate>("mpv_wait_event");
+    }
+
+    private string? GetPropertyString(string name)
+    {
+        var ptr = _mpv_get_property_string!(_handle, name);
+        if (ptr == IntPtr.Zero) return null;
+        var str = Marshal.PtrToStringAnsi(ptr);
+        _mpv_free!(ptr);
+        return str;
     }
     
     private T LoadFunction<T>(string functionName) where T : Delegate
@@ -271,36 +283,24 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
     {
         get
         {
-            if (!_isLoaded || _disposed)
-            {
-                return 0;
-            }
-            
-            if (_mpv_get_property_string!(_handle, "time-pos", out string? timePosStr) >= 0 && 
-                double.TryParse(timePosStr, out double timePos))
-            {
+            if (!_isLoaded || _disposed) return 0;
+            var str = GetPropertyString("time-pos");
+            if (str != null && double.TryParse(str, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double timePos))
                 return (long)(timePos * 1000);
-            }
-            
             return 0;
         }
     }
-    
+
     public long Duration
     {
         get
         {
-            if (!_isLoaded || _disposed)
-            {
-                return 0;
-            }
-            
-            if (_mpv_get_property_string!(_handle, "duration", out string? durationStr) >= 0 && 
-                double.TryParse(durationStr, out double duration))
-            {
+            if (!_isLoaded || _disposed) return 0;
+            var str = GetPropertyString("duration");
+            if (str != null && double.TryParse(str, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double duration))
                 return (long)(duration * 1000);
-            }
-            
             return 0;
         }
     }
@@ -316,20 +316,10 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
     {
         get
         {
-            if (!_isLoaded || _disposed)
-            {
-                return false;
-            }
-            
-            // Check if we've received an end file event
-            // In a real implementation, we would poll events
-            // For simplicity, we'll check the property
-            if (_mpv_get_property_string!(_handle, "eof-reached", out string? eofStr) >= 0 && 
-                bool.TryParse(eofStr, out bool eofReached))
-            {
+            if (!_isLoaded || _disposed) return false;
+            var str = GetPropertyString("eof-reached");
+            if (str != null && bool.TryParse(str, out bool eofReached))
                 _hasEnded = eofReached;
-            }
-            
             return _hasEnded;
         }
     }
