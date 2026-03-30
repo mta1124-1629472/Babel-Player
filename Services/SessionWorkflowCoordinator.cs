@@ -21,7 +21,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly IMediaTransport? _injectedSegmentPlayer;
     private IMediaTransport? _segmentPlayer;
     private bool _subscribedToPlayerEvents;
-    private CancellationTokenSource? _sequenceCts;
     private readonly EventHandler? _segmentEndedHandler;
     private readonly EventHandler<Exception>? _segmentErrorHandler;
 
@@ -53,18 +52,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _injectedSourcePlayer = sourcePlayer;
         
         // Create event handler delegates once for proper unsubscription
-        _segmentEndedHandler = (_, _) =>
-        {
-            ActiveTtsSegmentId = null;
-            if (PlaybackState == PlaybackState.PlayingSingleSegment)
-                PlaybackState = PlaybackState.Idle;
-        };
-        _segmentErrorHandler = (_, _) =>
-        {
-            ActiveTtsSegmentId = null;
-            if (PlaybackState == PlaybackState.PlayingSingleSegment)
-                PlaybackState = PlaybackState.Idle;
-        };
+        _segmentEndedHandler = (_, _) => StopTtsPlayback();
+        _segmentErrorHandler = (_, _) => StopTtsPlayback();
     }
 
     private IMediaTransport GetOrCreateSegmentPlayer()
@@ -83,7 +72,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         return _segmentPlayer;
     }
 
-    public async Task PlaySegmentTtsAsync(string segmentId)
+    public async Task PlayTtsForSegmentAsync(string segmentId)
     {
         if (CurrentSession is null)
             throw new InvalidOperationException("No active session.");
@@ -95,14 +84,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         if (!File.Exists(audioPath))
             throw new FileNotFoundException($"TTS audio file not found: {audioPath}", audioPath);
 
-        var oldCts = _sequenceCts;
-        _sequenceCts = null;
-        oldCts?.Cancel();
-        oldCts?.Dispose();
-        
-        _segmentPlayer?.Pause();
-        ActiveTtsSegmentId = null;
-
+        StopTtsPlayback();
         PlaybackState = PlaybackState.PlayingSingleSegment;
 
         var player = GetOrCreateSegmentPlayer();
@@ -111,91 +93,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         await Task.Run(() => player.Play());
     }
 
-    public async Task PlayAllDubbedSegmentsAsync()
+    public void StopTtsPlayback()
     {
-        // Cancel any running single-segment or sequence playback
-        var oldCts = _sequenceCts;
-        _sequenceCts = new CancellationTokenSource();
-        var token = _sequenceCts.Token;
-        oldCts?.Cancel();
-        oldCts?.Dispose();
-
-        PlaybackState = PlaybackState.PlayingSequence;
-
-        try
-        {
-            var segments = await GetSegmentWorkflowListAsync();
-            var dubbed = segments
-                .Where(s => s.HasTtsAudio)
-                .OrderBy(s => s.StartSeconds)
-                .ToList();
-
-            var player = GetOrCreateSegmentPlayer();
-
-            foreach (var segment in dubbed)
-            {
-                token.ThrowIfCancellationRequested();
-
-                var paths = CurrentSession.TtsSegmentAudioPaths;
-                if (paths is null || !paths.TryGetValue(segment.SegmentId, out var audioPath))
-                    continue;
-
-                if (!File.Exists(audioPath))
-                {
-                    _log.Warning($"Segment TTS artifact missing during sequence: {audioPath}");
-                    continue;
-                }
-
-                player.Load(audioPath);
-                ActiveTtsSegmentId = segment.SegmentId;
-                await Task.Run(() => player.Play(), token);
-
-                // Wait for this segment to end or for cancellation
-                // Add timeout protection: use actual TTS audio duration + 10 second grace period
-                var audioDurationSeconds = player.Duration / 1000.0;
-                var maxWaitSeconds = Math.Max(audioDurationSeconds + 10.0, 15.0); // Minimum 15s for edge cases
-                var startTime = DateTimeOffset.UtcNow;
-                
-                while (!player.HasEnded)
-                {
-                    token.ThrowIfCancellationRequested();
-                    
-                    var elapsed = (DateTimeOffset.UtcNow - startTime).TotalSeconds;
-                    if (elapsed > maxWaitSeconds)
-                    {
-                        _log.Warning($"Segment playback timeout after {elapsed:F1}s (expected ~{audioDurationSeconds:F1}s): {segment.SegmentId}");
-                        break;
-                    }
-                    
-                    await Task.Delay(50, token);
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Cancelled by StopPlayback() or a new playback starting — exit cleanly
-        }
-        finally
-        {
-            ActiveTtsSegmentId = null;
-            // Only reset to Idle if still in PlayingSequence — don't overwrite single-segment state
-            if (PlaybackState == PlaybackState.PlayingSequence)
-                PlaybackState = PlaybackState.Idle;
-        }
+        _segmentPlayer?.Pause();
+        ActiveTtsSegmentId = null;
+        PlaybackState = PlaybackState.Idle;
     }
 
     public void StopPlayback()
     {
-        _sequenceCts?.Cancel();
-        try
-        {
-            _segmentPlayer?.Pause();
-        }
-        finally
-        {
-            ActiveTtsSegmentId = null;
-            PlaybackState = PlaybackState.Idle;
-        }
+        StopTtsPlayback();
+        StopSourceMedia();
     }
 
     public async Task PlaySourceMediaAtSegmentAsync(string segmentId)
@@ -238,9 +146,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public void Dispose()
     {
         PruneNonActiveMediaArtifacts();
-        _sequenceCts?.Cancel();
-        _sequenceCts?.Dispose();
-        _sequenceCts = null;
 
         // Unsubscribe from events only if we previously subscribed
         if (_subscribedToPlayerEvents && _segmentPlayer is not null)

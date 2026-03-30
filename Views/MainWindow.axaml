@@ -114,12 +114,8 @@
                                 Command="{Binding Playback.PlaySourceAtSegmentCommand}"
                                 CommandParameter="{Binding Playback.SelectedSegment}"
                                 IsEnabled="{Binding Playback.SelectedSegment, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                        <Button Content="▶ Dubbed"
-                                Command="{Binding Playback.PlayDubbedSegmentCommand}"
-                                CommandParameter="{Binding Playback.SelectedSegment}"
-                                IsEnabled="{Binding Playback.CanPlayDubbedSegment}" />
-                        <Button Content="▶▶ All Dubbed"
-                                Command="{Binding Playback.PlayAllDubbedCommand}"
+                        <Button Content="{Binding Playback.DubModeLabel}"
+                                Command="{Binding Playback.ToggleDubModeCommand}"
                                 IsEnabled="{Binding Playback.HasSegments}" />
                         <Button Content="⏹ Stop"
                                 Command="{Binding Playback.StopPlaybackCommand}" />

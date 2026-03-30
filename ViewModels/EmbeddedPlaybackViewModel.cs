@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,12 +16,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private readonly SessionWorkflowCoordinator _coordinator;
     private string? _lastKnownSourceMediaPath;
     private bool _isUpdatingPositionFromTimer;
+    private WorkflowSegmentState? _lastDubbedSegment;
 
     [ObservableProperty]
     private ObservableCollection<WorkflowSegmentState> _segments = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanPlayDubbedSegment))]
     private WorkflowSegmentState? _selectedSegment;
 
     [ObservableProperty]
@@ -50,6 +51,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [ObservableProperty]
     private double _sourceVolume = 1.0;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DubModeLabel))]
+    private bool _isDubModeOn;
+
     public EmbeddedPlaybackViewModel(SessionWorkflowCoordinator coordinator)
     {
         _coordinator = coordinator;
@@ -68,9 +73,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     public string? ActiveTtsSegmentId => _coordinator.ActiveTtsSegmentId;
 
-    public bool CanPlayDubbedSegment => SelectedSegment?.HasTtsAudio == true;
-
     public string PlayPauseSourceLabel => IsSourcePaused ? "▶ Play" : "⏸ Pause";
+
+    public string DubModeLabel => IsDubModeOn ? "🎙 Dub: On" : "🎙 Dub: Off";
 
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
     public string SourceDurationFormatted => FormatMs(SourceDurationMs);
@@ -87,12 +92,19 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         SourceDurationMs = player.Duration;
         SourcePositionMs = player.CurrentTime;
         _isUpdatingPositionFromTimer = false;
+
+        if (IsDubModeOn) UpdateDubMode();
     }
 
     partial void OnSourcePositionMsChanged(double value)
     {
         if (_isUpdatingPositionFromTimer) return;
         _coordinator.SourceMediaPlayer?.Seek((long)value);
+        if (IsDubModeOn)
+        {
+            _coordinator.StopTtsPlayback();
+            _lastDubbedSegment = null;
+        }
     }
 
     partial void OnSourceVolumeChanged(double value)
@@ -100,6 +112,28 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         var player = _coordinator.SourceMediaPlayer;
         if (player != null)
             player.Volume = value;
+    }
+
+    partial void OnIsDubModeOnChanged(bool value)
+    {
+        if (!value)
+        {
+            _coordinator.StopTtsPlayback();
+            _lastDubbedSegment = null;
+        }
+    }
+
+    private WorkflowSegmentState? FindSegmentAt(double positionSeconds)
+        => Segments.FirstOrDefault(s => positionSeconds >= s.StartSeconds && positionSeconds < s.EndSeconds);
+
+    private void UpdateDubMode()
+    {
+        var currentSeg = FindSegmentAt(SourcePositionMs / 1000.0);
+        if (currentSeg?.SegmentId == _lastDubbedSegment?.SegmentId) return;
+        _lastDubbedSegment = currentSeg;
+        _coordinator.StopTtsPlayback();
+        if (currentSeg?.HasTtsAudio == true)
+            _ = _coordinator.PlayTtsForSegmentAsync(currentSeg.SegmentId);
     }
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -120,6 +154,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                     _lastKnownSourceMediaPath = newPath;
                     // Media switched — auto-play triggered by MainWindow code-behind
                     IsSourcePaused = false;
+                    _lastDubbedSegment = null;
                     _ = LoadSegmentsAsync();
                 }
                 break;
@@ -158,6 +193,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void ToggleDubMode() => IsDubModeOn = !IsDubModeOn;
+
+    [RelayCommand]
     private async Task LoadSegmentsAsync()
     {
         try
@@ -192,45 +230,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task PlayDubbedSegmentAsync(WorkflowSegmentState? segment)
-    {
-        if (segment is null) return;
-        if (!segment.HasTtsAudio)
-        {
-            StatusText = $"Segment {segment.SegmentId} has no TTS audio.";
-            return;
-        }
-        try
-        {
-            StatusText = $"Playing dubbed segment at {segment.StartSeconds:F1}s…";
-            await _coordinator.PlaySegmentTtsAsync(segment.SegmentId);
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"Dubbed playback failed: {ex.Message}";
-        }
-    }
-
-    [RelayCommand]
-    private async Task PlayAllDubbedAsync()
-    {
-        try
-        {
-            StatusText = "Playing all dubbed segments…";
-            await _coordinator.PlayAllDubbedSegmentsAsync();
-            StatusText = "Sequence playback finished.";
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"Sequence playback failed: {ex.Message}";
-        }
-    }
-
-    [RelayCommand]
     private void StopPlayback()
     {
         _coordinator.StopPlayback();
-        _coordinator.StopSourceMedia();
+        _lastDubbedSegment = null;
         IsSourcePaused = true;
         StatusText = "Playback stopped.";
     }

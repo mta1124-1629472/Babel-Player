@@ -18,46 +18,48 @@ public sealed class TranscriptionService
         _pythonPath = FindPythonPath();
     }
 
-    private string FindPythonPath()
-    {
-        var possiblePaths = new[]
-        {
-            "python",
-            "python3",
-            @"C:\Users\ander\AppData\Local\Programs\Python\Python310\python.exe",
-            @"C:\Python310\python.exe",
-        };
+private static string FindPythonPath()
+{
+    var appDir = AppContext.BaseDirectory;
 
-        foreach (var path in possiblePaths)
+    var possiblePaths = new[]
+    {
+        Path.Combine(appDir, "python.exe"),
+        Path.Combine(appDir, "python", "python.exe"),
+        "python",
+        "python3",
+    };
+
+    foreach (var path in possiblePaths)
+    {
+        try
         {
-            try
+            var psi = new ProcessStartInfo
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = path,
-                    Arguments = "--version",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using var proc = Process.Start(psi);
-                if (proc != null)
-                {
-                    proc.WaitForExit(5000);
-                    if (proc.ExitCode == 0)
-                    {
-                        return path;
-                    }
-                }
-            }
-            catch
+                FileName = path,
+                Arguments = "--version",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc != null)
             {
+                proc.WaitForExit(5000);
+                if (proc.ExitCode == 0)
+                    return path;
             }
         }
-
-        throw new InvalidOperationException("Python not found. Please install Python to use transcription.");
+        catch
+        {
+        }
     }
+
+    throw new InvalidOperationException(
+        "Python not found. Expected bundled python next to the app or python on PATH.");
+}
 
     private async Task<string> ExtractAudioAsync(string videoPath)
     {
@@ -92,46 +94,47 @@ public sealed class TranscriptionService
         return audioPath;
     }
 
-    private string FindFfmpegPath()
-    {
-        var possiblePaths = new[]
-        {
-            "ffmpeg",
-            @"C:\ffmpeg\ffmpeg.exe",
-            @"C:\ffmpeg\bin\ffmpeg.exe",
-        };
+private static string FindFfmpegPath()
+{
+    var appDir = AppContext.BaseDirectory;
 
-        foreach (var path in possiblePaths)
+    var possiblePaths = new[]
+    {
+        Path.Combine(appDir, "ffmpeg.exe"),
+        Path.Combine(appDir, "tools", "ffmpeg.exe"),
+        "ffmpeg",
+    };
+
+    foreach (var path in possiblePaths)
+    {
+        try
         {
-            try
+            var psi = new ProcessStartInfo
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = path,
-                    Arguments = "-version",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using var proc = Process.Start(psi);
-                if (proc != null)
-                {
-                    proc.WaitForExit(5000);
-                    if (proc.ExitCode == 0)
-                    {
-                        return path;
-                    }
-                }
-            }
-            catch
+                FileName = path,
+                Arguments = "-version",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc != null)
             {
+                proc.WaitForExit(5000);
+                if (proc.ExitCode == 0)
+                    return path;
             }
         }
-
-        throw new InvalidOperationException("ffmpeg not found. Please install ffmpeg to use transcription.");
+        catch
+        {
+        }
     }
 
+    throw new InvalidOperationException(
+        "ffmpeg not found. Expected bundled ffmpeg.exe next to the app or ffmpeg on PATH.");
+}   
     public async Task<TranscriptionResult> TranscribeAsync(string audioPath, string outputJsonPath)
     {
         if (!File.Exists(audioPath))

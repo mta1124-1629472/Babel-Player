@@ -12,12 +12,14 @@ public sealed class TtsService(AppLog log)
 
     private static string FindPythonPath()
     {
+        var appDir = AppContext.BaseDirectory;
+
         var possiblePaths = new[]
         {
+            Path.Combine(appDir, "python.exe"),
+            Path.Combine(appDir, "python", "python.exe"),
             "python",
             "python3",
-            @"C:\Users\ander\AppData\Local\Programs\Python\Python310\python.exe",
-            @"C:\Python310\python.exe",
         };
 
         foreach (var path in possiblePaths)
@@ -48,7 +50,8 @@ public sealed class TtsService(AppLog log)
             }
         }
 
-        throw new InvalidOperationException("Python not found. Please install Python to use TTS.");
+        throw new InvalidOperationException(
+            "Python not found. Expected bundled python next to the app or python on PATH.");
     }
 
     public async Task<TtsResult> GenerateTtsAsync(
