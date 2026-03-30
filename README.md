@@ -1,48 +1,109 @@
 # Babel Deck
 
 [![Sponsor](https://img.shields.io/github/sponsors/mta1124-1629472?label=Sponsor&logo=GitHub)](https://github.com/sponsors/mta1124-1629472)
-[![CI](https://github.com/mta1124-1629472/Babel-Deck/actions/workflows/ci.yml/badge.svg)](https://github.com/mta1124-1629472/Babel-Player/actions/workflows/ci.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/mta1124-1629472/Babel-Deck)](https://github.com/mta1124-1629472/Babel-Player/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-Windows-blue)](#run)
+[![CI](https://github.com/mta1124-1629472/Babel-Deck/actions/workflows/ci.yml/badge.svg)](https://github.com/mta1124-1629472/Babel-Deck/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/mta1124-1629472/Babel-Deck)](https://github.com/mta1124-1629472/Babel-Deck/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows-blue)](#requirements)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
+[![Alpha](https://img.shields.io/badge/status-early%20alpha-orange)](#status)
 
-Babel Deck is an Avalonia/.NET desktop media player for language learning. It can load local media, generate captions, translate subtitles, and synthesize dubbed speech through cloud or local inference paths depending on what is installed on the machine.
+> **Early alpha.** Core workflow is functional end-to-end, but the app is under active development. Expect rough edges, missing polish, and breaking changes between builds.
 
-The core product chain is:
+Babel Deck is a Windows desktop dubbing workstation. Load a local video, generate a timed transcript via Whisper, translate the dialogue, synthesize dubbed speech via TTS, and preview the result in-context — all from a single session.
 
-`source media -> timed transcript -> translated/adapted dialogue -> spoken dubbed output -> in-context preview and refinement`
+![Babel Deck preview](Assets/preview.png)
 
+---
 
-## Current posture
+## What it does today
 
-The project is in an early build phase.
+The end-to-end workflow runs from source media through to playable dubbed audio:
 
-The main goal right now is to prove the core workflow in the right order, with truthful states and tight scope control. The repo should prefer narrow working slices over broad partial systems.
+1. **Load media** — open any local video file (MP4, MKV, AVI, WebM, MOV)
+2. **Transcribe** — generate a timed source-language transcript using Whisper (via Python)
+3. **Translate** — produce target-language dialogue adapted for spoken delivery
+4. **Generate dubbed audio** — synthesize TTS audio per segment
+5. **Preview** — scrub the source video, toggle dub mode to hear TTS follow the video in real time, and click any segment in the sidebar to jump directly to that timestamp
+6. **Persist sessions** — work is saved between launches; artifacts are restored without re-running the pipeline
 
-## Repo guides
+Segment selection in the sidebar is live: the active segment highlights as the video plays and the list scrolls to track it automatically.
 
-Start here before making changes:
+---
 
-- `PLAN.md` — milestone order, product sequencing, and gates
-- `docs/architecture.md` — current structural map of the system and major boundaries
-- `AGENTS.md` — rules for AI contributors and anti-drift guardrails
-- `CONTRIBUTING.md` — contributor workflow, verification expectations, and scope discipline
+## What it does not do yet
 
-## Working principle
+To be direct about current limits:
 
-A feature is not done because it compiles or because a UI surface exists.
+- **No audio mixing** — dubbed TTS and source audio are not mixed; they play independently
+- **No sync guarantee** — TTS follows the video segment-by-segment, not frame-accurate lip sync
+- **No export** — there is no way to export a dubbed video file yet
+- **No settings UI** — Python/FFmpeg paths are detected automatically or must be configured manually in the session store
+- **Windows only** — libmpv is loaded via P/Invoke from a bundled DLL; macOS and Linux are not supported
+- **No offline TTS** — TTS currently requires a configured cloud or local Python inference endpoint
+- **No multi-language UI** — the interface is English only
 
-A feature is done when the current milestone gate has been actually demonstrated with build, tests, and a short smoke result.
+---
 
-Python-backed inference is expected to stay deployable through multiple hosting modes over time, including native local execution, WSL, and more isolated/containerized paths, but those are not early prerequisites for proving the core workflow.
+## Requirements
 
-## Current priority
+| Dependency | Notes |
+|-----------|-------|
+| Windows 10/11 x64 | Only tested platform |
+| [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) | Required to run |
+| Python 3.10+ | Required for transcription, translation, and TTS |
+| Whisper-compatible Python environment | Transcription backend |
+| FFmpeg | Audio extraction; placed in `tools/win-x64/ffmpeg.exe` or on `PATH` |
+| libmpv-2.dll | Bundled in `native/win-x64/` — GPU video output via `vo=gpu` |
 
-Protect the center of mass:
+---
 
-- transcription must produce trustworthy timed text
-- translation/adaptation must produce speakable dialogue
-- TTS must turn that dialogue into compelling spoken output
-- playback and inspection exist to support preview and refinement
+## Run from source
 
-Anything that pulls the repo away from that chain needs a strong reason to exist.
+```bash
+git clone https://github.com/mta1124-1629472/Babel-Deck.git
+cd Babel-Deck
+dotnet build
+dotnet run --project BabelDeck.csproj
+```
+
+Tests:
+
+```bash
+dotnet test
+```
+
+---
+
+## How the pipeline works
+
+```
+source video
+    └─ ingest (copy to session artifact dir)
+        └─ transcribe (Whisper via Python subprocess)
+            └─ translate (Python inference)
+                └─ TTS generation (per segment, Python)
+                    └─ preview (libmpv + Avalonia UI)
+```
+
+All artifacts are stored in a session directory under `%APPDATA%\BabelDeck\sessions\`. The session survives restarts; switching between multiple source files within a run caches prior work in memory and restores it without re-running the pipeline.
+
+---
+
+## Status
+
+Milestone 7 (Dub Session Workflow) is the current completed milestone. The core chain — load → transcribe → translate → TTS → playback — works end to end. The next focus is refinement tooling, per-segment editing, and export.
+
+This is early alpha software. The architecture is intentionally narrow and scope-controlled. Features are added in verified vertical slices, not as partially-wired stubs.
+
+---
+
+## Contributing
+
+Read these before touching anything:
+
+- [`AGENTS.md`](AGENTS.md) — operating rules and scope discipline
+- [`PLAN.md`](PLAN.md) — milestone order and gates
+- [`docs/architecture.md`](docs/architecture.md) — structural boundaries and state ownership
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contributor workflow and verification expectations
+
+The short version: a feature is not done because it compiles. It is done when it has build, tests, and a written smoke result.
