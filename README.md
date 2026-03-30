@@ -11,6 +11,9 @@
 
 Babel Player is a Windows desktop dubbing workstation. Load a local video, generate a timed transcript via Whisper, translate the dialogue, synthesize dubbed speech via TTS, and preview the result in-context — all from a single session.
 
+Babel Deck is built and maintained by a solo developer. If you’d like to support its continued development:
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/R5R01WOOYW)
+
 ![Babel Player preview](Assets/preview.png)
 
 ---
