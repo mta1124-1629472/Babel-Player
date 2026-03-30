@@ -353,6 +353,7 @@ internal sealed class FakeMediaTransport : IMediaTransport, IDisposable
     public long Duration { get; set; } = 10000;
     public bool HasEnded { get; set; }
     public double Volume { get; set; } = 1.0;
+    public double PlaybackRate { get; set; } = 1.0;
 
     public event EventHandler? Ended;
     public event EventHandler<Exception>? ErrorOccurred;
