@@ -154,6 +154,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 StatusText = "Transcription complete. Loading segments…";
                 await LoadSegmentsAsync();
                 System.Diagnostics.Debug.WriteLine($"[Pipeline] Segments loaded after transcription: {Segments.Count}");
+                StatusText = $"Transcribed {Segments.Count} segments. Ready for translation.";
             }
             else
             {
@@ -167,9 +168,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 System.Diagnostics.Debug.WriteLine("[Pipeline] Running translation…");
                 await _coordinator.TranslateTranscriptAsync();
                 System.Diagnostics.Debug.WriteLine("[Pipeline] Translation done.");
-                StatusText = "Translation complete. Refreshing segments…";
+                StatusText = "Translation complete. Loading segments…";
                 await LoadSegmentsAsync();
                 System.Diagnostics.Debug.WriteLine($"[Pipeline] Segments loaded after translation: {Segments.Count}");
+                StatusText = $"Translated {Segments.Count} segments. Ready for TTS.";
             }
             else
             {

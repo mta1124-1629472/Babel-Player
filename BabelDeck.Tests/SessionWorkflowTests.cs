@@ -89,7 +89,9 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         coordinator = new SessionWorkflowCoordinator(store, log);
         coordinator.Initialize();
 
-        Assert.Contains("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        // Stage must be downgraded — ingested media is missing so media must be re-loaded
+        Assert.Equal(SessionWorkflowStage.Foundation, coordinator.CurrentSession.Stage);
+        Assert.Null(coordinator.CurrentSession.IngestedMediaPath);
 
         return Task.CompletedTask;
     }
@@ -120,7 +122,9 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         coordinator = new SessionWorkflowCoordinator(store, log);
         coordinator.Initialize();
 
-        Assert.Contains("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        // Stage must be downgraded — transcript is missing so transcription must re-run
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, coordinator.CurrentSession.Stage);
+        Assert.Null(coordinator.CurrentSession.TranscriptPath);
     }
 
     [Fact]
@@ -151,7 +155,9 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         coordinator = new SessionWorkflowCoordinator(store, log);
         coordinator.Initialize();
 
-        Assert.Contains("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        // Stage must be downgraded — translation is missing so translation must re-run
+        Assert.Equal(SessionWorkflowStage.Transcribed, coordinator.CurrentSession.Stage);
+        Assert.Null(coordinator.CurrentSession.TranslationPath);
     }
 
     [Fact]
@@ -182,7 +188,9 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         coordinator = new SessionWorkflowCoordinator(store, log);
         coordinator.Initialize();
 
-        Assert.Contains("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        // Stage must be downgraded — TTS is missing so TTS must re-run
+        Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
+        Assert.Null(coordinator.CurrentSession.TtsPath);
     }
 
     [Fact]

@@ -27,6 +27,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     private IMediaTransport? _sourceMediaPlayer;
     private readonly IMediaTransport? _injectedSourcePlayer;
+    private readonly Dictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
+        new(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty]
     private WorkflowSessionSnapshot _currentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
@@ -235,6 +237,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void Dispose()
     {
+        PruneNonActiveMediaArtifacts();
         _sequenceCts?.Cancel();
         _sequenceCts?.Dispose();
         _sequenceCts = null;
@@ -276,107 +279,37 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         else
         {
             var snapshot = loadResult.Snapshot;
-            bool mediaMissing = false;
-            bool transcriptMissing = false;
-            bool translationMissing = false;
-            bool ttsMissing = false;
+            var validated = ValidateArtifacts(snapshot);
 
-            if (!string.IsNullOrEmpty(snapshot.IngestedMediaPath) && 
-                !File.Exists(snapshot.IngestedMediaPath))
-            {
-                _log.Warning($"Ingested media artifact missing: {snapshot.IngestedMediaPath}");
-                mediaMissing = true;
-            }
+            // Log any artifacts that were dropped by validation
+            if (snapshot.Stage != validated.Stage)
+                _log.Warning($"Session stage downgraded on load: {snapshot.Stage} → {validated.Stage} (missing artifacts)");
 
-            if (!string.IsNullOrEmpty(snapshot.TranscriptPath) && 
-                !File.Exists(snapshot.TranscriptPath))
-            {
-                _log.Warning($"Transcript artifact missing: {snapshot.TranscriptPath}");
-                transcriptMissing = true;
-            }
+            string statusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
+                ? "Resumed session with TTS. Dubbing complete."
+                : validated.Stage >= SessionWorkflowStage.Translated
+                    ? "Resumed session with translation. Ready for TTS/dubbing."
+                    : validated.Stage >= SessionWorkflowStage.Transcribed
+                        ? "Resumed session with transcript. Ready for translation."
+                        : validated.Stage >= SessionWorkflowStage.MediaLoaded
+                            ? "Resumed session with media. Ready for transcription."
+                            : "Resumed saved foundation session. Workflow not yet started.";
 
-            if (!string.IsNullOrEmpty(snapshot.TranslationPath) && 
-                !File.Exists(snapshot.TranslationPath))
-            {
-                _log.Warning($"Translation artifact missing: {snapshot.TranslationPath}");
-                translationMissing = true;
-            }
-
-            if (!string.IsNullOrEmpty(snapshot.TtsPath) && 
-                !File.Exists(snapshot.TtsPath))
-            {
-                _log.Warning($"TTS artifact missing: {snapshot.TtsPath}");
-                ttsMissing = true;
-            }
-
-            string statusMessage;
-            if (mediaMissing && transcriptMissing && translationMissing && ttsMissing)
-            {
-                statusMessage = "Session had all artifacts but they are missing. Please restart the workflow.";
-            }
-            else if (ttsMissing && snapshot.Stage >= SessionWorkflowStage.TtsGenerated)
-            {
-                statusMessage = "Session had TTS but artifact is missing. Please regenerate TTS.";
-            }
-            else if (translationMissing && snapshot.Stage >= SessionWorkflowStage.Translated)
-            {
-                statusMessage = "Session had translation but artifact is missing. Please re-translate.";
-            }
-            else if (transcriptMissing && snapshot.Stage >= SessionWorkflowStage.Transcribed)
-            {
-                statusMessage = "Session had transcript but artifact is missing. Please re-transcribe.";
-            }
-            else if (mediaMissing)
-            {
-                statusMessage = "Session had media but artifact is missing. Please re-load media.";
-            }
-            else
-            {
-                statusMessage = snapshot.Stage >= SessionWorkflowStage.TtsGenerated
-                    ? "Resumed session with TTS. Dubbing complete."
-                    : snapshot.Stage >= SessionWorkflowStage.Translated
-                        ? "Resumed session with translation. Ready for TTS/dubbing."
-                        : snapshot.Stage >= SessionWorkflowStage.Transcribed
-                            ? "Resumed session with transcript. Ready for translation."
-                            : "Resumed saved foundation session. Downstream workflow milestones are still not implemented.";
-            }
-
-            CurrentSession = snapshot with
+            CurrentSession = validated with
             {
                 LastUpdatedAtUtc = nowUtc,
                 StatusMessage = statusMessage,
             };
 
-            if (mediaMissing && transcriptMissing && translationMissing && ttsMissing)
-            {
-                SessionSource = "Resumed session but all artifacts are missing.";
-            }
-            else if (ttsMissing && snapshot.Stage >= SessionWorkflowStage.TtsGenerated)
-            {
-                SessionSource = "Resumed session but TTS artifact is missing.";
-            }
-            else if (translationMissing && snapshot.Stage >= SessionWorkflowStage.Translated)
-            {
-                SessionSource = "Resumed session but translation artifact is missing.";
-            }
-            else if (transcriptMissing && snapshot.Stage >= SessionWorkflowStage.Transcribed)
-            {
-                SessionSource = "Resumed session but transcript artifact is missing.";
-            }
-            else if (mediaMissing)
-            {
-                SessionSource = "Resumed session but media artifact is missing.";
-            }
-            else
-            {
-                SessionSource = snapshot.Stage >= SessionWorkflowStage.TtsGenerated
+            SessionSource = validated.Stage != snapshot.Stage
+                ? $"Resumed session (stage downgraded from {snapshot.Stage} to {validated.Stage}: missing artifacts)."
+                : validated.Stage >= SessionWorkflowStage.TtsGenerated
                     ? "Resumed session with TTS."
-                    : snapshot.Stage >= SessionWorkflowStage.Translated
+                    : validated.Stage >= SessionWorkflowStage.Translated
                         ? "Resumed session with translation."
-                        : snapshot.Stage >= SessionWorkflowStage.Transcribed
+                        : validated.Stage >= SessionWorkflowStage.Transcribed
                             ? "Resumed session with transcript."
                             : "Resumed the saved foundation session.";
-            }
         }
 
         PersistenceStatus = loadResult.StatusMessage;
@@ -387,31 +320,109 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public void LoadMedia(string sourceMediaPath)
     {
         if (!File.Exists(sourceMediaPath))
-        {
             throw new FileNotFoundException($"Source media file not found: {sourceMediaPath}");
-        }
 
         var nowUtc = DateTimeOffset.UtcNow;
+
+        // Stash current snapshot before switching
+        if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
+            _mediaSnapshotCache[MediaKey(CurrentSession.SourceMediaPath)] = CurrentSession;
+
+        // Ingest (always copy — session dir is shared, overwrite is fine)
         var sessionDir = GetSessionDirectory();
         var mediaDir = Path.Combine(sessionDir, "media");
         Directory.CreateDirectory(mediaDir);
-
         var fileName = Path.GetFileName(sourceMediaPath);
         var ingestedPath = Path.Combine(mediaDir, fileName);
-
         File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
         _log.Info($"Copied media to session artifact: {ingestedPath}");
 
-        CurrentSession = CurrentSession with
+        var newKey = MediaKey(sourceMediaPath);
+        var switchingMedia = !string.IsNullOrEmpty(CurrentSession.SourceMediaPath)
+            && !string.Equals(MediaKey(CurrentSession.SourceMediaPath), newKey,
+                              StringComparison.OrdinalIgnoreCase);
+
+        if (switchingMedia && _mediaSnapshotCache.TryGetValue(newKey, out var cached))
         {
-            Stage = SessionWorkflowStage.MediaLoaded,
-            SourceMediaPath = sourceMediaPath,
-            IngestedMediaPath = ingestedPath,
-            MediaLoadedAtUtc = nowUtc,
-            StatusMessage = "Media loaded. Ready for transcription.",
-        };
+            // Returning to a previously processed media — restore and validate
+            var validated = ValidateArtifacts(cached);
+            CurrentSession = validated with
+            {
+                IngestedMediaPath = ingestedPath,
+                MediaLoadedAtUtc = nowUtc,
+                LastUpdatedAtUtc = nowUtc,
+                StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
+                    ? "Restored prior TTS. Ready for playback."
+                    : validated.Stage >= SessionWorkflowStage.Translated
+                        ? "Restored translation. Ready for TTS/dubbing."
+                        : validated.Stage >= SessionWorkflowStage.Transcribed
+                            ? "Restored transcript. Ready for translation."
+                            : "Media loaded. Ready for transcription.",
+            };
+            _log.Info($"Restored cached session for: {sourceMediaPath} (stage: {CurrentSession.Stage})");
+        }
+        else
+        {
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.MediaLoaded,
+                SourceMediaPath = sourceMediaPath,
+                IngestedMediaPath = ingestedPath,
+                MediaLoadedAtUtc = nowUtc,
+                TranscriptPath = switchingMedia ? null : CurrentSession.TranscriptPath,
+                SourceLanguage = switchingMedia ? null : CurrentSession.SourceLanguage,
+                TranscribedAtUtc = switchingMedia ? null : CurrentSession.TranscribedAtUtc,
+                TranslationPath = switchingMedia ? null : CurrentSession.TranslationPath,
+                TargetLanguage = switchingMedia ? null : CurrentSession.TargetLanguage,
+                TranslatedAtUtc = switchingMedia ? null : CurrentSession.TranslatedAtUtc,
+                TtsPath = switchingMedia ? null : CurrentSession.TtsPath,
+                TtsVoice = switchingMedia ? null : CurrentSession.TtsVoice,
+                TtsGeneratedAtUtc = switchingMedia ? null : CurrentSession.TtsGeneratedAtUtc,
+                TtsSegmentsPath = switchingMedia ? null : CurrentSession.TtsSegmentsPath,
+                TtsSegmentAudioPaths = switchingMedia ? null : CurrentSession.TtsSegmentAudioPaths,
+                StatusMessage = "Media loaded. Ready for transcription.",
+            };
+        }
 
         SaveCurrentSession();
+    }
+
+    private static string MediaKey(string path) => Path.GetFullPath(path);
+
+    private static WorkflowSessionSnapshot ValidateArtifacts(WorkflowSessionSnapshot s)
+    {
+        var stage = s.Stage;
+
+        if (stage >= SessionWorkflowStage.TtsGenerated
+            && (string.IsNullOrEmpty(s.TtsPath) || !File.Exists(s.TtsPath)))
+        {
+            stage = SessionWorkflowStage.Translated;
+            s = s with { TtsPath = null, TtsVoice = null, TtsGeneratedAtUtc = null,
+                          TtsSegmentsPath = null, TtsSegmentAudioPaths = null };
+        }
+
+        if (stage >= SessionWorkflowStage.Translated
+            && (string.IsNullOrEmpty(s.TranslationPath) || !File.Exists(s.TranslationPath)))
+        {
+            stage = SessionWorkflowStage.Transcribed;
+            s = s with { TranslationPath = null, TargetLanguage = null, TranslatedAtUtc = null };
+        }
+
+        if (stage >= SessionWorkflowStage.Transcribed
+            && (string.IsNullOrEmpty(s.TranscriptPath) || !File.Exists(s.TranscriptPath)))
+        {
+            stage = SessionWorkflowStage.MediaLoaded;
+            s = s with { TranscriptPath = null, SourceLanguage = null, TranscribedAtUtc = null };
+        }
+
+        if (stage >= SessionWorkflowStage.MediaLoaded
+            && (string.IsNullOrEmpty(s.IngestedMediaPath) || !File.Exists(s.IngestedMediaPath)))
+        {
+            stage = SessionWorkflowStage.Foundation;
+            s = s with { IngestedMediaPath = null, MediaLoadedAtUtc = null };
+        }
+
+        return s with { Stage = stage };
     }
 
     public void InjectTestTranscript(string transcriptPath, string? translationPath = null)
@@ -566,7 +577,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         _log.Info($"TTS complete: {ttsPath}, size: {result.FileSizeBytes} bytes");
 
-        var segmentsDir = Path.Combine(ttsDir, "segments");
+        var mediaName = Path.GetFileNameWithoutExtension(CurrentSession.TranslationPath!);
+        var segmentsDir = Path.Combine(ttsDir, "segments", mediaName);
         Directory.CreateDirectory(segmentsDir);
 
         // Generate per-segment TTS audio for dubbed playback
@@ -821,7 +833,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
             string? translatedText = null;
             var hasTranslation = translationTexts != null && translationTexts.TryGetValue(id, out translatedText);
-            var hasTtsAudio = ttsSegmentPaths != null && ttsSegmentPaths.ContainsKey(id);
+            var hasTtsAudio = ttsSegmentPaths != null
+                && ttsSegmentPaths.TryGetValue(id, out var audioPath)
+                && File.Exists(audioPath);
 
             segments.Add(new WorkflowSegmentState(
                 id,
@@ -855,5 +869,36 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _store.Save(CurrentSession);
         PersistenceStatus = $"Saved current session snapshot to {StateFilePath}.";
         _log.Info(PersistenceStatus);
+    }
+
+    private void PruneNonActiveMediaArtifacts()
+    {
+        var activeKey = string.IsNullOrEmpty(CurrentSession.SourceMediaPath)
+            ? null : MediaKey(CurrentSession.SourceMediaPath);
+
+        foreach (var (key, snapshot) in _mediaSnapshotCache)
+        {
+            if (string.Equals(key, activeKey, StringComparison.OrdinalIgnoreCase)) continue;
+            TryDeleteFile(snapshot.TranscriptPath);
+            TryDeleteFile(snapshot.TranslationPath);
+            TryDeleteFile(snapshot.TtsPath);
+            if (snapshot.TtsSegmentAudioPaths != null)
+                foreach (var p in snapshot.TtsSegmentAudioPaths.Values)
+                    TryDeleteFile(p);
+            TryDeleteDirectory(snapshot.TtsSegmentsPath);
+        }
+        _mediaSnapshotCache.Clear();
+    }
+
+    private static void TryDeleteFile(string? path)
+    {
+        if (!string.IsNullOrEmpty(path) && File.Exists(path))
+            try { File.Delete(path); } catch { /* best-effort */ }
+    }
+
+    private static void TryDeleteDirectory(string? path)
+    {
+        if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
+            try { Directory.Delete(path, recursive: true); } catch { /* best-effort */ }
     }
 }
