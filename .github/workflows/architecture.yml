@@ -27,6 +27,9 @@ on:
       - ".github/workflows/architecture.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   layer-boundaries:
     name: Layer Boundary & Discipline Checks

@@ -45,7 +45,7 @@ jobs:
 
       - name: Run integration tests
         run: >
-          dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj
+          dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
           --no-build
           --configuration Release
           --filter "Category=Integration|Category=RequiresPython|Category=RequiresFfmpeg"
