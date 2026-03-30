@@ -267,41 +267,41 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
                 string solutionRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".."));
                 string nativeDir = Path.Combine(solutionRoot, "native", "win-x64");
 
-            string[] possibleNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
-            foreach (string dllName in possibleNames)
-            {
-                string path = Path.Combine(nativeDir, dllName);
-                if (File.Exists(path))
+                string[] possibleNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
+                foreach (string dllName in possibleNames)
                 {
-                    IntPtr handle = NativeLibrary.Load(path);
-                    if (handle != IntPtr.Zero) return handle;
+                    string path = Path.Combine(nativeDir, dllName);
+                    if (File.Exists(path))
+                    {
+                        IntPtr handle = NativeLibrary.Load(path);
+                        if (handle != IntPtr.Zero) return handle;
+                    }
+                }
+
+                foreach (string dllName in possibleNames)
+                {
+                    string path = Path.Combine(baseDir, dllName);
+                    if (File.Exists(path))
+                    {
+                        IntPtr handle = NativeLibrary.Load(path);
+                        if (handle != IntPtr.Zero) return handle;
+                    }
                 }
             }
-
-            foreach (string dllName in possibleNames)
+            catch
             {
-                string path = Path.Combine(baseDir, dllName);
-                if (File.Exists(path))
-                {
-                    IntPtr handle = NativeLibrary.Load(path);
-                    if (handle != IntPtr.Zero) return handle;
-                }
+                // Fall through to default loading
             }
-        }
-        catch
-        {
-            // Fall through to default loading
-        }
 
-        string[] fallbackNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
-        foreach (string dllName in fallbackNames)
-        {
-            IntPtr handle = NativeLibrary.Load(dllName);
-            if (handle != IntPtr.Zero) return handle;
-        }
+            string[] fallbackNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
+            foreach (string dllName in fallbackNames)
+            {
+                IntPtr handle = NativeLibrary.Load(dllName);
+                if (handle != IntPtr.Zero) return handle;
+            }
 
-        return IntPtr.Zero;
-    }
+            return IntPtr.Zero;
+        }
 
     private void LoadLibMpvFunctions()
     {
