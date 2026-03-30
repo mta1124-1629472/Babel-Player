@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   publish-win-x64:
-    name: Publish Windows x64 Release
+    name: Publish Windows x64 Self-Contained Release
     runs-on: windows-latest
 
     steps:
@@ -25,38 +25,50 @@ jobs:
       - name: Restore
         run: dotnet restore Babel-Deck.sln -r win-x64
 
-      - name: Publish desktop app (Release / win-x64)
+      - name: Publish self-contained build
         run: >
           dotnet publish BabelDeck.csproj
           --configuration Release
           -r win-x64
-          --self-contained false
+          --self-contained true
           -o ./publish
 
-      - name: Package publish output
+      - name: Verify publish output
+        shell: pwsh
+        run: |
+          $exePath = "./publish/BabelDeck.exe"
+          if (-not (Test-Path $exePath)) {
+            throw "Expected executable not found at $exePath"
+          }
+
+      - name: Package self-contained publish output
+        id: package
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
           $publishDir = "${{ github.workspace }}/publish"
+
           if (-not (Test-Path $publishDir)) {
             throw "Publish output not found at $publishDir"
           }
 
           New-Item -ItemType Directory -Path "dist" -Force | Out-Null
-          $zipPath = "dist/Babel-Deck-$tag-win-x64.zip"
-          Compress-Archive -Path "$publishDir/*" -DestinationPath $zipPath -Force
-          "ZIP_PATH=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $zipPath = "dist/Babel-Deck-$tag-win-x64-self-contained.zip"
 
-      - name: Upload artifact
+          Compress-Archive -Path "$publishDir/*" -DestinationPath $zipPath -Force
+
+          "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: babel-deck-${{ github.ref_name }}-win-x64
-          path: ${{ env.ZIP_PATH }}
+          name: babel-deck-${{ github.ref_name }}-win-x64-self-contained
+          path: ${{ steps.package.outputs.zip_path }}
           if-no-files-found: error
           retention-days: 30
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ZIP_PATH }}
+          files: ${{ steps.package.outputs.zip_path }}
           generate_release_notes: true
