@@ -74,7 +74,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     public string? ActiveTtsSegmentId => _coordinator.ActiveTtsSegmentId;
 
-    public string PlayPauseSourceLabel => IsSourcePaused ? "▶ Play" : "⏸ Pause";
+    public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6" : "\u23F8";
 
     public string DubModeLabel => IsDubModeOn ? "🎙 Dub: On" : "🎙 Dub: Off";
 

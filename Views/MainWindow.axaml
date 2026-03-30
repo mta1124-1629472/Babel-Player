@@ -110,20 +110,9 @@
                         <Button Content="{Binding Playback.PlayPauseSourceLabel}"
                                 Command="{Binding Playback.PlayPauseSourceCommand}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                        <Button Content="▶ Source"
-                                Command="{Binding Playback.PlaySourceAtSegmentCommand}"
-                                CommandParameter="{Binding Playback.SelectedSegment}"
-                                IsEnabled="{Binding Playback.SelectedSegment, Converter={x:Static ObjectConverters.IsNotNull}}" />
                         <Button Content="{Binding Playback.DubModeLabel}"
                                 Command="{Binding Playback.ToggleDubModeCommand}"
                                 IsEnabled="{Binding Playback.HasSegments}" />
-                        <Button Content="⏹ Stop"
-                                Command="{Binding Playback.StopPlaybackCommand}" />
-                        <Separator />
-                        <Button Content="↻ Regen Translation"
-                                Command="{Binding Playback.RegenerateTranslationCommand}"
-                                CommandParameter="{Binding Playback.SelectedSegment}"
-                                IsEnabled="{Binding Playback.SelectedSegment, Converter={x:Static ObjectConverters.IsNotNull}}" />
                         <Separator />
                         <TextBlock Text="Vol" VerticalAlignment="Center" FontSize="11" Opacity="0.7" />
                         <Slider Minimum="0" Maximum="1"

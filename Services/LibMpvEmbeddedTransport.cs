@@ -66,6 +66,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         SetOption("keep-open", "yes");
         // Start paused so the user controls when playback begins
         SetOption("pause", "yes");
+        // Suppress native mpv OSD — seek bar and volume overlay are shown by Avalonia controls
+        SetOption("osd-level", "0");
 
         if (_mpv_initialize!(_handle) != 0)
             throw new InvalidOperationException("Failed to initialize libmpv.");
