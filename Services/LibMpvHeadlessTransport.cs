@@ -90,8 +90,8 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         try
         {
             string baseDir = AppContext.BaseDirectory;
-            // Go up four levels to get to the solution root from the bin directory
-            string solutionRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", ".."));
+            // Go up three levels to get to the solution root from the bin directory
+            string solutionRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".."));
             string nativeDir = Path.Combine(solutionRoot, "native", "win-x64");
             
             // Try the native directory first

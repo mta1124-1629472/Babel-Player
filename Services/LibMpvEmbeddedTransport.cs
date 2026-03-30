@@ -259,13 +259,13 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _hasEnded = false;
     }
 
-    private IntPtr LoadLibMpvDll()
-    {
-        try
+        private IntPtr LoadLibMpvDll()
         {
-            string baseDir = AppContext.BaseDirectory;
-            string solutionRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", ".."));
-            string nativeDir = Path.Combine(solutionRoot, "native", "win-x64");
+            try
+            {
+                string baseDir = AppContext.BaseDirectory;
+                string solutionRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".."));
+                string nativeDir = Path.Combine(solutionRoot, "native", "win-x64");
 
             string[] possibleNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
             foreach (string dllName in possibleNames)
