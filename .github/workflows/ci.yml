@@ -25,7 +25,12 @@ jobs:
 
       - name: Build
         run: dotnet build Babel-Deck.sln --no-restore --configuration Release
-
+        
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          
       - name: Test
         run: >
           dotnet test BabelDeck.Tests
