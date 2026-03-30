@@ -1,7 +1,7 @@
 ﻿using Avalonia;
 using System;
 
-namespace Babel.Deck;
+namespace Babel.Player;
 
 sealed class Program
 {

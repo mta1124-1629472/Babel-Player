@@ -3,10 +3,10 @@ using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
-using Babel.Deck.Services;
-using Babel.Deck.ViewModels;
+using Babel.Player.Services;
+using Babel.Player.ViewModels;
 
-namespace Babel.Deck.Views;
+namespace Babel.Player.Views;
 
 public partial class MainWindow : Window
 {

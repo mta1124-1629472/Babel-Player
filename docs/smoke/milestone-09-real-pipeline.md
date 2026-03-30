@@ -31,8 +31,8 @@
 
 ### Commands Run
 ```bash
-dotnet build Babel-Deck.sln
-dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj --no-build
+dotnet build Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj --no-build
 ```
 
 ### Test Results
@@ -52,8 +52,8 @@ New tests:
 - `ViewModels/EmbeddedPlaybackViewModel.cs` — added `RunPipelineCommand` (chains Transcribe → Translate → GenerateTts → LoadSegments)
 - `Views/MainWindow.axaml` — added "Run Pipeline" button in top toolbar
 - `Views/MainWindow.axaml.cs` — removed test data auto-injection from `OnVideoHandleReady`; replaced with session resume on startup
-- `BabelDeck.Tests/BabelDeck.Tests.csproj` — made test video copy conditional (`Exists` guard) so build doesn't fail when video is absent
-- `BabelDeck.Tests/SessionWorkflowTests.cs` — added 2 new integration tests
+- `BabelPlayer.Tests/BabelPlayer.Tests.csproj` — made test video copy conditional (`Exists` guard) so build doesn't fail when video is absent
+- `BabelPlayer.Tests/SessionWorkflowTests.cs` — added 2 new integration tests
 
 ### New Files
 - `test-assets/video/sample.mp4` — 43KB test video (Spanish TTS speech over black video) for integration tests

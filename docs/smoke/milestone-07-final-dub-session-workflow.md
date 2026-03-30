@@ -32,8 +32,8 @@
 
 ### Commands Run
 ```bash
-dotnet build Babel-Deck.sln
-dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj
+dotnet build Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
 ```
 
 ### Test Results

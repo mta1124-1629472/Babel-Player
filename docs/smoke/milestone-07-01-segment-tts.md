@@ -14,7 +14,7 @@
 ## What Was Verified
 - `RegenerateSegmentTtsAsync(segmentId)` generates TTS for a single segment
 - Segment ID based on start time (e.g., "segment_0.0", "segment_3.68")
-- Per-segment audio saved to `{LocalApplicationData}/BabelDeck/sessions/{SessionId}/tts/segments/{segmentId}.mp3`
+- Per-segment audio saved to `{LocalApplicationData}/BabelPlayer/sessions/{SessionId}/tts/segments/{segmentId}.mp3`
 - Segment audio path persisted in snapshot's `TtsSegmentAudioPaths` dictionary
 - On reopen, segment audio path is restored from snapshot
 - Other segments are NOT affected by regeneration
@@ -23,8 +23,8 @@
 
 ### Commands Run
 ```bash
-dotnet build Babel-Deck.sln
-dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj
+dotnet build Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
 ```
 
 ### Test Results
@@ -47,7 +47,7 @@ Existing tests still pass (18):
 - Stable across sessions
 
 ### Artifacts / Paths
-- Segment TTS: `{LocalApplicationData}/BabelDeck/sessions/{SessionId}/tts/segments/{segmentId}.mp3`
+- Segment TTS: `{LocalApplicationData}/BabelPlayer/sessions/{SessionId}/tts/segments/{segmentId}.mp3`
 
 ## Notes
 - Uses segment start time as stable ID

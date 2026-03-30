@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Platform;
 
-namespace Babel.Deck.Views;
+namespace Babel.Player.Views;
 
 /// <summary>
 /// Avalonia control that hosts a native Win32 child window for libmpv video rendering.

@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace Babel.Deck.Services;
+namespace Babel.Player.Services;
 
 /// <summary>
 /// Embedded media transport using libmpv with GPU-accelerated rendering into a native window.

@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Babel.Deck.Models;
-using Babel.Deck.Services;
+using Babel.Player.Models;
+using Babel.Player.Services;
 
-namespace Babel.Deck.ViewModels;
+namespace Babel.Player.ViewModels;
 
 public partial class EmbeddedPlaybackViewModel : ViewModelBase
 {

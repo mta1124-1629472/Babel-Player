@@ -2,7 +2,7 @@
 
 ## Mission
 
-Build Babel Deck as a disciplined sequence of vertical slices centered on the real product chain:
+Build Babel Player as a disciplined sequence of vertical slices centered on the real product chain:
 
 `source media -> timed transcript -> translated/adapted dialogue -> spoken dubbed output -> in-context preview and refinement`
 

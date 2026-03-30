@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest a new feature or improvement for the Babel Deck
+about: Suggest a new feature or improvement for the Babel Player
 title: "[FEAT] "
 labels: enhancement
 assignees: mta1124-1629472, Copilot

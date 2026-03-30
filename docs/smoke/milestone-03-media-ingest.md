@@ -23,8 +23,8 @@
 
 ### Commands Run
 ```text
-dotnet build Babel-Deck.sln
-dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj
+dotnet build Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
 ```
 
 ### Test Results
@@ -42,8 +42,8 @@ Existing tests still pass (7):
 ```
 
 ### Artifacts / Paths
-- Artifact location: `{LocalApplicationData}/BabelDeck/sessions/{SessionId}/media/{filename}`
-- Example: `C:\Users\...\AppData\Local\BabelDeck\sessions\{guid}\media\sample.mp4`
+- Artifact location: `{LocalApplicationData}/BabelPlayer/sessions/{SessionId}/media/{filename}`
+- Example: `C:\Users\...\AppData\Local\BabelPlayer\sessions\{guid}\media\sample.mp4`
 
 ## Notes
 - Uses `LocalApplicationData` for session-owned artifacts (not roaming)

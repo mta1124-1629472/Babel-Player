@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\BabelDeck.csproj" />
+    <ProjectReference Include="..\BabelPlayer.csproj" />
   </ItemGroup>
 
   <!-- Copy libmpv DLL to output directory -->

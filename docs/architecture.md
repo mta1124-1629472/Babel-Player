@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the current intended structure of Babel Deck.
+This document describes the current intended structure of Babel Player.
 
 It is not a grand design document and it is not permission to build future systems early. `PLAN.md` remains the source of truth for milestone order and product sequencing. This file exists to clarify the current structural boundaries of the app so contributors do not invent them ad hoc.
 
@@ -16,7 +16,7 @@ If the repo begins to optimize for shell prestige, framework purity, or speculat
 
 ## Current Architectural Intent
 
-Babel Deck is a desktop dubbing-oriented application built as a sequence of vertical slices.
+Babel Player is a desktop dubbing-oriented application built as a sequence of vertical slices.
 
 The app is not treated as a generic media player with AI attached. It is treated as a workflow system for turning source media into transcript, translated/adapted dialogue, generated spoken output, and usable in-context preview.
 

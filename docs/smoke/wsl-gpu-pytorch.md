@@ -17,7 +17,7 @@
 
 ## What Was Not Verified
 - No app-level inference service was exercised in this smoke note.
-- No Babel Deck transcription, translation, or TTS workflow was exercised in this smoke note.
+- No Babel Player transcription, translation, or TTS workflow was exercised in this smoke note.
 - No containerized or NVIDIA-managed serving path was exercised in this smoke note.
 
 ## Evidence

@@ -48,10 +48,10 @@
 
 ### Commands Run
 ```bash
-dotnet restore BabelDeck.csproj --packages D:\Dev\Babel-Deck\.nuget-temp
-dotnet build BabelDeck.csproj --packages D:\Dev\Babel-Deck\.nuget-temp
-dotnet build BabelDeck.Tests/BabelDeck.Tests.csproj --packages D:\Dev\Babel-Deck\.nuget-temp
-dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj --no-build
+dotnet restore BabelPlayer.csproj --packages D:\Dev\Babel-Player\.nuget-temp
+dotnet build BabelPlayer.csproj --packages D:\Dev\Babel-Player\.nuget-temp
+dotnet build BabelPlayer.Tests/BabelPlayer.Tests.csproj --packages D:\Dev\Babel-Player\.nuget-temp
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj --no-build
 ```
 
 ### Test Results
@@ -85,13 +85,13 @@ New tests for this milestone:
 - `Views/MpvVideoView.cs` — NativeControlHost creating Win32 HWND for libmpv
 
 ### Modified Files
-- `BabelDeck.csproj` — Avalonia 12 package references
+- `BabelPlayer.csproj` — Avalonia 12 package references
 - `App.axaml.cs` — removed Diagnostics/BindingPlugins code
 - `Services/SessionWorkflowCoordinator.cs` — added source player field, `PlaySourceMediaAtSegmentAsync`, `StopSourceMedia`, `SourceMediaPlayer` property
 - `ViewModels/MainWindowViewModel.cs` — added `Playback` property
 - `Views/MainWindow.axaml` — full UI redesign with segment list, video surface, controls
 - `Views/MainWindow.axaml.cs` — wired HandleReady to LibMpvEmbeddedTransport
-- `BabelDeck.Tests/SessionWorkflowTests.cs` — added FakeMediaTransport and EmbeddedPlaybackTests
+- `BabelPlayer.Tests/SessionWorkflowTests.cs` — added FakeMediaTransport and EmbeddedPlaybackTests
 
 ## Notes
 - NuGet restore was blocked by IDE (Windsurf) holding locks on old Avalonia analyzer DLLs in the global NuGet cache. Workaround: `--packages` flag to use a temp local package directory. A full IDE restart + `dotnet restore` will resolve this for normal development.

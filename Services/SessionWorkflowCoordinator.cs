@@ -5,10 +5,10 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Babel.Deck.Models;
+using Babel.Player.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Babel.Deck.Services;
+namespace Babel.Player.Services;
 
 public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisposable
 {
@@ -773,7 +773,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private string GetSessionDirectory()
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(appData, "BabelDeck", "sessions", CurrentSession.SessionId.ToString());
+        return Path.Combine(appData, "BabelPlayer", "sessions", CurrentSession.SessionId.ToString());
     }
 
     public void SaveCurrentSession()

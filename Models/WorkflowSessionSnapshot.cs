@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Babel.Deck.Models;
+namespace Babel.Player.Models;
 
 public sealed record WorkflowSessionSnapshot(
     Guid SessionId,

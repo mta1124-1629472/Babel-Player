@@ -1,4 +1,4 @@
-# Babel Deck From-Scratch Plan (Windows-first, libmpv early, TTS-centered)
+# Babel Player From-Scratch Plan (Windows-first, libmpv early, TTS-centered)
 
 ## Summary
 

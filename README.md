@@ -1,17 +1,17 @@
-# Babel Deck
+# Babel Player
 
 [![Sponsor](https://img.shields.io/github/sponsors/mta1124-1629472?label=Sponsor&logo=GitHub)](https://github.com/sponsors/mta1124-1629472)
-[![CI](https://github.com/mta1124-1629472/Babel-Deck/actions/workflows/ci.yml/badge.svg)](https://github.com/mta1124-1629472/Babel-Deck/actions/workflows/ci.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/mta1124-1629472/Babel-Deck)](https://github.com/mta1124-1629472/Babel-Deck/releases/latest)
+[![CI](https://github.com/mta1124-1629472/Babel-Player/actions/workflows/ci.yml/badge.svg)](https://github.com/mta1124-1629472/Babel-Player/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/mta1124-1629472/Babel-Player)](https://github.com/mta1124-1629472/Babel-Player/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)](#requirements)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![Alpha](https://img.shields.io/badge/status-early%20alpha-orange)](#status)
 
 > **Early alpha.** Core workflow is functional end-to-end, but the app is under active development. Expect rough edges, missing polish, and breaking changes between builds.
 
-Babel Deck is a Windows desktop dubbing workstation. Load a local video, generate a timed transcript via Whisper, translate the dialogue, synthesize dubbed speech via TTS, and preview the result in-context — all from a single session.
+Babel Player is a Windows desktop dubbing workstation. Load a local video, generate a timed transcript via Whisper, translate the dialogue, synthesize dubbed speech via TTS, and preview the result in-context — all from a single session.
 
-![Babel Deck preview](Assets/preview.png)
+![Babel Player preview](Assets/preview.png)
 
 ---
 
@@ -60,10 +60,10 @@ To be direct about current limits:
 ## Run from source
 
 ```bash
-git clone https://github.com/mta1124-1629472/Babel-Deck.git
-cd Babel-Deck
+git clone https://github.com/mta1124-1629472/Babel-Player.git
+cd Babel-Player
 dotnet build
-dotnet run --project BabelDeck.csproj
+dotnet run --project BabelPlayer.csproj
 ```
 
 Tests:
@@ -85,7 +85,7 @@ source video
                     └─ preview (libmpv + Avalonia UI)
 ```
 
-All artifacts are stored in a session directory under `%APPDATA%\BabelDeck\sessions\`. The session survives restarts; switching between multiple source files within a run caches prior work in memory and restores it without re-running the pipeline.
+All artifacts are stored in a session directory under `%APPDATA%\BabelPlayer\sessions\`. The session survives restarts; switching between multiple source files within a run caches prior work in memory and restores it without re-running the pipeline.
 
 ---
 

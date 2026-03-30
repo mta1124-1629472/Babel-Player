@@ -1,6 +1,6 @@
 using System;
 
-namespace Babel.Deck.Services;
+namespace Babel.Player.Services;
 
 /// <summary>
 /// Headless media transport interface for loading, playing, and controlling media playback.

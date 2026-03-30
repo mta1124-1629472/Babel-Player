@@ -1,4 +1,4 @@
-namespace Babel.Deck.Models;
+namespace Babel.Player.Models;
 
 public enum SessionWorkflowStage
 {

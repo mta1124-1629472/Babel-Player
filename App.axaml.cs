@@ -4,11 +4,11 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Markup.Xaml;
-using Babel.Deck.Services;
-using Babel.Deck.ViewModels;
-using Babel.Deck.Views;
+using Babel.Player.Services;
+using Babel.Player.ViewModels;
+using Babel.Player.Views;
 
-namespace Babel.Deck;
+namespace Babel.Player;
 
 public partial class App : Application
 {
@@ -31,9 +31,9 @@ public partial class App : Application
         {
             var appDataRoot = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "BabelDeck");
+                "BabelPlayer");
 
-            var appLog = new AppLog(Path.Combine(appDataRoot, "logs", "babel-deck.log"));
+            var appLog = new AppLog(Path.Combine(appDataRoot, "logs", "babel-player.log"));
             _startupLog = appLog;
 
             try
@@ -53,8 +53,8 @@ public partial class App : Application
                 {
                     var fallbackDataRoot = Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "BabelDeck");
-                    var fallbackLog = _startupLog ?? new AppLog(Path.Combine(fallbackDataRoot, "logs", "babel-deck.log"));
+                        "BabelPlayer");
+                    var fallbackLog = _startupLog ?? new AppLog(Path.Combine(fallbackDataRoot, "logs", "babel-player.log"));
                     var fallbackStore = new SessionSnapshotStore(
                         Path.Combine(fallbackDataRoot, "state", "current-session.json"), fallbackLog);
                     _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(fallbackStore, fallbackLog);

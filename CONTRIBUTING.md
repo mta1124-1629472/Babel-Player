@@ -2,7 +2,7 @@
 
 ### Project posture
 
-Babel Deck is being rebuilt as a sequence of vertical slices around one core product chain:
+Babel Player is being rebuilt as a sequence of vertical slices around one core product chain:
 
 `source media -> timed transcript -> translated/adapted dialogue -> spoken dubbed output -> in-context preview and refinement`
 
@@ -24,9 +24,9 @@ If your intended work does not clearly support the current milestone, it is prob
 
 Use names consistently by context:
 
-- Product / branding: `Babel Deck`
-- Repository name: `Babel-Deck`
-- .NET namespaces and assembly-style identifiers: `BabelDeck` or `Babel.Deck`
+- Product / branding: `Babel Player`
+- Repository name: `Babel-Player`
+- .NET namespaces and assembly-style identifiers: `BabelPlayer` or `Babel.Player`
 - Filenames and folders: follow the local convention already used in that area rather than inventing a new one midstream
 
 Do not mix branding names and code identifiers casually inside the same surface.

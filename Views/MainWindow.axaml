@@ -1,14 +1,14 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:Babel.Deck.ViewModels"
-        xmlns:v="using:Babel.Deck.Views"
+        xmlns:vm="using:Babel.Player.ViewModels"
+        xmlns:v="using:Babel.Player.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
-        x:Class="Babel.Deck.Views.MainWindow"
+        x:Class="Babel.Player.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/babeldeck.ico"
-        Title="Babel Deck"
+        Icon="/Assets/babelplayer.ico"
+        Title="Babel Player"
         MinWidth="900" MinHeight="500">
 
     <Grid RowDefinitions="Auto,*,Auto">
@@ -17,7 +17,7 @@
         <Border Grid.Row="0" Padding="12,8" Background="#20808080">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Babel Deck" VerticalAlignment="Center" />
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Babel Player" VerticalAlignment="Center" />
                     <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" VerticalAlignment="Center" />
                     <Button Content="Run Pipeline"
                             Command="{Binding Playback.RunPipelineCommand}"

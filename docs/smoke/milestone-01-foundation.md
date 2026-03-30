@@ -37,8 +37,8 @@ Unit tests passed: 1/1
 ```
 
 ### Artifacts / Paths
-- Log file: `C:\Users\ander\AppData\Local\BabelDeck\logs\babel-deck.log`
-- Persisted session state: `C:\Users\ander\AppData\Local\BabelDeck\state\current-session.json`
+- Log file: `C:\Users\ander\AppData\Local\BabelPlayer\logs\babel-player.log`
+- Persisted session state: `C:\Users\ander\AppData\Local\BabelPlayer\state\current-session.json`
 
 ## Notes
 - App handles application lifecycle.

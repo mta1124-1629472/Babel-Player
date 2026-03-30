@@ -82,7 +82,7 @@ desktop.ini
 
 # Application data (session artifacts, logs, etc.)
 **/LocalApplicationData/
-**/AppData/Local/BabelDeck/
+**/AppData/Local/BabelPlayer/
 
 # External binaries
 ffmpeg.exe

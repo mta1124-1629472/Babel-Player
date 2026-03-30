@@ -1,9 +1,9 @@
 using System;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Babel.Deck.Models;
+using Babel.Player.Models;
 
-namespace Babel.Deck.ViewModels;
+namespace Babel.Player.ViewModels;
 
 public partial class SegmentInspectionViewModel : ViewModelBase
 {

@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace Babel.Deck.Services;
+namespace Babel.Player.Services;
 
 public sealed class AppLog
 {

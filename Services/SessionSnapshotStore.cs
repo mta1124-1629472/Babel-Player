@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using Babel.Deck.Models;
+using Babel.Player.Models;
 
-namespace Babel.Deck.Services;
+namespace Babel.Player.Services;
 
 public sealed class SessionSnapshotStore
 {

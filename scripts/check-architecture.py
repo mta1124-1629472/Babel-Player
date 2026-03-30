@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Architecture guard for Babel-Deck.
+Architecture guard for Babel-Player.
 Enforces basic project structure and placeholder discipline.
 
 Run from the repository root:
@@ -36,25 +36,25 @@ def project_refs(csproj: Path) -> list[str]:
     return [el.get("Include", "") for el in tree.getroot().iter("ProjectReference")]
 
 
-# ── Check 1: BabelDeck.csproj exists ─────────────────────────────────────────
+# ── Check 1: BabelPlayer.csproj exists ─────────────────────────────────────────
 
-if not Path("BabelDeck.csproj").exists():
-    fail("BabelDeck.csproj not found")
+if not Path("BabelPlayer.csproj").exists():
+    fail("BabelPlayer.csproj not found")
 else:
-    ok("BabelDeck.csproj exists")
+    ok("BabelPlayer.csproj exists")
 
 # ── Check 2: Test project references main project ───────────────────────────
 
-test_csproj = Path("BabelDeck.Tests/BabelDeck.Tests.csproj")
+test_csproj = Path("BabelPlayer.Tests/BabelPlayer.Tests.csproj")
 if not test_csproj.exists():
-    fail("BabelDeck.Tests/BabelDeck.Tests.csproj not found")
+    fail("BabelPlayer.Tests/BabelPlayer.Tests.csproj not found")
 else:
     refs = project_refs(test_csproj)
-    has_ref = any("BabelDeck.csproj" in r for r in refs)
+    has_ref = any("BabelPlayer.csproj" in r for r in refs)
     if has_ref:
         ok("Test project references main project")
     else:
-        fail(f"Test project must reference BabelDeck.csproj, found: {refs}")
+        fail(f"Test project must reference BabelPlayer.csproj, found: {refs}")
 
 # ── Check 3: Test project has test framework ─────────────────────────────────
 
@@ -67,7 +67,7 @@ else:
 
 # ── Check 4: Main project is Avalonia app ───────────────────────────────────
 
-main_csproj = Path("BabelDeck.csproj")
+main_csproj = Path("BabelPlayer.csproj")
 content = main_csproj.read_text()
 if re.search(r"(?i)avalonia", content):
     ok("Main project is an Avalonia application")
@@ -76,7 +76,7 @@ else:
 
 # ── Check 5: Main project has OutputType=WinExe for desktop ─────────────────
 
-main_csproj = Path("BabelDeck.csproj")
+main_csproj = Path("BabelPlayer.csproj")
 content = main_csproj.read_text()
 if "WinExe" in content and "OutputType" in content:
     ok("Main project OutputType is WinExe")

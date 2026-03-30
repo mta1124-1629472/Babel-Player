@@ -9,7 +9,7 @@
             "type": "shell",
             "args": [
                 "build",
-                "BabelDeck.csproj",
+                "BabelPlayer.csproj",
                 "--no-restore",
                 "--no-incremental",
                 // Ask dotnet build to generate full paths for file names.
@@ -38,7 +38,7 @@
             "type": "shell",
             "args": [
                 "clean",
-                "BabelDeck.csproj",
+                "BabelPlayer.csproj",
                 "--no-restore"
             ],
             "group": {

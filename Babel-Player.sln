@@ -2,9 +2,9 @@
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelDeck", "BabelDeck.csproj", "{B49A41B8-6C6F-CDE3-4C4B-A8D8196E2794}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer", "BabelPlayer.csproj", "{B49A41B8-6C6F-CDE3-4C4B-A8D8196E2794}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelDeck.Tests", "BabelDeck.Tests\BabelDeck.Tests.csproj", "{F021B902-7B44-4E76-AD15-C9C332F8A7B7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer.Tests", "BabelPlayer.Tests\BabelPlayer.Tests.csproj", "{F021B902-7B44-4E76-AD15-C9C332F8A7B7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

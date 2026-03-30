@@ -5,8 +5,8 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <AssemblyName>BabelDeck</AssemblyName>
-    <RootNamespace>Babel.Deck</RootNamespace>
+    <AssemblyName>BabelPlayer</AssemblyName>
+    <RootNamespace>Babel.Player</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="BabelPlayer.Tests\**" />
     <Compile Remove="BabelDeck.Tests\**" />
   </ItemGroup>
 

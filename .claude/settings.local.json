@@ -6,7 +6,8 @@
       "Read(//d/Dev/Babel-Deck/**)",
       "Bash(done)",
       "Bash(xargs ls:*)",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Bash(git stash:*)"
     ]
   }
 }

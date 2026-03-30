@@ -18,7 +18,7 @@
 - `TranslateTranscriptAsync()` runs translation via googletrans
 - Translation preserves segment timing (start/end seconds)
 - Translated text is added to each segment alongside source text
-- Translation persisted to `{LocalApplicationData}/BabelDeck/sessions/{SessionId}/translations/{filename}_{target}.json`
+- Translation persisted to `{LocalApplicationData}/BabelPlayer/sessions/{SessionId}/translations/{filename}_{target}.json`
 - On reopen, coordinator verifies translation artifact exists
 - Missing translation surfaces truthful degraded state with logging
 - Tests prove full load → transcribe → translate → persist → reopen → reuse loop
@@ -28,8 +28,8 @@
 ### Commands Run
 ```bash
 pip install torch transformers googletrans sentencepiece
-dotnet build Babel-Deck.sln
-dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj
+dotnet build Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
 ```
 
 ### Test Results
@@ -60,7 +60,7 @@ Existing tests still pass (12):
 ```
 
 ### Artifacts / Paths
-- Translation location: `{LocalApplicationData}/BabelDeck/sessions/{SessionId}/translations/{filename}_{target}.json`
+- Translation location: `{LocalApplicationData}/BabelPlayer/sessions/{SessionId}/translations/{filename}_{target}.json`
 - Uses `LocalApplicationData` (not roaming)
 
 ## Notes

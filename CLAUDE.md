@@ -1,11 +1,11 @@
-# Babel Deck — Claude Context
+# Babel Player — Claude Context
 
 ## Commands
 
 ```bash
 dotnet build                             # Build the project
 dotnet test                              # Run all tests
-dotnet run --project BabelDeck.csproj    # Launch the app
+dotnet run --project BabelPlayer.csproj    # Launch the app
 ```
 
 ## Essential Reading
@@ -23,9 +23,9 @@ Milestone 7 — Dub Session Workflow. Check `docs/smoke/` for completed gate evi
 
 | Context | Form |
 |---------|------|
-| Product / branding | `Babel Deck` |
-| Repository | `Babel-Deck` |
-| .NET namespaces / assembly IDs | `BabelDeck` or `Babel.Deck` |
+| Product / branding | `Babel Player` |
+| Repository | `Babel-Player` |
+| .NET namespaces / assembly IDs | `BabelPlayer` or `Babel.Player` |
 | Filenames / folders | match local convention already in use |
 
 ## Key Files

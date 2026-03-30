@@ -30,8 +30,8 @@
 
 ### Commands Run
 ```bash
-dotnet build Babel-Deck.sln
-dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj --no-build
+dotnet build Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj --no-build
 ```
 
 ### Test Results
@@ -56,7 +56,7 @@ New tests for this milestone:
 - `Views/MainWindow.axaml` — two-column layout with full-text segment list as unified inspection surface
 - `Views/MainWindow.axaml.cs` — auto-loads test transcript/translation on startup for smoke testing
 - `Services/SessionWorkflowCoordinator.cs` — added `InjectTestTranscript()` for smoke testing
-- `BabelDeck.Tests/SessionWorkflowTests.cs` — added `SegmentInspectionTests` class with 4 tests
+- `BabelPlayer.Tests/SessionWorkflowTests.cs` — added `SegmentInspectionTests` class with 4 tests
 
 ### New Test Assets
 - `test-assets/transcripts/sample.json` — transcript with 7 segments matching sample.srt

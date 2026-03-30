@@ -18,7 +18,7 @@
 - `LoadMedia()` copies source to session-owned directory
 - `TranscribeMediaAsync()` runs faster-whisper transcription
 - Transcript segments are timestamped (start/end seconds, text)
-- Transcript persisted to `{LocalApplicationData}/BabelDeck/sessions/{SessionId}/transcripts/{filename}.json`
+- Transcript persisted to `{LocalApplicationData}/BabelPlayer/sessions/{SessionId}/transcripts/{filename}.json`
 - On reopen, coordinator verifies transcript artifact exists
 - Missing transcript surfaces truthful degraded state with logging
 - Tests prove full load → transcribe → persist → reopen → reuse loop
@@ -28,8 +28,8 @@
 ### Commands Run
 ```text
 pip install faster-whisper
-dotnet build Babel-Deck.sln
-dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj
+dotnet build Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
 ```
 
 ### Test Results
@@ -60,7 +60,7 @@ Existing tests still pass (9):
 ```
 
 ### Artifacts / Paths
-- Transcript location: `{LocalApplicationData}/BabelDeck/sessions/{SessionId}/transcripts/{filename}.json`
+- Transcript location: `{LocalApplicationData}/BabelPlayer/sessions/{SessionId}/transcripts/{filename}.json`
 - Uses `LocalApplicationData` (not roaming)
 
 ## Notes

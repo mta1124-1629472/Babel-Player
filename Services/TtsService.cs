@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace Babel.Deck.Services;
+namespace Babel.Player.Services;
 
 public sealed class TtsService(AppLog log)
 {

@@ -1,6 +1,6 @@
-using Babel.Deck.Services;
+using Babel.Player.Services;
 
-namespace Babel.Deck.ViewModels;
+namespace Babel.Player.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {

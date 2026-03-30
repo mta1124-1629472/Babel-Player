@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Create a report to help us improve the Babel Deck
+about: Create a report to help us improve the Babel Player
 title: "[BUG]"
 labels: bug, invalid
 assignees: mta1124-1629472, Copilot
@@ -31,10 +31,10 @@ Please describe your system's hardware "mixture" so we can analyze the allocatio
 
 ## 📄 Logs & Screenshots
 If applicable, add screenshots to help explain your problem. 
-Please attach the terminal output or the log file from: `%LocalAppData%/BabelDeck/logs/`
+Please attach the terminal output or the log file from: `%LocalAppData%/BabelPlayer/logs/`
 
 ##  Environment
-- **Babel Deck Version:** (e.g., v0.1.2-alpha)
+- **Babel Player Version:** (e.g., v0.1.2-alpha)
 - **OS:** (e.g., Windows 11 23H2)
 - **Driver Version:** (e.g., NVIDIA 551.23 / Intel 31.0.101)
 

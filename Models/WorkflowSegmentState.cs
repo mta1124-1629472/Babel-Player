@@ -1,6 +1,6 @@
 using System;
 
-namespace Babel.Deck.Models;
+namespace Babel.Player.Models;
 
 public sealed record WorkflowSegmentState(
     string SegmentId,

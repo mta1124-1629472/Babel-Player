@@ -17,7 +17,7 @@
 ## What Was Verified
 - `GenerateTtsAsync()` runs edge-tts synthesis
 - TTS audio file generated with non-zero size
-- TTS persisted to `{LocalApplicationData}/BabelDeck/sessions/{SessionId}/tts/{filename}_{voice}.mp3`
+- TTS persisted to `{LocalApplicationData}/BabelPlayer/sessions/{SessionId}/tts/{filename}_{voice}.mp3`
 - On reopen, coordinator verifies TTS artifact exists
 - Missing TTS surfaces truthful degraded state with logging
 - Tests prove full load → transcribe → translate → TTS → persist → reopen → reuse loop
@@ -27,8 +27,8 @@
 ### Commands Run
 ```bash
 pip install edge-tts
-dotnet build Babel-Deck.sln
-dotnet test BabelDeck.Tests/BabelDeck.Tests.csproj
+dotnet build Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
 ```
 
 ### Test Results
@@ -53,7 +53,7 @@ Existing tests still pass (15):
 - Output file persisted to session artifacts directory
 
 ### Artifacts / Paths
-- TTS location: `{LocalApplicationData}/BabelDeck/sessions/{SessionId}/tts/{filename}_{voice}.mp3`
+- TTS location: `{LocalApplicationData}/BabelPlayer/sessions/{SessionId}/tts/{filename}_{voice}.mp3`
 - Uses `LocalApplicationData` (not roaming)
 
 ## Notes
