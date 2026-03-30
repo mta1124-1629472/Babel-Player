@@ -69,7 +69,7 @@ private static string FindPythonPath()
         var psi = new ProcessStartInfo
         {
             FileName = ffmpegPath,
-            Arguments = $"-i \"{videoPath}\" -vn -acodec pcm_s16le -ar 16000 -ac 1 -y \"{audioPath}\"",
+            Arguments = $"-i \"{videoPath}\" -vn -acodec pcm_s16le -ar 16000 -ac 1 -af \"loudnorm=I=-16:LRA=11:TP=-1.5\" -y \"{audioPath}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
