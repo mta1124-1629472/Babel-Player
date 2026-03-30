@@ -89,6 +89,7 @@ public partial class MainWindow : Window
                     if (!string.IsNullOrEmpty(ingestedPath) && System.IO.File.Exists(ingestedPath))
                     {
                         embedded.Load(ingestedPath);
+                        vm.Playback.ReapplySubtitlesIfActive();
                     }
                 }
             }
@@ -129,6 +130,7 @@ public partial class MainWindow : Window
                     {
                         _embeddedTransport.Load(ingestedPath);
                         _embeddedTransport.Play();
+                        vm.Playback.ReapplySubtitlesIfActive();
                     }
                 }
             }
