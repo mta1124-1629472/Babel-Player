@@ -354,7 +354,6 @@ internal sealed class FakeMediaTransport : IMediaTransport, IDisposable
     public bool HasEnded { get; set; }
     public double Volume { get; set; } = 1.0;
     public double PlaybackRate { get; set; } = 1.0;
-    public bool SubtitlesVisible { get; set; }
 
     public event EventHandler? Ended;
     public event EventHandler<Exception>? ErrorOccurred;
@@ -363,8 +362,6 @@ internal sealed class FakeMediaTransport : IMediaTransport, IDisposable
     public void Play() { IsPlaying = true; IsPaused = false; }
     public void Pause() { IsPlaying = false; IsPaused = true; }
     public void Seek(long positionMs) { LastSeekPosition = positionMs; }
-    public void LoadSubtitleTrack(string srtPath) { }
-    public void RemoveAllSubtitleTracks() { }
     public void Dispose() { IsDisposed = true; }
 
     public void SimulateEnd() { HasEnded = true; Ended?.Invoke(this, EventArgs.Empty); }

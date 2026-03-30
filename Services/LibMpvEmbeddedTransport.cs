@@ -243,29 +243,6 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         }
     }
 
-    public void LoadSubtitleTrack(string srtPath)
-    {
-        if (_disposed || _handle == IntPtr.Zero) return;
-        var normalized = srtPath.Replace('\\', '/');
-        _mpv_command_string!(_handle, $"sub-add \"{normalized}\"");
-    }
-
-    public void RemoveAllSubtitleTracks()
-    {
-        if (_disposed || _handle == IntPtr.Zero) return;
-        _mpv_command_string!(_handle, "sub-remove");
-    }
-
-    public bool SubtitlesVisible
-    {
-        get
-        {
-            if (_disposed || _handle == IntPtr.Zero) return false;
-            return GetPropertyString("sub-visibility") != "no";
-        }
-        set => _mpv_command_string!(_handle, $"set sub-visibility {(value ? "yes" : "no")}");
-    }
-
     public void Dispose()
     {
         Dispose(true);

@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
-using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -80,14 +78,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(DubModeLabel))]
     private bool _isDubModeOn;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SubtitleToggleLabel))]
-    private bool _isSubtitleModeOn;
-
     private double _preMuteVolume = 1.0;
     private bool _preFullscreenSegmentPaneVisible = true;
-    private bool _preSubtitlePaneState = true;
-    private string? _activeSrtPath;
 
     private readonly DispatcherTimer _controlsHideTimer;
     private const int ControlsHideDelayMs = 3000;
@@ -132,8 +124,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 : "\U0001F50A";
 
     public string DubModeLabel => IsDubModeOn ? "🎙 Dub: On" : "🎙 Dub: Off";
-
-    public string SubtitleToggleLabel => IsSubtitleModeOn ? "CC ✓" : "CC";
 
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
     public string SourceDurationFormatted => FormatMs(SourceDurationMs);
@@ -253,25 +243,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         }
         else
         {
-            // Don't restore pane if subtitle mode is active — pane stays closed
-            IsSegmentPaneVisible = _preFullscreenSegmentPaneVisible && !IsSubtitleModeOn;
+            IsSegmentPaneVisible = _preFullscreenSegmentPaneVisible;
             _controlsHideTimer.Stop();
             IsControlsVisible = true;   // always visible outside fullscreen
-        }
-    }
-
-    partial void OnIsSubtitleModeOnChanged(bool value)
-    {
-        if (value)
-        {
-            _preSubtitlePaneState = IsSegmentPaneVisible;
-            IsSegmentPaneVisible = false;
-            ApplySubtitleState();
-        }
-        else
-        {
-            ApplySubtitleState();                           // hide subs before restoring pane
-            IsSegmentPaneVisible = _preSubtitlePaneState;
         }
     }
 
@@ -416,54 +390,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private void ToggleFullscreen() => IsFullscreen = !IsFullscreen;
 
     [RelayCommand]
-    private void ToggleSegmentPane()
-    {
-        if (IsSubtitleModeOn)
-        {
-            // Pull tab while subtitles active → exit subtitle mode; hook restores pane
-            IsSubtitleModeOn = false;
-        }
-        else
-        {
-            IsSegmentPaneVisible = !IsSegmentPaneVisible;
-        }
-    }
-
-    [RelayCommand]
-    private void ToggleSubtitles()
-    {
-        if (!HasSegments) return;
-        IsSubtitleModeOn = !IsSubtitleModeOn;
-    }
-
-    /// <summary>
-    /// Called from code-behind after each embedded.Load() to re-apply an active subtitle
-    /// track, since mpv clears subtitle tracks when a new file is loaded.
-    /// </summary>
-    public void ReapplySubtitlesIfActive()
-    {
-        if (IsSubtitleModeOn && _activeSrtPath != null)
-            ApplySubtitleState();
-    }
-
-    private void ApplySubtitleState()
-    {
-        if (_coordinator.SourceMediaPlayer is not LibMpvEmbeddedTransport player) return;
-
-        if (IsSubtitleModeOn)
-        {
-            var srt = SrtGenerator.Generate(Segments);
-            _activeSrtPath = Path.Combine(Path.GetTempPath(), $"subs_{Guid.NewGuid():N}.srt");
-            File.WriteAllText(_activeSrtPath, srt, Encoding.UTF8);
-            player.RemoveAllSubtitleTracks();
-            player.LoadSubtitleTrack(_activeSrtPath);
-            player.SubtitlesVisible = true;
-        }
-        else
-        {
-            player.SubtitlesVisible = false;
-        }
-    }
+    private void ToggleSegmentPane() => IsSegmentPaneVisible = !IsSegmentPaneVisible;
 
     [RelayCommand]
     private async Task LoadSegmentsAsync()
@@ -476,7 +403,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             StatusText = HasSegments
                 ? $"{Segments.Count} segments loaded."
                 : "No segments available. Run the workflow first.";
-            if (IsSubtitleModeOn) ApplySubtitleState();
         }
         catch (Exception ex)
         {

@@ -57,21 +57,6 @@ public interface IMediaTransport : IDisposable
     double PlaybackRate { get; set; }
 
     /// <summary>
-    /// Loads an external subtitle file. No-op if the transport has no display.
-    /// </summary>
-    void LoadSubtitleTrack(string srtPath);
-
-    /// <summary>
-    /// Removes all external subtitle tracks. No-op if the transport has no display.
-    /// </summary>
-    void RemoveAllSubtitleTracks();
-
-    /// <summary>
-    /// Gets or sets whether the active subtitle track is visible.
-    /// </summary>
-    bool SubtitlesVisible { get; set; }
-
-    /// <summary>
     /// Event raised when media playback ends.
     /// </summary>
     event EventHandler? Ended;

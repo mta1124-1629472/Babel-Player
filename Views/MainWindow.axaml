@@ -165,10 +165,6 @@
                         <Button Content="&#x26F6;"
                                 Command="{Binding Playback.ToggleFullscreenCommand}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                        <Button Content="{Binding Playback.SubtitleToggleLabel}"
-                                Command="{Binding Playback.ToggleSubtitlesCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}"
-                                ToolTip.Tip="Toggle subtitles (CC)" />
                     </StackPanel>
                 </Border>
 
