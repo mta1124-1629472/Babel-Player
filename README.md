@@ -89,14 +89,6 @@ All artifacts are stored in a session directory under `%APPDATA%\BabelPlayer\ses
 
 ---
 
-## Status
-
-Milestone 7 (Dub Session Workflow) is the current completed milestone. The core chain — load → transcribe → translate → TTS → playback — works end to end. The next focus is refinement tooling, per-segment editing, and export.
-
-This is early alpha software. The architecture is intentionally narrow and scope-controlled. Features are added in verified vertical slices, not as partially-wired stubs.
-
----
-
 ## Contributing
 
 Read these before touching anything:
