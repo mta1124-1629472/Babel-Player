@@ -314,6 +314,10 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
 
     public double PlaybackRate { get => 1.0; set { } }
 
+    public void LoadSubtitleTrack(string srtPath) { }
+    public void RemoveAllSubtitleTracks() { }
+    public bool SubtitlesVisible { get; set; }
+
     public bool HasEnded
     {
         get
