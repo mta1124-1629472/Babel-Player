@@ -3,9 +3,10 @@
 ## Commands
 
 ```bash
-dotnet build                             # Build the project
-dotnet test                              # Run all tests
-dotnet run --project BabelPlayer.csproj    # Launch the app
+dotnet build                              # Build the project
+dotnet test                               # Run all tests
+dotnet run --project BabelPlayer.csproj   # Launch the app
+python3 scripts/check-architecture.py    # Architecture linter
 ```
 
 ## Essential Reading
@@ -17,7 +18,41 @@ Before making non-trivial changes, read:
 
 ## Current Milestone
 
-Milestone 7 — Dub Session Workflow. Check `docs/smoke/` for completed gate evidence.
+**Milestone 9 — Subtitle & Transcript Inspection** is complete. Check `docs/smoke/` for gate evidence.
+Next: Milestone 10 — Settings & Bootstrap.
+
+## Project Overview
+
+Babel Player is a cross-platform desktop dubbing/localization app built with:
+- **C# / .NET 10.0** + **Avalonia 12.0 RC1** (Fluent theme)
+- **libmpv** (native C library, P/Invoke) for media playback
+- **CommunityToolkit.MVVM 8.2.1** for observable properties
+- **Python subprocesses** for AI inference (Faster-Whisper, googletrans, edge-tts)
+- **xUnit 2.9.3** + coverlet for testing
+
+Core workflow chain: `source media → ingest → transcribe → translate → TTS → preview → persist`
+
+## Directory Structure
+
+```
+Babel-Player/
+├── Models/                          # Domain data structures
+├── Services/                        # Coordination, infrastructure, AI/media boundaries
+├── ViewModels/                      # MVVM coordinators
+├── Views/                           # Avalonia XAML UI
+├── BabelPlayer.Tests/               # xUnit integration tests
+├── docs/
+│   ├── architecture.md              # Structural principles
+│   ├── smoke/                       # Milestone completion evidence (required)
+│   └── containers.md                # WSL/container deployment notes (deferred)
+├── scripts/
+│   └── check-architecture.py        # Architecture linter
+├── native/win-x64/libmpv-2.dll      # Bundled native binary
+├── test-assets/video/sample.mp4     # Test media (43KB Spanish TTS video)
+├── AGENTS.md                        # Operating discipline (300+ lines — read it)
+├── PLAN.md                          # 13-milestone roadmap
+└── BabelPlayer.csproj               # net10.0, WinExe, RootNamespace=Babel.Player
+```
 
 ## Naming Conventions
 
@@ -32,13 +67,68 @@ Milestone 7 — Dub Session Workflow. Check `docs/smoke/` for completed gate evi
 
 | File | Purpose |
 |------|---------|
-| `Services/SessionWorkflowCoordinator.cs` | Single owner of workflow state — all stage progression runs through here |
+| `Services/SessionWorkflowCoordinator.cs` | **Single owner of all workflow/session state** — all stage progression runs through here |
+| `ViewModels/EmbeddedPlaybackViewModel.cs` | Largest VM (~600 lines); manages video playback UI, segment selection, dub mode, subtitle toggle |
+| `Models/WorkflowSessionSnapshot.cs` | Complete session state record persisted to disk |
+| `Models/SessionWorkflowStage.cs` | Enum: `Foundation → MediaLoaded → Transcribed → Translated → TtsGenerated` |
+| `Models/PlaybackState.cs` | Enum: `Idle`, `PlayingSingleSegment`, `PlayingSequence` |
+| `Models/WorkflowSegmentState.cs` | Record: segment ID, timing, source/translated text, TTS status |
+| `Services/IMediaTransport.cs` | Abstraction for load/play/pause/seek + subtitle + events |
 | `PLAN.md` | Milestone gates — current milestone is the only allowed scope |
-| `docs/smoke/` | Milestone smoke notes (required evidence for gate completion) |
+| `docs/smoke/` | Required gate evidence for each milestone |
+| `AGENTS.md` | Non-negotiable operating rules |
+
+## Services Reference
+
+| Service | Responsibility |
+|---------|----------------|
+| `SessionWorkflowCoordinator` | State owner; orchestrates transcription, translation, TTS; manages multi-file caching; segment playback via two IMediaTransport instances |
+| `SessionSnapshotStore` | JSON persistence to `%LOCALAPPDATA%/BabelPlayer/state/`; corruption recovery (moves bad JSON to `.corrupt`) |
+| `AppLog` | Thread-safe file logging (`%LOCALAPPDATA%/BabelPlayer/logs/babel-player.log`) |
+| `LibMpvHeadlessTransport` | Headless libmpv (`vo=null`, `ao=null`); used for TTS segment audio playback |
+| `LibMpvEmbeddedTransport` | GPU-accelerated libmpv (`vo=gpu`, `wid`); renders video to native HWND |
+| `TranscriptionService` | Subprocess → Faster-Whisper; auto-detects source language; returns timed segments |
+| `TranslationService` | Subprocess → googletrans; supports full-transcript and single-segment regeneration |
+| `TtsService` | Subprocess → edge-tts; generates MP3 per segment; supports single-segment regeneration |
+| `SrtGenerator` | Static utility; converts segment list to SRT; prefers translated text, falls back to source |
+
+## Python/C# Serialization Contract
+
+**Critical:** Field names crossing the Python/C# boundary are explicit serialization contracts. Do NOT rely on implicit .NET casing.
+
+- Python emits snake_case/camelCase field names
+- C# deserializes with `PropertyNameCaseInsensitive = true` OR explicit `[JsonPropertyName]`
+- Segment IDs are derived from transcript start time: `segment_{start}` (e.g., `segment_0.0`, `segment_3.68`) — must match Python output exactly as they key the TTS segment dictionary
+- When changing field names in Python scripts or C# result records, update **both sides deliberately**
+
+## Artifact Storage
+
+- Session state: `%LOCALAPPDATA%/BabelPlayer/state/current-session.json`
+- Session artifacts: `%LOCALAPPDATA%/BabelPlayer/sessions/{SessionId}/`
+  - Transcripts, translations, TTS audio in session-specific subdirectories
+- On restore, coordinator validates artifacts exist and **downgrades stage** if missing
+
+## Testing
+
+```bash
+dotnet test                            # All tests
+dotnet test --filter "ClassName=SessionWorkflowTests"
+```
+
+- 22 integration tests in `BabelPlayer.Tests/SessionWorkflowTests.cs`
+- Shared fixture via `SessionWorkflowTemplateFixture` (temp dirs, reusable templates)
+- xUnit collection `"Media transport"` runs non-parallel (hardware resource)
+- Test assets: `test-assets/video/sample.mp4`
+
+## Architecture Linter
+
+```bash
+python3 scripts/check-architecture.py
+```
+
+Enforces: `.csproj` structure, test project references, `OutputType=WinExe`, `NotImplementedException` carries PLACEHOLDER messages, silent event stubs have PLACEHOLDER comments.
 
 ## Active Skills
-
-Both skills are active for this session and should be used throughout:
 
 | Skill | Purpose |
 |-------|---------|
@@ -47,8 +137,11 @@ Both skills are active for this session and should be used throughout:
 
 ## Gotchas
 
-- **State ownership:** Do not scatter session/workflow state across views or helper classes. `SessionWorkflowCoordinator` is the explicit owner.
-- **Smoke notes:** Live in `docs/smoke/milestone-NN-label.md`. Status must be `complete`, `partial`, or `failed` — nothing vague.
+- **State ownership:** Never scatter session/workflow state across views or helpers. `SessionWorkflowCoordinator` is the explicit and sole owner.
+- **Smoke notes:** Live in `docs/smoke/milestone-NN-label.md`. Status must be `complete`, `partial`, or `failed` — nothing vague. Required sections: Metadata, Gate Summary, What Was Verified, What Was Not Verified, Evidence, Notes, Conclusion, Deferred Items.
 - **Scope discipline:** AGENTS.md rules are non-negotiable. Refactors, abstractions, and scope expansion require explicit justification against the current milestone.
 - **Fake readiness is forbidden:** Use explicit placeholders or disabled states — never silent fallback or pretend-complete UI.
-- **Python/C# JSON contracts:** Field names crossing the Python/C# boundary are explicit serialization contracts. Do not rely on implicit .NET casing. Python emits camelCase/snake_case, C# must match with hardcoded strings or explicit `[JsonPropertyName]` attributes.
+- **Python/C# JSON contracts:** Field names are explicit serialization contracts (see section above).
+- **Segment ID contract:** `segment_{start}` format — changing this breaks TTS segment lookup.
+- **No premature architecture:** No provider matrices, factory systems, plugin architectures, or runtime selection systems until milestones earn them.
+- **Do not push to main without explicit instruction.** Always develop on the designated branch.
