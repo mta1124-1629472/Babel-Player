@@ -24,11 +24,12 @@ public static class ProviderOptions
     // ── Translation ────────────────────────────────────────────────────────────
 
     public static IReadOnlyList<string> TranslationProviders { get; } =
-        ["google-translate-free", "deepl", "openai"];
+        ["google-translate-free", "nllb-200", "deepl", "openai"];
 
     public static IReadOnlyList<string> GetTranslationModels(string provider) => provider switch
     {
         "google-translate-free" => ["default"],
+        "nllb-200"              => ["nllb-200-distilled-600M", "nllb-200-distilled-1.3B", "nllb-200-1.3B"],
         "deepl"                 => ["default"],
         "openai"                => ["gpt-4o", "gpt-4o-mini"],
         _                       => ["default"],
@@ -37,20 +38,39 @@ public static class ProviderOptions
     // ── TTS ────────────────────────────────────────────────────────────────────
 
     public static IReadOnlyList<string> TtsProviders { get; } =
-        ["edge-tts", "elevenlabs", "google-cloud-tts", "openai-tts"];
+        ["edge-tts", "piper", "elevenlabs", "google-cloud-tts", "openai-tts"];
 
     /// <summary>
     /// For edge-tts this returns the voice list (TtsVoice in AppSettings IS the "model").
+    /// For piper this returns a curated list of voice names (each maps to a .onnx model file).
     /// For other providers it returns synthesis model names.
     /// </summary>
     public static IReadOnlyList<string> GetTtsOptions(string provider) => provider switch
     {
         "edge-tts"         => EdgeTtsVoices,
+        "piper"            => PiperVoices,
         "elevenlabs"       => ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5"],
         "google-cloud-tts" => ["standard", "wavenet", "neural2"],
         "openai-tts"       => ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"],
         _                  => ["default"],
     };
+
+    // ── Piper voice list ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Curated Piper voice names. Each name corresponds to a .onnx model file
+    /// that must be present in the configured Piper model directory.
+    /// </summary>
+    public static IReadOnlyList<string> PiperVoices { get; } =
+    [
+        "en_US-lessac-medium",
+        "en_US-ryan-high",
+        "en_US-ljspeech-high",
+        "en_GB-alan-medium",
+        "de_DE-thorsten-medium",
+        "fr_FR-gilles-low",
+        "es_ES-mls_10246-low",
+    ];
 
     // ── Edge-TTS voice list ────────────────────────────────────────────────────
 
@@ -71,10 +91,12 @@ public static class ProviderOptions
     /// <summary>True if this provider requires an API key stored in ApiKeyStore.</summary>
     public static bool RequiresApiKey(string provider) => provider switch
     {
-        "faster-whisper"       => false,
-        "google-translate-free"=> false,
-        "edge-tts"             => false,
-        _                      => true,
+        "faster-whisper"        => false,
+        "google-translate-free" => false,
+        "nllb-200"              => false,
+        "edge-tts"              => false,
+        "piper"                 => false,
+        _                       => true,
     };
 
     /// <summary>

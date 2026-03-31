@@ -29,6 +29,13 @@ public sealed class AppSettings
     /// <summary>BCP-47 language code for the translation target.</summary>
     public string TargetLanguage { get; set; } = "en";
 
+    /// <summary>
+    /// Directory where Piper voice model (.onnx) files are stored.
+    /// Empty string = use platform default (%LOCALAPPDATA%\piper\voices on Windows,
+    /// ~/.local/share/piper/voices on Linux/macOS).
+    /// </summary>
+    public string PiperModelDir { get; set; } = "";
+
     /// <summary>UI theme: "Light", "Dark", or "System".</summary>
     public string Theme { get; set; } = "System";
 

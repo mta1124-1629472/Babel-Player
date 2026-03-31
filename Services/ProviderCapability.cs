@@ -17,11 +17,14 @@ namespace Babel.Player.Services;
 public static class ProviderCapability
 {
     private static readonly HashSet<string> _transcriptionSupported = ["faster-whisper"];
-    private static readonly HashSet<string> _translationSupported   = ["google-translate-free"];
-    private static readonly HashSet<string> _ttsSupported           = ["edge-tts"];
+    private static readonly HashSet<string> _translationSupported   = ["google-translate-free", "nllb-200"];
+    private static readonly HashSet<string> _ttsSupported           = ["edge-tts", "piper"];
 
     private static readonly HashSet<string> _fasterWhisperModels =
         ["tiny", "base", "small", "medium", "large-v3"];
+
+    private static readonly HashSet<string> _nllbModels =
+        ["nllb-200-distilled-600M", "nllb-200-distilled-1.3B", "nllb-200-1.3B"];
 
     // ---------------------------------------------------------------------------
     // Transcription
@@ -60,7 +63,13 @@ public static class ProviderCapability
     public static void ValidateTranslation(string provider, string model, ApiKeyStore? keys)
     {
         if (_translationSupported.Contains(provider))
+        {
+            if (provider == "nllb-200" && !_nllbModels.Contains(model))
+                throw new PipelineProviderException(
+                    $"Model '{model}' is not valid for provider 'nllb-200'. " +
+                    $"Valid models: nllb-200-distilled-600M, nllb-200-distilled-1.3B, nllb-200-1.3B.");
             return;
+        }
 
         var credKey = CredentialKeyFor(provider);
         if (credKey is not null && keys is not null && !keys.HasKey(credKey))

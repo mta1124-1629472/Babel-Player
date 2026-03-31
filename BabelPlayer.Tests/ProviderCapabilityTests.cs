@@ -98,6 +98,36 @@ public sealed class ProviderCapabilityTests
     }
 
     // -------------------------------------------------------------------------
+    // Translation — NLLB-200 valid models pass
+    // -------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("nllb-200-distilled-600M")]
+    [InlineData("nllb-200-distilled-1.3B")]
+    [InlineData("nllb-200-1.3B")]
+    public void ValidateTranslation_Nllb200_ValidModel_Passes(string model)
+    {
+        ProviderCapability.ValidateTranslation("nllb-200", model, keys: null);
+    }
+
+    // -------------------------------------------------------------------------
+    // Translation — NLLB-200 invalid model throws
+    // -------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("base")]
+    [InlineData("large")]
+    [InlineData("unknown-model")]
+    [InlineData("")]
+    public void ValidateTranslation_Nllb200_InvalidModel_Throws(string model)
+    {
+        var ex = Assert.Throws<PipelineProviderException>(
+            () => ProviderCapability.ValidateTranslation("nllb-200", model, keys: null));
+        Assert.Contains("not valid", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(model, ex.Message);
+    }
+
+    // -------------------------------------------------------------------------
     // TTS — supported provider passes
     // -------------------------------------------------------------------------
 
@@ -112,6 +142,24 @@ public sealed class ProviderCapabilityTests
     {
         // Voice value is not validated by ProviderCapability — only provider is checked here
         ProviderCapability.ValidateTts("edge-tts", "ja-JP-NanamiNeural", keys: null);
+    }
+
+    // -------------------------------------------------------------------------
+    // TTS — Piper passes for any non-empty voice
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ValidateTts_Piper_ValidVoice_Passes()
+    {
+        ProviderCapability.ValidateTts("piper", "en_US-lessac-medium", keys: null);
+    }
+
+    [Fact]
+    public void ValidateTts_Piper_ArbitraryVoice_Passes()
+    {
+        // Piper voice names are not whitelisted by ProviderCapability — model file resolution
+        // happens at runtime in the Python script.
+        ProviderCapability.ValidateTts("piper", "de_DE-thorsten-medium", keys: null);
     }
 
     // -------------------------------------------------------------------------
