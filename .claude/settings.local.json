@@ -32,7 +32,9 @@
       "Bash(unzip -p diag.zip lib/net10.0/*.xml)",
       "Bash(unzip -l diag.zip)",
       "Bash(grep -v \"^$\")",
-      "Bash(dotnet remove:*)"
+      "Bash(dotnet remove:*)",
+      "Bash(dir \"D:\\\\Dev\\\\Babel-Player\\\\docs\\\\smoke\"\")",
+      "Bash(gh run:*)"
     ]
   }
 }

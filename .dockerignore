@@ -1,0 +1,9 @@
+*.bin
+*.pth
+*.pt
+*.onnx
+!inference/
+!Services/
+!*.csproj
+!Program.cs
+!**/.gitkeep
