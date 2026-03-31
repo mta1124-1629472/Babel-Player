@@ -56,7 +56,7 @@ public sealed class InferenceServiceClient : IDisposable
             if (!System.IO.File.Exists(audioPath))
             {
                 return new TranscriptionResult(
-                    false, new List<TranscriptSegment>(), "unknown", 0, 
+                    false, [], "unknown", 0, 
                     $"Audio file not found: {audioPath}");
             }
 
@@ -77,21 +77,21 @@ public sealed class InferenceServiceClient : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                _log.Error($"Transcription failed: {responseJson}");
+                _log.Error("Transcription failed", new Exception(responseJson));
                 return new TranscriptionResult(
-                    false, new List<TranscriptSegment>(), "unknown", 0, responseJson);
+                    false, [], "unknown", 0, responseJson);
             }
 
             var result = JsonSerializer.Deserialize<RemoteTranscriptionResponse>(responseJson, _jsonOptions);
             if (result?.Success != true)
             {
                 return new TranscriptionResult(
-                    false, new List<TranscriptSegment>(), result?.Language ?? "unknown", 0,
+                    false, [], result?.Language ?? "unknown", 0,
                     result?.ErrorMessage ?? "Unknown error");
             }
 
             var segments = new List<TranscriptSegment>();
-            foreach (var seg in (result.Segments ?? new List<RemoteSegment>()))
+            foreach (var seg in (result.Segments ?? []))
             {
                 if (!string.IsNullOrEmpty(seg.Text))
                 {
@@ -109,7 +109,7 @@ public sealed class InferenceServiceClient : IDisposable
         {
             _log.Error($"Transcription request failed: {ex.Message}", ex);
             return new TranscriptionResult(
-                false, new List<TranscriptSegment>(), "unknown", 0, ex.Message);
+                false, [], "unknown", 0, ex.Message);
         }
     }
 
@@ -133,21 +133,21 @@ public sealed class InferenceServiceClient : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                _log.Error($"Translation failed: {responseJson}");
+                _log.Error("Translation failed", new Exception(responseJson));
                 return new TranslationResult(
-                    false, new List<TranslatedSegment>(), sourceLanguage, targetLanguage, responseJson);
+                    false, [], sourceLanguage, targetLanguage, responseJson);
             }
 
             var result = JsonSerializer.Deserialize<RemoteTranslationResponse>(responseJson, _jsonOptions);
             if (result?.Success != true)
             {
                 return new TranslationResult(
-                    false, new List<TranslatedSegment>(), sourceLanguage, targetLanguage,
+                    false, [], sourceLanguage, targetLanguage,
                     result?.ErrorMessage ?? "Unknown error");
             }
 
             var segments = new List<TranslatedSegment>();
-            foreach (var seg in (result.Segments ?? new List<RemoteTranslatedSegment>()))
+            foreach (var seg in (result.Segments ?? []))
             {
                 segments.Add(new TranslatedSegment(
                     seg.Start, seg.End, seg.Text ?? "", seg.TranslatedText ?? ""));
@@ -161,7 +161,7 @@ public sealed class InferenceServiceClient : IDisposable
         {
             _log.Error($"Translation request failed: {ex.Message}", ex);
             return new TranslationResult(
-                false, new List<TranslatedSegment>(), sourceLanguage, targetLanguage, ex.Message);
+                false, [], sourceLanguage, targetLanguage, ex.Message);
         }
     }
 
@@ -189,7 +189,7 @@ public sealed class InferenceServiceClient : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                _log.Error($"TTS generation failed: {responseJson}");
+                _log.Error("TTS generation failed", new Exception(responseJson));
                 return new TtsResult(false, "", voice, 0, responseJson);
             }
 
