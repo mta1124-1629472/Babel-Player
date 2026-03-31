@@ -21,6 +21,17 @@ fi
 
 export PATH="$PATH:$HOME/.dotnet"
 
+# ── Install ffmpeg ─────────────────────────────────────────────────────────────
+if ! command -v ffmpeg &>/dev/null; then
+  echo "[session-start] Installing ffmpeg..."
+  apt-get update -q
+  apt-get install -y -q ffmpeg
+fi
+
+# ── Install Python dependencies ────────────────────────────────────────────────
+echo "[session-start] Installing Python dependencies..."
+pip install -q faster-whisper edge-tts googletrans
+
 # ── Restore NuGet packages ─────────────────────────────────────────────────────
 echo "[session-start] Restoring NuGet packages..."
 dotnet restore "$CLAUDE_PROJECT_DIR/BabelPlayer.csproj"
