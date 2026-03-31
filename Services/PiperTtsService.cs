@@ -21,7 +21,14 @@ public sealed class PiperTtsService : ITtsService
     }
 
     private const string PiperScript = @"
-import sys, json, os, subprocess, platform
+import sys, json, os, subprocess, platform, shutil
+
+if not shutil.which('piper'):
+    raise RuntimeError(
+        'piper CLI not found on PATH. '
+        'Install it from https://github.com/rhasspy/piper/releases '
+        'and ensure the piper executable is on your system PATH.')
+
 
 input_path = sys.argv[1]
 output_path = sys.argv[2]
@@ -69,7 +76,14 @@ print(f'Piper TTS generated: {output_path}')
 ";
 
     private const string PiperSegmentScript = @"
-import sys, os, subprocess, platform
+import sys, os, subprocess, platform, shutil
+
+if not shutil.which('piper'):
+    raise RuntimeError(
+        'piper CLI not found on PATH. '
+        'Install it from https://github.com/rhasspy/piper/releases '
+        'and ensure the piper executable is on your system PATH.')
+
 
 text       = sys.argv[1]
 output_path = sys.argv[2]

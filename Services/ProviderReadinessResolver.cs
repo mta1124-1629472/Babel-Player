@@ -167,9 +167,7 @@ public static class ProviderReadinessResolver
 
     private static string GetHuggingFaceCacheDir()
     {
-        string? envCache = Environment.GetEnvironmentVariable("HF_HOME");
-        if (!string.IsNullOrEmpty(envCache)) return Path.Combine(envCache, "hub");
-        if (!string.IsNullOrEmpty(envCache)) return envCache;
+        // HF_HOME overrides the default cache root; models live under /hub inside it.
         string? hfHome = Environment.GetEnvironmentVariable("HF_HOME");
         if (!string.IsNullOrEmpty(hfHome)) return Path.Combine(hfHome, "hub");
 

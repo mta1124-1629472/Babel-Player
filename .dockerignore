@@ -1,9 +1,47 @@
+# Build artifacts
+bin/
+obj/
+publish/
+*.pdb
+*.nupkg
+
+# Development
+node_modules/
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Model files (pre-download or use volume mounts)
 *.bin
 *.pth
 *.pt
 *.onnx
+*.safetensors
+
+# Media/test files
+*.mp3
+*.wav
+*.mp4
+*.srt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Keep these for containerization
 !inference/
 !Services/
-!*.csproj
-!Program.cs
-!**/.gitkeep
+!Models/.gitkeep

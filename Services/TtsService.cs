@@ -65,10 +65,14 @@ public sealed class TtsService(AppLog log) : ITtsService
         }
 
         var script = @"
-import sys
-import json
-import asyncio
-import edge_tts
+import sys, json, asyncio
+
+try:
+    import edge_tts
+except ImportError:
+    import subprocess
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'edge-tts'])
+    import edge_tts
 
 async def generate():
     with open(sys.argv[1], 'r', encoding='utf-8') as f:
@@ -164,9 +168,14 @@ asyncio.run(generate())
         }
 
         var script = @"
-import sys
-import asyncio
-import edge_tts
+import sys, asyncio
+
+try:
+    import edge_tts
+except ImportError:
+    import subprocess
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'edge-tts'])
+    import edge_tts
 
 async def generate():
     text = sys.argv[1]

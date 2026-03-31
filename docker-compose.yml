@@ -1,7 +1,7 @@
 version: '3.9'
 
 services:
-  # Python GPU inference service
+  # Python GPU inference service - speech transcription, translation, TTS
   inference:
     build:
       context: ./inference
@@ -11,8 +11,9 @@ services:
       - "8000:8000"
     environment:
       CUDA_VISIBLE_DEVICES: "0"
+      LOG_LEVEL: info
     volumes:
-      - ./inference/main.py:/app/main.py
+      - ./inference:/app:ro
       - inference_cache:/root/.cache
     # GPU runtime configuration
     runtime: nvidia
@@ -23,8 +24,11 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+        limits:
+          cpus: '4'
+          memory: 8G
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -32,12 +36,35 @@ services:
     restart: unless-stopped
     networks:
       - babel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
 
-  # .NET desktop app (optional - for demo purposes)
-  # In production, the C# app runs on the host and connects to the inference service
-  
+  # .NET Babel Player application (optional service for containerized deployment)
+  # Uncomment to run the app in a container
+  # babel-player:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: babel-player
+  #   depends_on:
+  #     inference:
+  #       condition: service_healthy
+  #   environment:
+  #     INFERENCE_SERVICE_URL: "http://inference:8000"
+  #   networks:
+  #     - babel-net
+  #   ports:
+  #     - "5000:5000"
+  #   volumes:
+  #     - ./Models:/app/Models
+  #   restart: unless-stopped
+
 volumes:
   inference_cache:
+    driver: local
 
 networks:
   babel-net:

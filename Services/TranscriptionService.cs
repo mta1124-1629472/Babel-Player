@@ -79,9 +79,15 @@ public sealed class TranscriptionService : ITranscriptionService
 
         // model has already been validated against the whitelist by ProviderCapability before this call
         var script = $@"
-import sys
-import json
-from faster_whisper import WhisperModel
+import sys, json
+
+try:
+    from faster_whisper import WhisperModel
+except ImportError:
+    import subprocess
+    print('Installing faster-whisper (this may take a few minutes on first run)...')
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'faster-whisper'])
+    from faster_whisper import WhisperModel
 
 model_name = '{model}'
 model = WhisperModel(model_name, device='cpu', compute_type='int8')
