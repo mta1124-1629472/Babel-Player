@@ -31,6 +31,7 @@ jobs:
           --configuration Release
           -r win-x64
           --self-contained true
+          -p:ApplicationIcon=babelplayer.ico
           -o ./publish
 
       - name: Verify publish output
