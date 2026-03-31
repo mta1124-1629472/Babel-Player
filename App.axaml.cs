@@ -23,9 +23,6 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
-#if DEBUG
-        this.AttachDeveloperTools();
-#endif
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -41,7 +38,6 @@ public partial class App : Application
 
             var appLog = new AppLog(Path.Combine(appDataRoot, "logs", "babel-player.log"));
             _startupLog = appLog;
-
             // Initialize Settings and other stores
             var settingsFilePath = Path.Combine(appDataRoot, "settings", "app-settings.json");
             _settingsService = new SettingsService(settingsFilePath, appLog);
@@ -57,8 +53,7 @@ public partial class App : Application
             try
             {
                 appLog.Info("App startup: initializing session coordinator.");
-                var store = new SessionSnapshotStore(
-                    Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
+                var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
                 _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
                     store, appLog, appSettings, perSessionStore, recentStore, keyStore: _apiKeyStore);
                 _sessionWorkflowCoordinator.Initialize();
@@ -82,7 +77,6 @@ public partial class App : Application
             {
                 DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService, _apiKeyStore),
             };
-
             // Detect hardware in background; post result to UI thread when done
             var coordinator = _sessionWorkflowCoordinator;
             Task.Run(() => HardwareSnapshot.Run())
