@@ -1,0 +1,124 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Babel.Player.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="480" d:DesignHeight="360"
+        x:Class="Babel.Player.Views.ApiKeysDialog"
+        x:DataType="vm:ApiKeysViewModel"
+        Title="API Keys"
+        Width="480" SizeToContent="Height"
+        MinWidth="420"
+        RequestedThemeVariant="Dark"
+        Background="#16161E"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- Key entry list -->
+        <ScrollViewer Grid.Row="0"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="20,18,20,4" Spacing="12">
+
+                <ItemsControl ItemsSource="{Binding Entries}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ApiKeyEntryViewModel">
+                            <Border Background="#1E1E2C" CornerRadius="6"
+                                    Padding="14,12" Margin="0,0,0,2"
+                                    BorderBrush="#2A2A3C" BorderThickness="1">
+                                <StackPanel Spacing="8">
+
+                                    <!-- Provider name + status -->
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding ProviderDisplayName}"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="#E0E0F0"
+                                                   VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                    Spacing="5" VerticalAlignment="Center">
+                                            <Ellipse Width="8" Height="8"
+                                                     Fill="{Binding StatusDotColor}"
+                                                     VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding StatusText}"
+                                                       Foreground="{Binding StatusTextColor}"
+                                                       FontSize="11" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Key input row -->
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding KeyValue, Mode=TwoWay}"
+                                                 PasswordChar="{Binding MaskChar}"
+                                                 PlaceholderText="Paste key here…"
+                                                 FontFamily="Consolas,monospace"
+                                                 FontSize="12"
+                                                 Background="#12121A"
+                                                 BorderBrush="#2A2A3C"
+                                                 Foreground="#C0C0D0"
+                                                 CornerRadius="4"
+                                                 Padding="8,6" />
+
+                                        <Button Grid.Column="1"
+                                                Command="{Binding ToggleRevealCommand}"
+                                                Content="{Binding RevealIcon}"
+                                                Padding="8,6" Margin="6,0,0,0"
+                                                Background="#252535" Foreground="#8080A0"
+                                                CornerRadius="4" FontSize="13"
+                                                ToolTip.Tip="Show / hide key" />
+
+                                        <Button Grid.Column="2"
+                                                Command="{Binding SaveKeyCommand}"
+                                                Content="Save"
+                                                Padding="10,6" Margin="4,0,0,0"
+                                                Background="#1E2E1E" Foreground="#86EFAC"
+                                                CornerRadius="4" FontSize="12" />
+
+                                        <Button Grid.Column="3"
+                                                Command="{Binding ClearKeyCommand}"
+                                                Content="Clear"
+                                                Padding="10,6" Margin="4,0,0,0"
+                                                Background="#2E1E1E" Foreground="#FCA5A5"
+                                                CornerRadius="4" FontSize="12" />
+                                    </Grid>
+
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Future providers placeholder -->
+                <Border Background="#1A1A28" CornerRadius="6"
+                        Padding="14,10" BorderBrush="#202030" BorderThickness="1">
+                    <TextBlock Text="More providers can be added in future updates."
+                               FontSize="11" Foreground="#383848"
+                               HorizontalAlignment="Center" />
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <Border Grid.Row="1" Padding="20,12"
+                BorderBrush="#252530" BorderThickness="0,1,0,0"
+                Background="#12121A">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="Keys are encrypted to your Windows user account and never leave this machine."
+                           FontSize="10" Foreground="#3A3A50"
+                           VerticalAlignment="Center" TextWrapping="Wrap" />
+                <Button Grid.Column="1"
+                        Click="OnCloseClick"
+                        Content="Close"
+                        Padding="16,7" Margin="12,0,0,0"
+                        Background="#252530" Foreground="#C0C0D0"
+                        CornerRadius="4" FontSize="12" />
+            </Grid>
+        </Border>
+
+    </Grid>
+
+</Window>

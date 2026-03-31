@@ -1,6 +1,7 @@
 using System;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.Input;
 using SettingsService = Babel.Player.Services.Settings.SettingsService;
@@ -10,14 +11,23 @@ namespace Babel.Player.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly SettingsService _settingsService;
+    private readonly ApiKeyStore? _apiKeyStore;
 
-    public MainWindowViewModel(SessionWorkflowCoordinator coordinator, SettingsService settingsService)
+    public MainWindowViewModel(
+        SessionWorkflowCoordinator coordinator,
+        SettingsService settingsService,
+        ApiKeyStore? apiKeyStore = null)
     {
         Coordinator = coordinator;
         _settingsService = settingsService;
-        Playback = new EmbeddedPlaybackViewModel(coordinator);
+        _apiKeyStore = apiKeyStore;
+
+        Playback = new EmbeddedPlaybackViewModel(coordinator, apiKeyStore);
         Inspection = new SegmentInspectionViewModel(Playback);
         OpenSettingsCommand = new RelayCommand(OpenSettings);
+
+        // Persist settings whenever the left-panel dropdowns change them in-place
+        Coordinator.SettingsModified += () => _settingsService.Save(Coordinator.CurrentSettings);
     }
 
 

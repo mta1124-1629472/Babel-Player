@@ -55,7 +55,8 @@ public sealed class TranscriptionService
         return audioPath;
     }
 
-    public async Task<TranscriptionResult> TranscribeAsync(string audioPath, string outputJsonPath)
+    public async Task<TranscriptionResult> TranscribeAsync(
+        string audioPath, string outputJsonPath, string model = "base")
     {
         if (!File.Exists(audioPath))
         {
@@ -74,28 +75,29 @@ public sealed class TranscriptionService
             throw new InvalidOperationException($"Unsupported audio format: {extension}. Supported formats: wav, mp3, flac, ogg, mp4, avi, mkv, mov");
         }
 
-        var script = @"
+        // model has already been validated against the whitelist by ProviderCapability before this call
+        var script = $@"
 import sys
 import json
 from faster_whisper import WhisperModel
 
-model_name = 'base'
+model_name = '{model}'
 model = WhisperModel(model_name, device='cpu', compute_type='int8')
 
 segments, info = model.transcribe(sys.argv[1])
 
-result = {
+result = {{
     'language': info.language,
     'language_probability': info.language_probability,
     'segments': []
-}
+}}
 
 for seg in segments:
-    result['segments'].append({
+    result['segments'].append({{
         'start': seg.start,
         'end': seg.end,
         'text': seg.text
-    })
+    }})
 
 with open(sys.argv[2], 'w', encoding='utf-8') as f:
     json.dump(result, f, ensure_ascii=False, indent=2)

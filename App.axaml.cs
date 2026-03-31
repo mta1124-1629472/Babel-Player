@@ -4,7 +4,9 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Babel.Player.Services;
+using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Settings;
 using Babel.Player.ViewModels;
 using Babel.Player.Views;
@@ -16,6 +18,7 @@ public partial class App : Application
     private SessionWorkflowCoordinator? _sessionWorkflowCoordinator;
     private AppLog? _startupLog;
     private SettingsService? _settingsService;
+    private ApiKeyStore? _apiKeyStore;
 
     public override void Initialize()
     {
@@ -49,13 +52,15 @@ public partial class App : Application
             var recentStore = new RecentSessionsStore(
                 Path.Combine(appDataRoot, "state", "recent-sessions.json"), appLog);
 
+            _apiKeyStore = new ApiKeyStore(appDataRoot);
+
             try
             {
                 appLog.Info("App startup: initializing session coordinator.");
                 var store = new SessionSnapshotStore(
                     Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
                 _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                    store, appLog, appSettings, perSessionStore, recentStore);
+                    store, appLog, appSettings, perSessionStore, recentStore, keyStore: _apiKeyStore);
                 _sessionWorkflowCoordinator.Initialize();
                 appLog.Info("App startup: session coordinator ready.");
             }
@@ -67,7 +72,7 @@ public partial class App : Application
                     var fallbackStore = new SessionSnapshotStore(
                         Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
                     _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                        fallbackStore, appLog, appSettings, perSessionStore, recentStore);
+                        fallbackStore, appLog, appSettings, perSessionStore, recentStore, keyStore: _apiKeyStore);
                 }
             }
 
@@ -75,8 +80,17 @@ public partial class App : Application
 
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService),
+                DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService, _apiKeyStore),
             };
+
+            // Detect hardware in background; post result to UI thread when done
+            var coordinator = _sessionWorkflowCoordinator;
+            Task.Run(() => HardwareSnapshot.Run())
+                .ContinueWith(t =>
+                {
+                    if (t.IsCompletedSuccessfully)
+                        Dispatcher.UIThread.Post(() => coordinator.HardwareSnapshot = t.Result);
+                });
         }
 
         base.OnFrameworkInitializationCompleted();

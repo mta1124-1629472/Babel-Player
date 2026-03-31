@@ -7,6 +7,7 @@ using Avalonia.Platform.Storage;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.ViewModels;
+using Babel.Player.Services.Credentials;
 
 namespace Babel.Player.Views;
 
@@ -127,6 +128,15 @@ public partial class MainWindow : Window
         {
             vm.Playback.StatusText = $"Failed to open: {ex.Message}";
         }
+    }
+
+    public void OnApiKeysClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+        var store = vm.Coordinator.KeyStore;
+        if (store is null) return;
+        var dialog = new ApiKeysDialog { DataContext = new ApiKeysViewModel(store) };
+        _ = dialog.ShowDialog(this);
     }
 
     public void OnSettingsClick(object? sender, RoutedEventArgs e)

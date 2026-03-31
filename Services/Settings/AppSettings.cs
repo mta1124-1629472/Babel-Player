@@ -5,7 +5,25 @@ namespace Babel.Player.Services.Settings;
 /// </summary>
 public sealed class AppSettings
 {
-    /// <summary>Edge-TTS voice identifier used for new TTS generation.</summary>
+    /// <summary>Transcription provider identifier (e.g. "faster-whisper", "openai-whisper-api").</summary>
+    public string TranscriptionProvider { get; set; } = "faster-whisper";
+
+    /// <summary>Transcription model name within the selected provider (e.g. "base", "large-v3").</summary>
+    public string TranscriptionModel { get; set; } = "base";
+
+    /// <summary>Translation provider identifier (e.g. "google-translate-free", "openai").</summary>
+    public string TranslationProvider { get; set; } = "google-translate-free";
+
+    /// <summary>Translation model name within the selected provider (e.g. "default", "gpt-4o").</summary>
+    public string TranslationModel { get; set; } = "default";
+
+    /// <summary>TTS provider identifier (e.g. "edge-tts", "elevenlabs").</summary>
+    public string TtsProvider { get; set; } = "edge-tts";
+
+    /// <summary>
+    /// TTS voice or model selection. For edge-tts this is an Edge-TTS voice name;
+    /// for other providers it is the synthesis model name.
+    /// </summary>
     public string TtsVoice { get; set; } = "en-US-AriaNeural";
 
     /// <summary>BCP-47 language code for the translation target.</summary>

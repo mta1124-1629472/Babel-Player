@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -53,9 +54,20 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private BootstrapDiagnostics _bootstrapDiagnostics = new(false, null, false, null);
 
+    [ObservableProperty]
+    private HardwareSnapshot _hardwareSnapshot = HardwareSnapshot.Detecting;
+
     public bool HasRecentSessions => RecentSessions.Count > 0;
 
     public AppSettings CurrentSettings { get; private set; }
+
+    /// <summary>
+    /// Raised when AppSettings are modified in-place (e.g. by left-panel dropdowns).
+    /// Subscribers should call SettingsService.Save() in response.
+    /// </summary>
+    public event Action? SettingsModified;
+
+    public ApiKeyStore? KeyStore { get; private set; }
 
     public SessionWorkflowCoordinator(
         SessionSnapshotStore store,
@@ -64,13 +76,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         PerSessionSnapshotStore perSessionStore,
         RecentSessionsStore recentStore,
         IMediaTransport? segmentPlayer = null,
-        IMediaTransport? sourcePlayer = null)
+        IMediaTransport? sourcePlayer = null,
+        ApiKeyStore? keyStore = null)
     {
         _store = store;
         _log = log;
         _perSessionStore = perSessionStore;
         _recentStore = recentStore;
         CurrentSettings = settings;
+        KeyStore = keyStore;
         _injectedSegmentPlayer = segmentPlayer;
         _injectedSourcePlayer = sourcePlayer;
 
@@ -83,6 +97,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     {
         CurrentSettings = settings;
     }
+
+    /// <summary>
+    /// Raises SettingsModified so subscribers (e.g. MainWindowViewModel) can persist changes.
+    /// Call after any in-place mutation of CurrentSettings.
+    /// </summary>
+    public void NotifySettingsModified() => SettingsModified?.Invoke();
 
     private IMediaTransport GetOrCreateSegmentPlayer()
     {
@@ -425,6 +445,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
         }
 
+        ProviderCapability.ValidateTranscription(
+            CurrentSettings.TranscriptionProvider,
+            CurrentSettings.TranscriptionModel,
+            KeyStore);
+
         _transcriptionService ??= new TranscriptionService(_log);
 
         var sessionDir = GetSessionDirectory();
@@ -434,11 +459,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var fileName = Path.GetFileNameWithoutExtension(CurrentSession.IngestedMediaPath);
         var transcriptPath = Path.Combine(transcriptDir, $"{fileName}.json");
 
-        _log.Info($"Starting transcription: {CurrentSession.IngestedMediaPath}");
+        _log.Info($"Starting transcription: {CurrentSession.IngestedMediaPath} " +
+                  $"[{CurrentSettings.TranscriptionProvider}/{CurrentSettings.TranscriptionModel}]");
 
         var result = await _transcriptionService.TranscribeAsync(
-            CurrentSession.IngestedMediaPath, 
-            transcriptPath);
+            CurrentSession.IngestedMediaPath,
+            transcriptPath,
+            CurrentSettings.TranscriptionModel);
 
         if (!result.Success)
         {
@@ -475,6 +502,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         var lang = targetLanguage ?? CurrentSettings.TargetLanguage;
         var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
+
+        ProviderCapability.ValidateTranslation(
+            CurrentSettings.TranslationProvider,
+            CurrentSettings.TranslationModel,
+            KeyStore);
 
         _translationService ??= new TranslationService(_log);
 
@@ -528,6 +560,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
 
         var v = voice ?? CurrentSettings.TtsVoice;
+
+        ProviderCapability.ValidateTts(
+            CurrentSettings.TtsProvider,
+            v,
+            KeyStore);
 
         _ttsService ??= new TtsService(_log);
 

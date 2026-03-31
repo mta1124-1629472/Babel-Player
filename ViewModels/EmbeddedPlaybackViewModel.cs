@@ -12,12 +12,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Credentials;
 
 namespace Babel.Player.ViewModels;
 
 public partial class EmbeddedPlaybackViewModel : ViewModelBase
 {
     private readonly SessionWorkflowCoordinator _coordinator;
+    private readonly ApiKeyStore? _apiKeyStore;
     private string? _lastKnownSourceMediaPath;
     private bool _isUpdatingPositionFromTimer;
     private bool _isUpdatingActiveSegment;
@@ -84,7 +86,42 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(SubtitleToggleLabel))]
     private bool _isSubtitleModeOn;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SpeechRateLabel))]
+    private double _speechRate = 1.0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AudioDuckingLabel))]
+    private double _audioDuckingDb = -15.0;
+
+    // ── Provider / model selection (backed by AppSettings) ────────────────────
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AvailableTranscriptionModels))]
+    [NotifyPropertyChangedFor(nameof(TranscriptionKeyStatus))]
+    private string _transcriptionProvider = "faster-whisper";
+
+    [ObservableProperty]
+    private string _transcriptionModel = "base";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AvailableTranslationModels))]
+    [NotifyPropertyChangedFor(nameof(TranslationKeyStatus))]
+    private string _translationProvider = "google-translate-free";
+
+    [ObservableProperty]
+    private string _translationModel = "default";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AvailableTtsOptions))]
+    [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
+    private string _ttsProvider = "edge-tts";
+
+    [ObservableProperty]
+    private string _ttsModelOrVoice = "en-US-AriaNeural";
+
     private double _preMuteVolume = 1.0;
+    private double _preDuckTransportVolume = 1.0;
+    private bool _isDucked;
     private bool _preFullscreenSegmentPaneVisible = true;
     private bool _preSubtitlePaneState = true;
     private string? _activeSrtPath;
@@ -92,11 +129,21 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private readonly DispatcherTimer _controlsHideTimer;
     private const int ControlsHideDelayMs = 3000;
 
-    public EmbeddedPlaybackViewModel(SessionWorkflowCoordinator coordinator)
+    public EmbeddedPlaybackViewModel(SessionWorkflowCoordinator coordinator, ApiKeyStore? apiKeyStore = null)
     {
         _coordinator = coordinator;
+        _apiKeyStore = apiKeyStore;
         _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
         _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
+
+        // Sync provider/model fields from persisted settings (no side-effects — set backing fields directly)
+        _transcriptionProvider = coordinator.CurrentSettings.TranscriptionProvider;
+        _transcriptionModel    = coordinator.CurrentSettings.TranscriptionModel;
+        _translationProvider   = coordinator.CurrentSettings.TranslationProvider;
+        _translationModel      = coordinator.CurrentSettings.TranslationModel;
+        _ttsProvider           = coordinator.CurrentSettings.TtsProvider;
+        _ttsModelOrVoice       = coordinator.CurrentSettings.TtsVoice;
+
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -135,6 +182,46 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     public string SubtitleToggleLabel => IsSubtitleModeOn ? "CC ✓" : "CC";
 
+    public string SpeechRateLabel => $"{SpeechRate:F1}x";
+    public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
+    public bool HasDiagnosticsWarning => !_coordinator.BootstrapDiagnostics.AllDependenciesAvailable;
+    public string DiagnosticsWarningText => _coordinator.BootstrapDiagnostics.DiagnosticSummary;
+    public string VoiceModelLabel => _coordinator.CurrentSession.TtsVoice ?? _coordinator.CurrentSettings.TtsVoice;
+
+    // ── Provider / model option lists ──────────────────────────────────────────
+    public IReadOnlyList<string> TranscriptionProviders  => ProviderOptions.TranscriptionProviders;
+    public IReadOnlyList<string> TranslationProviders    => ProviderOptions.TranslationProviders;
+    public IReadOnlyList<string> TtsProviders            => ProviderOptions.TtsProviders;
+
+    public IReadOnlyList<string> AvailableTranscriptionModels =>
+        ProviderOptions.GetTranscriptionModels(TranscriptionProvider);
+
+    public IReadOnlyList<string> AvailableTranslationModels =>
+        ProviderOptions.GetTranslationModels(TranslationProvider);
+
+    public IReadOnlyList<string> AvailableTtsOptions =>
+        ProviderOptions.GetTtsOptions(TtsProvider);
+
+    // ── API key status for UI lock indicators ─────────────────────────────────
+    public string TranscriptionKeyStatus => KeyStatusFor(TranscriptionProvider);
+    public string TranslationKeyStatus   => KeyStatusFor(TranslationProvider);
+    public string TtsKeyStatus           => KeyStatusFor(TtsProvider);
+
+    private string KeyStatusFor(string provider)
+    {
+        if (!ProviderOptions.RequiresApiKey(provider)) return "";
+        var credKey = ProviderOptions.GetCredentialKey(provider);
+        if (credKey == null) return "";
+        return _apiKeyStore?.HasKey(credKey) == true ? "" : "🔒 API key required — click API Keys to add";
+    }
+
+    // ── Hardware display lines ─────────────────────────────────────────────────
+    public string HwCpuLine  => _coordinator.HardwareSnapshot.CpuLine;
+    public string HwGpuLine  => _coordinator.HardwareSnapshot.GpuLine;
+    public string HwRamLine  => _coordinator.HardwareSnapshot.RamLine;
+    public string HwNpuLine  => _coordinator.HardwareSnapshot.NpuLine;
+    public string HwLibsLine => _coordinator.HardwareSnapshot.LibsLine;
+
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
     public string SourceDurationFormatted => FormatMs(SourceDurationMs);
 
@@ -170,6 +257,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _coordinator.SourceMediaPlayer?.Seek((long)value);
         if (IsDubModeOn)
         {
+            RestoreDucking();
             _coordinator.StopTtsPlayback();
             _lastDubbedSegment = null;
         }
@@ -210,10 +298,14 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         // Immediately sync dub mode to the new segment without waiting for the next timer tick
         if (IsDubModeOn)
         {
+            RestoreDucking();
             _coordinator.StopTtsPlayback();
             _lastDubbedSegment = segment;
             if (segment.HasTtsAudio)
+            {
+                ApplyDucking();
                 _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId);
+            }
         }
     }
 
@@ -234,10 +326,80 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         }
     }
 
+    partial void OnSpeechRateChanged(double value)
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player != null) player.PlaybackRate = value;
+    }
+
+    partial void OnTranscriptionProviderChanged(string value)
+    {
+        _coordinator.CurrentSettings.TranscriptionProvider = value;
+        // Reset model to first valid option for new provider
+        var models = ProviderOptions.GetTranscriptionModels(value);
+        TranscriptionModel = models.Count > 0 ? models[0] : "default";
+        NotifySettingsSave();
+    }
+
+    partial void OnTranscriptionModelChanged(string value)
+    {
+        _coordinator.CurrentSettings.TranscriptionModel = value;
+        NotifySettingsSave();
+    }
+
+    partial void OnTranslationProviderChanged(string value)
+    {
+        _coordinator.CurrentSettings.TranslationProvider = value;
+        var models = ProviderOptions.GetTranslationModels(value);
+        TranslationModel = models.Count > 0 ? models[0] : "default";
+        NotifySettingsSave();
+    }
+
+    partial void OnTranslationModelChanged(string value)
+    {
+        _coordinator.CurrentSettings.TranslationModel = value;
+        NotifySettingsSave();
+    }
+
+    partial void OnTtsProviderChanged(string value)
+    {
+        _coordinator.CurrentSettings.TtsProvider = value;
+        var options = ProviderOptions.GetTtsOptions(value);
+        TtsModelOrVoice = options.Count > 0 ? options[0] : "default";
+        NotifySettingsSave();
+    }
+
+    partial void OnTtsModelOrVoiceChanged(string value)
+    {
+        _coordinator.CurrentSettings.TtsVoice = value;
+        NotifySettingsSave();
+    }
+
+    private void NotifySettingsSave() => _coordinator.NotifySettingsModified();
+
+    private void ApplyDucking()
+    {
+        if (_isDucked) return;
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null) return;
+        _preDuckTransportVolume = player.Volume;
+        player.Volume = _preDuckTransportVolume * Math.Pow(10.0, AudioDuckingDb / 20.0);
+        _isDucked = true;
+    }
+
+    private void RestoreDucking()
+    {
+        if (!_isDucked) return;
+        var player = _coordinator.SourceMediaPlayer;
+        if (player != null) player.Volume = _preDuckTransportVolume;
+        _isDucked = false;
+    }
+
     partial void OnIsDubModeOnChanged(bool value)
     {
         if (!value)
         {
+            RestoreDucking();
             _coordinator.StopTtsPlayback();
             _lastDubbedSegment = null;
         }
@@ -311,9 +473,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         var currentSeg = FindSegmentAt(SourcePositionMs / 1000.0);
         if (currentSeg?.SegmentId == _lastDubbedSegment?.SegmentId) return;
         _lastDubbedSegment = currentSeg;
+        RestoreDucking();
         _coordinator.StopTtsPlayback();
         if (currentSeg?.HasTtsAudio == true)
+        {
+            ApplyDucking();
             _ = _coordinator.PlayTtsForSegmentAsync(currentSeg.SegmentId);
+        }
     }
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -326,7 +492,19 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             case nameof(SessionWorkflowCoordinator.ActiveTtsSegmentId):
                 OnPropertyChanged(nameof(ActiveTtsSegmentId));
                 break;
+            case nameof(SessionWorkflowCoordinator.BootstrapDiagnostics):
+                OnPropertyChanged(nameof(HasDiagnosticsWarning));
+                OnPropertyChanged(nameof(DiagnosticsWarningText));
+                break;
+            case nameof(SessionWorkflowCoordinator.HardwareSnapshot):
+                OnPropertyChanged(nameof(HwCpuLine));
+                OnPropertyChanged(nameof(HwGpuLine));
+                OnPropertyChanged(nameof(HwRamLine));
+                OnPropertyChanged(nameof(HwNpuLine));
+                OnPropertyChanged(nameof(HwLibsLine));
+                break;
             case nameof(SessionWorkflowCoordinator.CurrentSession):
+                OnPropertyChanged(nameof(VoiceModelLabel));
                 var newPath = _coordinator.CurrentSession.SourceMediaPath;
                 IsSourceMediaLoaded = !string.IsNullOrEmpty(_coordinator.CurrentSession.IngestedMediaPath);
                 if (newPath != _lastKnownSourceMediaPath)
