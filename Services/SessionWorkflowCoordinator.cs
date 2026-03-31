@@ -22,14 +22,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranslationService? _translationService;
     private ITtsService? _ttsService;
 
-    private readonly IMediaTransport? _injectedSegmentPlayer;
-    private IMediaTransport? _segmentPlayer;
-    private bool _subscribedToPlayerEvents;
-    private readonly EventHandler? _segmentEndedHandler;
-    private readonly EventHandler<Exception>? _segmentErrorHandler;
-
-    private IMediaTransport? _sourceMediaPlayer;
-    private readonly IMediaTransport? _injectedSourcePlayer;
+    private readonly IMediaTransportManager _transportManager;
+    private bool _subscribedToSegmentEvents;
+    private readonly EventHandler _segmentEndedHandler;
+    private readonly EventHandler<Exception> _segmentErrorHandler;
     private readonly Dictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -86,12 +82,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _recentStore = recentStore;
         CurrentSettings = settings;
         KeyStore = keyStore;
-        _injectedSegmentPlayer = segmentPlayer;
-        _injectedSourcePlayer = sourcePlayer;
+        _transportManager = new MediaTransportManager(segmentPlayer, sourcePlayer);
 
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) => StopTtsPlayback();
-        _segmentErrorHandler = (_, _) => StopTtsPlayback();
+        _segmentErrorHandler = (_, ex) => StopTtsPlayback();
     }
 
     public void UpdateSettings(AppSettings settings)
@@ -110,15 +105,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranslationService CreateTranslationService() =>
         CurrentSettings.TranslationProvider switch
         {
-            "nllb-200" => new NllbTranslationService(_log, CurrentSettings.TranslationModel),
-            _          => new TranslationService(_log),
+            ProviderNames.Nllb200 => new NllbTranslationService(_log, CurrentSettings.TranslationModel),
+            _                     => new TranslationService(_log),
         };
 
     private ITtsService CreateTtsService() =>
         CurrentSettings.TtsProvider switch
         {
-            "piper" => new PiperTtsService(_log, CurrentSettings.PiperModelDir),
-            _       => new TtsService(_log),
+            ProviderNames.Piper => new PiperTtsService(_log, CurrentSettings.PiperModelDir),
+            _                   => new TtsService(_log),
         };
 
     /// <summary>
@@ -129,18 +124,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     private IMediaTransport GetOrCreateSegmentPlayer()
     {
-        if (_segmentPlayer is not null) return _segmentPlayer;
-        _segmentPlayer = _injectedSegmentPlayer ?? new LibMpvHeadlessTransport(suppressAudio: false);
-        
-        // Subscribe to events only once and track subscription state
-        if (!_subscribedToPlayerEvents)
+        var player = _transportManager.GetOrCreateSegmentPlayer();
+
+        // Subscribe to segment lifecycle events exactly once.
+        if (!_subscribedToSegmentEvents)
         {
-            _segmentPlayer.Ended += _segmentEndedHandler;
-            _segmentPlayer.ErrorOccurred += _segmentErrorHandler;
-            _subscribedToPlayerEvents = true;
+            player.Ended        += _segmentEndedHandler;
+            player.ErrorOccurred += _segmentErrorHandler;
+            _subscribedToSegmentEvents = true;
         }
-        
-        return _segmentPlayer;
+
+        return player;
     }
 
     public async Task PlayTtsForSegmentAsync(string segmentId)
@@ -166,7 +160,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void StopTtsPlayback()
     {
-        _segmentPlayer?.Pause();
+        _transportManager.GetOrCreateSegmentPlayer().Pause();
         ActiveTtsSegmentId = null;
         PlaybackState = PlaybackState.Idle;
     }
@@ -202,38 +196,26 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void StopSourceMedia()
     {
-        _sourceMediaPlayer?.Pause();
+        _transportManager.SourceMediaPlayer?.Pause();
     }
 
-    public IMediaTransport GetOrCreateSourcePlayer()
-    {
-        if (_sourceMediaPlayer is not null) return _sourceMediaPlayer;
-        _sourceMediaPlayer = _injectedSourcePlayer ?? new LibMpvEmbeddedTransport();
-        return _sourceMediaPlayer;
-    }
+    public IMediaTransport GetOrCreateSourcePlayer() =>
+        _transportManager.GetOrCreateSourcePlayer();
 
-    public IMediaTransport? SourceMediaPlayer => _sourceMediaPlayer;
+    public IMediaTransport? SourceMediaPlayer => _transportManager.SourceMediaPlayer;
 
     public void Dispose()
     {
-        // Unsubscribe from events only if we previously subscribed
-        if (_subscribedToPlayerEvents && _segmentPlayer is not null)
+        // Unsubscribe segment events before disposing the transport manager.
+        if (_subscribedToSegmentEvents)
         {
-            _segmentPlayer.Ended -= _segmentEndedHandler;
-            _segmentPlayer.ErrorOccurred -= _segmentErrorHandler;
-            _subscribedToPlayerEvents = false;
+            var segmentPlayer = _transportManager.GetOrCreateSegmentPlayer();
+            segmentPlayer.Ended         -= _segmentEndedHandler;
+            segmentPlayer.ErrorOccurred -= _segmentErrorHandler;
+            _subscribedToSegmentEvents = false;
         }
 
-        // Only dispose if we created the player; injected players are owned by the caller.
-        if (_injectedSegmentPlayer is null)
-        {
-            _segmentPlayer?.Dispose();
-        }
-
-        if (_injectedSourcePlayer is null)
-        {
-            _sourceMediaPlayer?.Dispose();
-        }
+        _transportManager.Dispose();
     }
 
     public string StateFilePath => _store.StateFilePath;
@@ -253,7 +235,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         foreach (var snapshot in _perSessionStore.LoadAll())
         {
             if (!string.IsNullOrEmpty(snapshot.SourceMediaPath))
-                _mediaSnapshotCache[MediaKey(snapshot.SourceMediaPath)] = snapshot;
+                CacheMediaSnapshot(MediaKey(snapshot.SourceMediaPath), snapshot);
         }
 
         var nowUtc = DateTimeOffset.UtcNow;
@@ -291,7 +273,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
             // Primary current-session.json is authoritative — overwrite per-session cache entry.
             if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
-                _mediaSnapshotCache[MediaKey(CurrentSession.SourceMediaPath)] = CurrentSession;
+                CacheMediaSnapshot(MediaKey(CurrentSession.SourceMediaPath), CurrentSession);
 
             SessionSource = validated.Stage != snapshot.Stage
                 ? $"Resumed session (stage downgraded from {snapshot.Stage} to {validated.Stage}: missing artifacts)."
@@ -320,7 +302,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         // Stash current snapshot before switching — persist to disk so it survives restart.
         if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
         {
-            _mediaSnapshotCache[MediaKey(CurrentSession.SourceMediaPath)] = CurrentSession;
+            CacheMediaSnapshot(MediaKey(CurrentSession.SourceMediaPath), CurrentSession);
             _perSessionStore.Save(CurrentSession);
             _recentStore.Upsert(new RecentSessionEntry(
                 CurrentSession.SessionId,
@@ -405,6 +387,22 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     private static string MediaKey(string path) => Path.GetFullPath(path);
+
+    private const int MediaSnapshotCacheLimit = 20;
+
+    /// <summary>
+    /// Adds or updates a snapshot in the media cache, evicting the oldest entry
+    /// when the cache exceeds <see cref="MediaSnapshotCacheLimit"/> to prevent unbounded growth.
+    /// </summary>
+    private void CacheMediaSnapshot(string key, WorkflowSessionSnapshot snapshot)
+    {
+        _mediaSnapshotCache[key] = snapshot;
+        if (_mediaSnapshotCache.Count > MediaSnapshotCacheLimit)
+        {
+            var oldest = _mediaSnapshotCache.Keys.First();
+            _mediaSnapshotCache.Remove(oldest);
+        }
+    }
 
     private static WorkflowSessionSnapshot ValidateArtifacts(WorkflowSessionSnapshot s)
     {
@@ -525,7 +523,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var result = await _transcriptionService.TranscribeAsync(
             CurrentSession.IngestedMediaPath,
             transcriptPath,
-            CurrentSettings.TranscriptionModel);
+            CurrentSettings.TranscriptionModel,
+            cancellationToken);
 
         if (!result.Success)
         {
@@ -1037,7 +1036,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         // Stash and persist the current session before switching.
         if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
         {
-            _mediaSnapshotCache[MediaKey(CurrentSession.SourceMediaPath)] = CurrentSession;
+            CacheMediaSnapshot(MediaKey(CurrentSession.SourceMediaPath), CurrentSession);
             _perSessionStore.Save(CurrentSession);
             _recentStore.Upsert(new RecentSessionEntry(
                 CurrentSession.SessionId,
@@ -1066,6 +1065,62 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _log.Info($"Restored session {sessionId} (stage: {CurrentSession.Stage}).");
         SaveCurrentSession();
         RecentSessions = _recentStore.Load();
+    }
+
+    /// <summary>
+    /// Compares the current session's recorded provider/model settings against the
+    /// active <see cref="CurrentSettings"/> to determine what has been invalidated.
+    /// Callers use the result to decide which pipeline reset to apply before running.
+    /// </summary>
+    public PipelineInvalidation CheckSettingsInvalidation()
+    {
+        var cs = CurrentSession;
+        var s  = CurrentSettings;
+
+        bool wipeTranscription = cs.TranscriptionProvider != s.TranscriptionProvider
+            || cs.TranscriptionModel != s.TranscriptionModel;
+        bool wipeTranslation = wipeTranscription
+            || cs.TranslationProvider != s.TranslationProvider
+            || cs.TranslationModel    != s.TranslationModel
+            || cs.TargetLanguage      != s.TargetLanguage;
+        bool wipeTts = wipeTranslation
+            || cs.TtsProvider != s.TtsProvider
+            || cs.TtsVoice    != s.TtsVoice;
+
+        if (wipeTranscription) return PipelineInvalidation.Transcription;
+        if (wipeTranslation)   return PipelineInvalidation.Translation;
+        if (wipeTts)           return PipelineInvalidation.Tts;
+        return PipelineInvalidation.None;
+    }
+
+    /// <summary>
+    /// Advances the pipeline from its current stage through any remaining stages
+    /// (Transcribe → Translate → GenerateTts) that have not yet completed.
+    /// Stage-gating decisions live here, not in callers.
+    /// </summary>
+    public async Task AdvancePipelineAsync(
+        CancellationToken cancellationToken = default,
+        IProgress<double>? progress = null)
+    {
+        var stage = CurrentSession.Stage;
+
+        if (stage < SessionWorkflowStage.Transcribed
+            || CurrentSession.SourceLanguage is null or "unknown")
+        {
+            await TranscribeMediaAsync(cancellationToken, progress);
+        }
+
+        stage = CurrentSession.Stage;
+        if (stage < SessionWorkflowStage.Translated)
+        {
+            await TranslateTranscriptAsync(cancellationToken, progress);
+        }
+
+        stage = CurrentSession.Stage;
+        if (stage < SessionWorkflowStage.TtsGenerated)
+        {
+            await GenerateTtsAsync(cancellationToken, progress);
+        }
     }
 
     public void SaveCurrentSession()

@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -11,5 +12,6 @@ public interface ITranscriptionService
     Task<TranscriptionResult> TranscribeAsync(
         string audioPath,
         string outputJsonPath,
-        string model = "base");
+        string model = "base",
+        CancellationToken cancellationToken = default);
 }

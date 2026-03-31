@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 
 namespace Babel.Player.Services;
@@ -16,9 +17,12 @@ namespace Babel.Player.Services;
 /// </summary>
 public static class ProviderCapability
 {
-    private static readonly HashSet<string> _transcriptionSupported = ["faster-whisper"];
-    private static readonly HashSet<string> _translationSupported   = ["google-translate-free", "nllb-200"];
-    private static readonly HashSet<string> _ttsSupported           = ["edge-tts", "piper"];
+    private static readonly HashSet<string> _transcriptionSupported =
+        [ProviderNames.FasterWhisper];
+    private static readonly HashSet<string> _translationSupported =
+        [ProviderNames.GoogleTranslateFree, ProviderNames.Nllb200];
+    private static readonly HashSet<string> _ttsSupported =
+        [ProviderNames.EdgeTts, ProviderNames.Piper];
 
     private static readonly HashSet<string> _fasterWhisperModels =
         ["tiny", "base", "small", "medium", "large-v3"];
@@ -39,19 +43,19 @@ public static class ProviderCapability
             {
                 throw new PipelineProviderException(
                     $"Transcription provider '{provider}' is not implemented yet. " +
-                    $"Only 'faster-whisper' is currently supported. " +
+                    $"Only '{ProviderNames.FasterWhisper}' is currently supported. " +
                     $"An API key for '{credKey}' would also be required.");
             }
 
             throw new PipelineProviderException(
                 $"Transcription provider '{provider}' is not implemented. " +
-                $"Only 'faster-whisper' is currently supported.");
+                $"Only '{ProviderNames.FasterWhisper}' is currently supported.");
         }
 
-        if (provider == "faster-whisper" && !_fasterWhisperModels.Contains(model))
+        if (provider == ProviderNames.FasterWhisper && !_fasterWhisperModels.Contains(model))
         {
             throw new PipelineProviderException(
-                $"Model '{model}' is not valid for provider 'faster-whisper'. " +
+                $"Model '{model}' is not valid for provider '{ProviderNames.FasterWhisper}'. " +
                 $"Valid models: tiny, base, small, medium, large-v3.");
         }
     }
@@ -64,9 +68,9 @@ public static class ProviderCapability
     {
         if (_translationSupported.Contains(provider))
         {
-            if (provider == "nllb-200" && !_nllbModels.Contains(model))
+            if (provider == ProviderNames.Nllb200 && !_nllbModels.Contains(model))
                 throw new PipelineProviderException(
-                    $"Model '{model}' is not valid for provider 'nllb-200'. " +
+                    $"Model '{model}' is not valid for provider '{ProviderNames.Nllb200}'. " +
                     $"Valid models: nllb-200-distilled-600M, nllb-200-distilled-1.3B, nllb-200-1.3B.");
             return;
         }
@@ -76,13 +80,13 @@ public static class ProviderCapability
         {
             throw new PipelineProviderException(
                 $"Translation provider '{provider}' is not implemented yet. " +
-                $"Only 'google-translate-free' is currently supported. " +
+                $"Only '{ProviderNames.GoogleTranslateFree}' is currently supported. " +
                 $"An API key for '{credKey}' would also be required.");
         }
 
         throw new PipelineProviderException(
             $"Translation provider '{provider}' is not implemented. " +
-            $"Only 'google-translate-free' is currently supported.");
+            $"Only '{ProviderNames.GoogleTranslateFree}' is currently supported.");
     }
 
     // ---------------------------------------------------------------------------
@@ -99,13 +103,13 @@ public static class ProviderCapability
         {
             throw new PipelineProviderException(
                 $"TTS provider '{provider}' is not implemented yet. " +
-                $"Only 'edge-tts' is currently supported. " +
+                $"Only '{ProviderNames.EdgeTts}' is currently supported. " +
                 $"An API key for '{credKey}' would also be required.");
         }
 
         throw new PipelineProviderException(
             $"TTS provider '{provider}' is not implemented. " +
-            $"Only 'edge-tts' is currently supported.");
+            $"Only '{ProviderNames.EdgeTts}' is currently supported.");
     }
 
     // ---------------------------------------------------------------------------
@@ -119,13 +123,13 @@ public static class ProviderCapability
     /// </summary>
     private static string? CredentialKeyFor(string provider) => provider switch
     {
-        "openai-whisper-api" => "openai",
-        "openai-tts"         => "openai",
-        "openai"             => "openai",
-        "google-stt"         => "google-ai",
-        "google-cloud-tts"   => "google-ai",
-        "elevenlabs"         => "elevenlabs",
-        "deepl"              => "deepl",
-        _                    => null,
+        ProviderNames.OpenAiWhisperApi => CredentialKeys.OpenAi,
+        ProviderNames.OpenAiTts        => CredentialKeys.OpenAi,
+        ProviderNames.OpenAi           => CredentialKeys.OpenAi,
+        ProviderNames.GoogleStt        => CredentialKeys.GoogleAi,
+        ProviderNames.GoogleCloudTts   => CredentialKeys.GoogleAi,
+        ProviderNames.ElevenLabs       => CredentialKeys.ElevenLabs,
+        ProviderNames.Deepl            => CredentialKeys.Deepl,
+        _                              => null,
     };
 }

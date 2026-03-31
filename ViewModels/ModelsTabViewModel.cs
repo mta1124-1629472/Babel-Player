@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Babel.Player.Models;
 using Babel.Player.Services;
 
+
 namespace Babel.Player.ViewModels;
 
 /// <summary>
@@ -16,7 +17,7 @@ public sealed class ModelsTabViewModel : ViewModelBase
     public ModelsTabViewModel(ModelDownloader downloader, string piperModelDir)
     {
         // ── Faster Whisper ────────────────────────────────────────────────────
-        foreach (var model in ProviderOptions.GetTranscriptionModels("faster-whisper"))
+        foreach (var model in ProviderOptions.GetTranscriptionModels(ProviderNames.FasterWhisper))
         {
             var m = model; // capture
             Models.Add(new ModelDownloadEntry(
@@ -28,7 +29,7 @@ public sealed class ModelsTabViewModel : ViewModelBase
         }
 
         // ── NLLB-200 ──────────────────────────────────────────────────────────
-        foreach (var model in ProviderOptions.GetTranslationModels("nllb-200"))
+        foreach (var model in ProviderOptions.GetTranslationModels(ProviderNames.Nllb200))
         {
             var m = model;
             Models.Add(new ModelDownloadEntry(

@@ -25,6 +25,20 @@ jobs:
       - name: Restore
         run: dotnet restore Babel-Player.sln -r win-x64
 
+      - name: Download FFmpeg for Windows x64
+        shell: pwsh
+        run: |
+          $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          $ffmpegZip = "ffmpeg.zip"
+          Invoke-WebRequest -Uri $ffmpegUrl -OutFile $ffmpegZip
+          Expand-Archive -Path $ffmpegZip -DestinationPath "ffmpeg_temp"
+          $ffmpegExe = Get-ChildItem -Path "ffmpeg_temp" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
+          if (-not $ffmpegExe) { throw "Could not find ffmpeg.exe in downloaded archive" }
+          New-Item -ItemType Directory -Path "tools/win-x64" -Force | Out-Null
+          Move-Item -Path $ffmpegExe.FullName -Destination "tools/win-x64/ffmpeg.exe" -Force
+          Remove-Item -Path $ffmpegZip -Force
+          Remove-Item -Path "ffmpeg_temp" -Recurse -Force
+
       - name: Publish self-contained build
         run: >
           dotnet publish BabelPlayer.csproj
@@ -40,6 +54,10 @@ jobs:
           $exePath = "./publish/BabelPlayer.exe"
           if (-not (Test-Path $exePath)) {
             throw "Expected executable not found at $exePath"
+          }
+          $ffmpegPath = "./publish/ffmpeg.exe"
+          if (-not (Test-Path $ffmpegPath)) {
+            throw "Expected FFmpeg binary not found at $ffmpegPath"
           }
 
       - name: Package self-contained publish output

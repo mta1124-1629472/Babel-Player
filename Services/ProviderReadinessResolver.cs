@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 
 namespace Babel.Player.Services;
@@ -34,7 +35,7 @@ public static class ProviderReadinessResolver
             return ProviderReadiness.Unsupported;
         }
 
-        if (provider == "faster-whisper")
+        if (provider == ProviderNames.FasterWhisper)
         {
             if (!IsFasterWhisperDownloaded(model))
                 return ProviderReadiness.RequiresDownload;
@@ -67,7 +68,7 @@ public static class ProviderReadinessResolver
             return ProviderReadiness.Unsupported;
         }
 
-        if (provider == "nllb-200")
+        if (provider == ProviderNames.Nllb200)
         {
             if (!IsNllbDownloaded(model))
                 return ProviderReadiness.RequiresDownload;
@@ -91,7 +92,7 @@ public static class ProviderReadinessResolver
             return ProviderReadiness.Unsupported;
         }
 
-        if (provider == "piper")
+        if (provider == ProviderNames.Piper)
         {
             if (!IsPiperVoiceDownloaded(voice, piperModelDir))
                 return ProviderReadiness.RequiresDownload;

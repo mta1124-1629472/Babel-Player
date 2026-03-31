@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
 
@@ -20,7 +21,7 @@ public sealed class TranscriptionService : ITranscriptionService
                 "Python not found. Expected bundled python next to the app or python on PATH.");
     }
 
-    private async Task<string> ExtractAudioAsync(string videoPath)
+    private async Task<string> ExtractAudioAsync(string videoPath, CancellationToken cancellationToken = default)
     {
         var audioPath = Path.Combine(Path.GetTempPath(), $"audio_{Guid.NewGuid():N}.wav");
 
@@ -43,8 +44,8 @@ public sealed class TranscriptionService : ITranscriptionService
             throw new InvalidOperationException("Failed to start ffmpeg for audio extraction.");
         }
 
-        var stderr = await proc.StandardError.ReadToEndAsync();
-        await proc.WaitForExitAsync();
+        var stderr = await proc.StandardError.ReadToEndAsync(cancellationToken);
+        await proc.WaitForExitAsync(cancellationToken);
 
         if (proc.ExitCode != 0 || !File.Exists(audioPath))
         {
@@ -56,7 +57,8 @@ public sealed class TranscriptionService : ITranscriptionService
     }
 
     public async Task<TranscriptionResult> TranscribeAsync(
-        string audioPath, string outputJsonPath, string model = "base")
+        string audioPath, string outputJsonPath, string model = "base",
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(audioPath))
         {
@@ -68,7 +70,7 @@ public sealed class TranscriptionService : ITranscriptionService
         
         if (extension == ".mp4" || extension == ".avi" || extension == ".mkv" || extension == ".mov")
         {
-            inputPath = await ExtractAudioAsync(audioPath);
+            inputPath = await ExtractAudioAsync(audioPath, cancellationToken);
         }
         else if (extension != ".wav" && extension != ".mp3" && extension != ".flac" && extension != ".ogg")
         {
@@ -128,10 +130,10 @@ print('Transcription complete')
                 throw new InvalidOperationException("Failed to start transcription process.");
             }
 
-            var stdout = await proc.StandardOutput.ReadToEndAsync();
-            var stderr = await proc.StandardError.ReadToEndAsync();
+            var stdout = await proc.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderr = await proc.StandardError.ReadToEndAsync(cancellationToken);
 
-            proc.WaitForExit();
+            await proc.WaitForExitAsync(cancellationToken);
 
             if (proc.ExitCode != 0)
             {

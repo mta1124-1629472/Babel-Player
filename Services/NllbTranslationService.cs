@@ -23,8 +23,8 @@ public sealed class NllbTranslationService : ITranslationService
     }
 
     private const string NllbScript = @"
-import sys, json
-from transformers import pipeline as hf_pipeline
+import sys, json, torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 FLORES = {
     'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',
@@ -43,8 +43,18 @@ src_flores = FLORES.get(src_lang, src_lang)
 tgt_flores = FLORES.get(tgt_lang, tgt_lang)
 model_id   = f'facebook/{model_name}'
 
-pipe = hf_pipeline('translation', model=model_id,
-                   src_lang=src_flores, tgt_lang=tgt_flores, max_length=512)
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model     = AutoModelForSeq2SeqLM.from_pretrained(model_id).to(device)
+
+def translate_text(text):
+    if not text.strip():
+        return ''
+    inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True, max_length=512).to(device)
+    tgt_id = tokenizer.lang_code_to_id[tgt_flores]
+    with torch.no_grad():
+        tokens = model.generate(**inputs, forced_bos_token_id=tgt_id, max_length=512)
+    return tokenizer.batch_decode(tokens, skip_special_tokens=True)[0]
 
 with open(input_path, encoding='utf-8') as f:
     data = json.load(f)
@@ -52,9 +62,9 @@ with open(input_path, encoding='utf-8') as f:
 results = []
 for seg in data.get('segments', []):
     text   = seg.get('text', '')
-    xlated = pipe(text)[0]['translation_text'] if text.strip() else ''
+    xlated = translate_text(text)
     results.append({
-        'id':             f""segment_{seg['start']}"",
+        'id':             f'segment_{seg[""start""]}',
         'start':          seg['start'],
         'end':            seg['end'],
         'text':           text,
@@ -68,8 +78,8 @@ print('NLLB translation complete')
 ";
 
     private const string NllbSegmentScript = @"
-import sys, json
-from transformers import pipeline as hf_pipeline
+import sys, json, torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 FLORES = {
     'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',
@@ -89,9 +99,18 @@ src_flores = FLORES.get(src_lang, src_lang)
 tgt_flores = FLORES.get(tgt_lang, tgt_lang)
 model_id   = f'facebook/{model_name}'
 
-pipe   = hf_pipeline('translation', model=model_id,
-                     src_lang=src_flores, tgt_lang=tgt_flores, max_length=512)
-xlated = pipe(text)[0]['translation_text'] if text.strip() else ''
+device    = 'cuda' if torch.cuda.is_available() else 'cpu'
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model     = AutoModelForSeq2SeqLM.from_pretrained(model_id).to(device)
+
+if text.strip():
+    inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True, max_length=512).to(device)
+    tgt_id = tokenizer.lang_code_to_id[tgt_flores]
+    with torch.no_grad():
+        tokens = model.generate(**inputs, forced_bos_token_id=tgt_id, max_length=512)
+    xlated = tokenizer.batch_decode(tokens, skip_special_tokens=True)[0]
+else:
+    xlated = ''
 
 try:
     with open(json_path, encoding='utf-8') as f:
