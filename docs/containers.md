@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document explains how Babel Player should think about Python inference hosting, WSL, containers, and NVIDIA-managed serving paths.
+This document explains how the app should think about Python inference hosting, WSL, containers, and NVIDIA-managed serving paths.
 
 It exists to prevent two opposite mistakes:
 
@@ -15,7 +15,7 @@ This is a deployment-posture document, not a mandate to build container infrastr
 
 ## Current Position
 
-Babel Player should remain compatible with Python-backed inference services that can be hosted in more than one way over time.
+The app should remain compatible with Python-backed inference services that can be hosted in more than one way over time.
 
 Expected hosting modes include:
 

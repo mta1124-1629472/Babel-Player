@@ -2,7 +2,7 @@
 
 ## Mission
 
-Build Babel Player as the best tool for taking source media through transcript,
+Build the best tool for taking source media through transcript,
 translated dialogue, and spoken dubbed output — with in-context preview and
 refinement as the quality layer.
 

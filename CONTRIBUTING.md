@@ -2,7 +2,7 @@
 
 ### Project posture
 
-Babel Player is being rebuilt as a sequence of vertical slices around one core product chain:
+This project is built as a sequence of vertical slices around one core product chain:
 
 `source media -> timed transcript -> translated/adapted dialogue -> spoken dubbed output -> in-context preview and refinement`
 
