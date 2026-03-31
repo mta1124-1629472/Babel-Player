@@ -1,23 +1,17 @@
 using System;
-using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
-public sealed class PiperTtsService : ITtsService
+public sealed class PiperTtsService : PythonSubprocessServiceBase, ITtsService
 {
-    private readonly AppLog _log;
     private readonly string _modelDir;
-    private readonly string _pythonPath;
 
-    public PiperTtsService(AppLog log, string modelDir)
+    public PiperTtsService(AppLog log, string modelDir) : base(log)
     {
-        _log = log;
         _modelDir = modelDir;
-        _pythonPath = DependencyLocator.FindPython()
-            ?? throw new InvalidOperationException(
-                "Python not found. Piper TTS requires Python and the piper CLI installed.");
     }
 
     private const string PiperScript = @"
@@ -124,92 +118,50 @@ print(f'Piper segment TTS generated: {output_path}')
     public async Task<TtsResult> GenerateTtsAsync(
         string translationJsonPath,
         string outputAudioPath,
-        string voice)
+        string voice,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(translationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {translationJsonPath}");
 
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"piper_{Guid.NewGuid():N}.py");
-        await File.WriteAllTextAsync(scriptPath, PiperScript);
+        Log.Info($"Starting Piper TTS ({voice}): {translationJsonPath} -> {outputAudioPath}");
 
-        try
-        {
-            _log.Info($"Starting Piper TTS ({voice}): {translationJsonPath} -> {outputAudioPath}");
+        var result = await RunPythonScriptAsync(
+            PiperScript,
+            $"\"{translationJsonPath}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
+            "piper_tts",
+            cancellationToken);
+        ThrowIfFailed(result, "Piper TTS");
 
-            var psi = new ProcessStartInfo
-            {
-                FileName               = _pythonPath,
-                Arguments              = $"\"{scriptPath}\" \"{translationJsonPath}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
-                RedirectStandardError  = true,
-                UseShellExecute        = false,
-                CreateNoWindow         = true,
-            };
+        if (!File.Exists(outputAudioPath))
+            throw new InvalidOperationException($"Piper TTS output file not created: {outputAudioPath}");
 
-            using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start Piper TTS process.");
-            var stderr = await proc.StandardError.ReadToEndAsync();
-            proc.WaitForExit();
-
-            if (proc.ExitCode != 0)
-            {
-                _log.Error($"Piper TTS failed (exit {proc.ExitCode})", new Exception(stderr));
-                throw new InvalidOperationException($"Piper TTS failed: {stderr}");
-            }
-
-            if (!File.Exists(outputAudioPath))
-                throw new InvalidOperationException($"Piper TTS output file not created: {outputAudioPath}");
-
-            _log.Info($"Piper TTS completed: {outputAudioPath}");
-            return new TtsResult(true, outputAudioPath, voice, new FileInfo(outputAudioPath).Length, null);
-        }
-        finally
-        {
-            if (File.Exists(scriptPath)) File.Delete(scriptPath);
-        }
+        Log.Info($"Piper TTS completed: {outputAudioPath}");
+        return new TtsResult(true, outputAudioPath, voice, new FileInfo(outputAudioPath).Length, null);
     }
 
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         string text,
         string outputAudioPath,
-        string voice)
+        string voice,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Segment text cannot be empty", nameof(text));
 
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"piper_seg_{Guid.NewGuid():N}.py");
-        await File.WriteAllTextAsync(scriptPath, PiperSegmentScript);
+        Log.Info($"Starting Piper segment TTS ({voice}): {text[..Math.Min(30, text.Length)]}... -> {outputAudioPath}");
 
-        try
-        {
-            _log.Info($"Starting Piper segment TTS ({voice}): {text[..Math.Min(30, text.Length)]}... -> {outputAudioPath}");
+        var result = await RunPythonScriptAsync(
+            PiperSegmentScript,
+            $"\"{text}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
+            "piper_tts_seg",
+            cancellationToken);
+        ThrowIfFailed(result, "Piper segment TTS");
 
-            var psi = new ProcessStartInfo
-            {
-                FileName               = _pythonPath,
-                Arguments              = $"\"{scriptPath}\" \"{text}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
-                RedirectStandardError  = true,
-                UseShellExecute        = false,
-                CreateNoWindow         = true,
-            };
+        if (!File.Exists(outputAudioPath))
+            throw new InvalidOperationException($"Piper segment TTS output file not created: {outputAudioPath}");
 
-            using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start Piper segment TTS process.");
-            var stderr = await proc.StandardError.ReadToEndAsync();
-            proc.WaitForExit();
-
-            if (proc.ExitCode != 0)
-            {
-                _log.Error($"Piper segment TTS failed (exit {proc.ExitCode})", new Exception(stderr));
-                throw new InvalidOperationException($"Piper segment TTS failed: {stderr}");
-            }
-
-            if (!File.Exists(outputAudioPath))
-                throw new InvalidOperationException($"Piper segment TTS output file not created: {outputAudioPath}");
-
-            _log.Info($"Piper segment TTS completed: {outputAudioPath}");
-            return new TtsResult(true, outputAudioPath, voice, new FileInfo(outputAudioPath).Length, null);
-        }
-        finally
-        {
-            if (File.Exists(scriptPath)) File.Delete(scriptPath);
-        }
+        Log.Info($"Piper segment TTS completed: {outputAudioPath}");
+        return new TtsResult(true, outputAudioPath, voice, new FileInfo(outputAudioPath).Length, null);
     }
 }

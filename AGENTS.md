@@ -152,13 +152,67 @@ now costs almost nothing.
 
 The rule is about timing, not avoidance.
 
-### 10. Git history is the archive
+### 10. Service interfaces are uniform; configuration lives in constructors
+
+Every AI inference service implements a provider interface
+(`ITranscriptionService`, `ITranslationService`, `ITtsService`). Method
+signatures are uniform across providers — no provider-specific parameters on
+interface methods. Provider configuration (model name, voice, API key, model
+directory) is injected at construction time.
+
+All five Python-backed services extend `PythonSubprocessServiceBase`. Do not
+duplicate Python discovery, temp-file management, or process-spawn boilerplate
+— use `RunPythonScriptAsync` and `ThrowIfFailed`.
+
+### 11. Provider identifiers are constants, not string literals
+
+All provider and credential key strings live in `Models/ProviderNames.cs`
+(`ProviderNames.*` and `CredentialKeys.*`). Use these constants everywhere in
+production code. String literals matching a known provider ID outside of
+`ProviderNames.cs` are a linter violation (`check-architecture.py` check 8).
+
+### 12. Stage progression runs through AdvancePipelineAsync
+
+ViewModels must not call `TranscribeMediaAsync`, `TranslateTranscriptAsync`,
+or `GenerateTtsAsync` directly. All pipeline advancement goes through
+`SessionWorkflowCoordinator.AdvancePipelineAsync`. ViewModels may read
+`.CurrentSession.Stage` for UI state display; they must not decide which stage
+to execute. The linter enforces this (`check-architecture.py` check 9).
+
+### 13. Transport lifecycle is managed by MediaTransportManager
+
+`LibMpvHeadlessTransport` (TTS segment audio) and `LibMpvEmbeddedTransport`
+(video to native HWND) are created, owned, and disposed by
+`MediaTransportManager`. Do not create or dispose transport instances directly
+in the coordinator or ViewModel. Use `IMediaTransportManager.GetOrCreate*`
+accessors.
+
+### 14. Git history is the archive
 
 Do not accumulate dead code, commented-out blocks, or unused files in active
 source just because they once worked. Delete them. Git history preserves them.
 
 For large abandoned experiments (whole feature branches, multi-file approaches),
 preserve as a named branch before removing from main.
+
+---
+
+## Architecture Linter
+
+`python3 scripts/check-architecture.py` enforces:
+
+1. `BabelPlayer.csproj` exists
+2. Test project references main project
+3. Test project has a test framework
+4. Main project is an Avalonia app
+5. `OutputType=WinExe`
+6. `NotImplementedException` carries a `PLACEHOLDER` message
+7. Silent event stubs have `PLACEHOLDER` comments
+8. No magic provider string literals in production code (outside `ProviderNames.cs`)
+9. ViewModels do not call raw pipeline execution methods directly
+10. `SessionWorkflowCoordinator.cs` stays under 1300 lines
+
+Run this after any structural change. CI should fail on any violation.
 
 ---
 

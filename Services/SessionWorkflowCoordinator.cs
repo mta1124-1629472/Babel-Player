@@ -635,7 +635,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             CurrentSession.TranscriptPath,
             translationPath,
             src,
-            lang);
+            lang,
+            cancellationToken);
 
         if (!result.Success)
         {
@@ -709,7 +710,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var result = await _ttsService.GenerateTtsAsync(
             CurrentSession.TranslationPath,
             ttsPath,
-            v);
+            v,
+            cancellationToken);
 
         if (!result.Success)
         {
@@ -728,7 +730,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var segmentAudioPaths = new Dictionary<string, string>();
         try
         {
-            var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
+            var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath, cancellationToken);
             var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
             // NOTE: "segments", "id", "translatedText" — these property names are part of an explicit
             // Python/C# artifact contract. Must match TranslationService.py output exactly.
@@ -752,7 +754,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
                 try
                 {
-                    var segResult = await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, v);
+                    var segResult = await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, v, cancellationToken);
 
                     if (segResult.Success && File.Exists(segmentAudioPath))
                     {

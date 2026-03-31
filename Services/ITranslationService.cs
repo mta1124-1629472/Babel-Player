@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -18,7 +19,8 @@ public interface ITranslationService
         string transcriptJsonPath,
         string outputJsonPath,
         string sourceLanguage,
-        string targetLanguage);
+        string targetLanguage,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Re-translates a single segment and updates its <c>translatedText</c> field
@@ -30,5 +32,6 @@ public interface ITranslationService
         string translationJsonPath,
         string outputJsonPath,
         string sourceLanguage,
-        string targetLanguage);
+        string targetLanguage,
+        CancellationToken cancellationToken = default);
 }

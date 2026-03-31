@@ -1,25 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Diagnostics;
 
 namespace Babel.Player.Services;
 
-public sealed class TranscriptionService : ITranscriptionService
+public sealed class TranscriptionService : PythonSubprocessServiceBase, ITranscriptionService
 {
-    private readonly AppLog _log;
-    private readonly string _pythonPath;
-
-    public TranscriptionService(AppLog log)
-    {
-        _log = log;
-        _pythonPath = DependencyLocator.FindPython()
-            ?? throw new InvalidOperationException(
-                "Python not found. Expected bundled python next to the app or python on PATH.");
-    }
+    public TranscriptionService(AppLog log) : base(log) { }
 
     private async Task<string> ExtractAudioAsync(string videoPath, CancellationToken cancellationToken = default)
     {
@@ -40,19 +31,15 @@ public sealed class TranscriptionService : ITranscriptionService
 
         using var proc = Process.Start(psi);
         if (proc == null)
-        {
             throw new InvalidOperationException("Failed to start ffmpeg for audio extraction.");
-        }
 
         var stderr = await proc.StandardError.ReadToEndAsync(cancellationToken);
         await proc.WaitForExitAsync(cancellationToken);
 
         if (proc.ExitCode != 0 || !File.Exists(audioPath))
-        {
             throw new InvalidOperationException($"Audio extraction failed: {stderr}");
-        }
 
-        _log.Info($"Extracted audio to: {audioPath}");
+        Log.Info($"Extracted audio to: {audioPath}");
         return audioPath;
     }
 
@@ -61,13 +48,11 @@ public sealed class TranscriptionService : ITranscriptionService
         CancellationToken cancellationToken = default)
     {
         if (!File.Exists(audioPath))
-        {
             throw new FileNotFoundException($"Audio file not found: {audioPath}");
-        }
 
         var inputPath = audioPath;
         var extension = Path.GetExtension(audioPath).ToLowerInvariant();
-        
+
         if (extension == ".mp4" || extension == ".avi" || extension == ".mkv" || extension == ".mov")
         {
             inputPath = await ExtractAudioAsync(audioPath, cancellationToken);
@@ -113,72 +98,37 @@ with open(sys.argv[2], 'w', encoding='utf-8') as f:
 print('Transcription complete')
 ";
 
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"transcribe_{Guid.NewGuid():N}.py");
-        await File.WriteAllTextAsync(scriptPath, script);
+        Log.Info($"Starting transcription of: {inputPath}");
 
-        try
+        var result = await RunPythonScriptAsync(
+            script,
+            $"\"{audioPath}\" \"{outputJsonPath}\"",
+            "transcribe",
+            cancellationToken);
+        ThrowIfFailed(result, "Transcription");
+
+        Log.Info($"Transcription completed: {outputJsonPath}");
+
+        var jsonContent = await File.ReadAllTextAsync(outputJsonPath, cancellationToken);
+        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var transcriptionData = JsonSerializer.Deserialize<TranscriptionJson>(jsonContent, jsonOptions);
+
+        var segments = new List<TranscriptSegment>();
+        if (transcriptionData?.Segments != null)
         {
-            _log.Info($"Starting transcription of: {inputPath}");
-
-            var psi = new ProcessStartInfo
+            foreach (var seg in transcriptionData.Segments)
             {
-                FileName = _pythonPath,
-                Arguments = $"\"{scriptPath}\" \"{audioPath}\" \"{outputJsonPath}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null)
-            {
-                throw new InvalidOperationException("Failed to start transcription process.");
-            }
-
-            var stdout = await proc.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderr = await proc.StandardError.ReadToEndAsync(cancellationToken);
-
-            await proc.WaitForExitAsync(cancellationToken);
-
-            if (proc.ExitCode != 0)
-            {
-                _log.Error($"Transcription failed with exit code {proc.ExitCode}", new Exception(stderr));
-                throw new InvalidOperationException($"Transcription failed: {stderr}");
-            }
-
-            _log.Info($"Transcription completed: {outputJsonPath}");
-
-            var jsonContent = await File.ReadAllTextAsync(outputJsonPath);
-            var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var transcriptionData = JsonSerializer.Deserialize<TranscriptionJson>(jsonContent, jsonOptions);
-
-            var segments = new List<TranscriptSegment>();
-            if (transcriptionData?.Segments != null)
-            {
-                foreach (var seg in transcriptionData.Segments)
-                {
-                    if (!string.IsNullOrEmpty(seg.Text))
-                    {
-                        segments.Add(new TranscriptSegment(seg.Start, seg.End, seg.Text));
-                    }
-                }
-            }
-
-            return new TranscriptionResult(
-                true,
-                segments,
-                transcriptionData?.Language ?? "unknown",
-                transcriptionData?.LanguageProbability ?? 0.0,
-                null);
-        }
-        finally
-        {
-            if (File.Exists(scriptPath))
-            {
-                File.Delete(scriptPath);
+                if (!string.IsNullOrEmpty(seg.Text))
+                    segments.Add(new TranscriptSegment(seg.Start, seg.End, seg.Text));
             }
         }
+
+        return new TranscriptionResult(
+            true,
+            segments,
+            transcriptionData?.Language ?? "unknown",
+            transcriptionData?.LanguageProbability ?? 0.0,
+            null);
     }
 
     private class TranscriptionJson

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using Babel.Player.Models;
 
 namespace Babel.Player.Services.Credentials;
 
@@ -18,15 +19,15 @@ public sealed class ApiKeyStore
 
     /// <summary>Canonical provider IDs managed by this store (in display order).</summary>
     public static IReadOnlyList<string> KnownProviders { get; } =
-        ["openai", "google-ai", "elevenlabs", "deepl"];
+        [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.ElevenLabs, CredentialKeys.Deepl];
 
     public static string GetDisplayName(string providerKey) => providerKey switch
     {
-        "openai"     => "OpenAI",
-        "google-ai"  => "Google AI",
-        "elevenlabs" => "ElevenLabs",
-        "deepl"      => "DeepL",
-        _            => providerKey,
+        CredentialKeys.OpenAi     => "OpenAI",
+        CredentialKeys.GoogleAi   => "Google AI",
+        CredentialKeys.ElevenLabs => "ElevenLabs",
+        CredentialKeys.Deepl      => "DeepL",
+        _                         => providerKey,
     };
 
     public ApiKeyStore(string filePath)

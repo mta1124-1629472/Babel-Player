@@ -2,10 +2,9 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <ApplicationIcon>babelplayer.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\babelplayer.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\babelplayer.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyName>BabelPlayer</AssemblyName>
     <RootNamespace>Babel.Player</RootNamespace>
@@ -18,8 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="BabelPlayer\**" />
     <Compile Remove="BabelPlayer.Tests\**" />
-    <Compile Remove="BabelPlayer.Tests\**" />
+    <EmbeddedResource Remove="BabelPlayer\**" />
+    <None Remove="BabelPlayer\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.0.0-rc1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0-rc1" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.0-rc1" />
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.0-beta3" />
     <!-- DiagnosticsSupport 2.2.0-beta3 hangs on AttachDeveloperTools() with Avalonia 12.0.0-rc1.
          Re-enable when a compatible version is available. -->
     <!-- <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.0-beta3" /> -->

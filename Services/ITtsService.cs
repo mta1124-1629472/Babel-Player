@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -23,7 +24,8 @@ public interface ITtsService
     Task<TtsResult> GenerateTtsAsync(
         string translationJsonPath,
         string outputAudioPath,
-        string voice);
+        string voice,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Generates speech for a single piece of text and writes it to
@@ -34,5 +36,6 @@ public interface ITtsService
     Task<TtsResult> GenerateSegmentTtsAsync(
         string text,
         string outputAudioPath,
-        string voice);
+        string voice,
+        CancellationToken cancellationToken = default);
 }

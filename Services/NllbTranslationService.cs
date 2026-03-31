@@ -1,25 +1,19 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
-public sealed class NllbTranslationService : ITranslationService
+public sealed class NllbTranslationService : PythonSubprocessServiceBase, ITranslationService
 {
-    private readonly AppLog _log;
     private readonly string _model;
-    private readonly string _pythonPath;
 
-    public NllbTranslationService(AppLog log, string model)
+    public NllbTranslationService(AppLog log, string model) : base(log)
     {
-        _log = log;
         _model = model;
-        _pythonPath = DependencyLocator.FindPython()
-            ?? throw new InvalidOperationException(
-                "Python not found. NLLB-200 translation requires Python with the transformers package installed.");
     }
 
     private const string NllbScript = @"
@@ -150,57 +144,36 @@ print(f'NLLB single segment translated: {seg_id}')
         string transcriptJsonPath,
         string outputJsonPath,
         string sourceLanguage,
-        string targetLanguage)
+        string targetLanguage,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(transcriptJsonPath))
             throw new FileNotFoundException($"Transcript file not found: {transcriptJsonPath}");
 
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"nllb_{Guid.NewGuid():N}.py");
-        await File.WriteAllTextAsync(scriptPath, NllbScript);
+        Log.Info($"Starting NLLB-200 translation ({_model}): {transcriptJsonPath} ({sourceLanguage} -> {targetLanguage})");
 
-        try
-        {
-            _log.Info($"Starting NLLB-200 translation ({_model}): {transcriptJsonPath} ({sourceLanguage} -> {targetLanguage})");
+        var result = await RunPythonScriptAsync(
+            NllbScript,
+            $"\"{transcriptJsonPath}\" \"{outputJsonPath}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{_model}\"",
+            "nllb",
+            cancellationToken);
+        ThrowIfFailed(result, "NLLB translation");
 
-            var psi = new ProcessStartInfo
-            {
-                FileName               = _pythonPath,
-                Arguments              = $"\"{scriptPath}\" \"{transcriptJsonPath}\" \"{outputJsonPath}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{_model}\"",
-                RedirectStandardError  = true,
-                UseShellExecute        = false,
-                CreateNoWindow         = true,
-            };
+        Log.Info($"NLLB translation completed: {outputJsonPath}");
 
-            using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start NLLB translation process.");
-            var stderr = await proc.StandardError.ReadToEndAsync();
-            proc.WaitForExit();
+        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var translationData = JsonSerializer.Deserialize<TranslationJsonHelper>(
+            await File.ReadAllTextAsync(outputJsonPath), jsonOptions);
 
-            if (proc.ExitCode != 0)
-            {
-                _log.Error($"NLLB translation failed (exit {proc.ExitCode})", new Exception(stderr));
-                throw new InvalidOperationException($"NLLB translation failed: {stderr}");
-            }
+        var segments = new List<TranslatedSegment>();
+        foreach (var seg in translationData?.Segments ?? [])
+            segments.Add(new TranslatedSegment(seg.Start, seg.End, seg.Text ?? "", seg.TranslatedText ?? ""));
 
-            _log.Info($"NLLB translation completed: {outputJsonPath}");
-
-            var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var translationData = JsonSerializer.Deserialize<TranslationJsonHelper>(
-                await File.ReadAllTextAsync(outputJsonPath), jsonOptions);
-
-            var segments = new List<TranslatedSegment>();
-            foreach (var seg in translationData?.Segments ?? [])
-                segments.Add(new TranslatedSegment(seg.Start, seg.End, seg.Text ?? "", seg.TranslatedText ?? ""));
-
-            return new TranslationResult(
-                true, segments,
-                translationData?.SourceLanguage ?? sourceLanguage,
-                translationData?.TargetLanguage ?? targetLanguage,
-                null);
-        }
-        finally
-        {
-            if (File.Exists(scriptPath)) File.Delete(scriptPath);
-        }
+        return new TranslationResult(
+            true, segments,
+            translationData?.SourceLanguage ?? sourceLanguage,
+            translationData?.TargetLanguage ?? targetLanguage,
+            null);
     }
 
     public async Task<TranslationResult> TranslateSingleSegmentAsync(
@@ -209,59 +182,38 @@ print(f'NLLB single segment translated: {seg_id}')
         string translationJsonPath,
         string outputJsonPath,
         string sourceLanguage,
-        string targetLanguage)
+        string targetLanguage,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Source text cannot be empty", nameof(text));
         if (!File.Exists(translationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {translationJsonPath}");
 
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"nllb_seg_{Guid.NewGuid():N}.py");
-        await File.WriteAllTextAsync(scriptPath, NllbSegmentScript);
+        Log.Info($"Starting NLLB-200 single segment translation ({_model}): {text[..Math.Min(30, text.Length)]}...");
 
-        try
-        {
-            _log.Info($"Starting NLLB-200 single segment translation ({_model}): {text[..Math.Min(30, text.Length)]}...");
+        var result = await RunPythonScriptAsync(
+            NllbSegmentScript,
+            $"\"{text}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{translationJsonPath}\" \"{segmentId}\" \"{_model}\"",
+            "nllb_seg",
+            cancellationToken);
+        ThrowIfFailed(result, "NLLB segment translation");
 
-            var psi = new ProcessStartInfo
-            {
-                FileName               = _pythonPath,
-                Arguments              = $"\"{scriptPath}\" \"{text}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{translationJsonPath}\" \"{segmentId}\" \"{_model}\"",
-                RedirectStandardError  = true,
-                UseShellExecute        = false,
-                CreateNoWindow         = true,
-            };
+        Log.Info($"NLLB single segment translation completed: {segmentId}");
 
-            using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start NLLB segment translation process.");
-            var stderr = await proc.StandardError.ReadToEndAsync();
-            proc.WaitForExit();
+        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var translationData = JsonSerializer.Deserialize<TranslationJsonHelper>(
+            await File.ReadAllTextAsync(translationJsonPath), jsonOptions);
 
-            if (proc.ExitCode != 0)
-            {
-                _log.Error($"NLLB segment translation failed (exit {proc.ExitCode})", new Exception(stderr));
-                throw new InvalidOperationException($"NLLB segment translation failed: {stderr}");
-            }
+        var segments = new List<TranslatedSegment>();
+        foreach (var seg in translationData?.Segments ?? [])
+            segments.Add(new TranslatedSegment(seg.Start, seg.End, seg.Text ?? "", seg.TranslatedText ?? ""));
 
-            _log.Info($"NLLB single segment translation completed: {segmentId}");
-
-            var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var translationData = JsonSerializer.Deserialize<TranslationJsonHelper>(
-                await File.ReadAllTextAsync(translationJsonPath), jsonOptions);
-
-            var segments = new List<TranslatedSegment>();
-            foreach (var seg in translationData?.Segments ?? [])
-                segments.Add(new TranslatedSegment(seg.Start, seg.End, seg.Text ?? "", seg.TranslatedText ?? ""));
-
-            return new TranslationResult(
-                true, segments,
-                translationData?.SourceLanguage ?? sourceLanguage,
-                translationData?.TargetLanguage ?? targetLanguage,
-                null);
-        }
-        finally
-        {
-            if (File.Exists(scriptPath)) File.Delete(scriptPath);
-        }
+        return new TranslationResult(
+            true, segments,
+            translationData?.SourceLanguage ?? sourceLanguage,
+            translationData?.TargetLanguage ?? targetLanguage,
+            null);
     }
 
     // JSON deserialization helpers — internal so TranslationService can share them

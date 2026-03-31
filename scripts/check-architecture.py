@@ -133,6 +133,87 @@ else:
     ok("All silent event stubs have PLACEHOLDER comments")
 
 
+# ── Check 8: Magic provider strings outside ProviderNames.cs ────────────────
+# Any string literal matching a known provider ID in a .cs file that isn't
+# ProviderNames.cs signals that the constant was bypassed.
+
+PROVIDER_IDS = {
+    "faster-whisper", "openai-whisper-api", "google-stt",
+    "google-translate-free", "nllb-200", "deepl",
+    "edge-tts", "piper", "elevenlabs", "google-cloud-tts", "openai-tts",
+}
+PROVIDER_LITERAL = re.compile(r'"(' + "|".join(re.escape(p) for p in PROVIDER_IDS) + r')"')
+
+magic_hits: list[str] = []
+for cs in cs_files:
+    if cs.name == "ProviderNames.cs":
+        continue
+    # Test files may use string literals intentionally to pin the string contract
+    if any("Tests" in part for part in cs.parts):
+        continue
+    text = cs.read_text(encoding="utf-8", errors="replace")
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        stripped = line.lstrip()
+        if stripped.startswith("//"):
+            continue
+        # Skip lines inside raw string literals used for Python scripts (heuristic:
+        # if the line also contains 'import' or 'sys.argv' it's embedded Python)
+        if "import " in line or "sys.argv" in line:
+            continue
+        if PROVIDER_LITERAL.search(line):
+            magic_hits.append(f"{cs}:{lineno}: {line.strip()}")
+
+if magic_hits:
+    fail(
+        "Magic provider string literal (use ProviderNames.* constants instead):\n"
+        + "\n".join(f"    {h}" for h in magic_hits)
+    )
+else:
+    ok("No magic provider string literals found outside ProviderNames.cs")
+
+# ── Check 9: ViewModel pipeline-execution ban ─────────────────────────────────
+# ViewModels must not call raw pipeline execution methods (TranscribeMediaAsync,
+# TranslateTranscriptAsync, GenerateTtsAsync) directly. All stage progression
+# must go through SessionWorkflowCoordinator.AdvancePipelineAsync.
+
+DIRECT_PIPELINE_CALL = re.compile(
+    r"\.(TranscribeMediaAsync|TranslateTranscriptAsync|GenerateTtsAsync)\s*\("
+)
+vm_files = [f for f in cs_files if "ViewModels" in f.parts]
+
+stage_hits: list[str] = []
+for vm in vm_files:
+    text = vm.read_text(encoding="utf-8", errors="replace")
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        if line.lstrip().startswith("//"):
+            continue
+        if DIRECT_PIPELINE_CALL.search(line):
+            stage_hits.append(f"{vm}:{lineno}: {line.strip()}")
+
+if stage_hits:
+    fail(
+        "ViewModel calls raw pipeline method directly — use "
+        "SessionWorkflowCoordinator.AdvancePipelineAsync instead:\n"
+        + "\n".join(f"    {h}" for h in stage_hits)
+    )
+else:
+    ok("No ViewModel direct pipeline-execution calls found")
+
+# ── Check 10: SessionWorkflowCoordinator line-count warning ─────────────────
+COORDINATOR_WARN_LINES = 1300
+
+coordinator = Path("Services/SessionWorkflowCoordinator.cs")
+if coordinator.exists():
+    line_count = len(coordinator.read_text(encoding="utf-8", errors="replace").splitlines())
+    if line_count > COORDINATOR_WARN_LINES:
+        fail(
+            f"SessionWorkflowCoordinator.cs is {line_count} lines "
+            f"(threshold: {COORDINATOR_WARN_LINES}). "
+            "Consider extracting a helper service."
+        )
+    else:
+        ok(f"SessionWorkflowCoordinator.cs is {line_count} lines (within {COORDINATOR_WARN_LINES}-line threshold)")
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 
 print()

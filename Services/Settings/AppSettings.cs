@@ -1,3 +1,5 @@
+using Babel.Player.Models;
+
 namespace Babel.Player.Services.Settings;
 
 /// <summary>
@@ -6,19 +8,19 @@ namespace Babel.Player.Services.Settings;
 public sealed class AppSettings
 {
     /// <summary>Transcription provider identifier (e.g. "faster-whisper", "openai-whisper-api").</summary>
-    public string TranscriptionProvider { get; set; } = "faster-whisper";
+    public string TranscriptionProvider { get; set; } = ProviderNames.FasterWhisper;
 
     /// <summary>Transcription model name within the selected provider (e.g. "base", "large-v3").</summary>
     public string TranscriptionModel { get; set; } = "base";
 
     /// <summary>Translation provider identifier (e.g. "google-translate-free", "openai").</summary>
-    public string TranslationProvider { get; set; } = "google-translate-free";
+    public string TranslationProvider { get; set; } = ProviderNames.GoogleTranslateFree;
 
     /// <summary>Translation model name within the selected provider (e.g. "default", "gpt-4o").</summary>
     public string TranslationModel { get; set; } = "default";
 
     /// <summary>TTS provider identifier (e.g. "edge-tts", "elevenlabs").</summary>
-    public string TtsProvider { get; set; } = "edge-tts";
+    public string TtsProvider { get; set; } = ProviderNames.EdgeTts;
 
     /// <summary>
     /// TTS voice or model selection. For edge-tts this is an Edge-TTS voice name;
