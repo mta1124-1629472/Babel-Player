@@ -4,12 +4,21 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
+using Babel.Player.Services.Credentials;
 
 namespace Babel.Player.Services;
 
-public sealed class TranslationService : PythonSubprocessServiceBase, ITranslationService
+public sealed class TranslationService : PythonSubprocessServiceBase, ITranslationService, IInferenceProvider
 {
     public TranslationService(AppLog log) : base(log) { }
+
+    public string ProviderId => ProviderNames.GoogleTranslateFree;
+    public IReadOnlyList<string> SupportedModels { get; } = ["default"];
+
+    public ProviderReadiness CheckReadiness(string model, ApiKeyStore? keys) => ProviderReadiness.Ready;
+    
+    public Task EnsureReadyAsync(string model, IProgress<double>? progress, CancellationToken ct) => Task.CompletedTask;
 
     public async Task<TranslationResult> TranslateAsync(
         string transcriptJsonPath,
@@ -21,53 +30,56 @@ public sealed class TranslationService : PythonSubprocessServiceBase, ITranslati
         if (!File.Exists(transcriptJsonPath))
             throw new FileNotFoundException($"Transcript file not found: {transcriptJsonPath}");
 
-        // googletrans.Translator.translate() is synchronous — no asyncio wrapper needed.
+        // googletrans >= 4.0.2 has an async API — translate() returns a coroutine.
         var script = @"
-import sys, json
+import sys, json, asyncio
 
 try:
     from googletrans import Translator
 except ImportError:
     import subprocess
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'googletrans==4.0.0rc1'])
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'googletrans==4.0.2'])
     from googletrans import Translator
 
-with open(sys.argv[1], 'r', encoding='utf-8') as f:
-    data = json.load(f)
+async def translate():
+    with open(sys.argv[1], 'r', encoding='utf-8') as f:
+        data = json.load(f)
 
-source_lang = sys.argv[3] if len(sys.argv) > 3 else 'es'
-target_lang = sys.argv[4] if len(sys.argv) > 4 else 'en'
+    source_lang = sys.argv[3] if len(sys.argv) > 3 else 'es'
+    target_lang = sys.argv[4] if len(sys.argv) > 4 else 'en'
 
-translator = Translator()
-result = {
-    'sourceLanguage': source_lang,
-    'targetLanguage': target_lang,
-    'segments': []
-}
+    translator = Translator()
+    result = {
+        'sourceLanguage': source_lang,
+        'targetLanguage': target_lang,
+        'segments': []
+    }
 
-for seg in data.get('segments', []):
-    text = seg.get('text', '')
-    translated_text = ''
-    if text:
-        try:
-            translated = translator.translate(text, src=source_lang, dest=target_lang)
-            translated_text = translated.text if translated else ''
-        except Exception as e:
-            print(f'Error translating segment: {e}', file=sys.stderr)
+    for seg in data.get('segments', []):
+        text = seg.get('text', '')
+        translated_text = ''
+        if text:
+            try:
+                translated = await translator.translate(text, src=source_lang, dest=target_lang)
+                translated_text = (translated.text or '') if translated else ''
+            except Exception as e:
+                print(f'Error translating segment: {e}', file=sys.stderr)
 
-    start = seg.get('start', 0)
-    result['segments'].append({
-        'id': f'segment_{start}',
-        'start': start,
-        'end': seg.get('end', 0),
-        'text': text,
-        'translatedText': translated_text
-    })
+        start = seg.get('start', 0)
+        result['segments'].append({
+            'id': f'segment_{start}',
+            'start': start,
+            'end': seg.get('end', 0),
+            'text': text,
+            'translatedText': translated_text
+        })
 
-with open(sys.argv[2], 'w', encoding='utf-8') as f:
-    json.dump(result, f, ensure_ascii=False, indent=2)
+    with open(sys.argv[2], 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
 
-print('Translation complete')
+    print('Translation complete')
+
+asyncio.run(translate())
 ";
 
         Log.Info($"Starting translation: {transcriptJsonPath} ({sourceLanguage} -> {targetLanguage})");
@@ -127,40 +139,43 @@ print('Translation complete')
             throw new FileNotFoundException($"Translation file not found: {translationJsonPath}");
 
         var script = @"
-import sys, json
+import sys, json, asyncio
 
 try:
     from googletrans import Translator
 except ImportError:
     import subprocess
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'googletrans==4.0.0rc1'])
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'googletrans==4.0.2'])
     from googletrans import Translator
 
-text        = sys.argv[1]
-source_lang = sys.argv[2] if len(sys.argv) > 2 else 'es'
-target_lang = sys.argv[3] if len(sys.argv) > 3 else 'en'
-json_path   = sys.argv[4]
-seg_id      = sys.argv[5] if len(sys.argv) > 5 else ''
+async def translate():
+    text        = sys.argv[1]
+    source_lang = sys.argv[2] if len(sys.argv) > 2 else 'es'
+    target_lang = sys.argv[3] if len(sys.argv) > 3 else 'en'
+    json_path   = sys.argv[4]
+    seg_id      = sys.argv[5] if len(sys.argv) > 5 else ''
 
-translator    = Translator()
-translated    = translator.translate(text, src=source_lang, dest=target_lang)
-translated_text = translated.text if translated else ''
+    translator      = Translator()
+    translated      = await translator.translate(text, src=source_lang, dest=target_lang)
+    translated_text = (translated.text or '') if translated else ''
 
-try:
-    with open(json_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-except Exception:
-    data = {'segments': []}
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        data = {'segments': []}
 
-for seg in data.get('segments', []):
-    if seg.get('id') == seg_id:
-        seg['translatedText'] = translated_text
-        break
+    for seg in data.get('segments', []):
+        if seg.get('id') == seg_id:
+            seg['translatedText'] = translated_text
+            break
 
-with open(json_path, 'w', encoding='utf-8') as f:
-    json.dump(data, f, ensure_ascii=False, indent=2)
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-print(f'Single segment translated: {seg_id}')
+    print(f'Single segment translated: {seg_id}')
+
+asyncio.run(translate())
 ";
 
         Log.Info($"Starting single segment translation: {text.Substring(0, Math.Min(30, text.Length))}...");
