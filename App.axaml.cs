@@ -72,6 +72,7 @@ public partial class App : Application
             }
 
             desktop.Exit += OnDesktopExit;
+            desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose;
 
             desktop.MainWindow = new MainWindow
             {

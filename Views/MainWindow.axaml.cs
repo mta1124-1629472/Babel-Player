@@ -143,8 +143,15 @@ public partial class MainWindow : Window
     {
         if (DataContext is not MainWindowViewModel vm) return;
         var (service, current) = vm.GetSettingsContext();
-        var settingsVm = new SettingsViewModel(service, vm.Coordinator, this);
-        var win = new SettingsWindow { DataContext = settingsVm };
+        var win = new SettingsWindow();
+        var downloader = new Babel.Player.Services.ModelDownloader(
+            new Babel.Player.Services.AppLog(
+                System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "BabelPlayer", "logs", "babel-player.log")));
+        var modelsTab = new Babel.Player.ViewModels.ModelsTabViewModel(downloader, current.PiperModelDir);
+        var settingsVm = new SettingsViewModel(service, vm.Coordinator, win, modelsTab);
+        win.DataContext = settingsVm;
         _ = win.ShowDialog(this);
     }
 

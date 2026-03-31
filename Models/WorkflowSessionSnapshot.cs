@@ -22,7 +22,12 @@ public sealed record WorkflowSessionSnapshot(
     string? TtsVoice = null,
     DateTimeOffset? TtsGeneratedAtUtc = null,
     string? TtsSegmentsPath = null,
-    Dictionary<string, string>? TtsSegmentAudioPaths = null)
+    Dictionary<string, string>? TtsSegmentAudioPaths = null,
+    string? TranscriptionProvider = null,
+    string? TranscriptionModel = null,
+    string? TranslationProvider = null,
+    string? TranslationModel = null,
+    string? TtsProvider = null)
 {
     public static WorkflowSessionSnapshot CreateNew(DateTimeOffset nowUtc)
     {

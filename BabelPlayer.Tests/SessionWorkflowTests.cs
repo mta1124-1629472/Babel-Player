@@ -239,7 +239,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         coordinator.Initialize();
         coordinator.LoadMedia(_fixture.TestMediaPath);
         await coordinator.TranscribeMediaAsync();
-        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.TranslateTranscriptAsync(targetLanguage: "en", sourceLanguage: "es");
         await coordinator.GenerateTtsAsync();
 
         Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);

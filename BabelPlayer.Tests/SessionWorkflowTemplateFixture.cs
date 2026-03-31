@@ -111,13 +111,13 @@ public sealed class SessionWorkflowTemplateFixture : IAsyncDisposable
             case "translated":
                 coordinator.LoadMedia(_testMediaPath);
                 await coordinator.TranscribeMediaAsync();
-                await coordinator.TranslateTranscriptAsync("en", "es");
+                await coordinator.TranslateTranscriptAsync(targetLanguage: "en", sourceLanguage: "es");
                 break;
 
             case "tts":
                 coordinator.LoadMedia(_testMediaPath);
                 await coordinator.TranscribeMediaAsync();
-                await coordinator.TranslateTranscriptAsync("en", "es");
+                await coordinator.TranslateTranscriptAsync(targetLanguage: "en", sourceLanguage: "es");
                 await coordinator.GenerateTtsAsync();
                 break;
 

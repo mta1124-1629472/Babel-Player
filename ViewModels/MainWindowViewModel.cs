@@ -24,7 +24,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Playback = new EmbeddedPlaybackViewModel(coordinator, apiKeyStore);
         Inspection = new SegmentInspectionViewModel(Playback);
-        OpenSettingsCommand = new RelayCommand(OpenSettings);
+
 
         // Persist settings whenever the left-panel dropdowns change them in-place
         Coordinator.SettingsModified += () => _settingsService.Save(Coordinator.CurrentSettings);
@@ -33,14 +33,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public SessionWorkflowCoordinator Coordinator { get; }
 
-    public IRelayCommand OpenSettingsCommand { get; }
 
-    private void OpenSettings()
-    {
-        var settingsWindow = new Views.SettingsWindow();
-        settingsWindow.DataContext = new SettingsViewModel(_settingsService, Coordinator, settingsWindow);
-        settingsWindow.Show();
-    }
 
     public EmbeddedPlaybackViewModel Playback { get; }
 

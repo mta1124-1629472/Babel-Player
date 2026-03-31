@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
@@ -455,7 +456,30 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task TranscribeMediaAsync()
+    public void ResetPipelineToMediaLoaded()
+    {
+        if (CurrentSession.Stage < SessionWorkflowStage.MediaLoaded) return;
+
+        CurrentSession = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.MediaLoaded,
+            TranscriptPath = null,
+            TranslationPath = null,
+            TtsPath = null,
+            TtsVoice = null,
+            TtsSegmentsPath = null,
+            TtsSegmentAudioPaths = null,
+            SourceLanguage = null,
+            TargetLanguage = null,
+            TranscribedAtUtc = null,
+            TranslatedAtUtc = null,
+            TtsGeneratedAtUtc = null,
+            StatusMessage = "Pipeline reset. Ready to run."
+        };
+        SaveCurrentSession();
+    }
+
+    public async Task TranscribeMediaAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.IngestedMediaPath))
         {
@@ -467,10 +491,24 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
         }
 
-        ProviderCapability.ValidateTranscription(
+        var readiness = ProviderReadinessResolver.ResolveTranscription(
             CurrentSettings.TranscriptionProvider,
             CurrentSettings.TranscriptionModel,
             KeyStore);
+
+        if (readiness == ProviderReadiness.RequiresApiKey)
+            throw new PipelineProviderException($"API key missing for provider '{CurrentSettings.TranscriptionProvider}'.");
+
+        if (readiness == ProviderReadiness.Unsupported)
+            throw new PipelineProviderException($"Provider '{CurrentSettings.TranscriptionProvider}' is currently unsupported.");
+
+        if (readiness == ProviderReadiness.RequiresDownload)
+        {
+            _log.Info($"Model {CurrentSettings.TranscriptionModel} requires download. Starting download...");
+            var downloader = new ModelDownloader(_log);
+            if (!await downloader.DownloadFasterWhisperAsync(CurrentSettings.TranscriptionModel, progress, cancellationToken))
+                throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranscriptionModel}'.");
+        }
 
         _transcriptionService ??= new TranscriptionService(_log);
 
@@ -503,6 +541,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TranscriptPath = transcriptPath,
             SourceLanguage = result.Language,
             TranscribedAtUtc = nowUtc,
+            TranscriptionProvider = CurrentSettings.TranscriptionProvider,
+            TranscriptionModel = CurrentSettings.TranscriptionModel,
             StatusMessage = $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
         };
 
@@ -510,7 +550,44 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task TranslateTranscriptAsync(string? targetLanguage = null, string? sourceLanguage = null)
+    public void ResetPipelineToTranscribed()
+    {
+        if (CurrentSession.Stage < SessionWorkflowStage.Transcribed) return;
+        
+        CurrentSession = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            TranslationPath = null,
+            TtsPath = null,
+            TtsVoice = null,
+            TtsSegmentsPath = null,
+            TtsSegmentAudioPaths = null,
+            TargetLanguage = null,
+            TranslatedAtUtc = null,
+            TtsGeneratedAtUtc = null,
+            StatusMessage = "Pipeline reset to transcribed state."
+        };
+        SaveCurrentSession();
+    }
+
+    public void ResetPipelineToTranslated()
+    {
+        if (CurrentSession.Stage < SessionWorkflowStage.Translated) return;
+        
+        CurrentSession = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TtsPath = null,
+            TtsVoice = null,
+            TtsSegmentsPath = null,
+            TtsSegmentAudioPaths = null,
+            TtsGeneratedAtUtc = null,
+            StatusMessage = "Pipeline reset to translated state."
+        };
+        SaveCurrentSession();
+    }
+
+    public async Task TranslateTranscriptAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null, string? targetLanguage = null, string? sourceLanguage = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranscriptPath))
         {
@@ -525,10 +602,24 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var lang = targetLanguage ?? CurrentSettings.TargetLanguage;
         var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
 
-        ProviderCapability.ValidateTranslation(
+        var readiness = ProviderReadinessResolver.ResolveTranslation(
             CurrentSettings.TranslationProvider,
             CurrentSettings.TranslationModel,
             KeyStore);
+
+        if (readiness == ProviderReadiness.RequiresApiKey)
+            throw new PipelineProviderException($"API key missing for provider '{CurrentSettings.TranslationProvider}'.");
+
+        if (readiness == ProviderReadiness.Unsupported)
+            throw new PipelineProviderException($"Provider '{CurrentSettings.TranslationProvider}' is currently unsupported.");
+
+        if (readiness == ProviderReadiness.RequiresDownload)
+        {
+            _log.Info($"Model {CurrentSettings.TranslationModel} requires download. Starting download...");
+            var downloader = new ModelDownloader(_log);
+            if (!await downloader.DownloadNllbAsync(CurrentSettings.TranslationModel, progress, cancellationToken))
+                throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranslationModel}'.");
+        }
 
         _translationService ??= CreateTranslationService();
 
@@ -562,6 +653,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             SourceLanguage = src,
             TargetLanguage = lang,
             TranslatedAtUtc = nowUtc,
+            TranslationProvider = CurrentSettings.TranslationProvider,
+            TranslationModel = CurrentSettings.TranslationModel,
             StatusMessage = $"Translated {result.Segments.Count} segments to {lang}. Ready for TTS/dubbing.",
         };
 
@@ -569,7 +662,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task GenerateTtsAsync(string? voice = null)
+    public async Task GenerateTtsAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null, string? voice = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
         {
@@ -583,10 +676,25 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         var v = voice ?? CurrentSettings.TtsVoice;
 
-        ProviderCapability.ValidateTts(
+        var readiness = ProviderReadinessResolver.ResolveTts(
             CurrentSettings.TtsProvider,
             v,
+            CurrentSettings.PiperModelDir,
             KeyStore);
+
+        if (readiness == ProviderReadiness.RequiresApiKey)
+            throw new PipelineProviderException($"API key missing for provider '{CurrentSettings.TtsProvider}'.");
+
+        if (readiness == ProviderReadiness.Unsupported)
+            throw new PipelineProviderException($"Provider '{CurrentSettings.TtsProvider}' is currently unsupported.");
+
+        if (readiness == ProviderReadiness.RequiresDownload)
+        {
+            _log.Info($"Voice {CurrentSettings.TtsVoice} requires download. Starting download...");
+            var downloader = new ModelDownloader(_log);
+            if (!await downloader.DownloadPiperVoiceAsync(CurrentSettings.TtsVoice, CurrentSettings.PiperModelDir, progress, cancellationToken))
+                throw new InvalidOperationException($"Failed to download voice '{CurrentSettings.TtsVoice}'.");
+        }
 
         _ttsService ??= CreateTtsService();
 
@@ -678,6 +786,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TtsGeneratedAtUtc = nowUtc,
             TtsSegmentsPath = segmentsDir,
             TtsSegmentAudioPaths = segmentAudioPaths,
+            TtsProvider = CurrentSettings.TtsProvider,
             StatusMessage = $"TTS generated ({v}). Dubbing complete.",
         };
 

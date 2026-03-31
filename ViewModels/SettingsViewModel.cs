@@ -18,14 +18,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public SettingsViewModel(
         SettingsService settingsService,
         SessionWorkflowCoordinator coordinator,
-        Window ownerWindow)
+        Window ownerWindow,
+        ModelsTabViewModel modelsTab)
     {
         _settingsService = settingsService;
         _coordinator = coordinator;
         _ownerWindow = ownerWindow;
+        ModelsTab = modelsTab;
 
-        // Load current settings
-        var current = _settingsService.LoadOrDefault();
+        // Load current settings from coordinator (not disk, to avoid losing side-panel changes)
+        var current = _coordinator.CurrentSettings;
         SelectedVoice = current.TtsVoice;
         SelectedTheme = current.Theme;
         MaxRecentSessions = current.MaxRecentSessions;
@@ -74,6 +76,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string[] TtsVoiceOptions { get; }
 
+    // Models tab
+    public ModelsTabViewModel ModelsTab { get; }
+
     // Recent Sessions
     [ObservableProperty]
     private int _maxRecentSessions;
@@ -98,17 +103,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private void Apply()
     {
-        var settings = new AppSettings
-        {
-            TtsVoice = SelectedVoice,
-            Theme = SelectedTheme,
-            MaxRecentSessions = MaxRecentSessions,
-            AutoSaveEnabled = AutoSaveEnabled,
-            // Preserve target language — not yet exposed in the dialog
-            TargetLanguage = _settingsService.LoadOrDefault().TargetLanguage,
-        };
-        _settingsService.Save(settings);
-        _coordinator.UpdateSettings(settings);
+        // Update the existing settings instance directly
+        var settings = _coordinator.CurrentSettings;
+        
+        settings.TtsVoice = SelectedVoice ?? settings.TtsVoice;
+        settings.Theme = SelectedTheme ?? settings.Theme;
+        settings.MaxRecentSessions = MaxRecentSessions;
+        settings.AutoSaveEnabled = AutoSaveEnabled;
+
+        // Trigger persistence and notify listeners (like MainWindowViewModel) that settings have changed
+        _coordinator.NotifySettingsModified();
     }
 
     [RelayCommand]

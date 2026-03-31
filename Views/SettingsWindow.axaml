@@ -4,13 +4,13 @@
         xmlns:v="using:Babel.Player.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="500"
+        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="560"
         x:Class="Babel.Player.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Icon="/Assets/babelplayer.ico"
         Title="Babel Player - Settings"
-        Width="600" Height="500"
-        MinWidth="500" MinHeight="400">
+        Width="640" Height="580"
+        MinWidth="520" MinHeight="460">
 
     <Grid Margin="20">
         <Grid.RowDefinitions>
@@ -108,6 +108,62 @@
                         <TextBox Text="{Binding ToggleFullscreenHotkey}" IsReadOnly="True"
                                  Width="100" Opacity="0.6"/>
                     </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- Models Tab -->
+            <TabItem Header="Models">
+                <Grid RowDefinitions="Auto,*" Margin="0,12,0,0">
+
+                    <TextBlock Grid.Row="0"
+                               Text="Manage locally-hosted models. Cloud providers (OpenAI, DeepL, etc.) do not require downloads."
+                               FontSize="11" Opacity="0.55" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding ModelsTab.Models}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ModelDownloadEntry">
+                                    <Border Margin="0,0,0,6" Padding="10,8"
+                                            Background="#1E1E2C" CornerRadius="6">
+                                        <Grid ColumnDefinitions="Auto,*,Auto">
+
+                                            <!-- Provider badge + model name -->
+                                            <StackPanel Grid.Column="0" Spacing="2" Width="180">
+                                                <TextBlock Text="{Binding ProviderLabel}"
+                                                           FontSize="9" Opacity="0.45" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding ModelId}"
+                                                           FontSize="12" FontWeight="Medium"/>
+                                            </StackPanel>
+
+                                            <!-- Status + progress bar -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4" Margin="12,0">
+                                                <TextBlock Text="{Binding StatusLabel}"
+                                                           FontSize="11"
+                                                           Foreground="#A0A0B8"/>
+                                                <ProgressBar Value="{Binding DownloadProgress}"
+                                                             Minimum="0" Maximum="1"
+                                                             Height="4"
+                                                             IsVisible="{Binding IsProgressVisible}"/>
+                                            </StackPanel>
+
+                                            <!-- Download / Cancel button -->
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Button Content="Download"
+                                                        IsVisible="{Binding CanDownload}"
+                                                        Command="{Binding DownloadCommand}"
+                                                        FontSize="11" Padding="8,4"/>
+                                                <Button Content="Cancel"
+                                                        IsVisible="{Binding CanCancel}"
+                                                        Command="{Binding CancelCommand}"
+                                                        FontSize="11" Padding="8,4"/>
+                                            </StackPanel>
+
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </Grid>
             </TabItem>
 
