@@ -23,6 +23,27 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     public Task InitializeAsync() => Task.CompletedTask;
     public Task DisposeAsync() => Task.CompletedTask;
 
+    private SessionWorkflowCoordinator CreateCoordinator(
+        SessionSnapshotStore store,
+        AppLog log,
+        string caseDir,
+        IMediaTransport? segmentPlayer = null,
+        IMediaTransport? sourcePlayer = null)
+    {
+        var settings = new Babel.Player.Services.Settings.AppSettings();
+        var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
+        var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
+        
+        return new SessionWorkflowCoordinator(
+            store, 
+            log, 
+            settings, 
+            perSessionStore, 
+            recentStore, 
+            segmentPlayer, 
+            sourcePlayer);
+    }
+
     private async Task<(SessionWorkflowCoordinator coordinator, SessionSnapshotStore store, AppLog log, string caseDir)>
         OpenCaseFromTemplateAsync(string templateName, string caseName)
     {
@@ -34,7 +55,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
         var log = new AppLog(Path.Combine(caseDir, "case.log"));
         var store = new SessionSnapshotStore(stateFilePath, log);
-        var coordinator = new SessionWorkflowCoordinator(store, log);
+        var coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
 
         return (coordinator, store, log, caseDir);
@@ -47,7 +68,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
         var log = new AppLog(Path.Combine(caseDir, "case.log"));
         var store = new SessionSnapshotStore(stateFilePath, log);
-        var coordinator = new SessionWorkflowCoordinator(store, log);
+        var coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
 
         return (coordinator, store, log, caseDir);
@@ -56,11 +77,11 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Fact]
     public Task LoadMedia_ThenReopen_ReusesArtifact()
     {
-        var (coordinator, store, log, _) = CreateFreshCase(nameof(LoadMedia_ThenReopen_ReusesArtifact));
+        var (coordinator, store, log, caseDir) = CreateFreshCase(nameof(LoadMedia_ThenReopen_ReusesArtifact));
 
         coordinator.LoadMedia(_fixture.TestMediaPath);
 
-        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
 
         Assert.Equal(SessionWorkflowStage.MediaLoaded, coordinator.CurrentSession.Stage);
@@ -74,7 +95,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Fact]
     public Task ReopenWithMissingArtifact_SurfacesDegradedState()
     {
-        var (coordinator, store, log, _) = CreateFreshCase(nameof(ReopenWithMissingArtifact_SurfacesDegradedState));
+        var (coordinator, store, log, caseDir) = CreateFreshCase(nameof(ReopenWithMissingArtifact_SurfacesDegradedState));
 
         coordinator.LoadMedia(_fixture.TestMediaPath);
 
@@ -86,7 +107,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
             File.Delete(ingestedPath);
         }
 
-        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
 
         // Stage must be downgraded — ingested media is missing so media must be re-loaded
@@ -115,15 +136,16 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Trait("Category", "RequiresPython")]
     public async Task ReopenWithMissingTranscript_SurfacesDegradedState()
     {
-        var (coordinator, store, log, _) =
+        var (coordinator, store, log, caseDir) =
             await OpenCaseFromTemplateAsync("transcribed", nameof(ReopenWithMissingTranscript_SurfacesDegradedState));
 
-        var transcriptPath = coordinator.CurrentSession.TranscriptPath;
-        Assert.NotNull(transcriptPath);
+        Assert.NotNull(coordinator.CurrentSession.TranscriptPath);
 
-        File.Delete(transcriptPath);
+        // Patch the snapshot to reference a non-existent file rather than deleting
+        // the real AppData artifact — deleting it would corrupt the shared template.
+        store.Save(coordinator.CurrentSession with { TranscriptPath = Path.Combine(caseDir, "nonexistent.json") });
 
-        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
 
         // Stage must be downgraded — transcript is missing so transcription must re-run
@@ -152,15 +174,16 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Trait("Category", "RequiresExternalTranslation")]
     public async Task ReopenWithMissingTranslation_SurfacesDegradedState()
     {
-        var (coordinator, store, log, _) =
+        var (coordinator, store, log, caseDir) =
             await OpenCaseFromTemplateAsync("translated", nameof(ReopenWithMissingTranslation_SurfacesDegradedState));
 
-        var translationPath = coordinator.CurrentSession.TranslationPath;
-        Assert.NotNull(translationPath);
+        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
 
-        File.Delete(translationPath);
+        // Patch the snapshot to reference a non-existent file rather than deleting
+        // the real AppData artifact — deleting it would corrupt the shared template.
+        store.Save(coordinator.CurrentSession with { TranslationPath = Path.Combine(caseDir, "nonexistent.json") });
 
-        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
 
         // Stage must be downgraded — translation is missing so translation must re-run
@@ -187,7 +210,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Trait("Category", "RequiresPython")]
     public async Task ReopenWithMissingTts_SurfacesDegradedState()
     {
-        var (coordinator, store, log, _) =
+        var (coordinator, store, log, caseDir) =
             await OpenCaseFromTemplateAsync("tts", nameof(ReopenWithMissingTts_SurfacesDegradedState));
 
         var ttsPath = coordinator.CurrentSession.TtsPath;
@@ -195,7 +218,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
 
         File.Delete(ttsPath);
 
-        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
 
         // Stage must be downgraded — TTS is missing so TTS must re-run
@@ -211,7 +234,7 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
         var log = new AppLog(Path.Combine(caseDir, "case.log"));
         var store = new SessionSnapshotStore(stateFilePath, log);
-        var coordinator = new SessionWorkflowCoordinator(store, log);
+        var coordinator = CreateCoordinator(store, log, caseDir);
 
         coordinator.Initialize();
         coordinator.LoadMedia(_fixture.TestMediaPath);
@@ -384,6 +407,27 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
     public Task InitializeAsync() => Task.CompletedTask;
     public Task DisposeAsync() => Task.CompletedTask;
 
+    private SessionWorkflowCoordinator CreateCoordinator(
+        SessionSnapshotStore store,
+        AppLog log,
+        string caseDir,
+        IMediaTransport? segmentPlayer = null,
+        IMediaTransport? sourcePlayer = null)
+    {
+        var settings = new Babel.Player.Services.Settings.AppSettings();
+        var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
+        var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
+        
+        return new SessionWorkflowCoordinator(
+            store, 
+            log, 
+            settings, 
+            perSessionStore, 
+            recentStore, 
+            segmentPlayer, 
+            sourcePlayer);
+    }
+
     private async Task<(SessionWorkflowCoordinator coordinator, FakeMediaTransport sourcePlayer, string caseDir)>
         CreateCaseWithSourcePlayerAsync(string caseName)
     {
@@ -397,7 +441,7 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
 
         var fakeSegmentPlayer = new FakeMediaTransport();
         var fakeSourcePlayer = new FakeMediaTransport();
-        var coordinator = new SessionWorkflowCoordinator(store, log, fakeSegmentPlayer, fakeSourcePlayer);
+        var coordinator = CreateCoordinator(store, log, caseDir, fakeSegmentPlayer, fakeSourcePlayer);
         coordinator.Initialize();
 
         return (coordinator, fakeSourcePlayer, caseDir);
@@ -488,7 +532,7 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
         var log = new AppLog(Path.Combine(caseDir, "case.log"));
         var store = new SessionSnapshotStore(stateFilePath, log);
         var fakeSource = new FakeMediaTransport();
-        var coordinator = new SessionWorkflowCoordinator(store, log, sourcePlayer: fakeSource);
+        var coordinator = CreateCoordinator(store, log, caseDir, sourcePlayer: fakeSource);
         coordinator.Initialize();
 
         // Fresh session has no media loaded
@@ -499,12 +543,34 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
 
 public sealed class SegmentInspectionTests
 {
+    private static SessionWorkflowCoordinator CreateCoordinator(
+        SessionSnapshotStore store,
+        AppLog log,
+        string caseDir,
+        IMediaTransport? segmentPlayer = null,
+        IMediaTransport? sourcePlayer = null)
+    {
+        var settings = new Babel.Player.Services.Settings.AppSettings();
+        var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
+        var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
+        
+        return new SessionWorkflowCoordinator(
+            store, 
+            log, 
+            settings, 
+            perSessionStore, 
+            recentStore, 
+            segmentPlayer, 
+            sourcePlayer);
+    }
+
     private static EmbeddedPlaybackViewModel CreatePlaybackVm()
     {
+        var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}");
         var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.log"));
         var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.json");
         var store = new SessionSnapshotStore(storePath, log);
-        var coordinator = new SessionWorkflowCoordinator(store, log);
+        var coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
         return new EmbeddedPlaybackViewModel(coordinator);
     }

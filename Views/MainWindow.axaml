@@ -134,6 +134,7 @@
                         <!-- Open Media + Run Pipeline live here permanently so they are
                              accessible in both windowed mode and fullscreen -->
                         <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" />
+                        <Button Content="Settings" Command="{Binding OpenSettingsCommand}" />
                         <Button Content="Run Pipeline"
                                 Command="{Binding Playback.RunPipelineCommand}"
                                 IsEnabled="{Binding !Playback.IsBusy}" />

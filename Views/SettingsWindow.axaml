@@ -1,0 +1,139 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Babel.Player.ViewModels"
+        xmlns:v="using:Babel.Player.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="500"
+        x:Class="Babel.Player.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Icon="/Assets/babelplayer.ico"
+        Title="Babel Player - Settings"
+        Width="600" Height="500"
+        MinWidth="500" MinHeight="400">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" FontSize="24" FontWeight="SemiBold" Text="Settings" Margin="0,0,0,20"/>
+
+        <!-- Main content area -->
+        <TabControl Grid.Row="1" Margin="0,0,0,20">
+            
+            <!-- General Tab -->
+            <TabItem Header="General">
+                <Grid Margin="20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Theme -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="Theme:" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding ThemeOptions}"
+                                  SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
+                                  Width="150"/>
+                    </StackPanel>
+
+                    <!-- Default TTS Voice -->
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="Default TTS Voice:" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding TtsVoiceOptions}"
+                                  SelectedItem="{Binding SelectedVoice, Mode=TwoWay}"
+                                  Width="200"/>
+                    </StackPanel>
+
+                    <!-- Recent Sessions -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="Max Recent Sessions:" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding MaxRecentSessions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="60"/>
+                    </StackPanel>
+
+                    <!-- Auto-save -->
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
+                        <CheckBox IsChecked="{Binding AutoSaveEnabled}"
+                                  Content="Auto-save session on exit"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- Hotkeys Tab -->
+            <!-- Hotkeys: display-only defaults; customisation not yet implemented -->
+            <TabItem Header="Hotkeys">
+                <Grid Margin="20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Opacity="0.5" FontStyle="Italic" Margin="0,0,0,12"
+                               Text="Hotkey customisation is not yet available. Shown values are the current defaults." />
+
+                    <!-- Play/Pause -->
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="Play/Pause:" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding PlayPauseHotkey}" IsReadOnly="True"
+                                 Width="100" Opacity="0.6"/>
+                    </StackPanel>
+
+                    <!-- Toggle Segment Panel -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="Toggle Segment Panel:" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding ToggleSegmentPanelHotkey}" IsReadOnly="True"
+                                 Width="100" Opacity="0.6"/>
+                    </StackPanel>
+
+                    <!-- Toggle Dub Mode -->
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="Toggle Dub Mode:" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding ToggleDubModeHotkey}" IsReadOnly="True"
+                                 Width="100" Opacity="0.6"/>
+                    </StackPanel>
+
+                    <!-- Toggle Fullscreen -->
+                    <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="Toggle Fullscreen:" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding ToggleFullscreenHotkey}" IsReadOnly="True"
+                                 Width="100" Opacity="0.6"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- About Tab -->
+            <TabItem Header="About">
+                <Grid Margin="20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" FontSize="18" FontWeight="SemiBold" Text="Babel Player" Margin="0,0,0,10"/>
+                    <TextBlock Grid.Row="1" Text="Version 1.0.0" Opacity="0.7"/>
+                    <TextBlock Grid.Row="2" Text="Build date: 2026-03-30" Opacity="0.7"/>
+                    <TextBlock Grid.Row="3" Text="MIT License" Opacity="0.7"/>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- Footer buttons -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Content="Cancel" Click="OnCancelClick"/>
+            <Button Content="Apply" Click="OnApplyClick"/>
+            <Button Content="OK" Click="OnOKClick"/>
+        </StackPanel>
+    </Grid>
+</Window>

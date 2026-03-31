@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Markup.Xaml;
 using Babel.Player.Services;
+using Babel.Player.Services.Settings;
 using Babel.Player.ViewModels;
 using Babel.Player.Views;
 
@@ -14,6 +15,7 @@ public partial class App : Application
 {
     private SessionWorkflowCoordinator? _sessionWorkflowCoordinator;
     private AppLog? _startupLog;
+    private SettingsService? _settingsService;
 
     public override void Initialize()
     {
@@ -22,8 +24,6 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        // Register global exception handlers before doing anything else.
-        // These log the crash cause and do NOT restart the app.
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
@@ -36,28 +36,35 @@ public partial class App : Application
             var appLog = new AppLog(Path.Combine(appDataRoot, "logs", "babel-player.log"));
             _startupLog = appLog;
 
+            // Initialize Settings and other stores
+            var settingsFilePath = Path.Combine(appDataRoot, "settings", "app-settings.json");
+            _settingsService = new SettingsService(settingsFilePath, appLog);
+            var appSettings = _settingsService.LoadOrDefault();
+
+            var perSessionStore = new PerSessionSnapshotStore(
+                Path.Combine(appDataRoot, "sessions"), appLog);
+            var recentStore = new RecentSessionsStore(
+                Path.Combine(appDataRoot, "state", "recent-sessions.json"), appLog);
+
             try
             {
                 appLog.Info("App startup: initializing session coordinator.");
-                var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
-                _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(store, appLog);
+                var store = new SessionSnapshotStore(
+                    Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
+                _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
+                    store, appLog, appSettings, perSessionStore, recentStore);
                 _sessionWorkflowCoordinator.Initialize();
                 appLog.Info("App startup: session coordinator ready.");
             }
             catch (Exception ex)
             {
-                // Session restore failed — log it and continue with a degraded coordinator.
-                // The app still opens; the user sees an empty session rather than a crash.
                 _startupLog?.Error("App startup: session initialization failed. Continuing with empty session.", ex);
                 if (_sessionWorkflowCoordinator is null)
                 {
-                    var fallbackDataRoot = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "BabelPlayer");
-                    var fallbackLog = _startupLog ?? new AppLog(Path.Combine(fallbackDataRoot, "logs", "babel-player.log"));
                     var fallbackStore = new SessionSnapshotStore(
-                        Path.Combine(fallbackDataRoot, "state", "current-session.json"), fallbackLog);
-                    _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(fallbackStore, fallbackLog);
+                        Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
+                    _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
+                        fallbackStore, appLog, appSettings, perSessionStore, recentStore);
                 }
             }
 
@@ -65,7 +72,7 @@ public partial class App : Application
 
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator),
+                DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService),
             };
         }
 
@@ -98,6 +105,6 @@ public partial class App : Application
     private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
         _startupLog?.Error("Unobserved task exception.", e.Exception);
-        e.SetObserved(); // prevent process crash from unobserved async exceptions
+        e.SetObserved();
     }
 }

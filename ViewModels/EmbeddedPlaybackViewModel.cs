@@ -512,6 +512,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [RelayCommand]
     private async Task RunPipelineAsync()
     {
+        var diag = _coordinator.BootstrapDiagnostics;
+        if (!diag.AllDependenciesAvailable)
+        {
+            StatusText = $"Cannot run pipeline: {diag.DiagnosticSummary}";
+            return;
+        }
+
         try
         {
             IsBusy = true;

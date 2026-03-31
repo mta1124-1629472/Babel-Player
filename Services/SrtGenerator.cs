@@ -24,10 +24,11 @@ public static class SrtGenerator
             var text = seg.TranslatedText ?? seg.SourceText;
             if (string.IsNullOrWhiteSpace(text)) continue;
 
-            sb.AppendLine(index++.ToString());
-            sb.AppendLine($"{Stamp(seg.StartSeconds)} --> {Stamp(seg.EndSeconds)}");
-            sb.AppendLine(text.Trim());
-            sb.AppendLine();
+            // SRT spec uses LF line endings; explicit \n avoids CRLF on Windows.
+            sb.Append(index++).Append('\n');
+            sb.Append(Stamp(seg.StartSeconds)).Append(" --> ").Append(Stamp(seg.EndSeconds)).Append('\n');
+            sb.Append(text.Trim()).Append('\n');
+            sb.Append('\n');
         }
         return sb.ToString();
     }

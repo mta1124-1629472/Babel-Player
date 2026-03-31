@@ -8,9 +8,14 @@
       "Bash(xargs ls:*)",
       "Skill(update-config)",
       "Bash(git stash:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(gh pr:*)",
+      "Bash(dir D:DevBabel-Playerdocssmoke)",
+      "Bash(git rebase:*)"
     ]
   }
 }
