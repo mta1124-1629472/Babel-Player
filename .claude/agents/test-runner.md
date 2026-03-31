@@ -10,7 +10,7 @@ description: >
 Run `dotnet test` from the project root and report the result.
 
 Steps:
-1. Run: `dotnet test /home/user/Babel-Player/BabelPlayer.Tests/BabelPlayer.Tests.csproj --no-build 2>&1 || dotnet test /home/user/Babel-Player/BabelPlayer.Tests/BabelPlayer.Tests.csproj 2>&1`
+1. Run: `dotnet test "$CLAUDE_PROJECT_DIR/BabelPlayer.Tests/BabelPlayer.Tests.csproj" --no-build 2>&1 || dotnet test "$CLAUDE_PROJECT_DIR/BabelPlayer.Tests/BabelPlayer.Tests.csproj" 2>&1`
 2. Report total passed, failed, and skipped counts.
 3. For each failing test, report: test name, failure message, and relevant stack frame (file + line if available).
 4. Do not attempt to fix failures — just report them.

@@ -11,7 +11,7 @@ description: >
 Run the architecture linter from the project root and report the result.
 
 Steps:
-1. Run: `cd /home/user/Babel-Player && python3 scripts/check-architecture.py`
+1. Run: `cd "$CLAUDE_PROJECT_DIR" && python3 scripts/check-architecture.py`
 2. Report each FAIL line with its full message.
 3. Report the final summary (passed or N violation(s)).
 4. Do not attempt to fix violations — just report them.
