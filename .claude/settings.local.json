@@ -15,7 +15,17 @@
       "Bash(git push:*)",
       "Bash(gh pr:*)",
       "Bash(dir D:DevBabel-Playerdocssmoke)",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "mcp__avalonia_devtools__attach-to-file",
+      "Bash(Start-Process -FilePath \"dotnet\" -ArgumentList \"run\",\"--project\",\"BabelPlayer.csproj\" -PassThru)",
+      "mcp__avalonia_devtools__attach-to-app",
+      "Bash(find /c/Users/ander/.nuget/packages/avaloniaui.diagnosticssupport/2.2.0-beta3 -name *.xml -o -name *.nupkg)",
+      "Bash(cd /tmp)",
+      "Bash(cp /c/Users/ander/.nuget/packages/avaloniaui.diagnosticssupport/2.2.0-beta3/avaloniaui.diagnosticssupport.2.2.0-beta3.nupkg diag.zip)",
+      "Bash(unzip -p diag.zip lib/net10.0/*.xml)",
+      "Bash(unzip -l diag.zip)",
+      "Bash(grep -v \"^$\")",
+      "Bash(dotnet remove:*)"
     ]
   }
 }
