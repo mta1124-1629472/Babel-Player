@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Babel.Player.ViewModels"
         xmlns:v="using:Babel.Player.Views"
+        xmlns:models="using:Babel.Player.Models"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="650"
@@ -10,187 +11,406 @@
         Icon="/Assets/babelplayer.ico"
         Title="Babel Player"
         Width="1100" Height="650"
-        MinWidth="900" MinHeight="500">
+        MinWidth="900" MinHeight="500"
+        RequestedThemeVariant="Dark"
+        Background="#12121A">
 
-    <Grid RowDefinitions="Auto,*,Auto">
+    <Grid ColumnDefinitions="260,*,280">
 
-        <!-- Top: Session info bar (title + status only; media buttons live in controls row) -->
-        <Border Grid.Row="0" Padding="12,8" Background="#20808080"
-                IsVisible="{Binding !Playback.IsFullscreen}">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Grid.Column="0" FontSize="18" FontWeight="SemiBold" Text="Babel Player" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Margin="16,0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                           Text="{Binding Coordinator.CurrentSession.StatusMessage}" />
-                <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.6"
-                           Text="{Binding Coordinator.CurrentSession.Stage, StringFormat='Stage: {0}'}" />
-            </Grid>
-        </Border>
+        <!-- ═══════════════════════════════════════════════════
+             LEFT PANEL: Pipeline
+             ═══════════════════════════════════════════════════ -->
+        <Border Grid.Column="0" Background="#16161E"
+                BorderBrush="#252530" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,*,Auto">
 
-        <!-- Middle: Main content area -->
-        <!-- Column 0 is Auto so it collapses when the segment pane Border is hidden -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+                <!-- Header -->
+                <Border Grid.Row="0" Padding="16,14,16,12"
+                        BorderBrush="#252530" BorderThickness="0,0,0,1">
+                    <TextBlock Text="Pipeline" FontSize="15" FontWeight="SemiBold"
+                               Foreground="#F0F0F8" />
+                </Border>
 
-            <!-- Column 0: Segment list (collapsible) + pull tab (always visible) -->
-            <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto">
+                <!-- Scrollable body -->
+                <ScrollViewer Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="16,16,16,8" Spacing="22">
 
-                <!-- Pane content — collapses to zero width when IsSegmentPaneVisible=false -->
-                <Border Grid.Column="0" Width="300" BorderBrush="#40808080" BorderThickness="0,0,0,0"
-                        IsVisible="{Binding Playback.IsSegmentPaneVisible}">
-                    <Grid RowDefinitions="Auto,*">
-                        <Border Grid.Row="0" Padding="12,8" Background="#10808080">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" FontWeight="SemiBold" Text="Segments" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Content="Refresh"
-                                        Command="{Binding Playback.LoadSegmentsCommand}" />
+                        <!-- STAGES -->
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="STAGES" FontSize="10"
+                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+
+                            <Grid ColumnDefinitions="*,Auto" Height="28">
+                                <TextBlock Grid.Column="0" Text="Transcribe" FontSize="13"
+                                           Foreground="#C0C0D0" VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="True"
+                                             OnContent="" OffContent=""
+                                             Margin="0,-4,0,0" VerticalAlignment="Center" />
                             </Grid>
-                        </Border>
 
-                        <ListBox Grid.Row="1" x:Name="SegmentList"
-                                 ItemsSource="{Binding Playback.Segments}"
-                                 SelectedItem="{Binding Playback.SelectedSegment}"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Padding="8,6" BorderBrush="#20808080" BorderThickness="0,0,0,1">
-                                        <StackPanel Spacing="4">
-                                            <Grid ColumnDefinitions="*,Auto">
-                                                <TextBlock Grid.Column="0" FontWeight="SemiBold"
-                                                           Text="{Binding StartSeconds, StringFormat='⏱ {0:F1}s'}" />
-                                                <TextBlock Grid.Column="1" Opacity="0.5"
-                                                           Text="{Binding EndSeconds, StringFormat='→ {0:F1}s'}" />
-                                            </Grid>
-                                            <TextBlock Text="{Binding SourceText}" TextWrapping="Wrap"
-                                                       Opacity="0.7" FontSize="12" />
-                                            <TextBlock Text="{Binding TranslatedText}" TextWrapping="Wrap"
-                                                       FontSize="12" FontStyle="Italic" />
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <TextBlock FontSize="11" Opacity="0.5">
-                                                    <TextBlock.Text>
-                                                        <MultiBinding StringFormat="TTS: {0}">
-                                                            <Binding Path="HasTtsAudio" />
-                                                        </MultiBinding>
-                                                    </TextBlock.Text>
-                                                </TextBlock>
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Grid>
-                </Border>
+                            <Grid ColumnDefinitions="*,Auto" Height="28">
+                                <TextBlock Grid.Column="0" Text="Translate" FontSize="13"
+                                           Foreground="#C0C0D0" VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="True"
+                                             OnContent="" OffContent=""
+                                             Margin="0,-4,0,0" VerticalAlignment="Center" />
+                            </Grid>
 
-                <!-- Pull tab — arrow shows which way the pane will move on click:
-                     ◄ = open (collapse left)   ► = closed (expand right)
-                     Hides with the playback controls in fullscreen mode. -->
-                <Button Grid.Column="1"
-                        Content="{Binding Playback.SegmentPaneToggleLabel}"
-                        Command="{Binding Playback.ToggleSegmentPaneCommand}"
-                        IsVisible="{Binding Playback.IsPullTabVisible}"
-                        VerticalAlignment="Center"
-                        Padding="2,20"
-                        BorderBrush="#40808080" BorderThickness="1,1,1,1"
-                        ToolTip.Tip="Toggle segment panel" />
+                            <Grid ColumnDefinitions="*,Auto" Height="28">
+                                <TextBlock Grid.Column="0" Text="Dub" FontSize="13"
+                                           Foreground="#C0C0D0" VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="True"
+                                             OnContent="" OffContent=""
+                                             Margin="0,-4,0,0" VerticalAlignment="Center" />
+                            </Grid>
+                        </StackPanel>
 
-            </Grid>
+                        <!-- LANGUAGE ROUTING -->
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="LANGUAGE ROUTING" FontSize="10"
+                                       Foreground="#4A4A60" FontWeight="SemiBold" />
 
-            <!-- Column 1: Video + controls -->
-            <!-- Controls are in separate rows outside the NativeControlHost area.
-                 Win32 child HWNDs always render above Avalonia's composition layer,
-                 so controls placed inside the video Grid would be visually hidden. -->
-            <Grid Grid.Column="1" x:Name="VideoAreaGrid" RowDefinitions="*,Auto,Auto,Auto">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Source Audio" FontSize="12"
+                                           Foreground="#808090" VerticalAlignment="Center" />
+                                <Border Grid.Column="1" Background="#1E1E2C" CornerRadius="4"
+                                        Padding="8,4">
+                                    <TextBlock Text="Russian (ru)" FontSize="12"
+                                               Foreground="#C0C0D0" />
+                                </Border>
+                            </Grid>
 
-                <!-- Video surface -->
-                <Grid Grid.Row="0">
-                    <Border Background="Black" Margin="4">
-                        <v:MpvVideoView x:Name="VideoView" />
-                    </Border>
-                    <!-- Transparent overlay to capture PointerMoved events over the native
-                         NativeControlHost (Win32 HWND does not bubble Avalonia input) -->
-                    <Panel x:Name="VideoOverlayPanel" Background="Transparent" />
-                </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Target Sub/Dub" FontSize="12"
+                                           Foreground="#808090" VerticalAlignment="Center" />
+                                <Border Grid.Column="1" Background="#1E1E2C" CornerRadius="4"
+                                        Padding="8,4">
+                                    <TextBlock Text="English (en)" FontSize="12"
+                                               Foreground="#C0C0D0" />
+                                </Border>
+                            </Grid>
+                        </StackPanel>
 
-                <!-- Scrub bar (auto-hides in fullscreen; always visible in windowed mode) -->
-                <Border Grid.Row="1" Padding="8,4"
-                        IsVisible="{Binding Playback.IsControlsVisible}">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <TextBlock Grid.Column="0" Text="{Binding Playback.SourcePositionFormatted}"
-                                   VerticalAlignment="Center" FontSize="11" Opacity="0.7" Width="36" />
-                        <Slider Grid.Column="1"
-                                Minimum="0"
-                                Maximum="{Binding Playback.SourceDurationMs}"
-                                Value="{Binding Playback.SourcePositionMs, Mode=TwoWay}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
-                                VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="2" Text="{Binding Playback.SourceDurationFormatted}"
-                                   VerticalAlignment="Center" FontSize="11" Opacity="0.7" Width="36" TextAlignment="Right" />
-                    </Grid>
-                </Border>
+                        <!-- DUB CONFIGURATION -->
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="DUB CONFIGURATION" FontSize="10"
+                                       Foreground="#4A4A60" FontWeight="SemiBold" />
 
-                <!-- Playback controls (auto-hides in fullscreen; always visible in windowed mode) -->
-                <Border Grid.Row="2" Padding="8,4"
-                        IsVisible="{Binding Playback.IsControlsVisible}">
-                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                        <!-- Open Media + Run Pipeline live here permanently so they are
-                             accessible in both windowed mode and fullscreen -->
-                        <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" />
-                        <Button Content="Settings" Command="{Binding OpenSettingsCommand}" />
-                        <Button Content="Run Pipeline"
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Voice Model" FontSize="12"
+                                           Foreground="#808090" />
+                                <Border Background="#1E1E2C" CornerRadius="4" Padding="8,6"
+                                        BorderBrush="#2A2A3A" BorderThickness="1">
+                                    <TextBlock Text="en-US-Neural2-F (Female)" FontSize="12"
+                                               Foreground="#C0C0D0" />
+                                </Border>
+                            </StackPanel>
+
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Speech Rate" FontSize="12"
+                                               Foreground="#808090" />
+                                    <TextBlock Grid.Column="1" Text="1.0x" FontSize="12"
+                                               Foreground="#A0A0B8" />
+                                </Grid>
+                                <Slider Minimum="0.5" Maximum="2.0" Value="1.0"
+                                        VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Audio Ducking" FontSize="12"
+                                               Foreground="#808090" />
+                                    <TextBlock Grid.Column="1" Text="-15.0 dB" FontSize="12"
+                                               Foreground="#A0A0B8" />
+                                </Grid>
+                                <Slider Minimum="-30" Maximum="0" Value="-15"
+                                        VerticalAlignment="Center" />
+                            </StackPanel>
+                        </StackPanel>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Footer: Run Pipeline + status -->
+                <Border Grid.Row="2" Padding="16,12"
+                        BorderBrush="#252530" BorderThickness="0,1,0,0">
+                    <StackPanel Spacing="8">
+                        <Button HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Padding="0,10"
+                                FontSize="13" FontWeight="SemiBold"
+                                Foreground="White"
+                                CornerRadius="6"
                                 Command="{Binding Playback.RunPipelineCommand}"
-                                IsEnabled="{Binding !Playback.IsBusy}" />
-                        <Separator />
-                        <Button Content="&#x23EA;&#xFE0E;"
-                                Command="{Binding Playback.SkipBackwardCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}" />
-                        <Button Content="{Binding Playback.PlayPauseSourceLabel}"
-                                Command="{Binding Playback.PlayPauseSourceCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                        <Button Content="&#x23E9;&#xFE0E;"
-                                Command="{Binding Playback.SkipForwardCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}" />
-                        <Button Content="{Binding Playback.DubModeLabel}"
-                                Command="{Binding Playback.ToggleDubModeCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}" />
-                        <Separator />
-                        <Button Content="{Binding Playback.VolumeIconLabel}"
-                                Command="{Binding Playback.ToggleMuteCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                        <Slider Minimum="0" Maximum="1"
-                                Value="{Binding Playback.SourceVolume, Mode=TwoWay}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
-                                Width="80" VerticalAlignment="Center" />
-                        <ComboBox ItemsSource="{Binding Playback.PlaybackRateOptions}"
-                                  SelectedItem="{Binding Playback.SelectedPlaybackRate, Mode=TwoWay}"
-                                  Width="70"
-                                  IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                        <Button Content="&#x26F6;"
-                                Command="{Binding Playback.ToggleFullscreenCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                        <Button Content="{Binding Playback.SubtitleToggleLabel}"
-                                Command="{Binding Playback.ToggleSubtitlesCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}"
-                                ToolTip.Tip="Toggle subtitles (CC)" />
+                                IsEnabled="{Binding !Playback.IsBusy}">
+                            <Button.Content>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="▶" VerticalAlignment="Center" />
+                                    <TextBlock Text="Run Pipeline" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button.Content>
+                            <Button.Styles>
+                                <Style Selector="Button">
+                                    <Setter Property="Background">
+                                        <Setter.Value>
+                                            <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                <GradientStop Color="#4F46E5" Offset="0" />
+                                                <GradientStop Color="#7C3AED" Offset="1" />
+                                            </LinearGradientBrush>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                                <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                    <Setter Property="Background">
+                                        <Setter.Value>
+                                            <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                <GradientStop Color="#5B52F0" Offset="0" />
+                                                <GradientStop Color="#8B4DF8" Offset="1" />
+                                            </LinearGradientBrush>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                                <Style Selector="Button:pressed /template/ ContentPresenter">
+                                    <Setter Property="Background">
+                                        <Setter.Value>
+                                            <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                <GradientStop Color="#3D35C8" Offset="0" />
+                                                <GradientStop Color="#6A2FCC" Offset="1" />
+                                            </LinearGradientBrush>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Styles>
+                        </Button>
+
+                        <TextBlock FontSize="11" Foreground="#3A3A50"
+                                   HorizontalAlignment="Center"
+                                   Text="{Binding Playback.StatusText, StringFormat='● {0}'}" />
                     </StackPanel>
                 </Border>
 
-                <!-- Status bar -->
-                <Border Grid.Row="3" Padding="8,4" Background="#10808080"
-                        IsVisible="{Binding !Playback.IsFullscreen}">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Grid.Column="0" Text="{Binding Playback.StatusText}"
-                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="12" />
-                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="12" Opacity="0.6"
-                                   Text="{Binding Playback.PlaybackState, StringFormat='State: {0}'}" />
-                    </Grid>
-                </Border>
             </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════
+             CENTER PANEL: Video player
+             ═══════════════════════════════════════════════════ -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto"
+              Background="#0E0E14">
+
+            <!-- Top bar: Open Media + Stage badge -->
+            <Border Grid.Row="0" Padding="10,8"
+                    BorderBrush="#252530" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Button Grid.Column="0" x:Name="OpenMediaButton"
+                            Click="OnOpenMediaClick"
+                            Padding="10,5" FontSize="12"
+                            Background="#252530" Foreground="#C0C0D0"
+                            CornerRadius="4">
+                        <TextBlock Text="Open Media" />
+                    </Button>
+                    <Border Grid.Column="2" Background="#252530"
+                            CornerRadius="4" Padding="8,4">
+                        <TextBlock FontSize="12" Foreground="#8080A0"
+                                   Text="{Binding Coordinator.CurrentSession.Stage, StringFormat='Stage: {0}'}" />
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Video surface -->
+            <Grid Grid.Row="1">
+                <Border Background="Black" Margin="0">
+                    <v:MpvVideoView x:Name="VideoView" />
+                </Border>
+                <Panel x:Name="VideoOverlayPanel" Background="Transparent" />
+            </Grid>
+
+            <!-- Scrub bar -->
+            <Border Grid.Row="2" Padding="12,5"
+                    IsVisible="{Binding Playback.IsControlsVisible}">
+                <Grid ColumnDefinitions="40,*,40">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Playback.SourcePositionFormatted}"
+                               FontSize="11" Foreground="#8080A0"
+                               VerticalAlignment="Center" />
+                    <Slider Grid.Column="1"
+                            Minimum="0"
+                            Maximum="{Binding Playback.SourceDurationMs}"
+                            Value="{Binding Playback.SourcePositionMs, Mode=TwoWay}"
+                            IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                            VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Playback.SourceDurationFormatted}"
+                               FontSize="11" Foreground="#8080A0"
+                               VerticalAlignment="Center" TextAlignment="Right" />
+                </Grid>
+            </Border>
+
+            <!-- Controls bar -->
+            <Border Grid.Row="3" Padding="10,7"
+                    IsVisible="{Binding Playback.IsControlsVisible}">
+                <Grid ColumnDefinitions="*,Auto,*">
+
+                    <!-- Left: CC + dub mode toggle -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2"
+                                VerticalAlignment="Center">
+                        <Button Content="{Binding Playback.SubtitleToggleLabel}"
+                                Command="{Binding Playback.ToggleSubtitlesCommand}"
+                                IsEnabled="{Binding Playback.HasSegments}"
+                                Padding="6,5" FontSize="14"
+                                Background="Transparent"
+                                ToolTip.Tip="Toggle subtitles (CC)" />
+                        <Button Content="{Binding Playback.DubModeLabel}"
+                                Command="{Binding Playback.ToggleDubModeCommand}"
+                                IsEnabled="{Binding Playback.HasSegments}"
+                                Padding="6,5" FontSize="14"
+                                Background="Transparent" />
+                    </StackPanel>
+
+                    <!-- Center: playback buttons -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2"
+                                VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Button Content="&#x23EE;&#xFE0E;"
+                                IsEnabled="{Binding Playback.HasSegments}"
+                                Padding="8,6" FontSize="16"
+                                Background="Transparent" />
+                        <Button Content="&#x23EA;&#xFE0E;"
+                                Command="{Binding Playback.SkipBackwardCommand}"
+                                IsEnabled="{Binding Playback.HasSegments}"
+                                Padding="8,6" FontSize="16"
+                                Background="Transparent" />
+                        <Button Command="{Binding Playback.PlayPauseSourceCommand}"
+                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                Width="38" Height="38" Padding="0"
+                                CornerRadius="19" Background="#282838">
+                            <TextBlock Text="{Binding Playback.PlayPauseSourceLabel}"
+                                       FontSize="14"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Button>
+                        <Button Content="&#x23E9;&#xFE0E;"
+                                Command="{Binding Playback.SkipForwardCommand}"
+                                IsEnabled="{Binding Playback.HasSegments}"
+                                Padding="8,6" FontSize="16"
+                                Background="Transparent" />
+                        <Button Content="&#x23ED;&#xFE0E;"
+                                IsEnabled="{Binding Playback.HasSegments}"
+                                Padding="8,6" FontSize="16"
+                                Background="Transparent" />
+                    </StackPanel>
+
+                    <!-- Right: volume + fullscreen -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2"
+                                VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <Button Content="{Binding Playback.VolumeIconLabel}"
+                                Command="{Binding Playback.ToggleMuteCommand}"
+                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                Padding="6,5" FontSize="14"
+                                Background="Transparent" />
+                        <Button Content="&#x26F6;"
+                                Command="{Binding Playback.ToggleFullscreenCommand}"
+                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                Padding="6,5" FontSize="14"
+                                Background="Transparent" />
+                    </StackPanel>
+
+                </Grid>
+            </Border>
 
         </Grid>
 
-        <!-- Bottom: Persistence info -->
-        <Border Grid.Row="2" Padding="8,4" Background="#10808080"
-                IsVisible="{Binding !Playback.IsFullscreen}">
-            <TextBlock Text="{Binding Coordinator.PersistenceStatus}" FontSize="11" Opacity="0.5" />
+        <!-- ═══════════════════════════════════════════════════
+             RIGHT PANEL: Segments
+             ═══════════════════════════════════════════════════ -->
+        <Border Grid.Column="2" Background="#16161E"
+                BorderBrush="#252530" BorderThickness="1,0,0,0">
+            <Grid RowDefinitions="Auto,*">
+
+                <!-- Header -->
+                <Border Grid.Row="0" Padding="14,11"
+                        BorderBrush="#252530" BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="Segments" FontSize="14"
+                                   FontWeight="SemiBold" Foreground="#F0F0F8"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" FontSize="11" Foreground="#4A4A60"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding Playback.Segments.Count, StringFormat='{}{0} Items'}" />
+                    </Grid>
+                </Border>
+
+                <!-- Segment list -->
+                <ListBox Grid.Row="1" x:Name="SegmentList"
+                         ItemsSource="{Binding Playback.Segments}"
+                         SelectedItem="{Binding Playback.SelectedSegment}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Background" Value="Transparent" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#20203A" />
+                        </Style>
+                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#1C1C2C" />
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:WorkflowSegmentState">
+                            <Border Padding="14,10" BorderBrush="#252530" BorderThickness="0,0,0,1">
+                                <Grid ColumnDefinitions="*,12">
+
+                                    <StackPanel Grid.Column="0" Spacing="3">
+                                        <!-- Time range -->
+                                        <TextBlock FontSize="11" Foreground="#505060">
+                                            <TextBlock.Text>
+                                                <MultiBinding StringFormat="{}{0:F1}s  —  {1:F1}s">
+                                                    <Binding Path="StartSeconds" />
+                                                    <Binding Path="EndSeconds" />
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                        <!-- Original text -->
+                                        <TextBlock Text="{Binding SourceText}"
+                                                   FontSize="12" Foreground="#686878"
+                                                   TextWrapping="Wrap" />
+                                        <!-- Translated text -->
+                                        <TextBlock Text="{Binding TranslatedText}"
+                                                   FontSize="13" Foreground="#E8E8F0"
+                                                   FontWeight="Medium"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+
+                                    <!-- Status indicator column -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Top"
+                                                Margin="0,4,0,0" Spacing="4">
+                                        <!-- Green dot: TTS audio ready -->
+                                        <Ellipse Width="8" Height="8"
+                                                 Fill="#22C55E"
+                                                 IsVisible="{Binding HasTtsAudio}"
+                                                 HorizontalAlignment="Center" />
+                                        <!-- Orange bar: translation present, no TTS yet -->
+                                        <Rectangle Width="4" Height="16"
+                                                   Fill="#F59E0B"
+                                                   RadiusX="2" RadiusY="2"
+                                                   IsVisible="{Binding HasTranslation}"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+            </Grid>
         </Border>
 
     </Grid>
