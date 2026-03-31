@@ -7,7 +7,7 @@ using System.Diagnostics;
 
 namespace Babel.Player.Services;
 
-public sealed class TranscriptionService
+public sealed class TranscriptionService : ITranscriptionService
 {
     private readonly AppLog _log;
     private readonly string _pythonPath;
