@@ -111,6 +111,33 @@
                 </Grid>
             </TabItem>
 
+            <!-- Video Tab -->
+            <TabItem Header="Video">
+                <StackPanel Margin="20" Spacing="12">
+
+                    <TextBlock Text="Hardware Decode" FontWeight="SemiBold" />
+                    <ComboBox ItemsSource="{Binding HwdecOptions}"
+                              SelectedItem="{Binding VideoHwdec, Mode=TwoWay}"
+                              Width="220" HorizontalAlignment="Left" />
+
+                    <TextBlock Text="GPU Rendering API" FontWeight="SemiBold" />
+                    <ComboBox ItemsSource="{Binding GpuApiOptions}"
+                              SelectedItem="{Binding VideoGpuApi, Mode=TwoWay}"
+                              Width="220" HorizontalAlignment="Left" />
+
+                    <TextBlock Text="Export Encoder (future)" FontWeight="SemiBold" />
+                    <ComboBox ItemsSource="{Binding ExportEncoderOptions}"
+                              SelectedItem="{Binding VideoExportEncoder, Mode=TwoWay}"
+                              Width="220" HorizontalAlignment="Left" />
+
+                    <TextBlock TextWrapping="Wrap"
+                               Opacity="0.6"
+                               Margin="0,8,0,0"
+                               Text="Hardware Decode and GPU Rendering API take effect after restarting the app." />
+
+                </StackPanel>
+            </TabItem>
+
             <!-- Models Tab -->
             <TabItem Header="Models">
                 <Grid RowDefinitions="Auto,*" Margin="0,12,0,0">

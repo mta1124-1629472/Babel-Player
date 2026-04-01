@@ -3,6 +3,8 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 
+using Babel.Player.Models;
+
 namespace Babel.Player.Services;
 
 /// <summary>
@@ -48,7 +50,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     public event EventHandler<Exception>? ErrorOccurred;
 #pragma warning restore CS0067
 
-    public LibMpvEmbeddedTransport()
+    public LibMpvEmbeddedTransport(VideoPlaybackOptions? options = null)
     {
         _dllHandle = LoadLibMpvDll();
         if (_dllHandle == IntPtr.Zero)
@@ -62,6 +64,9 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
         // Use gpu-accelerated video output (renders into wid if set)
         SetOption("vo", "gpu");
+        // Hardware decode and GPU API — set before mpv_initialize; cannot change at runtime
+        SetOption("hwdec",   options?.HwdecMode ?? "auto");
+        SetOption("gpu-api", options?.GpuApi    ?? "auto");
         // Keep audio enabled for source media preview
         SetOption("idle", "yes");
         SetOption("keep-open", "yes");

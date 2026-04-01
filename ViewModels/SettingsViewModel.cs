@@ -57,6 +57,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
             "ru-RU-SvetlanaNeural",
         };
 
+        // Video hardware settings
+        _videoHwdec         = current.VideoHwdec;
+        _videoGpuApi        = current.VideoGpuApi;
+        _videoExportEncoder = current.VideoExportEncoder;
+
         // Hotkeys (default values)
         PlayPauseHotkey = "Space";
         ToggleSegmentPanelHotkey = "S";
@@ -87,6 +92,26 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _autoSaveEnabled;
 
+    // Video hardware decode & encode
+    [ObservableProperty]
+    private string _videoHwdec = "auto";
+
+    [ObservableProperty]
+    private string _videoGpuApi = "auto";
+
+    [ObservableProperty]
+    private string _videoExportEncoder = "auto";
+
+    public string[] HwdecOptions { get; } =
+        ["auto", "auto-safe", "no", "d3d11va", "d3d11va-copy", "nvdec", "nvdec-copy", "qsv", "dxva2"];
+
+    public string[] GpuApiOptions { get; } =
+        ["auto", "d3d11", "vulkan", "opengl"];
+
+    public string[] ExportEncoderOptions { get; } =
+        ["auto", "h264_nvenc", "hevc_nvenc", "h264_amf", "hevc_amf",
+         "h264_qsv", "hevc_qsv", "libx264", "libx265"];
+
     // Hotkeys
     [ObservableProperty]
     private string _playPauseHotkey;
@@ -106,10 +131,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         // Update the existing settings instance directly
         var settings = _coordinator.CurrentSettings;
         
-        settings.TtsVoice = SelectedVoice ?? settings.TtsVoice;
-        settings.Theme = SelectedTheme ?? settings.Theme;
-        settings.MaxRecentSessions = MaxRecentSessions;
-        settings.AutoSaveEnabled = AutoSaveEnabled;
+        settings.TtsVoice           = SelectedVoice ?? settings.TtsVoice;
+        settings.Theme              = SelectedTheme ?? settings.Theme;
+        settings.MaxRecentSessions  = MaxRecentSessions;
+        settings.AutoSaveEnabled    = AutoSaveEnabled;
+        settings.VideoHwdec         = VideoHwdec;
+        settings.VideoGpuApi        = VideoGpuApi;
+        settings.VideoExportEncoder = VideoExportEncoder;
 
         // Trigger persistence and notify listeners (like MainWindowViewModel) that settings have changed
         _coordinator.NotifySettingsModified();

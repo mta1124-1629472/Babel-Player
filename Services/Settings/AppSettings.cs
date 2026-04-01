@@ -44,6 +44,29 @@ public sealed class AppSettings
     /// </summary>
     public string ContainerizedServiceUrl { get; set; } = "http://localhost:8000";
 
+    /// <summary>
+    /// libmpv hardware video decode method.
+    /// "auto" lets mpv pick the best available decoder for the current GPU.
+    /// Options: auto, auto-safe, no, d3d11va, d3d11va-copy, nvdec, nvdec-copy, qsv, dxva2.
+    /// Takes effect on app restart.
+    /// </summary>
+    public string VideoHwdec { get; set; } = "auto";
+
+    /// <summary>
+    /// libmpv GPU rendering API.
+    /// "auto" lets mpv pick (d3d11 on Windows, opengl elsewhere).
+    /// Options: auto, d3d11, vulkan, opengl.
+    /// Takes effect on app restart.
+    /// </summary>
+    public string VideoGpuApi { get; set; } = "auto";
+
+    /// <summary>
+    /// ffmpeg encoder used by the video export stage (not yet implemented).
+    /// "auto" = resolve at export time from hardware detection.
+    /// Options: auto, h264_nvenc, hevc_nvenc, h264_amf, hevc_amf, h264_qsv, hevc_qsv, libx264, libx265.
+    /// </summary>
+    public string VideoExportEncoder { get; set; } = "auto";
+
     /// <summary>UI theme: "Light", "Dark", or "System".</summary>
     public string Theme { get; set; } = "System";
 

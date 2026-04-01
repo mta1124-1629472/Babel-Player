@@ -92,7 +92,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         TtsRegistry = ttsRegistry;
         CurrentSettings = settings;
         KeyStore = keyStore;
-        _transportManager = new MediaTransportManager(segmentPlayer, sourcePlayer);
+        _transportManager = new MediaTransportManager(
+            segmentPlayer,
+            sourcePlayer,
+            new VideoPlaybackOptions(settings.VideoHwdec, settings.VideoGpuApi));
 
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) => StopTtsPlayback();

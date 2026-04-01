@@ -1,3 +1,5 @@
+using Babel.Player.Models;
+
 namespace Babel.Player.Services;
 
 /// <summary>
@@ -9,15 +11,18 @@ public sealed class MediaTransportManager : IMediaTransportManager
 {
     private readonly IMediaTransport? _injectedSegmentPlayer;
     private readonly IMediaTransport? _injectedSourcePlayer;
+    private readonly VideoPlaybackOptions? _videoOptions;
     private IMediaTransport? _segmentPlayer;
     private IMediaTransport? _sourceMediaPlayer;
 
     public MediaTransportManager(
         IMediaTransport? segmentPlayer = null,
-        IMediaTransport? sourcePlayer = null)
+        IMediaTransport? sourcePlayer = null,
+        VideoPlaybackOptions? videoOptions = null)
     {
         _injectedSegmentPlayer = segmentPlayer;
         _injectedSourcePlayer  = sourcePlayer;
+        _videoOptions          = videoOptions;
     }
 
     public IMediaTransport GetOrCreateSegmentPlayer()
@@ -28,7 +33,7 @@ public sealed class MediaTransportManager : IMediaTransportManager
 
     public IMediaTransport GetOrCreateSourcePlayer()
     {
-        _sourceMediaPlayer ??= _injectedSourcePlayer ?? new LibMpvEmbeddedTransport();
+        _sourceMediaPlayer ??= _injectedSourcePlayer ?? new LibMpvEmbeddedTransport(_videoOptions);
         return _sourceMediaPlayer;
     }
 
