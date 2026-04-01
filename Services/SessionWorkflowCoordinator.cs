@@ -57,7 +57,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private IReadOnlyList<RecentSessionEntry> _recentSessions = [];
 
     [ObservableProperty]
-    private BootstrapDiagnostics _bootstrapDiagnostics = new(false, null, false, null);
+    private BootstrapDiagnostics _bootstrapDiagnostics = new(false, null, false, null, false, null);
 
     [ObservableProperty]
     private HardwareSnapshot _hardwareSnapshot = HardwareSnapshot.Detecting;
@@ -117,6 +117,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void UpdateSettings(AppSettings settings)
     {
+        bool transcriptionProviderChanged = settings.TranscriptionProvider != CurrentSettings.TranscriptionProvider
+            || settings.TranscriptionModel != CurrentSettings.TranscriptionModel;
         bool translationProviderChanged = settings.TranslationProvider != CurrentSettings.TranslationProvider
             || settings.TranslationModel != CurrentSettings.TranslationModel;
         bool ttsProviderChanged = settings.TtsProvider != CurrentSettings.TtsProvider
@@ -124,6 +126,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         CurrentSettings = settings;
 
+        if (transcriptionProviderChanged) _transcriptionService = null;
         if (translationProviderChanged) _translationService = null;
         if (ttsProviderChanged) _ttsService = null;
     }
@@ -252,7 +255,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public void Initialize()
     {
         // Heavy bootstrap probes and per-session snapshot preloading are warmed in background.
-        BootstrapDiagnostics = new BootstrapDiagnostics(false, null, false, null);
+        BootstrapDiagnostics = new BootstrapDiagnostics(false, null, false, null, false, null);
 
         var nowUtc = DateTimeOffset.UtcNow;
         var loadResult = _store.Load();
@@ -741,6 +744,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         // Generate per-segment TTS audio for dubbed playback
         var segmentAudioPaths = new Dictionary<string, string>();
+        int totalSegments = 0;
         try
         {
             var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath, cancellationToken);
@@ -761,6 +765,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     continue;
                 }
 
+                totalSegments++;
                 var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
 
                 _log.Info($"Generating TTS for segment {id}: {text.Substring(0, Math.Min(30, text.Length))}...");
@@ -796,6 +801,18 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             _log.Error($"Error generating per-segment TTS: {ex.Message}", ex);
         }
 
+        int succeeded = segmentAudioPaths.Count;
+        if (totalSegments > 0 && succeeded == 0)
+        {
+            _log.Error("TTS stage completed but no segments were generated.", new InvalidOperationException("Zero TTS segments"));
+            throw new InvalidOperationException(
+                "TTS stage completed but no segments were generated. Check provider configuration and logs.");
+        }
+
+        string ttsStatusMessage = (succeeded == totalSegments)
+            ? $"TTS generated ({v}). Dubbing complete."
+            : $"TTS generated ({v}). {succeeded}/{totalSegments} segments ready — {totalSegments - succeeded} failed.";
+
         var nowUtc = DateTimeOffset.UtcNow;
         CurrentSession = CurrentSession with
         {
@@ -806,7 +823,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TtsSegmentsPath = segmentsDir,
             TtsSegmentAudioPaths = segmentAudioPaths,
             TtsProvider = CurrentSettings.TtsProvider,
-            StatusMessage = $"TTS generated ({v}). Dubbing complete.",
+            StatusMessage = ttsStatusMessage,
         };
 
         SaveCurrentSession();
@@ -850,7 +867,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _ttsService ??= CreateTtsService();
 
         var sessionDir = GetSessionDirectory();
-        var segmentsDir = Path.Combine(sessionDir, "tts", "segments");
+        var mediaName = Path.GetFileNameWithoutExtension(CurrentSession.TranslationPath!);
+        var segmentsDir = Path.Combine(sessionDir, "tts", "segments", mediaName);
         Directory.CreateDirectory(segmentsDir);
 
         var segmentAudioPath = Path.Combine(segmentsDir, $"{segmentId}.mp3");
@@ -1129,8 +1147,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     {
         var stage = CurrentSession.Stage;
 
-        if (stage < SessionWorkflowStage.Transcribed
-            || CurrentSession.SourceLanguage is null or "unknown")
+        if (stage < SessionWorkflowStage.Transcribed)
         {
             await TranscribeMediaAsync(progress, cancellationToken);
         }

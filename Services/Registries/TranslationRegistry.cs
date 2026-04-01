@@ -31,10 +31,11 @@ public sealed class TranslationRegistry : ITranslationRegistry
     [
         new ProviderDescriptor(
             ProviderNames.GoogleTranslateFree,
-            "Google Translate (Free)",
+            "Google Translate (Free — unreliable, web scraper)",
             false,
             null,
-            ["default"]),
+            ["default"],
+            Notes: "Uses googletrans==4.0.0rc1 which scrapes Google's private endpoints. May break without warning when Google changes its API."),
         new ProviderDescriptor(
             ProviderNames.Nllb200,
             "NLLB-200 (Local)",
@@ -73,29 +74,17 @@ public sealed class TranslationRegistry : ITranslationRegistry
         if (desc.RequiresApiKey && string.IsNullOrEmpty(keyStore?.GetKey(desc.CredentialKey!)))
             return new ProviderReadiness(false, $"API key missing for provider '{desc.DisplayName}'.");
 
-        if (providerId == ProviderNames.Nllb200 && !ModelDownloader.IsNllbDownloaded(model))
-            return new ProviderReadiness(false,
-                $"Model '{model}' not downloaded yet.",
-                RequiresModelDownload: true,
-                ModelDownloadDescription: $"Download NLLB-200 {model} model");
-
-        if (providerId == ProviderNames.ContainerizedService
-            && string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
-            return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
-
-        return ProviderReadiness.Ready;
+        var provider = CreateProvider(providerId, settings, keyStore);
+        return provider.CheckReadiness(settings, keyStore);
     }
 
     public async Task<bool> EnsureModelAsync(string providerId, string model, AppSettings settings,
                                               IProgress<double>? progress = null, CancellationToken ct = default)
     {
-        if (providerId == ProviderNames.Nllb200 && !ModelDownloader.IsNllbDownloaded(model))
-        {
-            _log.Info($"Model {model} requires download. Starting download...");
-            var downloader = new ModelDownloader(_log);
-            return await downloader.DownloadNllbAsync(model, progress, ct);
-        }
-        return true;
+        var desc = GetAvailableProviders().FirstOrDefault(p => p.Id == providerId);
+        if (desc == null || !desc.IsImplemented) return false;
+        var provider = CreateProvider(providerId, settings);
+        return await provider.EnsureReadyAsync(settings, progress, ct);
     }
 
     public ITranslationProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)

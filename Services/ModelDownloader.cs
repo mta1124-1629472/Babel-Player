@@ -4,6 +4,7 @@ using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 
 namespace Babel.Player.Services;
 
@@ -126,15 +127,16 @@ except Exception as e:
 
     public async Task<bool> DownloadPiperVoiceAsync(string voiceName, string? piperDir, IProgress<double>? progress = null, CancellationToken token = default)
     {
-        if (string.IsNullOrEmpty(piperDir))
+        var resolvedDir = ResolvePiperModelDir(piperDir);
+        if (string.IsNullOrEmpty(resolvedDir))
         {
-            _log.Error("PiperModelDir is not configured.", new InvalidOperationException("PiperModelDir is null"));
+            _log.Error("PiperModelDir could not be resolved.", new InvalidOperationException("PiperModelDir is null"));
             return false;
         }
 
-        Directory.CreateDirectory(piperDir);
-        string onnxPath = Path.Combine(piperDir, $"{voiceName}.onnx");
-        string jsonPath = Path.Combine(piperDir, $"{voiceName}.onnx.json");
+        Directory.CreateDirectory(resolvedDir);
+        string onnxPath = Path.Combine(resolvedDir, $"{voiceName}.onnx");
+        string jsonPath = Path.Combine(resolvedDir, $"{voiceName}.onnx.json");
 
         // Piper voice string format: {language}_{region}-{name}-{quality}
         // Ex: en_US-lessac-medium
@@ -169,13 +171,10 @@ except Exception as e:
                 _log.Info($"Piper voice {voiceName} downloaded successfully.");
                 return true;
             }
-            if (!onnxOk && File.Exists(onnxPath)) File.Delete(onnxPath);
-            if (!jsonOk && File.Exists(jsonPath)) File.Delete(jsonPath);
-            if (onnxOk && jsonOk)
-            {
-                _log.Info($"Piper voice {voiceName} downloaded successfully.");
-                return true;
-            }
+
+            // Partial failure — clean up both files to avoid a corrupt state.
+            if (File.Exists(onnxPath)) File.Delete(onnxPath);
+            if (File.Exists(jsonPath)) File.Delete(jsonPath);
             return false;
         }
         catch (OperationCanceledException)
@@ -269,10 +268,30 @@ except Exception as e:
 
     public static bool IsPiperVoiceDownloaded(string voice, string? piperDir)
     {
-        if (string.IsNullOrEmpty(piperDir) || !Directory.Exists(piperDir)) return false;
-        string onnxPath = Path.Combine(piperDir, $"{voice}.onnx");
-        string jsonPath = Path.Combine(piperDir, $"{voice}.onnx.json");
+        var resolvedDir = ResolvePiperModelDir(piperDir);
+        if (string.IsNullOrEmpty(resolvedDir) || !Directory.Exists(resolvedDir)) return false;
+        string onnxPath = Path.Combine(resolvedDir, $"{voice}.onnx");
+        string jsonPath = Path.Combine(resolvedDir, $"{voice}.onnx.json");
         return File.Exists(onnxPath) && File.Exists(jsonPath);
+    }
+
+    /// <summary>
+    /// Returns the Piper model directory to use. If <paramref name="piperDir"/> is null or empty,
+    /// falls back to the platform-default location that the Piper CLI and Python script also search.
+    /// </summary>
+    public static string ResolvePiperModelDir(string? piperDir)
+    {
+        if (!string.IsNullOrEmpty(piperDir))
+            return piperDir;
+
+        if (OperatingSystem.IsWindows())
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return Path.Combine(localAppData, ProviderNames.Piper, "voices");
+        }
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(home, ".local", "share", ProviderNames.Piper, "voices");
     }
 
     private static string GetHuggingFaceCacheDir()

@@ -4,6 +4,9 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
+using Babel.Player.Services.Settings;
 using Babel.Player.Services.Translations;
 
 namespace Babel.Player.Services;
@@ -211,5 +214,23 @@ print(f'NLLB single segment translated: {seg_id}')
             null);
     }
 
+    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
+    {
+        if (!ModelDownloader.IsNllbDownloaded(_model))
+            return new ProviderReadiness(false,
+                $"Model '{_model}' not downloaded yet.",
+                RequiresModelDownload: true,
+                ModelDownloadDescription: $"Download NLLB-200 {_model} model");
+        return ProviderReadiness.Ready;
+    }
 
+    public async Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
+    {
+        if (!ModelDownloader.IsNllbDownloaded(_model))
+        {
+            Log.Info($"Model {_model} requires download. Starting download...");
+            return await new ModelDownloader(Log).DownloadNllbAsync(_model, progress, ct);
+        }
+        return true;
+    }
 }

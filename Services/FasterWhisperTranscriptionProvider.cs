@@ -5,6 +5,9 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
+using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
@@ -143,6 +146,28 @@ print('Transcription complete')
         public double Start { get; set; }
         public double End { get; set; }
         public string? Text { get; set; }
+    }
+
+    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
+    {
+        var model = settings.TranscriptionModel;
+        if (!ModelDownloader.IsFasterWhisperDownloaded(model))
+            return new ProviderReadiness(false,
+                $"Model '{model}' not downloaded yet.",
+                RequiresModelDownload: true,
+                ModelDownloadDescription: $"Download faster-whisper {model} model");
+        return ProviderReadiness.Ready;
+    }
+
+    public async Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
+    {
+        var model = settings.TranscriptionModel;
+        if (!ModelDownloader.IsFasterWhisperDownloaded(model))
+        {
+            Log.Info($"Model {model} requires download. Starting download...");
+            return await new ModelDownloader(Log).DownloadFasterWhisperAsync(model, progress, ct);
+        }
+        return true;
     }
 }
 
