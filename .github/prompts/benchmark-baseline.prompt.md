@@ -29,7 +29,7 @@ Use these exact IDs and formats.
 - Example: `bp.matrix.transcription.fasterwhisper.base.fp16_8c16t_32g.v1.0.0`
 
 3. Run Batch ID
-- Format: `bp.run.<yyyyMMdd-HHmmss>.<dataset_id>.<matrix_id>.r<run_count>`
+- Format: `bp.run.<yyyyMMddTHHmmssZ>.<dataset_id>.<matrix_id>.r<run_count>`
 
 ## Token Validation Reference
 
