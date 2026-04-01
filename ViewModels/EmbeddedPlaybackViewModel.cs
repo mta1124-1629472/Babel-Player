@@ -268,6 +268,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public string HwRamLine => _coordinator.HardwareSnapshot.RamLine;
     public string HwNpuLine => _coordinator.HardwareSnapshot.NpuLine;
     public string HwLibsLine => _coordinator.HardwareSnapshot.LibsLine;
+    public string HwInferenceLine => _coordinator.BootstrapDiagnostics.InferenceLine;
 
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
     public string SourceDurationFormatted => FormatMs(SourceDurationMs);
@@ -614,6 +615,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             case nameof(SessionWorkflowCoordinator.BootstrapDiagnostics):
                 OnPropertyChanged(nameof(HasDiagnosticsWarning));
                 OnPropertyChanged(nameof(DiagnosticsWarningText));
+                OnPropertyChanged(nameof(HwInferenceLine));
                 break;
             case nameof(SessionWorkflowCoordinator.HardwareSnapshot):
                 OnPropertyChanged(nameof(HwCpuLine));
