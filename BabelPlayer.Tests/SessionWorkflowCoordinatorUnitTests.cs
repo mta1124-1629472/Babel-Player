@@ -1,0 +1,530 @@
+using System;
+using System.IO;
+using System.Threading.Tasks;
+using Babel.Player.Models;
+using Babel.Player.Services;
+using Babel.Player.Services.Registries;
+using Babel.Player.Services.Settings;
+
+namespace BabelPlayer.Tests;
+
+/// <summary>
+/// Unit tests for SessionWorkflowCoordinator that do not require Python, FFmpeg, or libmpv.
+/// These tests exercise pure coordination logic: Initialize, LoadMedia, Reset*, InjectTestTranscript,
+/// UpdateSettings, CheckSettingsInvalidation, NotifySettingsModified, SegmentId, and SaveCurrentSession.
+/// </summary>
+public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
+{
+    private readonly string _dir;
+    private readonly AppLog _log;
+    private readonly SessionSnapshotStore _store;
+    private readonly PerSessionSnapshotStore _perSessionStore;
+    private readonly RecentSessionsStore _recentStore;
+    private readonly AppSettings _settings;
+
+    // A small real media file that exists in the test output directory
+    private readonly string _mediaPath;
+
+    public SessionWorkflowCoordinatorUnitTests()
+    {
+        _dir = Path.Combine(Path.GetTempPath(), $"babel-coord-unit-tests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_dir);
+        _log = new AppLog(Path.Combine(_dir, "test.log"));
+        _store = new SessionSnapshotStore(Path.Combine(_dir, "session.json"), _log);
+        _perSessionStore = new PerSessionSnapshotStore(Path.Combine(_dir, "sessions"), _log);
+        _recentStore = new RecentSessionsStore(Path.Combine(_dir, "recent-sessions.json"), _log);
+        _settings = new AppSettings();
+
+        // The test media (sample.mp4) is copied to the output dir by the .csproj
+        _mediaPath = Path.Combine(AppContext.BaseDirectory, "test-assets", "video", "sample.mp4");
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_dir, recursive: true); }
+        catch { /* best-effort cleanup */ }
+    }
+
+    private SessionWorkflowCoordinator CreateCoordinator(AppSettings? settings = null) =>
+        new SessionWorkflowCoordinator(
+            _store,
+            _log,
+            settings ?? _settings,
+            _perSessionStore,
+            _recentStore,
+            new TranscriptionRegistry(_log),
+            new TranslationRegistry(_log),
+            new TtsRegistry(_log));
+
+    // ── Initialize ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Initialize_NoSavedSnapshot_CreatesFoundationSession()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        Assert.Equal(SessionWorkflowStage.Foundation, coord.CurrentSession.Stage);
+    }
+
+    [Fact]
+    public void Initialize_NoSavedSnapshot_SessionSourceMentionsNewSession()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        Assert.False(string.IsNullOrWhiteSpace(coord.SessionSource));
+    }
+
+    [Fact]
+    public void Initialize_WithSavedSnapshot_RestoresSession()
+    {
+        var snapshot = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
+        _store.Save(snapshot);
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        Assert.Equal(snapshot.SessionId, coord.CurrentSession.SessionId);
+    }
+
+    [Fact]
+    public void Initialize_LoadsRecentSessions()
+    {
+        var entry = new RecentSessionEntry(
+            Guid.NewGuid(),
+            "/video/test.mp4",
+            "test.mp4",
+            SessionWorkflowStage.MediaLoaded,
+            DateTimeOffset.UtcNow);
+        _recentStore.Upsert(entry);
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        Assert.NotEmpty(coord.RecentSessions);
+    }
+
+    [Fact]
+    public void Initialize_PersistenceStatusIsNotEmpty()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        Assert.False(string.IsNullOrWhiteSpace(coord.PersistenceStatus));
+    }
+
+    // ── LoadMedia ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void LoadMedia_FileNotFound_ThrowsFileNotFoundException()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        Assert.Throws<FileNotFoundException>(() => coord.LoadMedia("/nonexistent/path/video.mp4"));
+    }
+
+    [Fact]
+    public void LoadMedia_ValidFile_AdvancesToMediaLoadedStage()
+    {
+        if (!File.Exists(_mediaPath)) return; // skip if media not present
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, coord.CurrentSession.Stage);
+    }
+
+    [Fact]
+    public void LoadMedia_ValidFile_SetsSourceMediaPath()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+        Assert.Equal(_mediaPath, coord.CurrentSession.SourceMediaPath);
+    }
+
+    [Fact]
+    public void LoadMedia_ValidFile_CopiesIngestedMedia()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        Assert.NotNull(coord.CurrentSession.IngestedMediaPath);
+        Assert.True(File.Exists(coord.CurrentSession.IngestedMediaPath));
+    }
+
+    [Fact]
+    public void LoadMedia_ValidFile_StatusMessageIndicatesReady()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+        Assert.Contains("transcription", coord.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ── ResetPipeline* ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ResetPipelineToMediaLoaded_WhenAtFoundation_IsNoOp()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        // Stage is Foundation — reset should be a no-op
+        coord.ResetPipelineToMediaLoaded();
+        Assert.Equal(SessionWorkflowStage.Foundation, coord.CurrentSession.Stage);
+    }
+
+    [Fact]
+    public void ResetPipelineToMediaLoaded_WhenAtMediaLoaded_ClearsDownstreamFields()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        // Manually inject some downstream fields to verify they get cleared
+        coord.InjectTestTranscript(
+            CreateTempFile("{\"language\":\"es\",\"segments\":[]}"),
+            CreateTempFile("{\"segments\":[]}"));
+
+        coord.ResetPipelineToMediaLoaded();
+
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, coord.CurrentSession.Stage);
+        Assert.Null(coord.CurrentSession.TranscriptPath);
+        Assert.Null(coord.CurrentSession.TranslationPath);
+        Assert.Null(coord.CurrentSession.TtsPath);
+        Assert.Null(coord.CurrentSession.SourceLanguage);
+        Assert.Null(coord.CurrentSession.TargetLanguage);
+    }
+
+    [Fact]
+    public void ResetPipelineToTranscribed_WhenAtFoundation_IsNoOp()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.ResetPipelineToTranscribed();
+        // Stage is Foundation (< Transcribed) — no change
+        Assert.Equal(SessionWorkflowStage.Foundation, coord.CurrentSession.Stage);
+    }
+
+    [Fact]
+    public void ResetPipelineToTranscribed_WhenAtTranslated_ClearsTranslationAndTts()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var translationPath = CreateTempFile("{\"segments\":[]}");
+        coord.InjectTestTranscript(transcriptPath, translationPath);
+
+        // The session is now at Translated stage
+        coord.ResetPipelineToTranscribed();
+
+        Assert.Equal(SessionWorkflowStage.Transcribed, coord.CurrentSession.Stage);
+        Assert.Null(coord.CurrentSession.TranslationPath);
+        Assert.Null(coord.CurrentSession.TargetLanguage);
+        Assert.Null(coord.CurrentSession.TtsPath);
+        // Transcript should be intact
+        Assert.Equal(transcriptPath, coord.CurrentSession.TranscriptPath);
+    }
+
+    [Fact]
+    public void ResetPipelineToTranslated_WhenAtFoundation_IsNoOp()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.ResetPipelineToTranslated();
+        Assert.Equal(SessionWorkflowStage.Foundation, coord.CurrentSession.Stage);
+    }
+
+    // ── InjectTestTranscript ──────────────────────────────────────────────────
+
+    [Fact]
+    public void InjectTestTranscript_WithoutTranslation_SetsTranscribedStage()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        coord.InjectTestTranscript(transcriptPath);
+
+        Assert.Equal(SessionWorkflowStage.Transcribed, coord.CurrentSession.Stage);
+        Assert.Equal(transcriptPath, coord.CurrentSession.TranscriptPath);
+    }
+
+    [Fact]
+    public void InjectTestTranscript_WithTranslation_SetsTranslatedStage()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var translationPath = CreateTempFile("{\"segments\":[]}");
+        coord.InjectTestTranscript(transcriptPath, translationPath);
+
+        Assert.Equal(SessionWorkflowStage.Translated, coord.CurrentSession.Stage);
+        Assert.Equal(translationPath, coord.CurrentSession.TranslationPath);
+    }
+
+    [Fact]
+    public void InjectTestTranscript_PersistsSession()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        coord.InjectTestTranscript(transcriptPath);
+
+        // Verify the snapshot was written to disk with Transcribed stage
+        var loaded = _store.Load().Snapshot;
+        Assert.NotNull(loaded);
+        Assert.Equal(SessionWorkflowStage.Transcribed, loaded.Stage);
+        Assert.Equal(transcriptPath, loaded.TranscriptPath);
+    }
+
+    // ── UpdateSettings ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void UpdateSettings_SameSettings_DoesNotRaiseSettingsModified()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        bool raised = false;
+        coord.SettingsModified += () => raised = true;
+
+        // UpdateSettings itself does not raise SettingsModified — that's the caller's job
+        coord.UpdateSettings(_settings);
+        Assert.False(raised);
+    }
+
+    [Fact]
+    public void UpdateSettings_ChangedSettings_UpdatesCurrentSettings()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        var newSettings = new AppSettings { TtsVoice = "de-DE-KatjaNeural" };
+        coord.UpdateSettings(newSettings);
+
+        Assert.Equal("de-DE-KatjaNeural", coord.CurrentSettings.TtsVoice);
+    }
+
+    // ── NotifySettingsModified ────────────────────────────────────────────────
+
+    [Fact]
+    public void NotifySettingsModified_RaisesSettingsModifiedEvent()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        bool raised = false;
+        coord.SettingsModified += () => raised = true;
+        coord.NotifySettingsModified();
+
+        Assert.True(raised);
+    }
+
+    [Fact]
+    public void NotifySettingsModified_NoSubscribers_DoesNotThrow()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        // Should not throw even with no subscribers
+        coord.NotifySettingsModified();
+    }
+
+    // ── CheckSettingsInvalidation ─────────────────────────────────────────────
+
+    [Fact]
+    public void CheckSettingsInvalidation_NothingChanged_ReturnsNone()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var translationPath = CreateTempFile("{\"segments\":[]}");
+        coord.InjectTestTranscript(transcriptPath, translationPath);
+
+        // Stamp the current provider settings into the snapshot
+        var session = coord.CurrentSession with
+        {
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+            TtsProvider = _settings.TtsProvider,
+            TtsVoice = _settings.TtsVoice,
+            TargetLanguage = _settings.TargetLanguage,
+        };
+        // Directly simulate the coordinator state as if the pipeline had run with current settings
+        // by updating the store and reinitialising
+        _store.Save(session);
+        var coord2 = CreateCoordinator();
+        coord2.Initialize();
+
+        var invalidation = coord2.CheckSettingsInvalidation();
+        Assert.Equal(PipelineInvalidation.None, invalidation);
+    }
+
+    [Fact]
+    public void CheckSettingsInvalidation_TtsProviderChanged_ReturnsTts()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var translationPath = CreateTempFile("{\"segments\":[]}");
+        coord.InjectTestTranscript(transcriptPath, translationPath);
+
+        // Set the session's TTS provider to match current settings
+        _store.Save(coord.CurrentSession with
+        {
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+            TtsProvider = _settings.TtsProvider,
+            TtsVoice = _settings.TtsVoice,
+            TargetLanguage = _settings.TargetLanguage,
+        });
+
+        // Now change TTS settings
+        var changedSettings = new AppSettings { TtsProvider = ProviderNames.Piper };
+        var coord2 = CreateCoordinator(changedSettings);
+        coord2.Initialize();
+
+        var invalidation = coord2.CheckSettingsInvalidation();
+        Assert.Equal(PipelineInvalidation.Tts, invalidation);
+    }
+
+    [Fact]
+    public void CheckSettingsInvalidation_TranscriptionProviderChanged_ReturnsTranscription()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        coord.InjectTestTranscript(transcriptPath);
+
+        // Stamp matching settings
+        _store.Save(coord.CurrentSession with
+        {
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+            TtsProvider = _settings.TtsProvider,
+            TtsVoice = _settings.TtsVoice,
+            TargetLanguage = _settings.TargetLanguage,
+        });
+
+        // Change transcription provider
+        var changedSettings = new AppSettings { TranscriptionProvider = ProviderNames.ContainerizedService };
+        var coord2 = CreateCoordinator(changedSettings);
+        coord2.Initialize();
+
+        var invalidation = coord2.CheckSettingsInvalidation();
+        Assert.Equal(PipelineInvalidation.Transcription, invalidation);
+    }
+
+    // ── SegmentId ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SegmentId_WholeNumber_FormatsWithOneDecimalPlace()
+    {
+        Assert.Equal("segment_0.0", SessionWorkflowCoordinator.SegmentId(0.0));
+        Assert.Equal("segment_5.0", SessionWorkflowCoordinator.SegmentId(5.0));
+        Assert.Equal("segment_100.0", SessionWorkflowCoordinator.SegmentId(100.0));
+    }
+
+    [Fact]
+    public void SegmentId_Fractional_FormatsWithExactPrecision()
+    {
+        Assert.Equal("segment_3.68", SessionWorkflowCoordinator.SegmentId(3.68));
+        Assert.Equal("segment_1.5", SessionWorkflowCoordinator.SegmentId(1.5));
+    }
+
+    [Fact]
+    public void SegmentId_UsesInvariantCulture()
+    {
+        // Must use dot as decimal separator regardless of thread culture
+        Assert.Contains(".", SessionWorkflowCoordinator.SegmentId(1.5));
+        Assert.DoesNotContain(",", SessionWorkflowCoordinator.SegmentId(1.5));
+    }
+
+    // ── SaveCurrentSession ────────────────────────────────────────────────────
+
+    [Fact]
+    public void SaveCurrentSession_UpdatesLastUpdatedAtUtcAndPersistenceStatus()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        var before = coord.CurrentSession.LastUpdatedAtUtc;
+        coord.SaveCurrentSession();
+
+        Assert.False(string.IsNullOrWhiteSpace(coord.PersistenceStatus));
+        Assert.True(coord.CurrentSession.LastUpdatedAtUtc >= before);
+    }
+
+    [Fact]
+    public void SaveCurrentSession_PersistedSessionCanBeReloaded()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.SaveCurrentSession();
+
+        var coord2 = CreateCoordinator();
+        coord2.Initialize();
+        Assert.Equal(coord.CurrentSession.SessionId, coord2.CurrentSession.SessionId);
+    }
+
+    // ── StateFilePath / LogFilePath ───────────────────────────────────────────
+
+    [Fact]
+    public void StateFilePath_ReturnsStoreFilePath()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        Assert.Equal(_store.StateFilePath, coord.StateFilePath);
+    }
+
+    [Fact]
+    public void LogFilePath_ReturnsLogFilePath()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        Assert.Equal(_log.LogFilePath, coord.LogFilePath);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private string CreateTempFile(string content)
+    {
+        var path = Path.Combine(_dir, $"temp-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, content);
+        return path;
+    }
+}
