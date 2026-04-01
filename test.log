@@ -1,0 +1,125 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Avalonia Accelerate Community requires telemetry. To opt out, please upgrade to a paid tier. Learn more: https://avaloniaui.net/accelerate/
+  BabelPlayer -> D:\Dev\Babel-Player\bin\Debug\net10.0\BabelPlayer.dll
+  Avalonia Accelerate Community requires telemetry. To opt out, please upgrade to a paid tier. Learn more: https://avaloniaui.net/accelerate/
+  BabelPlayer.Tests -> D:\Dev\Babel-Player\BabelPlayer.Tests\bin\Debug\net10.0\BabelPlayer.Tests.dll
+Test run for D:\Dev\Babel-Player\BabelPlayer.Tests\bin\Debug\net10.0\BabelPlayer.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+  Failed BabelPlayer.Tests.EmbeddedPlaybackTests.PlaySourceMediaAtSegment_InvalidSegment_Throws [7 s]
+  Error Message:
+   System.InvalidOperationException : TTS failed: No translated text found
+
+  Stack Trace:
+     at Babel.Player.Services.PythonSubprocessServiceBase.ThrowIfFailed(ScriptResult result, String operationName) in D:\Dev\Babel-Player\Services\PythonSubprocessServiceBase.cs:line 101
+   at Babel.Player.Services.EdgeTtsProvider.GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\EdgeTtsProvider.cs:line 64
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateTtsAsync(CancellationToken cancellationToken, IProgress`1 progress, String voice) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs:line 713
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.BuildTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 121
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.GetPreparedTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 40
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.CreateCaseWithSourcePlayerAsync(String caseName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 434
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.PlaySourceMediaAtSegment_InvalidSegment_Throws() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 473
+--- End of stack trace from previous location ---
+  Failed BabelPlayer.Tests.EmbeddedPlaybackTests.Dispose_CleansUpSourcePlayer [< 1 ms]
+  Error Message:
+   System.InvalidOperationException : TTS failed: No translated text found
+
+  Stack Trace:
+     at Babel.Player.Services.PythonSubprocessServiceBase.ThrowIfFailed(ScriptResult result, String operationName) in D:\Dev\Babel-Player\Services\PythonSubprocessServiceBase.cs:line 101
+   at Babel.Player.Services.EdgeTtsProvider.GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\EdgeTtsProvider.cs:line 64
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateTtsAsync(CancellationToken cancellationToken, IProgress`1 progress, String voice) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs:line 713
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.BuildTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 121
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.GetPreparedTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 40
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.CreateCaseWithSourcePlayerAsync(String caseName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 434
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.Dispose_CleansUpSourcePlayer() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 514
+--- End of stack trace from previous location ---
+  Failed BabelPlayer.Tests.EmbeddedPlaybackTests.StopSourceMedia_PausesPlayer [< 1 ms]
+  Error Message:
+   System.InvalidOperationException : TTS failed: No translated text found
+
+  Stack Trace:
+     at Babel.Player.Services.PythonSubprocessServiceBase.ThrowIfFailed(ScriptResult result, String operationName) in D:\Dev\Babel-Player\Services\PythonSubprocessServiceBase.cs:line 101
+   at Babel.Player.Services.EdgeTtsProvider.GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\EdgeTtsProvider.cs:line 64
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateTtsAsync(CancellationToken cancellationToken, IProgress`1 progress, String voice) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs:line 713
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.BuildTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 121
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.GetPreparedTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 40
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.CreateCaseWithSourcePlayerAsync(String caseName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 434
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.StopSourceMedia_PausesPlayer() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 484
+--- End of stack trace from previous location ---
+  Failed BabelPlayer.Tests.EmbeddedPlaybackTests.SourceMediaPlayer_Property_ReturnsInjectedPlayer [< 1 ms]
+  Error Message:
+   System.InvalidOperationException : TTS failed: No translated text found
+
+  Stack Trace:
+     at Babel.Player.Services.PythonSubprocessServiceBase.ThrowIfFailed(ScriptResult result, String operationName) in D:\Dev\Babel-Player\Services\PythonSubprocessServiceBase.cs:line 101
+   at Babel.Player.Services.EdgeTtsProvider.GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\EdgeTtsProvider.cs:line 64
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateTtsAsync(CancellationToken cancellationToken, IProgress`1 progress, String voice) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs:line 713
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.BuildTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 121
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.GetPreparedTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 40
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.CreateCaseWithSourcePlayerAsync(String caseName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 434
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.SourceMediaPlayer_Property_ReturnsInjectedPlayer() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 500
+--- End of stack trace from previous location ---
+  Failed BabelPlayer.Tests.EmbeddedPlaybackTests.PlaySourceMediaAtSegment_LoadsAndSeeks [< 1 ms]
+  Error Message:
+   System.InvalidOperationException : TTS failed: No translated text found
+
+  Stack Trace:
+     at Babel.Player.Services.PythonSubprocessServiceBase.ThrowIfFailed(ScriptResult result, String operationName) in D:\Dev\Babel-Player\Services\PythonSubprocessServiceBase.cs:line 101
+   at Babel.Player.Services.EdgeTtsProvider.GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\EdgeTtsProvider.cs:line 64
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateTtsAsync(CancellationToken cancellationToken, IProgress`1 progress, String voice) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs:line 713
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.BuildTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 121
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.GetPreparedTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 40
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.CreateCaseWithSourcePlayerAsync(String caseName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 434
+   at BabelPlayer.Tests.EmbeddedPlaybackTests.PlaySourceMediaAtSegment_LoadsAndSeeks() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 454
+--- End of stack trace from previous location ---
+  Failed BabelPlayer.Tests.SessionWorkflowTests.GenerateTts_ThenReopen_ReusesAudio [1 ms]
+  Error Message:
+   System.InvalidOperationException : TTS failed: No translated text found
+
+  Stack Trace:
+     at Babel.Player.Services.PythonSubprocessServiceBase.ThrowIfFailed(ScriptResult result, String operationName) in D:\Dev\Babel-Player\Services\PythonSubprocessServiceBase.cs:line 101
+   at Babel.Player.Services.EdgeTtsProvider.GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\EdgeTtsProvider.cs:line 64
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateTtsAsync(CancellationToken cancellationToken, IProgress`1 progress, String voice) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs:line 713
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.BuildTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 121
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.GetPreparedTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 40
+   at BabelPlayer.Tests.SessionWorkflowTests.OpenCaseFromTemplateAsync(String templateName, String caseName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 50
+   at BabelPlayer.Tests.SessionWorkflowTests.GenerateTts_ThenReopen_ReusesAudio() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 198
+--- End of stack trace from previous location ---
+  Failed BabelPlayer.Tests.SessionWorkflowTests.RegenerateSegmentTranslation_ActuallyWritesNewTextToSegment [7 s]
+  Error Message:
+   System.InvalidOperationException : Single segment translation failed: Traceback (most recent call last):
+  File "C:\Users\ander\AppData\Local\Temp\translate_seg_88123f7ab5e84efbbedb47f1a543ebc9.py", line 19, in <module>
+    translated_text = translated.text if translated else ''
+AttributeError: 'coroutine' object has no attribute 'text'
+sys:1: RuntimeWarning: coroutine 'Translator.translate' was never awaited
+
+  Stack Trace:
+     at Babel.Player.Services.PythonSubprocessServiceBase.ThrowIfFailed(ScriptResult result, String operationName) in D:\Dev\Babel-Player\Services\PythonSubprocessServiceBase.cs:line 101
+   at Babel.Player.Services.GoogleTranslationProvider.TranslateSingleSegmentAsync(SingleSegmentTranslationRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\GoogleTranslationProvider.cs:line 165
+   at Babel.Player.Services.SessionWorkflowCoordinator.RegenerateSegmentTranslationAsync(String segmentId) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs:line 923
+   at BabelPlayer.Tests.SessionWorkflowTests.RegenerateSegmentTranslation_ActuallyWritesNewTextToSegment() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 304
+--- End of stack trace from previous location ---
+  Failed BabelPlayer.Tests.SessionWorkflowTests.EndToEndPipeline_SmokeTest [6 s]
+  Error Message:
+   System.InvalidOperationException : TTS failed: No translated text found
+
+  Stack Trace:
+     at Babel.Player.Services.PythonSubprocessServiceBase.ThrowIfFailed(ScriptResult result, String operationName) in D:\Dev\Babel-Player\Services\PythonSubprocessServiceBase.cs:line 101
+   at Babel.Player.Services.EdgeTtsProvider.GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\EdgeTtsProvider.cs:line 64
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateTtsAsync(CancellationToken cancellationToken, IProgress`1 progress, String voice) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs:line 713
+   at BabelPlayer.Tests.SessionWorkflowTests.EndToEndPipeline_SmokeTest() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 243
+--- End of stack trace from previous location ---
+  Failed BabelPlayer.Tests.SessionWorkflowTests.ReopenWithMissingTts_SurfacesDegradedState [< 1 ms]
+  Error Message:
+   System.InvalidOperationException : TTS failed: No translated text found
+
+  Stack Trace:
+     at Babel.Player.Services.PythonSubprocessServiceBase.ThrowIfFailed(ScriptResult result, String operationName) in D:\Dev\Babel-Player\Services\PythonSubprocessServiceBase.cs:line 101
+   at Babel.Player.Services.EdgeTtsProvider.GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\EdgeTtsProvider.cs:line 64
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateTtsAsync(CancellationToken cancellationToken, IProgress`1 progress, String voice) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs:line 713
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.BuildTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 121
+   at BabelPlayer.Tests.SessionWorkflowTemplateFixture.GetPreparedTemplateAsync(String templateName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTemplateFixture.cs:line 40
+   at BabelPlayer.Tests.SessionWorkflowTests.OpenCaseFromTemplateAsync(String templateName, String caseName) in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 50
+   at BabelPlayer.Tests.SessionWorkflowTests.ReopenWithMissingTts_SurfacesDegradedState() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowTests.cs:line 213
+--- End of stack trace from previous location ---
+
+Failed!  - Failed:     9, Passed:    83, Skipped:     0, Total:    92, Duration: 28 s - BabelPlayer.Tests.dll (net10.0)

@@ -9,29 +9,21 @@ namespace Babel.Player.Services;
 /// Provider configuration (model name, credentials) belongs in the constructor —
 /// method signatures are uniform across all implementations.
 /// </summary>
-public interface ITranslationService
+public interface ITranslationProvider
 {
     /// <summary>
     /// Translates all segments in a transcript JSON and writes the result to
-    /// <paramref name="outputJsonPath"/> using the standard translation artifact contract.
+    /// a new translation JSON artifact.
     /// </summary>
     Task<TranslationResult> TranslateAsync(
-        string transcriptJsonPath,
-        string outputJsonPath,
-        string sourceLanguage,
-        string targetLanguage,
+        TranslationRequest request,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Re-translates a single segment and updates its <c>translatedText</c> field
-    /// in the existing translation JSON at <paramref name="translationJsonPath"/>.
+    /// Translates a single segment and writes the updated translation JSON artifact.
+    /// Used for on-demand regeneration.
     /// </summary>
     Task<TranslationResult> TranslateSingleSegmentAsync(
-        string text,
-        string segmentId,
-        string translationJsonPath,
-        string outputJsonPath,
-        string sourceLanguage,
-        string targetLanguage,
+        SingleSegmentTranslationRequest request,
         CancellationToken cancellationToken = default);
 }

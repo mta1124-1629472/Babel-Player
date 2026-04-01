@@ -14,28 +14,21 @@ namespace Babel.Player.Services;
 /// per-speaker voice assignment without interface changes.
 /// <see cref="GenerateTtsAsync"/> is a convenience method for single-voice output.
 /// </summary>
-public interface ITtsService
+public interface ITtsProvider
 {
     /// <summary>
     /// Generates speech for all translated segments in a translation JSON,
-    /// combined into a single audio file at <paramref name="outputAudioPath"/>.
-    /// Primary use: single-voice output and smoke testing.
+    /// returning the combined output audio stream.
     /// </summary>
     Task<TtsResult> GenerateTtsAsync(
-        string translationJsonPath,
-        string outputAudioPath,
-        string voice,
+        TtsRequest request,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Generates speech for a single piece of text and writes it to
-    /// <paramref name="outputAudioPath"/>. The caller determines which voice
-    /// each segment receives, making this the primary method for multi-speaker
-    /// workflows.
+    /// Generates speech for a single translated text payload, returning
+    /// the output audio stream. Primary path for dubbing workflows.
     /// </summary>
     Task<TtsResult> GenerateSegmentTtsAsync(
-        string text,
-        string outputAudioPath,
-        string voice,
+        SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default);
 }

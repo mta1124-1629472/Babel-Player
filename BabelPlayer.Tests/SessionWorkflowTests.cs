@@ -34,12 +34,19 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
         
+        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
+        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
+        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
+        
         return new SessionWorkflowCoordinator(
             store, 
             log, 
             settings, 
             perSessionStore, 
             recentStore, 
+            transcriptionRegistry,
+            translationRegistry,
+            ttsRegistry,
             segmentPlayer, 
             sourcePlayer);
     }
@@ -418,12 +425,19 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
         
+        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
+        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
+        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
+        
         return new SessionWorkflowCoordinator(
             store, 
             log, 
             settings, 
             perSessionStore, 
             recentStore, 
+            transcriptionRegistry,
+            translationRegistry,
+            ttsRegistry,
             segmentPlayer, 
             sourcePlayer);
     }
@@ -554,12 +568,19 @@ public sealed class SegmentInspectionTests
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
         
+        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
+        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
+        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
+        
         return new SessionWorkflowCoordinator(
             store, 
             log, 
             settings, 
             perSessionStore, 
             recentStore, 
+            transcriptionRegistry,
+            translationRegistry,
+            ttsRegistry,
             segmentPlayer, 
             sourcePlayer);
     }

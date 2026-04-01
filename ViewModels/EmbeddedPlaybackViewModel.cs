@@ -14,6 +14,7 @@ using CommunityToolkit.Mvvm.Input;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
 
 namespace Babel.Player.ViewModels;
 
@@ -148,11 +149,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
         // Sync provider/model fields from persisted settings (no side-effects — set backing fields directly)
         _transcriptionProvider = coordinator.CurrentSettings.TranscriptionProvider;
-        _transcriptionModel    = coordinator.CurrentSettings.TranscriptionModel;
-        _translationProvider   = coordinator.CurrentSettings.TranslationProvider;
-        _translationModel      = coordinator.CurrentSettings.TranslationModel;
-        _ttsProvider           = coordinator.CurrentSettings.TtsProvider;
-        _ttsModelOrVoice       = coordinator.CurrentSettings.TtsVoice;
+        _transcriptionModel = coordinator.CurrentSettings.TranscriptionModel;
+        _translationProvider = coordinator.CurrentSettings.TranslationProvider;
+        _translationModel = coordinator.CurrentSettings.TranslationModel;
+        _ttsProvider = coordinator.CurrentSettings.TtsProvider;
+        _ttsModelOrVoice = coordinator.CurrentSettings.TtsVoice;
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
@@ -199,27 +200,30 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public string VoiceModelLabel => _coordinator.CurrentSession.TtsVoice ?? _coordinator.CurrentSettings.TtsVoice;
 
     // ── Provider / model option lists ──────────────────────────────────────────
-    public static IReadOnlyList<string> TranscriptionProviders  => ProviderOptions.TranscriptionProviders;
-    public static IReadOnlyList<string> TranslationProviders    => ProviderOptions.TranslationProviders;
-    public static IReadOnlyList<string> TtsProviders            => ProviderOptions.TtsProviders;
+    public IReadOnlyList<string> TranscriptionProviders => [.. _coordinator.TranscriptionRegistry.GetAvailableProviders().Where(p => p.IsImplemented).Select(p => p.Id)];
+    public IReadOnlyList<string> TranslationProviders => [.. _coordinator.TranslationRegistry.GetAvailableProviders().Where(p => p.IsImplemented).Select(p => p.Id)];
+    public IReadOnlyList<string> TtsProviders => [.. _coordinator.TtsRegistry.GetAvailableProviders().Where(p => p.IsImplemented).Select(p => p.Id)];
 
     public IReadOnlyList<ModelOptionViewModel> AvailableTranscriptionModels =>
-        [.. ProviderOptions.GetTranscriptionModels(TranscriptionProvider)
+        [.. (_coordinator.TranscriptionRegistry.GetAvailableProviders()
+                .FirstOrDefault(p => p.Id == TranscriptionProvider)?.SupportedModels ?? ["default"])
             .Select(m => new ModelOptionViewModel(m,
-                TranscriptionProvider == ProviderNames.FasterWhisper
-                    ? ProviderReadinessResolver.IsFasterWhisperDownloaded(m) : null))];
+                _coordinator.TranscriptionRegistry.CheckReadiness(TranscriptionProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
+                    ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
 
     public IReadOnlyList<ModelOptionViewModel> AvailableTranslationModels =>
-        [.. ProviderOptions.GetTranslationModels(TranslationProvider)
+        [.. (_coordinator.TranslationRegistry.GetAvailableProviders()
+                .FirstOrDefault(p => p.Id == TranslationProvider)?.SupportedModels ?? ["default"])
             .Select(m => new ModelOptionViewModel(m,
-                TranslationProvider == ProviderNames.Nllb200
-                    ? ProviderReadinessResolver.IsNllbDownloaded(m) : null))];
+                _coordinator.TranslationRegistry.CheckReadiness(TranslationProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
+                    ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
 
     public IReadOnlyList<ModelOptionViewModel> AvailableTtsOptions =>
-        [.. ProviderOptions.GetTtsOptions(TtsProvider)
+        [.. (_coordinator.TtsRegistry.GetAvailableProviders()
+                .FirstOrDefault(p => p.Id == TtsProvider)?.SupportedModels ?? ["default"])
             .Select(m => new ModelOptionViewModel(m,
-                TtsProvider == ProviderNames.Piper
-                    ? ProviderReadinessResolver.IsPiperVoiceDownloaded(m, _coordinator.CurrentSettings.PiperModelDir) : null))];
+                _coordinator.TtsRegistry.CheckReadiness(TtsProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
+                    ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
 
     /// <summary>The currently selected transcription model as an object — used for SelectedItem binding to avoid blank box on collection swap.</summary>
     public ModelOptionViewModel? SelectedTranscriptionModel
@@ -249,29 +253,28 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isPipelineProgressVisible;
 
-    // ── API key status for UI lock indicators ─────────────────────────────────
-    public string TranscriptionKeyStatus => ReadinessToStatusText(
-        ProviderReadinessResolver.ResolveTranscription(TranscriptionProvider, TranscriptionModel, _apiKeyStore));
+    // ── API key / readiness status for UI lock indicators ──────────────────────
+    public string TranscriptionKeyStatus => GetReadinessStatus(
+        _coordinator.TranscriptionRegistry.CheckReadiness(TranscriptionProvider, TranscriptionModel, _coordinator.CurrentSettings, _apiKeyStore));
 
-    public string TranslationKeyStatus => ReadinessToStatusText(
-        ProviderReadinessResolver.ResolveTranslation(TranslationProvider, TranslationModel, _apiKeyStore));
+    public string TranslationKeyStatus => GetReadinessStatus(
+        _coordinator.TranslationRegistry.CheckReadiness(TranslationProvider, TranslationModel, _coordinator.CurrentSettings, _apiKeyStore));
 
-    public string TtsKeyStatus => ReadinessToStatusText(
-        ProviderReadinessResolver.ResolveTts(TtsProvider, TtsModelOrVoice, _coordinator.CurrentSettings.PiperModelDir, _apiKeyStore));
+    public string TtsKeyStatus => GetReadinessStatus(
+        _coordinator.TtsRegistry.CheckReadiness(TtsProvider, TtsModelOrVoice, _coordinator.CurrentSettings, _apiKeyStore));
 
-    private static string ReadinessToStatusText(ProviderReadiness readiness) => readiness switch
+    private static string GetReadinessStatus(ProviderReadiness readiness)
     {
-        ProviderReadiness.RequiresDownload => "⬇️ Download required (will run automatically)",
-        ProviderReadiness.RequiresApiKey   => "🔒 API key required — click API Keys to add",
-        ProviderReadiness.Unsupported      => "⚠️ Provider not implemented yet",
-        _                                  => ""
-    };
+        if (readiness.IsReady) return "";
+        if (readiness.RequiresModelDownload) return "⬇️ Download required (will run automatically)";
+        return $"⚠️ {readiness.BlockingReason}";
+    }
 
     // ── Hardware display lines ─────────────────────────────────────────────────
-    public string HwCpuLine  => _coordinator.HardwareSnapshot.CpuLine;
-    public string HwGpuLine  => _coordinator.HardwareSnapshot.GpuLine;
-    public string HwRamLine  => _coordinator.HardwareSnapshot.RamLine;
-    public string HwNpuLine  => _coordinator.HardwareSnapshot.NpuLine;
+    public string HwCpuLine => _coordinator.HardwareSnapshot.CpuLine;
+    public string HwGpuLine => _coordinator.HardwareSnapshot.GpuLine;
+    public string HwRamLine => _coordinator.HardwareSnapshot.RamLine;
+    public string HwNpuLine => _coordinator.HardwareSnapshot.NpuLine;
     public string HwLibsLine => _coordinator.HardwareSnapshot.LibsLine;
 
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
@@ -389,7 +392,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranscriptionProvider = value;
         // Reset model to first valid option for new provider
-        var models = ProviderOptions.GetTranscriptionModels(value);
+        var models = _coordinator.TranscriptionRegistry.GetAvailableProviders()
+                        .FirstOrDefault(p => p.Id == value)?.SupportedModels ?? ["default"];
         TranscriptionModel = models.Count > 0 ? models[0] : "default";
         NotifySettingsSave();
     }
@@ -405,7 +409,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranslationProvider = value;
-        var models = ProviderOptions.GetTranslationModels(value);
+        var models = _coordinator.TranslationRegistry.GetAvailableProviders()
+                        .FirstOrDefault(p => p.Id == value)?.SupportedModels ?? ["default"];
         TranslationModel = models.Count > 0 ? models[0] : "default";
         NotifySettingsSave();
     }
@@ -421,7 +426,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TtsProvider = value;
-        var options = ProviderOptions.GetTtsOptions(value);
+        var options = _coordinator.TtsRegistry.GetAvailableProviders()
+                          .FirstOrDefault(p => p.Id == value)?.SupportedModels ?? ["default"];
         TtsModelOrVoice = options.Count > 0 ? options[0] : "default";
         NotifySettingsSave();
     }
@@ -566,7 +572,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 var oldPath = _lastKnownSourceMediaPath;
                 var newPath = _coordinator.CurrentSession.SourceMediaPath;
                 IsSourceMediaLoaded = !string.IsNullOrEmpty(_coordinator.CurrentSession.IngestedMediaPath);
-                
+
                 if (newPath != oldPath)
                 {
                     _lastKnownSourceMediaPath = newPath;

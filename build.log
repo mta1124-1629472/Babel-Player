@@ -1,0 +1,22 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Avalonia Accelerate Community requires telemetry. To opt out, please upgrade to a paid tier. Learn more: https://avaloniaui.net/accelerate/
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(523,50): error CS1501: No overload for method 'TranscribeAsync' takes 4 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(634,48): error CS1501: No overload for method 'TranslateAsync' takes 5 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(710,40): error CS1501: No overload for method 'GenerateTtsAsync' takes 4 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(757,55): error CS1501: No overload for method 'GenerateSegmentTtsAsync' takes 4 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(843,40): error CS1501: No overload for method 'GenerateSegmentTtsAsync' takes 3 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(911,48): error CS1501: No overload for method 'TranslateSingleSegmentAsync' takes 6 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+
+Build FAILED.
+
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(523,50): error CS1501: No overload for method 'TranscribeAsync' takes 4 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(634,48): error CS1501: No overload for method 'TranslateAsync' takes 5 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(710,40): error CS1501: No overload for method 'GenerateTtsAsync' takes 4 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(757,55): error CS1501: No overload for method 'GenerateSegmentTtsAsync' takes 4 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(843,40): error CS1501: No overload for method 'GenerateSegmentTtsAsync' takes 3 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.cs(911,48): error CS1501: No overload for method 'TranslateSingleSegmentAsync' takes 6 arguments [D:\Dev\Babel-Player\BabelPlayer.csproj]
+    0 Warning(s)
+    6 Error(s)
+
+Time Elapsed 00:00:01.80

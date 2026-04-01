@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -18,9 +19,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly AppLog _log;
     private readonly PerSessionSnapshotStore _perSessionStore;
     private readonly RecentSessionsStore _recentStore;
-    private ITranscriptionService? _transcriptionService;
-    private ITranslationService? _translationService;
-    private ITtsService? _ttsService;
+    public ITranscriptionRegistry TranscriptionRegistry { get; }
+    public ITranslationRegistry TranslationRegistry { get; }
+    public ITtsRegistry TtsRegistry { get; }
+    private ITranscriptionProvider? _transcriptionService;
+    private ITranslationProvider? _translationService;
+    private ITtsProvider? _ttsService;
 
     private readonly IMediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
@@ -72,6 +76,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         AppSettings settings,
         PerSessionSnapshotStore perSessionStore,
         RecentSessionsStore recentStore,
+        ITranscriptionRegistry transcriptionRegistry,
+        ITranslationRegistry translationRegistry,
+        ITtsRegistry ttsRegistry,
         IMediaTransport? segmentPlayer = null,
         IMediaTransport? sourcePlayer = null,
         ApiKeyStore? keyStore = null)
@@ -80,6 +87,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _log = log;
         _perSessionStore = perSessionStore;
         _recentStore = recentStore;
+        TranscriptionRegistry = transcriptionRegistry;
+        TranslationRegistry = translationRegistry;
+        TtsRegistry = ttsRegistry;
         CurrentSettings = settings;
         KeyStore = keyStore;
         _transportManager = new MediaTransportManager(segmentPlayer, sourcePlayer);
@@ -102,19 +112,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         if (ttsProviderChanged) _ttsService = null;
     }
 
-    private ITranslationService CreateTranslationService() =>
-        CurrentSettings.TranslationProvider switch
-        {
-            ProviderNames.Nllb200 => new NllbTranslationService(_log, CurrentSettings.TranslationModel),
-            _                     => new TranslationService(_log),
-        };
+    private ITranslationProvider CreateTranslationService() =>
+        TranslationRegistry.CreateProvider(CurrentSettings.TranslationProvider, CurrentSettings, KeyStore);
 
-    private ITtsService CreateTtsService() =>
-        CurrentSettings.TtsProvider switch
-        {
-            ProviderNames.Piper => new PiperTtsService(_log, CurrentSettings.PiperModelDir),
-            _                   => new TtsService(_log),
-        };
+    private ITtsProvider CreateTtsService() =>
+        TtsRegistry.CreateProvider(CurrentSettings.TtsProvider, CurrentSettings, KeyStore);
 
     /// <summary>
     /// Raises SettingsModified so subscribers (e.g. MainWindowViewModel) can persist changes.
@@ -480,35 +482,27 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public async Task TranscribeMediaAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.IngestedMediaPath))
-        {
             throw new InvalidOperationException("No media loaded. Please load media first.");
-        }
 
         if (!File.Exists(CurrentSession.IngestedMediaPath))
-        {
             throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
-        }
 
-        var readiness = ProviderReadinessResolver.ResolveTranscription(
-            CurrentSettings.TranscriptionProvider,
-            CurrentSettings.TranscriptionModel,
-            KeyStore);
+        // Registry-owned readiness check — covers IsImplemented, API keys, local model status
+        var readiness = TranscriptionRegistry.CheckReadiness(
+            CurrentSettings.TranscriptionProvider, CurrentSettings.TranscriptionModel, CurrentSettings, KeyStore);
+        if (!readiness.IsReady && !readiness.RequiresModelDownload)
+            throw new PipelineProviderException(readiness.BlockingReason!);
 
-        if (readiness == ProviderReadiness.RequiresApiKey)
-            throw new PipelineProviderException($"API key missing for provider '{CurrentSettings.TranscriptionProvider}'.");
-
-        if (readiness == ProviderReadiness.Unsupported)
-            throw new PipelineProviderException($"Provider '{CurrentSettings.TranscriptionProvider}' is currently unsupported.");
-
-        if (readiness == ProviderReadiness.RequiresDownload)
+        // Registry-owned model download — provider-agnostic
+        if (readiness.RequiresModelDownload)
         {
-            _log.Info($"Model {CurrentSettings.TranscriptionModel} requires download. Starting download...");
-            var downloader = new ModelDownloader(_log);
-            if (!await downloader.DownloadFasterWhisperAsync(CurrentSettings.TranscriptionModel, progress, cancellationToken))
+            if (!await TranscriptionRegistry.EnsureModelAsync(
+                    CurrentSettings.TranscriptionProvider, CurrentSettings.TranscriptionModel, CurrentSettings, progress, cancellationToken))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranscriptionModel}'.");
         }
 
-        _transcriptionService ??= new TranscriptionService(_log);
+        _transcriptionService ??= TranscriptionRegistry.CreateProvider(
+            CurrentSettings.TranscriptionProvider, CurrentSettings, KeyStore);
 
         var sessionDir = GetSessionDirectory();
         var transcriptDir = Path.Combine(sessionDir, "transcripts");
@@ -521,9 +515,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                   $"[{CurrentSettings.TranscriptionProvider}/{CurrentSettings.TranscriptionModel}]");
 
         var result = await _transcriptionService.TranscribeAsync(
-            CurrentSession.IngestedMediaPath,
-            transcriptPath,
-            CurrentSettings.TranscriptionModel,
+            new TranscriptionRequest(
+                CurrentSession.IngestedMediaPath,
+                transcriptPath,
+                CurrentSettings.TranscriptionModel),
             cancellationToken);
 
         if (!result.Success)
@@ -589,34 +584,24 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public async Task TranslateTranscriptAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null, string? targetLanguage = null, string? sourceLanguage = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranscriptPath))
-        {
             throw new InvalidOperationException("No transcript available. Please transcribe media first.");
-        }
 
         if (!File.Exists(CurrentSession.TranscriptPath))
-        {
             throw new FileNotFoundException($"Transcript file not found: {CurrentSession.TranscriptPath}");
-        }
 
         var lang = targetLanguage ?? CurrentSettings.TargetLanguage;
         var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
 
-        var readiness = ProviderReadinessResolver.ResolveTranslation(
-            CurrentSettings.TranslationProvider,
-            CurrentSettings.TranslationModel,
-            KeyStore);
+        // Registry-owned readiness check
+        var readiness = TranslationRegistry.CheckReadiness(
+            CurrentSettings.TranslationProvider, CurrentSettings.TranslationModel, CurrentSettings, KeyStore);
+        if (!readiness.IsReady && !readiness.RequiresModelDownload)
+            throw new PipelineProviderException(readiness.BlockingReason!);
 
-        if (readiness == ProviderReadiness.RequiresApiKey)
-            throw new PipelineProviderException($"API key missing for provider '{CurrentSettings.TranslationProvider}'.");
-
-        if (readiness == ProviderReadiness.Unsupported)
-            throw new PipelineProviderException($"Provider '{CurrentSettings.TranslationProvider}' is currently unsupported.");
-
-        if (readiness == ProviderReadiness.RequiresDownload)
+        if (readiness.RequiresModelDownload)
         {
-            _log.Info($"Model {CurrentSettings.TranslationModel} requires download. Starting download...");
-            var downloader = new ModelDownloader(_log);
-            if (!await downloader.DownloadNllbAsync(CurrentSettings.TranslationModel, progress, cancellationToken))
+            if (!await TranslationRegistry.EnsureModelAsync(
+                    CurrentSettings.TranslationProvider, CurrentSettings.TranslationModel, CurrentSettings, progress, cancellationToken))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranslationModel}'.");
         }
 
@@ -632,10 +617,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _log.Info($"Starting translation: {CurrentSession.TranscriptPath} ({src} -> {lang})");
 
         var result = await _translationService.TranslateAsync(
-            CurrentSession.TranscriptPath,
-            translationPath,
-            src,
-            lang,
+            new TranslationRequest(
+                CurrentSession.TranscriptPath,
+                translationPath,
+                src,
+                lang,
+                CurrentSettings.TranslationModel),
             cancellationToken);
 
         if (!result.Success)
@@ -665,35 +652,24 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public async Task GenerateTtsAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null, string? voice = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
-        {
             throw new InvalidOperationException("No translation available. Please translate first.");
-        }
 
         if (!File.Exists(CurrentSession.TranslationPath))
-        {
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
-        }
 
         var v = voice ?? CurrentSettings.TtsVoice;
 
-        var readiness = ProviderReadinessResolver.ResolveTts(
-            CurrentSettings.TtsProvider,
-            v,
-            CurrentSettings.PiperModelDir,
-            KeyStore);
+        // Registry-owned readiness check
+        var readiness = TtsRegistry.CheckReadiness(
+            CurrentSettings.TtsProvider, v, CurrentSettings, KeyStore);
+        if (!readiness.IsReady && !readiness.RequiresModelDownload)
+            throw new PipelineProviderException(readiness.BlockingReason!);
 
-        if (readiness == ProviderReadiness.RequiresApiKey)
-            throw new PipelineProviderException($"API key missing for provider '{CurrentSettings.TtsProvider}'.");
-
-        if (readiness == ProviderReadiness.Unsupported)
-            throw new PipelineProviderException($"Provider '{CurrentSettings.TtsProvider}' is currently unsupported.");
-
-        if (readiness == ProviderReadiness.RequiresDownload)
+        if (readiness.RequiresModelDownload)
         {
-            _log.Info($"Voice {CurrentSettings.TtsVoice} requires download. Starting download...");
-            var downloader = new ModelDownloader(_log);
-            if (!await downloader.DownloadPiperVoiceAsync(CurrentSettings.TtsVoice, CurrentSettings.PiperModelDir, progress, cancellationToken))
-                throw new InvalidOperationException($"Failed to download voice '{CurrentSettings.TtsVoice}'.");
+            if (!await TtsRegistry.EnsureModelAsync(
+                    CurrentSettings.TtsProvider, v, CurrentSettings, progress, cancellationToken))
+                throw new InvalidOperationException($"Failed to download voice '{v}'.");
         }
 
         _ttsService ??= CreateTtsService();
@@ -708,9 +684,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _log.Info($"Starting TTS generation: {CurrentSession.TranslationPath} -> {ttsPath}");
 
         var result = await _ttsService.GenerateTtsAsync(
-            CurrentSession.TranslationPath,
-            ttsPath,
-            v,
+            new TtsRequest(
+                CurrentSession.TranslationPath,
+                ttsPath,
+                v),
             cancellationToken);
 
         if (!result.Success)
@@ -733,7 +710,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath, cancellationToken);
             var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
             // NOTE: "segments", "id", "translatedText" — these property names are part of an explicit
-            // Python/C# artifact contract. Must match TranslationService.py output exactly.
+            // Python/C# artifact contract. Must match GoogleTranslationProvider.py output exactly.
             var segments = translationData.GetProperty("segments");
 
             foreach (var seg in segments.EnumerateArray())
@@ -754,7 +731,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
                 try
                 {
-                    var segResult = await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, v, cancellationToken);
+                    var segResult = await _ttsService.GenerateSegmentTtsAsync(
+                        new SingleSegmentTtsRequest(
+                            text,
+                            segmentAudioPath,
+                            v),
+                        cancellationToken);
 
                     if (segResult.Success && File.Exists(segmentAudioPath))
                     {
@@ -841,7 +823,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         var regenVoice = CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
         var result = await _ttsService.GenerateSegmentTtsAsync(
-            segmentText, segmentAudioPath, regenVoice);
+            new SingleSegmentTtsRequest(
+                segmentText,
+                segmentAudioPath,
+                regenVoice));
 
         if (!result.Success)
         {
@@ -909,12 +894,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _log.Info($"Regenerating translation for segment {segmentId}: {sourceText.Substring(0, Math.Min(30, sourceText.Length))}...");
 
         var result = await _translationService.TranslateSingleSegmentAsync(
-            sourceText,
-            segmentId,
-            CurrentSession.TranslationPath,
-            CurrentSession.TranslationPath,
-            sourceLanguage,
-            targetLanguage);
+            new SingleSegmentTranslationRequest(
+                sourceText,
+                segmentId,
+                CurrentSession.TranslationPath,
+                CurrentSession.TranslationPath,
+                sourceLanguage,
+                targetLanguage,
+                CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel));
 
         if (!result.Success)
         {
@@ -940,7 +927,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         var segments = new List<WorkflowSegmentState>();
 
-        // NOTE: Transcript JSON format (from TranscriptionService) — Python/C# artifact contract:
+        // NOTE: Transcript JSON format (from FasterWhisperTranscriptionProvider) — Python/C# artifact contract:
         // "segments", "start", "end", "text"
         var transcriptJson = await File.ReadAllTextAsync(CurrentSession.TranscriptPath);
         var transcriptData = JsonSerializer.Deserialize<JsonElement>(transcriptJson);
@@ -948,7 +935,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         var ttsSegmentPaths = CurrentSession.TtsSegmentAudioPaths;
 
-        // NOTE: Translation JSON format (from TranslationService) — Python/C# artifact contract:
+        // NOTE: Translation JSON format (from GoogleTranslationProvider) — Python/C# artifact contract:
         // "segments", "id", "text", "translatedText"
         Dictionary<string, string>? translationTexts = null;
         if (!string.IsNullOrEmpty(CurrentSession.TranslationPath) && File.Exists(CurrentSession.TranslationPath))
@@ -1003,7 +990,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         return segments;
     }
 
-    // Stable segment ID derived from start time — must match the format written by TranslationService.
+    // Stable segment ID derived from start time — must match the format written by GoogleTranslationProvider.
     // Python: f"segment_{start}" → e.g. "segment_0.0", "segment_3.68"
     internal static string SegmentId(double start) =>
         start == (int)start

@@ -239,4 +239,48 @@ except Exception as e:
             return false;
         }
     }
+
+    public static bool IsFasterWhisperDownloaded(string model)
+    {
+        string hfCache = GetHuggingFaceCacheDir();
+        string modelPath = Path.Combine(hfCache, $"models--Systran--faster-whisper-{model}");
+        return IsDownloadedInHfCache(modelPath);
+    }
+
+    public static bool IsNllbDownloaded(string model)
+    {
+        string hfCache = GetHuggingFaceCacheDir();
+        string modelPath = Path.Combine(hfCache, $"models--facebook--{model}");
+        return IsDownloadedInHfCache(modelPath);
+    }
+
+    private static bool IsDownloadedInHfCache(string modelPath)
+    {
+        if (!Directory.Exists(modelPath)) return false;
+        string refsPath = Path.Combine(modelPath, "refs", "main");
+        if (File.Exists(refsPath)) return true;
+        try
+        {
+            return Directory.GetFiles(modelPath, "*.bin").Length > 0 ||
+                   Directory.GetFiles(modelPath, "*.json").Length > 0 ||
+                   Directory.GetFiles(modelPath, "*.model").Length > 0;
+        }
+        catch { return false; }
+    }
+
+    public static bool IsPiperVoiceDownloaded(string voice, string? piperDir)
+    {
+        if (string.IsNullOrEmpty(piperDir) || !Directory.Exists(piperDir)) return false;
+        string onnxPath = Path.Combine(piperDir, $"{voice}.onnx");
+        string jsonPath = Path.Combine(piperDir, $"{voice}.onnx.json");
+        return File.Exists(onnxPath) && File.Exists(jsonPath);
+    }
+
+    private static string GetHuggingFaceCacheDir()
+    {
+        string? hfHome = Environment.GetEnvironmentVariable("HF_HOME");
+        if (!string.IsNullOrEmpty(hfHome)) return Path.Combine(hfHome, "hub");
+        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(userProfile, ".cache", "huggingface", "hub");
+    }
 }

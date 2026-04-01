@@ -5,18 +5,16 @@ using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
-public sealed class TtsService : PythonSubprocessServiceBase, ITtsService
+public sealed class EdgeTtsProvider : PythonSubprocessServiceBase, ITtsProvider
 {
-    public TtsService(AppLog log) : base(log) { }
+    public EdgeTtsProvider(AppLog log) : base(log) { }
 
     public async Task<TtsResult> GenerateTtsAsync(
-        string translationJsonPath,
-        string outputAudioPath,
-        string voice = "en-US-AriaNeural",
+        TtsRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(translationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {translationJsonPath}");
+        if (!File.Exists(request.TranslationJsonPath))
+            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
         var script = @"
 import sys, json, asyncio
@@ -56,36 +54,34 @@ async def generate():
 asyncio.run(generate())
 ";
 
-        Log.Info($"Starting TTS generation: {translationJsonPath} -> {outputAudioPath}");
+        Log.Info($"Starting TTS generation: {request.TranslationJsonPath} -> {request.OutputAudioPath}");
 
         var result = await RunPythonScriptAsync(
             script,
-            $"\"{translationJsonPath}\" \"{outputAudioPath}\" \"{voice}\"",
+            $"\"{request.TranslationJsonPath}\" \"{request.OutputAudioPath}\" \"{request.VoiceName}\"",
             "tts",
             cancellationToken);
         ThrowIfFailed(result, "TTS");
 
-        if (!File.Exists(outputAudioPath))
-            throw new InvalidOperationException($"TTS output file not created: {outputAudioPath}");
+        if (!File.Exists(request.OutputAudioPath))
+            throw new InvalidOperationException($"TTS output file not created: {request.OutputAudioPath}");
 
-        Log.Info($"TTS completed: {outputAudioPath}");
+        Log.Info($"TTS completed: {request.OutputAudioPath}");
 
         return new TtsResult(
             true,
-            outputAudioPath,
-            voice,
-            new FileInfo(outputAudioPath).Length,
+            request.OutputAudioPath,
+            request.VoiceName,
+            new FileInfo(request.OutputAudioPath).Length,
             null);
     }
 
     public async Task<TtsResult> GenerateSegmentTtsAsync(
-        string text,
-        string outputAudioPath,
-        string voice = "en-US-AriaNeural",
+        SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(text))
-            throw new ArgumentException("Segment text cannot be empty", nameof(text));
+        if (string.IsNullOrWhiteSpace(request.Text))
+            throw new ArgumentException("Segment text cannot be empty", nameof(request.Text));
 
         var script = @"
 import sys, asyncio
@@ -110,33 +106,28 @@ async def generate():
 asyncio.run(generate())
 ";
 
-        Log.Info($"Starting segment TTS generation: {text[..Math.Min(30, text.Length)]}... -> {outputAudioPath}");
+        Log.Info($"Starting segment TTS generation: {request.Text[..Math.Min(30, request.Text.Length)]}... -> {request.OutputAudioPath}");
 
         var result = await RunPythonScriptAsync(
             script,
-            $"\"{text}\" \"{voice}\" \"{outputAudioPath}\"",
+            $"\"{request.Text}\" \"{request.VoiceName}\" \"{request.OutputAudioPath}\"",
             "tts_seg",
             cancellationToken);
         ThrowIfFailed(result, "Segment TTS");
 
-        if (!File.Exists(outputAudioPath))
-            throw new InvalidOperationException($"Segment TTS output file not created: {outputAudioPath}");
+        if (!File.Exists(request.OutputAudioPath))
+            throw new InvalidOperationException($"Segment TTS output file not created: {request.OutputAudioPath}");
 
-        Log.Info($"Segment TTS completed: {outputAudioPath}");
+        Log.Info($"Segment TTS completed: {request.OutputAudioPath}");
 
         return new TtsResult(
             true,
-            outputAudioPath,
-            voice,
-            new FileInfo(outputAudioPath).Length,
+            request.OutputAudioPath,
+            request.VoiceName,
+            new FileInfo(request.OutputAudioPath).Length,
             null);
     }
-    // Piper TTS implementation lives in PiperTtsService.cs
+    // Piper TTS implementation lives in PiperTtsProvider.cs
 }
 
-public sealed record TtsResult(
-    bool Success,
-    string AudioPath,
-    string Voice,
-    long FileSizeBytes,
-    string? ErrorMessage);
+

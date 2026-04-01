@@ -149,7 +149,7 @@ public partial class MainWindow : Window
                 System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "BabelPlayer", "logs", "babel-player.log")));
-        var modelsTab = new Babel.Player.ViewModels.ModelsTabViewModel(downloader, current.PiperModelDir);
+        var modelsTab = new Babel.Player.ViewModels.ModelsTabViewModel(downloader, vm.Coordinator);
         var settingsVm = new SettingsViewModel(service, vm.Coordinator, win, modelsTab);
         win.DataContext = settingsVm;
         _ = win.ShowDialog(this);

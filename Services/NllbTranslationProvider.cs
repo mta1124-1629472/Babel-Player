@@ -4,14 +4,15 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Services.Translations;
 
 namespace Babel.Player.Services;
 
-public sealed class NllbTranslationService : PythonSubprocessServiceBase, ITranslationService
+public sealed class NllbTranslationProvider : PythonSubprocessServiceBase, ITranslationProvider
 {
     private readonly string _model;
 
-    public NllbTranslationService(AppLog log, string model) : base(log)
+    public NllbTranslationProvider(AppLog log, string model) : base(log)
     {
         _model = model;
     }
@@ -141,69 +142,63 @@ print(f'NLLB single segment translated: {seg_id}')
 ";
 
     public async Task<TranslationResult> TranslateAsync(
-        string transcriptJsonPath,
-        string outputJsonPath,
-        string sourceLanguage,
-        string targetLanguage,
+        TranslationRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(transcriptJsonPath))
-            throw new FileNotFoundException($"Transcript file not found: {transcriptJsonPath}");
+        if (!File.Exists(request.TranscriptJsonPath))
+            throw new FileNotFoundException($"Transcript file not found: {request.TranscriptJsonPath}");
 
-        Log.Info($"Starting NLLB-200 translation ({_model}): {transcriptJsonPath} ({sourceLanguage} -> {targetLanguage})");
+        Log.Info($"Starting NLLB translation: {request.TranscriptJsonPath}");
 
         var result = await RunPythonScriptAsync(
             NllbScript,
-            $"\"{transcriptJsonPath}\" \"{outputJsonPath}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{_model}\"",
+            $"\"{request.TranscriptJsonPath}\" \"{request.OutputJsonPath}\" \"{request.SourceLanguage}\" \"{request.TargetLanguage}\" \"{_model}\"",
             "nllb",
             cancellationToken);
-        ThrowIfFailed(result, "NLLB translation");
+        ThrowIfFailed(result, "NLLB Translation");
 
-        Log.Info($"NLLB translation completed: {outputJsonPath}");
+        Log.Info($"NLLB Translation completed: {request.OutputJsonPath}");
 
         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         var translationData = JsonSerializer.Deserialize<TranslationJsonHelper>(
-            await File.ReadAllTextAsync(outputJsonPath), jsonOptions);
+            await File.ReadAllTextAsync(request.OutputJsonPath), jsonOptions);
 
         var segments = new List<TranslatedSegment>();
         foreach (var seg in translationData?.Segments ?? [])
             segments.Add(new TranslatedSegment(seg.Start, seg.End, seg.Text ?? "", seg.TranslatedText ?? ""));
 
         return new TranslationResult(
-            true, segments,
-            translationData?.SourceLanguage ?? sourceLanguage,
-            translationData?.TargetLanguage ?? targetLanguage,
+            true,
+            segments,
+            translationData?.SourceLanguage ?? request.SourceLanguage,
+            translationData?.TargetLanguage ?? request.TargetLanguage,
             null);
     }
 
     public async Task<TranslationResult> TranslateSingleSegmentAsync(
-        string text,
-        string segmentId,
-        string translationJsonPath,
-        string outputJsonPath,
-        string sourceLanguage,
-        string targetLanguage,
+        SingleSegmentTranslationRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(text))
-            throw new ArgumentException("Source text cannot be empty", nameof(text));
-        if (!File.Exists(translationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {translationJsonPath}");
+        if (string.IsNullOrWhiteSpace(request.SourceText))
+            throw new ArgumentException("Source text cannot be empty", nameof(request.SourceText));
+        if (!File.Exists(request.TranslationJsonPath))
+            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
-        Log.Info($"Starting NLLB-200 single segment translation ({_model}): {text[..Math.Min(30, text.Length)]}...");
+        Log.Info($"Starting NLLB single segment translation: {request.SourceText.Substring(0, Math.Min(30, request.SourceText.Length))}...");
 
         var result = await RunPythonScriptAsync(
             NllbSegmentScript,
-            $"\"{text}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{translationJsonPath}\" \"{segmentId}\" \"{_model}\"",
+            $"\"{request.SourceText}\" \"{request.SourceLanguage}\" \"{request.TargetLanguage}\" \"{request.TranslationJsonPath}\" \"{request.SegmentId}\" \"{_model}\"",
             "nllb_seg",
             cancellationToken);
+
         ThrowIfFailed(result, "NLLB segment translation");
 
-        Log.Info($"NLLB single segment translation completed: {segmentId}");
+        Log.Info($"NLLB single segment translation completed: {request.SegmentId}");
 
         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         var translationData = JsonSerializer.Deserialize<TranslationJsonHelper>(
-            await File.ReadAllTextAsync(translationJsonPath), jsonOptions);
+            await File.ReadAllTextAsync(request.TranslationJsonPath), jsonOptions);
 
         var segments = new List<TranslatedSegment>();
         foreach (var seg in translationData?.Segments ?? [])
@@ -211,25 +206,10 @@ print(f'NLLB single segment translated: {seg_id}')
 
         return new TranslationResult(
             true, segments,
-            translationData?.SourceLanguage ?? sourceLanguage,
-            translationData?.TargetLanguage ?? targetLanguage,
+            translationData?.SourceLanguage ?? request.SourceLanguage,
+            translationData?.TargetLanguage ?? request.TargetLanguage,
             null);
     }
 
-    // JSON deserialization helpers — internal so TranslationService can share them
-    internal class TranslationJsonHelper
-    {
-        public string? SourceLanguage { get; set; }
-        public string? TargetLanguage { get; set; }
-        public List<SegmentJsonHelper>? Segments { get; set; }
-    }
 
-    internal class SegmentJsonHelper
-    {
-        public string? Id { get; set; }
-        public double Start { get; set; }
-        public double End { get; set; }
-        public string? Text { get; set; }
-        public string? TranslatedText { get; set; }
-    }
 }

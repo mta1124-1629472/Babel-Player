@@ -93,7 +93,10 @@ public sealed class SessionWorkflowTemplateFixture : IAsyncDisposable
         var settings = new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(dir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(dir, "recent-sessions.json"), log);
-        var coordinator = new SessionWorkflowCoordinator(store, log, settings, perSessionStore, recentStore);
+        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
+        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
+        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
+        var coordinator = new SessionWorkflowCoordinator(store, log, settings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry);
 
         coordinator.Initialize();
 

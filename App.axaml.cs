@@ -7,6 +7,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using Babel.Player.ViewModels;
 using Babel.Player.Views;
@@ -53,9 +54,12 @@ public partial class App : Application
             try
             {
                 appLog.Info("App startup: initializing session coordinator.");
+                var transcriptionRegistry = new TranscriptionRegistry(appLog);
+                var translationRegistry = new TranslationRegistry(appLog);
+                var ttsRegistry = new TtsRegistry(appLog);
                 var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
                 _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                    store, appLog, appSettings, perSessionStore, recentStore, keyStore: _apiKeyStore);
+                    store, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, keyStore: _apiKeyStore);
                 _sessionWorkflowCoordinator.Initialize();
                 appLog.Info("App startup: session coordinator ready.");
             }
@@ -64,10 +68,13 @@ public partial class App : Application
                 _startupLog?.Error("App startup: session initialization failed. Continuing with empty session.", ex);
                 if (_sessionWorkflowCoordinator is null)
                 {
+                    var transcriptionRegistry = new TranscriptionRegistry(appLog);
+                    var translationRegistry = new TranslationRegistry(appLog);
+                    var ttsRegistry = new TtsRegistry(appLog);
                     var fallbackStore = new SessionSnapshotStore(
                         Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
                     _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                        fallbackStore, appLog, appSettings, perSessionStore, recentStore, keyStore: _apiKeyStore);
+                        fallbackStore, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, keyStore: _apiKeyStore);
                 }
             }
 

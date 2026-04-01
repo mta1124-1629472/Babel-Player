@@ -7,11 +7,9 @@ namespace Babel.Player.Services;
 /// Transcribes audio into timed text segments.
 /// Implementations are provider-specific (e.g. faster-whisper).
 /// </summary>
-public interface ITranscriptionService
+public interface ITranscriptionProvider
 {
     Task<TranscriptionResult> TranscribeAsync(
-        string audioPath,
-        string outputJsonPath,
-        string model = "base",
+        TranscriptionRequest request,
         CancellationToken cancellationToken = default);
 }

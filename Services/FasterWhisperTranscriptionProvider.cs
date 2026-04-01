@@ -8,9 +8,9 @@ using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
-public sealed class TranscriptionService : PythonSubprocessServiceBase, ITranscriptionService
+public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessServiceBase, ITranscriptionProvider
 {
-    public TranscriptionService(AppLog log) : base(log) { }
+    public FasterWhisperTranscriptionProvider(AppLog log) : base(log) { }
 
     private async Task<string> ExtractAudioAsync(string videoPath, CancellationToken cancellationToken = default)
     {
@@ -44,18 +44,18 @@ public sealed class TranscriptionService : PythonSubprocessServiceBase, ITranscr
     }
 
     public async Task<TranscriptionResult> TranscribeAsync(
-        string audioPath, string outputJsonPath, string model = "base",
+        TranscriptionRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(audioPath))
-            throw new FileNotFoundException($"Audio file not found: {audioPath}");
+        if (!File.Exists(request.SourceAudioPath))
+            throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        var inputPath = audioPath;
-        var extension = Path.GetExtension(audioPath).ToLowerInvariant();
+        var inputPath = request.SourceAudioPath;
+        var extension = Path.GetExtension(request.SourceAudioPath).ToLowerInvariant();
 
         if (extension == ".mp4" || extension == ".avi" || extension == ".mkv" || extension == ".mov")
         {
-            inputPath = await ExtractAudioAsync(audioPath, cancellationToken);
+            inputPath = await ExtractAudioAsync(request.SourceAudioPath, cancellationToken);
         }
         else if (extension != ".wav" && extension != ".mp3" && extension != ".flac" && extension != ".ogg")
         {
@@ -74,7 +74,7 @@ except ImportError:
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'faster-whisper'])
     from faster_whisper import WhisperModel
 
-model_name = '{model}'
+model_name = '{request.ModelName}'
 model = WhisperModel(model_name, device='cpu', compute_type='int8')
 
 segments, info = model.transcribe(sys.argv[1])
@@ -102,14 +102,14 @@ print('Transcription complete')
 
         var result = await RunPythonScriptAsync(
             script,
-            $"\"{audioPath}\" \"{outputJsonPath}\"",
+            $"\"{inputPath}\" \"{request.OutputJsonPath}\"",
             "transcribe",
             cancellationToken);
         ThrowIfFailed(result, "Transcription");
 
-        Log.Info($"Transcription completed: {outputJsonPath}");
+        Log.Info($"Transcription completed: {request.OutputJsonPath}");
 
-        var jsonContent = await File.ReadAllTextAsync(outputJsonPath, cancellationToken);
+        var jsonContent = await File.ReadAllTextAsync(request.OutputJsonPath, cancellationToken);
         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         var transcriptionData = JsonSerializer.Deserialize<TranscriptionJson>(jsonContent, jsonOptions);
 
@@ -146,14 +146,4 @@ print('Transcription complete')
     }
 }
 
-public sealed record TranscriptionResult(
-    bool Success,
-    IReadOnlyList<TranscriptSegment> Segments,
-    string Language,
-    double LanguageProbability,
-    string? ErrorMessage);
 
-public sealed record TranscriptSegment(
-    double StartSeconds,
-    double EndSeconds,
-    string Text);
