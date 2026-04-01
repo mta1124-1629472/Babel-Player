@@ -14,7 +14,7 @@ Use these exact IDs and formats.
 - Allowed values:
   - source: `local` or `public`
   - content: `dialogue`, `mixed`, or `narration`
-  - langpair: `<src>-<tgt>` lower-case ISO-like codes, example `es-en`
+  - langpair: `<src>-<tgt>` where `src` and `tgt` are each 2–3 lowercase ASCII letters (ISO 639-1 or ISO 639-2/3); must match pattern `[a-z]{2,3}-[a-z]{2,3}`; example `es-en`; reject `english-to-spanish`, `es_en`, or any variant that does not match the pattern
   - duration_bucket: `s`, `m`, `l`, or `xl`
 - Example: `bp.dataset.local.dialogue.es-en.m.v1.0.0`
 
