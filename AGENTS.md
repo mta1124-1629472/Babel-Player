@@ -303,6 +303,8 @@ These are explicitly good uses of time at this stage:
 - Improving error messages, diagnostics, and user-facing honesty
 - Test coverage improvements for existing behaviour
 - Clarifying the Python/C# service boundary for future hosting flexibility
+- Maintaining `.github/agents/`, `.github/instructions/`, and `.github/prompts/`
+  so AI routing and prompt flows stay aligned with current architecture
 
 ---
 
