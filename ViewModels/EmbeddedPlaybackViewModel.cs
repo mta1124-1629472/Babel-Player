@@ -834,7 +834,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         {
             IsBusy = true;
             StatusText = "Running pipeline…";
-            await _coordinator.AdvancePipelineAsync(ct, progress);
+            await _coordinator.AdvancePipelineAsync(progress, ct);
             StatusText = "Loading segments…";
             await RefreshSegmentsAsync();
             StatusText = _coordinator.CurrentSession.StatusMessage;

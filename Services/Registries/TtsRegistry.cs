@@ -30,36 +30,42 @@ public sealed class TtsRegistry : ITtsRegistry
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
     [
         new ProviderDescriptor(
-            ProviderNames.EdgeTts, 
-            "Edge TTS (Cloud)", 
-            false, 
-            null, 
+            ProviderNames.EdgeTts,
+            "Edge TTS (Cloud)",
+            false,
+            null,
             EdgeTtsVoices),
         new ProviderDescriptor(
-            ProviderNames.Piper, 
-            "Piper (Local)", 
-            false, 
-            null, 
+            ProviderNames.Piper,
+            "Piper (Local)",
+            false,
+            null,
             PiperVoices),
         new ProviderDescriptor(
-            ProviderNames.ElevenLabs, 
-            "ElevenLabs API", 
-            true, 
-            CredentialKeys.ElevenLabs, 
+            ProviderNames.ContainerizedService,
+            "Containerized Inference Service",
+            false,
+            null,
+            EdgeTtsVoices),   // containerized service uses edge-tts voices
+        new ProviderDescriptor(
+            ProviderNames.ElevenLabs,
+            "ElevenLabs API",
+            true,
+            CredentialKeys.ElevenLabs,
             ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5"],
             IsImplemented: false),
         new ProviderDescriptor(
-            ProviderNames.GoogleCloudTts, 
-            "Google Cloud TTS", 
-            true, 
-            CredentialKeys.GoogleAi, 
+            ProviderNames.GoogleCloudTts,
+            "Google Cloud TTS",
+            true,
+            CredentialKeys.GoogleAi,
             ["standard", "wavenet", "neural2"],
             IsImplemented: false),
         new ProviderDescriptor(
-            ProviderNames.OpenAiTts, 
-            "OpenAI API", 
-            true, 
-            CredentialKeys.OpenAi, 
+            ProviderNames.OpenAiTts,
+            "OpenAI API",
+            true,
+            CredentialKeys.OpenAi,
             ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"],
             IsImplemented: false)
     ];
@@ -79,6 +85,10 @@ public sealed class TtsRegistry : ITtsRegistry
                 $"Voice '{modelOrVoice}' not downloaded yet.",
                 RequiresModelDownload: true,
                 ModelDownloadDescription: $"Download Piper voice {modelOrVoice}");
+
+        if (providerId == ProviderNames.ContainerizedService
+            && string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
+            return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
 
         return ProviderReadiness.Ready;
     }
@@ -101,6 +111,8 @@ public sealed class TtsRegistry : ITtsRegistry
         {
             ProviderNames.Piper => new PiperTtsProvider(_log, settings.PiperModelDir),
             ProviderNames.EdgeTts => new EdgeTtsProvider(_log),
+            ProviderNames.ContainerizedService => new ContainerizedTtsProvider(
+                new ContainerizedInferenceClient(settings.ContainerizedServiceUrl, _log), _log),
             _ => throw new PipelineProviderException(
                 $"TTS provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

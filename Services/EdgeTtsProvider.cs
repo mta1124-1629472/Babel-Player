@@ -81,7 +81,7 @@ asyncio.run(generate())
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Text))
-            throw new ArgumentException("Segment text cannot be empty", nameof(request.Text));
+            throw new ArgumentException("Segment text cannot be empty", nameof(request));
 
         var script = @"
 import sys, asyncio

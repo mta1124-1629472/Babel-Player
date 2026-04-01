@@ -30,23 +30,29 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
     [
         new ProviderDescriptor(
-            ProviderNames.FasterWhisper, 
-            "Faster Whisper (Local)", 
-            false, 
-            null, 
+            ProviderNames.FasterWhisper,
+            "Faster Whisper (Local)",
+            false,
+            null,
             ["tiny", "base", "small", "medium", "large-v3"]),
         new ProviderDescriptor(
-            ProviderNames.OpenAiWhisperApi, 
-            "OpenAI Whisper API", 
-            true, 
-            CredentialKeys.OpenAi, 
+            ProviderNames.ContainerizedService,
+            "Containerized Inference Service",
+            false,
+            null,
+            ["tiny", "base", "small", "medium", "large-v3"]),
+        new ProviderDescriptor(
+            ProviderNames.OpenAiWhisperApi,
+            "OpenAI Whisper API",
+            true,
+            CredentialKeys.OpenAi,
             ["whisper-1", "gpt-4o-transcribe"],
             IsImplemented: false),
         new ProviderDescriptor(
-            ProviderNames.GoogleStt, 
-            "Google STT", 
-            true, 
-            CredentialKeys.GoogleAi, 
+            ProviderNames.GoogleStt,
+            "Google STT",
+            true,
+            CredentialKeys.GoogleAi,
             ["default"],
             IsImplemented: false)
     ];
@@ -66,6 +72,10 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
                 $"Model '{model}' not downloaded yet.",
                 RequiresModelDownload: true,
                 ModelDownloadDescription: $"Download faster-whisper {model} model");
+
+        if (providerId == ProviderNames.ContainerizedService
+            && string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
+            return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
 
         return ProviderReadiness.Ready;
     }
@@ -87,6 +97,8 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
         return providerId switch
         {
             ProviderNames.FasterWhisper => new FasterWhisperTranscriptionProvider(_log),
+            ProviderNames.ContainerizedService => new ContainerizedTranscriptionProvider(
+                new ContainerizedInferenceClient(settings.ContainerizedServiceUrl, _log), _log),
             _ => throw new PipelineProviderException(
                 $"Transcription provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

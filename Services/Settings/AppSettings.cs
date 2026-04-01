@@ -38,6 +38,12 @@ public sealed class AppSettings
     /// </summary>
     public string PiperModelDir { get; set; } = "";
 
+    /// <summary>
+    /// Base URL of the containerized inference service (used when TranscriptionProvider,
+    /// TranslationProvider, or TtsProvider is set to "containerized").
+    /// </summary>
+    public string ContainerizedServiceUrl { get; set; } = "http://localhost:8000";
+
     /// <summary>UI theme: "Light", "Dark", or "System".</summary>
     public string Theme { get; set; } = "System";
 

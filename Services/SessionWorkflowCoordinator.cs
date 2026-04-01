@@ -26,7 +26,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
 
-    private readonly IMediaTransportManager _transportManager;
+    private readonly MediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
     private readonly EventHandler _segmentEndedHandler;
     private readonly EventHandler<Exception> _segmentErrorHandler;
@@ -479,7 +479,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task TranscribeMediaAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null)
+    public async Task TranscribeMediaAsync(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(CurrentSession.IngestedMediaPath))
             throw new InvalidOperationException("No media loaded. Please load media first.");
@@ -581,7 +581,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task TranslateTranscriptAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null, string? targetLanguage = null, string? sourceLanguage = null)
+    public async Task TranslateTranscriptAsync(IProgress<double>? progress = null, string? targetLanguage = null, string? sourceLanguage = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranscriptPath))
             throw new InvalidOperationException("No transcript available. Please transcribe media first.");
@@ -649,7 +649,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task GenerateTtsAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null, string? voice = null)
+    public async Task GenerateTtsAsync(IProgress<double>? progress = null, string? voice = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
             throw new InvalidOperationException("No translation available. Please translate first.");
@@ -1088,27 +1088,27 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Stage-gating decisions live here, not in callers.
     /// </summary>
     public async Task AdvancePipelineAsync(
-        CancellationToken cancellationToken = default,
-        IProgress<double>? progress = null)
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         var stage = CurrentSession.Stage;
 
         if (stage < SessionWorkflowStage.Transcribed
             || CurrentSession.SourceLanguage is null or "unknown")
         {
-            await TranscribeMediaAsync(cancellationToken, progress);
+            await TranscribeMediaAsync(progress, cancellationToken);
         }
 
         stage = CurrentSession.Stage;
         if (stage < SessionWorkflowStage.Translated)
         {
-            await TranslateTranscriptAsync(cancellationToken, progress);
+            await TranslateTranscriptAsync(progress, null, null, cancellationToken);
         }
 
         stage = CurrentSession.Stage;
         if (stage < SessionWorkflowStage.TtsGenerated)
         {
-            await GenerateTtsAsync(cancellationToken, progress);
+            await GenerateTtsAsync(progress, null, cancellationToken);
         }
     }
 

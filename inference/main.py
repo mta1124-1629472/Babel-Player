@@ -7,7 +7,7 @@ from typing import Optional
 from datetime import datetime
 
 import torch
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from faster_whisper import WhisperModel
@@ -191,9 +191,9 @@ def get_translator():
 
 @app.post("/translate", response_model=TranslationResponse)
 async def translate(
-    transcript_json: str,
-    source_language: str,
-    target_language: str
+    transcript_json: str = Form(...),
+    source_language: str = Form(...),
+    target_language: str = Form(...)
 ):
     """Translate transcript segments."""
     try:
@@ -244,8 +244,8 @@ async def translate(
 
 @app.post("/tts", response_model=TtsResponse)
 async def text_to_speech(
-    text: str,
-    voice: str = "en-US-AriaNeural",
+    text: str = Form(...),
+    voice: str = Form("en-US-AriaNeural"),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """Generate speech from text using edge-tts."""

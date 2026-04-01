@@ -180,7 +180,7 @@ print(f'NLLB single segment translated: {seg_id}')
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.SourceText))
-            throw new ArgumentException("Source text cannot be empty", nameof(request.SourceText));
+            throw new ArgumentException("Source text cannot be empty", nameof(request));
         if (!File.Exists(request.TranslationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 

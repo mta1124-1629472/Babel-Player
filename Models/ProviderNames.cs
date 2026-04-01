@@ -7,6 +7,9 @@ namespace Babel.Player.Models;
 /// </summary>
 public static class ProviderNames
 {
+    // ── Containerized inference service (all stages) ──────────────────────────
+    public const string ContainerizedService = "containerized";
+
     // ── Transcription ──────────────────────────────────────────────────────────
     public const string FasterWhisper    = "faster-whisper";
     public const string OpenAiWhisperApi = "openai-whisper-api";

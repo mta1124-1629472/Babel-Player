@@ -11,6 +11,9 @@ public sealed class TranslationJsonHelper
     public string? SourceLanguage { get; set; }
     public string? TargetLanguage { get; set; }
     public List<SegmentJsonHelper>? Segments { get; set; }
+    
+    private static readonly JsonSerializerOptions _options = new() { PropertyNameCaseInsensitive = true };
+
 
     public sealed class SegmentJsonHelper
     {
@@ -27,10 +30,9 @@ public sealed class TranslationJsonHelper
     /// </summary>
     public static TranslationJsonHelper? Parse(string json)
     {
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         try
         {
-            return JsonSerializer.Deserialize<TranslationJsonHelper>(json, options);
+            return JsonSerializer.Deserialize<TranslationJsonHelper>(json, _options);
         }
         catch
         {

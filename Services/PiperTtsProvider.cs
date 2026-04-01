@@ -143,7 +143,7 @@ print(f'Piper segment TTS generated: {output_path}')
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Text))
-            throw new ArgumentException("Segment text cannot be empty", nameof(request.Text));
+            throw new ArgumentException("Segment text cannot be empty", nameof(request));
 
         Log.Info($"Starting Piper segment TTS ({request.VoiceName}): {request.Text[..Math.Min(30, request.Text.Length)]}... -> {request.OutputAudioPath}");
 

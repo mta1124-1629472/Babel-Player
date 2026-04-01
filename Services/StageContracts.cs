@@ -4,9 +4,10 @@ namespace Babel.Player.Services;
 
 // --- TRANSCRIPTION ---
 public sealed record TranscriptionRequest(
-    string SourceAudioPath, 
-    string OutputJsonPath, 
-    string ModelName);
+    string SourceAudioPath,
+    string OutputJsonPath,
+    string ModelName,
+    string? LanguageHint = null);
 
 public sealed record TranscriptionResult(
     bool Success,

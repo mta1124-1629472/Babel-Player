@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
-public sealed class ModelDownloader
+public sealed partial class ModelDownloader
 {
     private readonly AppLog _log;
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromMinutes(30) };
@@ -77,7 +77,6 @@ except Exception as e:
             
             var errorReaderTask = Task.Run(async () =>
             {
-                var regex = new System.Text.RegularExpressions.Regex(@"(\d+)%");
                 while (true)
                 {
                     string? line = await proc.StandardError.ReadLineAsync();
@@ -85,7 +84,7 @@ except Exception as e:
                     
                     if (progress != null)
                     {
-                        var match = regex.Match(line);
+                        var match = ProgressRegex().Match(line);
                         if (match.Success && double.TryParse(match.Groups[1].Value, out double pct))
                         {
                             progress.Report(pct / 100.0);
@@ -283,4 +282,7 @@ except Exception as e:
         string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return Path.Combine(userProfile, ".cache", "huggingface", "hub");
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"(\d+)%")]
+    private static partial System.Text.RegularExpressions.Regex ProgressRegex();
 }

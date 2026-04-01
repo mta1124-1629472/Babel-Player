@@ -30,29 +30,35 @@ public sealed class TranslationRegistry : ITranslationRegistry
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
     [
         new ProviderDescriptor(
-            ProviderNames.GoogleTranslateFree, 
-            "Google Translate (Free)", 
-            false, 
-            null, 
+            ProviderNames.GoogleTranslateFree,
+            "Google Translate (Free)",
+            false,
+            null,
             ["default"]),
         new ProviderDescriptor(
-            ProviderNames.Nllb200, 
-            "NLLB-200 (Local)", 
-            false, 
-            null, 
+            ProviderNames.Nllb200,
+            "NLLB-200 (Local)",
+            false,
+            null,
             ["nllb-200-distilled-600M", "nllb-200-distilled-1.3B", "nllb-200-1.3B"]),
         new ProviderDescriptor(
-            ProviderNames.Deepl, 
-            "DeepL API", 
-            true, 
-            CredentialKeys.Deepl, 
+            ProviderNames.ContainerizedService,
+            "Containerized Inference Service",
+            false,
+            null,
+            ["default"]),
+        new ProviderDescriptor(
+            ProviderNames.Deepl,
+            "DeepL API",
+            true,
+            CredentialKeys.Deepl,
             ["default"],
             IsImplemented: false),
         new ProviderDescriptor(
-            ProviderNames.OpenAi, 
-            "OpenAI API", 
-            true, 
-            CredentialKeys.OpenAi, 
+            ProviderNames.OpenAi,
+            "OpenAI API",
+            true,
+            CredentialKeys.OpenAi,
             ["gpt-4o", "gpt-4o-mini"],
             IsImplemented: false)
     ];
@@ -72,6 +78,10 @@ public sealed class TranslationRegistry : ITranslationRegistry
                 $"Model '{model}' not downloaded yet.",
                 RequiresModelDownload: true,
                 ModelDownloadDescription: $"Download NLLB-200 {model} model");
+
+        if (providerId == ProviderNames.ContainerizedService
+            && string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
+            return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
 
         return ProviderReadiness.Ready;
     }
@@ -94,6 +104,8 @@ public sealed class TranslationRegistry : ITranslationRegistry
         {
             ProviderNames.Nllb200 => new NllbTranslationProvider(_log, settings.TranslationModel),
             ProviderNames.GoogleTranslateFree => new GoogleTranslationProvider(_log),
+            ProviderNames.ContainerizedService => new ContainerizedTranslationProvider(
+                new ContainerizedInferenceClient(settings.ContainerizedServiceUrl, _log), _log),
             _ => throw new PipelineProviderException(
                 $"Translation provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")
