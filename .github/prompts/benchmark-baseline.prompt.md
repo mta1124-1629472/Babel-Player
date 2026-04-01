@@ -24,6 +24,8 @@ Use these exact IDs and formats.
   - `transcription`
   - `translation`
   - `tts`
+- `hw_profile` format: `<precision>_<cores>c<threads>t_<ram_gb>g`
+  - Allowed `<precision>` values: `fp32`, `fp16`, `fp8`, `fp4`, `int8`
 - Example: `bp.matrix.transcription.fasterwhisper.base.fp16_8c16t_32g.v1.0.0`
 
 3. Run Batch ID
