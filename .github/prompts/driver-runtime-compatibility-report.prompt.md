@@ -29,7 +29,7 @@ Output requirements:
 3) Include explicit `selected_route_recommendation` and `fallback_route` by stage.
 4) Include `blocking_issues` and `warnings` arrays.
 5) Include `next_actions` array with ordered remediation steps.
-6) Include `ci_gate` verdict: pass | warn | fail.
+6) Include `ci_gate` verdict (`pass`, `warn`, or `fail`).
 
 Schema (required keys):
 {
@@ -69,11 +69,18 @@ Schema (required keys):
     "translation": {"selected_route_recommendation": "", "fallback_route": "", "reason": ""},
     "tts": {"selected_route_recommendation": "", "fallback_route": "", "reason": ""}
   },
-  "blocking_issues": [{"code": "", "message": "", "component": "", "severity": "high|medium|low"}],
-  "warnings": [{"code": "", "message": "", "component": "", "severity": "high|medium|low"}],
-  "next_actions": [{"order": 1, "action": "", "owner_hint": "app|infra|ops", "estimated_risk": "low|medium|high"}],
-  "ci_gate": {"verdict": "pass|warn|fail", "reason": ""}
+  "blocking_issues": [{"code": "", "message": "", "component": "", "severity": "high"}],
+  "warnings": [{"code": "", "message": "", "component": "", "severity": "medium"}],
+  "next_actions": [{"order": 1, "action": "", "owner_hint": "app", "estimated_risk": "low"}],
+  "ci_gate": {"verdict": "pass", "reason": ""}
 }
+
+Allowed enum values (do not include the `|` characters in JSON values):
+- `blocking_issues[].severity`: `"high"`, `"medium"`, `"low"`
+- `warnings[].severity`: `"high"`, `"medium"`, `"low"`
+- `next_actions[].owner_hint`: `"app"`, `"infra"`, `"ops"`
+- `next_actions[].estimated_risk`: `"low"`, `"medium"`, `"high"`
+- `ci_gate.verdict`: `"pass"`, `"warn"`, `"fail"`
 
 Rules:
 - If evidence is missing, set values to `unknown` and lower confidence.
