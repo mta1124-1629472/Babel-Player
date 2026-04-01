@@ -51,6 +51,7 @@ public sealed class AppLogTests : IDisposable
     {
         var log = new AppLog(_logPath);
         log.Info("hello from info");
+        log.Dispose();
 
         var content = File.ReadAllText(_logPath);
         Assert.Contains("hello from info", content);
@@ -61,6 +62,7 @@ public sealed class AppLogTests : IDisposable
     {
         var log = new AppLog(_logPath);
         log.Info("test message");
+        log.Dispose();
 
         var content = File.ReadAllText(_logPath);
         Assert.Contains("[INFO]", content);
@@ -71,6 +73,7 @@ public sealed class AppLogTests : IDisposable
     {
         var log = new AppLog(_logPath);
         log.Warning("a warning occurred");
+        log.Dispose();
 
         var content = File.ReadAllText(_logPath);
         Assert.Contains("a warning occurred", content);
@@ -81,6 +84,7 @@ public sealed class AppLogTests : IDisposable
     {
         var log = new AppLog(_logPath);
         log.Warning("test warning");
+        log.Dispose();
 
         var content = File.ReadAllText(_logPath);
         Assert.Contains("[WARN]", content);
@@ -91,6 +95,7 @@ public sealed class AppLogTests : IDisposable
     {
         var log = new AppLog(_logPath);
         log.Error("something failed", new InvalidOperationException("bang"));
+        log.Dispose();
 
         var content = File.ReadAllText(_logPath);
         Assert.Contains("something failed", content);
@@ -102,6 +107,7 @@ public sealed class AppLogTests : IDisposable
     {
         var log = new AppLog(_logPath);
         log.Error("error msg", new Exception("ex"));
+        log.Dispose();
 
         var content = File.ReadAllText(_logPath);
         Assert.Contains("[ERROR]", content);
@@ -114,6 +120,7 @@ public sealed class AppLogTests : IDisposable
         log.Info("entry one");
         log.Warning("entry two");
         log.Info("entry three");
+        log.Dispose();
 
         var content = File.ReadAllText(_logPath);
         Assert.Contains("entry one", content);
@@ -126,6 +133,7 @@ public sealed class AppLogTests : IDisposable
     {
         var log = new AppLog(_logPath);
         log.Info("timestamped");
+        log.Dispose();
 
         var content = File.ReadAllText(_logPath);
         // ISO 8601 pattern: digits-digits-digitsT
@@ -174,6 +182,7 @@ public sealed class AppLogTests : IDisposable
 
         var log = new AppLog(_logPath);
         log.Info("post-rotation entry");
+        log.Dispose();
 
         Assert.True(File.Exists(_logPath));
         Assert.Contains("post-rotation entry", File.ReadAllText(_logPath));

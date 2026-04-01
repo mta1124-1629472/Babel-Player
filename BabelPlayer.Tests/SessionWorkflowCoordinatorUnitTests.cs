@@ -286,6 +286,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         coord.InjectTestTranscript(transcriptPath);
+        coord.FlushPendingSave();
 
         // Verify the snapshot was written to disk with Transcribed stage
         var loaded = _store.Load().Snapshot;
