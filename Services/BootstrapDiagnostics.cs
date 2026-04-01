@@ -10,8 +10,16 @@ public sealed record BootstrapDiagnostics(
     bool PythonAvailable,
     string? PythonPath,
     bool FfmpegAvailable,
-    string? FfmpegPath)
+    string? FfmpegPath,
+    bool PiperAvailable,
+    string? PiperPath)
 {
+    /// <summary>
+    /// True only when all hard-required runtime dependencies are present.
+    /// <c>PiperAvailable</c> is intentionally excluded — Piper is an optional provider
+    /// dependency, not a startup requirement. It is checked at the readiness gate when
+    /// the Piper TTS provider is selected.
+    /// </summary>
     public bool AllDependenciesAvailable => PythonAvailable && FfmpegAvailable;
 
     public string DiagnosticSummary => AllDependenciesAvailable
@@ -30,8 +38,10 @@ public sealed record BootstrapDiagnostics(
     {
         var pythonPath = DependencyLocator.FindPython();
         var ffmpegPath = DependencyLocator.FindFfmpeg();
+        var piperPath  = DependencyLocator.FindPiper();
         return new BootstrapDiagnostics(
             pythonPath is not null, pythonPath,
-            ffmpegPath is not null, ffmpegPath);
+            ffmpegPath is not null, ffmpegPath,
+            piperPath  is not null, piperPath);
     }
 }

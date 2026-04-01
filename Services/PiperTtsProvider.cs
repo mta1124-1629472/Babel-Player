@@ -2,6 +2,9 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
+using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
@@ -159,5 +162,30 @@ print(f'Piper segment TTS generated: {output_path}')
 
         Log.Info($"Piper segment TTS completed: {request.OutputAudioPath}");
         return new TtsResult(true, request.OutputAudioPath, request.VoiceName, new FileInfo(request.OutputAudioPath).Length, null);
+    }
+
+    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
+    {
+        var voice = settings.TtsVoice;
+        if (!ModelDownloader.IsPiperVoiceDownloaded(voice, settings.PiperModelDir))
+            return new ProviderReadiness(false,
+                $"Voice '{voice}' not downloaded yet.",
+                RequiresModelDownload: true,
+                ModelDownloadDescription: $"Download Piper voice {voice}");
+        if (DependencyLocator.FindPiper() is null)
+            return new ProviderReadiness(false,
+                "Piper CLI not found on PATH. Install from https://github.com/rhasspy/piper/releases.");
+        return ProviderReadiness.Ready;
+    }
+
+    public async Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
+    {
+        var voice = settings.TtsVoice;
+        if (!ModelDownloader.IsPiperVoiceDownloaded(voice, settings.PiperModelDir))
+        {
+            Log.Info($"Voice {voice} requires download. Starting download...");
+            return await new ModelDownloader(Log).DownloadPiperVoiceAsync(voice, settings.PiperModelDir, progress, ct);
+        }
+        return true;
     }
 }

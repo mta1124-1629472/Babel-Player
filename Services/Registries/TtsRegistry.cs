@@ -80,29 +80,17 @@ public sealed class TtsRegistry : ITtsRegistry
         if (desc.RequiresApiKey && string.IsNullOrEmpty(keyStore?.GetKey(desc.CredentialKey!)))
             return new ProviderReadiness(false, $"API key missing for provider '{desc.DisplayName}'.");
 
-        if (providerId == ProviderNames.Piper && !ModelDownloader.IsPiperVoiceDownloaded(modelOrVoice, settings.PiperModelDir))
-            return new ProviderReadiness(false,
-                $"Voice '{modelOrVoice}' not downloaded yet.",
-                RequiresModelDownload: true,
-                ModelDownloadDescription: $"Download Piper voice {modelOrVoice}");
-
-        if (providerId == ProviderNames.ContainerizedService
-            && string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
-            return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
-
-        return ProviderReadiness.Ready;
+        var provider = CreateProvider(providerId, settings, keyStore);
+        return provider.CheckReadiness(settings, keyStore);
     }
 
     public async Task<bool> EnsureModelAsync(string providerId, string modelOrVoice, AppSettings settings,
                                               IProgress<double>? progress = null, CancellationToken ct = default)
     {
-        if (providerId == ProviderNames.Piper && !ModelDownloader.IsPiperVoiceDownloaded(modelOrVoice, settings.PiperModelDir))
-        {
-            _log.Info($"Voice {modelOrVoice} requires download. Starting download...");
-            var downloader = new ModelDownloader(_log);
-            return await downloader.DownloadPiperVoiceAsync(modelOrVoice, settings.PiperModelDir, progress, ct);
-        }
-        return true;
+        var desc = GetAvailableProviders().FirstOrDefault(p => p.Id == providerId);
+        if (desc == null || !desc.IsImplemented) return false;
+        var provider = CreateProvider(providerId, settings);
+        return await provider.EnsureReadyAsync(settings, progress, ct);
     }
 
     public ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)

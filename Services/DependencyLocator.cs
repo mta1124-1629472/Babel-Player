@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using Babel.Player.Models;
 
 namespace Babel.Player.Services;
 
@@ -37,6 +38,19 @@ public static class DependencyLocator
             "ffmpeg",
         };
         return Probe(candidates, "-version");
+    }
+
+    /// <summary>Returns a working piper executable path, or null if not found.</summary>
+    public static string? FindPiper()
+    {
+        var appDir = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            Path.Combine(appDir, $"{ProviderNames.Piper}.exe"),
+            Path.Combine(appDir, ProviderNames.Piper, $"{ProviderNames.Piper}.exe"),
+            ProviderNames.Piper,
+        };
+        return Probe(candidates, "--version");
     }
 
     private static string? Probe(string[] candidates, string versionArg)
