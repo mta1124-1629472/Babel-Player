@@ -22,6 +22,88 @@ public sealed class ContainerizedInferenceClient
         _httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
     }
 
+    /// <summary>
+    /// Pings <c>GET /health</c> and returns a snapshot of container readiness.
+    /// Never throws — failures are captured in <see cref="ContainerHealthStatus.IsAvailable"/>.
+    /// </summary>
+    public async Task<ContainerHealthStatus> CheckHealthAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await _httpClient.GetAsync(
+                $"{_inferenceServiceUrl}/health",
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+                return ContainerHealthStatus.Unavailable(_inferenceServiceUrl);
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var status = root.TryGetProperty("status", out var s)
+                ? s.GetString() : null;
+            var cudaAvailable = root.TryGetProperty("cuda_available", out var c)
+                && c.GetBoolean();
+            var cudaVersion = root.TryGetProperty("cuda_version", out var cv)
+                && cv.ValueKind == JsonValueKind.String
+                ? cv.GetString() : null;
+
+            return new ContainerHealthStatus(
+                IsAvailable:     status == "healthy",
+                CudaAvailable:   cudaAvailable,
+                CudaVersion:     cudaVersion,
+                ServiceUrl:      _inferenceServiceUrl,
+                ErrorMessage:    null);
+        }
+        catch (Exception ex)
+        {
+            return ContainerHealthStatus.Unavailable(_inferenceServiceUrl, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Blocking health check intended for use on background threads
+    /// (e.g. inside <c>GatherBootstrapWarmupData</c>).
+    /// Uses a dedicated short-timeout client to avoid stalling startup.
+    /// </summary>
+    public static ContainerHealthStatus CheckHealth(string serviceUrl, int timeoutSeconds = 5)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(timeoutSeconds) };
+            var response = http.GetAsync($"{serviceUrl.TrimEnd('/')}/health")
+                              .GetAwaiter().GetResult();
+
+            if (!response.IsSuccessStatusCode)
+                return ContainerHealthStatus.Unavailable(serviceUrl);
+
+            var json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var status = root.TryGetProperty("status", out var s)
+                ? s.GetString() : null;
+            var cudaAvailable = root.TryGetProperty("cuda_available", out var c)
+                && c.GetBoolean();
+            var cudaVersion = root.TryGetProperty("cuda_version", out var cv)
+                && cv.ValueKind == JsonValueKind.String
+                ? cv.GetString() : null;
+
+            return new ContainerHealthStatus(
+                IsAvailable:   status == "healthy",
+                CudaAvailable: cudaAvailable,
+                CudaVersion:   cudaVersion,
+                ServiceUrl:    serviceUrl,
+                ErrorMessage:  null);
+        }
+        catch (Exception ex)
+        {
+            return ContainerHealthStatus.Unavailable(serviceUrl, ex.Message);
+        }
+    }
+
     public async Task<TranscriptionResult> TranscribeAsync(
         string audioFilePath,
         string modelName = "base",
@@ -254,5 +336,32 @@ public sealed class ContainerizedInferenceClient
         public string? AudioPath { get; set; }
         public long FileSizeBytes { get; set; }
         public string? ErrorMessage { get; set; }
+    }
+}
+
+/// <summary>
+/// Result of probing <c>GET /health</c> on the containerized inference service.
+/// </summary>
+public sealed record ContainerHealthStatus(
+    bool IsAvailable,
+    bool CudaAvailable,
+    string? CudaVersion,
+    string ServiceUrl,
+    string? ErrorMessage)
+{
+    public static ContainerHealthStatus Unavailable(string url, string? reason = null) =>
+        new(false, false, null, url, reason);
+
+    /// <summary>Human-readable single line suitable for the bootstrap diagnostics panel.</summary>
+    public string StatusLine
+    {
+        get
+        {
+            if (!IsAvailable) return "Container unavailable";
+            var cuda = CudaAvailable
+                ? $"CUDA {CudaVersion ?? "✓"}"
+                : "CPU-only";
+            return $"Healthy ({cuda})";
+        }
     }
 }

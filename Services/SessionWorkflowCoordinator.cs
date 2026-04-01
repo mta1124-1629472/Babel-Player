@@ -57,10 +57,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private IReadOnlyList<RecentSessionEntry> _recentSessions = [];
 
     [ObservableProperty]
-    private BootstrapDiagnostics _bootstrapDiagnostics = new(false, null, false, null, false, null);
+    private BootstrapDiagnostics _bootstrapDiagnostics = new(false, null, false, null, false, null, false, false, null, null);
 
     [ObservableProperty]
     private HardwareSnapshot _hardwareSnapshot = HardwareSnapshot.Detecting;
+
+    [ObservableProperty]
+    private InferenceMode _inferenceMode = InferenceMode.SubprocessCpu;
 
     public bool HasRecentSessions => RecentSessions.Count > 0;
 
@@ -255,7 +258,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public void Initialize()
     {
         // Heavy bootstrap probes and per-session snapshot preloading are warmed in background.
-        BootstrapDiagnostics = new BootstrapDiagnostics(false, null, false, null, false, null);
+        BootstrapDiagnostics = new BootstrapDiagnostics(false, null, false, null, false, null, false, false, null, null);
 
         var nowUtc = DateTimeOffset.UtcNow;
         var loadResult = _store.Load();
@@ -313,24 +316,37 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public BootstrapWarmupData GatherBootstrapWarmupData()
     {
-        var diagnostics = BootstrapDiagnostics.Run();
+        var diagnostics = BootstrapDiagnostics.Run(CurrentSettings.ContainerizedServiceUrl);
         var snapshots = _perSessionStore.LoadAll();
-        return new BootstrapWarmupData(diagnostics, snapshots);
+        var inferenceMode = ResolveInferenceMode(diagnostics);
+        return new BootstrapWarmupData(diagnostics, snapshots, inferenceMode);
     }
 
     public void ApplyBootstrapWarmupData(BootstrapWarmupData warmup)
     {
         BootstrapDiagnostics = warmup.Diagnostics;
+        InferenceMode = warmup.ResolvedInferenceMode;
+
         if (!BootstrapDiagnostics.AllDependenciesAvailable)
             _log.Warning($"Bootstrap: {BootstrapDiagnostics.DiagnosticSummary}");
         else
             _log.Info("Bootstrap: all dependencies available.");
+
+        _log.Info($"Bootstrap: inference mode = {InferenceMode} ({BootstrapDiagnostics.InferenceLine})");
 
         foreach (var snapshot in warmup.Snapshots)
         {
             if (!string.IsNullOrEmpty(snapshot.SourceMediaPath))
                 CacheMediaSnapshot(MediaKey(snapshot.SourceMediaPath), snapshot);
         }
+    }
+
+    private static InferenceMode ResolveInferenceMode(BootstrapDiagnostics diagnostics)
+    {
+        if (diagnostics.ContainerizedServiceAvailable)
+            return InferenceMode.Containerized;
+        // ManagedVenv path is PLACEHOLDER — not yet implemented.
+        return InferenceMode.SubprocessCpu;
     }
 
     public void LoadMedia(string sourceMediaPath)
@@ -1250,6 +1266,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public sealed record BootstrapWarmupData(
         BootstrapDiagnostics Diagnostics,
-        IReadOnlyList<WorkflowSessionSnapshot> Snapshots);
+        IReadOnlyList<WorkflowSessionSnapshot> Snapshots,
+        InferenceMode ResolvedInferenceMode);
 
 }
