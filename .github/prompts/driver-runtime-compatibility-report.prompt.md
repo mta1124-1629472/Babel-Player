@@ -55,11 +55,17 @@ Schema (required keys):
   },
   "providers": [
     {
-      "name": "cpu|cuda|directml|openvino|npu",
+      "name": {
+        "value": "cpu",
+        "allowed_values": ["cpu", "cuda", "directml", "openvino", "npu"]
+      },
       "installed": true,
       "runtime_version": "",
       "device_visible": true,
-      "compatibility": "supported|partial|unsupported",
+      "compatibility": {
+        "value": "supported",
+        "allowed_values": ["supported", "partial", "unsupported"]
+      },
       "confidence": 0.0,
       "issues": ["..."]
     }
@@ -69,10 +75,10 @@ Schema (required keys):
     "translation": {"selected_route_recommendation": "", "fallback_route": "", "reason": ""},
     "tts": {"selected_route_recommendation": "", "fallback_route": "", "reason": ""}
   },
-  "blocking_issues": [{"code": "", "message": "", "component": "", "severity": "high|medium|low"}],
-  "warnings": [{"code": "", "message": "", "component": "", "severity": "high|medium|low"}],
-  "next_actions": [{"order": 1, "action": "", "owner_hint": "app|infra|ops", "estimated_risk": "low|medium|high"}],
-  "ci_gate": {"verdict": "pass|warn|fail", "reason": ""}
+  "blocking_issues": [{"code": "", "message": "", "component": "", "severity": {"value": "high", "allowed_values": ["high", "medium", "low"]}}],
+  "warnings": [{"code": "", "message": "", "component": "", "severity": {"value": "high", "allowed_values": ["high", "medium", "low"]}}],
+  "next_actions": [{"order": 1, "action": "", "owner_hint": {"value": "app", "allowed_values": ["app", "infra", "ops"]}, "estimated_risk": {"value": "low", "allowed_values": ["low", "medium", "high"]}}],
+  "ci_gate": {"verdict": {"value": "pass", "allowed_values": ["pass", "warn", "fail"]}, "reason": ""}
 }
 
 Rules:
