@@ -6,6 +6,9 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
+using Babel.Player.Services.Settings;
 using Babel.Player.Services.Translations;
 
 namespace Babel.Player.Services;
@@ -179,5 +182,12 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         foreach (var h in helpers)
             result.Add(new TranslatedSegment(h.Start, h.End, h.Text ?? "", h.TranslatedText ?? ""));
         return result;
+    }
+
+    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
+    {
+        if (string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
+            return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
+        return ProviderReadiness.Ready;
     }
 }

@@ -67,29 +67,17 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
         if (desc.RequiresApiKey && string.IsNullOrEmpty(keyStore?.GetKey(desc.CredentialKey!)))
             return new ProviderReadiness(false, $"API key missing for provider '{desc.DisplayName}'.");
 
-        if (providerId == ProviderNames.FasterWhisper && !ModelDownloader.IsFasterWhisperDownloaded(model))
-            return new ProviderReadiness(false,
-                $"Model '{model}' not downloaded yet.",
-                RequiresModelDownload: true,
-                ModelDownloadDescription: $"Download faster-whisper {model} model");
-
-        if (providerId == ProviderNames.ContainerizedService
-            && string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
-            return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
-
-        return ProviderReadiness.Ready;
+        var provider = CreateProvider(providerId, settings, keyStore);
+        return provider.CheckReadiness(settings, keyStore);
     }
 
     public async Task<bool> EnsureModelAsync(string providerId, string model, AppSettings settings,
                                               IProgress<double>? progress = null, CancellationToken ct = default)
     {
-        if (providerId == ProviderNames.FasterWhisper && !ModelDownloader.IsFasterWhisperDownloaded(model))
-        {
-            _log.Info($"Model {model} requires download. Starting download...");
-            var downloader = new ModelDownloader(_log);
-            return await downloader.DownloadFasterWhisperAsync(model, progress, ct);
-        }
-        return true; // already available or no download needed
+        var desc = GetAvailableProviders().FirstOrDefault(p => p.Id == providerId);
+        if (desc == null || !desc.IsImplemented) return false;
+        var provider = CreateProvider(providerId, settings);
+        return await provider.EnsureReadyAsync(settings, progress, ct);
     }
 
     public ITranscriptionProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)

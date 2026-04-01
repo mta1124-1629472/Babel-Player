@@ -14,7 +14,8 @@ public sealed record ProviderDescriptor(
     bool RequiresApiKey,
     string? CredentialKey,
     IReadOnlyList<string> SupportedModels,
-    bool IsImplemented = true);
+    bool IsImplemented = true,
+    string? Notes = null);
 
 /// <summary>
 /// Result of a provider readiness check. A ready provider has

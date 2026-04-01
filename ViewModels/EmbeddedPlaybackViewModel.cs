@@ -867,10 +867,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                     _coordinator.ResetPipelineToTranslated();
                     break;
                 case PipelineInvalidation.None:
-                    StatusText = "Re-running full pipeline…";
-                    _coordinator.ResetPipelineToMediaLoaded();
-                    Segments.Clear();
-                    HasSegments = false;
+                    // No settings changed — pipeline continues from current stage. No reset needed.
                     break;
             }
         }
