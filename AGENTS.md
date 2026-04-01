@@ -304,7 +304,10 @@ These are explicitly good uses of time at this stage:
 - Test coverage improvements for existing behaviour
 - Clarifying the Python/C# service boundary for future hosting flexibility
 - Maintaining `.github/agents/`, `.github/instructions/`, and `.github/prompts/`
-  so AI routing and prompt flows stay aligned with current architecture
+  (AI agents, high-level instructions, and reusable prompt templates used by
+  our automation and Copilot tooling) so that AI routing and prompt flows
+  — which agent handles which task, with what context — stay aligned with
+  the current architecture
 
 ---
 

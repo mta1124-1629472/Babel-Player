@@ -2,7 +2,7 @@
 name: Provider Capability Matrix Generator
 description: "Generate a normalized provider capability matrix for Babel Player stages across CPU, CUDA, DirectML, OpenVINO, and NPU paths."
 argument-hint: "Provide stages, target hardware profiles, providers/runtimes, precision modes, and acceptance thresholds."
-agent: "Hardware Acceleration Architect"
+agent: "Hardware Acceleration Architect" # Defined in .github/agents/hardware-acceleration-architect.agent.md
 ---
 Build a provider capability matrix artifact the team can use for planning and release gating.
 
