@@ -85,8 +85,22 @@ public partial class App : Application
             {
                 DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService, _apiKeyStore),
             };
-            // Detect hardware in background; post result to UI thread when done
+            // Run heavy startup probes in background and publish results on UI thread.
             var coordinator = _sessionWorkflowCoordinator;
+            Task.Run(() => coordinator.GatherBootstrapWarmupData())
+                .ContinueWith(t =>
+                {
+                    if (t.IsCompletedSuccessfully)
+                    {
+                        Dispatcher.UIThread.Post(() => coordinator.ApplyBootstrapWarmupData(t.Result));
+                    }
+                    else if (t.Exception is not null)
+                    {
+                        _startupLog?.Error("Background bootstrap warmup failed.", t.Exception.Flatten());
+                    }
+                });
+
+            // Detect hardware in background; post result to UI thread when done.
             Task.Run(() => HardwareSnapshot.Run())
                 .ContinueWith(t =>
                 {
@@ -103,7 +117,7 @@ public partial class App : Application
         if (_sessionWorkflowCoordinator is null) return;
         try
         {
-            _sessionWorkflowCoordinator.SaveCurrentSession();
+            _sessionWorkflowCoordinator.FlushPendingSave();
         }
         catch (Exception ex)
         {
@@ -112,6 +126,7 @@ public partial class App : Application
         finally
         {
             _sessionWorkflowCoordinator.Dispose();
+            (_startupLog as IDisposable)?.Dispose();
         }
     }
 

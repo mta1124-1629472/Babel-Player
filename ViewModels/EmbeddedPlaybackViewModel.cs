@@ -30,6 +30,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [ObservableProperty]
     private ObservableCollection<WorkflowSegmentState> _segments = [];
 
+    // Parallel sorted array for O(log n) seek — rebuilt whenever Segments is replaced.
+    private WorkflowSegmentState[] _sortedSegments = [];
+
     [ObservableProperty]
     private WorkflowSegmentState? _selectedSegment;
 
@@ -136,6 +139,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _preFullscreenSegmentPaneVisible = true;
     private bool _preSubtitlePaneState = true;
     private string? _activeSrtPath;
+    private IReadOnlyList<ModelOptionViewModel> _availableTranscriptionModels = [];
+    private IReadOnlyList<ModelOptionViewModel> _availableTranslationModels = [];
+    private IReadOnlyList<ModelOptionViewModel> _availableTtsOptions = [];
 
     private readonly DispatcherTimer _controlsHideTimer;
     private const int ControlsHideDelayMs = 3000;
@@ -154,6 +160,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _translationModel = coordinator.CurrentSettings.TranslationModel;
         _ttsProvider = coordinator.CurrentSettings.TtsProvider;
         _ttsModelOrVoice = coordinator.CurrentSettings.TtsVoice;
+        RebuildAllModelOptions();
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
@@ -204,26 +211,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public IReadOnlyList<string> TranslationProviders => [.. _coordinator.TranslationRegistry.GetAvailableProviders().Where(p => p.IsImplemented).Select(p => p.Id)];
     public IReadOnlyList<string> TtsProviders => [.. _coordinator.TtsRegistry.GetAvailableProviders().Where(p => p.IsImplemented).Select(p => p.Id)];
 
-    public IReadOnlyList<ModelOptionViewModel> AvailableTranscriptionModels =>
-        [.. (_coordinator.TranscriptionRegistry.GetAvailableProviders()
-                .FirstOrDefault(p => p.Id == TranscriptionProvider)?.SupportedModels ?? ["default"])
-            .Select(m => new ModelOptionViewModel(m,
-                _coordinator.TranscriptionRegistry.CheckReadiness(TranscriptionProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
-                    ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
+    public IReadOnlyList<ModelOptionViewModel> AvailableTranscriptionModels => _availableTranscriptionModels;
 
-    public IReadOnlyList<ModelOptionViewModel> AvailableTranslationModels =>
-        [.. (_coordinator.TranslationRegistry.GetAvailableProviders()
-                .FirstOrDefault(p => p.Id == TranslationProvider)?.SupportedModels ?? ["default"])
-            .Select(m => new ModelOptionViewModel(m,
-                _coordinator.TranslationRegistry.CheckReadiness(TranslationProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
-                    ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
+    public IReadOnlyList<ModelOptionViewModel> AvailableTranslationModels => _availableTranslationModels;
 
-    public IReadOnlyList<ModelOptionViewModel> AvailableTtsOptions =>
-        [.. (_coordinator.TtsRegistry.GetAvailableProviders()
-                .FirstOrDefault(p => p.Id == TtsProvider)?.SupportedModels ?? ["default"])
-            .Select(m => new ModelOptionViewModel(m,
-                _coordinator.TtsRegistry.CheckReadiness(TtsProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
-                    ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
+    public IReadOnlyList<ModelOptionViewModel> AvailableTtsOptions => _availableTtsOptions;
 
     /// <summary>The currently selected transcription model as an object — used for SelectedItem binding to avoid blank box on collection swap.</summary>
     public ModelOptionViewModel? SelectedTranscriptionModel
@@ -391,10 +383,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranscriptionProvider = value;
-        // Reset model to first valid option for new provider
-        var models = _coordinator.TranscriptionRegistry.GetAvailableProviders()
-                        .FirstOrDefault(p => p.Id == value)?.SupportedModels ?? ["default"];
-        TranscriptionModel = models.Count > 0 ? models[0] : "default";
+        RebuildTranscriptionModelOptions();
+        TranscriptionModel = _availableTranscriptionModels.FirstOrDefault()?.ModelId ?? "default";
+        OnPropertyChanged(nameof(AvailableTranscriptionModels));
         NotifySettingsSave();
     }
 
@@ -402,6 +393,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranscriptionModel = value;
+        RebuildTranscriptionModelOptions();
+        OnPropertyChanged(nameof(AvailableTranscriptionModels));
         NotifySettingsSave();
     }
 
@@ -409,9 +402,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranslationProvider = value;
-        var models = _coordinator.TranslationRegistry.GetAvailableProviders()
-                        .FirstOrDefault(p => p.Id == value)?.SupportedModels ?? ["default"];
-        TranslationModel = models.Count > 0 ? models[0] : "default";
+        RebuildTranslationModelOptions();
+        TranslationModel = _availableTranslationModels.FirstOrDefault()?.ModelId ?? "default";
+        OnPropertyChanged(nameof(AvailableTranslationModels));
         NotifySettingsSave();
     }
 
@@ -419,6 +412,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranslationModel = value;
+        RebuildTranslationModelOptions();
+        OnPropertyChanged(nameof(AvailableTranslationModels));
         NotifySettingsSave();
     }
 
@@ -426,9 +421,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TtsProvider = value;
-        var options = _coordinator.TtsRegistry.GetAvailableProviders()
-                          .FirstOrDefault(p => p.Id == value)?.SupportedModels ?? ["default"];
-        TtsModelOrVoice = options.Count > 0 ? options[0] : "default";
+        RebuildTtsModelOptions();
+        TtsModelOrVoice = _availableTtsOptions.FirstOrDefault()?.ModelId ?? "default";
+        OnPropertyChanged(nameof(AvailableTtsOptions));
         NotifySettingsSave();
     }
 
@@ -436,7 +431,46 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TtsVoice = value;
+        RebuildTtsModelOptions();
+        OnPropertyChanged(nameof(AvailableTtsOptions));
         NotifySettingsSave();
+    }
+
+    private void RebuildAllModelOptions()
+    {
+        RebuildTranscriptionModelOptions();
+        RebuildTranslationModelOptions();
+        RebuildTtsModelOptions();
+    }
+
+    private void RebuildTranscriptionModelOptions()
+    {
+        _availableTranscriptionModels =
+            [.. (_coordinator.TranscriptionRegistry.GetAvailableProviders()
+                    .FirstOrDefault(p => p.Id == TranscriptionProvider)?.SupportedModels ?? ["default"])
+                .Select(m => new ModelOptionViewModel(m,
+                    _coordinator.TranscriptionRegistry.CheckReadiness(TranscriptionProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
+                        ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
+    }
+
+    private void RebuildTranslationModelOptions()
+    {
+        _availableTranslationModels =
+            [.. (_coordinator.TranslationRegistry.GetAvailableProviders()
+                    .FirstOrDefault(p => p.Id == TranslationProvider)?.SupportedModels ?? ["default"])
+                .Select(m => new ModelOptionViewModel(m,
+                    _coordinator.TranslationRegistry.CheckReadiness(TranslationProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
+                        ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
+    }
+
+    private void RebuildTtsModelOptions()
+    {
+        _availableTtsOptions =
+            [.. (_coordinator.TtsRegistry.GetAvailableProviders()
+                    .FirstOrDefault(p => p.Id == TtsProvider)?.SupportedModels ?? ["default"])
+                .Select(m => new ModelOptionViewModel(m,
+                    _coordinator.TtsRegistry.CheckReadiness(TtsProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
+                        ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
     }
 
     private void NotifySettingsSave() => _coordinator.NotifySettingsModified();
@@ -529,8 +563,29 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         IsControlsVisible = false;
     }
 
+    partial void OnSegmentsChanged(ObservableCollection<WorkflowSegmentState> value)
+    {
+        var arr = value.ToArray();
+        Array.Sort(arr, (a, b) => a.StartSeconds.CompareTo(b.StartSeconds));
+        _sortedSegments = arr;
+    }
+
     private WorkflowSegmentState? FindSegmentAt(double positionSeconds)
-        => Segments.FirstOrDefault(s => positionSeconds >= s.StartSeconds && positionSeconds < s.EndSeconds);
+    {
+        var arr = _sortedSegments;
+        if (arr.Length == 0) return null;
+        // Binary search for the last segment with StartSeconds <= positionSeconds.
+        int lo = 0, hi = arr.Length - 1, candidate = -1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            if (arr[mid].StartSeconds <= positionSeconds) { candidate = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        if (candidate < 0) return null;
+        var seg = arr[candidate];
+        return positionSeconds < seg.EndSeconds ? seg : null;
+    }
 
     private void UpdateDubMode()
     {

@@ -76,9 +76,12 @@ public abstract class PythonSubprocessServiceBase
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException($"Failed to start Python process ({scriptPrefix}).");
 
-            var stdout = await proc.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderr = await proc.StandardError.ReadToEndAsync(cancellationToken);
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
+            await Task.WhenAll(stdoutTask, stderrTask);
             await proc.WaitForExitAsync(cancellationToken);
+            var stdout = stdoutTask.Result;
+            var stderr = stderrTask.Result;
 
             return new ScriptResult(proc.ExitCode, stdout, stderr);
         }

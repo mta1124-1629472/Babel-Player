@@ -32,6 +32,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly EventHandler<Exception> _segmentErrorHandler;
     private readonly Dictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _saveGate = new();
+    private CancellationTokenSource? _saveDebounceCts;
+    private WorkflowSessionSnapshot? _pendingSaveSnapshot;
+    private static readonly TimeSpan SaveDebounceDelay = TimeSpan.FromMilliseconds(350);
 
     [ObservableProperty]
     private WorkflowSessionSnapshot _currentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
@@ -220,6 +224,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void Dispose()
     {
+        FlushPendingSave();
+
         // Unsubscribe segment events before disposing the transport manager.
         if (_subscribedToSegmentEvents)
         {
@@ -238,19 +244,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void Initialize()
     {
-        // Run dependency probes upfront so the UI can warn before the pipeline is attempted.
-        BootstrapDiagnostics = BootstrapDiagnostics.Run();
-        if (!BootstrapDiagnostics.AllDependenciesAvailable)
-            _log.Warning($"Bootstrap: {BootstrapDiagnostics.DiagnosticSummary}");
-        else
-            _log.Info("Bootstrap: all dependencies available.");
-
-        // Seed in-memory cache from per-session snapshot files so cross-restart media switching works.
-        foreach (var snapshot in _perSessionStore.LoadAll())
-        {
-            if (!string.IsNullOrEmpty(snapshot.SourceMediaPath))
-                CacheMediaSnapshot(MediaKey(snapshot.SourceMediaPath), snapshot);
-        }
+        // Heavy bootstrap probes and per-session snapshot preloading are warmed in background.
+        BootstrapDiagnostics = new BootstrapDiagnostics(false, null, false, null);
 
         var nowUtc = DateTimeOffset.UtcNow;
         var loadResult = _store.Load();
@@ -304,6 +299,28 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         RecentSessions = _recentStore.Load();
         _log.Info(SessionSource);
         SaveCurrentSession();
+    }
+
+    public BootstrapWarmupData GatherBootstrapWarmupData()
+    {
+        var diagnostics = BootstrapDiagnostics.Run();
+        var snapshots = _perSessionStore.LoadAll();
+        return new BootstrapWarmupData(diagnostics, snapshots);
+    }
+
+    public void ApplyBootstrapWarmupData(BootstrapWarmupData warmup)
+    {
+        BootstrapDiagnostics = warmup.Diagnostics;
+        if (!BootstrapDiagnostics.AllDependenciesAvailable)
+            _log.Warning($"Bootstrap: {BootstrapDiagnostics.DiagnosticSummary}");
+        else
+            _log.Info("Bootstrap: all dependencies available.");
+
+        foreach (var snapshot in warmup.Snapshots)
+        {
+            if (!string.IsNullOrEmpty(snapshot.SourceMediaPath))
+                CacheMediaSnapshot(MediaKey(snapshot.SourceMediaPath), snapshot);
+        }
     }
 
     public void LoadMedia(string sourceMediaPath)
@@ -1127,9 +1144,88 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public void SaveCurrentSession()
     {
         CurrentSession = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-        _store.Save(CurrentSession);
-        PersistenceStatus = $"Saved current session snapshot to {StateFilePath}.";
-        _log.Info(PersistenceStatus);
+        PersistenceStatus = $"Queued session snapshot save to {StateFilePath}.";
+        ScheduleSave(CurrentSession);
     }
+
+    public void FlushPendingSave()
+    {
+        CancellationTokenSource? pendingCts;
+        WorkflowSessionSnapshot snapshotToSave;
+
+        lock (_saveGate)
+        {
+            pendingCts = _saveDebounceCts;
+            _saveDebounceCts = null;
+            snapshotToSave = _pendingSaveSnapshot ?? (CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow });
+            _pendingSaveSnapshot = null;
+        }
+
+        pendingCts?.Cancel();
+        pendingCts?.Dispose();
+
+        CurrentSession = snapshotToSave;
+        PersistSnapshot(snapshotToSave, updateStatus: true);
+    }
+
+    private void ScheduleSave(WorkflowSessionSnapshot snapshot)
+    {
+        CancellationTokenSource? previousCts;
+        CancellationTokenSource currentCts;
+
+        lock (_saveGate)
+        {
+            _pendingSaveSnapshot = snapshot;
+            previousCts = _saveDebounceCts;
+            currentCts = new CancellationTokenSource();
+            _saveDebounceCts = currentCts;
+        }
+
+        previousCts?.Cancel();
+        previousCts?.Dispose();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(SaveDebounceDelay, currentCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                currentCts.Dispose();
+                return;
+            }
+
+            WorkflowSessionSnapshot snapshotToSave;
+            lock (_saveGate)
+            {
+                if (!ReferenceEquals(_saveDebounceCts, currentCts))
+                {
+                    currentCts.Dispose();
+                    return;
+                }
+
+                snapshotToSave = _pendingSaveSnapshot ?? CurrentSession;
+                _pendingSaveSnapshot = null;
+                _saveDebounceCts = null;
+            }
+
+            PersistSnapshot(snapshotToSave, updateStatus: false);
+            currentCts.Dispose();
+        });
+    }
+
+    private void PersistSnapshot(WorkflowSessionSnapshot snapshot, bool updateStatus)
+    {
+        _store.Save(snapshot);
+        var message = $"Saved current session snapshot to {StateFilePath}.";
+        if (updateStatus)
+            PersistenceStatus = message;
+        _log.Info(message);
+    }
+
+    public sealed record BootstrapWarmupData(
+        BootstrapDiagnostics Diagnostics,
+        IReadOnlyList<WorkflowSessionSnapshot> Snapshots);
 
 }

@@ -1,21 +1,28 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
-public sealed class AppLog
+public sealed class AppLog : IDisposable
 {
     private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
     private const int MaxArchivedFiles = 4; // keep 4 archives + 1 current = 5 total
 
-    private readonly object _gate = new();
+    private readonly Channel<string> _channel = Channel.CreateUnbounded<string>(
+        new UnboundedChannelOptions { SingleReader = true, AllowSynchronousContinuations = false });
+    private readonly Task _writerTask;
+    private readonly CancellationTokenSource _cts = new();
 
     public AppLog(string logFilePath)
     {
         LogFilePath = logFilePath;
         Directory.CreateDirectory(Path.GetDirectoryName(logFilePath)!);
         RotateIfNeeded();
+        _writerTask = Task.Run(BackgroundWriterAsync);
     }
 
     public string LogFilePath { get; }
@@ -31,11 +38,36 @@ public sealed class AppLog
     private void Write(string level, string message)
     {
         var line = $"{DateTimeOffset.UtcNow:O} [{level}] {message}{Environment.NewLine}";
+        _channel.Writer.TryWrite(line);
+    }
 
-        lock (_gate)
+    private async Task BackgroundWriterAsync()
+    {
+        var reader = _channel.Reader;
+        try
         {
-            File.AppendAllText(LogFilePath, line);
+            await foreach (var line in reader.ReadAllAsync(_cts.Token))
+            {
+                try { await File.AppendAllTextAsync(LogFilePath, line); }
+                catch { /* best-effort: log writes are never fatal */ }
+            }
         }
+        catch (OperationCanceledException) { }
+
+        // Drain remaining entries after cancellation.
+        while (reader.TryRead(out var remaining))
+        {
+            try { File.AppendAllText(LogFilePath, remaining); }
+            catch { }
+        }
+    }
+
+    public void Dispose()
+    {
+        _channel.Writer.TryComplete();
+        _cts.Cancel();
+        try { _writerTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        _cts.Dispose();
     }
 
     /// <summary>

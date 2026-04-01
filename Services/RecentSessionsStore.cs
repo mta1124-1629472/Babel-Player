@@ -17,6 +17,7 @@ public sealed class RecentSessionsStore
 
     private readonly string _filePath;
     private readonly AppLog _log;
+    private List<RecentSessionEntry>? _cache;
 
     public RecentSessionsStore(string filePath, AppLog log)
     {
@@ -28,13 +29,16 @@ public sealed class RecentSessionsStore
     /// <summary>Returns the current list, most-recently-used first. Empty if absent or unreadable.</summary>
     public IReadOnlyList<RecentSessionEntry> Load()
     {
+        if (_cache != null) return _cache;
+
         if (!File.Exists(_filePath)) return [];
 
         try
         {
             var json = File.ReadAllText(_filePath);
             if (string.IsNullOrWhiteSpace(json)) return [];
-            return JsonSerializer.Deserialize<List<RecentSessionEntry>>(json, SerializerOptions) ?? [];
+            _cache = JsonSerializer.Deserialize<List<RecentSessionEntry>>(json, SerializerOptions) ?? [];
+            return _cache;
         }
         catch (Exception ex)
         {
@@ -51,12 +55,13 @@ public sealed class RecentSessionsStore
     {
         try
         {
-            var current = Load().ToList();
+            var current = (_cache ?? Load().ToList()).ToList();
             current.RemoveAll(e => e.SessionId == entry.SessionId);
             current.Insert(0, entry);
             if (current.Count > MaxEntries)
                 current = current.Take(MaxEntries).ToList();
 
+            _cache = current;
             File.WriteAllText(_filePath, JsonSerializer.Serialize(current, SerializerOptions));
         }
         catch (Exception ex)

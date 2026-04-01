@@ -9,6 +9,7 @@
     <AssemblyName>BabelPlayer</AssemblyName>
     <RootNamespace>Babel.Player</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TieredPGO>true</TieredPGO>
   </PropertyGroup>
 
   <ItemGroup>

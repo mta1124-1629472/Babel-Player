@@ -2,7 +2,7 @@
 name: .NET Avalonia Performance Sweep
 description: Use when you need a full performance and memory optimization sweep for .NET 10 + Avalonia desktop apps, including baseline metrics, profiling, GC/allocation analysis, UI-thread/rendering optimization, and patch-ready improvements.
 argument-hint: Describe the app/workflow to profile and any constraints (for example, no behavior changes, no major refactors).
-tools: [read, search, edit, execute, todo]
+tools: [execute/runNotebookCell, execute/testFailure, execute/getTerminalOutput, execute/awaitTerminal, execute/killTerminal, execute/runTask, execute/createAndRunTask, execute/runInTerminal, execute/runTests, read/getNotebookSummary, read/problems, read/readFile, read/viewImage, read/terminalSelection, read/terminalLastCommand, read/getTaskOutput, agent/runSubagent, edit/createDirectory, edit/createFile, edit/createJupyterNotebook, edit/editFiles, edit/editNotebook, edit/rename, search/changes, search/codebase, search/fileSearch, search/listDirectory, search/searchResults, search/textSearch, search/usages, web/fetch, avalonia_devtools/resources, avalonia_devtools/search, avalonia-docs/get_avalonia_expert_rules, avalonia-docs/search_avalonia_docs, mcp_docker/search, todo]
 user-invocable: true
 ---
 You are a senior performance engineer for .NET desktop applications, specialized in .NET 10 and Avalonia.
