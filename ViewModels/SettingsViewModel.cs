@@ -61,6 +61,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _videoHwdec         = current.VideoHwdec;
         _videoGpuApi        = current.VideoGpuApi;
         _videoExportEncoder = current.VideoExportEncoder;
+        _videoUseGpuNext    = current.VideoUseGpuNext;
+
+        // RTX Video Enhancement settings
+        _videoVsrEnabled    = current.VideoVsrEnabled;
+        _videoVsrQuality    = current.VideoVsrQuality;
+        _videoHdrEnabled    = current.VideoHdrEnabled;
+        _videoToneMapping   = current.VideoToneMapping;
+        _videoTargetPeak    = current.VideoTargetPeak;
+        _videoHdrComputePeak = current.VideoHdrComputePeak;
 
         // Hotkeys (default values)
         PlayPauseHotkey = "Space";
@@ -102,6 +111,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _videoExportEncoder = "auto";
 
+    [ObservableProperty]
+    private bool _videoUseGpuNext;
+
     public string[] HwdecOptions { get; } =
         ["auto", "auto-safe", "no", "d3d11va", "d3d11va-copy", "nvdec", "nvdec-copy", "qsv", "dxva2"];
 
@@ -111,6 +123,27 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public string[] ExportEncoderOptions { get; } =
         ["auto", "h264_nvenc", "hevc_nvenc", "h264_amf", "hevc_amf",
          "h264_qsv", "hevc_qsv", "libx264", "libx265"];
+
+    // RTX Video Enhancement settings
+    [ObservableProperty]
+    private bool _videoVsrEnabled;
+
+    [ObservableProperty]
+    private int _videoVsrQuality = 2;
+
+    [ObservableProperty]
+    private bool _videoHdrEnabled;
+
+    [ObservableProperty]
+    private string _videoToneMapping = "bt.2390";
+
+    [ObservableProperty]
+    private string _videoTargetPeak = "auto";
+
+    [ObservableProperty]
+    private bool _videoHdrComputePeak;
+
+    public string[] ToneMappingOptions { get; } = ["bt.2390", "mobius", "clip", "auto"];
 
     // Hotkeys
     [ObservableProperty]
@@ -138,6 +171,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         settings.VideoHwdec         = VideoHwdec;
         settings.VideoGpuApi        = VideoGpuApi;
         settings.VideoExportEncoder = VideoExportEncoder;
+        settings.VideoUseGpuNext    = VideoUseGpuNext;
+        settings.VideoVsrEnabled    = VideoVsrEnabled;
+        settings.VideoVsrQuality    = VideoVsrQuality;
+        settings.VideoHdrEnabled    = VideoHdrEnabled;
+        settings.VideoToneMapping   = VideoToneMapping;
+        settings.VideoTargetPeak    = VideoTargetPeak;
+        settings.VideoHdrComputePeak = VideoHdrComputePeak;
 
         // Trigger persistence and notify listeners (like MainWindowViewModel) that settings have changed
         _coordinator.NotifySettingsModified();

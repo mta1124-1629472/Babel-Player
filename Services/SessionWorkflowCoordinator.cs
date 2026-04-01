@@ -95,7 +95,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _transportManager = new MediaTransportManager(
             segmentPlayer,
             sourcePlayer,
-            new VideoPlaybackOptions(settings.VideoHwdec, settings.VideoGpuApi));
+            new VideoPlaybackOptions(
+                HwdecMode:      settings.VideoHwdec,
+                GpuApi:         settings.VideoGpuApi,
+                UseGpuNext:     settings.VideoUseGpuNext,
+                VsrEnabled:     settings.VideoVsrEnabled,
+                VsrQuality:     settings.VideoVsrQuality,
+                HdrEnabled:     settings.VideoHdrEnabled,
+                ToneMapping:    settings.VideoToneMapping,
+                TargetPeak:     settings.VideoTargetPeak,
+                HdrComputePeak: settings.VideoHdrComputePeak));
 
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) => StopTtsPlayback();

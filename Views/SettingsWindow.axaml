@@ -4,13 +4,13 @@
         xmlns:v="using:Babel.Player.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="560"
+        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="680"
         x:Class="Babel.Player.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Icon="/Assets/babelplayer.ico"
         Title="Babel Player - Settings"
-        Width="640" Height="580"
-        MinWidth="520" MinHeight="460">
+        Width="640" Height="680"
+        MinWidth="520" MinHeight="540">
 
     <Grid Margin="20">
         <Grid.RowDefinitions>
@@ -113,29 +113,89 @@
 
             <!-- Video Tab -->
             <TabItem Header="Video">
-                <StackPanel Margin="20" Spacing="12">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="20" Spacing="12">
 
-                    <TextBlock Text="Hardware Decode" FontWeight="SemiBold" />
-                    <ComboBox ItemsSource="{Binding HwdecOptions}"
-                              SelectedItem="{Binding VideoHwdec, Mode=TwoWay}"
-                              Width="220" HorizontalAlignment="Left" />
+                        <!-- ── Core Hardware ────────────────────────────────── -->
+                        <TextBlock Text="Hardware Decode" FontWeight="SemiBold" />
+                        <ComboBox ItemsSource="{Binding HwdecOptions}"
+                                  SelectedItem="{Binding VideoHwdec, Mode=TwoWay}"
+                                  Width="220" HorizontalAlignment="Left" />
 
-                    <TextBlock Text="GPU Rendering API" FontWeight="SemiBold" />
-                    <ComboBox ItemsSource="{Binding GpuApiOptions}"
-                              SelectedItem="{Binding VideoGpuApi, Mode=TwoWay}"
-                              Width="220" HorizontalAlignment="Left" />
+                        <TextBlock Text="GPU Rendering API" FontWeight="SemiBold" />
+                        <ComboBox ItemsSource="{Binding GpuApiOptions}"
+                                  SelectedItem="{Binding VideoGpuApi, Mode=TwoWay}"
+                                  Width="220" HorizontalAlignment="Left" />
 
-                    <TextBlock Text="Export Encoder (future)" FontWeight="SemiBold" />
-                    <ComboBox ItemsSource="{Binding ExportEncoderOptions}"
-                              SelectedItem="{Binding VideoExportEncoder, Mode=TwoWay}"
-                              Width="220" HorizontalAlignment="Left" />
+                        <TextBlock Text="Export Encoder (future)" FontWeight="SemiBold" />
+                        <ComboBox ItemsSource="{Binding ExportEncoderOptions}"
+                                  SelectedItem="{Binding VideoExportEncoder, Mode=TwoWay}"
+                                  Width="220" HorizontalAlignment="Left" />
 
-                    <TextBlock TextWrapping="Wrap"
-                               Opacity="0.6"
-                               Margin="0,8,0,0"
-                               Text="Hardware Decode and GPU Rendering API take effect after restarting the app." />
+                        <!-- ── gpu-next backend ─────────────────────────────── -->
+                        <TextBlock Text="GPU-Next Backend" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                        <CheckBox IsChecked="{Binding VideoUseGpuNext, Mode=TwoWay}"
+                                  Content="Use gpu-next video output (required for RTX enhancements)"/>
+                        <TextBlock TextWrapping="Wrap"
+                                   Opacity="0.6"
+                                   Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or RTX HDR." />
 
-                </StackPanel>
+                        <!-- ── RTX Video Enhancement ────────────────────────── -->
+                        <TextBlock Text="RTX Video Enhancement" FontWeight="SemiBold" Margin="0,12,0,0"/>
+
+                        <!-- VSR -->
+                        <CheckBox IsChecked="{Binding VideoVsrEnabled, Mode=TwoWay}"
+                                  IsEnabled="{Binding VideoUseGpuNext}"
+                                  Content="RTX Video Super Resolution (VSR)"/>
+                        <TextBlock TextWrapping="Wrap" Opacity="0.6"
+                                   Text="AI upscaling via NVIDIA d3d11vpp. Requires RTX GPU, driver ≥ 551.23, and 'RTX Video Enhancement' enabled in NVIDIA Control Panel." />
+
+                        <StackPanel Orientation="Horizontal" Spacing="12"
+                                    IsEnabled="{Binding VideoVsrEnabled}">
+                            <TextBlock Text="VSR Quality:" VerticalAlignment="Center"/>
+                            <Slider Minimum="1" Maximum="4"
+                                    Value="{Binding VideoVsrQuality, Mode=TwoWay}"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    Width="140"/>
+                            <TextBlock Text="{Binding VideoVsrQuality}" VerticalAlignment="Center" Width="14"/>
+                            <TextBlock Opacity="0.55" VerticalAlignment="Center"
+                                       Text="(1 = Performance · 4 = Quality)"/>
+                        </StackPanel>
+
+                        <!-- HDR -->
+                        <CheckBox IsChecked="{Binding VideoHdrEnabled, Mode=TwoWay}"
+                                  IsEnabled="{Binding VideoUseGpuNext}"
+                                  Content="HDR Output Pipeline"
+                                  Margin="0,8,0,0"/>
+                        <TextBlock TextWrapping="Wrap" Opacity="0.6"
+                                   Text="Enables target-colorspace-hint so mpv sends a proper HDR signal to Windows. Pair with NVIDIA RTX HDR in NVIDIA Control Panel for AI SDR→HDR conversion. Requires an HDR display with Windows HDR enabled." />
+
+                        <StackPanel Spacing="8" IsEnabled="{Binding VideoHdrEnabled}">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="Tone Mapping:" VerticalAlignment="Center" Width="100"/>
+                                <ComboBox ItemsSource="{Binding ToneMappingOptions}"
+                                          SelectedItem="{Binding VideoToneMapping, Mode=TwoWay}"
+                                          Width="140"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="Target Peak (nits):" VerticalAlignment="Center" Width="100"/>
+                                <TextBox Text="{Binding VideoTargetPeak, Mode=TwoWay}"
+                                         Width="80"
+                                         ToolTip.Tip="Enter a nit value (e.g. 1000) or 'auto'"/>
+                            </StackPanel>
+                            <CheckBox IsChecked="{Binding VideoHdrComputePeak, Mode=TwoWay}"
+                                      Content="Dynamic peak detection (hdr-compute-peak)"
+                                      ToolTip.Tip="Per-frame brightness peak analysis. May cause brightness instability on some content."/>
+                        </StackPanel>
+
+                        <!-- Restart notice -->
+                        <TextBlock TextWrapping="Wrap"
+                                   Opacity="0.6"
+                                   Margin="0,12,0,0"
+                                   Text="All video settings take effect after restarting the app." />
+
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!-- Models Tab -->

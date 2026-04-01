@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 using Babel.Player.Models;
 
@@ -11,6 +12,16 @@ namespace Babel.Player.Services;
 /// Embedded media transport using libmpv with GPU-accelerated rendering into a native window.
 /// Unlike LibMpvHeadlessTransport, this renders video into an HWND provided via the --wid option,
 /// using libmpv's own GPU pipeline (OpenGL/D3D11 under the hood).
+///
+/// When <see cref="VideoPlaybackOptions.UseGpuNext"/> is true the transport switches to the
+/// gpu-next video output backend, which is required for RTX Video Super Resolution and the
+/// correct mpv HDR pipeline.
+///
+/// VSR is applied dynamically when a file finishes loading: a background event-polling thread
+/// detects the MPV_EVENT_FILE_LOADED event (id 8), queries the video dimensions, computes the
+/// upscale factor required to reach the display resolution, and issues the d3d11vpp filter
+/// command.  The filter is silently skipped when preconditions are not met (no upscaling
+/// needed, unsupported pixel format, VSR disabled, or d3d11vpp unavailable in this build).
 /// </summary>
 public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 {
@@ -20,6 +31,17 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     private bool _isPaused;
     private bool _hasEnded;
 
+    // Options captured at construction for VSR application on file-load.
+    private readonly VideoPlaybackOptions _options;
+
+    // Background event-loop thread for MPV_EVENT_FILE_LOADED.
+    private Thread? _eventThread;
+    private volatile bool _eventThreadRunning;
+
+    // Display dimensions supplied by the host (set via SetDisplaySize).
+    private int _displayWidth;
+    private int _displayHeight;
+
     private delegate IntPtr mpv_create_delegate();
     private delegate int mpv_initialize_delegate(IntPtr handle);
     private delegate int mpv_set_option_string_delegate(IntPtr handle, string name, string value);
@@ -27,6 +49,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     private delegate IntPtr mpv_get_property_string_delegate(IntPtr handle, string name);
     private delegate void mpv_free_delegate(IntPtr data);
     private delegate void mpv_terminate_destroy_delegate(IntPtr handle);
+    private delegate IntPtr mpv_wait_event_delegate(IntPtr handle, double timeout);
 
     private mpv_create_delegate? _mpv_create;
     private mpv_initialize_delegate? _mpv_initialize;
@@ -35,6 +58,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     private mpv_get_property_string_delegate? _mpv_get_property_string;
     private mpv_free_delegate? _mpv_free;
     private mpv_terminate_destroy_delegate? _mpv_terminate_destroy;
+    private mpv_wait_event_delegate? _mpv_wait_event;
 
     private IntPtr _dllHandle = IntPtr.Zero;
 
@@ -52,6 +76,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
     public LibMpvEmbeddedTransport(VideoPlaybackOptions? options = null)
     {
+        _options = options ?? new VideoPlaybackOptions();
+
         _dllHandle = LoadLibMpvDll();
         if (_dllHandle == IntPtr.Zero)
             throw new DllNotFoundException("libmpv DLL not found.");
@@ -62,11 +88,41 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         if (_handle == IntPtr.Zero)
             throw new InvalidOperationException("Failed to create libmpv context.");
 
-        // Use gpu-accelerated video output (renders into wid if set)
-        SetOption("vo", "gpu");
+        // ── Video output backend ───────────────────────────────────────────────
+        // gpu-next is required for RTX VSR (d3d11vpp filter) and for the correct
+        // HDR pipeline (target-colorspace-hint).  It is opt-in: the legacy "gpu"
+        // backend is used when UseGpuNext is false.
+        if (_options.UseGpuNext)
+        {
+            SetOption("vo", "gpu-next");
+            // Pin the rendering context to D3D11 so d3d11vpp is available.
+            SetOption("gpu-context", "d3d11");
+        }
+        else
+        {
+            SetOption("vo", "gpu");
+        }
+
         // Hardware decode and GPU API — set before mpv_initialize; cannot change at runtime
-        SetOption("hwdec",   options?.HwdecMode ?? "auto");
-        SetOption("gpu-api", options?.GpuApi    ?? "auto");
+        SetOption("hwdec",   _options.HwdecMode);
+        SetOption("gpu-api", _options.GpuApi);
+
+        // ── HDR pipeline options (gpu-next + HDR display required) ────────────
+        if (_options.UseGpuNext && _options.HdrEnabled)
+        {
+            // Pass a proper HDR signal to the OS/driver (triggers RTX HDR in NVCP).
+            SetOption("target-colorspace-hint", "yes");
+            // Tone-mapping algorithm for HDR → display peak mapping.
+            SetOption("tone-mapping", _options.ToneMapping);
+            // Display peak nit target ("auto" or a numeric string like "1000").
+            if (!string.IsNullOrWhiteSpace(_options.TargetPeak))
+                SetOption("target-peak", _options.TargetPeak);
+            // Dynamic per-frame peak detection — may cause brightness instability.
+            SetOption("hdr-compute-peak", _options.HdrComputePeak ? "yes" : "no");
+            // Honour the display ICC profile for accurate colour.
+            SetOption("icc-profile-auto", "yes");
+        }
+
         // Keep audio enabled for source media preview
         SetOption("idle", "yes");
         SetOption("keep-open", "yes");
@@ -81,6 +137,21 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _isLoaded = false;
         _isPaused = true;
         _hasEnded = false;
+
+        // Start the background event loop only when VSR may be applied.
+        if (_options.UseGpuNext && _options.VsrEnabled)
+            StartEventThread();
+    }
+
+    /// <summary>
+    /// Informs the transport of the native render-target dimensions so that the VSR
+    /// upscale factor can be computed correctly when a file loads.
+    /// Call this after the HWND is created and whenever the window is resized.
+    /// </summary>
+    public void SetDisplaySize(int width, int height)
+    {
+        _displayWidth  = width;
+        _displayHeight = height;
     }
 
     /// <summary>
@@ -134,7 +205,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         for (int i = 0; i < 20; i++)
         {
             if (Duration > 0) break;
-            System.Threading.Thread.Sleep(50);
+            Thread.Sleep(50);
         }
 
         int result = _mpv_command_string!(_handle, "set pause no");
@@ -185,8 +256,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         {
             if (!_isLoaded || _disposed) return 0;
             var str = GetPropertyString("time-pos");
-            if (str != null && double.TryParse(str, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double timePos))
+            if (str != null && double.TryParse(str, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double timePos))
                 return (long)(timePos * 1000);
             return 0;
         }
@@ -198,8 +269,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         {
             if (!_isLoaded || _disposed) return 0;
             var str = GetPropertyString("duration");
-            if (str != null && double.TryParse(str, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double duration))
+            if (str != null && double.TryParse(str, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double duration))
                 return (long)(duration * 1000);
             return 0;
         }
@@ -211,8 +282,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         {
             if (_disposed || _handle == IntPtr.Zero) return 1.0;
             var str = GetPropertyString("volume");
-            if (str != null && double.TryParse(str, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double vol))
+            if (str != null && double.TryParse(str, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double vol))
                 return Math.Clamp(vol / 100.0, 0.0, 1.0);
             return 1.0;
         }
@@ -281,6 +352,11 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     {
         if (!_disposed)
         {
+            // Signal the event thread to stop and wait for it to exit before
+            // destroying the mpv handle it may still be accessing.
+            _eventThreadRunning = false;
+            _eventThread?.Join(TimeSpan.FromSeconds(2));
+
             if (_handle != IntPtr.Zero)
             {
                 _mpv_terminate_destroy!(_handle);
@@ -307,10 +383,98 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         if (_isLoaded && !_isPaused)
             Pause();
 
+        // Remove any previously applied VSR filter before loading a new file.
+        if (_options.UseGpuNext && _options.VsrEnabled)
+            _mpv_command_string!(_handle, "vf remove @vsr");
+
         _mpv_command_string!(_handle, "stop");
         _isLoaded = false;
         _isPaused = true;
         _hasEnded = false;
+    }
+
+    // ── VSR event loop ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Starts a background thread that polls the mpv event queue and applies the
+    /// d3d11vpp VSR filter after MPV_EVENT_FILE_LOADED (event id 8).
+    /// </summary>
+    private void StartEventThread()
+    {
+        _eventThreadRunning = true;
+        _eventThread = new Thread(EventLoop) { IsBackground = true, Name = "mpv-event-vsr" };
+        _eventThread.Start();
+    }
+
+    private void EventLoop()
+    {
+        // MPV_EVENT_FILE_LOADED = 8, MPV_EVENT_NONE = 0
+        // mpv_wait_event returns a pointer to mpv_event { int event_id; int error; ulong reply; void* data; }
+        // The event_id is the first int-sized field of the struct.
+        const int MpvEventFileLoaded = 8;
+
+        while (_eventThreadRunning)
+        {
+            if (_handle == IntPtr.Zero) { Thread.Sleep(50); continue; }
+
+            // Wait up to 0.5 s for the next event; returns a pointer to mpv_event.
+            IntPtr eventPtr = _mpv_wait_event!(_handle, 0.5);
+
+            if (!_eventThreadRunning) break;
+            if (eventPtr == IntPtr.Zero) continue;
+
+            // Read event_id from the first int-sized field of the mpv_event struct.
+            int eventId = Marshal.ReadInt32(eventPtr);
+            if (eventId != MpvEventFileLoaded) continue;
+
+            ApplyVsrFilter();
+        }
+    }
+
+    /// <summary>
+    /// Computes the VSR scale factor from video vs. display dimensions and issues
+    /// the d3d11vpp filter command.  Silently skips when preconditions are not met.
+    /// </summary>
+    private void ApplyVsrFilter()
+    {
+        if (_disposed || _handle == IntPtr.Zero) return;
+
+        // Query video dimensions.
+        var wStr = GetPropertyString("width");
+        var hStr = GetPropertyString("height");
+        if (!int.TryParse(wStr, out int videoW) || videoW <= 0) return;
+        if (!int.TryParse(hStr, out int videoH) || videoH <= 0) return;
+
+        int dispW = _displayWidth  > 0 ? _displayWidth  : videoW;
+        int dispH = _displayHeight > 0 ? _displayHeight : videoH;
+
+        // Compute the upscale factor needed along the larger axis.
+        double scaleExact = Math.Max(dispW, dispH) / (double)Math.Max(videoW, videoH);
+
+        // Snap to the nearest 0.1 to avoid floating-point filter noise.
+        double scale = Math.Floor(scaleExact * 10.0) / 10.0;
+
+        // Do not apply VSR when no upscaling is required.
+        if (scale <= 1.0) return;
+
+        // d3d11vpp only works reliably on nv12 / yuv420p.
+        // For 10-bit sources a format conversion is prepended automatically.
+        var hwFmt = GetPropertyString("video-params/hw-pixelformat")
+                    ?? GetPropertyString("video-params/pixelformat")
+                    ?? "";
+
+        bool needsFormatConv = hwFmt != "nv12" && hwFmt != "yuv420p" && !string.IsNullOrEmpty(hwFmt);
+
+        // Quality level: 1 (Performance) … 4 (Quality); clamp to valid range.
+        int quality = Math.Clamp(_options.VsrQuality, 1, 4);
+
+        string filterChain = needsFormatConv
+            ? $"@vsr:lavfi=[format=nv12],d3d11vpp:scaling-mode=nvidia:scale={scale:F1}:scaling-quality={quality}"
+            : $"@vsr:d3d11vpp:scaling-mode=nvidia:scale={scale:F1}:scaling-quality={quality}";
+
+        // Remove any stale filter first, then add the new one.
+        _mpv_command_string!(_handle, "vf remove @vsr");
+        _mpv_command_string!(_handle, $"vf add {filterChain}");
     }
 
         private IntPtr LoadLibMpvDll()
@@ -366,6 +530,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _mpv_get_property_string = LoadFunction<mpv_get_property_string_delegate>("mpv_get_property_string");
         _mpv_free = LoadFunction<mpv_free_delegate>("mpv_free");
         _mpv_terminate_destroy = LoadFunction<mpv_terminate_destroy_delegate>("mpv_terminate_destroy");
+        _mpv_wait_event = LoadFunction<mpv_wait_event_delegate>("mpv_wait_event");
     }
 
     private string? GetPropertyString(string name)

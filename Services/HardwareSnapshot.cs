@@ -23,7 +23,11 @@ public sealed record HardwareSnapshot(
     string? CudaVersion,
     bool HasOpenVino,
     string? OpenVinoVersion,
-    string? NpuLabel)
+    string? NpuLabel,
+    bool IsRtxCapable,
+    bool IsVsrDriverSufficient,
+    string? NvidiaDriverVersion,
+    bool IsHdrDisplayAvailable)
 {
     /// <summary>Placeholder shown while background detection is still running.</summary>
     public static HardwareSnapshot Detecting { get; } = new(
@@ -34,7 +38,11 @@ public sealed record HardwareSnapshot(
         GpuName: null, GpuVramMb: null,
         HasCuda: false, CudaVersion: null,
         HasOpenVino: false, OpenVinoVersion: null,
-        NpuLabel: null);
+        NpuLabel: null,
+        IsRtxCapable: false,
+        IsVsrDriverSufficient: false,
+        NvidiaDriverVersion: null,
+        IsHdrDisplayAvailable: false);
 
     // ── Formatted display lines ────────────────────────────────────────────────
 
@@ -100,10 +108,13 @@ public sealed record HardwareSnapshot(
         var hasAvx512 = TryAvx512();
         var ramGb     = DetectRamGb();
 
-        var (gpuName, gpuVramMb) = DetectGpu();
-        var (hasCuda, cudaVer)   = DetectCuda();
-        var (hasOv, ovVer)       = DetectOpenVino();
-        var npuLabel             = InferNpu(cpuName);
+        var (gpuName, gpuVramMb)          = DetectGpu();
+        var (hasCuda, cudaVer)            = DetectCuda();
+        var (hasOv, ovVer)                = DetectOpenVino();
+        var npuLabel                      = InferNpu(cpuName);
+        var (driverVer, isVsrSufficient)  = DetectNvidiaDriver();
+        var isRtx                         = IsRtxGpu(gpuName);
+        var isHdr                         = DetectHdrDisplay();
 
         return new HardwareSnapshot(
             IsDetecting: false,
@@ -113,7 +124,11 @@ public sealed record HardwareSnapshot(
             GpuName: gpuName, GpuVramMb: gpuVramMb,
             HasCuda: hasCuda, CudaVersion: cudaVer,
             HasOpenVino: hasOv, OpenVinoVersion: ovVer,
-            NpuLabel: npuLabel);
+            NpuLabel: npuLabel,
+            IsRtxCapable: isRtx,
+            IsVsrDriverSufficient: isVsrSufficient,
+            NvidiaDriverVersion: driverVer,
+            IsHdrDisplayAvailable: isHdr);
     }
 
     // ── CPU ────────────────────────────────────────────────────────────────────
@@ -198,6 +213,42 @@ public sealed record HardwareSnapshot(
         return (name, vram);
     }
 
+    // ── RTX capable ───────────────────────────────────────────────────────────
+
+    private static bool IsRtxGpu(string? gpuName)
+    {
+        if (gpuName == null) return false;
+        return gpuName.Contains("RTX", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ── NVIDIA driver version (via nvidia-smi) ────────────────────────────────
+
+    /// <summary>
+    /// Returns the driver version string and whether it meets the minimum required for
+    /// RTX Video Super Resolution (≥ 551.23).
+    /// </summary>
+    private static (string? version, bool isSufficient) DetectNvidiaDriver()
+    {
+        var output = RunAndCapture("nvidia-smi",
+            "--query-gpu=driver_version --format=csv,noheader,nounits");
+        if (output == null) return (null, false);
+
+        var ver = output.Trim().Split('\n')[0].Trim();
+        if (string.IsNullOrEmpty(ver)) return (null, false);
+
+        // Driver versions on Windows follow a nnn.nn format (e.g. "551.23", "572.16")
+        bool sufficient = false;
+        var parts = ver.Split('.');
+        if (parts.Length >= 2
+            && int.TryParse(parts[0], out int major)
+            && int.TryParse(parts[1], out int minor))
+        {
+            sufficient = major > 551 || (major == 551 && minor >= 23);
+        }
+
+        return (ver, sufficient);
+    }
+
     // ── CUDA (via nvidia-smi header) ──────────────────────────────────────────
 
     private static (bool hasCuda, string? version) DetectCuda()
@@ -207,6 +258,46 @@ public sealed record HardwareSnapshot(
 
         var m = Regex.Match(output, @"CUDA Version:\s*(\S+)");
         return m.Success ? (true, m.Groups[1].Value) : (false, null);
+    }
+
+    // ── HDR display (Windows-only, WMI fallback) ──────────────────────────────
+
+    /// <summary>
+    /// Returns true when at least one connected display reports HDR capability via the
+    /// Windows registry (HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\SceneChangeDetect).
+    /// Falls back gracefully to false on non-Windows or when the key is absent.
+    /// </summary>
+    private static bool DetectHdrDisplay()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+
+        try
+        {
+            // Windows stores per-display HDR support under the display adapter key.
+            // The presence of any HDR-enabled monitor is surfaced via WMI or the registry.
+            // We use a lightweight registry probe that works without WMI activation.
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration");
+            if (key == null) return false;
+
+            foreach (var subkeyName in key.GetSubKeyNames())
+            {
+                using var subkey = key.OpenSubKey(subkeyName);
+                if (subkey == null) continue;
+                foreach (var childName in subkey.GetSubKeyNames())
+                {
+                    using var child = subkey.OpenSubKey(childName);
+                    if (child == null) continue;
+                    // "HDRSupported" value present and non-zero → HDR display
+                    var hdrVal = child.GetValue("HDRSupported");
+                    if (hdrVal is int i && i != 0) return true;
+                    if (hdrVal is uint u && u != 0) return true;
+                }
+            }
+        }
+        catch { /* fall through */ }
+
+        return false;
     }
 
     // ── OpenVINO (via Python import probe) ────────────────────────────────────

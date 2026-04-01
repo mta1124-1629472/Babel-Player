@@ -6,5 +6,12 @@ namespace Babel.Player.Models;
 /// be changed at runtime — changing them requires an app restart.
 /// </summary>
 public sealed record VideoPlaybackOptions(
-    string HwdecMode = "auto",
-    string GpuApi    = "auto");
+    string HwdecMode       = "auto",
+    string GpuApi          = "auto",
+    bool   UseGpuNext      = false,
+    bool   VsrEnabled      = false,
+    int    VsrQuality      = 2,
+    bool   HdrEnabled      = false,
+    string ToneMapping     = "bt.2390",
+    string TargetPeak      = "auto",
+    bool   HdrComputePeak  = false);
