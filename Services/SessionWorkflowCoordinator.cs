@@ -178,7 +178,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void StopTtsPlayback()
     {
-        _transportManager.GetOrCreateSegmentPlayer().Pause();
+        try
+        {
+            _transportManager.SegmentPlayer?.Pause();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown/race path: segment transport was disposed while timer tick tried to stop playback.
+        }
         ActiveTtsSegmentId = null;
         PlaybackState = PlaybackState.Idle;
     }

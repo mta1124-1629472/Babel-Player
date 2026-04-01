@@ -37,6 +37,8 @@ public sealed class MediaTransportManager : IMediaTransportManager
         return _sourceMediaPlayer;
     }
 
+    public IMediaTransport? SegmentPlayer => _segmentPlayer;
+
     public IMediaTransport? SourceMediaPlayer => _sourceMediaPlayer;
 
     public void Dispose()

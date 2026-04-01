@@ -247,10 +247,9 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
     
     public void Pause()
     {
+        // Idempotent pause: safe no-op when transport is disposed or media isn't loaded.
         if (!_isLoaded || _disposed)
-        {
-            throw new ObjectDisposedException(nameof(LibMpvHeadlessTransport));
-        }
+            return;
         
         int result = _mpv_command_string!(_handle, "set pause yes");
         if (result < 0)
