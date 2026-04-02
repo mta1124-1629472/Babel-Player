@@ -154,6 +154,27 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
+    public void TranslationRegistry_CheckReadiness_OpenAiWithoutKey_ReturnsMissingKey()
+    {
+        var readiness = _translationRegistry.CheckReadiness(
+            ProviderNames.OpenAi, "gpt-4o-mini", new AppSettings { TranslationProvider = ProviderNames.OpenAi, TranslationModel = "gpt-4o-mini" }, null);
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains("API key missing", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TranslationRegistry_CreateProvider_OpenAi_DoesNotThrow()
+    {
+        var provider = _translationRegistry.CreateProvider(
+            ProviderNames.OpenAi,
+            new AppSettings { TranslationProvider = ProviderNames.OpenAi, TranslationModel = "gpt-4o-mini" },
+            null);
+
+        Assert.NotNull(provider);
+    }
+
+    [Fact]
     public void TranslationRegistry_AllUnimplementedProviders_HaveIsImplementedFalse()
     {
         foreach (var p in _translationRegistry.GetAvailableProviders().Where(p => !p.IsImplemented))

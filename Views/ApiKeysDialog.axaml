@@ -48,7 +48,7 @@
                                     </Grid>
 
                                     <!-- Key input row -->
-                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                                         <TextBox Grid.Column="0"
                                                  Text="{Binding KeyValue, Mode=TwoWay}"
                                                  PasswordChar="{Binding MaskChar}"
@@ -77,12 +77,26 @@
                                                 CornerRadius="4" FontSize="12" />
 
                                         <Button Grid.Column="3"
+                                                Command="{Binding ValidateKeyCommand}"
+                                                Content="{Binding ValidateButtonText}"
+                                                IsEnabled="{Binding CanValidateLive}"
+                                                Padding="10,6" Margin="4,0,0,0"
+                                                Background="#1E2436" Foreground="#93C5FD"
+                                                CornerRadius="4" FontSize="12" />
+
+                                        <Button Grid.Column="4"
                                                 Command="{Binding ClearKeyCommand}"
                                                 Content="Clear"
                                                 Padding="10,6" Margin="4,0,0,0"
                                                 Background="#2E1E1E" Foreground="#FCA5A5"
                                                 CornerRadius="4" FontSize="12" />
                                     </Grid>
+
+                                    <TextBlock Text="{Binding ValidationText}"
+                                               Foreground="{Binding ValidationTextColor}"
+                                               FontSize="11"
+                                               IsVisible="{Binding HasValidationText}"
+                                               TextWrapping="Wrap" />
 
                                 </StackPanel>
                             </Border>

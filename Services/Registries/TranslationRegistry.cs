@@ -60,8 +60,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
             "OpenAI API",
             true,
             CredentialKeys.OpenAi,
-            ["gpt-4o", "gpt-4o-mini"],
-            IsImplemented: false)
+            ["gpt-4o", "gpt-4o-mini"])
     ];
 
     public ProviderReadiness CheckReadiness(string providerId, string model, AppSettings settings, ApiKeyStore? keyStore)
@@ -93,6 +92,10 @@ public sealed class TranslationRegistry : ITranslationRegistry
         {
             ProviderNames.Nllb200 => new NllbTranslationProvider(_log, settings.TranslationModel),
             ProviderNames.GoogleTranslateFree => new GoogleTranslationProvider(_log),
+            ProviderNames.OpenAi => new OpenAiTranslationProvider(
+                _log,
+                keyStore?.GetKey(CredentialKeys.OpenAi) ?? string.Empty,
+                settings.TranslationModel),
             ProviderNames.ContainerizedService => new ContainerizedTranslationProvider(
                 new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log), _log),
             _ => throw new PipelineProviderException(
