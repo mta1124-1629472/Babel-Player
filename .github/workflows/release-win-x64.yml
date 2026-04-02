@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -25,6 +26,19 @@ jobs:
       - name: Restore
         run: dotnet restore Babel-Player.sln -r win-x64
 
+      - name: Build
+        run: dotnet build Babel-Player.sln --no-restore --configuration Release -r win-x64
+
+      - name: Run architecture checks
+        run: python scripts/check-architecture.py
+
+      - name: Run core tests
+        run: >
+          dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
+          --no-build
+          --configuration Release
+          --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation"
+
       - name: Download FFmpeg for Windows x64
         shell: pwsh
         run: |
@@ -45,7 +59,7 @@ jobs:
           --configuration Release
           -r win-x64
           --self-contained true
-          -p:ApplicationIcon=babelplayer.ico
+          -p:PublishSingleFile=false
           -o ./publish
 
       - name: Verify publish output
@@ -59,35 +73,73 @@ jobs:
           if (-not (Test-Path $ffmpegPath)) {
             throw "Expected FFmpeg binary not found at $ffmpegPath"
           }
+          $mpvPath = "./publish/libmpv-2.dll"
+          if (-not (Test-Path $mpvPath)) {
+            throw "Expected libmpv binary not found at $mpvPath"
+          }
+
+      - name: Stage release bundle
+        id: stage_bundle
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = "manual"
+          }
+
+          $bundleRoot = Join-Path "${{ github.workspace }}" "dist\\Babel-Player-$tag-win-x64-portable"
+          if (Test-Path $bundleRoot) {
+            Remove-Item -Path $bundleRoot -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Path $bundleRoot -Force | Out-Null
+          Copy-Item -Path ".\\publish\\*" -Destination $bundleRoot -Recurse -Force
+          Copy-Item -Path ".\\README.md" -Destination (Join-Path $bundleRoot "README.md") -Force
+          Copy-Item -Path ".\\LICENSE" -Destination (Join-Path $bundleRoot "LICENSE.txt") -Force
+          Copy-Item -Path ".\\docs\\install-windows-release.md" -Destination (Join-Path $bundleRoot "INSTALL-WINDOWS.md") -Force
+
+          "bundle_root=$bundleRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Package self-contained publish output
         id: package
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $publishDir = "${{ github.workspace }}/publish"
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = "manual"
+          }
+          $bundleDir = "${{ steps.stage_bundle.outputs.bundle_root }}"
 
-          if (-not (Test-Path $publishDir)) {
-            throw "Publish output not found at $publishDir"
+          if (-not (Test-Path $bundleDir)) {
+            throw "Release bundle not found at $bundleDir"
           }
 
           New-Item -ItemType Directory -Path "dist" -Force | Out-Null
-          $zipPath = "dist/Babel-Player-$tag-win-x64-self-contained.zip"
+          $zipPath = "dist/Babel-Player-$tag-win-x64-portable.zip"
+          $checksumPath = "dist/Babel-Player-$tag-win-x64-portable.sha256"
 
-          Compress-Archive -Path "$publishDir/*" -DestinationPath $zipPath -Force
+          Compress-Archive -Path "$bundleDir\\*" -DestinationPath $zipPath -Force
+          $hash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $zipPath -Leaf)" | Set-Content -Path $checksumPath
 
           "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "checksum_path=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: babel-player-${{ github.ref_name }}-win-x64-self-contained
-          path: ${{ steps.package.outputs.zip_path }}
+          name: babel-player-${{ github.ref_name || 'manual' }}-win-x64-portable
+          path: |
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.checksum_path }}
           if-no-files-found: error
           retention-days: 30
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.package.outputs.zip_path }}
+          files: |
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.checksum_path }}
+          body_path: docs/install-windows-release.md
           generate_release_notes: true

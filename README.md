@@ -51,11 +51,31 @@ To be direct about current limits:
 | Dependency | Notes |
 |-----------|-------|
 | Windows 10/11 x64 | Only tested platform |
-| [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) | Required to run |
+| [.NET 10 SDK or Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) | Needed for source builds; GitHub release bundles are self-contained |
 | Python 3.10+ | Required for transcription, translation, and TTS |
 | Whisper-compatible Python environment | Transcription backend |
 | FFmpeg | Audio extraction; placed in `tools/win-x64/ffmpeg.exe` or on `PATH` |
 | libmpv-2.dll | Bundled in `native/win-x64/` — GPU video output via `vo=gpu` |
+
+---
+
+## Install from GitHub Releases
+
+For normal users, prefer the latest GitHub release over building from source:
+
+1. Download `Babel-Player-<version>-win-x64-portable.zip`
+2. Download the matching `.sha256` file
+3. Extract the zip to a folder such as `C:\Apps\BabelPlayer`
+4. Run `BabelPlayer.exe`
+
+Release bundles already include:
+
+- the .NET runtime needed to run the app
+- `ffmpeg.exe`
+- `libmpv-2.dll`
+- the app executable and managed dependencies
+
+Release bundles do **not** include Python or model/provider runtimes. See [`docs/install-windows-release.md`](docs/install-windows-release.md) for the user-facing install notes that ship with the release.
 
 ---
 

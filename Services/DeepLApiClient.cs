@@ -53,10 +53,13 @@ public sealed class DeepLApiClient : IDisposable
         if (texts.Count == 0)
             return [];
 
+        var normalizedTarget = NormalizeLanguage(targetLanguage, isTargetLanguage: true)
+            ?? throw new ArgumentException("Target language cannot be empty.", nameof(targetLanguage));
+
         var request = new TranslateRequestDto
         {
             Text = [.. texts],
-            TargetLanguage = NormalizeLanguage(targetLanguage, isTargetLanguage: true)
+            TargetLanguage = normalizedTarget
         };
 
         var normalizedSource = NormalizeLanguage(sourceLanguage, isTargetLanguage: false);
