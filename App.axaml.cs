@@ -43,6 +43,7 @@ public partial class App : Application
 
             _logFilePath = Path.Combine(appDataRoot, "logs", "babel-player.log");
             var appLog = new AppLog(_logFilePath);
+            var errorDialogService = new AvaloniaErrorDialogService(appLog);
             _startupLog = appLog;
 
             // Initialize Settings and other stores
@@ -89,7 +90,12 @@ public partial class App : Application
 
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService, _apiKeyStore),
+                DataContext = new MainWindowViewModel(
+                    _sessionWorkflowCoordinator,
+                    _settingsService,
+                    _apiKeyStore,
+                    errorDialogService,
+                    _logFilePath),
             };
 
             // Run heavy startup probes in background and publish results on UI thread.

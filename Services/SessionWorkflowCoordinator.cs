@@ -32,10 +32,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly EventHandler<Exception> _segmentErrorHandler;
     private readonly Dictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
         new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _saveGate = new();
-    private CancellationTokenSource? _saveDebounceCts;
-    private WorkflowSessionSnapshot? _pendingSaveSnapshot;
-    private static readonly TimeSpan SaveDebounceDelay = TimeSpan.FromMilliseconds(350);
 
     [ObservableProperty]
     private WorkflowSessionSnapshot _currentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
@@ -1069,11 +1065,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     private string GetSessionDirectory() => SessionDirectoryFor(CurrentSession.SessionId);
 
-    private static string SessionDirectoryFor(Guid sessionId)
-    {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(appData, "BabelPlayer", "sessions", sessionId.ToString());
-    }
+    private string SessionDirectoryFor(Guid sessionId) =>
+        _perSessionStore.GetSessionDirectory(sessionId);
 
     /// <summary>
     /// Restores a previously-opened session by ID, stashing the current one first.
@@ -1183,76 +1176,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void SaveCurrentSession()
     {
-        CurrentSession = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-        PersistenceStatus = $"Queued session snapshot save to {StateFilePath}.";
-        ScheduleSave(CurrentSession);
+        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
+        CurrentSession = snapshot;
+        PersistSnapshot(snapshot, updateStatus: true);
     }
 
     public void FlushPendingSave()
     {
-        CancellationTokenSource? pendingCts;
-        WorkflowSessionSnapshot snapshotToSave;
-
-        lock (_saveGate)
-        {
-            pendingCts = _saveDebounceCts;
-            _saveDebounceCts = null;
-            snapshotToSave = _pendingSaveSnapshot ?? (CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow });
-            _pendingSaveSnapshot = null;
-        }
-
-        pendingCts?.Cancel();
-        pendingCts?.Dispose();
-
-        CurrentSession = snapshotToSave;
-        PersistSnapshot(snapshotToSave, updateStatus: true);
-    }
-
-    private void ScheduleSave(WorkflowSessionSnapshot snapshot)
-    {
-        CancellationTokenSource? previousCts;
-        CancellationTokenSource currentCts;
-
-        lock (_saveGate)
-        {
-            _pendingSaveSnapshot = snapshot;
-            previousCts = _saveDebounceCts;
-            currentCts = new CancellationTokenSource();
-            _saveDebounceCts = currentCts;
-        }
-
-        previousCts?.Cancel();
-        previousCts?.Dispose();
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(SaveDebounceDelay, currentCts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                currentCts.Dispose();
-                return;
-            }
-
-            WorkflowSessionSnapshot snapshotToSave;
-            lock (_saveGate)
-            {
-                if (!ReferenceEquals(_saveDebounceCts, currentCts))
-                {
-                    currentCts.Dispose();
-                    return;
-                }
-
-                snapshotToSave = _pendingSaveSnapshot ?? CurrentSession;
-                _pendingSaveSnapshot = null;
-                _saveDebounceCts = null;
-            }
-
-            PersistSnapshot(snapshotToSave, updateStatus: false);
-            currentCts.Dispose();
-        });
+        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
+        CurrentSession = snapshot;
+        PersistSnapshot(snapshot, updateStatus: true);
     }
 
     private void PersistSnapshot(WorkflowSessionSnapshot snapshot, bool updateStatus)

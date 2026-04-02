@@ -22,6 +22,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 {
     private readonly SessionWorkflowCoordinator _coordinator;
     private readonly ApiKeyStore? _apiKeyStore;
+    private readonly IErrorDialogService? _errorDialogService;
+    private readonly string? _logFilePath;
     private string? _lastKnownSourceMediaPath;
     private bool _isUpdatingPositionFromTimer;
     private bool _isUpdatingActiveSegment;
@@ -43,6 +45,15 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private string _statusText = "No segments loaded.";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasErrorDetails))]
+    private string? _statusErrorTitle;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasErrorDetails))]
+    private string? _statusErrorDetail;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRunPipeline))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -146,10 +157,16 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private readonly DispatcherTimer _controlsHideTimer;
     private const int ControlsHideDelayMs = 3000;
 
-    public EmbeddedPlaybackViewModel(SessionWorkflowCoordinator coordinator, ApiKeyStore? apiKeyStore = null)
+    public EmbeddedPlaybackViewModel(
+        SessionWorkflowCoordinator coordinator,
+        ApiKeyStore? apiKeyStore = null,
+        IErrorDialogService? errorDialogService = null,
+        string? logFilePath = null)
     {
         _coordinator = coordinator;
         _apiKeyStore = apiKeyStore;
+        _errorDialogService = errorDialogService;
+        _logFilePath = logFilePath;
         _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
         _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
 
@@ -202,6 +219,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
     public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
+    public bool CanRunPipeline => !IsBusy;
+    public bool HasErrorDetails => !string.IsNullOrWhiteSpace(StatusErrorDetail);
     public bool HasDiagnosticsWarning => !_coordinator.BootstrapDiagnostics.AllDependenciesAvailable;
     public string DiagnosticsWarningText => _coordinator.BootstrapDiagnostics.DiagnosticSummary;
     public string VoiceModelLabel => _coordinator.CurrentSession.TtsVoice ?? _coordinator.CurrentSettings.TtsVoice;
@@ -260,6 +279,18 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         if (readiness.IsReady) return "";
         if (readiness.RequiresModelDownload) return "⬇️ Download required (will run automatically)";
         return $"⚠️ {readiness.BlockingReason}";
+    }
+
+    private void ClearStatusErrorDetail()
+    {
+        StatusErrorTitle = null;
+        StatusErrorDetail = null;
+    }
+
+    private void SetStatusErrorDetail(string title, Exception ex)
+    {
+        StatusErrorTitle = title;
+        StatusErrorDetail = ex.ToString();
     }
 
     // ── Hardware display lines ─────────────────────────────────────────────────
@@ -335,10 +366,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             {
                 await Task.Run(() => player.Play());
                 IsSourcePaused = false;
+                ClearStatusErrorDetail();
             }
             catch (Exception ex)
             {
                 StatusText = $"Play failed: {ex.Message}";
+                SetStatusErrorDetail("Source Playback failed", ex);
                 return;
             }
         }
@@ -678,10 +711,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             {
                 await Task.Run(() => player.Play());
                 IsSourcePaused = false;
+                ClearStatusErrorDetail();
             }
             catch (Exception ex)
             {
                 StatusText = $"Play failed: {ex.Message}";
+                SetStatusErrorDetail("Source Playback failed", ex);
             }
         }
         else
@@ -792,11 +827,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             StatusText = HasSegments
                 ? $"{Segments.Count} segments loaded."
                 : "No segments available. Run the workflow first.";
+            ClearStatusErrorDetail();
             if (IsSubtitleModeOn) ApplySubtitleState();
         }
         catch (Exception ex)
         {
             StatusText = $"Failed to load segments: {ex.Message}";
+            SetStatusErrorDetail("Load Segments failed", ex);
         }
     }
 
@@ -809,10 +846,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             StatusText = $"Playing source at {segment.StartSeconds:F1}s…";
             await _coordinator.PlaySourceMediaAtSegmentAsync(segment.SegmentId);
             IsSourcePaused = false;
+            ClearStatusErrorDetail();
         }
         catch (Exception ex)
         {
             StatusText = $"Source playback failed: {ex.Message}";
+            SetStatusErrorDetail("Source Playback failed", ex);
         }
     }
 
@@ -835,6 +874,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             _pipelineCts.Cancel();
             StatusText = "Canceling pipeline...";
             IsPipelineProgressVisible = false;
+            ClearStatusErrorDetail();
         }
     }
 
@@ -845,6 +885,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         if (!diag.AllDependenciesAvailable)
         {
             StatusText = $"⚠ {diag.DiagnosticSummary}";
+            ClearStatusErrorDetail();
             return;
         }
 
@@ -894,18 +935,22 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         {
             IsBusy = true;
             StatusText = "Running pipeline…";
+            ClearStatusErrorDetail();
             await _coordinator.AdvancePipelineAsync(progress, ct);
             StatusText = "Loading segments…";
             await RefreshSegmentsAsync();
             StatusText = _coordinator.CurrentSession.StatusMessage;
+            ClearStatusErrorDetail();
         }
         catch (OperationCanceledException)
         {
             StatusText = "Pipeline cancelled.";
+            ClearStatusErrorDetail();
         }
         catch (Exception ex)
         {
             StatusText = $"Pipeline failed: {ex.Message}";
+            SetStatusErrorDetail("Pipeline failed", ex);
         }
         finally
         {
@@ -925,6 +970,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         if (IsSubtitleModeOn) ToggleSubtitles();
         if (IsDubModeOn) ToggleDubMode();
         StatusText = "Pipeline cleared. Ready to run fresh.";
+        ClearStatusErrorDetail();
     }
 
     private void ApplySmartWipe(PipelineInvalidation invalidation)
@@ -963,17 +1009,34 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         {
             IsBusy = true;
             StatusText = $"Regenerating translation for {segment.SegmentId}…";
+            ClearStatusErrorDetail();
             await _coordinator.RegenerateSegmentTranslationAsync(segment.SegmentId);
             await RefreshSegmentsAsync();
             StatusText = $"Translation regenerated for {segment.SegmentId}.";
+            ClearStatusErrorDetail();
         }
         catch (Exception ex)
         {
             StatusText = $"Regeneration failed: {ex.Message}";
+            SetStatusErrorDetail("Regeneration failed", ex);
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    [RelayCommand]
+    private async Task ShowStatusErrorDetailsAsync()
+    {
+        if (_errorDialogService is null || string.IsNullOrWhiteSpace(StatusErrorDetail))
+        {
+            return;
+        }
+
+        await _errorDialogService.ShowErrorAsync(
+            StatusErrorTitle ?? "Error details",
+            StatusErrorDetail,
+            _logFilePath);
     }
 }

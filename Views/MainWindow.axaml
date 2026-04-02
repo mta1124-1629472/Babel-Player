@@ -287,7 +287,7 @@
                                 Foreground="White"
                                 CornerRadius="6"
                                 Command="{Binding Playback.RunPipelineCommand}"
-                                IsEnabled="{Binding !Playback.IsBusy}">
+                                IsEnabled="{Binding Playback.CanRunPipeline}">
                             <Button.Content>
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <TextBlock Text="▶" VerticalAlignment="Center" />
@@ -349,9 +349,30 @@
                                      Height="4" Foreground="#7C3AED" Background="#2A2A3A"
                                      HorizontalAlignment="Stretch" Margin="0,4"/>
 
-                        <TextBlock FontSize="11" Foreground="#3A3A50"
-                                   HorizontalAlignment="Center"
-                                   Text="{Binding Playback.StatusText, StringFormat='● {0}'}" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0"
+                                       FontSize="11"
+                                       Foreground="#3A3A50"
+                                       HorizontalAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       MaxHeight="52"
+                                       Text="{Binding Playback.StatusText, StringFormat='● {0}'}" />
+
+                            <Button Grid.Column="1"
+                                    Command="{Binding Playback.ShowStatusErrorDetailsCommand}"
+                                    IsVisible="{Binding Playback.HasErrorDetails}"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Bottom"
+                                    Padding="6,2"
+                                    MinWidth="24"
+                                    FontSize="12"
+                                    Background="#2A2A3A"
+                                    Foreground="#A8A8C8"
+                                    CornerRadius="4"
+                                    ToolTip.Tip="Expand error details">
+                                <TextBlock Text="↗" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Button>
+                        </Grid>
 
                         <Button HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"

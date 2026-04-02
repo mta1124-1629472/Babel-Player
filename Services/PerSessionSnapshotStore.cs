@@ -24,6 +24,12 @@ public sealed class PerSessionSnapshotStore
         Directory.CreateDirectory(sessionsRoot);
     }
 
+    /// <summary>Root directory containing all per-session folders.</summary>
+    public string SessionsRoot => _sessionsRoot;
+
+    /// <summary>Returns the directory path for a specific session ID.</summary>
+    public string GetSessionDirectory(Guid sessionId) => SessionDir(sessionId);
+
     /// <summary>Writes <c>sessions/[SessionId]/snapshot.json</c>. Non-fatal on failure.</summary>
     public void Save(WorkflowSessionSnapshot snapshot)
     {

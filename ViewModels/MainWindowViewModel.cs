@@ -16,13 +16,15 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel(
         SessionWorkflowCoordinator coordinator,
         SettingsService settingsService,
-        ApiKeyStore? apiKeyStore = null)
+        ApiKeyStore? apiKeyStore = null,
+        IErrorDialogService? errorDialogService = null,
+        string? logFilePath = null)
     {
         Coordinator = coordinator;
         _settingsService = settingsService;
         _apiKeyStore = apiKeyStore;
 
-        Playback = new EmbeddedPlaybackViewModel(coordinator, apiKeyStore);
+        Playback = new EmbeddedPlaybackViewModel(coordinator, apiKeyStore, errorDialogService, logFilePath);
         Inspection = new SegmentInspectionViewModel(Playback);
 
 

@@ -37,6 +37,11 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
 
     private void ShowDialog(string title, string fullDetail, string? logFilePath)
     {
+        const double CollapsedDetailMaxHeight = 140;
+        const double ExpandedDetailMaxHeight = 520;
+
+        var detailsExpanded = false;
+
         // ── Layout ────────────────────────────────────────────────────────────
         var errorBox = new TextBox
         {
@@ -48,6 +53,7 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
             FontSize          = 12,
             Background        = Brushes.Transparent,
             BorderThickness   = new Thickness(0),
+            Padding           = new Thickness(0, 0, 0, 4),
             [ScrollViewer.HorizontalScrollBarVisibilityProperty] = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
         };
 
@@ -56,7 +62,48 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
             Content           = errorBox,
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility   = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            MaxHeight         = 400,
+            MaxHeight         = CollapsedDetailMaxHeight,
+        };
+
+        var expandDetailsBtn = new Button
+        {
+            Content = "↗ Expand details",
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 6, 0, 0),
+            MinWidth = 130,
+        };
+
+        ToolTip.SetTip(expandDetailsBtn, "Expand details");
+
+        void ApplyDetailsState()
+        {
+            scroll.MaxHeight = detailsExpanded ? ExpandedDetailMaxHeight : CollapsedDetailMaxHeight;
+            expandDetailsBtn.Content = detailsExpanded ? "↙ Collapse details" : "↗ Expand details";
+            ToolTip.SetTip(expandDetailsBtn, detailsExpanded ? "Collapse details" : "Expand details");
+        }
+
+        expandDetailsBtn.Click += (_, _) =>
+        {
+            detailsExpanded = !detailsExpanded;
+            ApplyDetailsState();
+        };
+
+        ApplyDetailsState();
+
+        var detailsContainer = new Border
+        {
+            BorderBrush = Brushes.LightGray,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(10),
+            Child = new StackPanel
+            {
+                Children =
+                {
+                    scroll,
+                    expandDetailsBtn,
+                },
+            },
         };
 
         Control? logPathRow = null;
@@ -157,7 +204,7 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
             {
                 headerText,
                 divider,
-                scroll,
+                detailsContainer,
             },
         };
 
