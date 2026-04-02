@@ -54,6 +54,42 @@ public sealed class GoogleApiClient : IDisposable
     }
 
     /// <summary>
+    /// Synthesizes speech with Google Cloud TTS and returns decoded audio bytes.
+    /// </summary>
+    public async Task<byte[]> SynthesizeSpeechAsync(
+        string text,
+        string voiceName,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new GoogleSynthesizeRequest(
+            Input: new GoogleSynthesizeInput(text),
+            Voice: new GoogleSynthesizeVoice(voiceName, ResolveLanguageFromVoiceName(voiceName)),
+            AudioConfig: new GoogleSynthesizeAudioConfig("MP3"));
+
+        var json = JsonSerializer.Serialize(request, JsonOptions);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync($"text:synthesize?key={Uri.EscapeDataString(_apiKey)}", content, cancellationToken);
+        var result = await ReadJsonAsync<GoogleSynthesizeResponse>(response, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(result.AudioContent))
+            throw new InvalidOperationException("Google TTS returned empty audio content.");
+
+        return Convert.FromBase64String(result.AudioContent);
+    }
+
+    private static string ResolveLanguageFromVoiceName(string voiceName)
+    {
+        if (string.IsNullOrWhiteSpace(voiceName))
+            return "en-US";
+
+        var parts = voiceName.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+            return "en-US";
+
+        return $"{parts[0]}-{parts[1]}";
+    }
+
+    /// <summary>
     /// Calls Cloud Speech-to-Text synchronous recognize endpoint with API-key auth.
     /// Audio bytes are expected to be LINEAR16 wav at 16kHz mono.
     /// </summary>
@@ -126,6 +162,24 @@ public sealed class GoogleApiException : Exception
         StatusCode = statusCode;
     }
 }
+
+public sealed record GoogleSynthesizeResponse(
+    [property: JsonPropertyName("audioContent")] string? AudioContent);
+
+internal sealed record GoogleSynthesizeRequest(
+    [property: JsonPropertyName("input")] GoogleSynthesizeInput Input,
+    [property: JsonPropertyName("voice")] GoogleSynthesizeVoice Voice,
+    [property: JsonPropertyName("audioConfig")] GoogleSynthesizeAudioConfig AudioConfig);
+
+internal sealed record GoogleSynthesizeInput(
+    [property: JsonPropertyName("text")] string Text);
+
+internal sealed record GoogleSynthesizeVoice(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("languageCode")] string LanguageCode);
+
+internal sealed record GoogleSynthesizeAudioConfig(
+    [property: JsonPropertyName("audioEncoding")] string AudioEncoding);
 
 public sealed record GoogleSpeechRecognizeInfo(
     [property: JsonPropertyName("results")] GoogleSpeechResult[]? Results);

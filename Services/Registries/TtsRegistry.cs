@@ -39,8 +39,18 @@ public sealed class TtsRegistry : ITtsRegistry
                 false,
                 null,
                 EdgeTtsVoices,
-                SupportedRuntimes: [InferenceRuntime.Cloud, InferenceRuntime.Containerized],
+                SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud),
+            new(
+                ProviderNames.XttsContainer,
+                "XTTS v2 (Container)",
+                false,
+                null,
+                ["xtts-v2"],
+                SupportedRuntimes: [InferenceRuntime.Containerized],
+                DefaultRuntime: InferenceRuntime.Containerized,
+                IsImplemented: true,
+                Notes: "Voice cloning via reference audio, hosted in local container runtime."),
             new(
                 ProviderNames.Piper,
                 "Piper (Local)",
@@ -66,7 +76,7 @@ public sealed class TtsRegistry : ITtsRegistry
                 ["standard", "wavenet", "neural2"],
                 SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud,
-                IsImplemented: false),
+                IsImplemented: true),
             new(
                 ProviderNames.OpenAiTts,
                 "OpenAI API",
@@ -75,7 +85,7 @@ public sealed class TtsRegistry : ITtsRegistry
                 ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"],
                 SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud,
-                IsImplemented: false),
+                IsImplemented: true),
         };
 
         return runtime is null
@@ -120,9 +130,17 @@ public sealed class TtsRegistry : ITtsRegistry
 
         if (resolvedRuntime == InferenceRuntime.Containerized)
         {
-            return new ContainerizedTtsProvider(
-                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
-                _log);
+            return normalizedProviderId switch
+            {
+                ProviderNames.XttsContainer => new XttsContainerTtsProvider(
+                    new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                    _log),
+                ProviderNames.EdgeTts => new ContainerizedTtsProvider(
+                    new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                    _log),
+                _ => throw new PipelineProviderException(
+                    $"Containerized TTS provider '{providerId}' is not implemented. Select a supported provider.")
+            };
         }
 
         return normalizedProviderId switch
@@ -131,6 +149,10 @@ public sealed class TtsRegistry : ITtsRegistry
             ProviderNames.EdgeTts => new EdgeTtsProvider(_log),
             ProviderNames.ElevenLabs => new ElevenLabsTtsProvider(
                 _log, keyStore?.GetKey(CredentialKeys.ElevenLabs) ?? string.Empty),
+            ProviderNames.GoogleCloudTts => new GoogleCloudTtsProvider(
+                _log, keyStore?.GetKey(CredentialKeys.GoogleAi) ?? string.Empty),
+            ProviderNames.OpenAiTts => new OpenAiTtsProvider(
+                _log, keyStore?.GetKey(CredentialKeys.OpenAi) ?? string.Empty),
             _ => throw new PipelineProviderException(
                 $"TTS provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

@@ -104,10 +104,12 @@ Current supported implementation:
 
 - the only supported container path right now is an external/local inference service consumed over HTTP
 - in the app UI, `Containerized` is a runtime selection, not a provider name
-- the desktop app does not try to launch Docker, WSL, or another host runtime for you
+- for loopback service URLs such as `http://localhost:8000`, the desktop app can optionally run `docker compose up -d inference`
+- local container autostart happens when a stage is set to `Containerized`, or when the `Always run local container at app start` setting is enabled
+- the desktop app does not try to launch remote hosts, WSL, or non-loopback container endpoints for you
 - `INFERENCE_SERVICE_URL` overrides the saved service URL at startup when present
 - provider readiness is based on `GET /health/live` plus `GET /capabilities`, not URL presence alone
-- the repo `docker-compose.yml` is a dev-only helper for the inference service; it is not a desktop-app deployment story
+- the bundled `docker-compose.yml` is a same-machine local inference helper; it is not a remote deployment or orchestration story for the desktop app
 
 ---
 

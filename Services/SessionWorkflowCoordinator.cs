@@ -22,6 +22,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly SessionArtifactReader _artifactReader;
     private readonly SessionSwitchService _sessionSwitchService;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
+    private readonly IContainerizedInferenceManager? _containerizedInferenceManager;
     public ITranscriptionRegistry TranscriptionRegistry { get; }
     public ITranslationRegistry TranslationRegistry { get; }
     public ITtsRegistry TtsRegistry { get; }
@@ -127,7 +128,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SessionArtifactReader? artifactReader = null,
         SessionSwitchService? sessionSwitchService = null,
         IDiarizationRegistry? diarizationRegistry = null,
-        ContainerizedServiceProbe? containerizedProbe = null)
+        ContainerizedServiceProbe? containerizedProbe = null,
+        IContainerizedInferenceManager? containerizedInferenceManager = null)
     {
         _store = store;
         _log = log;
@@ -136,6 +138,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _artifactReader = artifactReader ?? new SessionArtifactReader();
         _sessionSwitchService = sessionSwitchService ?? new SessionSwitchService(perSessionStore, recentStore, log);
         _containerizedProbe = containerizedProbe;
+        _containerizedInferenceManager = containerizedInferenceManager;
         TranscriptionRegistry = transcriptionRegistry;
         TranslationRegistry = translationRegistry;
         TtsRegistry = ttsRegistry;
@@ -189,27 +192,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         PendingMediaReloadRequest = null;
         return request;
     }
-
-    private ITranscriptionProvider CreateTranscriptionService() =>
-        TranscriptionRegistry.CreateProvider(
-            CurrentSettings.TranscriptionProvider,
-            CurrentSettings,
-            KeyStore,
-            CurrentSettings.TranscriptionRuntime);
-
-    private ITranslationProvider CreateTranslationService() =>
-        TranslationRegistry.CreateProvider(
-            CurrentSettings.TranslationProvider,
-            CurrentSettings,
-            KeyStore,
-            CurrentSettings.TranslationRuntime);
-
-    private ITtsProvider CreateTtsService() =>
-        TtsRegistry.CreateProvider(
-            CurrentSettings.TtsProvider,
-            CurrentSettings,
-            KeyStore,
-            CurrentSettings.TtsRuntime);
 
     /// <summary>
     /// Invalidates all cached provider service instances, forcing them to be recreated
@@ -508,6 +490,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         if (!File.Exists(CurrentSession.IngestedMediaPath))
             throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
 
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TranscriptionRuntime, cancellationToken);
+
         // Registry-owned readiness check — covers IsImplemented, API keys, local model status
         var readiness = CurrentSettings.TranscriptionRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
             ? await ContainerizedProviderReadiness.CheckTranscriptionForExecutionAsync(
@@ -736,6 +720,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 break;
         }
 
+        RequestContainerizedAutostartForSettings();
         NotifySettingsModified();
         stopwatch.Stop();
         _log.Info(
@@ -758,6 +743,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         var lang = targetLanguage ?? CurrentSettings.TargetLanguage;
         var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
+
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TranslationRuntime, cancellationToken);
 
         // Registry-owned readiness check
         var readiness = CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
@@ -840,6 +827,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
 
         var v = voice ?? CurrentSettings.TtsVoice;
+
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime, cancellationToken);
 
         // Registry-owned readiness check
         var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
@@ -1017,6 +1006,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;
 
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime);
+
         var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
             ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(CurrentSettings, _containerizedProbe)
             : TtsRegistry.CheckReadiness(
@@ -1088,6 +1079,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
         }
+
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TranslationRuntime);
 
         var readiness = CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
             ? await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(CurrentSettings, _containerizedProbe)

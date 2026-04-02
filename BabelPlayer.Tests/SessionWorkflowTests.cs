@@ -693,4 +693,85 @@ public sealed class SegmentInspectionTests
         Assert.Equal(1.0, sourcePlayer.PlaybackRate);
         Assert.Equal(1.0, segmentPlayer.PlaybackRate);
     }
+
+    [Fact]
+    public void TranslationRuntime_SwitchToLocal_ResolvesProviderAndModel()
+    {
+        var playback = CreatePlaybackVm();
+
+        playback.TranslationProvider = ProviderNames.OpenAi;
+        playback.TranslationModel = "gpt-4o-mini";
+
+        playback.TranslationRuntime = InferenceRuntime.Local;
+
+        Assert.Equal(InferenceRuntime.Local, playback.TranslationRuntime);
+        Assert.Equal(ProviderNames.Nllb200, playback.TranslationProvider);
+        Assert.Equal("nllb-200-distilled-600M", playback.TranslationModel);
+        Assert.Equal(InferenceRuntime.Local, playback.Coordinator.CurrentSettings.TranslationRuntime);
+        Assert.Equal(ProviderNames.Nllb200, playback.Coordinator.CurrentSettings.TranslationProvider);
+        Assert.Equal("nllb-200-distilled-600M", playback.Coordinator.CurrentSettings.TranslationModel);
+    }
+
+    [Fact]
+    public void TtsRuntime_SwitchToLocal_ResolvesProviderAndVoice()
+    {
+        var playback = CreatePlaybackVm();
+
+        playback.TtsModelOrVoice = "eleven_multilingual_v2";
+        playback.TtsRuntime = InferenceRuntime.Local;
+
+        Assert.Equal(InferenceRuntime.Local, playback.TtsRuntime);
+        Assert.Equal(ProviderNames.Piper, playback.TtsProvider);
+        Assert.Equal("en_US-lessac-medium", playback.TtsModelOrVoice);
+        Assert.Equal(InferenceRuntime.Local, playback.Coordinator.CurrentSettings.TtsRuntime);
+        Assert.Equal(ProviderNames.Piper, playback.Coordinator.CurrentSettings.TtsProvider);
+        Assert.Equal("en_US-lessac-medium", playback.Coordinator.CurrentSettings.TtsVoice);
+    }
+
+    [Fact]
+    public void TranscriptionRuntime_SwitchToContainerized_UpdatesCoordinatorSettings()
+    {
+        var playback = CreatePlaybackVm();
+
+        playback.TranscriptionRuntime = InferenceRuntime.Containerized;
+
+        Assert.Equal(InferenceRuntime.Containerized, playback.TranscriptionRuntime);
+        Assert.Equal(ProviderNames.FasterWhisper, playback.TranscriptionProvider);
+        Assert.Equal("base", playback.TranscriptionModel);
+        Assert.Equal(InferenceRuntime.Containerized, playback.Coordinator.CurrentSettings.TranscriptionRuntime);
+        Assert.Equal(ProviderNames.FasterWhisper, playback.Coordinator.CurrentSettings.TranscriptionProvider);
+        Assert.Equal("base", playback.Coordinator.CurrentSettings.TranscriptionModel);
+    }
+
+    [Fact]
+    public void TranslationProvider_Change_ReconcilesModelToProviderDefault()
+    {
+        var playback = CreatePlaybackVm();
+
+        playback.TranslationProvider = ProviderNames.OpenAi;
+        playback.TranslationModel = "gpt-4o-mini";
+
+        playback.TranslationProvider = ProviderNames.GoogleTranslateFree;
+
+        Assert.Equal(ProviderNames.GoogleTranslateFree, playback.TranslationProvider);
+        Assert.Equal("default", playback.TranslationModel);
+        Assert.Equal(ProviderNames.GoogleTranslateFree, playback.Coordinator.CurrentSettings.TranslationProvider);
+        Assert.Equal("default", playback.Coordinator.CurrentSettings.TranslationModel);
+    }
+
+    [Fact]
+    public void TtsProvider_Change_ReconcilesVoiceToProviderDefault()
+    {
+        var playback = CreatePlaybackVm();
+
+        playback.TtsProvider = ProviderNames.ElevenLabs;
+        playback.TtsModelOrVoice = "eleven_multilingual_v2";
+
+        playback.TtsProvider = ProviderNames.EdgeTts;
+
+        Assert.Equal(ProviderNames.EdgeTts, playback.TtsProvider);
+        Assert.Equal("en-US-AriaNeural", playback.TtsModelOrVoice);
+        Assert.Equal(ProviderNames.EdgeTts, playback.Coordinator.CurrentSettings.TtsProvider);
+        Assert.Equal("en-US-AriaNeural", playback.Coordinator.CurrentSettings.TtsVoice);
+    }
 }

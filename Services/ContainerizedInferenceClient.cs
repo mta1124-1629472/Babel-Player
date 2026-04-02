@@ -219,6 +219,85 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    public async Task<string> RegisterXttsReferenceAsync(
+        string speakerId,
+        string referenceAudioPath,
+        string? transcript = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(referenceAudioPath))
+            throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
+
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(speakerId), "speaker_id");
+        if (!string.IsNullOrWhiteSpace(transcript))
+            content.Add(new StringContent(transcript), "transcript");
+
+        await using var fs = File.OpenRead(referenceAudioPath);
+        content.Add(new StreamContent(fs), "file", Path.GetFileName(referenceAudioPath));
+
+        using var response = await _httpClient.PostAsync(
+            $"{_inferenceServiceUrl}/tts/xtts/references",
+            content,
+            cancellationToken);
+
+        var result = await DeserializeResponseAsync<XttsReferenceResponseDto>(response, cancellationToken);
+        if (!result.Success || string.IsNullOrWhiteSpace(result.ReferenceId))
+            throw new InvalidOperationException($"XTTS reference registration failed: {result.ErrorMessage}");
+
+        return result.ReferenceId;
+    }
+
+    public async Task<TtsResult> XttsSegmentAsync(
+        string text,
+        string? speakerId = null,
+        string? referenceAudioPath = null,
+        string? referenceTranscript = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            content.Add(new StringContent(text), "text");
+            if (!string.IsNullOrWhiteSpace(speakerId))
+                content.Add(new StringContent(speakerId), "speaker_id");
+            if (!string.IsNullOrWhiteSpace(referenceTranscript))
+                content.Add(new StringContent(referenceTranscript), "reference_transcript");
+
+            FileStream? fs = null;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(referenceAudioPath))
+                {
+                    if (!File.Exists(referenceAudioPath))
+                        throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
+                    fs = File.OpenRead(referenceAudioPath);
+                    content.Add(new StreamContent(fs), "reference_file", Path.GetFileName(referenceAudioPath));
+                }
+
+                using var response = await _httpClient.PostAsync(
+                    $"{_inferenceServiceUrl}/tts/xtts/segment",
+                    content,
+                    cancellationToken);
+
+                var result = await DeserializeResponseAsync<TtsApiResponseDto>(response, cancellationToken);
+                if (!result.Success)
+                    throw new InvalidOperationException($"XTTS segment error: {result.ErrorMessage}");
+
+                return new TtsResult(true, result.AudioPath ?? "", result.Voice ?? "xtts-v2", result.FileSizeBytes, null);
+            }
+            finally
+            {
+                fs?.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"XTTS segment synthesis failed: {ex.Message}", ex);
+            return new TtsResult(false, "", "xtts-v2", 0, ex.Message);
+        }
+    }
+
     public async Task DownloadTtsAudioAsync(
         string filename,
         string localOutputPath,
@@ -408,6 +487,18 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("file_size_bytes")]
         public long FileSizeBytes { get; set; }
+
+        [JsonPropertyName("error_message")]
+        public string? ErrorMessage { get; set; }
+    }
+
+    private sealed class XttsReferenceResponseDto
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("reference_id")]
+        public string? ReferenceId { get; set; }
 
         [JsonPropertyName("error_message")]
         public string? ErrorMessage { get; set; }

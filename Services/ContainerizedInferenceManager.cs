@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
@@ -29,12 +30,12 @@ public interface IContainerizedInferenceManager
         CancellationToken cancellationToken = default);
 }
 
-internal sealed record ContainerComposeStartRequest(
+public sealed record ContainerComposeStartRequest(
     string DockerPath,
     string ComposeFilePath,
     string ServiceName);
 
-internal sealed record ContainerComposeStartResult(
+public sealed record ContainerComposeStartResult(
     bool Success,
     string StandardOutput,
     string StandardError);
@@ -106,7 +107,7 @@ public sealed class ContainerizedInferenceManager : IContainerizedInferenceManag
             }
             else
             {
-                _inFlightStartTask = EnsureStartedCoreAsync(settings, serviceUrl, trigger, cancellationToken);
+                _inFlightStartTask = EnsureStartedCoreAsync(serviceUrl, trigger, cancellationToken);
                 task = _inFlightStartTask;
             }
         }
@@ -126,7 +127,6 @@ public sealed class ContainerizedInferenceManager : IContainerizedInferenceManag
     }
 
     private async Task<ContainerizedStartResult> EnsureStartedCoreAsync(
-        AppSettings settings,
         string serviceUrl,
         ContainerizedStartupTrigger trigger,
         CancellationToken cancellationToken)
@@ -206,9 +206,9 @@ public sealed class ContainerizedInferenceManager : IContainerizedInferenceManag
         if (trigger == ContainerizedStartupTrigger.AppStartup && settings.AlwaysRunContainerAtAppStart)
             return true;
 
-        return settings.TranscriptionRuntime == Models.InferenceRuntime.Containerized
-            || settings.TranslationRuntime == Models.InferenceRuntime.Containerized
-            || settings.TtsRuntime == Models.InferenceRuntime.Containerized;
+        return settings.TranscriptionRuntime == InferenceRuntime.Containerized
+            || settings.TranslationRuntime == InferenceRuntime.Containerized
+            || settings.TtsRuntime == InferenceRuntime.Containerized;
     }
 
     private static bool IsLoopbackServiceUrl(string? serviceUrl)
@@ -235,7 +235,7 @@ public sealed class ContainerizedInferenceManager : IContainerizedInferenceManag
         catch (Exception ex)
         {
             _log.Info($"Container health preflight failed for {serviceUrl}: {ex.Message}");
-            return new ContainerHealthStatus(false, ex.Message, false, null, null);
+            return ContainerHealthStatus.Unavailable(serviceUrl, ex.Message);
         }
     }
 

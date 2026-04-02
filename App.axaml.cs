@@ -79,13 +79,15 @@ public partial class App : Application
             {
                 appLog.Info("App startup: initializing session coordinator.");
                 var containerizedProbe = new ContainerizedServiceProbe(appLog);
+                var containerizedManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
                 var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
                 var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
                 var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
                 var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
                 _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                    store, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore, containerizedProbe: containerizedProbe);
+                    store, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore, containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
                 _sessionWorkflowCoordinator.Initialize();
+                containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
                 appLog.Info("App startup: session coordinator ready.");
             }
             catch (Exception ex)
@@ -94,13 +96,15 @@ public partial class App : Application
                 if (_sessionWorkflowCoordinator is null)
                 {
                     var containerizedProbe = new ContainerizedServiceProbe(appLog);
+                    var containerizedManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
                     var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
                     var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
                     var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
                     var fallbackStore = new SessionSnapshotStore(
                         Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
                     _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                        fallbackStore, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore, containerizedProbe: containerizedProbe);
+                        fallbackStore, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore, containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
+                    containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
                 }
             }
 

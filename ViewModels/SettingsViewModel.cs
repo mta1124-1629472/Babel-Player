@@ -34,6 +34,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         SelectedTheme = current.Theme;
         MaxRecentSessions = current.MaxRecentSessions;
         AutoSaveEnabled = current.AutoSaveEnabled;
+        ContainerizedServiceUrl = current.ContainerizedServiceUrl;
+        AlwaysRunContainerAtAppStart = current.AlwaysRunContainerAtAppStart;
         TranscriptionCpuComputeType = current.TranscriptionCpuComputeType;
         TranscriptionCpuThreads = current.TranscriptionCpuThreads;
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
@@ -90,6 +92,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     // Auto-save
     [ObservableProperty]
     private bool _autoSaveEnabled;
+
+    // Containerized local inference
+    [ObservableProperty]
+    private string _containerizedServiceUrl = "http://localhost:8000";
+
+    [ObservableProperty]
+    private bool _alwaysRunContainerAtAppStart;
 
     // Advanced transcription CPU tuning
     [ObservableProperty]
@@ -168,6 +177,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         settings.Theme              = SelectedTheme ?? settings.Theme;
         settings.MaxRecentSessions  = MaxRecentSessions;
         settings.AutoSaveEnabled    = AutoSaveEnabled;
+        settings.ContainerizedServiceUrl = string.IsNullOrWhiteSpace(ContainerizedServiceUrl)
+            ? settings.ContainerizedServiceUrl
+            : ContainerizedServiceUrl.Trim();
+        settings.AlwaysRunContainerAtAppStart = AlwaysRunContainerAtAppStart;
         settings.TranscriptionCpuComputeType = string.IsNullOrWhiteSpace(TranscriptionCpuComputeType)
             ? "int8"
             : TranscriptionCpuComputeType;

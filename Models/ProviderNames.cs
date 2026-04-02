@@ -27,6 +27,7 @@ public static class ProviderNames
     public const string ElevenLabs     = "elevenlabs";
     public const string GoogleCloudTts = "google-cloud-tts";
     public const string OpenAiTts      = "openai-tts";
+    public const string XttsContainer  = "xtts-container";
 
     // ── Diarization ────────────────────────────────────────────────────────────
     public const string PyannoteLocal = "pyannote-local";

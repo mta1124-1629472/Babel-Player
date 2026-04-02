@@ -29,6 +29,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _isUpdatingActiveSegment;
     private bool _isSynchronizingPipelineSettings;
     private WorkflowSegmentState? _lastDubbedSegment;
+    private readonly Dictionary<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> _transcriptionProvidersByRuntime = [];
+    private readonly Dictionary<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> _translationProvidersByRuntime = [];
+    private readonly Dictionary<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> _ttsProvidersByRuntime = [];
+    private readonly Dictionary<InferenceRuntime, IReadOnlyList<string>> _transcriptionProviderIdsByRuntime = [];
+    private readonly Dictionary<InferenceRuntime, IReadOnlyList<string>> _translationProviderIdsByRuntime = [];
+    private readonly Dictionary<InferenceRuntime, IReadOnlyList<string>> _ttsProviderIdsByRuntime = [];
     private CancellationTokenSource? _providerReadinessRefreshCts;
     private int _providerReadinessRefreshVersion;
     private ProviderSelectionSnapshot? _lastQueuedProviderReadinessSnapshot;
@@ -252,6 +258,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _logFilePath = logFilePath;
         _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
         _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
+        BuildProviderCaches();
         SyncProviderModelFieldsFromSettings();
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
@@ -323,14 +330,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public bool HasAutoSpeakerDetectionStatus => !string.IsNullOrWhiteSpace(AutoSpeakerDetectionStatus);
 
     // ── Provider / model option lists ──────────────────────────────────────────
-    public IReadOnlyList<string> TranscriptionProviders =>
-        [.. _coordinator.TranscriptionRegistry.GetAvailableProviders(TranscriptionRuntime).Select(p => p.Id)];
+    public IReadOnlyList<string> TranscriptionProviders => GetTranscriptionProviderIds(TranscriptionRuntime);
 
-    public IReadOnlyList<string> TranslationProviders =>
-        [.. _coordinator.TranslationRegistry.GetAvailableProviders(TranslationRuntime).Select(p => p.Id)];
+    public IReadOnlyList<string> TranslationProviders => GetTranslationProviderIds(TranslationRuntime);
 
-    public IReadOnlyList<string> TtsProviders =>
-        [.. _coordinator.TtsRegistry.GetAvailableProviders(TtsRuntime).Select(p => p.Id)];
+    public IReadOnlyList<string> TtsProviders => GetTtsProviderIds(TtsRuntime);
 
     public IReadOnlyList<ModelOptionViewModel> AvailableTranscriptionModels => _availableTranscriptionModels;
 
@@ -1023,14 +1027,73 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             IsDubModeOn = false;
     }
 
+    private void BuildProviderCaches()
+    {
+        BuildProviderCache(
+            _transcriptionProvidersByRuntime,
+            _transcriptionProviderIdsByRuntime,
+            runtime => _coordinator.TranscriptionRegistry.GetAvailableProviders(runtime));
+
+        BuildProviderCache(
+            _translationProvidersByRuntime,
+            _translationProviderIdsByRuntime,
+            runtime => _coordinator.TranslationRegistry.GetAvailableProviders(runtime));
+
+        BuildProviderCache(
+            _ttsProvidersByRuntime,
+            _ttsProviderIdsByRuntime,
+            runtime => _coordinator.TtsRegistry.GetAvailableProviders(runtime));
+    }
+
+    private static void BuildProviderCache(
+        Dictionary<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> descriptorCache,
+        Dictionary<InferenceRuntime, IReadOnlyList<string>> idCache,
+        Func<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> providerFactory)
+    {
+        descriptorCache.Clear();
+        idCache.Clear();
+
+        foreach (var runtime in InferenceRuntimeOptions)
+        {
+            var providers = providerFactory(runtime)
+                .Where(p => p.IsImplemented)
+                .ToArray();
+            descriptorCache[runtime] = providers;
+            idCache[runtime] = providers
+                .Select(p => p.Id)
+                .ToArray();
+        }
+    }
+
+    private IReadOnlyList<string> GetTranscriptionProviderIds(InferenceRuntime runtime) =>
+        _transcriptionProviderIdsByRuntime.TryGetValue(runtime, out var providers)
+            ? providers
+            : [];
+
+    private IReadOnlyList<string> GetTranslationProviderIds(InferenceRuntime runtime) =>
+        _translationProviderIdsByRuntime.TryGetValue(runtime, out var providers)
+            ? providers
+            : [];
+
+    private IReadOnlyList<string> GetTtsProviderIds(InferenceRuntime runtime) =>
+        _ttsProviderIdsByRuntime.TryGetValue(runtime, out var providers)
+            ? providers
+            : [];
+
     private IReadOnlyList<ProviderDescriptor> GetTranscriptionProviderDescriptors(InferenceRuntime runtime) =>
-        [.. _coordinator.TranscriptionRegistry.GetAvailableProviders(runtime).Where(p => p.IsImplemented)];
+        _transcriptionProvidersByRuntime.TryGetValue(runtime, out var providers)
+            ? providers
+            : [];
 
     private IReadOnlyList<ProviderDescriptor> GetTranslationProviderDescriptors(InferenceRuntime runtime) =>
-        [.. _coordinator.TranslationRegistry.GetAvailableProviders(runtime).Where(p => p.IsImplemented)];
+        _translationProvidersByRuntime.TryGetValue(runtime, out var providers)
+            ? providers
+            : [];
 
     private IReadOnlyList<ProviderDescriptor> GetTtsProviderDescriptors(InferenceRuntime runtime) =>
-        [.. _coordinator.TtsRegistry.GetAvailableProviders(runtime).Where(p => p.IsImplemented)];
+        _ttsProvidersByRuntime.TryGetValue(runtime, out var providers)
+            ? providers
+            : [];
 
     private string ResolveTranscriptionProviderForRuntime(InferenceRuntime runtime, string? providerId)
     {

@@ -76,6 +76,34 @@ public sealed class OpenAiApiClient : IDisposable
         return message;
     }
 
+    /// <summary>
+    /// Calls OpenAI speech synthesis endpoint and returns raw MP3 bytes.
+    /// </summary>
+    public async Task<byte[]> CreateSpeechAsync(
+        string inputText,
+        string model,
+        string voice = "alloy",
+        CancellationToken cancellationToken = default)
+    {
+        var request = new SpeechRequestDto
+        {
+            Model = model,
+            Voice = voice,
+            Input = inputText,
+            Format = "mp3",
+        };
+
+        var json = JsonSerializer.Serialize(request, JsonOptions);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("audio/speech", content, cancellationToken);
+        var payload = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            throw CreateApiException(response.StatusCode, Encoding.UTF8.GetString(payload));
+
+        return payload;
+    }
+
     public async Task<OpenAiTranscriptionPayload> TranscribeAudioAsync(
         string audioFilePath,
         string model,
@@ -203,6 +231,21 @@ public sealed class OpenAiApiClient : IDisposable
     {
         [JsonPropertyName("choices")]
         public List<ChoiceDto>? Choices { get; set; }
+    }
+
+    private sealed class SpeechRequestDto
+    {
+        [JsonPropertyName("model")]
+        public string Model { get; set; } = string.Empty;
+
+        [JsonPropertyName("voice")]
+        public string Voice { get; set; } = "alloy";
+
+        [JsonPropertyName("input")]
+        public string Input { get; set; } = string.Empty;
+
+        [JsonPropertyName("format")]
+        public string Format { get; set; } = "mp3";
     }
 
     private sealed class ChoiceDto

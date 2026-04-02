@@ -48,7 +48,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         catch { /* best-effort cleanup */ }
     }
 
-    private SessionWorkflowCoordinator CreateCoordinator(AppSettings? settings = null) =>
+    private SessionWorkflowCoordinator CreateCoordinator(
+        AppSettings? settings = null,
+        IContainerizedInferenceManager? containerizedInferenceManager = null) =>
         new SessionWorkflowCoordinator(
             _store,
             _log,
@@ -57,7 +59,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             _recentStore,
             new TranscriptionRegistry(_log),
             new TranslationRegistry(_log),
-            new TtsRegistry(_log));
+            new TtsRegistry(_log),
+            containerizedInferenceManager: containerizedInferenceManager);
 
     private AppSettings CreateMatchingSettings() =>
         new()
@@ -77,6 +80,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             TargetLanguage = _settings.TargetLanguage,
             PiperModelDir = _settings.PiperModelDir,
             ContainerizedServiceUrl = _settings.ContainerizedServiceUrl,
+            AlwaysRunContainerAtAppStart = _settings.AlwaysRunContainerAtAppStart,
             VideoHwdec = _settings.VideoHwdec,
             VideoGpuApi = _settings.VideoGpuApi,
             VideoUseGpuNext = _settings.VideoUseGpuNext,
@@ -928,6 +932,29 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     }
 
     [Fact]
+    public void ApplyPipelineSettings_ContainerizedRuntime_RequestsContainerStart()
+    {
+        var manager = new FakeContainerizedInferenceManager();
+        var coord = CreateCoordinator(containerizedInferenceManager: manager);
+        coord.Initialize();
+
+        coord.ApplyPipelineSettings(new PipelineSettingsSelection(
+            InferenceRuntime.Containerized,
+            ProviderNames.FasterWhisper,
+            "base",
+            _settings.TranslationRuntime,
+            _settings.TranslationProvider,
+            _settings.TranslationModel,
+            _settings.TtsRuntime,
+            _settings.TtsProvider,
+            _settings.TtsVoice,
+            _settings.TargetLanguage));
+
+        Assert.Equal(1, manager.RequestCount);
+        Assert.Equal(ContainerizedStartupTrigger.SettingsChanged, manager.LastRequestTrigger);
+    }
+
+    [Fact]
     public void RestoreSession_QueuesPausedMediaReloadRequest()
     {
         if (!File.Exists(_mediaPath)) return;
@@ -1192,6 +1219,28 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         {
             LastSegmentRequest = request;
             return Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, 1, null));
+        }
+    }
+
+    private sealed class FakeContainerizedInferenceManager : IContainerizedInferenceManager
+    {
+        public int RequestCount { get; private set; }
+        public int EnsureCount { get; private set; }
+        public ContainerizedStartupTrigger? LastRequestTrigger { get; private set; }
+
+        public void RequestEnsureStarted(AppSettings settings, ContainerizedStartupTrigger trigger)
+        {
+            RequestCount++;
+            LastRequestTrigger = trigger;
+        }
+
+        public Task<ContainerizedStartResult> EnsureStartedAsync(
+            AppSettings settings,
+            ContainerizedStartupTrigger trigger,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureCount++;
+            return Task.FromResult(new ContainerizedStartResult(true, true, "started"));
         }
     }
 }

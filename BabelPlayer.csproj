@@ -50,4 +50,15 @@
     <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
   </None>
 </ItemGroup>
+
+<ItemGroup>
+  <None Include="docker-compose.yml">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+  </None>
+  <None Include="inference\**\*" Exclude="inference\__pycache__\**;inference\*.pyc">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+  </None>
+</ItemGroup>
 </Project>

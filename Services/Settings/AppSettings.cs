@@ -73,8 +73,8 @@ public sealed class AppSettings
     public string PiperModelDir { get; set; } = "";
 
     /// <summary>
-    /// Base URL of the containerized inference service (used when TranscriptionProvider,
-    /// TranslationProvider, or TtsProvider is set to "containerized").
+    /// Base URL of the containerized inference service used by any stage whose runtime
+    /// is set to Containerized.
     /// </summary>
     public string ContainerizedServiceUrl { get; set; } = "http://localhost:8000";
 

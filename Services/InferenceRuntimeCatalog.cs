@@ -47,7 +47,7 @@ public static class InferenceRuntimeCatalog
 
     public static string DefaultTtsProvider(InferenceRuntime runtime) => runtime switch
     {
-        InferenceRuntime.Containerized => ProviderNames.EdgeTts,
+        InferenceRuntime.Containerized => ProviderNames.XttsContainer,
         InferenceRuntime.Local => ProviderNames.Piper,
         _ => ProviderNames.EdgeTts,
     };
@@ -108,7 +108,7 @@ public static class InferenceRuntimeCatalog
         if (runtime == InferenceRuntime.Containerized)
         {
             return string.IsNullOrWhiteSpace(providerId) || string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal)
-                ? ProviderNames.EdgeTts
+                ? ProviderNames.XttsContainer
                 : providerId;
         }
 

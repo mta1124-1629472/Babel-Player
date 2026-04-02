@@ -34,12 +34,12 @@ Release bundles include:
 - `ffmpeg.exe`
 - `libmpv-2.dll`
 
-Release bundles do not include Python or any external/local provider runtimes. Those still need to be installed and reachable on your machine.
+Release bundles do not include Python, Docker Desktop, or external provider accounts. Local subprocess providers still need Python, and the containerized runtime needs Docker if you want the app to start the bundled local inference container for you.
 
 Inference selection is now runtime-aware per stage:
 
 - `Local` runs the provider directly on your machine
-- `Containerized` calls an already-running HTTP inference service
+- `Containerized` calls an HTTP inference service; for loopback URLs such as `http://localhost:8000`, the app can also start the bundled local inference container automatically
 - `Cloud` uses the provider's remote API or hosted backend
 
 ## What It Does
@@ -80,6 +80,13 @@ If you are building from source, you also need the [.NET 10 SDK](https://dotnet.
 5. Toggle dub mode to preview the result in the player.
 
 If the app reports missing dependencies at startup, install the required toolchain and verify it is on `PATH` or available in the app folder.
+
+If you use the `Containerized` runtime, the app can start the bundled local inference container automatically when:
+
+- a stage is set to `Containerized` and the service URL points to a loopback address such as `http://localhost:8000`
+- or `Always run local container at app start` is enabled in Settings
+
+Remote service URLs remain manual; the app only auto-starts loopback container hosts.
 
 ## Source Build
 

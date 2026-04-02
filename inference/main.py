@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -33,6 +34,10 @@ app = FastAPI(
 whisper_model = None
 whisper_model_key = None
 translator = None
+xtts_model = None
+xtts_available = None
+xtts_error = None
+xtts_reference_store: dict[str, dict] = {}
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -108,6 +113,23 @@ class CapabilitiesResponse(BaseModel):
 # ============================================================================
 
 def get_stage_capabilities() -> CapabilitiesResponse:
+    global xtts_available, xtts_error
+
+    if xtts_available is None:
+        try:
+            from TTS.api import TTS  # noqa: F401
+            xtts_available = True
+            xtts_error = None
+        except Exception as e:
+            xtts_available = False
+            xtts_error = str(e)
+
+    tts_detail = "edge-tts available"
+    if xtts_available:
+        tts_detail += "; xtts-v2 available"
+    else:
+        tts_detail += f"; xtts-v2 unavailable ({xtts_error})"
+
     return CapabilitiesResponse(
         transcription=StageCapability(
             ready=True,
@@ -119,7 +141,7 @@ def get_stage_capabilities() -> CapabilitiesResponse:
         ),
         tts=StageCapability(
             ready=True,
-            detail="edge-tts available",
+            detail=tts_detail,
         ),
     )
 
@@ -325,6 +347,47 @@ async def translate(
 # ============================================================================
 # TTS Endpoint
 # ============================================================================
+
+def get_xtts_model():
+    global xtts_model, xtts_available, xtts_error
+
+    if xtts_model is not None:
+        return xtts_model
+
+    try:
+        from TTS.api import TTS
+
+        logger.info("Loading XTTS model (tts_models/multilingual/multi-dataset/xtts_v2)")
+        xtts_model = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2")
+        xtts_available = True
+        xtts_error = None
+        return xtts_model
+    except Exception as e:
+        xtts_available = False
+        xtts_error = str(e)
+        raise
+
+
+def save_xtts_wav_to_mp3(wav_path: Path, mp3_path: Path):
+    import subprocess
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(wav_path),
+        "-codec:a",
+        "libmp3lame",
+        "-q:a",
+        "3",
+        str(mp3_path),
+    ]
+
+    try:
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+    except Exception as e:
+        raise RuntimeError(f"ffmpeg conversion failed: {e}")
+
 
 @app.post("/tts", response_model=TtsResponse)
 async def text_to_speech(

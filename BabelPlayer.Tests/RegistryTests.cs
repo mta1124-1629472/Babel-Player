@@ -253,6 +253,24 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
+    public void TtsRegistry_CheckReadiness_GoogleCloudTtsWithoutKey_ReturnsNotReady()
+    {
+        var readiness = _ttsRegistry.CheckReadiness(
+            ProviderNames.GoogleCloudTts, "standard", new AppSettings(), null);
+        Assert.False(readiness.IsReady);
+        Assert.Contains("API key missing", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TtsRegistry_CheckReadiness_OpenAiTtsWithoutKey_ReturnsNotReady()
+    {
+        var readiness = _ttsRegistry.CheckReadiness(
+            ProviderNames.OpenAiTts, "tts-1", new AppSettings(), null);
+        Assert.False(readiness.IsReady);
+        Assert.Contains("API key missing", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void TtsRegistry_CreateProvider_UnknownProvider_ThrowsPipelineProviderException()
     {
         Assert.Throws<PipelineProviderException>(() =>
@@ -271,6 +289,20 @@ public sealed class RegistryTests : IDisposable
     {
         // Key is empty — provider is created but CheckReadiness will report missing key.
         var provider = _ttsRegistry.CreateProvider(ProviderNames.ElevenLabs, new AppSettings(), null);
+        Assert.NotNull(provider);
+    }
+
+    [Fact]
+    public void TtsRegistry_CreateProvider_GoogleCloudTts_DoesNotThrow()
+    {
+        var provider = _ttsRegistry.CreateProvider(ProviderNames.GoogleCloudTts, new AppSettings(), null);
+        Assert.NotNull(provider);
+    }
+
+    [Fact]
+    public void TtsRegistry_CreateProvider_OpenAiTts_DoesNotThrow()
+    {
+        var provider = _ttsRegistry.CreateProvider(ProviderNames.OpenAiTts, new AppSettings(), null);
         Assert.NotNull(provider);
     }
 

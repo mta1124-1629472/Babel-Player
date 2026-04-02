@@ -1,7 +1,7 @@
 # Coverage Gap Plan (2026-04-02)
 
 ## Progress Update (2026-04-02)
-- Stability status: resolved for the earlier failing clusters; full test project currently passes (321 passed, 0 failed).
+- Stability status: resolved for the earlier failing clusters; full test project currently passes (337 passed, 0 failed).
 - Implemented first Priority A slice:
   - Added deterministic containerized provider tests in [BabelPlayer.Tests/ContainerizedProvidersTests.cs](BabelPlayer.Tests/ContainerizedProvidersTests.cs).
   - Added containerized probe behavior tests in [BabelPlayer.Tests/ContainerizedServiceProbeTests.cs](BabelPlayer.Tests/ContainerizedServiceProbeTests.cs).
@@ -14,7 +14,13 @@
   - [Services/ContainerizedProviderReadiness.cs](Services/ContainerizedProviderReadiness.cs): 81.4%
   - [Services/ContainerizedServiceProbe.cs](Services/ContainerizedServiceProbe.cs): 86.8%
 - Remaining Priority A gap:
-  - [ViewModels/EmbeddedPlaybackViewModel.cs](ViewModels/EmbeddedPlaybackViewModel.cs) runtime/provider selection paths still need dedicated behavioral tests.
+  - [ViewModels/EmbeddedPlaybackViewModel.cs](ViewModels/EmbeddedPlaybackViewModel.cs) still needs more invalidation/synchronization path coverage.
+
+- Implemented ViewModel switching behavior tests in [BabelPlayer.Tests/SessionWorkflowTests.cs](BabelPlayer.Tests/SessionWorkflowTests.cs):
+  - runtime switches for transcription/translation/TTS
+  - provider->model reconciliation for translation and TTS
+- Updated targeted coverage:
+  - [ViewModels/EmbeddedPlaybackViewModel.cs](ViewModels/EmbeddedPlaybackViewModel.cs): 40.2% (up from 28.4%)
 
 ### Next Implementation Slice
 1. Add probe-focused tests for:
@@ -22,7 +28,7 @@
 - in-flight probe reuse
 - wait-timeout returns checking state
 - force-refresh bypasses cache
-2. Add focused ViewModel runtime-selection tests for [ViewModels/EmbeddedPlaybackViewModel.cs](ViewModels/EmbeddedPlaybackViewModel.cs).
+2. Add focused ViewModel invalidation/synchronization tests for [ViewModels/EmbeddedPlaybackViewModel.cs](ViewModels/EmbeddedPlaybackViewModel.cs).
 3. Re-run coverage and update this plan with measured deltas.
 
 ## Baseline From Coverage Run
