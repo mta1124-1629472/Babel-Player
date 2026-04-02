@@ -56,6 +56,36 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             new TranslationRegistry(_log),
             new TtsRegistry(_log));
 
+    private AppSettings CreateMatchingSettings() =>
+        new()
+        {
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranscriptionCpuComputeType = _settings.TranscriptionCpuComputeType,
+            TranscriptionCpuThreads = _settings.TranscriptionCpuThreads,
+            TranscriptionNumWorkers = _settings.TranscriptionNumWorkers,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+            TtsProvider = _settings.TtsProvider,
+            TtsVoice = _settings.TtsVoice,
+            TargetLanguage = _settings.TargetLanguage,
+            PiperModelDir = _settings.PiperModelDir,
+            ContainerizedServiceUrl = _settings.ContainerizedServiceUrl,
+            VideoHwdec = _settings.VideoHwdec,
+            VideoGpuApi = _settings.VideoGpuApi,
+            VideoUseGpuNext = _settings.VideoUseGpuNext,
+            VideoVsrEnabled = _settings.VideoVsrEnabled,
+            VideoVsrQuality = _settings.VideoVsrQuality,
+            VideoHdrEnabled = _settings.VideoHdrEnabled,
+            VideoToneMapping = _settings.VideoToneMapping,
+            VideoTargetPeak = _settings.VideoTargetPeak,
+            VideoHdrComputePeak = _settings.VideoHdrComputePeak,
+            VideoExportEncoder = _settings.VideoExportEncoder,
+            Theme = _settings.Theme,
+            MaxRecentSessions = _settings.MaxRecentSessions,
+            AutoSaveEnabled = _settings.AutoSaveEnabled,
+        };
+
     // ── Initialize ─────────────────────────────────────────────────────────────
 
     [Fact]
@@ -216,6 +246,93 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         Assert.Null(coord.CurrentSession.TtsPath);
         Assert.Null(coord.CurrentSession.SourceLanguage);
         Assert.Null(coord.CurrentSession.TargetLanguage);
+    }
+
+    [Fact]
+    public void ResetPipelineToMediaLoaded_ClearsAllArtifactProvenance()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[]}");
+        var ttsPath = CreateTempFile("fake audio");
+
+        _store.Save(coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = "es",
+            TranscribedAtUtc = DateTimeOffset.UtcNow,
+            TranslationPath = translationPath,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+            TargetLanguage = _settings.TargetLanguage,
+            TranslatedAtUtc = DateTimeOffset.UtcNow,
+            TtsPath = ttsPath,
+            TtsProvider = _settings.TtsProvider,
+            TtsVoice = _settings.TtsVoice,
+            TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+        });
+
+        coord = CreateCoordinator();
+        coord.Initialize();
+        coord.ResetPipelineToMediaLoaded();
+
+        Assert.Null(coord.CurrentSession.TranscriptPath);
+        Assert.Null(coord.CurrentSession.TranslationPath);
+        Assert.Null(coord.CurrentSession.TtsPath);
+        Assert.Null(coord.CurrentSession.TranscriptionProvider);
+        Assert.Null(coord.CurrentSession.TranscriptionModel);
+        Assert.Null(coord.CurrentSession.TranslationProvider);
+        Assert.Null(coord.CurrentSession.TranslationModel);
+        Assert.Null(coord.CurrentSession.TtsProvider);
+        Assert.Null(coord.CurrentSession.TtsVoice);
+    }
+
+    [Fact]
+    public void ResetPipelineToTranscribed_PreservesTranscriptionProvenanceAndClearsDownstream()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[]}");
+
+        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            SourceMediaPath = _mediaPath,
+            IngestedMediaPath = _mediaPath,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = "es",
+            TranscribedAtUtc = DateTimeOffset.UtcNow,
+            TranslationPath = translationPath,
+            TargetLanguage = _settings.TargetLanguage,
+            TranslatedAtUtc = DateTimeOffset.UtcNow,
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+            TtsProvider = _settings.TtsProvider,
+            TtsVoice = _settings.TtsVoice,
+        });
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.ResetPipelineToTranscribed();
+
+        Assert.Equal(SessionWorkflowStage.Transcribed, coord.CurrentSession.Stage);
+        Assert.Equal(_settings.TranscriptionProvider, coord.CurrentSession.TranscriptionProvider);
+        Assert.Equal(_settings.TranscriptionModel, coord.CurrentSession.TranscriptionModel);
+        Assert.Null(coord.CurrentSession.TranslationProvider);
+        Assert.Null(coord.CurrentSession.TranslationModel);
+        Assert.Null(coord.CurrentSession.TtsProvider);
+        Assert.Null(coord.CurrentSession.TtsVoice);
     }
 
     [Fact]
@@ -399,6 +516,125 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     }
 
     [Fact]
+    public void CheckSettingsInvalidation_MediaLoaded_TranslationModelChange_ReturnsNone()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        var changedSettings = CreateMatchingSettings();
+        changedSettings.TranslationModel = "nllb-200-1.3B";
+
+        var coord2 = CreateCoordinator(changedSettings);
+        coord2.Initialize();
+        coord2.LoadMedia(_mediaPath);
+
+        Assert.Equal(PipelineInvalidation.None, coord2.CheckSettingsInvalidation());
+    }
+
+    [Fact]
+    public void CheckSettingsInvalidation_Transcribed_TranslationModelChange_ReturnsNone()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            SourceMediaPath = _mediaPath,
+            IngestedMediaPath = _mediaPath,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = "es",
+            TranscribedAtUtc = DateTimeOffset.UtcNow,
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+        });
+
+        var changedSettings = CreateMatchingSettings();
+        changedSettings.TranslationProvider = ProviderNames.Nllb200;
+        changedSettings.TranslationModel = "nllb-200-distilled-600M";
+
+        var coord = CreateCoordinator(changedSettings);
+        coord.Initialize();
+
+        Assert.Equal(PipelineInvalidation.None, coord.CheckSettingsInvalidation());
+    }
+
+    [Fact]
+    public void CheckSettingsInvalidation_Translated_TranslationModelChange_ReturnsTranslation()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[]}");
+        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            SourceMediaPath = _mediaPath,
+            IngestedMediaPath = _mediaPath,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = "es",
+            TranscribedAtUtc = DateTimeOffset.UtcNow,
+            TranslationPath = translationPath,
+            TargetLanguage = _settings.TargetLanguage,
+            TranslatedAtUtc = DateTimeOffset.UtcNow,
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+        });
+
+        var changedSettings = CreateMatchingSettings();
+        changedSettings.TranslationProvider = ProviderNames.Nllb200;
+        changedSettings.TranslationModel = "nllb-200-distilled-600M";
+
+        var coord = CreateCoordinator(changedSettings);
+        coord.Initialize();
+
+        Assert.Equal(PipelineInvalidation.Translation, coord.CheckSettingsInvalidation());
+    }
+
+    [Fact]
+    public void CheckSettingsInvalidation_TtsGenerated_TtsVoiceChange_ReturnsTts()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[]}");
+        var ttsPath = CreateTempFile("tts");
+        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            SourceMediaPath = _mediaPath,
+            IngestedMediaPath = _mediaPath,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = "es",
+            TranscribedAtUtc = DateTimeOffset.UtcNow,
+            TranslationPath = translationPath,
+            TargetLanguage = _settings.TargetLanguage,
+            TranslatedAtUtc = DateTimeOffset.UtcNow,
+            TtsPath = ttsPath,
+            TtsProvider = _settings.TtsProvider,
+            TtsVoice = _settings.TtsVoice,
+            TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+        });
+
+        var changedSettings = CreateMatchingSettings();
+        changedSettings.TtsVoice = "en-US-GuyNeural";
+
+        var coord = CreateCoordinator(changedSettings);
+        coord.Initialize();
+
+        Assert.Equal(PipelineInvalidation.Tts, coord.CheckSettingsInvalidation());
+    }
+
+    [Fact]
     public void CheckSettingsInvalidation_TtsProviderChanged_ReturnsTts()
     {
         if (!File.Exists(_mediaPath)) return;
@@ -424,7 +660,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         });
 
         // Now change TTS settings
-        var changedSettings = new AppSettings { TtsProvider = ProviderNames.Piper };
+        var changedSettings = CreateMatchingSettings();
+        changedSettings.TtsProvider = ProviderNames.Piper;
         var coord2 = CreateCoordinator(changedSettings);
         coord2.Initialize();
 
@@ -457,7 +694,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         });
 
         // Change transcription provider
-        var changedSettings = new AppSettings { TranscriptionProvider = ProviderNames.ContainerizedService };
+        var changedSettings = CreateMatchingSettings();
+        changedSettings.TranscriptionProvider = ProviderNames.ContainerizedService;
         var coord2 = CreateCoordinator(changedSettings);
         coord2.Initialize();
 
@@ -535,6 +773,108 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         Assert.NotNull(request);
         Assert.False(request!.AutoPlay);
         Assert.Equal(coord.CurrentSession.IngestedMediaPath, request.IngestedMediaPath);
+    }
+
+    [Fact]
+    public void SaveCurrentSession_MirrorsSnapshotToPerSessionStore()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+        coord.SaveCurrentSession();
+
+        var mirrored = _perSessionStore.Load(coord.CurrentSession.SessionId);
+        Assert.NotNull(mirrored);
+        Assert.Equal(coord.CurrentSession.SessionId, mirrored!.SessionId);
+        Assert.Equal(coord.CurrentSession.Stage, mirrored.Stage);
+    }
+
+    [Fact]
+    public void Initialize_WithMissingTranslation_DowngradesAndClearsDownstreamProvenance()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var missingTranslationPath = Path.Combine(_dir, "missing-translation.json");
+        var existingTtsPath = CreateTempFile("tts");
+        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            SourceMediaPath = _mediaPath,
+            IngestedMediaPath = _mediaPath,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = "es",
+            TranscribedAtUtc = DateTimeOffset.UtcNow,
+            TranslationPath = missingTranslationPath,
+            TargetLanguage = _settings.TargetLanguage,
+            TranslatedAtUtc = DateTimeOffset.UtcNow,
+            TtsPath = existingTtsPath,
+            TtsProvider = _settings.TtsProvider,
+            TtsVoice = _settings.TtsVoice,
+            TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+        });
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        Assert.Equal(SessionWorkflowStage.Transcribed, coord.CurrentSession.Stage);
+        Assert.Null(coord.CurrentSession.TranslationPath);
+        Assert.Null(coord.CurrentSession.TranslationProvider);
+        Assert.Null(coord.CurrentSession.TranslationModel);
+        Assert.Null(coord.CurrentSession.TtsPath);
+        Assert.Null(coord.CurrentSession.TtsProvider);
+        Assert.Null(coord.CurrentSession.TtsVoice);
+    }
+
+    [Fact]
+    public void ApplyPipelineSettings_AfterDowngradedStaleSession_ChangingTranslationModel_DoesNotResetBelowTranscribed()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
+        var missingTranslationPath = Path.Combine(_dir, "stale-translation.json");
+        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            SourceMediaPath = _mediaPath,
+            IngestedMediaPath = _mediaPath,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = "es",
+            TranscribedAtUtc = DateTimeOffset.UtcNow,
+            TranslationPath = missingTranslationPath,
+            TargetLanguage = _settings.TargetLanguage,
+            TranslatedAtUtc = DateTimeOffset.UtcNow,
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+        });
+
+        var changedSettings = CreateMatchingSettings();
+        changedSettings.TranslationProvider = ProviderNames.Nllb200;
+        changedSettings.TranslationModel = "nllb-200-distilled-600M";
+
+        var coord = CreateCoordinator(changedSettings);
+        coord.Initialize();
+
+        var result = coord.ApplyPipelineSettings(new PipelineSettingsSelection(
+            changedSettings.TranscriptionProvider,
+            changedSettings.TranscriptionModel,
+            changedSettings.TranslationProvider,
+            changedSettings.TranslationModel,
+            changedSettings.TtsProvider,
+            changedSettings.TtsVoice,
+            changedSettings.TargetLanguage));
+
+        Assert.Equal(SessionWorkflowStage.Transcribed, coord.CurrentSession.Stage);
+        Assert.Equal(PipelineInvalidation.None, result.Invalidation);
+        Assert.NotNull(coord.CurrentSession.TranscriptPath);
     }
 
     // ── SegmentId ─────────────────────────────────────────────────────────────

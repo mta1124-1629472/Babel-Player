@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -318,6 +319,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public string StateFilePath => _store.StateFilePath;
 
     public string LogFilePath => _log.LogFilePath;
+    internal AppLog Log => _log;
 
     public void Initialize()
     {
@@ -335,7 +337,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         else
         {
             var snapshot = loadResult.Snapshot;
-            var validated = ValidateArtifacts(snapshot);
+            var validated = ValidateArtifacts(snapshot, "startup-load");
 
             // Log any artifacts that were dropped by validation
             if (snapshot.Stage != validated.Stage)
@@ -443,7 +445,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             // Returning to a previously processed media — restore, validate, then copy into
             // that session's existing directory.
-            var validated = ValidateArtifacts(cached);
+            var validated = ValidateArtifacts(cached, "media-cache-restore");
 
             var sessionDir = _sessionSwitchService.GetSessionDirectory(validated.SessionId);
             var mediaDir = Path.Combine(sessionDir, "media");
@@ -525,41 +527,99 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             MediaSnapshotCacheLimit);
     }
 
-    private static WorkflowSessionSnapshot ValidateArtifacts(WorkflowSessionSnapshot s)
+    private WorkflowSessionSnapshot ValidateArtifacts(WorkflowSessionSnapshot s, string reason)
     {
         var stage = s.Stage;
+        var originalStage = stage;
+        var cleared = new List<string>();
 
         if (stage >= SessionWorkflowStage.TtsGenerated
             && (string.IsNullOrEmpty(s.TtsPath) || !File.Exists(s.TtsPath)))
         {
             stage = SessionWorkflowStage.Translated;
-            s = s with { TtsPath = null, TtsVoice = null, TtsGeneratedAtUtc = null,
-                          TtsSegmentsPath = null, TtsSegmentAudioPaths = null };
+            s = ClearTtsOutputs(s);
+            cleared.Add("tts");
         }
 
         if (stage >= SessionWorkflowStage.Translated
             && (string.IsNullOrEmpty(s.TranslationPath) || !File.Exists(s.TranslationPath)))
         {
             stage = SessionWorkflowStage.Transcribed;
-            s = s with { TranslationPath = null, TargetLanguage = null, TranslatedAtUtc = null };
+            s = ClearTranslationOutputs(s);
+            cleared.Add("translation");
         }
 
         if (stage >= SessionWorkflowStage.Transcribed
             && (string.IsNullOrEmpty(s.TranscriptPath) || !File.Exists(s.TranscriptPath)))
         {
             stage = SessionWorkflowStage.MediaLoaded;
-            s = s with { TranscriptPath = null, SourceLanguage = null, TranscribedAtUtc = null };
+            s = ClearTranscriptionOutputs(s);
+            cleared.Add("transcription");
         }
 
         if (stage >= SessionWorkflowStage.MediaLoaded
             && (string.IsNullOrEmpty(s.IngestedMediaPath) || !File.Exists(s.IngestedMediaPath)))
         {
             stage = SessionWorkflowStage.Foundation;
-            s = s with { IngestedMediaPath = null, MediaLoadedAtUtc = null };
+            s = ClearMediaLoadedOutputs(s);
+            cleared.Add("media");
         }
 
-        return s with { Stage = stage };
+        var validated = s with { Stage = stage };
+        if (originalStage != stage)
+        {
+            _log.Warning(
+                $"ValidateArtifacts[{reason}]: downgraded stage {originalStage} -> {stage}; " +
+                $"cleared={string.Join(",", cleared)}; provenance={DescribeSessionProvenance(validated)}");
+        }
+
+        return validated;
     }
+
+    private static WorkflowSessionSnapshot ClearTtsOutputs(WorkflowSessionSnapshot snapshot) =>
+        snapshot with
+        {
+            TtsPath = null,
+            TtsVoice = null,
+            TtsGeneratedAtUtc = null,
+            TtsSegmentsPath = null,
+            TtsSegmentAudioPaths = null,
+            TtsProvider = null,
+        };
+
+    private static WorkflowSessionSnapshot ClearTranslationOutputs(WorkflowSessionSnapshot snapshot) =>
+        ClearTtsOutputs(snapshot) with
+        {
+            TranslationPath = null,
+            TargetLanguage = null,
+            TranslatedAtUtc = null,
+            TranslationProvider = null,
+            TranslationModel = null,
+        };
+
+    private static WorkflowSessionSnapshot ClearTranscriptionOutputs(WorkflowSessionSnapshot snapshot) =>
+        ClearTranslationOutputs(snapshot) with
+        {
+            TranscriptPath = null,
+            SourceLanguage = null,
+            TranscribedAtUtc = null,
+            TranscriptionProvider = null,
+            TranscriptionModel = null,
+        };
+
+    private static WorkflowSessionSnapshot ClearMediaLoadedOutputs(WorkflowSessionSnapshot snapshot) =>
+        ClearTranscriptionOutputs(snapshot) with
+        {
+            IngestedMediaPath = null,
+            MediaLoadedAtUtc = null,
+        };
+
+    private static string DescribeSessionProvenance(WorkflowSessionSnapshot snapshot) =>
+        $"stage={snapshot.Stage}, " +
+        $"txc={snapshot.TranscriptionProvider ?? "<null>"}/{snapshot.TranscriptionModel ?? "<null>"}, " +
+        $"trn={snapshot.TranslationProvider ?? "<null>"}/{snapshot.TranslationModel ?? "<null>"}, " +
+        $"tts={snapshot.TtsProvider ?? "<null>"}/{snapshot.TtsVoice ?? "<null>"}, " +
+        $"srcLang={snapshot.SourceLanguage ?? "<null>"}, tgtLang={snapshot.TargetLanguage ?? "<null>"}";
 
     public void InjectTestTranscript(string transcriptPath, string? translationPath = null)
     {
@@ -593,6 +653,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TranscribedAtUtc = null,
             TranslatedAtUtc = null,
             TtsGeneratedAtUtc = null,
+            TranscriptionProvider = null,
+            TranscriptionModel = null,
+            TranslationProvider = null,
+            TranslationModel = null,
+            TtsProvider = null,
             StatusMessage = "Pipeline reset. Ready to run."
         };
         SaveCurrentSession();
@@ -695,6 +760,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TargetLanguage = null,
             TranslatedAtUtc = null,
             TtsGeneratedAtUtc = null,
+            TranslationProvider = null,
+            TranslationModel = null,
+            TtsProvider = null,
             StatusMessage = "Pipeline reset to transcribed state."
         };
         SaveCurrentSession();
@@ -712,6 +780,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TtsSegmentsPath = null,
             TtsSegmentAudioPaths = null,
             TtsGeneratedAtUtc = null,
+            TtsProvider = null,
             StatusMessage = "Pipeline reset to translated state."
         };
         SaveCurrentSession();
@@ -725,6 +794,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public PipelineSettingsApplyResult ApplyPipelineSettings(PipelineSettingsSelection selection)
     {
+        var stopwatch = Stopwatch.StartNew();
         ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranscriptionProvider);
         ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranscriptionModel);
         ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranslationProvider);
@@ -747,6 +817,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var settingsChanged = transcriptionProviderChanged || translationProviderChanged || ttsProviderChanged;
         if (!settingsChanged)
         {
+            _log.Info(
+                $"ApplyPipelineSettings: no-op at stage {CurrentSession.Stage}; selection matched current settings.");
             return new PipelineSettingsApplyResult(
                 PipelineInvalidation.None,
                 CurrentSession.Stage,
@@ -768,6 +840,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         if (ttsProviderChanged) _ttsService = null;
 
         var invalidation = CheckSettingsInvalidation();
+        _log.Info(
+            $"ApplyPipelineSettings: stage={CurrentSession.Stage}, invalidation={invalidation}, " +
+            $"selection=({selection.TranscriptionProvider}/{selection.TranscriptionModel}, " +
+            $"{selection.TranslationProvider}/{selection.TranslationModel}, " +
+            $"{selection.TtsProvider}/{selection.TtsVoice}, target={selection.TargetLanguage ?? "<unchanged>"}), " +
+            $"provenance=({DescribeSessionProvenance(CurrentSession)})");
         var statusMessage = invalidation switch
         {
             PipelineInvalidation.Transcription => "Transcription settings changed — pipeline reset to media-loaded state.",
@@ -796,6 +874,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
 
         NotifySettingsModified();
+        stopwatch.Stop();
+        _log.Info(
+            $"ApplyPipelineSettings complete: invalidation={invalidation}, stage={CurrentSession.Stage}, elapsedMs={stopwatch.ElapsedMilliseconds}");
 
         return new PipelineSettingsApplyResult(
             invalidation,
@@ -1160,7 +1241,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 MediaSnapshotCacheLimit);
         }
 
-        var validated = ValidateArtifacts(restored);
+        var validated = ValidateArtifacts(restored, "session-restore");
         var nowUtc = DateTimeOffset.UtcNow;
         CurrentSession = validated with
         {
@@ -1192,20 +1273,63 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var cs = CurrentSession;
         var s  = CurrentSettings;
 
-        bool wipeTranscription = cs.TranscriptionProvider != s.TranscriptionProvider
+        bool transcriptionChanged = cs.TranscriptionProvider != s.TranscriptionProvider
             || cs.TranscriptionModel != s.TranscriptionModel;
-        bool wipeTranslation = wipeTranscription
-            || cs.TranslationProvider != s.TranslationProvider
-            || cs.TranslationModel    != s.TranslationModel
-            || cs.TargetLanguage      != s.TargetLanguage;
-        bool wipeTts = wipeTranslation
-            || cs.TtsProvider != s.TtsProvider
-            || cs.TtsVoice    != s.TtsVoice;
+        bool translationChanged = cs.TranslationProvider != s.TranslationProvider
+            || cs.TranslationModel != s.TranslationModel
+            || cs.TargetLanguage != s.TargetLanguage;
+        bool ttsChanged = cs.TtsProvider != s.TtsProvider
+            || cs.TtsVoice != s.TtsVoice;
 
-        if (wipeTranscription) return PipelineInvalidation.Transcription;
-        if (wipeTranslation)   return PipelineInvalidation.Translation;
-        if (wipeTts)           return PipelineInvalidation.Tts;
-        return PipelineInvalidation.None;
+        var effectiveStage = ResolveArtifactStage(cs);
+        var invalidation = effectiveStage switch
+        {
+            SessionWorkflowStage.Foundation => PipelineInvalidation.None,
+            SessionWorkflowStage.MediaLoaded => PipelineInvalidation.None,
+            SessionWorkflowStage.Transcribed => transcriptionChanged ? PipelineInvalidation.Transcription : PipelineInvalidation.None,
+            SessionWorkflowStage.Translated => transcriptionChanged
+                ? PipelineInvalidation.Transcription
+                : translationChanged
+                    ? PipelineInvalidation.Translation
+                    : PipelineInvalidation.None,
+            SessionWorkflowStage.TtsGenerated => transcriptionChanged
+                ? PipelineInvalidation.Transcription
+                : translationChanged
+                    ? PipelineInvalidation.Translation
+                    : ttsChanged
+                        ? PipelineInvalidation.Tts
+                        : PipelineInvalidation.None,
+            _ => PipelineInvalidation.None,
+        };
+
+        _log.Info(
+            $"CheckSettingsInvalidation: stage={cs.Stage}, effectiveStage={effectiveStage}, invalidation={invalidation}, provenance=({DescribeSessionProvenance(cs)})");
+        return invalidation;
+    }
+
+    private static SessionWorkflowStage ResolveArtifactStage(WorkflowSessionSnapshot snapshot)
+    {
+        if (snapshot.Stage >= SessionWorkflowStage.TtsGenerated
+            && !string.IsNullOrWhiteSpace(snapshot.TtsPath)
+            && File.Exists(snapshot.TtsPath))
+            return SessionWorkflowStage.TtsGenerated;
+
+        if (snapshot.Stage >= SessionWorkflowStage.Translated
+            && !string.IsNullOrWhiteSpace(snapshot.TranslationPath)
+            && File.Exists(snapshot.TranslationPath))
+            return SessionWorkflowStage.Translated;
+
+        if (snapshot.Stage >= SessionWorkflowStage.Transcribed
+            && !string.IsNullOrWhiteSpace(snapshot.TranscriptPath)
+            && File.Exists(snapshot.TranscriptPath))
+            return SessionWorkflowStage.Transcribed;
+
+        if (snapshot.Stage >= SessionWorkflowStage.MediaLoaded
+            && !string.IsNullOrWhiteSpace(snapshot.IngestedMediaPath)
+            && File.Exists(snapshot.IngestedMediaPath))
+            return SessionWorkflowStage.MediaLoaded;
+
+        return SessionWorkflowStage.Foundation;
     }
 
     /// <summary>
@@ -1253,11 +1377,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     private void PersistSnapshot(WorkflowSessionSnapshot snapshot, bool updateStatus)
     {
+        var stopwatch = Stopwatch.StartNew();
         _store.Save(snapshot);
+        _perSessionStore.Save(snapshot);
+        stopwatch.Stop();
         var message = $"Saved current session snapshot to {StateFilePath}.";
         if (updateStatus)
             PersistenceStatus = message;
-        _log.Info(message);
+        _log.Info($"{message} Mirrored per-session snapshot. elapsedMs={stopwatch.ElapsedMilliseconds}");
     }
 
     public sealed record BootstrapWarmupData(

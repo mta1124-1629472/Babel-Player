@@ -29,6 +29,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _isUpdatingActiveSegment;
     private bool _isSynchronizingPipelineSettings;
     private WorkflowSegmentState? _lastDubbedSegment;
+    private CancellationTokenSource? _providerReadinessRefreshCts;
+    private int _providerReadinessRefreshVersion;
 
     [ObservableProperty]
     private ObservableCollection<WorkflowSegmentState> _segments = [];
@@ -270,6 +272,19 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     public string TtsKeyStatus => _ttsKeyStatus;
 
+    private sealed record ProviderSelectionSnapshot(
+        string TranscriptionProvider,
+        string TranscriptionModel,
+        string TranslationProvider,
+        string TranslationModel,
+        string TtsProvider,
+        string TtsModelOrVoice);
+
+    private sealed record ProviderReadinessStatus(
+        string TranscriptionStatus,
+        string TranslationStatus,
+        string TtsStatus);
+
     private static string GetReadinessStatus(ProviderReadiness readiness)
     {
         if (readiness.IsReady) return "";
@@ -279,30 +294,98 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     private void RefreshProviderReadinessStatuses()
     {
-        var newTranscription = GetReadinessStatus(
-            _coordinator.TranscriptionRegistry.CheckReadiness(TranscriptionProvider, TranscriptionModel, _coordinator.CurrentSettings, _apiKeyStore));
-        var newTranslation = GetReadinessStatus(
-            _coordinator.TranslationRegistry.CheckReadiness(TranslationProvider, TranslationModel, _coordinator.CurrentSettings, _apiKeyStore));
-        var newTts = GetReadinessStatus(
-            _coordinator.TtsRegistry.CheckReadiness(TtsProvider, TtsModelOrVoice, _coordinator.CurrentSettings, _apiKeyStore));
+        var snapshot = new ProviderSelectionSnapshot(
+            TranscriptionProvider,
+            TranscriptionModel,
+            TranslationProvider,
+            TranslationModel,
+            TtsProvider,
+            TtsModelOrVoice);
+        QueueProviderReadinessRefresh(snapshot);
+    }
 
-        if (!string.Equals(_transcriptionKeyStatus, newTranscription, StringComparison.Ordinal))
-        {
-            _transcriptionKeyStatus = newTranscription;
-            OnPropertyChanged(nameof(TranscriptionKeyStatus));
-        }
+    private void QueueProviderReadinessRefresh(ProviderSelectionSnapshot snapshot)
+    {
+        var version = Interlocked.Increment(ref _providerReadinessRefreshVersion);
+        var cts = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _providerReadinessRefreshCts, cts);
+        previous?.Cancel();
+        previous?.Dispose();
 
-        if (!string.Equals(_translationKeyStatus, newTranslation, StringComparison.Ordinal))
-        {
-            _translationKeyStatus = newTranslation;
-            OnPropertyChanged(nameof(TranslationKeyStatus));
-        }
+        _coordinator.Log.Info(
+            $"Provider readiness refresh queued: v={version}, " +
+            $"selection=({snapshot.TranscriptionProvider}/{snapshot.TranscriptionModel}, " +
+            $"{snapshot.TranslationProvider}/{snapshot.TranslationModel}, " +
+            $"{snapshot.TtsProvider}/{snapshot.TtsModelOrVoice})");
 
-        if (!string.Equals(_ttsKeyStatus, newTts, StringComparison.Ordinal))
+        _ = RefreshProviderReadinessStatusesAsync(snapshot, version, cts.Token);
+    }
+
+    private async Task RefreshProviderReadinessStatusesAsync(
+        ProviderSelectionSnapshot snapshot,
+        int version,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        try
         {
-            _ttsKeyStatus = newTts;
-            OnPropertyChanged(nameof(TtsKeyStatus));
+            var status = await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return new ProviderReadinessStatus(
+                    GetReadinessStatus(_coordinator.TranscriptionRegistry.CheckReadiness(
+                        snapshot.TranscriptionProvider,
+                        snapshot.TranscriptionModel,
+                        _coordinator.CurrentSettings,
+                        _apiKeyStore)),
+                    GetReadinessStatus(_coordinator.TranslationRegistry.CheckReadiness(
+                        snapshot.TranslationProvider,
+                        snapshot.TranslationModel,
+                        _coordinator.CurrentSettings,
+                        _apiKeyStore)),
+                    GetReadinessStatus(_coordinator.TtsRegistry.CheckReadiness(
+                        snapshot.TtsProvider,
+                        snapshot.TtsModelOrVoice,
+                        _coordinator.CurrentSettings,
+                        _apiKeyStore)));
+            }, cancellationToken);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (version != _providerReadinessRefreshVersion || cancellationToken.IsCancellationRequested)
+                    return;
+
+                ApplyReadinessStatus(ref _transcriptionKeyStatus, status.TranscriptionStatus, nameof(TranscriptionKeyStatus));
+                ApplyReadinessStatus(ref _translationKeyStatus, status.TranslationStatus, nameof(TranslationKeyStatus));
+                ApplyReadinessStatus(ref _ttsKeyStatus, status.TtsStatus, nameof(TtsKeyStatus));
+            });
+
+            stopwatch.Stop();
+            _coordinator.Log.Info(
+                $"Provider readiness refresh complete: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}");
         }
+        catch (OperationCanceledException)
+        {
+            stopwatch.Stop();
+            _coordinator.Log.Info(
+                $"Provider readiness refresh canceled: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}");
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _coordinator.Log.Error(
+                $"Provider readiness refresh failed: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}",
+                ex);
+        }
+    }
+
+    private void ApplyReadinessStatus(ref string field, string value, string propertyName)
+    {
+        if (string.Equals(field, value, StringComparison.Ordinal))
+            return;
+
+        field = value;
+        OnPropertyChanged(propertyName);
     }
 
     private void ClearStatusErrorDetail()
@@ -612,9 +695,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _availableTranscriptionModels =
             [.. (_coordinator.TranscriptionRegistry.GetAvailableProviders()
                     .FirstOrDefault(p => p.Id == TranscriptionProvider)?.SupportedModels ?? ["default"])
-                .Select(m => new ModelOptionViewModel(m,
-                    _coordinator.TranscriptionRegistry.CheckReadiness(TranscriptionProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
-                        ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
+                .Select(m => new ModelOptionViewModel(m, GetTranscriptionModelAvailability(TranscriptionProvider, m)))];
     }
 
     private void RebuildTranslationModelOptions()
@@ -622,9 +703,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _availableTranslationModels =
             [.. (_coordinator.TranslationRegistry.GetAvailableProviders()
                     .FirstOrDefault(p => p.Id == TranslationProvider)?.SupportedModels ?? ["default"])
-                .Select(m => new ModelOptionViewModel(m,
-                    _coordinator.TranslationRegistry.CheckReadiness(TranslationProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
-                        ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
+                .Select(m => new ModelOptionViewModel(m, GetTranslationModelAvailability(TranslationProvider, m)))];
     }
 
     private void RebuildTtsModelOptions()
@@ -632,10 +711,29 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _availableTtsOptions =
             [.. (_coordinator.TtsRegistry.GetAvailableProviders()
                     .FirstOrDefault(p => p.Id == TtsProvider)?.SupportedModels ?? ["default"])
-                .Select(m => new ModelOptionViewModel(m,
-                    _coordinator.TtsRegistry.CheckReadiness(TtsProvider, m, _coordinator.CurrentSettings, _apiKeyStore) is var r
-                        ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
+                .Select(m => new ModelOptionViewModel(m, GetTtsModelAvailability(TtsProvider, m)))];
     }
+
+    private static bool? GetTranscriptionModelAvailability(string providerId, string model) =>
+        providerId switch
+        {
+            ProviderNames.FasterWhisper => ModelDownloader.IsFasterWhisperDownloaded(model),
+            _ => null,
+        };
+
+    private static bool? GetTranslationModelAvailability(string providerId, string model) =>
+        providerId switch
+        {
+            ProviderNames.Nllb200 => ModelDownloader.IsNllbDownloaded(model),
+            _ => null,
+        };
+
+    private bool? GetTtsModelAvailability(string providerId, string model) =>
+        providerId switch
+        {
+            ProviderNames.Piper => ModelDownloader.IsPiperVoiceDownloaded(model, _coordinator.CurrentSettings.PiperModelDir),
+            _ => null,
+        };
 
     private void ApplyPipelineSettingsSelection(PipelineSettingsSelection selection)
     {
