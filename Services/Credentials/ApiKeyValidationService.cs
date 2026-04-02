@@ -16,19 +16,22 @@ public sealed class ApiKeyValidationService
     private readonly ITtsRegistry _ttsRegistry;
     private readonly Func<string, OpenAiApiClient> _openAiClientFactory;
     private readonly Func<string, DeepLApiClient> _deepLClientFactory;
+    private readonly Func<string, ElevenLabsApiClient> _elevenLabsClientFactory;
 
     public ApiKeyValidationService(
         ITranscriptionRegistry transcriptionRegistry,
         ITranslationRegistry translationRegistry,
         ITtsRegistry ttsRegistry,
         Func<string, OpenAiApiClient>? openAiClientFactory = null,
-        Func<string, DeepLApiClient>? deepLClientFactory = null)
+        Func<string, DeepLApiClient>? deepLClientFactory = null,
+        Func<string, ElevenLabsApiClient>? elevenLabsClientFactory = null)
     {
         _transcriptionRegistry = transcriptionRegistry;
         _translationRegistry = translationRegistry;
         _ttsRegistry = ttsRegistry;
         _openAiClientFactory = openAiClientFactory ?? (apiKey => new OpenAiApiClient(apiKey));
         _deepLClientFactory = deepLClientFactory ?? (apiKey => new DeepLApiClient(apiKey));
+        _elevenLabsClientFactory = elevenLabsClientFactory ?? (apiKey => new ElevenLabsApiClient(apiKey));
     }
 
     public string? GetAvailabilityMessage(string credentialKey)
@@ -57,9 +60,38 @@ public sealed class ApiKeyValidationService
         {
             CredentialKeys.OpenAi => await ValidateOpenAiAsync(apiKey.Trim(), implementedProviders, cancellationToken),
             CredentialKeys.Deepl => await ValidateDeepLAsync(apiKey.Trim(), cancellationToken),
+            CredentialKeys.ElevenLabs => await ValidateElevenLabsAsync(apiKey.Trim(), cancellationToken),
             _ => ApiKeyValidationResult.Unavailable(
                 "Live validation is not implemented for this credential yet."),
         };
+    }
+
+    private async Task<ApiKeyValidationResult> ValidateElevenLabsAsync(
+        string apiKey,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = _elevenLabsClientFactory(apiKey);
+            var subscription = await client.GetSubscriptionAsync(cancellationToken);
+            var tier = string.IsNullOrEmpty(subscription.Tier) ? "unknown" : subscription.Tier;
+
+            return ApiKeyValidationResult.Success(
+                $"Validated for ElevenLabs ({tier} tier). " +
+                $"Usage: {subscription.CharacterCount} / {subscription.CharacterLimit} characters.");
+        }
+        catch (ElevenLabsApiException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            return ApiKeyValidationResult.Failure($"ElevenLabs rejected the key: {ex.Message}");
+        }
+        catch (ElevenLabsApiException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            return ApiKeyValidationResult.Failure($"ElevenLabs rate-limited validation: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return ApiKeyValidationResult.Failure($"Validation failed: {ex.Message}");
+        }
     }
 
     private async Task<ApiKeyValidationResult> ValidateDeepLAsync(

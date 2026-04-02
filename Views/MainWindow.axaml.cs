@@ -231,6 +231,29 @@ public partial class MainWindow : Window
         }
     }
 
+    public async void OnBrowseReferenceClipClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+        if (string.IsNullOrWhiteSpace(vm.Playback.SelectedSpeakerId)) return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = $"Select reference clip for {vm.Playback.SelectedSpeakerId}",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Audio Files") { Patterns = new[] { "*.wav", "*.mp3", "*.flac", "*.ogg", "*.m4a" } },
+                new FilePickerFileType("All Files") { Patterns = new[] { "*.*" } },
+            }
+        });
+
+        if (files.Count == 0) return;
+        var path = files[0].TryGetLocalPath();
+        if (string.IsNullOrEmpty(path)) return;
+
+        await vm.Playback.SetReferenceAudioForSelectedSpeaker(path);
+    }
+
     public async void OnExportCaptionsClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm)

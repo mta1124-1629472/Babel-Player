@@ -524,6 +524,19 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     }
 
     [Fact]
+    public void RemoveSpeakerReferenceAudioPath_RemovesEntry()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.SetSpeakerReferenceAudioPath("spk_01", "/tmp/spk_01.wav");
+
+        coord.RemoveSpeakerReferenceAudioPath("spk_01");
+
+        Assert.True(coord.CurrentSession.SpeakerReferenceAudioPaths is null
+            || !coord.CurrentSession.SpeakerReferenceAudioPaths.ContainsKey("spk_01"));
+    }
+
+    [Fact]
     public void SetMultiSpeakerEnabled_UpdatesSessionFlag()
     {
         var coord = CreateCoordinator();

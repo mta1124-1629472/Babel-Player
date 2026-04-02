@@ -1426,4 +1426,27 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         UpdateSelectedSpeakerDetails(SelectedSpeakerId);
         await RefreshSegmentsAsync();
     }
+
+    public async Task SetReferenceAudioForSelectedSpeaker(string path)
+    {
+        if (string.IsNullOrWhiteSpace(SelectedSpeakerId) || string.IsNullOrWhiteSpace(path))
+            return;
+
+        _coordinator.SetSpeakerReferenceAudioPath(SelectedSpeakerId, path);
+        StatusText = $"Set reference audio for {SelectedSpeakerId}.";
+        UpdateSelectedSpeakerDetails(SelectedSpeakerId);
+        await RefreshSegmentsAsync();
+    }
+
+    [RelayCommand]
+    private async Task ClearSelectedSpeakerReferenceAudioAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedSpeakerId))
+            return;
+
+        _coordinator.RemoveSpeakerReferenceAudioPath(SelectedSpeakerId);
+        StatusText = $"Cleared reference audio for {SelectedSpeakerId}.";
+        UpdateSelectedSpeakerDetails(SelectedSpeakerId);
+        await RefreshSegmentsAsync();
+    }
 }

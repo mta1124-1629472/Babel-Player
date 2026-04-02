@@ -53,7 +53,7 @@ public sealed class TtsRegistry : ITtsRegistry
             true,
             CredentialKeys.ElevenLabs,
             ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5"],
-            IsImplemented: false),
+            IsImplemented: true),
         new ProviderDescriptor(
             ProviderNames.GoogleCloudTts,
             "Google Cloud TTS",
@@ -101,6 +101,8 @@ public sealed class TtsRegistry : ITtsRegistry
             ProviderNames.EdgeTts => new EdgeTtsProvider(_log),
             ProviderNames.ContainerizedService => new ContainerizedTtsProvider(
                 new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log), _log),
+            ProviderNames.ElevenLabs => new ElevenLabsTtsProvider(
+                _log, keyStore?.GetKey(CredentialKeys.ElevenLabs) ?? string.Empty),
             _ => throw new PipelineProviderException(
                 $"TTS provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

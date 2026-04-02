@@ -215,9 +215,9 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TtsRegistry_CheckReadiness_UnimplementedProvider_ReturnsNotReady()
+    public void TtsRegistry_CheckReadiness_ElevenLabsWithoutKey_ReturnsNotReady()
     {
-        // ElevenLabs is marked IsImplemented=false
+        // ElevenLabs is implemented but RequiresApiKey — missing key blocks readiness.
         var readiness = _ttsRegistry.CheckReadiness(
             ProviderNames.ElevenLabs, "eleven_multilingual_v2", new AppSettings(), null);
         Assert.False(readiness.IsReady);
@@ -235,6 +235,14 @@ public sealed class RegistryTests : IDisposable
     public void TtsRegistry_CreateProvider_EdgeTts_DoesNotThrow()
     {
         var provider = _ttsRegistry.CreateProvider(ProviderNames.EdgeTts, new AppSettings(), null);
+        Assert.NotNull(provider);
+    }
+
+    [Fact]
+    public void TtsRegistry_CreateProvider_ElevenLabs_DoesNotThrow()
+    {
+        // Key is empty — provider is created but CheckReadiness will report missing key.
+        var provider = _ttsRegistry.CreateProvider(ProviderNames.ElevenLabs, new AppSettings(), null);
         Assert.NotNull(provider);
     }
 

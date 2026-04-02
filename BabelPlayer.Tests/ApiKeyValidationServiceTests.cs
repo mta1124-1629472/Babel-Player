@@ -52,13 +52,13 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
     }
 
     [Fact]
-    public void GetAvailabilityMessage_ElevenLabs_ReturnsUnavailable_WhenNoImplementedProviderUsesKey()
+    public void GetAvailabilityMessage_ElevenLabs_ReturnsNull_WhenImplementedProviderUsesKey()
     {
         var service = CreateService();
 
         var message = service.GetAvailabilityMessage(CredentialKeys.ElevenLabs);
 
-        Assert.False(string.IsNullOrWhiteSpace(message));
+        Assert.Null(message);
     }
 
     [Fact]
@@ -130,6 +130,47 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ValidateAsync_ElevenLabs_ReturnsSuccess_WhenSubscriptionEndpointAccessible()
+    {
+        var service = CreateService(
+            elevenLabsClientFactory: _ => new ElevenLabsApiClient("eleven-key", new StubHttpMessageHandler(_ =>
+                System.Threading.Tasks.Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                    {
+                      "tier": "starter",
+                      "character_count": 5000,
+                      "character_limit": 30000
+                    }
+                    """, Encoding.UTF8, "application/json")
+                }))));
+
+        var result = await service.ValidateAsync(CredentialKeys.ElevenLabs, "eleven-key");
+
+        Assert.True(result.IsAvailable);
+        Assert.True(result.IsValid);
+        Assert.Contains("starter", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("5000", result.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ElevenLabs_ReturnsFailure_WhenUnauthorized()
+    {
+        var service = CreateService(
+            elevenLabsClientFactory: _ => new ElevenLabsApiClient("bad-key", new StubHttpMessageHandler(_ =>
+                System.Threading.Tasks.Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                {
+                    Content = new StringContent("unauthorized", Encoding.UTF8, "text/plain")
+                }))));
+
+        var result = await service.ValidateAsync(CredentialKeys.ElevenLabs, "bad-key");
+
+        Assert.True(result.IsAvailable);
+        Assert.False(result.IsValid);
+        Assert.Contains("rejected", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ValidateAsync_DeepL_ReturnsSuccess_WhenUsageEndpointAccessible()
     {
         var service = CreateService(
@@ -170,13 +211,15 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
 
     private ApiKeyValidationService CreateService(
         Func<string, OpenAiApiClient>? openAiClientFactory = null,
-        Func<string, DeepLApiClient>? deepLClientFactory = null) =>
+        Func<string, DeepLApiClient>? deepLClientFactory = null,
+        Func<string, ElevenLabsApiClient>? elevenLabsClientFactory = null) =>
         new(
             new TranscriptionRegistry(_log),
             new TranslationRegistry(_log),
             new TtsRegistry(_log),
             openAiClientFactory,
-            deepLClientFactory);
+            deepLClientFactory,
+            elevenLabsClientFactory);
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {

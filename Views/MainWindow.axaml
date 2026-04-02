@@ -250,8 +250,8 @@
                                            FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
                             </Grid>
 
-                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                                <Button Grid.Column="0"
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+                                <Button Grid.Row="0" Grid.Column="0"
                                         Command="{Binding Playback.AssignSelectedSpeakerVoiceCommand}"
                                         IsEnabled="{Binding Playback.HasSpeakers}"
                                         HorizontalAlignment="Stretch"
@@ -259,7 +259,7 @@
                                         Background="#2A2A3A" Foreground="#C0C0D0"
                                         CornerRadius="5"
                                         Content="Assign current TTS" />
-                                <Button Grid.Column="1"
+                                <Button Grid.Row="0" Grid.Column="1"
                                         Command="{Binding Playback.ClearSelectedSpeakerVoiceCommand}"
                                         IsEnabled="{Binding Playback.HasSpeakers}"
                                         HorizontalAlignment="Stretch"
@@ -267,6 +267,22 @@
                                         Background="#2A2A3A" Foreground="#C0C0D0"
                                         CornerRadius="5"
                                         Content="Clear speaker voice" />
+                                <Button Grid.Row="1" Grid.Column="0"
+                                        IsEnabled="{Binding Playback.HasSpeakers}"
+                                        HorizontalAlignment="Stretch"
+                                        Padding="0,7" FontSize="12"
+                                        Background="#2A2A3A" Foreground="#C0C0D0"
+                                        CornerRadius="5"
+                                        Click="OnBrowseReferenceClipClick"
+                                        Content="Browse ref clip" />
+                                <Button Grid.Row="1" Grid.Column="1"
+                                        Command="{Binding Playback.ClearSelectedSpeakerReferenceAudioCommand}"
+                                        IsEnabled="{Binding Playback.HasSpeakers}"
+                                        HorizontalAlignment="Stretch"
+                                        Padding="0,7" FontSize="12"
+                                        Background="#2A2A3A" Foreground="#C0C0D0"
+                                        CornerRadius="5"
+                                        Content="Clear speaker ref" />
                             </Grid>
                         </StackPanel>
 
