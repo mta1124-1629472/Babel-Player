@@ -78,6 +78,13 @@ public sealed class AppSettings
     /// </summary>
     public string ContainerizedServiceUrl { get; set; } = "http://localhost:8000";
 
+    /// <summary>
+    /// When true, the app will attempt to start the local containerized inference host
+    /// during app startup even if no stage is currently set to the containerized runtime.
+    /// Only applies when the effective service URL points at a local loopback address.
+    /// </summary>
+    public bool AlwaysRunContainerAtAppStart { get; set; } = false;
+
     [JsonIgnore]
     public string EffectiveContainerizedServiceUrl
     {

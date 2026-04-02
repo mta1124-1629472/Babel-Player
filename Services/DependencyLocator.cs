@@ -54,6 +54,19 @@ public static class DependencyLocator
         return Probe(candidates, "--version");
     }
 
+    /// <summary>Returns a working docker executable path, or null if not found.</summary>
+    public static string? FindDocker()
+    {
+        var appDir = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            Path.Combine(appDir, "docker.exe"),
+            Path.Combine(appDir, "tools", "docker.exe"),
+            "docker",
+        };
+        return Probe(candidates, "--version");
+    }
+
     private static string? Probe(string[] candidates, string versionArg)
     {
         foreach (var path in candidates)
