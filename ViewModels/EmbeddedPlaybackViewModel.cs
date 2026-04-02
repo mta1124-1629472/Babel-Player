@@ -388,6 +388,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         TranscriptionModel = _availableTranscriptionModels.FirstOrDefault()?.ModelId ?? "default";
         OnPropertyChanged(nameof(AvailableTranscriptionModels));
         NotifySettingsSave();
+        ApplySmartWipe(PipelineInvalidation.Transcription);
     }
 
     partial void OnTranscriptionModelChanged(string value)
@@ -397,6 +398,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         RebuildTranscriptionModelOptions();
         OnPropertyChanged(nameof(AvailableTranscriptionModels));
         NotifySettingsSave();
+        ApplySmartWipe(PipelineInvalidation.Transcription);
     }
 
     partial void OnTranslationProviderChanged(string value)
@@ -407,6 +409,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         TranslationModel = _availableTranslationModels.FirstOrDefault()?.ModelId ?? "default";
         OnPropertyChanged(nameof(AvailableTranslationModels));
         NotifySettingsSave();
+        ApplySmartWipe(PipelineInvalidation.Translation);
     }
 
     partial void OnTranslationModelChanged(string value)
@@ -416,6 +419,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         RebuildTranslationModelOptions();
         OnPropertyChanged(nameof(AvailableTranslationModels));
         NotifySettingsSave();
+        ApplySmartWipe(PipelineInvalidation.Translation);
     }
 
     partial void OnTtsProviderChanged(string value)
@@ -426,6 +430,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         TtsModelOrVoice = _availableTtsOptions.FirstOrDefault()?.ModelId ?? "default";
         OnPropertyChanged(nameof(AvailableTtsOptions));
         NotifySettingsSave();
+        ApplySmartWipe(PipelineInvalidation.Tts);
     }
 
     partial void OnTtsModelOrVoiceChanged(string value)
@@ -435,6 +440,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         RebuildTtsModelOptions();
         OnPropertyChanged(nameof(AvailableTtsOptions));
         NotifySettingsSave();
+        ApplySmartWipe(PipelineInvalidation.Tts);
     }
 
     private void RebuildAllModelOptions()
@@ -907,6 +913,45 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             IsPipelineProgressVisible = false;
             _pipelineCts?.Dispose();
             _pipelineCts = null;
+        }
+    }
+
+    [RelayCommand]
+    private void ClearPipeline()
+    {
+        _coordinator.ResetPipelineToMediaLoaded();
+        Segments.Clear();
+        HasSegments = false;
+        if (IsSubtitleModeOn) ToggleSubtitles();
+        if (IsDubModeOn) ToggleDubMode();
+        StatusText = "Pipeline cleared. Ready to run fresh.";
+    }
+
+    private void ApplySmartWipe(PipelineInvalidation invalidation)
+    {
+        if (_coordinator.CurrentSession.Stage < SessionWorkflowStage.Transcribed) return;
+
+        if (IsSubtitleModeOn) ToggleSubtitles();
+        if (IsDubModeOn) ToggleDubMode();
+
+        switch (invalidation)
+        {
+            case PipelineInvalidation.Transcription:
+                StatusText = "Transcription settings changed — pipeline will restart from scratch.";
+                _coordinator.ResetPipelineToMediaLoaded();
+                Segments.Clear();
+                HasSegments = false;
+                break;
+            case PipelineInvalidation.Translation:
+                StatusText = "Translation settings changed — pipeline will restart from translation.";
+                _coordinator.ResetPipelineToTranscribed();
+                Segments.Clear();
+                HasSegments = false;
+                break;
+            case PipelineInvalidation.Tts:
+                StatusText = "TTS settings changed — pipeline will restart from TTS.";
+                _coordinator.ResetPipelineToTranslated();
+                break;
         }
     }
 

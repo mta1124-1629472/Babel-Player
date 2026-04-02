@@ -28,8 +28,21 @@
                 <!-- Header -->
                 <Border Grid.Row="0" Padding="16,14,16,12"
                         BorderBrush="#252530" BorderThickness="0,0,0,1">
-                    <TextBlock Text="Pipeline" FontSize="15" FontWeight="SemiBold"
-                               Foreground="#F0F0F8" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="Pipeline" FontSize="15" FontWeight="SemiBold"
+                                   Foreground="#F0F0F8" VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Padding="8,4" FontSize="11"
+                                Background="#2A2A3A" Foreground="#A0A0B0"
+                                CornerRadius="4"
+                                Command="{Binding Playback.ClearPipelineCommand}"
+                                ToolTip.Tip="Clear pipeline and start fresh">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="🗑" FontSize="10" />
+                                <TextBlock Text="Clear" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
                 </Border>
 
                 <!-- Scrollable body -->
