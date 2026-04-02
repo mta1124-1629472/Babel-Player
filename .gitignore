@@ -96,6 +96,7 @@ benchmarks/
 .claude/settings.local.json
 .kilo/node_modules/
 .ruff_cache/
+.codex/config.toml
 
 # External binaries
 ffmpeg.exe
