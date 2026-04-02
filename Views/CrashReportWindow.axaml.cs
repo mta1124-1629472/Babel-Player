@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 
 namespace Babel.Player.Views;
@@ -44,7 +43,9 @@ public partial class CrashReportWindow : Window
         {
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
             if (clipboard is not null)
-                await clipboard.SetTextAsync(ErrorTextBox.Text ?? string.Empty);
+                await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(
+                    clipboard,
+                    ErrorTextBox.Text ?? string.Empty);
 
             CopyButton.Content = "Copied!";
         }

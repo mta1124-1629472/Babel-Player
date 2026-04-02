@@ -59,7 +59,6 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
             MaxHeight         = 400,
         };
 
-        // Log-file path label (shown only when provided)
         Control? logPathRow = null;
         if (!string.IsNullOrEmpty(logFilePath))
         {
@@ -93,10 +92,12 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
         Window? dialog = null;
 
         var copyBtn = new Button { Content = "Copy Error Text", Margin = new Thickness(0, 0, 8, 0) };
-        copyBtn.Click += (_, _) =>
+        copyBtn.Click += async (_, _) =>
         {
             if (dialog?.Clipboard is { } clipboard)
-                _ = Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, fullDetail);
+            {
+                await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, fullDetail);
+            }
         };
 
         var openLogBtn = new Button { Content = "Open Log Folder", Margin = new Thickness(0, 0, 8, 0) };
@@ -107,11 +108,13 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
             {
                 var dir = System.IO.Path.GetDirectoryName(logFilePath!);
                 if (dir != null)
+                {
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = dir,
                         UseShellExecute = true,
                     });
+                }
             }
             catch (Exception ex)
             {
@@ -132,11 +135,11 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
 
         var headerText = new TextBlock
         {
-            Text       = title,
-            FontSize   = 15,
+            Text = title,
+            FontSize = 15,
             FontWeight = FontWeight.SemiBold,
             Foreground = Brushes.OrangeRed,
-            Margin     = new Thickness(0, 0, 0, 10),
+            Margin = new Thickness(0, 0, 0, 10),
             TextWrapping = TextWrapping.Wrap,
         };
 
@@ -158,27 +161,30 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
             },
         };
 
-        if (logPathRow != null) root.Children.Add(logPathRow);
+        if (logPathRow != null)
+        {
+            root.Children.Add(logPathRow);
+        }
+
         root.Children.Add(buttonRow);
 
         dialog = new Window
         {
-            Title          = "Error Details",
-            Width          = 720,
-            MinWidth       = 400,
-            MinHeight      = 260,
-            SizeToContent  = SizeToContent.Height,
-            Content        = root,
+            Title = "Error Details",
+            Width = 720,
+            MinWidth = 400,
+            MinHeight = 260,
+            SizeToContent = SizeToContent.Height,
+            Content = root,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            CanResize      = true,
+            CanResize = true,
         };
 
-        // Try to attach to the main window as owner so it centres correctly.
         if (Avalonia.Application.Current?.ApplicationLifetime is
             Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime dt &&
             dt.MainWindow is { } main)
         {
-            dialog.ShowDialog(main);
+            _ = dialog.ShowDialog(main);
         }
         else
         {
