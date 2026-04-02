@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Text;
 using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -226,6 +228,53 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             vm.Playback.StatusText = $"Failed to open: {ex.Message}";
+        }
+    }
+
+    public async void OnExportCaptionsClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        if (!vm.Playback.HasSegments)
+        {
+            vm.Playback.StatusText = "No segments available to export.";
+            return;
+        }
+
+        var sourceMediaPath = vm.Coordinator.CurrentSession.SourceMediaPath;
+        var suggestedName = string.IsNullOrWhiteSpace(sourceMediaPath)
+            ? "babel-player-captions.srt"
+            : $"{Path.GetFileNameWithoutExtension(sourceMediaPath)}.srt";
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export Captions",
+            DefaultExtension = "srt",
+            SuggestedFileName = suggestedName,
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("SubRip Subtitle") { Patterns = new[] { "*.srt" } },
+            }
+        });
+
+        if (file is null)
+            return;
+
+        var srt = SrtGenerator.Generate(vm.Playback.Segments);
+
+        try
+        {
+            await using var stream = await file.OpenWriteAsync();
+            await using var writer = new StreamWriter(stream, Encoding.UTF8);
+            await writer.WriteAsync(srt);
+            await writer.FlushAsync();
+
+            vm.Playback.StatusText = $"Exported captions to {file.Name}.";
+        }
+        catch (Exception ex)
+        {
+            vm.Playback.StatusText = $"Failed to export captions: {ex.Message}";
         }
     }
 

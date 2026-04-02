@@ -505,6 +505,15 @@
                             CornerRadius="4">
                         <TextBlock Text="Open Media" />
                     </Button>
+                    <Button Grid.Column="1"
+                            Click="OnExportCaptionsClick"
+                            Padding="8,5" FontSize="12"
+                            Background="#252530" Foreground="#C0C0D0"
+                            CornerRadius="4"
+                            Margin="6,0,0,0"
+                            ToolTip.Tip="Export captions as SRT">
+                        <TextBlock Text="Export Captions" />
+                    </Button>
                     <Button Grid.Column="2"
                             Content="{Binding Playback.SegmentPaneToggleLabel}"
                             Command="{Binding Playback.ToggleSegmentPaneCommand}"
