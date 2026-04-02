@@ -117,7 +117,7 @@ public sealed partial class ApiKeyEntryViewModel : ViewModelBase
     private void ToggleReveal() => IsRevealed = !IsRevealed;
 
     [RelayCommand]
-    private async Task ValidateKeyAsync()
+    private async System.Threading.Tasks.Task ValidateKeyAsync()
     {
         if (_validationService is null)
         {

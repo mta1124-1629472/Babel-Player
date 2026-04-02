@@ -60,12 +60,18 @@ public sealed record TranslatedSegment(
 public sealed record TtsRequest(
     string TranslationJsonPath, 
     string OutputAudioPath, 
-    string VoiceName);
+    string VoiceName,
+    Dictionary<string, string>? SpeakerVoiceAssignments = null,
+    Dictionary<string, string>? SpeakerReferenceAudioPaths = null,
+    string? DefaultVoiceFallback = null);
 
 public sealed record SingleSegmentTtsRequest(
     string Text, 
     string OutputAudioPath, 
-    string VoiceName);
+    string VoiceName,
+    string? SpeakerId = null,
+    string? ReferenceAudioPath = null,
+    string? ReferenceTranscriptText = null);
 
 public sealed record TtsResult(
     bool Success,

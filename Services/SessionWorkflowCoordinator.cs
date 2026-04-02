@@ -200,6 +200,121 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// </summary>
     public void NotifySettingsModified() => SettingsModified?.Invoke();
 
+    public IReadOnlyDictionary<string, string> GetSpeakerVoiceAssignments() =>
+        CurrentSession.SpeakerVoiceAssignments is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
+
+    public IReadOnlyDictionary<string, string> GetSpeakerReferenceAudioPaths() =>
+        CurrentSession.SpeakerReferenceAudioPaths is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
+
+    public void SetSpeakerVoiceAssignment(string speakerId, string voiceOrModel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(voiceOrModel);
+
+        var current = CurrentSession.SpeakerVoiceAssignments ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
+        {
+            [speakerId] = voiceOrModel,
+        };
+
+        CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated };
+        SaveCurrentSession();
+    }
+
+    public void RemoveSpeakerVoiceAssignment(string speakerId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
+        if (CurrentSession.SpeakerVoiceAssignments is null)
+            return;
+
+        var updated = new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
+        if (!updated.Remove(speakerId))
+            return;
+
+        CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
+        SaveCurrentSession();
+    }
+
+    public void SetSpeakerReferenceAudioPath(string speakerId, string clipPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(clipPath);
+
+        var current = CurrentSession.SpeakerReferenceAudioPaths ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
+        {
+            [speakerId] = clipPath,
+        };
+
+        CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
+        SaveCurrentSession();
+    }
+
+    public void RemoveSpeakerReferenceAudioPath(string speakerId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
+        if (CurrentSession.SpeakerReferenceAudioPaths is null)
+            return;
+
+        var updated = new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
+        if (!updated.Remove(speakerId))
+            return;
+
+        CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated.Count == 0 ? null : updated };
+        SaveCurrentSession();
+    }
+
+    public void SetMultiSpeakerEnabled(bool enabled)
+    {
+        if (CurrentSession.MultiSpeakerEnabled == enabled)
+            return;
+
+        CurrentSession = CurrentSession with { MultiSpeakerEnabled = enabled };
+        SaveCurrentSession();
+    }
+
+    private string ResolveVoiceForSegment(TranslationSegmentArtifact segment, string defaultVoice)
+    {
+        if (!CurrentSession.MultiSpeakerEnabled)
+            return defaultVoice;
+
+        var speakerId = segment.SpeakerId;
+        if (string.IsNullOrWhiteSpace(speakerId))
+            return !string.IsNullOrWhiteSpace(CurrentSession.DefaultTtsVoiceFallback)
+                ? CurrentSession.DefaultTtsVoiceFallback
+                : defaultVoice;
+
+        if (CurrentSession.SpeakerVoiceAssignments is not null &&
+            CurrentSession.SpeakerVoiceAssignments.TryGetValue(speakerId, out var mappedVoice) &&
+            !string.IsNullOrWhiteSpace(mappedVoice))
+        {
+            return mappedVoice;
+        }
+
+        return !string.IsNullOrWhiteSpace(CurrentSession.DefaultTtsVoiceFallback)
+            ? CurrentSession.DefaultTtsVoiceFallback
+            : defaultVoice;
+    }
+
+    private string? ResolveReferenceAudioForSegment(TranslationSegmentArtifact segment)
+    {
+        if (!CurrentSession.MultiSpeakerEnabled)
+            return null;
+
+        var speakerId = segment.SpeakerId;
+        if (string.IsNullOrWhiteSpace(speakerId) || CurrentSession.SpeakerReferenceAudioPaths is null)
+            return null;
+
+        return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var path) &&
+               !string.IsNullOrWhiteSpace(path)
+            ? path
+            : null;
+    }
+
     private void QueueMediaReloadRequest(bool autoPlay, string reason)
     {
         if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
@@ -911,7 +1026,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             new TtsRequest(
                 CurrentSession.TranslationPath,
                 ttsPath,
-                v),
+                v,
+                CurrentSession.SpeakerVoiceAssignments,
+                CurrentSession.SpeakerReferenceAudioPaths,
+                CurrentSession.DefaultTtsVoiceFallback),
             cancellationToken);
 
         if (!result.Success)
@@ -947,8 +1065,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
                 totalSegments++;
                 var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
+                var resolvedVoice = ResolveVoiceForSegment(seg, v);
+                var referenceAudioPath = ResolveReferenceAudioForSegment(seg);
 
-                _log.Info($"Generating TTS for segment {id}: {text.Substring(0, Math.Min(30, text.Length))}...");
+                _log.Info($"Generating TTS for segment {id} (voice={resolvedVoice}, speaker={seg.SpeakerId ?? "<none>"}): {text.Substring(0, Math.Min(30, text.Length))}...");
 
                 try
                 {
@@ -956,7 +1076,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                         new SingleSegmentTtsRequest(
                             text,
                             segmentAudioPath,
-                            v),
+                            resolvedVoice,
+                            seg.SpeakerId,
+                            referenceAudioPath),
                         cancellationToken);
 
                     if (segResult.Success && File.Exists(segmentAudioPath))
@@ -1028,6 +1150,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new InvalidOperationException($"Segment not found: {segmentId}");
         }
 
+        var translation = await _artifactReader.LoadTranslationAsync(CurrentSession.TranslationPath);
+        var targetSegment = translation.Segments?.FirstOrDefault(s => s.Id == segmentId);
+        var regenVoice = targetSegment is not null
+            ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
+            : CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
+        var referenceAudioPath = targetSegment is not null
+            ? ResolveReferenceAudioForSegment(targetSegment)
+            : null;
+
         _ttsService ??= CreateTtsService();
 
         var sessionDir = GetSessionDirectory();
@@ -1039,12 +1170,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText.Substring(0, Math.Min(30, segmentText.Length))}...");
 
-        var regenVoice = CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
         var result = await _ttsService.GenerateSegmentTtsAsync(
             new SingleSegmentTtsRequest(
                 segmentText,
                 segmentAudioPath,
-                regenVoice));
+                regenVoice,
+                targetSegment?.SpeakerId,
+                referenceAudioPath));
 
         if (!result.Success)
         {

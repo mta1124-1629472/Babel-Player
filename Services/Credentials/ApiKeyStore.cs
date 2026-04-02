@@ -15,6 +15,7 @@ namespace Babel.Player.Services.Credentials;
 /// </summary>
 public sealed class ApiKeyStore
 {
+    private const string DefaultFileName = "api-keys.json";
     private readonly string _filePath;
 
     /// <summary>Canonical provider IDs managed by this store (in display order).</summary>
@@ -32,8 +33,23 @@ public sealed class ApiKeyStore
 
     public ApiKeyStore(string filePath)
     {
-        _filePath = filePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        _filePath = ResolveFilePath(filePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
+    }
+
+    private static string ResolveFilePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("API key store path cannot be empty.", nameof(path));
+
+        var normalized = path.Trim();
+
+        // Backward-compatible safety: if caller supplies a directory path,
+        // persist to <dir>/state/api-keys.json.
+        if (Directory.Exists(normalized) || !Path.HasExtension(normalized))
+            return Path.Combine(normalized, "state", DefaultFileName);
+
+        return normalized;
     }
 
     // ── Public API ──────────────────────────────────────────────────────────────

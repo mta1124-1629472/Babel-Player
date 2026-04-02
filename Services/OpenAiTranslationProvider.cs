@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -24,18 +23,18 @@ public sealed class OpenAiTranslationProvider : ITranslationProvider
     private readonly AppLog _log;
     private readonly string _apiKey;
     private readonly string _model;
-    private readonly Func<HttpMessageHandler?>? _httpHandlerFactory;
+    private readonly Func<OpenAiApiClient> _clientFactory;
 
     public OpenAiTranslationProvider(
         AppLog log,
         string apiKey,
         string model,
-        Func<HttpMessageHandler?>? httpHandlerFactory = null)
+        Func<OpenAiApiClient>? clientFactory = null)
     {
         _log = log;
         _apiKey = apiKey;
         _model = model;
-        _httpHandlerFactory = httpHandlerFactory;
+        _clientFactory = clientFactory ?? (() => new OpenAiApiClient(_apiKey));
     }
 
     public async Task<TranslationResult> TranslateAsync(
@@ -123,7 +122,7 @@ public sealed class OpenAiTranslationProvider : ITranslationProvider
         string model,
         CancellationToken cancellationToken)
     {
-        using var client = new OpenAiApiClient(_apiKey, _httpHandlerFactory?.Invoke());
+        using var client = _clientFactory();
 
         var responseContent = await client.CreateChatCompletionAsync(
             model,

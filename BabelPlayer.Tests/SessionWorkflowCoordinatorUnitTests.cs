@@ -479,6 +479,58 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         coord.NotifySettingsModified();
     }
 
+    // ── Multi-speaker mapping APIs ───────────────────────────────────────────
+
+    [Fact]
+    public void SetSpeakerVoiceAssignment_PersistsInCurrentSession()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        coord.SetSpeakerVoiceAssignment("spk_01", "en-US-AriaNeural");
+
+        Assert.NotNull(coord.CurrentSession.SpeakerVoiceAssignments);
+        Assert.True(coord.CurrentSession.SpeakerVoiceAssignments!.TryGetValue("spk_01", out var voice));
+        Assert.Equal("en-US-AriaNeural", voice);
+    }
+
+    [Fact]
+    public void RemoveSpeakerVoiceAssignment_RemovesEntry()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.SetSpeakerVoiceAssignment("spk_01", "en-US-AriaNeural");
+
+        coord.RemoveSpeakerVoiceAssignment("spk_01");
+
+        Assert.True(coord.CurrentSession.SpeakerVoiceAssignments is null
+            || !coord.CurrentSession.SpeakerVoiceAssignments.ContainsKey("spk_01"));
+    }
+
+    [Fact]
+    public void SetSpeakerReferenceAudioPath_PersistsInCurrentSession()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        coord.SetSpeakerReferenceAudioPath("spk_01", "/tmp/spk_01.wav");
+
+        Assert.NotNull(coord.CurrentSession.SpeakerReferenceAudioPaths);
+        Assert.True(coord.CurrentSession.SpeakerReferenceAudioPaths!.TryGetValue("spk_01", out var path));
+        Assert.Equal("/tmp/spk_01.wav", path);
+    }
+
+    [Fact]
+    public void SetMultiSpeakerEnabled_UpdatesSessionFlag()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        coord.SetMultiSpeakerEnabled(true);
+
+        Assert.True(coord.CurrentSession.MultiSpeakerEnabled);
+    }
+
     // ── CheckSettingsInvalidation ─────────────────────────────────────────────
 
     [Fact]
