@@ -14,15 +14,18 @@ public sealed class ApiKeyValidationService
     private readonly ITranscriptionRegistry _transcriptionRegistry;
     private readonly ITranslationRegistry _translationRegistry;
     private readonly ITtsRegistry _ttsRegistry;
+    private readonly Func<string, OpenAiApiClient> _openAiClientFactory;
 
     public ApiKeyValidationService(
         ITranscriptionRegistry transcriptionRegistry,
         ITranslationRegistry translationRegistry,
-        ITtsRegistry ttsRegistry)
+        ITtsRegistry ttsRegistry,
+        Func<string, OpenAiApiClient>? openAiClientFactory = null)
     {
         _transcriptionRegistry = transcriptionRegistry;
         _translationRegistry = translationRegistry;
         _ttsRegistry = ttsRegistry;
+        _openAiClientFactory = openAiClientFactory ?? (apiKey => new OpenAiApiClient(apiKey));
     }
 
     public string? GetAvailabilityMessage(string credentialKey)
@@ -62,7 +65,7 @@ public sealed class ApiKeyValidationService
     {
         try
         {
-            using var client = new OpenAiApiClient(apiKey);
+            using var client = _openAiClientFactory(apiKey);
             var availableModels = await client.ListModelsAsync(cancellationToken);
             var supportedModels = implementedProviders
                 .SelectMany(provider => provider.SupportedModels)

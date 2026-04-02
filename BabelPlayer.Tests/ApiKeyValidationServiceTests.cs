@@ -54,21 +54,20 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
     [Fact]
     public async Task ValidateAsync_OpenAi_ReturnsSuccess_WhenSupportedModelIsAvailable()
     {
-        var service = CreateService();
-        using var client = new OpenAiApiClient("test-key", new StubHttpMessageHandler(_ =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("""
-                {
-                  "object": "list",
-                  "data": [
-                    { "id": "gpt-4o-mini", "object": "model", "created": 1, "owned_by": "openai" }
-                  ]
-                }
-                """, Encoding.UTF8, "application/json")
-            })));
+                var service = CreateService(_ => new OpenAiApiClient("test-key", new StubHttpMessageHandler(_ =>
+                        Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                        {
+                                Content = new StringContent("""
+                                {
+                                    "object": "list",
+                                    "data": [
+                                        { "id": "gpt-4o-mini", "object": "model", "created": 1, "owned_by": "openai" }
+                                    ]
+                                }
+                                """, Encoding.UTF8, "application/json")
+                        }))));
 
-        var result = await ValidateOpenAiAsync(service, client);
+                var result = await service.ValidateAsync(CredentialKeys.OpenAi, "test-key");
 
         Assert.True(result.IsAvailable);
         Assert.True(result.IsValid);
@@ -78,20 +77,19 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
     [Fact]
     public async Task ValidateAsync_OpenAi_ReturnsFailure_WhenKeyUnauthorized()
     {
-        var service = CreateService();
-        using var client = new OpenAiApiClient("bad-key", new StubHttpMessageHandler(_ =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
-            {
-                Content = new StringContent("""
-                {
-                  "error": {
-                    "message": "Incorrect API key provided."
-                  }
-                }
-                """, Encoding.UTF8, "application/json")
-            })));
+                var service = CreateService(_ => new OpenAiApiClient("bad-key", new StubHttpMessageHandler(_ =>
+                        Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                        {
+                                Content = new StringContent("""
+                                {
+                                    "error": {
+                                        "message": "Incorrect API key provided."
+                                    }
+                                }
+                                """, Encoding.UTF8, "application/json")
+                        }))));
 
-        var result = await ValidateOpenAiAsync(service, client);
+                var result = await service.ValidateAsync(CredentialKeys.OpenAi, "bad-key");
 
         Assert.True(result.IsAvailable);
         Assert.False(result.IsValid);
@@ -101,52 +99,32 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
     [Fact]
     public async Task ValidateAsync_OpenAi_ReturnsFailure_WhenNoSupportedModelsAvailable()
     {
-        var service = CreateService();
-        using var client = new OpenAiApiClient("test-key", new StubHttpMessageHandler(_ =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("""
-                {
-                  "object": "list",
-                  "data": [
-                    { "id": "other-model", "object": "model", "created": 1, "owned_by": "openai" }
-                  ]
-                }
-                """, Encoding.UTF8, "application/json")
-            })));
+                var service = CreateService(_ => new OpenAiApiClient("test-key", new StubHttpMessageHandler(_ =>
+                        Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                        {
+                                Content = new StringContent("""
+                                {
+                                    "object": "list",
+                                    "data": [
+                                        { "id": "other-model", "object": "model", "created": 1, "owned_by": "openai" }
+                                    ]
+                                }
+                                """, Encoding.UTF8, "application/json")
+                        }))));
 
-        var result = await ValidateOpenAiAsync(service, client);
+                var result = await service.ValidateAsync(CredentialKeys.OpenAi, "test-key");
 
         Assert.True(result.IsAvailable);
         Assert.False(result.IsValid);
         Assert.Contains("supported", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private ApiKeyValidationService CreateService() =>
+    private ApiKeyValidationService CreateService(Func<string, OpenAiApiClient>? openAiClientFactory = null) =>
         new(
             new TranscriptionRegistry(_log),
             new TranslationRegistry(_log),
-            new TtsRegistry(_log));
-
-    private async Task<ApiKeyValidationResult> ValidateOpenAiAsync(ApiKeyValidationService service, OpenAiApiClient client)
-    {
-        var implementedProviders = new TranslationRegistry(_log)
-            .GetAvailableProviders();
-
-        var availableModels = await client.ListModelsAsync();
-        var supportedModels = implementedProviders
-            .Where(provider => provider.IsImplemented && provider.CredentialKey == CredentialKeys.OpenAi)
-            .SelectMany(provider => provider.SupportedModels)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        var matchedModels = availableModels
-            .Where(model => supportedModels.Contains(model, StringComparer.Ordinal))
-            .ToArray();
-
-        return matchedModels.Length > 0
-            ? ApiKeyValidationResult.Success($"Validated for OpenAI. Available Babel Player models: {string.Join(", ", matchedModels)}.")
-            : ApiKeyValidationResult.Failure("OpenAI accepted the key, but none of Babel Player's supported OpenAI models are available on this account.");
-    }
+            new TtsRegistry(_log),
+            openAiClientFactory);
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
