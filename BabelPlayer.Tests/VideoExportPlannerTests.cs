@@ -93,7 +93,7 @@ public sealed class VideoExportPlannerTests
                 new ExportVideoOptions(Path.Combine(workDir, "out.mp4"), IncludeSoftCaptions: false, BurnInCaptions: true));
 
             Assert.Contains("-vf", plan.FfmpegArguments);
-            Assert.Contains("subtitles=", plan.FfmpegArguments[^1]);
+            Assert.Contains(plan.FfmpegArguments, arg => arg.StartsWith("subtitles=", StringComparison.Ordinal));
             Assert.NotNull(plan.SubtitleFilePath);
         }
         finally
