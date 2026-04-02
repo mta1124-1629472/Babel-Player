@@ -168,6 +168,25 @@
                                        TextWrapping="Wrap" />
                         </StackPanel>
 
+                        <!-- API KEYS -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="API KEYS" FontSize="10"
+                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+
+                            <Button HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="0,7"
+                                    FontSize="12"
+                                    Background="#1C1C2C" Foreground="#8080A0"
+                                    CornerRadius="5"
+                                    Click="OnApiKeysClick">
+                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                    <TextBlock Text="🔑" VerticalAlignment="Center" />
+                                    <TextBlock Text="Manage API Keys" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
                         <!-- LANGUAGE ROUTING -->
                         <StackPanel Spacing="10">
                             <TextBlock Text="LANGUAGE ROUTING" FontSize="10"
@@ -406,18 +425,6 @@
                             </Button>
                         </Grid>
 
-                        <Button HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                Padding="0,7"
-                                FontSize="12"
-                                Background="#1C1C2C" Foreground="#8080A0"
-                                CornerRadius="5"
-                                Click="OnApiKeysClick">
-                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                <TextBlock Text="🔑" VerticalAlignment="Center" />
-                                <TextBlock Text="API Keys" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
                     </StackPanel>
                 </Border>
 

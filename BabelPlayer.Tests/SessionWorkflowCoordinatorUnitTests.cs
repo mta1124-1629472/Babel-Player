@@ -521,9 +521,15 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         var coord = CreateCoordinator();
         coord.Initialize();
         coord.LoadMedia(_mediaPath);
+        var firstSessionId = coord.CurrentSession.SessionId;
         coord.ConsumePendingMediaReloadRequest();
 
-        coord.RestoreSession(coord.CurrentSession.SessionId);
+        var secondMediaPath = Path.Combine(_dir, $"copy-{Guid.NewGuid():N}.mp4");
+        File.Copy(_mediaPath, secondMediaPath);
+        coord.LoadMedia(secondMediaPath);
+        coord.ConsumePendingMediaReloadRequest();
+
+        coord.RestoreSession(firstSessionId);
 
         var request = coord.ConsumePendingMediaReloadRequest();
         Assert.NotNull(request);
