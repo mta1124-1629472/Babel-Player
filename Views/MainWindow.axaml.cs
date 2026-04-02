@@ -21,6 +21,10 @@ public partial class MainWindow : Window
     private DispatcherTimer? _volumeHideTimer;
     private const int VolumeHideDelayMs = 3000;
 
+    // Cached handler refs so we can unsubscribe in OnClosed.
+    private PropertyChangedEventHandler? _playbackPropertyChangedHandler;
+    private EventHandler<PointerEventArgs>? _videoOverlayPointerMovedHandler;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -44,15 +48,48 @@ public partial class MainWindow : Window
         base.OnDataContextChanged(e);
         if (DataContext is MainWindowViewModel vm)
         {
-            vm.Playback.PropertyChanged += OnPlaybackPropertyChanged;
+            _playbackPropertyChangedHandler = OnPlaybackPropertyChanged;
+            vm.Playback.PropertyChanged += _playbackPropertyChangedHandler;
 
             // Subscribe to PointerMoved on the transparent overlay Panel that sits above the
             // NativeControlHost (MpvVideoView). The native Win32 HWND does not bubble Avalonia
             // pointer events to parent controls, so we capture on the managed overlay instead.
             var overlay = this.FindControl<Panel>("VideoOverlayPanel");
             if (overlay is not null)
-                overlay.PointerMoved += OnVideoAreaPointerMoved;
+            {
+                _videoOverlayPointerMovedHandler = OnVideoAreaPointerMoved;
+                overlay.PointerMoved += _videoOverlayPointerMovedHandler;
+            }
         }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+
+        // Stop and discard the volume hide timer so it cannot fire after
+        // the control tree is torn down.
+        if (_volumeHideTimer is not null)
+        {
+            _volumeHideTimer.Stop();
+            _volumeHideTimer.Tick -= OnVolumeHideTimerTick;
+            _volumeHideTimer = null;
+        }
+
+        // Unsubscribe event handlers so the window is not kept alive by
+        // rooted objects (ViewModel, overlay panel) after it has closed.
+        if (DataContext is MainWindowViewModel vm)
+        {
+            if (_playbackPropertyChangedHandler is not null)
+                vm.Playback.PropertyChanged -= _playbackPropertyChangedHandler;
+
+            var overlay = this.FindControl<Panel>("VideoOverlayPanel");
+            if (overlay is not null && _videoOverlayPointerMovedHandler is not null)
+                overlay.PointerMoved -= _videoOverlayPointerMovedHandler;
+        }
+
+        _playbackPropertyChangedHandler = null;
+        _videoOverlayPointerMovedHandler = null;
     }
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)

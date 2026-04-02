@@ -43,7 +43,6 @@ public partial class App : Application
 
             _logFilePath = Path.Combine(appDataRoot, "logs", "babel-player.log");
             var appLog = new AppLog(_logFilePath);
-            var errorDialogService = new AvaloniaErrorDialogService(appLog);
             _startupLog = appLog;
 
             // Initialize Settings and other stores
@@ -90,12 +89,7 @@ public partial class App : Application
 
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(
-                    _sessionWorkflowCoordinator,
-                    _settingsService,
-                    _apiKeyStore,
-                    errorDialogService,
-                    _logFilePath),
+                DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService, _apiKeyStore),
             };
 
             // Run heavy startup probes in background and publish results on UI thread.
@@ -140,6 +134,11 @@ public partial class App : Application
         {
             _sessionWorkflowCoordinator.Dispose();
             (_startupLog as IDisposable)?.Dispose();
+
+            // Force the process to exit cleanly. Without this, background threads
+            // (mpv event loop, debounce Task.Run continuations, bootstrap warmup)
+            // can keep the CLR alive indefinitely after the window has closed.
+            Environment.Exit(e.ApplicationExitCode);
         }
     }
 
