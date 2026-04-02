@@ -21,6 +21,10 @@ public partial class App : Application
     private SettingsService? _settingsService;
     private ApiKeyStore? _apiKeyStore;
 
+    // Resolved once at startup so crash handlers can reference it without
+    // touching the AppLog instance (which may itself be in a bad state).
+    private string? _logFilePath;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -37,8 +41,10 @@ public partial class App : Application
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "BabelPlayer");
 
-            var appLog = new AppLog(Path.Combine(appDataRoot, "logs", "babel-player.log"));
+            _logFilePath = Path.Combine(appDataRoot, "logs", "babel-player.log");
+            var appLog = new AppLog(_logFilePath);
             _startupLog = appLog;
+
             // Initialize Settings and other stores
             var settingsFilePath = Path.Combine(appDataRoot, "settings", "app-settings.json");
             _settingsService = new SettingsService(settingsFilePath, appLog);
@@ -85,6 +91,7 @@ public partial class App : Application
             {
                 DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService, _apiKeyStore),
             };
+
             // Run heavy startup probes in background and publish results on UI thread.
             var coordinator = _sessionWorkflowCoordinator;
             Task.Run(() => coordinator.GatherBootstrapWarmupData())
@@ -133,12 +140,30 @@ public partial class App : Application
     private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
         var msg = e.ExceptionObject is Exception ex ? ex.ToString() : e.ExceptionObject?.ToString() ?? "unknown";
-        _startupLog?.Error($"Unhandled exception (isTerminating={e.IsTerminating}).", new InvalidOperationException(msg));
+
+        // 1. Always log to disk first — this is guaranteed to run even if the
+        //    UI thread is in a bad state.
+        _startupLog?.Error($"Unhandled exception (isTerminating={e.IsTerminating}).",
+            new InvalidOperationException(msg));
+
+        // 2. Show the full error to the user in a dedicated pop-up window.
+        var header = e.IsTerminating
+            ? $"FATAL — application will close after this dialog.\n\n{msg}"
+            : msg;
+        CrashReportWindow.ShowOnUiThread(header, _logFilePath);
     }
 
     private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
-        _startupLog?.Error("Unobserved task exception.", e.Exception);
+        // 1. Mark observed so the runtime does not re-throw and terminate.
         e.SetObserved();
+
+        var msg = e.Exception.ToString();
+
+        // 2. Log to disk.
+        _startupLog?.Error("Unobserved task exception.", e.Exception);
+
+        // 3. Show full error to the user.
+        CrashReportWindow.ShowOnUiThread(msg, _logFilePath);
     }
 }
