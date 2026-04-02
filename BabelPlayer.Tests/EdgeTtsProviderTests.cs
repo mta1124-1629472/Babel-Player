@@ -128,7 +128,7 @@ public sealed class EdgeTtsProviderTests : IDisposable
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => provider.GenerateSegmentTtsAsync(request, cts.Token));
     }
 

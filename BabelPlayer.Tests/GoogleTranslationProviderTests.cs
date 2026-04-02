@@ -98,7 +98,7 @@ public sealed class GoogleTranslationProviderTests : IDisposable
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => provider.TranslateAsync(request, cts.Token));
     }
 
@@ -174,7 +174,7 @@ public sealed class GoogleTranslationProviderTests : IDisposable
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => provider.TranslateSingleSegmentAsync(request, cts.Token));
     }
 

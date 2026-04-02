@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 
@@ -157,7 +158,10 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void TranslationRegistry_CreateProvider_DeepL_DoesNotThrow()
     {
-        var provider = _translationRegistry.CreateProvider(ProviderNames.Deepl, new AppSettings(), null);
+        var keyStore = new ApiKeyStore(_dir);
+        keyStore.SetKey(CredentialKeys.Deepl, "test-deepl-key");
+
+        var provider = _translationRegistry.CreateProvider(ProviderNames.Deepl, new AppSettings(), keyStore);
         Assert.NotNull(provider);
     }
 
@@ -278,11 +282,11 @@ public sealed class RegistryTests : IDisposable
         var settingsWithEmptyUrl = new AppSettings { ContainerizedServiceUrl = "" };
 
         var transcription = _transcriptionRegistry.CheckReadiness(
-            ProviderNames.ContainerizedService, "base", settingsWithEmptyUrl, null);
+            ProviderNames.FasterWhisper, "base", settingsWithEmptyUrl, null, InferenceRuntime.Containerized);
         var translation = _translationRegistry.CheckReadiness(
-            ProviderNames.ContainerizedService, "default", settingsWithEmptyUrl, null);
+            ProviderNames.GoogleTranslateFree, "default", settingsWithEmptyUrl, null, InferenceRuntime.Containerized);
         var tts = _ttsRegistry.CheckReadiness(
-            ProviderNames.ContainerizedService, "en-US-AriaNeural", settingsWithEmptyUrl, null);
+            ProviderNames.EdgeTts, "en-US-AriaNeural", settingsWithEmptyUrl, null, InferenceRuntime.Containerized);
 
         Assert.False(transcription.IsReady);
         Assert.False(translation.IsReady);
@@ -295,15 +299,42 @@ public sealed class RegistryTests : IDisposable
         var settingsWithUrl = new AppSettings { ContainerizedServiceUrl = "http://127.0.0.1:1" };
 
         var transcription = _transcriptionRegistry.CheckReadiness(
-            ProviderNames.ContainerizedService, "base", settingsWithUrl, null);
+            ProviderNames.FasterWhisper, "base", settingsWithUrl, null, InferenceRuntime.Containerized);
         var translation = _translationRegistry.CheckReadiness(
-            ProviderNames.ContainerizedService, "default", settingsWithUrl, null);
+            ProviderNames.GoogleTranslateFree, "default", settingsWithUrl, null, InferenceRuntime.Containerized);
         var tts = _ttsRegistry.CheckReadiness(
-            ProviderNames.ContainerizedService, "en-US-AriaNeural", settingsWithUrl, null);
+            ProviderNames.EdgeTts, "en-US-AriaNeural", settingsWithUrl, null, InferenceRuntime.Containerized);
 
         Assert.False(transcription.IsReady);
         Assert.False(translation.IsReady);
         Assert.False(tts.IsReady);
+    }
+
+    [Fact]
+    public void TranscriptionRegistry_GetAvailableProviders_ContainerizedFiltersToHostedProviders()
+    {
+        var providers = _transcriptionRegistry.GetAvailableProviders(InferenceRuntime.Containerized);
+
+        Assert.Single(providers);
+        Assert.Equal(ProviderNames.FasterWhisper, providers[0].Id);
+    }
+
+    [Fact]
+    public void TranslationRegistry_GetAvailableProviders_LocalFiltersToLocalProviders()
+    {
+        var providers = _translationRegistry.GetAvailableProviders(InferenceRuntime.Local);
+
+        Assert.Single(providers);
+        Assert.Equal(ProviderNames.Nllb200, providers[0].Id);
+    }
+
+    [Fact]
+    public void TtsRegistry_GetAvailableProviders_CloudExcludesLocalOnlyProviders()
+    {
+        var providers = _ttsRegistry.GetAvailableProviders(InferenceRuntime.Cloud);
+
+        Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.Piper);
+        Assert.Contains(providers, provider => provider.Id == ProviderNames.EdgeTts);
     }
 
     // ── DiarizationRegistry ───────────────────────────────────────────────────────

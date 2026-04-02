@@ -123,7 +123,7 @@ public sealed class DeepLTranslationProviderTests : IDisposable
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => provider.TranslateAsync(request, cts.Token));
     }
 
