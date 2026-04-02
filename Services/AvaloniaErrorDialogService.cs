@@ -2,7 +2,6 @@ using System;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -28,8 +27,8 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
         // Always marshal to the UI thread — callers may be on background threads.
         if (!Dispatcher.UIThread.CheckAccess())
         {
-            return Dispatcher.UIThread.InvokeAsync(() =>
-                ShowErrorAsync(title, fullDetail, logFilePath));
+            Dispatcher.UIThread.Post(() => ShowDialog(title, fullDetail, logFilePath));
+            return Task.CompletedTask;
         }
 
         ShowDialog(title, fullDetail, logFilePath);
@@ -97,7 +96,7 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
         copyBtn.Click += (_, _) =>
         {
             if (dialog?.Clipboard is { } clipboard)
-                _ = clipboard.SetTextAsync(fullDetail);
+                _ = Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, fullDetail);
         };
 
         var openLogBtn = new Button { Content = "Open Log Folder", Margin = new Thickness(0, 0, 8, 0) };
