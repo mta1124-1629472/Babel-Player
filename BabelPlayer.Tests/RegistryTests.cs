@@ -323,14 +323,25 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void DiarizationRegistry_AllProviders_AreUnimplemented_AndCheckReadiness_ReturnsNotReady()
+    public void DiarizationRegistry_PyannoteLocal_IsImplemented()
     {
-        foreach (var p in _diarizationRegistry.GetAvailableProviders())
-        {
-            Assert.False(p.IsImplemented, $"Provider '{p.Id}' is unexpectedly marked implemented.");
-            var r = _diarizationRegistry.CheckReadiness(p.Id, new AppSettings(), null);
-            Assert.False(r.IsReady, $"Provider '{p.Id}' reported ready but is unimplemented.");
-        }
+        var providers = _diarizationRegistry.GetAvailableProviders();
+        var pyannote = Assert.Single(providers, p => p.Id == ProviderNames.PyannoteLocal);
+        Assert.True(pyannote.IsImplemented);
+    }
+
+    [Fact]
+    public void DiarizationRegistry_PyannoteLocal_CheckReadiness_ReturnsReady()
+    {
+        var readiness = _diarizationRegistry.CheckReadiness(ProviderNames.PyannoteLocal, new AppSettings(), null);
+        Assert.True(readiness.IsReady);
+    }
+
+    [Fact]
+    public void DiarizationRegistry_PyannoteLocal_CreateProvider_DoesNotThrow()
+    {
+        var provider = _diarizationRegistry.CreateProvider(ProviderNames.PyannoteLocal, new AppSettings(), null);
+        Assert.NotNull(provider);
     }
 
     [Fact]

@@ -40,8 +40,8 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
             false,
             null,
             ["pyannote/speaker-diarization-3.1"],
-            IsImplemented: false,
-            Notes: "Requires pyannote.audio Python package and HuggingFace model download."),
+            IsImplemented: true,
+            Notes: "Requires pyannote.audio Python package and HuggingFace model acceptance."),
     ];
 
     public ProviderReadiness CheckReadiness(string providerId, AppSettings settings, ApiKeyStore? keyStore)
@@ -58,9 +58,12 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
 
     public IDiarizationProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)
     {
-        // PLACEHOLDER — no diarization providers are implemented in this build.
-        throw new PipelineProviderException(
-            $"Diarization provider '{providerId}' is not implemented yet. " +
-            "No diarization providers are available in this build.");
+        return providerId switch
+        {
+            ProviderNames.PyannoteLocal => new PyannoteDiarizationProvider(_log),
+            _ => throw new PipelineProviderException(
+                $"Diarization provider '{providerId}' is not implemented. " +
+                "Select an implemented provider in Settings.")
+        };
     }
 }
