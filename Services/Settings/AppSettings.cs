@@ -35,6 +35,9 @@ public sealed class AppSettings
     /// </summary>
     public int TranscriptionNumWorkers { get; set; } = 1;
 
+    /// <summary>Diarization provider identifier (e.g. "pyannote-local"). Empty string = diarization disabled.</summary>
+    public string DiarizationProvider { get; set; } = "";
+
     /// <summary>Translation provider identifier (e.g. "google-translate-free", "openai").</summary>
     public string TranslationProvider { get; set; } = ProviderNames.GoogleTranslateFree;
 

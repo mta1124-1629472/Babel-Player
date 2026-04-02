@@ -21,6 +21,7 @@ public sealed class RegistryTests : IDisposable
     private readonly TranscriptionRegistry _transcriptionRegistry;
     private readonly TranslationRegistry _translationRegistry;
     private readonly TtsRegistry _ttsRegistry;
+    private readonly DiarizationRegistry _diarizationRegistry;
 
     public RegistryTests()
     {
@@ -30,6 +31,7 @@ public sealed class RegistryTests : IDisposable
         _transcriptionRegistry = new TranscriptionRegistry(_log);
         _translationRegistry = new TranslationRegistry(_log);
         _ttsRegistry = new TtsRegistry(_log);
+        _diarizationRegistry = new DiarizationRegistry(_log);
     }
 
     public void Dispose()
@@ -302,5 +304,47 @@ public sealed class RegistryTests : IDisposable
         Assert.False(transcription.IsReady);
         Assert.False(translation.IsReady);
         Assert.False(tts.IsReady);
+    }
+
+    // ── DiarizationRegistry ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void DiarizationRegistry_GetAvailableProviders_ReturnsNonEmpty()
+    {
+        var providers = _diarizationRegistry.GetAvailableProviders();
+        Assert.NotEmpty(providers);
+    }
+
+    [Fact]
+    public void DiarizationRegistry_GetAvailableProviders_ContainsPyannoteLocal()
+    {
+        var providers = _diarizationRegistry.GetAvailableProviders();
+        Assert.Contains(providers, p => p.Id == ProviderNames.PyannoteLocal);
+    }
+
+    [Fact]
+    public void DiarizationRegistry_AllProviders_AreUnimplemented_AndCheckReadiness_ReturnsNotReady()
+    {
+        foreach (var p in _diarizationRegistry.GetAvailableProviders())
+        {
+            Assert.False(p.IsImplemented, $"Provider '{p.Id}' is unexpectedly marked implemented.");
+            var r = _diarizationRegistry.CheckReadiness(p.Id, new AppSettings(), null);
+            Assert.False(r.IsReady, $"Provider '{p.Id}' reported ready but is unimplemented.");
+        }
+    }
+
+    [Fact]
+    public void DiarizationRegistry_CheckReadiness_UnknownProvider_ReturnsNotReady()
+    {
+        var readiness = _diarizationRegistry.CheckReadiness("nonexistent-diarizer", new AppSettings(), null);
+        Assert.False(readiness.IsReady);
+        Assert.Contains("nonexistent-diarizer", readiness.BlockingReason);
+    }
+
+    [Fact]
+    public void DiarizationRegistry_CreateProvider_UnknownProvider_ThrowsPipelineProviderException()
+    {
+        Assert.Throws<PipelineProviderException>(
+            () => _diarizationRegistry.CreateProvider("nonexistent-diarizer", new AppSettings(), null));
     }
 }

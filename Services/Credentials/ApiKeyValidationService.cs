@@ -17,6 +17,7 @@ public sealed class ApiKeyValidationService
     private readonly Func<string, OpenAiApiClient> _openAiClientFactory;
     private readonly Func<string, DeepLApiClient> _deepLClientFactory;
     private readonly Func<string, ElevenLabsApiClient> _elevenLabsClientFactory;
+    private readonly Func<string, GoogleApiClient> _googleClientFactory;
 
     public ApiKeyValidationService(
         ITranscriptionRegistry transcriptionRegistry,
@@ -24,7 +25,8 @@ public sealed class ApiKeyValidationService
         ITtsRegistry ttsRegistry,
         Func<string, OpenAiApiClient>? openAiClientFactory = null,
         Func<string, DeepLApiClient>? deepLClientFactory = null,
-        Func<string, ElevenLabsApiClient>? elevenLabsClientFactory = null)
+        Func<string, ElevenLabsApiClient>? elevenLabsClientFactory = null,
+        Func<string, GoogleApiClient>? googleClientFactory = null)
     {
         _transcriptionRegistry = transcriptionRegistry;
         _translationRegistry = translationRegistry;
@@ -32,12 +34,18 @@ public sealed class ApiKeyValidationService
         _openAiClientFactory = openAiClientFactory ?? (apiKey => new OpenAiApiClient(apiKey));
         _deepLClientFactory = deepLClientFactory ?? (apiKey => new DeepLApiClient(apiKey));
         _elevenLabsClientFactory = elevenLabsClientFactory ?? (apiKey => new ElevenLabsApiClient(apiKey));
+        _googleClientFactory = googleClientFactory ?? (apiKey => new GoogleApiClient(apiKey));
     }
 
     public string? GetAvailabilityMessage(string credentialKey)
     {
         var implementedProviders = GetImplementedProviders(credentialKey);
         if (implementedProviders.Count > 0)
+            return null;
+
+        // Some credentials have a direct validation probe even before a full provider
+        // is wired in the registry. Surface validation for these immediately.
+        if (HasDirectValidationProbe(credentialKey))
             return null;
 
         return "Live validation unavailable until an implemented provider uses this key.";
@@ -50,6 +58,10 @@ public sealed class ApiKeyValidationService
     {
         if (string.IsNullOrWhiteSpace(apiKey))
             return ApiKeyValidationResult.Failure("Enter or save a key before validating.");
+
+        // Google has a direct probe independent of provider implementation state.
+        if (credentialKey == CredentialKeys.GoogleAi)
+            return await ValidateGoogleAsync(apiKey.Trim(), cancellationToken);
 
         var implementedProviders = GetImplementedProviders(credentialKey);
         if (implementedProviders.Count == 0)
@@ -174,6 +186,43 @@ public sealed class ApiKeyValidationService
             provider.IsImplemented
             && provider.RequiresApiKey
             && string.Equals(provider.CredentialKey, credentialKey, StringComparison.Ordinal);
+    }
+
+    // Credentials that have a dedicated live probe independent of any fully
+    // implemented provider. Add entries here when validation is wired but the
+    // full provider implementation is still pending.
+    private static bool HasDirectValidationProbe(string credentialKey) =>
+        credentialKey is CredentialKeys.GoogleAi;
+
+    private async Task<ApiKeyValidationResult> ValidateGoogleAsync(
+        string apiKey,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = _googleClientFactory(apiKey);
+            var voices = await client.ListVoicesAsync(cancellationToken);
+
+            return ApiKeyValidationResult.Success(
+                $"Google Cloud API key accepted. Cloud TTS voices available: {voices.Count}. " +
+                "Note: Google STT and Cloud TTS providers are not yet implemented \u2014 " +
+                "your key is ready for when they ship.");
+        }
+        catch (GoogleApiException ex) when (
+            ex.StatusCode is HttpStatusCode.BadRequest
+                          or HttpStatusCode.Unauthorized
+                          or HttpStatusCode.Forbidden)
+        {
+            return ApiKeyValidationResult.Failure($"Google rejected the key: {ex.Message}");
+        }
+        catch (GoogleApiException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            return ApiKeyValidationResult.Failure($"Google rate-limited validation: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return ApiKeyValidationResult.Failure($"Validation failed: {ex.Message}");
+        }
     }
 }
 

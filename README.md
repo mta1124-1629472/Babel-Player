@@ -7,79 +7,75 @@
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![Alpha](https://img.shields.io/badge/status-early%20alpha-orange)](#status)
 
-> **Early alpha.** Core workflow is functional end-to-end, but the app is under active development. Expect rough edges, missing polish, and breaking changes between builds.
-
-Babel Player is a Windows desktop dubbing workstation. Load a local video, generate a timed transcript via Whisper, translate the dialogue, synthesize dubbed speech via TTS, and preview the result in-context — all from a single session.
+Babel Player is a Windows desktop dubbing workstation for local video files. It takes source media through transcription, translation, TTS generation, and in-context preview in a single session.
 
 Babel Deck is built and maintained by a solo developer. If you’d like to support its continued development:
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/R5R01WOOYW)
 
 ![Babel Player preview](Assets/preview.png)
 
----
+The workflow is:
 
-## What it does today
+`source media -> timed transcript -> translated dialogue -> spoken dubbed output -> preview and refinement`
 
-The end-to-end workflow runs from source media through to playable dubbed audio:
+## Install from GitHub Releases
 
-1. **Load media** — open any local video file (MP4, MKV, AVI, WebM, MOV)
-2. **Transcribe** — generate a timed source-language transcript using Whisper (via Python)
-3. **Translate** — produce target-language dialogue adapted for spoken delivery
-4. **Generate dubbed audio** — synthesize TTS audio per segment
-5. **Preview** — scrub the source video, toggle dub mode to hear TTS follow the video in real time, and click any segment in the sidebar to jump directly to that timestamp
-6. **Persist sessions** — work is saved between launches; artifacts are restored without re-running the pipeline
+If you want to run Babel Player without building from source, use the latest GitHub release.
 
-Segment selection in the sidebar is live: the active segment highlights as the video plays and the list scrolls to track it automatically.
+1. Download the `Babel-Player-<version>-win-x64-portable.zip` asset from the release page.
+2. Download the matching `.sha256` file and verify the archive if you want integrity checking.
+3. Extract the zip to a folder such as `C:\Apps\BabelPlayer`.
+4. Run `BabelPlayer.exe`.
 
----
+Release bundles include:
 
-## What it does not do yet
+- the app executable and managed dependencies
+- the .NET runtime needed to run the app
+- `ffmpeg.exe`
+- `libmpv-2.dll`
 
-To be direct about current limits:
+Release bundles do not include Python or any external/local provider runtimes. Those still need to be installed and reachable on your machine.
 
-- **No audio mixing** — dubbed TTS and source audio are not mixed; they play independently
-- **No sync guarantee** — TTS follows the video segment-by-segment, not frame-accurate lip sync
-- **No export** — there is no way to export a dubbed video file yet
-- **No setup wizard** — a settings UI exists, but Python, FFmpeg, and any external/local inference service still need to be installed and reachable
-- **Windows only** — libmpv is loaded via P/Invoke from a bundled DLL; macOS and Linux are not supported
-- **No multi-language UI** — the interface is English only
+## What It Does
 
----
+- Load a local video file
+- Generate a timed transcript with Whisper via Python
+- Translate and adapt dialogue for spoken delivery
+- Generate dubbed TTS audio per segment
+- Preview the result in context with a subtitle overlay and dub mode
+- Persist and restore sessions between launches
+- Export captions as `.srt`
+
+## What It Does Not Do Yet
+
+- No automatic end-to-end video export yet
+- No audio mixing between source audio and dubbed audio
+- No multi-language UI
+- Windows only
 
 ## Requirements
 
 | Dependency | Notes |
 |-----------|-------|
-| Windows 10/11 x64 | Only tested platform |
-| [.NET 10 SDK or Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) | Needed for source builds; GitHub release bundles are self-contained |
+| Windows 10/11 x64 | Only supported platform today |
 | Python 3.10+ | Required for transcription, translation, and TTS |
 | Whisper-compatible Python environment | Transcription backend |
-| FFmpeg | Audio extraction; placed in `tools/win-x64/ffmpeg.exe` or on `PATH` |
-| libmpv-2.dll | Bundled in `native/win-x64/` — GPU video output via `vo=gpu` |
+| FFmpeg | Audio extraction and media tooling |
+| `libmpv-2.dll` | Bundled in `native/win-x64/` for playback |
 
----
+If you are building from source, you also need the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). Release bundles already include the runtime.
 
-## Install from GitHub Releases
+## First Run
 
-For normal users, prefer the latest GitHub release over building from source:
+1. Start the app.
+2. Open a local video file.
+3. Configure providers and any required API keys in Settings.
+4. Run transcription, then translation, then TTS generation.
+5. Toggle dub mode to preview the result in the player.
 
-1. Download `Babel-Player-<version>-win-x64-portable.zip`
-2. Download the matching `.sha256` file
-3. Extract the zip to a folder such as `C:\Apps\BabelPlayer`
-4. Run `BabelPlayer.exe`
+If the app reports missing dependencies at startup, install the required toolchain and verify it is on `PATH` or available in the app folder.
 
-Release bundles already include:
-
-- the .NET runtime needed to run the app
-- `ffmpeg.exe`
-- `libmpv-2.dll`
-- the app executable and managed dependencies
-
-Release bundles do **not** include Python or model/provider runtimes. See [`docs/install-windows-release.md`](docs/install-windows-release.md) for the user-facing install notes that ship with the release.
-
----
-
-## Run from source
+## Source Build
 
 ```bash
 git clone https://github.com/mta1124-1629472/Babel-Player.git
@@ -88,41 +84,31 @@ dotnet build
 dotnet run --project BabelPlayer.csproj
 ```
 
-Tests:
+Run the tests with:
 
 ```bash
 dotnet test
 ```
 
----
+## Project Layout
 
-## How the pipeline works
+- `App.axaml.cs` owns startup and composition
+- `Services/SessionWorkflowCoordinator.cs` owns workflow state and stage progression
+- `ViewModels/EmbeddedPlaybackViewModel.cs` owns the playback and preview surface logic
+- `Services/` contains provider adapters, persistence, and media services
+- `docs/` contains smoke notes and deployment notes
 
-```
-source video
-    └─ ingest (copy to session artifact dir)
-        └─ transcribe (Whisper via Python subprocess)
-            └─ translate (Python inference)
-                └─ TTS generation (per segment, Python or external/local inference service)
-                    └─ preview (libmpv + Avalonia UI)
-```
+## Release Notes For Users
 
-All artifacts are stored in a session directory under `%LOCALAPPDATA%\BabelPlayer\sessions\`. The session survives restarts; switching between multiple source files within a run caches prior work in memory and restores it without re-running the pipeline.
-
-Container note:
-- the supported container posture today is an external/local inference service consumed over HTTP
-- the desktop app does not package or launch itself in Docker
-- `INFERENCE_SERVICE_URL` overrides the saved container service URL at startup when set
-
----
+The release bundle is portable. You can extract it anywhere and launch the executable directly. Session data and settings are stored locally under your user profile, so reopening the app will restore prior work when the underlying artifacts still exist.
 
 ## Contributing
 
-Read these before touching anything:
+Read these before making changes:
 
-- [`AGENTS.md`](AGENTS.md) — operating rules and scope discipline
-- [`PLAN.md`](PLAN.md) — milestone order and gates
-- [`docs/architecture.md`](docs/architecture.md) — structural boundaries and state ownership
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contributor workflow and verification expectations
+- [`AGENTS.md`](AGENTS.md)
+- [`PLAN.md`](PLAN.md)
+- [`docs/architecture.md`](docs/architecture.md)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
-The short version: a feature is not done because it compiles. It is done when it has build, tests, and a written smoke result.
+The project is still in early alpha, but it is no longer a prototype. Changes should preserve the working source-media-to-dub workflow and keep release behavior truthful.

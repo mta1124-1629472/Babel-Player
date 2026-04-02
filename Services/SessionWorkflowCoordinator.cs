@@ -24,6 +24,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public ITranscriptionRegistry TranscriptionRegistry { get; }
     public ITranslationRegistry TranslationRegistry { get; }
     public ITtsRegistry TtsRegistry { get; }
+    public IDiarizationRegistry? DiarizationRegistry { get; private set; }
     private ITranscriptionProvider? _transcriptionService;
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
@@ -123,7 +124,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         IMediaTransport? sourcePlayer = null,
         ApiKeyStore? keyStore = null,
         SessionArtifactReader? artifactReader = null,
-        SessionSwitchService? sessionSwitchService = null)
+        SessionSwitchService? sessionSwitchService = null,
+        IDiarizationRegistry? diarizationRegistry = null)
     {
         _store = store;
         _log = log;
@@ -134,6 +136,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         TranscriptionRegistry = transcriptionRegistry;
         TranslationRegistry = translationRegistry;
         TtsRegistry = ttsRegistry;
+        DiarizationRegistry = diarizationRegistry;
         CurrentSettings = settings;
         KeyStore = keyStore;
         _transportManager = transportManager ?? new MediaTransportManager(
@@ -202,6 +205,76 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Call after any in-place mutation of CurrentSettings.
     /// </summary>
     public void NotifySettingsModified() => SettingsModified?.Invoke();
+
+    // ── Diarization ───────────────────────────────────────────────────────────
+
+    private async Task RunDiarizationAsync(string audioPath, string transcriptPath, CancellationToken ct)
+    {
+        if (DiarizationRegistry is null) return;
+
+        var readiness = DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+        if (!readiness.IsReady)
+        {
+            _log.Warning($"Diarization skipped: {readiness.BlockingReason}");
+            return;
+        }
+
+        var provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+
+        _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={audioPath}");
+        var result = await provider.DiarizeAsync(new DiarizationRequest(audioPath), ct);
+
+        if (!result.Success)
+        {
+            _log.Warning($"Diarization failed: {result.ErrorMessage}");
+            return;
+        }
+
+        await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
+
+        CurrentSession = CurrentSession with
+        {
+            DiarizationProvider = CurrentSettings.DiarizationProvider,
+            SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+        };
+        SaveCurrentSession();
+
+        _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
+    }
+
+    private static async Task MergeDiarizationIntoTranscriptAsync(
+        string transcriptPath,
+        IReadOnlyList<DiarizedSegment> diarizedSegments,
+        CancellationToken ct)
+    {
+        var artifact = await ArtifactJson.LoadTranscriptAsync(transcriptPath, ct);
+
+        if (artifact.Segments is null) return;
+
+        foreach (var segment in artifact.Segments)
+            segment.SpeakerId = FindBestSpeakerFor(segment.Start, segment.End, diarizedSegments);
+
+        var json = ArtifactJson.SerializeTranscript(artifact);
+        await File.WriteAllTextAsync(transcriptPath, json, ct);
+    }
+
+    private static string FindBestSpeakerFor(double start, double end, IReadOnlyList<DiarizedSegment> diarizedSegments)
+    {
+        string? best = null;
+        double bestOverlap = 0;
+        foreach (var d in diarizedSegments)
+        {
+            var overlapStart = Math.Max(start, d.StartSeconds);
+            var overlapEnd = Math.Min(end, d.EndSeconds);
+            var overlap = Math.Max(0, overlapEnd - overlapStart);
+            if (overlap > bestOverlap)
+            {
+                bestOverlap = overlap;
+                best = d.SpeakerId;
+            }
+        }
+        return best ?? "spk_00";
+    }
 
     public IReadOnlyDictionary<string, string> GetSpeakerVoiceAssignments() =>
         CurrentSession.SpeakerVoiceAssignments is null
@@ -788,6 +861,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
         SaveCurrentSession();
+
+        if (CurrentSession.MultiSpeakerEnabled && !string.IsNullOrEmpty(CurrentSettings.DiarizationProvider))
+            await RunDiarizationAsync(CurrentSession.IngestedMediaPath!, transcriptPath, cancellationToken);
     }
 
     public void ResetPipelineToTranscribed()

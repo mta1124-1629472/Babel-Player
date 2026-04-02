@@ -209,17 +209,80 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
         Assert.Contains("rejected", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void GetAvailabilityMessage_GoogleAi_ReturnsNull_WhenDirectProbeAvailable()
+    {
+        var service = CreateService();
+
+        var message = service.GetAvailabilityMessage(CredentialKeys.GoogleAi);
+
+        Assert.Null(message);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_Google_ReturnsSuccess_WhenVoicesEndpointAccessible()
+    {
+        var voicesJson = """
+        {
+          "voices": [
+            { "name": "en-US-Standard-A" },
+            { "name": "en-US-Standard-B" }
+          ]
+        }
+        """;
+        var service = CreateService(
+            googleClientFactory: _ => new GoogleApiClient("google-key", new StubHttpMessageHandler(_ =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(voicesJson, Encoding.UTF8, "application/json")
+                }))));
+
+        var result = await service.ValidateAsync(CredentialKeys.GoogleAi, "google-key");
+
+        Assert.True(result.IsAvailable);
+        Assert.True(result.IsValid);
+        Assert.Contains("2", result.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_Google_ReturnsFailure_WhenForbidden()
+    {
+        var errorJson = """
+        {
+          "error": {
+            "code": 403,
+            "message": "API key not valid. Please pass a valid API key.",
+            "status": "PERMISSION_DENIED"
+          }
+        }
+        """;
+        var service = CreateService(
+            googleClientFactory: _ => new GoogleApiClient("bad-google-key", new StubHttpMessageHandler(_ =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)
+                {
+                    Content = new StringContent(errorJson, Encoding.UTF8, "application/json")
+                }))));
+
+        var result = await service.ValidateAsync(CredentialKeys.GoogleAi, "bad-google-key");
+
+        Assert.True(result.IsAvailable);
+        Assert.False(result.IsValid);
+        Assert.Contains("rejected", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private ApiKeyValidationService CreateService(
         Func<string, OpenAiApiClient>? openAiClientFactory = null,
         Func<string, DeepLApiClient>? deepLClientFactory = null,
-        Func<string, ElevenLabsApiClient>? elevenLabsClientFactory = null) =>
+        Func<string, ElevenLabsApiClient>? elevenLabsClientFactory = null,
+        Func<string, GoogleApiClient>? googleClientFactory = null) =>
         new(
             new TranscriptionRegistry(_log),
             new TranslationRegistry(_log),
             new TtsRegistry(_log),
             openAiClientFactory,
             deepLClientFactory,
-            elevenLabsClientFactory);
+            elevenLabsClientFactory,
+            googleClientFactory);
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {

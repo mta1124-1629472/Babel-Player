@@ -79,3 +79,20 @@ public sealed record TtsResult(
     string Voice,
     long FileSizeBytes,
     string? ErrorMessage);
+
+// --- DIARIZATION ---
+public sealed record DiarizationRequest(
+    string SourceAudioPath,
+    int? MinSpeakers = null,
+    int? MaxSpeakers = null);
+
+public sealed record DiarizationResult(
+    bool Success,
+    IReadOnlyList<DiarizedSegment> Segments,
+    int SpeakerCount,
+    string? ErrorMessage);
+
+public sealed record DiarizedSegment(
+    double StartSeconds,
+    double EndSeconds,
+    string SpeakerId);
