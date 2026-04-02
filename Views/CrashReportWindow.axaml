@@ -1,0 +1,80 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Babel.Player.Views.CrashReportWindow"
+        Title="Babel Player — Unhandled Error"
+        Width="760" Height="520"
+        MinWidth="480" MinHeight="340"
+        WindowStartupLocation="CenterScreen"
+        CanResize="True"
+        Background="#1c1b19">
+
+  <Window.Styles>
+    <Style Selector="TextBlock">
+      <Setter Property="Foreground" Value="#cdccca"/>
+      <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="Background" Value="#313b3b"/>
+      <Setter Property="Foreground" Value="#cdccca"/>
+      <Setter Property="BorderBrush" Value="#393836"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="CornerRadius" Value="4"/>
+      <Setter Property="FontSize" Value="13"/>
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#4f98a3"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+
+    <!-- Header -->
+    <StackPanel Grid.Row="0" Spacing="6" Margin="0,0,0,12">
+      <TextBlock Text="An unhandled error occurred"
+                 FontSize="18" FontWeight="SemiBold"
+                 Foreground="#dd6974"/>
+      <TextBlock x:Name="SubtitleText"
+                 Text="The full error details are shown below. The error has also been written to the log file."
+                 FontSize="13" Foreground="#797876"
+                 TextWrapping="Wrap"/>
+      <TextBlock x:Name="LogPathText"
+                 FontSize="12" Foreground="#5a5957"
+                 TextWrapping="Wrap"
+                 IsVisible="False"/>
+    </StackPanel>
+
+    <!-- Scrollable error body -->
+    <Border Grid.Row="1"
+            Background="#171614"
+            BorderBrush="#393836" BorderThickness="1"
+            CornerRadius="4">
+      <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Auto">
+        <TextBox x:Name="ErrorTextBox"
+                 IsReadOnly="True"
+                 AcceptsReturn="True"
+                 TextWrapping="NoWrap"
+                 FontFamily="Cascadia Code, Consolas, monospace"
+                 FontSize="12"
+                 Foreground="#cdccca"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Padding="12"
+                 VerticalAlignment="Stretch"/>
+      </ScrollViewer>
+    </Border>
+
+    <!-- Footer buttons -->
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8"
+                HorizontalAlignment="Right" Margin="0,12,0,0">
+      <Button x:Name="CopyButton" Content="Copy to Clipboard" Click="OnCopyClick"/>
+      <Button x:Name="OpenLogFolderButton" Content="Open Log Folder"
+              Click="OnOpenLogFolderClick" IsVisible="False"/>
+      <Button x:Name="CloseButton" Content="Close"
+              Background="#a13544" Foreground="#f9f8f4"
+              Click="OnCloseClick"/>
+    </StackPanel>
+
+  </Grid>
+</Window>
