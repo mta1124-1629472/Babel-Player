@@ -58,7 +58,7 @@ def translate_text(text):
     if not text.strip():
         return ''
     inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True, max_length=512).to(device)
-    tgt_id = tokenizer.lang_code_to_id[tgt_flores]
+    tgt_id = tokenizer.convert_tokens_to_ids(tgt_flores)
     with torch.no_grad():
         tokens = model.generate(**inputs, forced_bos_token_id=tgt_id, max_length=512)
     return tokenizer.batch_decode(tokens, skip_special_tokens=True)[0]
@@ -71,7 +71,7 @@ for seg in data.get('segments', []):
     text   = seg.get('text', '')
     xlated = translate_text(text)
     results.append({
-        'id':             f'segment_{seg[""start""]}',
+        'id':             f'segment_{seg[\'start\']}',
         'start':          seg['start'],
         'end':            seg['end'],
         'text':           text,
@@ -121,7 +121,7 @@ model     = AutoModelForSeq2SeqLM.from_pretrained(model_id).to(device)
 
 if text.strip():
     inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True, max_length=512).to(device)
-    tgt_id = tokenizer.lang_code_to_id[tgt_flores]
+    tgt_id = tokenizer.convert_tokens_to_ids(tgt_flores)
     with torch.no_grad():
         tokens = model.generate(**inputs, forced_bos_token_id=tgt_id, max_length=512)
     xlated = tokenizer.batch_decode(tokens, skip_special_tokens=True)[0]
