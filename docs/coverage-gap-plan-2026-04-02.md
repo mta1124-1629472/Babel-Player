@@ -4,14 +4,17 @@
 - Stability status: resolved for the earlier failing clusters; full test project currently passes (321 passed, 0 failed).
 - Implemented first Priority A slice:
   - Added deterministic containerized provider tests in [BabelPlayer.Tests/ContainerizedProvidersTests.cs](BabelPlayer.Tests/ContainerizedProvidersTests.cs).
+  - Added containerized probe behavior tests in [BabelPlayer.Tests/ContainerizedServiceProbeTests.cs](BabelPlayer.Tests/ContainerizedServiceProbeTests.cs).
   - Added injectable HttpClient support to [Services/ContainerizedInferenceClient.cs](Services/ContainerizedInferenceClient.cs) to enable offline HTTP-path testing.
 - Targeted coverage deltas from the new test slice:
   - [Services/ContainerizedTranslationProvider.cs](Services/ContainerizedTranslationProvider.cs): 89.8%
   - [Services/ContainerizedTtsProvider.cs](Services/ContainerizedTtsProvider.cs): 88.2%
   - [Services/ContainerizedTranscriptionProvider.cs](Services/ContainerizedTranscriptionProvider.cs): 93.5%
-  - [Services/ContainerizedInferenceClient.cs](Services/ContainerizedInferenceClient.cs): 74.6%
+  - [Services/ContainerizedInferenceClient.cs](Services/ContainerizedInferenceClient.cs): 75.0%
+  - [Services/ContainerizedProviderReadiness.cs](Services/ContainerizedProviderReadiness.cs): 81.4%
+  - [Services/ContainerizedServiceProbe.cs](Services/ContainerizedServiceProbe.cs): 86.8%
 - Remaining Priority A gap:
-  - [Services/ContainerizedServiceProbe.cs](Services/ContainerizedServiceProbe.cs) still needs dedicated transition/cache tests.
+  - [ViewModels/EmbeddedPlaybackViewModel.cs](ViewModels/EmbeddedPlaybackViewModel.cs) runtime/provider selection paths still need dedicated behavioral tests.
 
 ### Next Implementation Slice
 1. Add probe-focused tests for:
