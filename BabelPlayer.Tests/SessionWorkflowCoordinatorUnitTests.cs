@@ -534,6 +534,104 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         Assert.True(coord.CurrentSession.MultiSpeakerEnabled);
     }
 
+    [Fact]
+    public async Task RegenerateSegmentTts_MultiSpeakerEnabled_UsesSpeakerMappedVoice()
+    {
+        var fakeTts = new FakeTtsProvider();
+        var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
+        var coord = new SessionWorkflowCoordinator(
+            _store,
+            _log,
+            _settings,
+            _perSessionStore,
+            _recentStore,
+            new TranscriptionRegistry(_log),
+            new TranslationRegistry(_log),
+            fakeTtsRegistry);
+        coord.Initialize();
+
+        var translationPath = CreateTempFile("""
+        {
+          "sourceLanguage": "es",
+          "targetLanguage": "en",
+          "segments": [
+            {
+              "id": "segment_0.0",
+              "start": 0.0,
+              "end": 1.0,
+              "text": "hola",
+              "translatedText": "hello",
+              "speakerId": "spk_01"
+            }
+          ]
+        }
+        """);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranslationPath = translationPath,
+            TtsVoice = "global-voice",
+            MultiSpeakerEnabled = true,
+            SpeakerVoiceAssignments = new Dictionary<string, string> { ["spk_01"] = "mapped-voice" },
+        };
+
+        await coord.RegenerateSegmentTtsAsync("segment_0.0");
+
+        Assert.NotNull(fakeTts.LastSegmentRequest);
+        Assert.Equal("mapped-voice", fakeTts.LastSegmentRequest!.VoiceName);
+        Assert.Equal("spk_01", fakeTts.LastSegmentRequest.SpeakerId);
+    }
+
+    [Fact]
+    public async Task RegenerateSegmentTts_MultiSpeakerEnabled_UsesDefaultFallbackWhenSpeakerUnmapped()
+    {
+        var fakeTts = new FakeTtsProvider();
+        var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
+        var coord = new SessionWorkflowCoordinator(
+            _store,
+            _log,
+            _settings,
+            _perSessionStore,
+            _recentStore,
+            new TranscriptionRegistry(_log),
+            new TranslationRegistry(_log),
+            fakeTtsRegistry);
+        coord.Initialize();
+
+        var translationPath = CreateTempFile("""
+        {
+          "sourceLanguage": "es",
+          "targetLanguage": "en",
+          "segments": [
+            {
+              "id": "segment_0.0",
+              "start": 0.0,
+              "end": 1.0,
+              "text": "hola",
+              "translatedText": "hello",
+              "speakerId": "spk_02"
+            }
+          ]
+        }
+        """);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranslationPath = translationPath,
+            TtsVoice = "global-voice",
+            MultiSpeakerEnabled = true,
+            DefaultTtsVoiceFallback = "fallback-voice",
+        };
+
+        await coord.RegenerateSegmentTtsAsync("segment_0.0");
+
+        Assert.NotNull(fakeTts.LastSegmentRequest);
+        Assert.Equal("fallback-voice", fakeTts.LastSegmentRequest!.VoiceName);
+        Assert.Equal("spk_02", fakeTts.LastSegmentRequest.SpeakerId);
+    }
+
     // ── CheckSettingsInvalidation ─────────────────────────────────────────────
 
     [Fact]
@@ -1009,5 +1107,42 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         var path = Path.Combine(_dir, $"temp-{Guid.NewGuid():N}.json");
         File.WriteAllText(path, content);
         return path;
+    }
+
+    private sealed class FakeTtsRegistry : ITtsRegistry
+    {
+        private readonly ITtsProvider _provider;
+
+        public FakeTtsRegistry(ITtsProvider provider)
+        {
+            _provider = provider;
+        }
+
+        public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
+        [
+            new ProviderDescriptor(ProviderNames.EdgeTts, "Fake TTS", false, null, ["global-voice"])
+        ];
+
+        public ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null) => _provider;
+
+        public ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore) =>
+            ProviderReadiness.Ready;
+
+        public Task<bool> EnsureModelAsync(string providerId, string modelOrVoice, AppSettings settings, IProgress<double>? progress = null, CancellationToken ct = default) =>
+            Task.FromResult(true);
+    }
+
+    private sealed class FakeTtsProvider : ITtsProvider
+    {
+        public SingleSegmentTtsRequest? LastSegmentRequest { get; private set; }
+
+        public Task<TtsResult> GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, 1, null));
+
+        public Task<TtsResult> GenerateSegmentTtsAsync(SingleSegmentTtsRequest request, CancellationToken cancellationToken = default)
+        {
+            LastSegmentRequest = request;
+            return Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, 1, null));
+        }
     }
 }
