@@ -152,6 +152,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _isMultiSpeakerEnabled;
 
     [ObservableProperty]
+    private bool _isAutoSpeakerDetectionEnabled;
+
+    [ObservableProperty]
+    private string _autoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSpeakers))]
     private ObservableCollection<string> _speakerIds = [];
 
@@ -267,6 +273,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public string SelectedSegmentAssignedVoice => SelectedSegment?.AssignedVoice ?? "—";
     public string SelectedSegmentReferenceStatus => SelectedSegment?.HasReferenceAudio == true ? "Yes" : "No";
     public bool HasSpeakers => SpeakerIds.Count > 0;
+    public bool HasAutoSpeakerDetectionStatus => !string.IsNullOrWhiteSpace(AutoSpeakerDetectionStatus);
 
     // ── Provider / model option lists ──────────────────────────────────────────
     public IReadOnlyList<string> TranscriptionProviders => [.. _coordinator.TranscriptionRegistry.GetAvailableProviders().Where(p => p.IsImplemented).Select(p => p.Id)];
@@ -495,8 +502,18 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnIsMultiSpeakerEnabledChanged(bool value)
     {
+        if (_isSynchronizingPipelineSettings) return;
         _coordinator.SetMultiSpeakerEnabled(value);
         _ = RefreshSegmentsAsync();
+    }
+
+    partial void OnIsAutoSpeakerDetectionEnabledChanged(bool value)
+    {
+        if (_isSynchronizingPipelineSettings) return;
+
+        _coordinator.CurrentSettings.DiarizationProvider = value ? ProviderNames.PyannoteLocal : string.Empty;
+        _coordinator.NotifySettingsModified();
+        RefreshAutoSpeakerDetectionStatus();
     }
 
     private async Task SeekAndPlayAsync(WorkflowSegmentState segment)
@@ -703,6 +720,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 ?? _availableTtsOptions.FirstOrDefault();
 
             IsMultiSpeakerEnabled = _coordinator.CurrentSession.MultiSpeakerEnabled;
+            IsAutoSpeakerDetectionEnabled =
+                string.Equals(_coordinator.CurrentSettings.DiarizationProvider, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
         }
         finally
         {
@@ -712,8 +731,37 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         OnPropertyChanged(nameof(AvailableTranscriptionModels));
         OnPropertyChanged(nameof(AvailableTranslationModels));
         OnPropertyChanged(nameof(AvailableTtsOptions));
+        RefreshAutoSpeakerDetectionStatus();
         RefreshProviderReadinessStatuses();
         RebuildSpeakerIds();
+    }
+
+    private void RefreshAutoSpeakerDetectionStatus()
+    {
+        if (!IsAutoSpeakerDetectionEnabled)
+        {
+            AutoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
+            return;
+        }
+
+        var registry = _coordinator.DiarizationRegistry;
+        if (registry is null)
+        {
+            AutoSpeakerDetectionStatus = "⚠ Auto speaker detection is unavailable in this build. Using manual mapping.";
+            return;
+        }
+
+        try
+        {
+            var readiness = registry.CheckReadiness(ProviderNames.PyannoteLocal, _coordinator.CurrentSettings, _coordinator.KeyStore);
+            AutoSpeakerDetectionStatus = readiness.IsReady
+                ? "⚠ Advanced mode enabled. Requires pyannote runtime + HuggingFace model access on user machines."
+                : $"⚠ Auto detection not ready: {readiness.BlockingReason}. Manual mapping will still work.";
+        }
+        catch (Exception ex)
+        {
+            AutoSpeakerDetectionStatus = $"⚠ Auto detection readiness check failed: {ex.Message}. Manual mapping will still work.";
+        }
     }
 
     private void NotifyActiveConfigChanged()
