@@ -108,6 +108,9 @@ public sealed class ContainerizedInferenceClient
         string audioFilePath,
         string modelName = "base",
         string? language = null,
+        string cpuComputeType = "int8",
+        int cpuThreads = 0,
+        int numWorkers = 1,
         CancellationToken cancellationToken = default)
     {
         try
@@ -123,6 +126,10 @@ public sealed class ContainerizedInferenceClient
             content.Add(new StringContent(modelName), "model");
             if (language != null)
                 content.Add(new StringContent(language), "language");
+            content.Add(new StringContent(string.IsNullOrWhiteSpace(cpuComputeType) ? "int8" : cpuComputeType), "cpu_compute_type");
+            if (cpuThreads > 0)
+                content.Add(new StringContent(cpuThreads.ToString()), "cpu_threads");
+            content.Add(new StringContent((numWorkers < 1 ? 1 : numWorkers).ToString()), "num_workers");
 
             var response = await _httpClient.PostAsync(
                 $"{_inferenceServiceUrl}/transcribe",

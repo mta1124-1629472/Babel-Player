@@ -65,6 +65,20 @@ public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessService
             throw new InvalidOperationException($"Unsupported audio format: {extension}. Supported formats: wav, mp3, flac, ogg, mp4, avi, mkv, mov");
         }
 
+        var cpuComputeType = string.IsNullOrWhiteSpace(request.CpuComputeType)
+            ? "int8"
+            : request.CpuComputeType;
+        var cpuThreads = request.CpuThreads;
+        var numWorkers = request.NumWorkers < 1 ? 1 : request.NumWorkers;
+
+        var modelNameLiteral = request.ModelName.Replace("\\", "\\\\").Replace("'", "\\'");
+        var cpuComputeTypeLiteral = cpuComputeType.Replace("\\", "\\\\").Replace("'", "\\'");
+
+        var whisperCtorArgs =
+            $"model_name, device='cpu', compute_type='{cpuComputeTypeLiteral}', num_workers={numWorkers}";
+        if (cpuThreads > 0)
+            whisperCtorArgs += $", cpu_threads={cpuThreads}";
+
         // model has already been validated against the whitelist by ProviderCapability before this call
         var script = $@"
 import sys, json
@@ -77,8 +91,9 @@ except ImportError:
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'faster-whisper'])
     from faster_whisper import WhisperModel
 
-model_name = '{request.ModelName}'
-model = WhisperModel(model_name, device='cpu', compute_type='int8')
+model_name = '{modelNameLiteral}'
+print('CPU transcription runtime: compute_type={cpuComputeTypeLiteral}, cpu_threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, num_workers={numWorkers}')
+model = WhisperModel({whisperCtorArgs})
 
 segments, info = model.transcribe(sys.argv[1])
 
@@ -101,7 +116,7 @@ with open(sys.argv[2], 'w', encoding='utf-8') as f:
 print('Transcription complete')
 ";
 
-        Log.Info($"Starting transcription of: {inputPath}");
+    Log.Info($"Starting transcription of: {inputPath} [cpu compute={cpuComputeType}, threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, workers={numWorkers}]");
 
         var result = await RunPythonScriptAsync(
             script,

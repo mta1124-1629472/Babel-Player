@@ -154,6 +154,15 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private IReadOnlyList<ModelOptionViewModel> _availableTranslationModels = [];
     private IReadOnlyList<ModelOptionViewModel> _availableTtsOptions = [];
 
+    [ObservableProperty]
+    private ModelOptionViewModel? _selectedTranscriptionModel;
+
+    [ObservableProperty]
+    private ModelOptionViewModel? _selectedTranslationModel;
+
+    [ObservableProperty]
+    private ModelOptionViewModel? _selectedTtsOption;
+
     private readonly DispatcherTimer _controlsHideTimer;
     private const int ControlsHideDelayMs = 3000;
 
@@ -178,6 +187,15 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _ttsProvider = coordinator.CurrentSettings.TtsProvider;
         _ttsModelOrVoice = coordinator.CurrentSettings.TtsVoice;
         RebuildAllModelOptions();
+        SelectedTranscriptionModel =
+            _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == _transcriptionModel)
+            ?? _availableTranscriptionModels.FirstOrDefault();
+        SelectedTranslationModel =
+            _availableTranslationModels.FirstOrDefault(m => m.ModelId == _translationModel)
+            ?? _availableTranslationModels.FirstOrDefault();
+        SelectedTtsOption =
+            _availableTtsOptions.FirstOrDefault(m => m.ModelId == _ttsModelOrVoice)
+            ?? _availableTtsOptions.FirstOrDefault();
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
@@ -235,27 +253,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public IReadOnlyList<ModelOptionViewModel> AvailableTranslationModels => _availableTranslationModels;
 
     public IReadOnlyList<ModelOptionViewModel> AvailableTtsOptions => _availableTtsOptions;
-
-    /// <summary>The currently selected transcription model as an object — used for SelectedItem binding to avoid blank box on collection swap.</summary>
-    public ModelOptionViewModel? SelectedTranscriptionModel
-    {
-        get => AvailableTranscriptionModels.FirstOrDefault(m => m.ModelId == TranscriptionModel);
-        set { if (value != null) TranscriptionModel = value.ModelId; }
-    }
-
-    /// <summary>The currently selected translation model as an object — used for SelectedItem binding.</summary>
-    public ModelOptionViewModel? SelectedTranslationModel
-    {
-        get => AvailableTranslationModels.FirstOrDefault(m => m.ModelId == TranslationModel);
-        set { if (value != null) TranslationModel = value.ModelId; }
-    }
-
-    /// <summary>The currently selected TTS voice/model as an object — used for SelectedItem binding.</summary>
-    public ModelOptionViewModel? SelectedTtsOption
-    {
-        get => AvailableTtsOptions.FirstOrDefault(m => m.ModelId == TtsModelOrVoice);
-        set { if (value != null) TtsModelOrVoice = value.ModelId; }
-    }
 
     // ── Pipeline Progress ──────────────────────────────────────────────────────
     [ObservableProperty]
@@ -419,6 +416,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _coordinator.CurrentSettings.TranscriptionProvider = value;
         RebuildTranscriptionModelOptions();
         TranscriptionModel = _availableTranscriptionModels.FirstOrDefault()?.ModelId ?? "default";
+        SelectedTranscriptionModel =
+            _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == TranscriptionModel)
+            ?? _availableTranscriptionModels.FirstOrDefault();
         OnPropertyChanged(nameof(AvailableTranscriptionModels));
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Transcription);
@@ -427,9 +427,30 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     partial void OnTranscriptionModelChanged(string value)
     {
         if (string.IsNullOrEmpty(value)) return;
+        SelectedTranscriptionModel =
+            _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == value)
+            ?? _availableTranscriptionModels.FirstOrDefault();
         _coordinator.CurrentSettings.TranscriptionModel = value;
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Transcription);
+    }
+
+    partial void OnSelectedTranscriptionModelChanged(ModelOptionViewModel? value)
+    {
+        if (value is null || value.ModelId == TranscriptionModel) return;
+        TranscriptionModel = value.ModelId;
+    }
+
+    partial void OnSelectedTranslationModelChanged(ModelOptionViewModel? value)
+    {
+        if (value is null || value.ModelId == TranslationModel) return;
+        TranslationModel = value.ModelId;
+    }
+
+    partial void OnSelectedTtsOptionChanged(ModelOptionViewModel? value)
+    {
+        if (value is null || value.ModelId == TtsModelOrVoice) return;
+        TtsModelOrVoice = value.ModelId;
     }
 
     partial void OnTranslationProviderChanged(string value)
@@ -438,6 +459,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _coordinator.CurrentSettings.TranslationProvider = value;
         RebuildTranslationModelOptions();
         TranslationModel = _availableTranslationModels.FirstOrDefault()?.ModelId ?? "default";
+        SelectedTranslationModel =
+            _availableTranslationModels.FirstOrDefault(m => m.ModelId == TranslationModel)
+            ?? _availableTranslationModels.FirstOrDefault();
         OnPropertyChanged(nameof(AvailableTranslationModels));
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Translation);
@@ -446,6 +470,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     partial void OnTranslationModelChanged(string value)
     {
         if (string.IsNullOrEmpty(value)) return;
+        SelectedTranslationModel =
+            _availableTranslationModels.FirstOrDefault(m => m.ModelId == value)
+            ?? _availableTranslationModels.FirstOrDefault();
         _coordinator.CurrentSettings.TranslationModel = value;
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Translation);
@@ -457,6 +484,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _coordinator.CurrentSettings.TtsProvider = value;
         RebuildTtsModelOptions();
         TtsModelOrVoice = _availableTtsOptions.FirstOrDefault()?.ModelId ?? "default";
+        SelectedTtsOption =
+            _availableTtsOptions.FirstOrDefault(m => m.ModelId == TtsModelOrVoice)
+            ?? _availableTtsOptions.FirstOrDefault();
         OnPropertyChanged(nameof(AvailableTtsOptions));
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Tts);
@@ -465,6 +495,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     partial void OnTtsModelOrVoiceChanged(string value)
     {
         if (string.IsNullOrEmpty(value)) return;
+        SelectedTtsOption =
+            _availableTtsOptions.FirstOrDefault(m => m.ModelId == value)
+            ?? _availableTtsOptions.FirstOrDefault();
         _coordinator.CurrentSettings.TtsVoice = value;
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Tts);

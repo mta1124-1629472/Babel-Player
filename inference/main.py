@@ -31,6 +31,7 @@ app = FastAPI(
 
 # Global model instances (loaded once)
 whisper_model = None
+whisper_model_key = None
 translator = None
 
 # Temporary directory for artifacts
@@ -44,6 +45,9 @@ TEMP_DIR.mkdir(exist_ok=True)
 class TranscriptionRequest(BaseModel):
     model: str = "base"
     language: Optional[str] = None
+    cpu_compute_type: str = "int8"
+    cpu_threads: Optional[int] = None
+    num_workers: int = 1
 
 class TranscriptSegment(BaseModel):
     start: float
@@ -115,15 +119,37 @@ async def health_check():
 # Transcription Endpoint
 # ============================================================================
 
-def load_whisper_model(model_name: str):
+def load_whisper_model(model_name: str, cpu_compute_type: str = "int8", cpu_threads: Optional[int] = None, num_workers: int = 1):
     """Load Whisper model with GPU support."""
     global whisper_model
-    
-    if whisper_model is None or whisper_model.model.device != ("cuda" if torch.cuda.is_available() else "cpu"):
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        compute_type = "float16" if device == "cuda" else "int8"
-        logger.info(f"Loading Whisper model '{model_name}' on device '{device}' with compute_type '{compute_type}'")
-        whisper_model = WhisperModel(model_name, device=device, compute_type=compute_type)
+    global whisper_model_key
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    compute_type = "float16" if device == "cuda" else (cpu_compute_type or "int8")
+    effective_num_workers = max(1, int(num_workers or 1))
+    effective_cpu_threads = int(cpu_threads) if cpu_threads is not None else None
+    if effective_cpu_threads is not None and effective_cpu_threads <= 0:
+        effective_cpu_threads = None
+
+    desired_key = (model_name, device, compute_type, effective_cpu_threads, effective_num_workers)
+
+    if whisper_model is None or whisper_model_key != desired_key:
+        init_kwargs = {
+            "device": device,
+            "compute_type": compute_type,
+            "num_workers": effective_num_workers,
+        }
+        if device == "cpu" and effective_cpu_threads is not None:
+            init_kwargs["cpu_threads"] = effective_cpu_threads
+
+        logger.info(
+            f"Loading Whisper model '{model_name}' on device '{device}' "
+            f"with compute_type '{compute_type}', "
+            f"cpu_threads='{effective_cpu_threads if effective_cpu_threads is not None else 'auto'}', "
+            f"num_workers='{effective_num_workers}'"
+        )
+        whisper_model = WhisperModel(model_name, **init_kwargs)
+        whisper_model_key = desired_key
         logger.info(f"Whisper model loaded successfully")
     
     return whisper_model
@@ -133,6 +159,9 @@ async def transcribe(
     file: UploadFile = File(...),
     model: str = "base",
     language: Optional[str] = None,
+    cpu_compute_type: str = "int8",
+    cpu_threads: Optional[int] = None,
+    num_workers: int = 1,
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """Transcribe audio file using Whisper."""
@@ -146,7 +175,7 @@ async def transcribe(
         logger.info(f"Transcribing file: {file.filename} (model: {model})")
         
         # Load model
-        whisper = load_whisper_model(model)
+        whisper = load_whisper_model(model, cpu_compute_type, cpu_threads, num_workers)
         
         # Transcribe
         segments, info = whisper.transcribe(str(temp_audio_path), language=language)

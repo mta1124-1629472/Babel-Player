@@ -569,7 +569,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             new TranscriptionRequest(
                 CurrentSession.IngestedMediaPath,
                 transcriptPath,
-                CurrentSettings.TranscriptionModel),
+                CurrentSettings.TranscriptionModel,
+                null,
+                CurrentSettings.TranscriptionCpuComputeType,
+                CurrentSettings.TranscriptionCpuThreads,
+                CurrentSettings.TranscriptionNumWorkers),
             cancellationToken);
 
         if (!result.Success)

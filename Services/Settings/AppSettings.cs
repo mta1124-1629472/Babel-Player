@@ -13,6 +13,24 @@ public sealed class AppSettings
     /// <summary>Transcription model name within the selected provider (e.g. "base", "large-v3").</summary>
     public string TranscriptionModel { get; set; } = "base";
 
+    /// <summary>
+    /// CPU compute type used by transcription providers when running on CPU.
+    /// Default "int8" matches current faster-whisper CPU behavior.
+    /// </summary>
+    public string TranscriptionCpuComputeType { get; set; } = "int8";
+
+    /// <summary>
+    /// CPU thread count hint for transcription providers.
+    /// 0 means provider/runtime default auto-selection.
+    /// </summary>
+    public int TranscriptionCpuThreads { get; set; } = 0;
+
+    /// <summary>
+    /// Number of worker threads/processes used by transcription runtime internals.
+    /// Keep conservative default to avoid oversubscription on low-core machines.
+    /// </summary>
+    public int TranscriptionNumWorkers { get; set; } = 1;
+
     /// <summary>Translation provider identifier (e.g. "google-translate-free", "openai").</summary>
     public string TranslationProvider { get; set; } = ProviderNames.GoogleTranslateFree;
 

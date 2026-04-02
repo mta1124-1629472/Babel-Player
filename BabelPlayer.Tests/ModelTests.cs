@@ -257,11 +257,14 @@ public sealed class ModelTests
     [Fact]
     public void TranscriptionRequest_ConstructsCorrectly()
     {
-        var req = new TranscriptionRequest("/audio.mp3", "/out.json", "base", "es");
+        var req = new TranscriptionRequest("/audio.mp3", "/out.json", "base", "es", "int8", 8, 2);
         Assert.Equal("/audio.mp3", req.SourceAudioPath);
         Assert.Equal("/out.json", req.OutputJsonPath);
         Assert.Equal("base", req.ModelName);
         Assert.Equal("es", req.LanguageHint);
+        Assert.Equal("int8", req.CpuComputeType);
+        Assert.Equal(8, req.CpuThreads);
+        Assert.Equal(2, req.NumWorkers);
     }
 
     [Fact]
@@ -269,6 +272,18 @@ public sealed class ModelTests
     {
         var req = new TranscriptionRequest("/audio.mp3", "/out.json", "base");
         Assert.Null(req.LanguageHint);
+        Assert.Equal("int8", req.CpuComputeType);
+        Assert.Equal(0, req.CpuThreads);
+        Assert.Equal(1, req.NumWorkers);
+    }
+
+    [Fact]
+    public void AppSettings_TranscriptionCpuDefaults_AreSafe()
+    {
+        var settings = new Babel.Player.Services.Settings.AppSettings();
+        Assert.Equal("int8", settings.TranscriptionCpuComputeType);
+        Assert.Equal(0, settings.TranscriptionCpuThreads);
+        Assert.Equal(1, settings.TranscriptionNumWorkers);
     }
 
     [Fact]

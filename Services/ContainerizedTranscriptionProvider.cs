@@ -39,6 +39,9 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider
             request.SourceAudioPath,
             request.ModelName,
             request.LanguageHint,
+            request.CpuComputeType,
+            request.CpuThreads,
+            request.NumWorkers,
             cancellationToken);
 
         if (!result.Success)

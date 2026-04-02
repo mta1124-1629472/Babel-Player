@@ -7,7 +7,10 @@ public sealed record TranscriptionRequest(
     string SourceAudioPath,
     string OutputJsonPath,
     string ModelName,
-    string? LanguageHint = null);
+    string? LanguageHint = null,
+    string CpuComputeType = "int8",
+    int CpuThreads = 0,
+    int NumWorkers = 1);
 
 public sealed record TranscriptionResult(
     bool Success,
