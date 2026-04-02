@@ -560,7 +560,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnSpeechRateChanged(double value)
     {
-        _coordinator.TtsPlaybackRate = value;
+        var player = _coordinator.SourceMediaPlayer;
+        if (player != null) player.PlaybackRate = value;
     }
 
     partial void OnTranscriptionProviderChanged(string value)
