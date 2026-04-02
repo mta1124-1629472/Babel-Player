@@ -23,17 +23,18 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
         _log = log;
     }
 
-    public Task ShowErrorAsync(string title, string fullDetail, string? logFilePath = null)
+    public async Task ShowErrorAsync(string title, string fullDetail, string? logFilePath = null)
     {
         // Always marshal to the UI thread — callers may be on background threads.
         if (!Dispatcher.UIThread.CheckAccess())
         {
-            return Dispatcher.UIThread.InvokeAsync(() =>
+            await Dispatcher.UIThread.InvokeAsync(() =>
                 ShowErrorAsync(title, fullDetail, logFilePath));
+            return;
         }
 
         ShowDialog(title, fullDetail, logFilePath);
-        return Task.CompletedTask;
+        await Task.CompletedTask;
     }
 
     private void ShowDialog(string title, string fullDetail, string? logFilePath)
@@ -94,10 +95,10 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
         Window? dialog = null;
 
         var copyBtn = new Button { Content = "Copy Error Text", Margin = new Thickness(0, 0, 8, 0) };
-        copyBtn.Click += (_, _) =>
+        copyBtn.Click += async (_, _) =>
         {
             if (dialog?.Clipboard is { } clipboard)
-                _ = clipboard.SetTextAsync(fullDetail);
+                await clipboard.SetTextAsync(fullDetail);
         };
 
         var openLogBtn = new Button { Content = "Open Log Folder", Margin = new Thickness(0, 0, 8, 0) };
