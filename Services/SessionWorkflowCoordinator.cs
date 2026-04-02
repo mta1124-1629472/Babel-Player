@@ -21,6 +21,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly RecentSessionsStore _recentStore;
     private readonly SessionArtifactReader _artifactReader;
     private readonly SessionSwitchService _sessionSwitchService;
+    private readonly ContainerizedServiceProbe? _containerizedProbe;
     public ITranscriptionRegistry TranscriptionRegistry { get; }
     public ITranslationRegistry TranslationRegistry { get; }
     public ITtsRegistry TtsRegistry { get; }
@@ -125,7 +126,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         ApiKeyStore? keyStore = null,
         SessionArtifactReader? artifactReader = null,
         SessionSwitchService? sessionSwitchService = null,
-        IDiarizationRegistry? diarizationRegistry = null)
+        IDiarizationRegistry? diarizationRegistry = null,
+        ContainerizedServiceProbe? containerizedProbe = null)
     {
         _store = store;
         _log = log;
@@ -133,6 +135,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _recentStore = recentStore;
         _artifactReader = artifactReader ?? new SessionArtifactReader();
         _sessionSwitchService = sessionSwitchService ?? new SessionSwitchService(perSessionStore, recentStore, log);
+        _containerizedProbe = containerizedProbe;
         TranscriptionRegistry = transcriptionRegistry;
         TranslationRegistry = translationRegistry;
         TtsRegistry = ttsRegistry;
@@ -160,11 +163,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void UpdateSettings(AppSettings settings)
     {
-        bool transcriptionProviderChanged = settings.TranscriptionProvider != CurrentSettings.TranscriptionProvider
+        settings.NormalizeLegacyInferenceSettings();
+
+        bool transcriptionProviderChanged = settings.TranscriptionRuntime != CurrentSettings.TranscriptionRuntime
+            || settings.TranscriptionProvider != CurrentSettings.TranscriptionProvider
             || settings.TranscriptionModel != CurrentSettings.TranscriptionModel;
-        bool translationProviderChanged = settings.TranslationProvider != CurrentSettings.TranslationProvider
+        bool translationProviderChanged = settings.TranslationRuntime != CurrentSettings.TranslationRuntime
+            || settings.TranslationProvider != CurrentSettings.TranslationProvider
             || settings.TranslationModel != CurrentSettings.TranslationModel;
-        bool ttsProviderChanged = settings.TtsProvider != CurrentSettings.TtsProvider
+        bool ttsProviderChanged = settings.TtsRuntime != CurrentSettings.TtsRuntime
+            || settings.TtsProvider != CurrentSettings.TtsProvider
             || settings.TtsVoice != CurrentSettings.TtsVoice
             || settings.PiperModelDir != CurrentSettings.PiperModelDir;
 
@@ -182,11 +190,26 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         return request;
     }
 
+    private ITranscriptionProvider CreateTranscriptionService() =>
+        TranscriptionRegistry.CreateProvider(
+            CurrentSettings.TranscriptionProvider,
+            CurrentSettings,
+            KeyStore,
+            CurrentSettings.TranscriptionRuntime);
+
     private ITranslationProvider CreateTranslationService() =>
-        TranslationRegistry.CreateProvider(CurrentSettings.TranslationProvider, CurrentSettings, KeyStore);
+        TranslationRegistry.CreateProvider(
+            CurrentSettings.TranslationProvider,
+            CurrentSettings,
+            KeyStore,
+            CurrentSettings.TranslationRuntime);
 
     private ITtsProvider CreateTtsService() =>
-        TtsRegistry.CreateProvider(CurrentSettings.TtsProvider, CurrentSettings, KeyStore);
+        TtsRegistry.CreateProvider(
+            CurrentSettings.TtsProvider,
+            CurrentSettings,
+            KeyStore,
+            CurrentSettings.TtsRuntime);
 
     /// <summary>
     /// Invalidates all cached provider service instances, forcing them to be recreated
@@ -518,6 +541,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public string LogFilePath => _log.LogFilePath;
     internal AppLog Log => _log;
+    internal ContainerizedServiceProbe? ContainerizedProbe => _containerizedProbe;
 
     public void Initialize()
     {
@@ -771,10 +795,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TranscribedAtUtc = null,
             TranslatedAtUtc = null,
             TtsGeneratedAtUtc = null,
+            TranscriptionRuntime = null,
             TranscriptionProvider = null,
             TranscriptionModel = null,
+            TranslationRuntime = null,
             TranslationProvider = null,
             TranslationModel = null,
+            TtsRuntime = null,
             TtsProvider = null,
             StatusMessage = "Pipeline reset. Ready to run."
         };
@@ -790,8 +817,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
 
         // Registry-owned readiness check — covers IsImplemented, API keys, local model status
-        var readiness = TranscriptionRegistry.CheckReadiness(
-            CurrentSettings.TranscriptionProvider, CurrentSettings.TranscriptionModel, CurrentSettings, KeyStore);
+        var readiness = CurrentSettings.TranscriptionRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
+            ? await ContainerizedProviderReadiness.CheckTranscriptionForExecutionAsync(
+                CurrentSettings,
+                _containerizedProbe,
+                cancellationToken)
+            : TranscriptionRegistry.CheckReadiness(
+                CurrentSettings.TranscriptionProvider,
+                CurrentSettings.TranscriptionModel,
+                CurrentSettings,
+                KeyStore,
+                CurrentSettings.TranscriptionRuntime);
         if (!readiness.IsReady && !readiness.RequiresModelDownload)
             throw new PipelineProviderException(readiness.BlockingReason!);
 
@@ -799,12 +835,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         if (readiness.RequiresModelDownload)
         {
             if (!await TranscriptionRegistry.EnsureModelAsync(
-                    CurrentSettings.TranscriptionProvider, CurrentSettings.TranscriptionModel, CurrentSettings, progress, cancellationToken))
+                    CurrentSettings.TranscriptionProvider,
+                    CurrentSettings.TranscriptionModel,
+                    CurrentSettings,
+                    progress,
+                    cancellationToken,
+                    CurrentSettings.TranscriptionRuntime))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranscriptionModel}'.");
         }
 
-        _transcriptionService ??= TranscriptionRegistry.CreateProvider(
-            CurrentSettings.TranscriptionProvider, CurrentSettings, KeyStore);
+        _transcriptionService ??= CreateTranscriptionService();
 
         var sessionDir = GetSessionDirectory();
         var transcriptDir = Path.Combine(sessionDir, "transcripts");
@@ -854,6 +894,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TranscriptPath = transcriptPath,
             SourceLanguage = result.Language,
             TranscribedAtUtc = nowUtc,
+            TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
             TranscriptionModel = CurrentSettings.TranscriptionModel,
             StatusMessage = $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
@@ -881,8 +922,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TargetLanguage = null,
             TranslatedAtUtc = null,
             TtsGeneratedAtUtc = null,
+            TranslationRuntime = null,
             TranslationProvider = null,
             TranslationModel = null,
+            TtsRuntime = null,
             TtsProvider = null,
             StatusMessage = "Pipeline reset to transcribed state."
         };
@@ -901,6 +944,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TtsSegmentsPath = null,
             TtsSegmentAudioPaths = null,
             TtsGeneratedAtUtc = null,
+            TtsRuntime = null,
             TtsProvider = null,
             StatusMessage = "Pipeline reset to translated state."
         };
@@ -924,14 +968,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         ArgumentException.ThrowIfNullOrWhiteSpace(selection.TtsVoice);
 
         var transcriptionProviderChanged =
+            CurrentSettings.TranscriptionRuntime != selection.TranscriptionRuntime ||
             !string.Equals(CurrentSettings.TranscriptionProvider, selection.TranscriptionProvider, StringComparison.Ordinal) ||
             !string.Equals(CurrentSettings.TranscriptionModel, selection.TranscriptionModel, StringComparison.Ordinal);
         var translationProviderChanged =
+            CurrentSettings.TranslationRuntime != selection.TranslationRuntime ||
             !string.Equals(CurrentSettings.TranslationProvider, selection.TranslationProvider, StringComparison.Ordinal) ||
             !string.Equals(CurrentSettings.TranslationModel, selection.TranslationModel, StringComparison.Ordinal) ||
             (!string.IsNullOrWhiteSpace(selection.TargetLanguage) &&
              !string.Equals(CurrentSettings.TargetLanguage, selection.TargetLanguage, StringComparison.Ordinal));
         var ttsProviderChanged =
+            CurrentSettings.TtsRuntime != selection.TtsRuntime ||
             !string.Equals(CurrentSettings.TtsProvider, selection.TtsProvider, StringComparison.Ordinal) ||
             !string.Equals(CurrentSettings.TtsVoice, selection.TtsVoice, StringComparison.Ordinal);
 
@@ -947,10 +994,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 CurrentSession.StatusMessage);
         }
 
+        CurrentSettings.TranscriptionRuntime = selection.TranscriptionRuntime;
         CurrentSettings.TranscriptionProvider = selection.TranscriptionProvider;
         CurrentSettings.TranscriptionModel = selection.TranscriptionModel;
+        CurrentSettings.TranslationRuntime = selection.TranslationRuntime;
         CurrentSettings.TranslationProvider = selection.TranslationProvider;
         CurrentSettings.TranslationModel = selection.TranslationModel;
+        CurrentSettings.TtsRuntime = selection.TtsRuntime;
         CurrentSettings.TtsProvider = selection.TtsProvider;
         CurrentSettings.TtsVoice = selection.TtsVoice;
         if (!string.IsNullOrWhiteSpace(selection.TargetLanguage))
@@ -963,9 +1013,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var invalidation = CheckSettingsInvalidation();
         _log.Info(
             $"ApplyPipelineSettings: stage={CurrentSession.Stage}, invalidation={invalidation}, " +
-            $"selection=({selection.TranscriptionProvider}/{selection.TranscriptionModel}, " +
-            $"{selection.TranslationProvider}/{selection.TranslationModel}, " +
-            $"{selection.TtsProvider}/{selection.TtsVoice}, target={selection.TargetLanguage ?? "<unchanged>"}), " +
+            $"selection=({selection.TranscriptionRuntime}/{selection.TranscriptionProvider}/{selection.TranscriptionModel}, " +
+            $"{selection.TranslationRuntime}/{selection.TranslationProvider}/{selection.TranslationModel}, " +
+            $"{selection.TtsRuntime}/{selection.TtsProvider}/{selection.TtsVoice}, target={selection.TargetLanguage ?? "<unchanged>"}), " +
             $"provenance=({SessionSnapshotSemantics.DescribeSessionProvenance(CurrentSession)})");
         var statusMessage = invalidation switch
         {
@@ -1018,15 +1068,29 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
 
         // Registry-owned readiness check
-        var readiness = TranslationRegistry.CheckReadiness(
-            CurrentSettings.TranslationProvider, CurrentSettings.TranslationModel, CurrentSettings, KeyStore);
+        var readiness = CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
+            ? await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(
+                CurrentSettings,
+                _containerizedProbe,
+                cancellationToken)
+            : TranslationRegistry.CheckReadiness(
+                CurrentSettings.TranslationProvider,
+                CurrentSettings.TranslationModel,
+                CurrentSettings,
+                KeyStore,
+                CurrentSettings.TranslationRuntime);
         if (!readiness.IsReady && !readiness.RequiresModelDownload)
             throw new PipelineProviderException(readiness.BlockingReason!);
 
         if (readiness.RequiresModelDownload)
         {
             if (!await TranslationRegistry.EnsureModelAsync(
-                    CurrentSettings.TranslationProvider, CurrentSettings.TranslationModel, CurrentSettings, progress, cancellationToken))
+                    CurrentSettings.TranslationProvider,
+                    CurrentSettings.TranslationModel,
+                    CurrentSettings,
+                    progress,
+                    cancellationToken,
+                    CurrentSettings.TranslationRuntime))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranslationModel}'.");
         }
 
@@ -1065,6 +1129,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             SourceLanguage = src,
             TargetLanguage = lang,
             TranslatedAtUtc = nowUtc,
+            TranslationRuntime = CurrentSettings.TranslationRuntime,
             TranslationProvider = CurrentSettings.TranslationProvider,
             TranslationModel = CurrentSettings.TranslationModel,
             StatusMessage = $"Translated {result.Segments.Count} segments to {lang}. Ready for TTS/dubbing.",
@@ -1085,15 +1150,29 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var v = voice ?? CurrentSettings.TtsVoice;
 
         // Registry-owned readiness check
-        var readiness = TtsRegistry.CheckReadiness(
-            CurrentSettings.TtsProvider, v, CurrentSettings, KeyStore);
+        var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
+            ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(
+                CurrentSettings,
+                _containerizedProbe,
+                cancellationToken)
+            : TtsRegistry.CheckReadiness(
+                CurrentSettings.TtsProvider,
+                v,
+                CurrentSettings,
+                KeyStore,
+                CurrentSettings.TtsRuntime);
         if (!readiness.IsReady && !readiness.RequiresModelDownload)
             throw new PipelineProviderException(readiness.BlockingReason!);
 
         if (readiness.RequiresModelDownload)
         {
             if (!await TtsRegistry.EnsureModelAsync(
-                    CurrentSettings.TtsProvider, v, CurrentSettings, progress, cancellationToken))
+                    CurrentSettings.TtsProvider,
+                    v,
+                    CurrentSettings,
+                    progress,
+                    cancellationToken,
+                    CurrentSettings.TtsRuntime))
                 throw new InvalidOperationException($"Failed to download voice '{v}'.");
         }
 
@@ -1210,6 +1289,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TtsGeneratedAtUtc = nowUtc,
             TtsSegmentsPath = segmentsDir,
             TtsSegmentAudioPaths = segmentAudioPaths,
+            TtsRuntime = CurrentSettings.TtsRuntime,
             TtsProvider = CurrentSettings.TtsProvider,
             StatusMessage = ttsStatusMessage,
         };
@@ -1244,6 +1324,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var referenceAudioPath = targetSegment is not null
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;
+
+        var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
+            ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(CurrentSettings, _containerizedProbe)
+            : TtsRegistry.CheckReadiness(
+                CurrentSettings.TtsProvider,
+                regenVoice,
+                CurrentSettings,
+                KeyStore,
+                CurrentSettings.TtsRuntime);
+        if (!readiness.IsReady && !readiness.RequiresModelDownload)
+            throw new PipelineProviderException(readiness.BlockingReason!);
 
         _ttsService ??= CreateTtsService();
 
@@ -1305,6 +1396,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
         }
+
+        var readiness = CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
+            ? await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(CurrentSettings, _containerizedProbe)
+            : TranslationRegistry.CheckReadiness(
+                CurrentSettings.TranslationProvider,
+                CurrentSettings.TranslationModel,
+                CurrentSettings,
+                KeyStore,
+                CurrentSettings.TranslationRuntime);
+        if (!readiness.IsReady && !readiness.RequiresModelDownload)
+            throw new PipelineProviderException(readiness.BlockingReason!);
 
         _translationService ??= CreateTranslationService();
 

@@ -151,11 +151,33 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isMultiSpeakerEnabled;
 
-    [ObservableProperty]
     private bool _isAutoSpeakerDetectionEnabled;
 
-    [ObservableProperty]
     private string _autoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
+
+    public bool IsAutoSpeakerDetectionEnabled
+    {
+        get => _isAutoSpeakerDetectionEnabled;
+        set
+        {
+            if (!SetProperty(ref _isAutoSpeakerDetectionEnabled, value))
+                return;
+
+            OnIsAutoSpeakerDetectionEnabledChanged(value);
+        }
+    }
+
+    public string AutoSpeakerDetectionStatus
+    {
+        get => _autoSpeakerDetectionStatus;
+        private set
+        {
+            if (!SetProperty(ref _autoSpeakerDetectionStatus, value))
+                return;
+
+            OnPropertyChanged(nameof(HasAutoSpeakerDetectionStatus));
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSpeakers))]
@@ -507,7 +529,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _ = RefreshSegmentsAsync();
     }
 
-    partial void OnIsAutoSpeakerDetectionEnabledChanged(bool value)
+    private void OnIsAutoSpeakerDetectionEnabledChanged(bool value)
     {
         if (_isSynchronizingPipelineSettings) return;
 

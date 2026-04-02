@@ -18,6 +18,7 @@ public static class SessionSnapshotSemantics
 
     public static ValidationResult ValidateArtifacts(WorkflowSessionSnapshot snapshot)
     {
+        snapshot = NormalizeRuntimeProvenance(snapshot);
         var stage = snapshot.Stage;
         var originalStage = stage;
         var cleared = new List<string>();
@@ -64,12 +65,17 @@ public static class SessionSnapshotSemantics
         WorkflowSessionSnapshot snapshot,
         AppSettings settings)
     {
-        bool transcriptionChanged = snapshot.TranscriptionProvider != settings.TranscriptionProvider
+        snapshot = NormalizeRuntimeProvenance(snapshot);
+
+        bool transcriptionChanged = snapshot.TranscriptionRuntime != settings.TranscriptionRuntime
+            || snapshot.TranscriptionProvider != settings.TranscriptionProvider
             || snapshot.TranscriptionModel != settings.TranscriptionModel;
-        bool translationChanged = snapshot.TranslationProvider != settings.TranslationProvider
+        bool translationChanged = snapshot.TranslationRuntime != settings.TranslationRuntime
+            || snapshot.TranslationProvider != settings.TranslationProvider
             || snapshot.TranslationModel != settings.TranslationModel
             || snapshot.TargetLanguage != settings.TargetLanguage;
-        bool ttsChanged = snapshot.TtsProvider != settings.TtsProvider
+        bool ttsChanged = snapshot.TtsRuntime != settings.TtsRuntime
+            || snapshot.TtsProvider != settings.TtsProvider
             || snapshot.TtsVoice != settings.TtsVoice;
 
         var effectiveStage = ResolveArtifactStage(snapshot);
@@ -121,10 +127,33 @@ public static class SessionSnapshotSemantics
 
     public static string DescribeSessionProvenance(WorkflowSessionSnapshot snapshot) =>
         $"stage={snapshot.Stage}, " +
-        $"txc={snapshot.TranscriptionProvider ?? "<null>"}/{snapshot.TranscriptionModel ?? "<null>"}, " +
-        $"trn={snapshot.TranslationProvider ?? "<null>"}/{snapshot.TranslationModel ?? "<null>"}, " +
-        $"tts={snapshot.TtsProvider ?? "<null>"}/{snapshot.TtsVoice ?? "<null>"}, " +
+        $"txc={snapshot.TranscriptionRuntime?.ToString() ?? "<null>"}/{snapshot.TranscriptionProvider ?? "<null>"}/{snapshot.TranscriptionModel ?? "<null>"}, " +
+        $"trn={snapshot.TranslationRuntime?.ToString() ?? "<null>"}/{snapshot.TranslationProvider ?? "<null>"}/{snapshot.TranslationModel ?? "<null>"}, " +
+        $"tts={snapshot.TtsRuntime?.ToString() ?? "<null>"}/{snapshot.TtsProvider ?? "<null>"}/{snapshot.TtsVoice ?? "<null>"}, " +
         $"srcLang={snapshot.SourceLanguage ?? "<null>"}, tgtLang={snapshot.TargetLanguage ?? "<null>"}";
+
+    public static WorkflowSessionSnapshot NormalizeRuntimeProvenance(WorkflowSessionSnapshot snapshot) =>
+        snapshot with
+        {
+            TranscriptionRuntime = snapshot.TranscriptionRuntime
+                ?? InferenceRuntimeCatalog.InferTranscriptionRuntime(snapshot.TranscriptionProvider),
+            TranslationRuntime = snapshot.TranslationRuntime
+                ?? InferenceRuntimeCatalog.InferTranslationRuntime(snapshot.TranslationProvider),
+            TtsRuntime = snapshot.TtsRuntime
+                ?? InferenceRuntimeCatalog.InferTtsRuntime(snapshot.TtsProvider),
+            TranscriptionProvider = NormalizeStageProvider(
+                snapshot.TranscriptionRuntime ?? InferenceRuntimeCatalog.InferTranscriptionRuntime(snapshot.TranscriptionProvider),
+                snapshot.TranscriptionProvider,
+                InferenceRuntimeCatalog.NormalizeTranscriptionProvider),
+            TranslationProvider = NormalizeStageProvider(
+                snapshot.TranslationRuntime ?? InferenceRuntimeCatalog.InferTranslationRuntime(snapshot.TranslationProvider),
+                snapshot.TranslationProvider,
+                InferenceRuntimeCatalog.NormalizeTranslationProvider),
+            TtsProvider = NormalizeStageProvider(
+                snapshot.TtsRuntime ?? InferenceRuntimeCatalog.InferTtsRuntime(snapshot.TtsProvider),
+                snapshot.TtsProvider,
+                InferenceRuntimeCatalog.NormalizeTtsProvider),
+        };
 
     public static WorkflowSessionSnapshot ClearTtsOutputs(WorkflowSessionSnapshot snapshot) =>
         snapshot with
@@ -134,6 +163,7 @@ public static class SessionSnapshotSemantics
             TtsGeneratedAtUtc = null,
             TtsSegmentsPath = null,
             TtsSegmentAudioPaths = null,
+            TtsRuntime = null,
             TtsProvider = null,
         };
 
@@ -143,6 +173,7 @@ public static class SessionSnapshotSemantics
             TranslationPath = null,
             TargetLanguage = null,
             TranslatedAtUtc = null,
+            TranslationRuntime = null,
             TranslationProvider = null,
             TranslationModel = null,
         };
@@ -153,6 +184,7 @@ public static class SessionSnapshotSemantics
             TranscriptPath = null,
             SourceLanguage = null,
             TranscribedAtUtc = null,
+            TranscriptionRuntime = null,
             TranscriptionProvider = null,
             TranscriptionModel = null,
         };
@@ -163,4 +195,15 @@ public static class SessionSnapshotSemantics
             IngestedMediaPath = null,
             MediaLoadedAtUtc = null,
         };
+
+    private static string? NormalizeStageProvider(
+        InferenceRuntime runtime,
+        string? providerId,
+        Func<InferenceRuntime, string?, string> normalizeProvider)
+    {
+        if (string.IsNullOrWhiteSpace(providerId))
+            return null;
+
+        return normalizeProvider(runtime, providerId);
+    }
 }

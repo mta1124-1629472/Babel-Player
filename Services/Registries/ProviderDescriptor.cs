@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Babel.Player.Models;
 
 namespace Babel.Player.Services.Registries;
 
@@ -14,8 +15,17 @@ public sealed record ProviderDescriptor(
     bool RequiresApiKey,
     string? CredentialKey,
     IReadOnlyList<string> SupportedModels,
+    IReadOnlyList<InferenceRuntime>? SupportedRuntimes = null,
+    InferenceRuntime? DefaultRuntime = null,
     bool IsImplemented = true,
-    string? Notes = null);
+    string? Notes = null)
+{
+    public IReadOnlyList<InferenceRuntime> EffectiveSupportedRuntimes =>
+        SupportedRuntimes ?? [InferenceRuntime.Local];
+
+    public InferenceRuntime EffectiveDefaultRuntime =>
+        DefaultRuntime ?? EffectiveSupportedRuntimes[0];
+}
 
 /// <summary>
 /// Result of a provider readiness check. A ready provider has

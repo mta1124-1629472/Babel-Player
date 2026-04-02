@@ -29,10 +29,13 @@ public sealed record WorkflowSessionSnapshot(
     string? DefaultTtsVoiceFallback = null,
     string? DiarizationProvider = null,
     DateTimeOffset? SpeakersDetectedAtUtc = null,
+    InferenceRuntime? TranscriptionRuntime = null,
     string? TranscriptionProvider = null,
     string? TranscriptionModel = null,
+    InferenceRuntime? TranslationRuntime = null,
     string? TranslationProvider = null,
     string? TranslationModel = null,
+    InferenceRuntime? TtsRuntime = null,
     string? TtsProvider = null)
 {
     public static WorkflowSessionSnapshot CreateNew(DateTimeOffset nowUtc)

@@ -32,21 +32,33 @@ public sealed class SettingsService
     public AppSettings LoadOrDefault()
     {
         if (!File.Exists(_filePath))
-            return new AppSettings();
+        {
+            var defaults = new AppSettings();
+            defaults.NormalizeLegacyInferenceSettings();
+            return defaults;
+        }
 
         try
         {
             var json = File.ReadAllText(_filePath);
             if (string.IsNullOrWhiteSpace(json))
-                return new AppSettings();
+            {
+                var defaults = new AppSettings();
+                defaults.NormalizeLegacyInferenceSettings();
+                return defaults;
+            }
 
-            return JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions)
-                   ?? new AppSettings();
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions)
+                ?? new AppSettings();
+            settings.NormalizeLegacyInferenceSettings();
+            return settings;
         }
         catch (Exception ex)
         {
             _log.Warning($"Settings load failed ({ex.Message}). Using defaults.");
-            return new AppSettings();
+            var defaults = new AppSettings();
+            defaults.NormalizeLegacyInferenceSettings();
+            return defaults;
         }
     }
 
@@ -55,6 +67,7 @@ public sealed class SettingsService
     {
         try
         {
+            settings.NormalizeLegacyInferenceSettings();
             File.WriteAllText(_filePath, JsonSerializer.Serialize(settings, SerializerOptions));
         }
         catch (Exception ex)

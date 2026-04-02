@@ -27,6 +27,23 @@ public sealed class ContainerizedInferenceClient
         CancellationToken cancellationToken = default) =>
         ProbeHealthAsync(_httpClient, _inferenceServiceUrl, cancellationToken);
 
+    public static async Task<ContainerHealthStatus> CheckHealthAsync(
+        string serviceUrl,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = timeout };
+            return await ProbeHealthAsync(http, NormalizeBaseUrl(serviceUrl), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var normalizedUrl = NormalizeBaseUrl(serviceUrl);
+            return ContainerHealthStatus.Unavailable(normalizedUrl, ex.Message);
+        }
+    }
+
     /// <summary>
     /// Blocking health check intended for background-thread startup probes.
     /// Uses both /health/live and /capabilities so provider readiness is stage-aware.
@@ -269,7 +286,7 @@ public sealed class ContainerizedInferenceClient
             ?? throw new InvalidOperationException($"Failed to deserialize {typeof(T).Name} from service response.");
     }
 
-    private static string NormalizeBaseUrl(string? serviceUrl)
+    public static string NormalizeBaseUrl(string? serviceUrl)
     {
         if (string.IsNullOrWhiteSpace(serviceUrl))
             return "http://localhost:8000";

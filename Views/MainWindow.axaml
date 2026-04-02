@@ -228,6 +228,16 @@
                                       IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
                                       Foreground="#C0C0D0" />
 
+                            <CheckBox Content="Auto speaker detection (Advanced)"
+                                      IsChecked="{Binding Playback.IsAutoSpeakerDetectionEnabled, Mode=TwoWay}"
+                                      Foreground="#C0C0D0" />
+
+                            <TextBlock Text="{Binding Playback.AutoSpeakerDetectionStatus}"
+                                       FontSize="11"
+                                       Foreground="#C0803A"
+                                       IsVisible="{Binding Playback.HasAutoSpeakerDetectionStatus}"
+                                       TextWrapping="Wrap" />
+
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Speaker" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.SpeakerIds}"

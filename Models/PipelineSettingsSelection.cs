@@ -1,10 +1,13 @@
 namespace Babel.Player.Models;
 
 public sealed record PipelineSettingsSelection(
+    InferenceRuntime TranscriptionRuntime,
     string TranscriptionProvider,
     string TranscriptionModel,
+    InferenceRuntime TranslationRuntime,
     string TranslationProvider,
     string TranslationModel,
+    InferenceRuntime TtsRuntime,
     string TtsProvider,
     string TtsVoice,
     string? TargetLanguage = null);

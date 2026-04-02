@@ -14,6 +14,9 @@ public sealed class AppSettings
     /// <summary>Transcription provider identifier (e.g. "faster-whisper", "openai-whisper-api").</summary>
     public string TranscriptionProvider { get; set; } = ProviderNames.FasterWhisper;
 
+    /// <summary>Runtime host used for transcription: local, containerized, or cloud.</summary>
+    public InferenceRuntime TranscriptionRuntime { get; set; } = InferenceRuntime.Local;
+
     /// <summary>Transcription model name within the selected provider (e.g. "base", "large-v3").</summary>
     public string TranscriptionModel { get; set; } = "base";
 
@@ -41,16 +44,22 @@ public sealed class AppSettings
     /// <summary>Translation provider identifier (e.g. "google-translate-free", "openai").</summary>
     public string TranslationProvider { get; set; } = ProviderNames.GoogleTranslateFree;
 
+    /// <summary>Runtime host used for translation: local, containerized, or cloud.</summary>
+    public InferenceRuntime TranslationRuntime { get; set; } = InferenceRuntime.Cloud;
+
     /// <summary>Translation model name within the selected provider (e.g. "default", "gpt-4o").</summary>
     public string TranslationModel { get; set; } = "default";
 
     /// <summary>TTS provider identifier (e.g. "edge-tts", "elevenlabs").</summary>
     public string TtsProvider { get; set; } = ProviderNames.EdgeTts;
 
+    /// <summary>Runtime host used for TTS: local, containerized, or cloud.</summary>
+    public InferenceRuntime TtsRuntime { get; set; } = InferenceRuntime.Cloud;
+
     /// <summary>
-    /// TTS voice or model selection. For edge-tts this is an Edge-TTS voice name;
-    /// for other providers it is the synthesis model name.
-    /// </summary>
+     /// TTS voice or model selection. For edge-tts this is an Edge-TTS voice name;
+     /// for other providers it is the synthesis model name.
+     /// </summary>
     public string TtsVoice { get; set; } = "en-US-AriaNeural";
 
     /// <summary>BCP-47 language code for the translation target.</summary>
@@ -80,6 +89,9 @@ public sealed class AppSettings
                 : overrideValue.Trim();
         }
     }
+
+    public void NormalizeLegacyInferenceSettings() =>
+        InferenceRuntimeCatalog.NormalizeSettings(this);
 
     /// <summary>
     /// libmpv hardware video decode method.

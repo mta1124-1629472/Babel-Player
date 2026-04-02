@@ -11,102 +11,144 @@ namespace Babel.Player.Services.Registries;
 
 public interface ITtsRegistry
 {
-    IReadOnlyList<ProviderDescriptor> GetAvailableProviders();
-    ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null);
-    ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore);
+    IReadOnlyList<ProviderDescriptor> GetAvailableProviders(InferenceRuntime? runtime = null);
+    ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, InferenceRuntime? runtime = null);
+    ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore, InferenceRuntime? runtime = null);
     Task<bool> EnsureModelAsync(string providerId, string modelOrVoice, AppSettings settings,
-                                 IProgress<double>? progress = null, CancellationToken ct = default);
+                                 IProgress<double>? progress = null, CancellationToken ct = default, InferenceRuntime? runtime = null);
 }
 
 public sealed class TtsRegistry : ITtsRegistry
 {
     private readonly AppLog _log;
+    private readonly ContainerizedServiceProbe? _containerizedProbe;
 
-    public TtsRegistry(AppLog log)
+    public TtsRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null)
     {
         _log = log;
+        _containerizedProbe = containerizedProbe;
     }
 
-    public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
-    [
-        new ProviderDescriptor(
-            ProviderNames.EdgeTts,
-            "Edge TTS (Cloud)",
-            false,
-            null,
-            EdgeTtsVoices),
-        new ProviderDescriptor(
-            ProviderNames.Piper,
-            "Piper (Local)",
-            false,
-            null,
-            PiperVoices),
-        new ProviderDescriptor(
-            ProviderNames.ContainerizedService,
-            "Containerized Inference Service",
-            false,
-            null,
-            EdgeTtsVoices),   // containerized service uses edge-tts voices
-        new ProviderDescriptor(
-            ProviderNames.ElevenLabs,
-            "ElevenLabs API",
-            true,
-            CredentialKeys.ElevenLabs,
-            ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5"],
-            IsImplemented: true),
-        new ProviderDescriptor(
-            ProviderNames.GoogleCloudTts,
-            "Google Cloud TTS",
-            true,
-            CredentialKeys.GoogleAi,
-            ["standard", "wavenet", "neural2"],
-            IsImplemented: false),
-        new ProviderDescriptor(
-            ProviderNames.OpenAiTts,
-            "OpenAI API",
-            true,
-            CredentialKeys.OpenAi,
-            ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"],
-            IsImplemented: false)
-    ];
-
-    public ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore)
+    public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(InferenceRuntime? runtime = null)
     {
-        var desc = GetAvailableProviders().FirstOrDefault(p => p.Id == providerId);
+        var providers = new List<ProviderDescriptor>
+        {
+            new(
+                ProviderNames.EdgeTts,
+                "Edge TTS",
+                false,
+                null,
+                EdgeTtsVoices,
+                SupportedRuntimes: [InferenceRuntime.Cloud, InferenceRuntime.Containerized],
+                DefaultRuntime: InferenceRuntime.Cloud),
+            new(
+                ProviderNames.Piper,
+                "Piper (Local)",
+                false,
+                null,
+                PiperVoices,
+                SupportedRuntimes: [InferenceRuntime.Local],
+                DefaultRuntime: InferenceRuntime.Local),
+            new(
+                ProviderNames.ElevenLabs,
+                "ElevenLabs API",
+                true,
+                CredentialKeys.ElevenLabs,
+                ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5"],
+                SupportedRuntimes: [InferenceRuntime.Cloud],
+                DefaultRuntime: InferenceRuntime.Cloud,
+                IsImplemented: true),
+            new(
+                ProviderNames.GoogleCloudTts,
+                "Google Cloud TTS",
+                true,
+                CredentialKeys.GoogleAi,
+                ["standard", "wavenet", "neural2"],
+                SupportedRuntimes: [InferenceRuntime.Cloud],
+                DefaultRuntime: InferenceRuntime.Cloud,
+                IsImplemented: false),
+            new(
+                ProviderNames.OpenAiTts,
+                "OpenAI API",
+                true,
+                CredentialKeys.OpenAi,
+                ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"],
+                SupportedRuntimes: [InferenceRuntime.Cloud],
+                DefaultRuntime: InferenceRuntime.Cloud,
+                IsImplemented: false),
+        };
+
+        return runtime is null
+            ? providers
+            : [.. providers.Where(p => p.EffectiveSupportedRuntimes.Contains(runtime.Value))];
+    }
+
+    public ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore, InferenceRuntime? runtime = null)
+    {
+        var resolvedRuntime = ResolveRuntime(providerId, settings, runtime);
+        var normalizedProviderId = InferenceRuntimeCatalog.NormalizeTtsProvider(resolvedRuntime, providerId);
+        var desc = GetAvailableProviders(resolvedRuntime).FirstOrDefault(p => p.Id == normalizedProviderId);
         if (desc == null)
-            return new ProviderReadiness(false, $"Unknown TTS provider '{providerId}'.");
+            return new ProviderReadiness(false, $"Unknown TTS provider '{normalizedProviderId}'.");
         if (!desc.IsImplemented)
             return new ProviderReadiness(false, $"Provider '{desc.DisplayName}' is not implemented yet.");
         if (desc.RequiresApiKey && string.IsNullOrEmpty(keyStore?.GetKey(desc.CredentialKey!)))
             return new ProviderReadiness(false, $"API key missing for provider '{desc.DisplayName}'.");
 
-        var provider = CreateProvider(providerId, settings, keyStore);
+        if (resolvedRuntime == InferenceRuntime.Containerized)
+            return ContainerizedProviderReadiness.CheckTts(settings, _containerizedProbe);
+
+        var provider = CreateProvider(normalizedProviderId, settings, keyStore, resolvedRuntime);
         return provider.CheckReadiness(settings, keyStore);
     }
 
     public async Task<bool> EnsureModelAsync(string providerId, string modelOrVoice, AppSettings settings,
-                                              IProgress<double>? progress = null, CancellationToken ct = default)
+                                              IProgress<double>? progress = null, CancellationToken ct = default, InferenceRuntime? runtime = null)
     {
-        var desc = GetAvailableProviders().FirstOrDefault(p => p.Id == providerId);
+        var resolvedRuntime = ResolveRuntime(providerId, settings, runtime);
+        var normalizedProviderId = InferenceRuntimeCatalog.NormalizeTtsProvider(resolvedRuntime, providerId);
+        var desc = GetAvailableProviders(resolvedRuntime).FirstOrDefault(p => p.Id == normalizedProviderId);
         if (desc == null || !desc.IsImplemented) return false;
-        var provider = CreateProvider(providerId, settings);
+        var provider = CreateProvider(normalizedProviderId, settings, null, resolvedRuntime);
         return await provider.EnsureReadyAsync(settings, progress, ct);
     }
 
-    public ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)
+    public ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, InferenceRuntime? runtime = null)
     {
-        return providerId switch
+        var resolvedRuntime = ResolveRuntime(providerId, settings, runtime);
+        var normalizedProviderId = InferenceRuntimeCatalog.NormalizeTtsProvider(resolvedRuntime, providerId);
+
+        if (resolvedRuntime == InferenceRuntime.Containerized)
+        {
+            return new ContainerizedTtsProvider(
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                _log);
+        }
+
+        return normalizedProviderId switch
         {
             ProviderNames.Piper => new PiperTtsProvider(_log, settings.PiperModelDir),
             ProviderNames.EdgeTts => new EdgeTtsProvider(_log),
-            ProviderNames.ContainerizedService => new ContainerizedTtsProvider(
-                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log), _log),
             ProviderNames.ElevenLabs => new ElevenLabsTtsProvider(
                 _log, keyStore?.GetKey(CredentialKeys.ElevenLabs) ?? string.Empty),
             _ => throw new PipelineProviderException(
                 $"TTS provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")
         };
+    }
+
+    private static InferenceRuntime ResolveRuntime(
+        string providerId,
+        AppSettings settings,
+        InferenceRuntime? runtime)
+    {
+        if (runtime.HasValue)
+            return runtime.Value;
+
+        if (string.Equals(settings.TtsProvider, providerId, StringComparison.Ordinal))
+            return settings.TtsRuntime;
+
+        return InferenceRuntimeCatalog.InferTtsRuntime(providerId);
     }
     
     public static readonly IReadOnlyList<string> PiperVoices =
