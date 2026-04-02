@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.ViewModels;
@@ -15,6 +16,11 @@ public partial class MainWindow : Window
 {
     private LibMpvEmbeddedTransport? _embeddedTransport;
 
+    // Volume slider hover-reveal state
+    private bool _isPointerOverVolumeArea;
+    private DispatcherTimer? _volumeHideTimer;
+    private const int VolumeHideDelayMs = 3000;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -24,6 +30,13 @@ public partial class MainWindow : Window
         {
             videoView.HandleReady += OnVideoHandleReady;
         }
+
+        // Initialise the 3-second hide timer (single-shot; restart on each pointer-enter).
+        _volumeHideTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(VolumeHideDelayMs)
+        };
+        _volumeHideTimer.Tick += OnVolumeHideTimerTick;
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -73,6 +86,49 @@ public partial class MainWindow : Window
             e.Handled = true;
         }
     }
+
+    // ── Volume slider hover-reveal ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Called when the pointer enters EITHER the mute button OR the volume slider popup.
+    /// Shows the slider popup and cancels any pending hide timer.
+    /// </summary>
+    public void OnVolumeAreaPointerEntered(object? sender, PointerEventArgs e)
+    {
+        _isPointerOverVolumeArea = true;
+        _volumeHideTimer?.Stop();
+
+        var popup = this.FindControl<Border>("VolumeSliderPopup");
+        if (popup is not null)
+            popup.IsVisible = true;
+    }
+
+    /// <summary>
+    /// Called when the pointer leaves EITHER the mute button OR the volume slider popup.
+    /// Starts the 3-second retraction timer; if the pointer re-enters before it fires
+    /// the timer is cancelled and the slider stays visible.
+    /// </summary>
+    public void OnVolumeAreaPointerExited(object? sender, PointerEventArgs e)
+    {
+        _isPointerOverVolumeArea = false;
+        _volumeHideTimer?.Stop();
+        _volumeHideTimer?.Start();
+    }
+
+    private void OnVolumeHideTimerTick(object? sender, EventArgs e)
+    {
+        _volumeHideTimer?.Stop();
+
+        // Only hide if the pointer is genuinely outside the whole volume area.
+        if (!_isPointerOverVolumeArea)
+        {
+            var popup = this.FindControl<Border>("VolumeSliderPopup");
+            if (popup is not null)
+                popup.IsVisible = false;
+        }
+    }
+
+    // ── Video handle + media loading ───────────────────────────────────────────
 
     private void OnVideoHandleReady(object? sender, IntPtr hwnd)
     {
