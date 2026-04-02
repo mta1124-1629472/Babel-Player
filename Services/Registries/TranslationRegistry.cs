@@ -53,8 +53,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
             "DeepL API",
             true,
             CredentialKeys.Deepl,
-            ["default"],
-            IsImplemented: false),
+            ["default"]),
         new ProviderDescriptor(
             ProviderNames.OpenAi,
             "OpenAI API",
@@ -92,6 +91,9 @@ public sealed class TranslationRegistry : ITranslationRegistry
         {
             ProviderNames.Nllb200 => new NllbTranslationProvider(_log, settings.TranslationModel),
             ProviderNames.GoogleTranslateFree => new GoogleTranslationProvider(_log),
+            ProviderNames.Deepl => new DeepLTranslationProvider(
+                _log,
+                keyStore?.GetKey(CredentialKeys.Deepl) ?? string.Empty),
             ProviderNames.OpenAi => new OpenAiTranslationProvider(
                 _log,
                 keyStore?.GetKey(CredentialKeys.OpenAi) ?? string.Empty,

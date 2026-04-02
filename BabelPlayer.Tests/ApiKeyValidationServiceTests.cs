@@ -42,6 +42,16 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
     }
 
     [Fact]
+    public void GetAvailabilityMessage_DeepL_ReturnsNull_WhenImplementedProviderUsesKey()
+    {
+        var service = CreateService();
+
+        var message = service.GetAvailabilityMessage(CredentialKeys.Deepl);
+
+        Assert.Null(message);
+    }
+
+    [Fact]
     public void GetAvailabilityMessage_ElevenLabs_ReturnsUnavailable_WhenNoImplementedProviderUsesKey()
     {
         var service = CreateService();
@@ -119,12 +129,54 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
         Assert.Contains("supported", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private ApiKeyValidationService CreateService(Func<string, OpenAiApiClient>? openAiClientFactory = null) =>
+    [Fact]
+    public async Task ValidateAsync_DeepL_ReturnsSuccess_WhenUsageEndpointAccessible()
+    {
+        var service = CreateService(
+            deepLClientFactory: _ => new DeepLApiClient("deepl-key", new StubHttpMessageHandler(_ =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                    {
+                      "character_count": 42,
+                      "character_limit": 1250000
+                    }
+                    """, Encoding.UTF8, "application/json")
+                }))));
+
+        var result = await service.ValidateAsync(CredentialKeys.Deepl, "deepl-key");
+
+        Assert.True(result.IsAvailable);
+        Assert.True(result.IsValid);
+        Assert.Contains("42", result.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_DeepL_ReturnsFailure_WhenUnauthorized()
+    {
+        var service = CreateService(
+            deepLClientFactory: _ => new DeepLApiClient("bad-deepl-key", new StubHttpMessageHandler(_ =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)
+                {
+                    Content = new StringContent("forbidden", Encoding.UTF8, "text/plain")
+                }))));
+
+        var result = await service.ValidateAsync(CredentialKeys.Deepl, "bad-deepl-key");
+
+        Assert.True(result.IsAvailable);
+        Assert.False(result.IsValid);
+        Assert.Contains("rejected", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private ApiKeyValidationService CreateService(
+        Func<string, OpenAiApiClient>? openAiClientFactory = null,
+        Func<string, DeepLApiClient>? deepLClientFactory = null) =>
         new(
             new TranscriptionRegistry(_log),
             new TranslationRegistry(_log),
             new TtsRegistry(_log),
-            openAiClientFactory);
+            openAiClientFactory,
+            deepLClientFactory);
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {

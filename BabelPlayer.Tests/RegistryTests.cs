@@ -130,13 +130,12 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TranslationRegistry_CheckReadiness_UnimplementedProvider_ReturnsNotReady()
+    public void TranslationRegistry_CheckReadiness_DeepLWithoutKey_ReturnsNotReady()
     {
-        // DeepL is marked IsImplemented=false
         var readiness = _translationRegistry.CheckReadiness(
             ProviderNames.Deepl, "default", new AppSettings(), null);
         Assert.False(readiness.IsReady);
-        Assert.NotNull(readiness.BlockingReason);
+        Assert.Contains("API key missing", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -150,6 +149,13 @@ public sealed class RegistryTests : IDisposable
     public void TranslationRegistry_CreateProvider_GoogleTranslateFree_DoesNotThrow()
     {
         var provider = _translationRegistry.CreateProvider(ProviderNames.GoogleTranslateFree, new AppSettings(), null);
+        Assert.NotNull(provider);
+    }
+
+    [Fact]
+    public void TranslationRegistry_CreateProvider_DeepL_DoesNotThrow()
+    {
+        var provider = _translationRegistry.CreateProvider(ProviderNames.Deepl, new AppSettings(), null);
         Assert.NotNull(provider);
     }
 

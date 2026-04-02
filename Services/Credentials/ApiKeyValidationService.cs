@@ -15,17 +15,20 @@ public sealed class ApiKeyValidationService
     private readonly ITranslationRegistry _translationRegistry;
     private readonly ITtsRegistry _ttsRegistry;
     private readonly Func<string, OpenAiApiClient> _openAiClientFactory;
+    private readonly Func<string, DeepLApiClient> _deepLClientFactory;
 
     public ApiKeyValidationService(
         ITranscriptionRegistry transcriptionRegistry,
         ITranslationRegistry translationRegistry,
         ITtsRegistry ttsRegistry,
-        Func<string, OpenAiApiClient>? openAiClientFactory = null)
+        Func<string, OpenAiApiClient>? openAiClientFactory = null,
+        Func<string, DeepLApiClient>? deepLClientFactory = null)
     {
         _transcriptionRegistry = transcriptionRegistry;
         _translationRegistry = translationRegistry;
         _ttsRegistry = ttsRegistry;
         _openAiClientFactory = openAiClientFactory ?? (apiKey => new OpenAiApiClient(apiKey));
+        _deepLClientFactory = deepLClientFactory ?? (apiKey => new DeepLApiClient(apiKey));
     }
 
     public string? GetAvailabilityMessage(string credentialKey)
@@ -53,9 +56,36 @@ public sealed class ApiKeyValidationService
         return credentialKey switch
         {
             CredentialKeys.OpenAi => await ValidateOpenAiAsync(apiKey.Trim(), implementedProviders, cancellationToken),
+            CredentialKeys.Deepl => await ValidateDeepLAsync(apiKey.Trim(), cancellationToken),
             _ => ApiKeyValidationResult.Unavailable(
                 "Live validation is not implemented for this credential yet."),
         };
+    }
+
+    private async Task<ApiKeyValidationResult> ValidateDeepLAsync(
+        string apiKey,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = _deepLClientFactory(apiKey);
+            var usage = await client.GetUsageAsync(cancellationToken);
+
+            return ApiKeyValidationResult.Success(
+                $"Validated for DeepL. Usage: {usage.CharacterCount} / {usage.CharacterLimit} characters.");
+        }
+        catch (DeepLApiException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            return ApiKeyValidationResult.Failure($"DeepL rejected the key: {ex.Message}");
+        }
+        catch (DeepLApiException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            return ApiKeyValidationResult.Failure($"DeepL rate-limited validation: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return ApiKeyValidationResult.Failure($"Validation failed: {ex.Message}");
+        }
     }
 
     private async Task<ApiKeyValidationResult> ValidateOpenAiAsync(
