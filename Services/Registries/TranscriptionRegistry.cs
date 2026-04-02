@@ -49,7 +49,7 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
                 ["whisper-1", "gpt-4o-transcribe"],
                 SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud,
-                IsImplemented: false),
+                IsImplemented: true),
             new(
                 ProviderNames.GoogleStt,
                 "Google STT",
@@ -58,7 +58,7 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
                 ["default"],
                 SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud,
-                IsImplemented: false),
+                IsImplemented: true),
         };
 
         return runtime is null
@@ -111,6 +111,12 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
         return normalizedProviderId switch
         {
             ProviderNames.FasterWhisper => new FasterWhisperTranscriptionProvider(_log),
+            ProviderNames.OpenAiWhisperApi => new OpenAiWhisperTranscriptionProvider(
+                _log,
+                keyStore?.GetKey(CredentialKeys.OpenAi) ?? string.Empty),
+            ProviderNames.GoogleStt => new GoogleSttTranscriptionProvider(
+                _log,
+                keyStore?.GetKey(CredentialKeys.GoogleAi) ?? string.Empty),
             _ => throw new PipelineProviderException(
                 $"Transcription provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

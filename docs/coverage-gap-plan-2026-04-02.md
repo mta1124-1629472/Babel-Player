@@ -1,5 +1,27 @@
 # Coverage Gap Plan (2026-04-02)
 
+## Progress Update (2026-04-02)
+- Stability status: resolved for the earlier failing clusters; full test project currently passes (321 passed, 0 failed).
+- Implemented first Priority A slice:
+  - Added deterministic containerized provider tests in [BabelPlayer.Tests/ContainerizedProvidersTests.cs](BabelPlayer.Tests/ContainerizedProvidersTests.cs).
+  - Added injectable HttpClient support to [Services/ContainerizedInferenceClient.cs](Services/ContainerizedInferenceClient.cs) to enable offline HTTP-path testing.
+- Targeted coverage deltas from the new test slice:
+  - [Services/ContainerizedTranslationProvider.cs](Services/ContainerizedTranslationProvider.cs): 89.8%
+  - [Services/ContainerizedTtsProvider.cs](Services/ContainerizedTtsProvider.cs): 88.2%
+  - [Services/ContainerizedTranscriptionProvider.cs](Services/ContainerizedTranscriptionProvider.cs): 93.5%
+  - [Services/ContainerizedInferenceClient.cs](Services/ContainerizedInferenceClient.cs): 74.6%
+- Remaining Priority A gap:
+  - [Services/ContainerizedServiceProbe.cs](Services/ContainerizedServiceProbe.cs) still needs dedicated transition/cache tests.
+
+### Next Implementation Slice
+1. Add probe-focused tests for:
+- cache hit behavior (available/unavailable TTL)
+- in-flight probe reuse
+- wait-timeout returns checking state
+- force-refresh bypasses cache
+2. Add focused ViewModel runtime-selection tests for [ViewModels/EmbeddedPlaybackViewModel.cs](ViewModels/EmbeddedPlaybackViewModel.cs).
+3. Re-run coverage and update this plan with measured deltas.
+
 ## Baseline From Coverage Run
 - Command: run full test suite in coverage mode.
 - Result: 282 passed, 23 failed.

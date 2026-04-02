@@ -73,13 +73,21 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TranscriptionRegistry_CheckReadiness_UnimplementedProvider_ReturnsNotReady()
+    public void TranscriptionRegistry_CheckReadiness_OpenAiWhisperWithoutKey_ReturnsNotReady()
     {
-        // OpenAI Whisper API is marked IsImplemented=false
         var readiness = _transcriptionRegistry.CheckReadiness(
             ProviderNames.OpenAiWhisperApi, "whisper-1", new AppSettings(), null);
         Assert.False(readiness.IsReady);
-        Assert.NotNull(readiness.BlockingReason);
+        Assert.Contains("API key missing", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TranscriptionRegistry_CheckReadiness_GoogleSttWithoutKey_ReturnsNotReady()
+    {
+        var readiness = _transcriptionRegistry.CheckReadiness(
+            ProviderNames.GoogleStt, "default", new AppSettings(), null);
+        Assert.False(readiness.IsReady);
+        Assert.Contains("API key missing", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -94,6 +102,20 @@ public sealed class RegistryTests : IDisposable
     {
         // Creating the provider itself should succeed — it just builds the object
         var provider = _transcriptionRegistry.CreateProvider(ProviderNames.FasterWhisper, new AppSettings(), null);
+        Assert.NotNull(provider);
+    }
+
+    [Fact]
+    public void TranscriptionRegistry_CreateProvider_OpenAiWhisper_DoesNotThrow()
+    {
+        var provider = _transcriptionRegistry.CreateProvider(ProviderNames.OpenAiWhisperApi, new AppSettings(), null);
+        Assert.NotNull(provider);
+    }
+
+    [Fact]
+    public void TranscriptionRegistry_CreateProvider_GoogleStt_DoesNotThrow()
+    {
+        var provider = _transcriptionRegistry.CreateProvider(ProviderNames.GoogleStt, new AppSettings(), null);
         Assert.NotNull(provider);
     }
 
