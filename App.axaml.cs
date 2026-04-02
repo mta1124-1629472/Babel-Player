@@ -21,7 +21,6 @@ public partial class App : Application
     private AppLog? _startupLog;
     private SettingsService? _settingsService;
     private ApiKeyStore? _apiKeyStore;
-    private ContainerizedInferenceManager? _containerizedInferenceManager;
 
     // Resolved once at startup so crash handlers can reference it without
     // touching the AppLog instance (which may itself be in a bad state).
@@ -51,6 +50,11 @@ public partial class App : Application
             var settingsFilePath = Path.Combine(appDataRoot, "settings", "app-settings.json");
             _settingsService = new SettingsService(settingsFilePath, appLog);
             var appSettings = _settingsService.LoadOrDefault();
+            if (!string.Equals(appSettings.EffectiveContainerizedServiceUrl, appSettings.ContainerizedServiceUrl, StringComparison.Ordinal))
+            {
+                appLog.Info(
+                    $"Environment override active: {AppSettings.InferenceServiceUrlEnvVar}={appSettings.EffectiveContainerizedServiceUrl}");
+            }
 
             var perSessionStore = new PerSessionSnapshotStore(
                 Path.Combine(appDataRoot, "sessions"), appLog);
@@ -58,9 +62,18 @@ public partial class App : Application
                 Path.Combine(appDataRoot, "state", "recent-sessions.json"), appLog);
 
             _apiKeyStore = new ApiKeyStore(appDataRoot);
-            _containerizedInferenceManager = new ContainerizedInferenceManager(
-                appLog,
-                appSettings.ContainerizedServiceUrl);
+            var modelDownloader = new ModelDownloader(appLog);
+            var transportManager = new MediaTransportManager(
+                videoOptions: new VideoPlaybackOptions(
+                    HwdecMode:      appSettings.VideoHwdec,
+                    GpuApi:         appSettings.VideoGpuApi,
+                    UseGpuNext:     appSettings.VideoUseGpuNext,
+                    VsrEnabled:     appSettings.VideoVsrEnabled,
+                    VsrQuality:     appSettings.VideoVsrQuality,
+                    HdrEnabled:     appSettings.VideoHdrEnabled,
+                    ToneMapping:    appSettings.VideoToneMapping,
+                    TargetPeak:     appSettings.VideoTargetPeak,
+                    HdrComputePeak: appSettings.VideoHdrComputePeak));
 
             try
             {
@@ -70,7 +83,7 @@ public partial class App : Application
                 var ttsRegistry = new TtsRegistry(appLog);
                 var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
                 _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                    store, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, keyStore: _apiKeyStore);
+                    store, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore);
                 _sessionWorkflowCoordinator.Initialize();
                 appLog.Info("App startup: session coordinator ready.");
             }
@@ -85,7 +98,7 @@ public partial class App : Application
                     var fallbackStore = new SessionSnapshotStore(
                         Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
                     _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                        fallbackStore, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, keyStore: _apiKeyStore);
+                        fallbackStore, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore);
                 }
             }
 
@@ -94,20 +107,12 @@ public partial class App : Application
 
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService, _apiKeyStore),
+                DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService, modelDownloader, _apiKeyStore, logFilePath: _logFilePath),
             };
 
             // Run heavy startup probes in background and publish results on UI thread.
             var coordinator = _sessionWorkflowCoordinator;
-            var settingsForWarmup = appSettings;
-            var inferenceManager = _containerizedInferenceManager;
-            Task.Run(() =>
-                {
-                    if (ShouldAutoStartLocalContainerizedInference(settingsForWarmup))
-                        inferenceManager?.EnsureAvailable();
-
-                    return coordinator.GatherBootstrapWarmupData();
-                })
+            Task.Run(() => coordinator.GatherBootstrapWarmupData())
                 .ContinueWith(t =>
                 {
                     if (t.IsCompletedSuccessfully)
@@ -138,7 +143,6 @@ public partial class App : Application
         try
         {
             _sessionWorkflowCoordinator.FlushPendingSave();
-            _containerizedInferenceManager?.StopManagedService();
         }
         catch (Exception ex)
         {
@@ -184,21 +188,5 @@ public partial class App : Application
 
         // 3. Show full error to the user.
         CrashReportWindow.ShowOnUiThread(msg, _logFilePath);
-    }
-
-    private static bool ShouldAutoStartLocalContainerizedInference(AppSettings settings)
-    {
-        if (settings.TranscriptionProvider != ProviderNames.ContainerizedService &&
-            settings.TranslationProvider != ProviderNames.ContainerizedService &&
-            settings.TtsProvider != ProviderNames.ContainerizedService)
-        {
-            return false;
-        }
-
-        if (!Uri.TryCreate(settings.ContainerizedServiceUrl, UriKind.Absolute, out var uri))
-            return false;
-
-        return uri.IsLoopback ||
-               string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -27,6 +27,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private string? _lastKnownSourceMediaPath;
     private bool _isUpdatingPositionFromTimer;
     private bool _isUpdatingActiveSegment;
+    private bool _isSynchronizingPipelineSettings;
     private WorkflowSegmentState? _lastDubbedSegment;
 
     [ObservableProperty]
@@ -178,24 +179,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _logFilePath = logFilePath;
         _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
         _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
-
-        // Sync provider/model fields from persisted settings (no side-effects — set backing fields directly)
-        _transcriptionProvider = coordinator.CurrentSettings.TranscriptionProvider;
-        _transcriptionModel = coordinator.CurrentSettings.TranscriptionModel;
-        _translationProvider = coordinator.CurrentSettings.TranslationProvider;
-        _translationModel = coordinator.CurrentSettings.TranslationModel;
-        _ttsProvider = coordinator.CurrentSettings.TtsProvider;
-        _ttsModelOrVoice = coordinator.CurrentSettings.TtsVoice;
-        RebuildAllModelOptions();
-        SelectedTranscriptionModel =
-            _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == _transcriptionModel)
-            ?? _availableTranscriptionModels.FirstOrDefault();
-        SelectedTranslationModel =
-            _availableTranslationModels.FirstOrDefault(m => m.ModelId == _translationModel)
-            ?? _availableTranslationModels.FirstOrDefault();
-        SelectedTtsOption =
-            _availableTtsOptions.FirstOrDefault(m => m.ModelId == _ttsModelOrVoice)
-            ?? _availableTtsOptions.FirstOrDefault();
+        SyncProviderModelFieldsFromSettings();
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
         _coordinator.SettingsModified += OnCoordinatorSettingsModified;
@@ -426,29 +410,30 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnTranscriptionProviderChanged(string value)
     {
-        if (string.IsNullOrEmpty(value)) return;
-        _coordinator.CurrentSettings.TranscriptionProvider = value;
-        RebuildTranscriptionModelOptions();
-        TranscriptionModel = _availableTranscriptionModels.FirstOrDefault()?.ModelId ?? "default";
-        SelectedTranscriptionModel =
-            _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == TranscriptionModel)
-            ?? _availableTranscriptionModels.FirstOrDefault();
-        OnPropertyChanged(nameof(AvailableTranscriptionModels));
-        NotifyActiveConfigChanged();
-        NotifySettingsSave();
-        ApplySmartWipe(PipelineInvalidation.Transcription);
+        if (_isSynchronizingPipelineSettings || string.IsNullOrEmpty(value)) return;
+
+        ApplyPipelineSettingsSelection(new PipelineSettingsSelection(
+            value,
+            GetDefaultModelId(_coordinator.TranscriptionRegistry.GetAvailableProviders(), value),
+            TranslationProvider,
+            TranslationModel,
+            TtsProvider,
+            TtsModelOrVoice,
+            _coordinator.CurrentSettings.TargetLanguage));
     }
 
     partial void OnTranscriptionModelChanged(string value)
     {
-        if (string.IsNullOrEmpty(value)) return;
-        SelectedTranscriptionModel =
-            _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == value)
-            ?? _availableTranscriptionModels.FirstOrDefault();
-        _coordinator.CurrentSettings.TranscriptionModel = value;
-        NotifyActiveConfigChanged();
-        NotifySettingsSave();
-        ApplySmartWipe(PipelineInvalidation.Transcription);
+        if (_isSynchronizingPipelineSettings || string.IsNullOrEmpty(value)) return;
+
+        ApplyPipelineSettingsSelection(new PipelineSettingsSelection(
+            TranscriptionProvider,
+            value,
+            TranslationProvider,
+            TranslationModel,
+            TtsProvider,
+            TtsModelOrVoice,
+            _coordinator.CurrentSettings.TargetLanguage));
     }
 
     partial void OnSelectedTranscriptionModelChanged(ModelOptionViewModel? value)
@@ -471,61 +456,65 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnTranslationProviderChanged(string value)
     {
-        if (string.IsNullOrEmpty(value)) return;
-        _coordinator.CurrentSettings.TranslationProvider = value;
-        RebuildTranslationModelOptions();
-        TranslationModel = _availableTranslationModels.FirstOrDefault()?.ModelId ?? "default";
-        SelectedTranslationModel =
-            _availableTranslationModels.FirstOrDefault(m => m.ModelId == TranslationModel)
-            ?? _availableTranslationModels.FirstOrDefault();
-        OnPropertyChanged(nameof(AvailableTranslationModels));
-        NotifyActiveConfigChanged();
-        NotifySettingsSave();
-        ApplySmartWipe(PipelineInvalidation.Translation);
+        if (_isSynchronizingPipelineSettings || string.IsNullOrEmpty(value)) return;
+
+        ApplyPipelineSettingsSelection(new PipelineSettingsSelection(
+            TranscriptionProvider,
+            TranscriptionModel,
+            value,
+            GetDefaultModelId(_coordinator.TranslationRegistry.GetAvailableProviders(), value),
+            TtsProvider,
+            TtsModelOrVoice,
+            _coordinator.CurrentSettings.TargetLanguage));
     }
 
     partial void OnTranslationModelChanged(string value)
     {
-        if (string.IsNullOrEmpty(value)) return;
-        SelectedTranslationModel =
-            _availableTranslationModels.FirstOrDefault(m => m.ModelId == value)
-            ?? _availableTranslationModels.FirstOrDefault();
-        _coordinator.CurrentSettings.TranslationModel = value;
-        NotifyActiveConfigChanged();
-        NotifySettingsSave();
-        ApplySmartWipe(PipelineInvalidation.Translation);
+        if (_isSynchronizingPipelineSettings || string.IsNullOrEmpty(value)) return;
+
+        ApplyPipelineSettingsSelection(new PipelineSettingsSelection(
+            TranscriptionProvider,
+            TranscriptionModel,
+            TranslationProvider,
+            value,
+            TtsProvider,
+            TtsModelOrVoice,
+            _coordinator.CurrentSettings.TargetLanguage));
     }
 
     partial void OnTtsProviderChanged(string value)
     {
-        if (string.IsNullOrEmpty(value)) return;
-        _coordinator.CurrentSettings.TtsProvider = value;
-        RebuildTtsModelOptions();
-        TtsModelOrVoice = _availableTtsOptions.FirstOrDefault()?.ModelId ?? "default";
-        SelectedTtsOption =
-            _availableTtsOptions.FirstOrDefault(m => m.ModelId == TtsModelOrVoice)
-            ?? _availableTtsOptions.FirstOrDefault();
-        OnPropertyChanged(nameof(AvailableTtsOptions));
-        NotifyActiveConfigChanged();
-        NotifySettingsSave();
-        ApplySmartWipe(PipelineInvalidation.Tts);
+        if (_isSynchronizingPipelineSettings || string.IsNullOrEmpty(value)) return;
+
+        ApplyPipelineSettingsSelection(new PipelineSettingsSelection(
+            TranscriptionProvider,
+            TranscriptionModel,
+            TranslationProvider,
+            TranslationModel,
+            value,
+            GetDefaultModelId(_coordinator.TtsRegistry.GetAvailableProviders(), value),
+            _coordinator.CurrentSettings.TargetLanguage));
     }
 
     partial void OnTtsModelOrVoiceChanged(string value)
     {
-        if (string.IsNullOrEmpty(value)) return;
-        SelectedTtsOption =
-            _availableTtsOptions.FirstOrDefault(m => m.ModelId == value)
-            ?? _availableTtsOptions.FirstOrDefault();
-        _coordinator.CurrentSettings.TtsVoice = value;
-        NotifyActiveConfigChanged();
-        NotifySettingsSave();
-        ApplySmartWipe(PipelineInvalidation.Tts);
+        if (_isSynchronizingPipelineSettings || string.IsNullOrEmpty(value)) return;
+
+        ApplyPipelineSettingsSelection(new PipelineSettingsSelection(
+            TranscriptionProvider,
+            TranscriptionModel,
+            TranslationProvider,
+            TranslationModel,
+            TtsProvider,
+            value,
+            _coordinator.CurrentSettings.TargetLanguage));
     }
 
     private void OnCoordinatorSettingsModified()
     {
+        SyncProviderModelFieldsFromSettings();
         NotifyActiveConfigChanged();
+        OnPropertyChanged(nameof(VoiceModelLabel));
     }
 
     /// <summary>
@@ -536,38 +525,39 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     /// </summary>
     private void SyncProviderModelFieldsFromSettings()
     {
-        // Read all configuration fields directly from coordinator settings (no partial handlers)
-        _transcriptionProvider = _coordinator.CurrentSettings.TranscriptionProvider;
-        _transcriptionModel = _coordinator.CurrentSettings.TranscriptionModel;
-        _translationProvider = _coordinator.CurrentSettings.TranslationProvider;
-        _translationModel = _coordinator.CurrentSettings.TranslationModel;
-        _ttsProvider = _coordinator.CurrentSettings.TtsProvider;
-        _ttsModelOrVoice = _coordinator.CurrentSettings.TtsVoice;
+        _isSynchronizingPipelineSettings = true;
+        try
+        {
+            TranscriptionProvider = _coordinator.CurrentSettings.TranscriptionProvider;
+            TranscriptionModel = _coordinator.CurrentSettings.TranscriptionModel;
+            TranslationProvider = _coordinator.CurrentSettings.TranslationProvider;
+            TranslationModel = _coordinator.CurrentSettings.TranslationModel;
+            TtsProvider = _coordinator.CurrentSettings.TtsProvider;
+            TtsModelOrVoice = _coordinator.CurrentSettings.TtsVoice;
 
-        // Rebuild available model lists for all providers
-        RebuildAllModelOptions();
+            RebuildAllModelOptions();
 
-        // Re-sync dropdown selections to match the backing fields
-        SelectedTranscriptionModel =
-            _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == _transcriptionModel)
-            ?? _availableTranscriptionModels.FirstOrDefault();
-        SelectedTranslationModel =
-            _availableTranslationModels.FirstOrDefault(m => m.ModelId == _translationModel)
-            ?? _availableTranslationModels.FirstOrDefault();
-        SelectedTtsOption =
-            _availableTtsOptions.FirstOrDefault(m => m.ModelId == _ttsModelOrVoice)
-            ?? _availableTtsOptions.FirstOrDefault();
+            SelectedTranscriptionModel =
+                _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == TranscriptionModel)
+                ?? _availableTranscriptionModels.FirstOrDefault();
+            SelectedTranslationModel =
+                _availableTranslationModels.FirstOrDefault(m => m.ModelId == TranslationModel)
+                ?? _availableTranslationModels.FirstOrDefault();
+            SelectedTtsOption =
+                _availableTtsOptions.FirstOrDefault(m => m.ModelId == TtsModelOrVoice)
+                ?? _availableTtsOptions.FirstOrDefault();
+        }
+        finally
+        {
+            _isSynchronizingPipelineSettings = false;
+        }
 
-        // Notify all related properties changed so UI bindings refresh
-        OnPropertyChanged(nameof(TranscriptionProvider));
-        OnPropertyChanged(nameof(TranscriptionModel));
         OnPropertyChanged(nameof(AvailableTranscriptionModels));
-        OnPropertyChanged(nameof(TranslationProvider));
-        OnPropertyChanged(nameof(TranslationModel));
         OnPropertyChanged(nameof(AvailableTranslationModels));
-        OnPropertyChanged(nameof(TtsProvider));
-        OnPropertyChanged(nameof(TtsModelOrVoice));
         OnPropertyChanged(nameof(AvailableTtsOptions));
+        OnPropertyChanged(nameof(TranscriptionKeyStatus));
+        OnPropertyChanged(nameof(TranslationKeyStatus));
+        OnPropertyChanged(nameof(TtsKeyStatus));
     }
 
     private void NotifyActiveConfigChanged()
@@ -615,7 +605,48 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                         ? (r.IsReady ? true : r.RequiresModelDownload ? false : (bool?)null) : null))];
     }
 
-    private void NotifySettingsSave() => _coordinator.NotifySettingsModified();
+    private void ApplyPipelineSettingsSelection(PipelineSettingsSelection selection)
+    {
+        var result = _coordinator.ApplyPipelineSettings(selection);
+        SyncProviderModelFieldsFromSettings();
+        NotifyActiveConfigChanged();
+        HandlePipelineSettingsApplyResult(result);
+    }
+
+    private void HandlePipelineSettingsApplyResult(PipelineSettingsApplyResult result)
+    {
+        if (!result.SettingsChanged)
+            return;
+
+        if (result.Invalidation != PipelineInvalidation.None)
+            ResetInteractiveModes();
+        StatusText = result.StatusMessage;
+        ClearStatusErrorDetail();
+
+        if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
+        {
+            _ = RefreshSegmentsAsync();
+        }
+        else
+        {
+            Segments.Clear();
+            HasSegments = false;
+        }
+    }
+
+    private void ResetInteractiveModes()
+    {
+        if (IsSubtitleModeOn)
+            IsSubtitleModeOn = false;
+        if (IsDubModeOn)
+            IsDubModeOn = false;
+    }
+
+    private static string GetDefaultModelId(
+        IReadOnlyList<ProviderDescriptor> providers,
+        string providerId) =>
+        providers.FirstOrDefault(provider => provider.Id == providerId)?.SupportedModels.FirstOrDefault()
+        ?? "default";
 
     private void ApplyDucking()
     {
@@ -774,8 +805,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 if (newPath != oldPath)
                 {
                     _lastKnownSourceMediaPath = newPath;
-                    // Media switched — auto-play triggered by MainWindow code-behind
-                    IsSourcePaused = false;
+                    IsSourcePaused = true;
                     _lastDubbedSegment = null;
                     _isUpdatingActiveSegment = true;
                     SelectedSegment = null;
@@ -786,6 +816,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 // This ensures dropdowns always reflect the actual configured state,
                 // especially after session restore from cache.
                 SyncProviderModelFieldsFromSettings();
+                NotifyActiveConfigChanged();
 
                 if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
                 {
@@ -996,38 +1027,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             return;
         }
 
-        // Smart wipe: coordinator determines which stages are invalidated by settings changes;
-        // ViewModel applies the UI side-effects (clearing segments, disabling active modes).
-        if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
-        {
-            if (IsSubtitleModeOn) ToggleSubtitles();
-            if (IsDubModeOn) ToggleDubMode();
-
-            switch (_coordinator.CheckSettingsInvalidation())
-            {
-                case PipelineInvalidation.Transcription:
-                    StatusText = "Transcription settings changed — restarting from scratch…";
-                    _coordinator.ResetPipelineToMediaLoaded();
-                    Segments.Clear();
-                    HasSegments = false;
-                    break;
-                case PipelineInvalidation.Translation:
-                    StatusText = "Translation settings changed — re-running translation…";
-                    _coordinator.ResetPipelineToTranscribed();
-                    Segments.Clear();
-                    HasSegments = false;
-                    await RefreshSegmentsAsync();
-                    break;
-                case PipelineInvalidation.Tts:
-                    StatusText = "TTS settings changed — re-generating audio…";
-                    _coordinator.ResetPipelineToTranslated();
-                    break;
-                case PipelineInvalidation.None:
-                    // No settings changed — pipeline continues from current stage. No reset needed.
-                    break;
-            }
-        }
-
         _pipelineCts?.Cancel();
         _pipelineCts = new CancellationTokenSource();
         var ct = _pipelineCts.Token;
@@ -1071,42 +1070,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [RelayCommand]
     private void ClearPipeline()
     {
-        _coordinator.ResetPipelineToMediaLoaded();
-        _coordinator.InvalidateAllProviderCaches();  // Force provider instances to be recreated
+        _coordinator.ClearPipeline();
         Segments.Clear();
         HasSegments = false;
-        if (IsSubtitleModeOn) ToggleSubtitles();
-        if (IsDubModeOn) ToggleDubMode();
+        ResetInteractiveModes();
         StatusText = "Pipeline cleared. Ready to run fresh.";
         ClearStatusErrorDetail();
-    }
-
-    private void ApplySmartWipe(PipelineInvalidation invalidation)
-    {
-        if (_coordinator.CurrentSession.Stage < SessionWorkflowStage.Transcribed) return;
-
-        if (IsSubtitleModeOn) ToggleSubtitles();
-        if (IsDubModeOn) ToggleDubMode();
-
-        switch (invalidation)
-        {
-            case PipelineInvalidation.Transcription:
-                StatusText = "Transcription settings changed — pipeline will restart from scratch.";
-                _coordinator.ResetPipelineToMediaLoaded();
-                Segments.Clear();
-                HasSegments = false;
-                break;
-            case PipelineInvalidation.Translation:
-                StatusText = "Translation settings changed — pipeline will restart from translation.";
-                _coordinator.ResetPipelineToTranscribed();
-                Segments.Clear();
-                HasSegments = false;
-                break;
-            case PipelineInvalidation.Tts:
-                StatusText = "TTS settings changed — pipeline will restart from TTS.";
-                _coordinator.ResetPipelineToTranslated();
-                break;
-        }
     }
 
     [RelayCommand]

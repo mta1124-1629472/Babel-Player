@@ -23,6 +23,12 @@ public interface IMediaTransportManager : IDisposable
     IMediaTransport GetOrCreateSourcePlayer();
 
     /// <summary>
+    /// The headless segment player if it has been created; null otherwise.
+    /// Exposed so callers can stop/pause playback without forcing creation.
+    /// </summary>
+    IMediaTransport? SegmentPlayer { get; }
+
+    /// <summary>
     /// The embedded source player if it has been created; null otherwise.
     /// Exposed so callers can attach it to a window handle or subscribe to events.
     /// </summary>

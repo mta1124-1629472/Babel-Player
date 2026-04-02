@@ -3,6 +3,7 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Babel.Player.Services;
+using Babel.Player.Services.Registries;
 using SettingsService = Babel.Player.Services.Settings.SettingsService;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -41,25 +42,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ThemeOptions = new[] { "Light", "Dark", "System" };
         
         // TTS voice options
-        TtsVoiceOptions = new[]
-        {
-            "en-US-AriaNeural",
-            "en-US-JennyNeural",
-            "en-US-GuyNeural",
-            "es-ES-LauraNeural",
-            "es-ES-PabloNeural",
-            "fr-FR-DeniseNeural",
-            "de-DE-KatjaNeural",
-            "it-IT-ElsaNeural",
-            "pt-BR-FranciscaNeural",
-            "ja-JP-NanamiNeural",
-            "ko-KR-SunHiNeural",
-            "zh-CN-XiaoxiaoNeural",
-            "zh-CN-YunxiNeural",
-            "ar-SA-ZariyahNeural",
-            "hi-IN-SwaraNeural",
-            "ru-RU-SvetlanaNeural",
-        };
+        TtsVoiceOptions = [.. TtsRegistry.EdgeTtsVoices];
 
         // Video hardware settings
         _videoHwdec         = current.VideoHwdec;

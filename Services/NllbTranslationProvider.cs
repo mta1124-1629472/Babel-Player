@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
-using Babel.Player.Services.Translations;
 
 namespace Babel.Player.Services;
 
@@ -104,12 +103,12 @@ FLORES = {
     'nl':'nld_Latn','pl':'pol_Latn','sv':'swe_Latn','tr':'tur_Latn',
 }
 
-text       = sys.argv[1]
-src_lang   = sys.argv[2]
-tgt_lang   = sys.argv[3]
-json_path  = sys.argv[4]
-seg_id     = sys.argv[5]
-model_name = sys.argv[6]
+src_lang   = sys.argv[1]
+tgt_lang   = sys.argv[2]
+json_path  = sys.argv[3]
+seg_id     = sys.argv[4]
+model_name = sys.argv[5]
+text       = sys.stdin.read()
 
 src_flores = FLORES.get(src_lang, src_lang)
 tgt_flores = FLORES.get(tgt_lang, tgt_lang)
@@ -134,10 +133,16 @@ try:
 except Exception:
     data = {'segments': []}
 
+updated = False
 for seg in data.get('segments', []):
     if seg.get('id') == seg_id:
         seg['translatedText'] = xlated
+        updated = True
         break
+
+if not updated:
+    print(f'Segment not found: {seg_id}', file=sys.stderr)
+    sys.exit(1)
 
 with open(json_path, 'w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
@@ -155,26 +160,30 @@ print(f'NLLB single segment translated: {seg_id}')
 
         var result = await RunPythonScriptAsync(
             NllbScript,
-            $"\"{request.TranscriptJsonPath}\" \"{request.OutputJsonPath}\" \"{request.SourceLanguage}\" \"{request.TargetLanguage}\" \"{_model}\"",
+            [request.TranscriptJsonPath, request.OutputJsonPath, request.SourceLanguage, request.TargetLanguage, _model],
             "nllb",
-            cancellationToken);
+            cancellationToken: cancellationToken);
         ThrowIfFailed(result, "NLLB Translation");
 
         Log.Info($"NLLB Translation completed: {request.OutputJsonPath}");
 
-        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var translationData = JsonSerializer.Deserialize<TranslationJsonHelper>(
-            await File.ReadAllTextAsync(request.OutputJsonPath), jsonOptions);
+        var transcriptData = await ArtifactJson.LoadTranscriptAsync(request.TranscriptJsonPath, cancellationToken);
+        var translationData = await ArtifactJson.LoadTranslationAsync(request.OutputJsonPath, cancellationToken);
+        if (translationData.Segments?.Count != transcriptData.Segments?.Count)
+        {
+            throw new InvalidOperationException(
+                $"NLLB translation artifact segment count mismatch: expected {transcriptData.Segments?.Count ?? 0}, got {translationData.Segments?.Count ?? 0}.");
+        }
 
         var segments = new List<TranslatedSegment>();
-        foreach (var seg in translationData?.Segments ?? [])
+        foreach (var seg in translationData.Segments ?? [])
             segments.Add(new TranslatedSegment(seg.Start, seg.End, seg.Text ?? "", seg.TranslatedText ?? ""));
 
         return new TranslationResult(
             true,
             segments,
-            translationData?.SourceLanguage ?? request.SourceLanguage,
-            translationData?.TargetLanguage ?? request.TargetLanguage,
+            translationData.SourceLanguage ?? request.SourceLanguage,
+            translationData.TargetLanguage ?? request.TargetLanguage,
             null);
     }
 
@@ -191,26 +200,25 @@ print(f'NLLB single segment translated: {seg_id}')
 
         var result = await RunPythonScriptAsync(
             NllbSegmentScript,
-            $"\"{request.SourceText}\" \"{request.SourceLanguage}\" \"{request.TargetLanguage}\" \"{request.TranslationJsonPath}\" \"{request.SegmentId}\" \"{_model}\"",
+            [request.SourceLanguage, request.TargetLanguage, request.TranslationJsonPath, request.SegmentId, _model],
             "nllb_seg",
-            cancellationToken);
+            standardInput: request.SourceText,
+            cancellationToken: cancellationToken);
 
         ThrowIfFailed(result, "NLLB segment translation");
 
         Log.Info($"NLLB single segment translation completed: {request.SegmentId}");
 
-        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var translationData = JsonSerializer.Deserialize<TranslationJsonHelper>(
-            await File.ReadAllTextAsync(request.TranslationJsonPath), jsonOptions);
+        var translationData = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
 
         var segments = new List<TranslatedSegment>();
-        foreach (var seg in translationData?.Segments ?? [])
+        foreach (var seg in translationData.Segments ?? [])
             segments.Add(new TranslatedSegment(seg.Start, seg.End, seg.Text ?? "", seg.TranslatedText ?? ""));
 
         return new TranslationResult(
             true, segments,
-            translationData?.SourceLanguage ?? request.SourceLanguage,
-            translationData?.TargetLanguage ?? request.TargetLanguage,
+            translationData.SourceLanguage ?? request.SourceLanguage,
+            translationData.TargetLanguage ?? request.TargetLanguage,
             null);
     }
 

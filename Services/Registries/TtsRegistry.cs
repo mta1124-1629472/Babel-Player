@@ -100,7 +100,7 @@ public sealed class TtsRegistry : ITtsRegistry
             ProviderNames.Piper => new PiperTtsProvider(_log, settings.PiperModelDir),
             ProviderNames.EdgeTts => new EdgeTtsProvider(_log),
             ProviderNames.ContainerizedService => new ContainerizedTtsProvider(
-                new ContainerizedInferenceClient(settings.ContainerizedServiceUrl, _log), _log),
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log), _log),
             _ => throw new PipelineProviderException(
                 $"TTS provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

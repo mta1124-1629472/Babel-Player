@@ -1,15 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
-using Babel.Player.Services.Translations;
 
 namespace Babel.Player.Services;
 
@@ -24,9 +22,6 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
 {
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
-
-    private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true };
-    private static readonly JsonSerializerOptions ReadOptions  = new() { PropertyNameCaseInsensitive = true };
 
     public ContainerizedTranslationProvider(ContainerizedInferenceClient client, AppLog log)
     {
@@ -44,6 +39,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         _log.Info($"[ContainerizedTranslation] Translating {request.SourceLanguage} -> {request.TargetLanguage}");
 
         var transcriptJson = await File.ReadAllTextAsync(request.TranscriptJsonPath, cancellationToken);
+        var transcriptArtifact = ArtifactJson.DeserializeTranscript(transcriptJson, request.TranscriptJsonPath);
 
         var result = await _client.TranslateAsync(
             transcriptJson,
@@ -54,10 +50,18 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         if (!result.Success)
             throw new InvalidOperationException(
                 $"Containerized translation failed: {result.ErrorMessage}");
+        if (result.Segments.Count != transcriptArtifact.Segments?.Count)
+        {
+            throw new InvalidOperationException(
+                $"Containerized translation artifact segment count mismatch: expected {transcriptArtifact.Segments?.Count ?? 0}, got {result.Segments.Count}.");
+        }
 
-        await WriteTranslationArtifactAsync(
-            result.Segments, result.SourceLanguage, result.TargetLanguage,
-            request.OutputJsonPath, cancellationToken);
+        var translationArtifact = CreateTranslationArtifact(
+            result.Segments,
+            result.SourceLanguage,
+            result.TargetLanguage);
+
+        await WriteTranslationArtifactAsync(translationArtifact, request.OutputJsonPath, cancellationToken);
 
         _log.Info($"[ContainerizedTranslation] Complete: {result.Segments.Count} segments");
 
@@ -72,9 +76,19 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
 
         // Send a minimal transcript with just this one segment so the server endpoint is reused.
         // Start/end are not meaningful for translation; we only need the translated text.
-        var singleSegmentTranscript = JsonSerializer.Serialize(new
+        var singleSegmentTranscript = ArtifactJson.SerializeTranscript(new TranscriptArtifact
         {
-            segments = new[] { new { start = 0.0, end = 0.0, text = request.SourceText } },
+            Language = request.SourceLanguage,
+            LanguageProbability = 1.0,
+            Segments =
+            [
+                new TranscriptSegmentArtifact
+                {
+                    Start = 0.0,
+                    End = 0.0,
+                    Text = request.SourceText,
+                }
+            ],
         });
 
         var result = await _client.TranslateAsync(
@@ -93,10 +107,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         if (!File.Exists(request.TranslationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
-        var existing = TranslationJsonHelper.Parse(
-            await File.ReadAllTextAsync(request.TranslationJsonPath, cancellationToken));
-        if (existing == null)
-            throw new InvalidOperationException($"Failed to parse translation JSON: {request.TranslationJsonPath}");
+        var existing = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
 
         var updated = false;
         if (existing.Segments != null)
@@ -123,8 +134,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         var updatedResult = new TranslationResult(
             true, updatedSegments, sourceLanguage, targetLanguage, null);
 
-        await WriteTranslationArtifactFromHelperAsync(
-            existing, request.OutputJsonPath, cancellationToken);
+        await WriteTranslationArtifactAsync(existing, request.OutputJsonPath, cancellationToken);
 
         _log.Info($"[ContainerizedTranslation] Single-segment regen complete: {request.SegmentId}");
 
@@ -134,36 +144,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static async Task WriteTranslationArtifactAsync(
-        IReadOnlyList<TranslatedSegment> segments,
-        string sourceLanguage,
-        string targetLanguage,
-        string outputPath,
-        CancellationToken ct)
-    {
-        var artifactDir = Path.GetDirectoryName(outputPath);
-        if (!string.IsNullOrEmpty(artifactDir))
-            Directory.CreateDirectory(artifactDir);
-
-        var artifact = new
-        {
-            sourceLanguage,
-            targetLanguage,
-            segments = System.Linq.Enumerable.Select(segments, s => new
-            {
-                id            = SessionWorkflowCoordinator.SegmentId(s.StartSeconds),
-                start         = s.StartSeconds,
-                end           = s.EndSeconds,
-                text          = s.Text,
-                translatedText = s.TranslatedText,
-            }),
-        };
-
-        await File.WriteAllTextAsync(outputPath,
-            JsonSerializer.Serialize(artifact, WriteOptions), ct);
-    }
-
-    private static async Task WriteTranslationArtifactFromHelperAsync(
-        TranslationJsonHelper helper,
+        TranslationArtifact artifact,
         string outputPath,
         CancellationToken ct)
     {
@@ -172,11 +153,11 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
             Directory.CreateDirectory(artifactDir);
 
         await File.WriteAllTextAsync(outputPath,
-            JsonSerializer.Serialize(helper, WriteOptions), ct);
+            ArtifactJson.SerializeTranslation(artifact), ct);
     }
 
     private static IReadOnlyList<TranslatedSegment> BuildTranslatedSegments(
-        IEnumerable<TranslationJsonHelper.SegmentJsonHelper> helpers)
+        IEnumerable<TranslationSegmentArtifact> helpers)
     {
         var result = new List<TranslatedSegment>();
         foreach (var h in helpers)
@@ -184,8 +165,33 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         return result;
     }
 
+    private static TranslationArtifact CreateTranslationArtifact(
+        IReadOnlyList<TranslatedSegment> segments,
+        string sourceLanguage,
+        string targetLanguage)
+    {
+        var artifact = new TranslationArtifact
+        {
+            SourceLanguage = sourceLanguage,
+            TargetLanguage = targetLanguage,
+            Segments =
+            [
+                .. System.Linq.Enumerable.Select(segments, s => new TranslationSegmentArtifact
+                {
+                    Id = SessionWorkflowCoordinator.SegmentId(s.StartSeconds),
+                    Start = s.StartSeconds,
+                    End = s.EndSeconds,
+                    Text = s.Text,
+                    TranslatedText = s.TranslatedText,
+                })
+            ],
+        };
+
+        return artifact;
+    }
+
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
     {
-        return ContainerizedProviderReadiness.Check(settings, keyStore);
+        return ContainerizedProviderReadiness.CheckTranslation(settings, keyStore);
     }
 }

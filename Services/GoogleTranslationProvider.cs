@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
 using Babel.Player.Models;
-using Babel.Player.Services.Translations;
 
 namespace Babel.Player.Services;
 
@@ -77,18 +75,23 @@ asyncio.run(main())
 
         var result = await RunPythonScriptAsync(
             script,
-            $"\"{request.TranscriptJsonPath}\" \"{request.OutputJsonPath}\" \"{request.SourceLanguage}\" \"{request.TargetLanguage}\"",
+            [request.TranscriptJsonPath, request.OutputJsonPath, request.SourceLanguage, request.TargetLanguage],
             "translate",
-            cancellationToken);
+            cancellationToken: cancellationToken);
         ThrowIfFailed(result, "Translation");
 
         Log.Info($"Translation completed: {request.OutputJsonPath}");
 
-        var jsonContent = await File.ReadAllTextAsync(request.OutputJsonPath);
-        var translationData = TranslationJsonHelper.Parse(jsonContent);
+        var transcriptData = await ArtifactJson.LoadTranscriptAsync(request.TranscriptJsonPath, cancellationToken);
+        var translationData = await ArtifactJson.LoadTranslationAsync(request.OutputJsonPath, cancellationToken);
+        if (translationData.Segments?.Count != transcriptData.Segments?.Count)
+        {
+            throw new InvalidOperationException(
+                $"Translation artifact segment count mismatch: expected {transcriptData.Segments?.Count ?? 0}, got {translationData.Segments?.Count ?? 0}.");
+        }
 
         var segments = new List<TranslatedSegment>();
-        if (translationData?.Segments != null)
+        if (translationData.Segments != null)
         {
             Log.Info($"Translation JSON parsed: {translationData.Segments.Count} segments found");
             foreach (var seg in translationData.Segments)
@@ -109,8 +112,8 @@ asyncio.run(main())
         return new TranslationResult(
             true,
             segments,
-            translationData?.SourceLanguage ?? request.SourceLanguage,
-            translationData?.TargetLanguage ?? request.TargetLanguage,
+            translationData.SourceLanguage ?? request.SourceLanguage,
+            translationData.TargetLanguage ?? request.TargetLanguage,
             null);
     }
 
@@ -134,11 +137,11 @@ except ImportError:
     from googletrans import Translator
 
 async def main():
-    text       = sys.argv[1]
-    src_lang   = sys.argv[2]
-    tgt_lang   = sys.argv[3]
-    json_path  = sys.argv[4]
-    seg_id     = sys.argv[5]
+    src_lang   = sys.argv[1]
+    tgt_lang   = sys.argv[2]
+    json_path  = sys.argv[3]
+    seg_id     = sys.argv[4]
+    text       = sys.stdin.read()
 
     translator = Translator()
     try:
@@ -154,10 +157,16 @@ async def main():
     except FileNotFoundError:
         data = {'segments': []}
 
+    updated = False
     for seg in data.get('segments', []):
         if seg.get('id') == seg_id:
             seg['translatedText'] = translated_text
+            updated = True
             break
+
+    if not updated:
+        print(f'Segment not found: {seg_id}', file=sys.stderr)
+        sys.exit(1)
 
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -167,22 +176,22 @@ async def main():
 asyncio.run(main())
 ";
 
-        Log.Info($"Starting single segment translation: {request.SourceText.Substring(0, Math.Min(30, request.SourceText.Length))}...");
+        Log.Info($"Starting single segment translation: {request.SourceText[..Math.Min(30, request.SourceText.Length)]}...");
 
         var result = await RunPythonScriptAsync(
             script,
-            $"\"{request.SourceText}\" \"{request.SourceLanguage}\" \"{request.TargetLanguage}\" \"{request.TranslationJsonPath}\" \"{request.SegmentId}\"",
+            [request.SourceLanguage, request.TargetLanguage, request.TranslationJsonPath, request.SegmentId],
             "translate_seg",
-            cancellationToken);
+            standardInput: request.SourceText,
+            cancellationToken: cancellationToken);
         ThrowIfFailed(result, "Single segment translation");
 
         Log.Info($"Single segment translation completed: {request.TranslationJsonPath}");
 
-        var jsonContent = await File.ReadAllTextAsync(request.TranslationJsonPath);
-        var translationData = TranslationJsonHelper.Parse(jsonContent);
+        var translationData = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
 
         var segments = new List<TranslatedSegment>();
-        if (translationData?.Segments != null)
+        if (translationData.Segments != null)
         {
             foreach (var seg in translationData.Segments)
             {
@@ -197,8 +206,8 @@ asyncio.run(main())
         return new TranslationResult(
             true,
             segments,
-            translationData?.SourceLanguage ?? request.SourceLanguage,
-            translationData?.TargetLanguage ?? request.TargetLanguage,
+            translationData.SourceLanguage ?? request.SourceLanguage,
+            translationData.TargetLanguage ?? request.TargetLanguage,
             null);
     }
 

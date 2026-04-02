@@ -5,6 +5,7 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
@@ -25,12 +26,24 @@ public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessService
         var psi = new ProcessStartInfo
         {
             FileName = ffmpegPath,
-            Arguments = $"-i \"{videoPath}\" -vn -acodec pcm_s16le -ar 16000 -ac 1 -af \"loudnorm=I=-16:LRA=11:TP=-1.5\" -y \"{audioPath}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        psi.ArgumentList.Add("-i");
+        psi.ArgumentList.Add(videoPath);
+        psi.ArgumentList.Add("-vn");
+        psi.ArgumentList.Add("-acodec");
+        psi.ArgumentList.Add("pcm_s16le");
+        psi.ArgumentList.Add("-ar");
+        psi.ArgumentList.Add("16000");
+        psi.ArgumentList.Add("-ac");
+        psi.ArgumentList.Add("1");
+        psi.ArgumentList.Add("-af");
+        psi.ArgumentList.Add("loudnorm=I=-16:LRA=11:TP=-1.5");
+        psi.ArgumentList.Add("-y");
+        psi.ArgumentList.Add(audioPath);
 
         using var proc = Process.Start(psi);
         if (proc == null)
@@ -54,33 +67,37 @@ public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessService
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
         var inputPath = request.SourceAudioPath;
+        string? extractedAudioPath = null;
         var extension = Path.GetExtension(request.SourceAudioPath).ToLowerInvariant();
 
-        if (extension == ".mp4" || extension == ".avi" || extension == ".mkv" || extension == ".mov")
+        try
         {
-            inputPath = await ExtractAudioAsync(request.SourceAudioPath, cancellationToken);
-        }
-        else if (extension != ".wav" && extension != ".mp3" && extension != ".flac" && extension != ".ogg")
-        {
-            throw new InvalidOperationException($"Unsupported audio format: {extension}. Supported formats: wav, mp3, flac, ogg, mp4, avi, mkv, mov");
-        }
+            if (extension == ".mp4" || extension == ".avi" || extension == ".mkv" || extension == ".mov")
+            {
+                extractedAudioPath = await ExtractAudioAsync(request.SourceAudioPath, cancellationToken);
+                inputPath = extractedAudioPath;
+            }
+            else if (extension != ".wav" && extension != ".mp3" && extension != ".flac" && extension != ".ogg")
+            {
+                throw new InvalidOperationException($"Unsupported audio format: {extension}. Supported formats: wav, mp3, flac, ogg, mp4, avi, mkv, mov");
+            }
 
-        var cpuComputeType = string.IsNullOrWhiteSpace(request.CpuComputeType)
-            ? "int8"
-            : request.CpuComputeType;
-        var cpuThreads = request.CpuThreads;
-        var numWorkers = request.NumWorkers < 1 ? 1 : request.NumWorkers;
+            var cpuComputeType = string.IsNullOrWhiteSpace(request.CpuComputeType)
+                ? "int8"
+                : request.CpuComputeType;
+            var cpuThreads = request.CpuThreads;
+            var numWorkers = request.NumWorkers < 1 ? 1 : request.NumWorkers;
 
-        var modelNameLiteral = request.ModelName.Replace("\\", "\\\\").Replace("'", "\\'");
-        var cpuComputeTypeLiteral = cpuComputeType.Replace("\\", "\\\\").Replace("'", "\\'");
+            var modelNameLiteral = request.ModelName.Replace("\\", "\\\\").Replace("'", "\\'");
+            var cpuComputeTypeLiteral = cpuComputeType.Replace("\\", "\\\\").Replace("'", "\\'");
 
-        var whisperCtorArgs =
-            $"model_name, device='cpu', compute_type='{cpuComputeTypeLiteral}', num_workers={numWorkers}";
-        if (cpuThreads > 0)
-            whisperCtorArgs += $", cpu_threads={cpuThreads}";
+            var whisperCtorArgs =
+                $"model_name, device='cpu', compute_type='{cpuComputeTypeLiteral}', num_workers={numWorkers}";
+            if (cpuThreads > 0)
+                whisperCtorArgs += $", cpu_threads={cpuThreads}";
 
-        // model has already been validated against the whitelist by ProviderCapability before this call
-        var script = $@"
+            // model has already been validated against the whitelist by ProviderCapability before this call
+            var script = $@"
 import sys, json
 
 try:
@@ -116,51 +133,41 @@ with open(sys.argv[2], 'w', encoding='utf-8') as f:
 print('Transcription complete')
 ";
 
-    Log.Info($"Starting transcription of: {inputPath} [cpu compute={cpuComputeType}, threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, workers={numWorkers}]");
+            Log.Info($"Starting transcription of: {inputPath} [cpu compute={cpuComputeType}, threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, workers={numWorkers}]");
 
-        var result = await RunPythonScriptAsync(
-            script,
-            $"\"{inputPath}\" \"{request.OutputJsonPath}\"",
-            "transcribe",
-            cancellationToken);
-        ThrowIfFailed(result, "Transcription");
+            var result = await RunPythonScriptAsync(
+                script,
+                [inputPath, request.OutputJsonPath],
+                "transcribe",
+                cancellationToken: cancellationToken);
+            ThrowIfFailed(result, "Transcription");
 
-        Log.Info($"Transcription completed: {request.OutputJsonPath}");
+            Log.Info($"Transcription completed: {request.OutputJsonPath}");
 
-        var jsonContent = await File.ReadAllTextAsync(request.OutputJsonPath, cancellationToken);
-        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var transcriptionData = JsonSerializer.Deserialize<TranscriptionJson>(jsonContent, jsonOptions);
+            var transcriptionData = await ArtifactJson.LoadTranscriptAsync(request.OutputJsonPath, cancellationToken);
 
-        var segments = new List<TranscriptSegment>();
-        if (transcriptionData?.Segments != null)
-        {
-            foreach (var seg in transcriptionData.Segments)
+            var segments = new List<TranscriptSegment>();
+            foreach (var seg in transcriptionData.Segments ?? [])
             {
-                if (!string.IsNullOrEmpty(seg.Text))
+                if (!string.IsNullOrWhiteSpace(seg.Text))
                     segments.Add(new TranscriptSegment(seg.Start, seg.End, seg.Text));
             }
+
+            return new TranscriptionResult(
+                true,
+                segments,
+                transcriptionData.Language ?? "unknown",
+                transcriptionData.LanguageProbability,
+                null);
         }
-
-        return new TranscriptionResult(
-            true,
-            segments,
-            transcriptionData?.Language ?? "unknown",
-            transcriptionData?.LanguageProbability ?? 0.0,
-            null);
-    }
-
-    private class TranscriptionJson
-    {
-        public string? Language { get; set; }
-        public double LanguageProbability { get; set; }
-        public List<SegmentJson>? Segments { get; set; }
-    }
-
-    private class SegmentJson
-    {
-        public double Start { get; set; }
-        public double End { get; set; }
-        public string? Text { get; set; }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(extractedAudioPath) && File.Exists(extractedAudioPath))
+            {
+                File.Delete(extractedAudioPath);
+                Log.Info($"Deleted temporary extracted audio: {extractedAudioPath}");
+            }
+        }
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)

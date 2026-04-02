@@ -94,13 +94,38 @@ class HealthResponse(BaseModel):
     cuda_available: bool
     cuda_version: Optional[str] = None
 
+class StageCapability(BaseModel):
+    ready: bool
+    detail: Optional[str] = None
+
+class CapabilitiesResponse(BaseModel):
+    transcription: StageCapability
+    translation: StageCapability
+    tts: StageCapability
+
 # ============================================================================
 # Health Check
 # ============================================================================
 
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint with GPU info."""
+def get_stage_capabilities() -> CapabilitiesResponse:
+    return CapabilitiesResponse(
+        transcription=StageCapability(
+            ready=True,
+            detail="faster-whisper available; model loads on demand",
+        ),
+        translation=StageCapability(
+            ready=True,
+            detail="googletrans available",
+        ),
+        tts=StageCapability(
+            ready=True,
+            detail="edge-tts available",
+        ),
+    )
+
+@app.get("/health/live", response_model=HealthResponse)
+async def health_live():
+    """Liveness endpoint with basic CUDA info."""
     try:
         cuda_available = torch.cuda.is_available()
         cuda_version = torch.version.cuda if cuda_available else None
@@ -113,6 +138,20 @@ async def health_check():
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    """Backward-compatible health alias."""
+    return await health_live()
+
+@app.get("/capabilities", response_model=CapabilitiesResponse)
+async def capabilities():
+    """Stage-specific readiness details for the desktop app."""
+    try:
+        return get_stage_capabilities()
+    except Exception as e:
+        logger.error(f"Capability probe failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
@@ -243,18 +282,21 @@ async def translate(
         # Translate each segment
         trans = get_translator()
         translated_segments = []
+        failures = []
         
-        for seg in segments:
+        for index, seg in enumerate(segments):
             text = seg.get("text", "")
             translated_text = ""
             
             if text:
                 try:
-                    result = trans.translate(text, src_lang=source_language, dest_lang=target_language)
+                    result = trans.translate(text, src=source_language, dest=target_language)
                     translated_text = result.text if result else ""
                 except Exception as e:
-                    logger.warning(f"Failed to translate segment: {e}")
-                    translated_text = text  # Fallback to original
+                    segment_label = seg.get("start", index)
+                    logger.error(f"Failed to translate segment {segment_label}: {e}")
+                    failures.append(f"segment {segment_label}: {e}")
+                    continue
             
             translated_segments.append(TranslatedSegment(
                 start=seg.get("start", 0),
@@ -262,6 +304,11 @@ async def translate(
                 text=text,
                 translated_text=translated_text
             ))
+
+        if failures:
+            raise RuntimeError(
+                "Translation failed; no fallback was applied. " + "; ".join(failures)
+            )
         
         logger.info(f"Translation complete: {len(translated_segments)} segments translated")
         

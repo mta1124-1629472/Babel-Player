@@ -1,5 +1,5 @@
-# Single-stage build for inference service
-FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
+# Dev/local build for the external inference service consumed by the desktop app.
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -22,16 +22,16 @@ RUN pip install --upgrade pip setuptools wheel
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --pre \
-    torch \
-    --index-url https://download.pytorch.org/whl/nightly/cu124 && \
-    pip install --no-cache-dir torchaudio==2.5.1 && \
+RUN pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cu124 \
+    torch==2.5.1 \
+    torchaudio==2.5.1 && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "import sys; import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5); sys.exit(0)" || exit 1
+    CMD python3 -c "import sys; import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=5); sys.exit(0)" || exit 1
 
 EXPOSE 8000
 

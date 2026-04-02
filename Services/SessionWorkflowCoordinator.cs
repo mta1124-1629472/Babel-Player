@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -19,6 +18,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly AppLog _log;
     private readonly PerSessionSnapshotStore _perSessionStore;
     private readonly RecentSessionsStore _recentStore;
+    private readonly SessionArtifactReader _artifactReader;
+    private readonly SessionSwitchService _sessionSwitchService;
     public ITranscriptionRegistry TranscriptionRegistry { get; }
     public ITranslationRegistry TranslationRegistry { get; }
     public ITtsRegistry TtsRegistry { get; }
@@ -26,7 +27,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
 
-    private readonly MediaTransportManager _transportManager;
+    private readonly IMediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
     private readonly EventHandler _segmentEndedHandler;
     private readonly EventHandler<Exception> _segmentErrorHandler;
@@ -61,6 +62,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private InferenceMode _inferenceMode = InferenceMode.SubprocessCpu;
 
+    [ObservableProperty]
+    private MediaReloadRequest? _pendingMediaReloadRequest;
+
     public bool HasRecentSessions => RecentSessions.Count > 0;
 
     public AppSettings CurrentSettings { get; private set; }
@@ -82,20 +86,53 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         ITranscriptionRegistry transcriptionRegistry,
         ITranslationRegistry translationRegistry,
         ITtsRegistry ttsRegistry,
+        IMediaTransport? segmentPlayer,
+        IMediaTransport? sourcePlayer,
+        ApiKeyStore? keyStore = null)
+        : this(
+            store,
+            log,
+            settings,
+            perSessionStore,
+            recentStore,
+            transcriptionRegistry,
+            translationRegistry,
+            ttsRegistry,
+            transportManager: null,
+            segmentPlayer: segmentPlayer,
+            sourcePlayer: sourcePlayer,
+            keyStore: keyStore)
+    {
+    }
+
+    public SessionWorkflowCoordinator(
+        SessionSnapshotStore store,
+        AppLog log,
+        AppSettings settings,
+        PerSessionSnapshotStore perSessionStore,
+        RecentSessionsStore recentStore,
+        ITranscriptionRegistry transcriptionRegistry,
+        ITranslationRegistry translationRegistry,
+        ITtsRegistry ttsRegistry,
+        IMediaTransportManager? transportManager = null,
         IMediaTransport? segmentPlayer = null,
         IMediaTransport? sourcePlayer = null,
-        ApiKeyStore? keyStore = null)
+        ApiKeyStore? keyStore = null,
+        SessionArtifactReader? artifactReader = null,
+        SessionSwitchService? sessionSwitchService = null)
     {
         _store = store;
         _log = log;
         _perSessionStore = perSessionStore;
         _recentStore = recentStore;
+        _artifactReader = artifactReader ?? new SessionArtifactReader();
+        _sessionSwitchService = sessionSwitchService ?? new SessionSwitchService(perSessionStore, recentStore, log);
         TranscriptionRegistry = transcriptionRegistry;
         TranslationRegistry = translationRegistry;
         TtsRegistry = ttsRegistry;
         CurrentSettings = settings;
         KeyStore = keyStore;
-        _transportManager = new MediaTransportManager(
+        _transportManager = transportManager ?? new MediaTransportManager(
             segmentPlayer,
             sourcePlayer,
             new VideoPlaybackOptions(
@@ -131,6 +168,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         if (ttsProviderChanged) _ttsService = null;
     }
 
+    public MediaReloadRequest? ConsumePendingMediaReloadRequest()
+    {
+        var request = PendingMediaReloadRequest;
+        PendingMediaReloadRequest = null;
+        return request;
+    }
+
     private ITranslationProvider CreateTranslationService() =>
         TranslationRegistry.CreateProvider(CurrentSettings.TranslationProvider, CurrentSettings, KeyStore);
 
@@ -154,6 +198,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Call after any in-place mutation of CurrentSettings.
     /// </summary>
     public void NotifySettingsModified() => SettingsModified?.Invoke();
+
+    private void QueueMediaReloadRequest(bool autoPlay, string reason)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
+            return;
+
+        PendingMediaReloadRequest = new MediaReloadRequest(
+            CurrentSession.IngestedMediaPath,
+            autoPlay,
+            reason);
+    }
 
     private IMediaTransport GetOrCreateSegmentPlayer()
     {
@@ -320,12 +375,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         PersistenceStatus = loadResult.StatusMessage;
         RecentSessions = _recentStore.Load();
         _log.Info(SessionSource);
+        if (CurrentSession.Stage >= SessionWorkflowStage.MediaLoaded)
+            QueueMediaReloadRequest(autoPlay: false, "initialize");
         SaveCurrentSession();
     }
 
     public BootstrapWarmupData GatherBootstrapWarmupData()
     {
-        var diagnostics = BootstrapDiagnostics.Run(CurrentSettings.ContainerizedServiceUrl);
+        var diagnostics = BootstrapDiagnostics.Run(CurrentSettings.EffectiveContainerizedServiceUrl);
         var snapshots = _perSessionStore.LoadAll();
         var inferenceMode = ResolveInferenceMode(diagnostics);
         return new BootstrapWarmupData(diagnostics, snapshots, inferenceMode);
@@ -368,15 +425,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         // Stash current snapshot before switching — persist to disk so it survives restart.
         if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
         {
-            CacheMediaSnapshot(MediaKey(CurrentSession.SourceMediaPath), CurrentSession);
-            _perSessionStore.Save(CurrentSession);
-            _recentStore.Upsert(new RecentSessionEntry(
-                CurrentSession.SessionId,
-                CurrentSession.SourceMediaPath,
-                Path.GetFileName(CurrentSession.SourceMediaPath),
-                CurrentSession.Stage,
-                CurrentSession.LastUpdatedAtUtc));
-            RecentSessions = _recentStore.Load();
+            RecentSessions = _sessionSwitchService.StashCurrentSession(
+                CurrentSession,
+                _mediaSnapshotCache,
+                MediaSnapshotCacheLimit);
         }
 
         var newKey = MediaKey(sourceMediaPath);
@@ -384,13 +436,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             && !string.Equals(MediaKey(CurrentSession.SourceMediaPath), newKey,
                               StringComparison.OrdinalIgnoreCase);
 
-        if (switchingMedia && _mediaSnapshotCache.TryGetValue(newKey, out var cached))
+        var cached = switchingMedia
+            ? _sessionSwitchService.LoadSessionForMedia(sourceMediaPath, _mediaSnapshotCache)
+            : null;
+        if (cached is not null)
         {
             // Returning to a previously processed media — restore, validate, then copy into
             // that session's existing directory.
             var validated = ValidateArtifacts(cached);
 
-            var sessionDir = SessionDirectoryFor(validated.SessionId);
+            var sessionDir = _sessionSwitchService.GetSessionDirectory(validated.SessionId);
             var mediaDir = Path.Combine(sessionDir, "media");
             Directory.CreateDirectory(mediaDir);
             var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(sourceMediaPath));
@@ -408,7 +463,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                         ? "Restored translation. Ready for TTS/dubbing."
                         : validated.Stage >= SessionWorkflowStage.Transcribed
                             ? "Restored transcript. Ready for translation."
-                            : "Media loaded. Ready for transcription.",
+                    : "Media loaded. Ready for transcription.",
             };
             _log.Info($"Restored cached session for: {sourceMediaPath} (stage: {CurrentSession.Stage})");
         }
@@ -420,7 +475,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             // session is promoted rather than orphaned.
             var newSessionId = switchingMedia ? Guid.NewGuid() : CurrentSession.SessionId;
 
-            var sessionDir = SessionDirectoryFor(newSessionId);
+            var sessionDir = _sessionSwitchService.GetSessionDirectory(newSessionId);
             var mediaDir = Path.Combine(sessionDir, "media");
             Directory.CreateDirectory(mediaDir);
             var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(sourceMediaPath));
@@ -449,10 +504,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             };
         }
 
+        QueueMediaReloadRequest(autoPlay: true, "media-switch");
         SaveCurrentSession();
     }
 
-    private static string MediaKey(string path) => Path.GetFullPath(path);
+    internal static string MediaKey(string path) => Path.GetFullPath(path);
 
     private const int MediaSnapshotCacheLimit = 20;
 
@@ -462,12 +518,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// </summary>
     private void CacheMediaSnapshot(string key, WorkflowSessionSnapshot snapshot)
     {
-        _mediaSnapshotCache[key] = snapshot;
-        if (_mediaSnapshotCache.Count > MediaSnapshotCacheLimit)
-        {
-            var oldest = _mediaSnapshotCache.Keys.First();
-            _mediaSnapshotCache.Remove(oldest);
-        }
+        _sessionSwitchService.CacheCurrentSession(
+            key,
+            snapshot,
+            _mediaSnapshotCache,
+            MediaSnapshotCacheLimit);
     }
 
     private static WorkflowSessionSnapshot ValidateArtifacts(WorkflowSessionSnapshot s)
@@ -662,6 +717,93 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
+    public void ClearPipeline()
+    {
+        ResetPipelineToMediaLoaded();
+        InvalidateAllProviderCaches();
+    }
+
+    public PipelineSettingsApplyResult ApplyPipelineSettings(PipelineSettingsSelection selection)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranscriptionProvider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranscriptionModel);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranslationProvider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranslationModel);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TtsProvider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TtsVoice);
+
+        var transcriptionProviderChanged =
+            !string.Equals(CurrentSettings.TranscriptionProvider, selection.TranscriptionProvider, StringComparison.Ordinal) ||
+            !string.Equals(CurrentSettings.TranscriptionModel, selection.TranscriptionModel, StringComparison.Ordinal);
+        var translationProviderChanged =
+            !string.Equals(CurrentSettings.TranslationProvider, selection.TranslationProvider, StringComparison.Ordinal) ||
+            !string.Equals(CurrentSettings.TranslationModel, selection.TranslationModel, StringComparison.Ordinal) ||
+            (!string.IsNullOrWhiteSpace(selection.TargetLanguage) &&
+             !string.Equals(CurrentSettings.TargetLanguage, selection.TargetLanguage, StringComparison.Ordinal));
+        var ttsProviderChanged =
+            !string.Equals(CurrentSettings.TtsProvider, selection.TtsProvider, StringComparison.Ordinal) ||
+            !string.Equals(CurrentSettings.TtsVoice, selection.TtsVoice, StringComparison.Ordinal);
+
+        var settingsChanged = transcriptionProviderChanged || translationProviderChanged || ttsProviderChanged;
+        if (!settingsChanged)
+        {
+            return new PipelineSettingsApplyResult(
+                PipelineInvalidation.None,
+                CurrentSession.Stage,
+                false,
+                CurrentSession.StatusMessage);
+        }
+
+        CurrentSettings.TranscriptionProvider = selection.TranscriptionProvider;
+        CurrentSettings.TranscriptionModel = selection.TranscriptionModel;
+        CurrentSettings.TranslationProvider = selection.TranslationProvider;
+        CurrentSettings.TranslationModel = selection.TranslationModel;
+        CurrentSettings.TtsProvider = selection.TtsProvider;
+        CurrentSettings.TtsVoice = selection.TtsVoice;
+        if (!string.IsNullOrWhiteSpace(selection.TargetLanguage))
+            CurrentSettings.TargetLanguage = selection.TargetLanguage;
+
+        if (transcriptionProviderChanged) _transcriptionService = null;
+        if (translationProviderChanged) _translationService = null;
+        if (ttsProviderChanged) _ttsService = null;
+
+        var invalidation = CheckSettingsInvalidation();
+        var statusMessage = invalidation switch
+        {
+            PipelineInvalidation.Transcription => "Transcription settings changed — pipeline reset to media-loaded state.",
+            PipelineInvalidation.Translation => "Translation settings changed — pipeline reset to transcript state.",
+            PipelineInvalidation.Tts => "TTS settings changed — pipeline reset to translation state.",
+            _ => "Pipeline settings updated."
+        };
+
+        switch (invalidation)
+        {
+            case PipelineInvalidation.Transcription:
+                ResetPipelineToMediaLoaded();
+                CurrentSession = CurrentSession with { StatusMessage = statusMessage };
+                SaveCurrentSession();
+                break;
+            case PipelineInvalidation.Translation:
+                ResetPipelineToTranscribed();
+                CurrentSession = CurrentSession with { StatusMessage = statusMessage };
+                SaveCurrentSession();
+                break;
+            case PipelineInvalidation.Tts:
+                ResetPipelineToTranslated();
+                CurrentSession = CurrentSession with { StatusMessage = statusMessage };
+                SaveCurrentSession();
+                break;
+        }
+
+        NotifySettingsModified();
+
+        return new PipelineSettingsApplyResult(
+            invalidation,
+            CurrentSession.Stage,
+            true,
+            statusMessage);
+    }
+
     public async Task TranslateTranscriptAsync(IProgress<double>? progress = null, string? targetLanguage = null, string? sourceLanguage = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranscriptPath))
@@ -789,17 +931,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         int totalSegments = 0;
         try
         {
-            var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath, cancellationToken);
-            var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
-            // NOTE: "segments", "id", "translatedText" — these property names are part of an explicit
-            // Python/C# artifact contract. Must match GoogleTranslationProvider.py output exactly.
-            var segments = translationData.GetProperty("segments");
+            var translationData = await _artifactReader.LoadTranslationAsync(CurrentSession.TranslationPath, cancellationToken);
 
-            foreach (var seg in segments.EnumerateArray())
+            foreach (var seg in translationData.Segments ?? [])
             {
-                var id = seg.GetProperty("id").GetString();
-                var textProp = seg.GetProperty("translatedText");
-                var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
+                var id = seg.Id;
+                var text = seg.TranslatedText;
 
                 if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(id))
                 {
@@ -883,23 +1020,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
-        var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
-        
-        // NOTE: "segments", "id", "translatedText" — Python/C# artifact contract.
-        var segments = translationData.GetProperty("segments");
-        string? segmentText = null;
-        
-        foreach (var seg in segments.EnumerateArray())
-        {
-            var id = seg.GetProperty("id").GetString();
-            if (id == segmentId)
-            {
-                var textProp = seg.GetProperty("translatedText");
-                segmentText = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
-                break;
-            }
-        }
+        var segmentText = await _artifactReader.GetTranslatedTextAsync(CurrentSession.TranslationPath, segmentId);
 
         if (string.IsNullOrEmpty(segmentText))
         {
@@ -959,23 +1080,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
-        var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
-        
-        // NOTE: "segments", "id", "text" — Python/C# artifact contract.
-        var segments = translationData.GetProperty("segments");
-        string? sourceText = null;
-        
-        foreach (var seg in segments.EnumerateArray())
-        {
-            var id = seg.GetProperty("id").GetString();
-            if (id == segmentId)
-            {
-                var textProp = seg.GetProperty("text");
-                sourceText = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
-                break;
-            }
-        }
+        var sourceText = await _artifactReader.GetSourceTextAsync(CurrentSession.TranslationPath, segmentId);
 
         if (string.IsNullOrEmpty(sourceText))
         {
@@ -1016,74 +1121,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public async Task<List<WorkflowSegmentState>> GetSegmentWorkflowListAsync()
     {
-        if (string.IsNullOrEmpty(CurrentSession.TranscriptPath) || !File.Exists(CurrentSession.TranscriptPath))
-        {
-            return new List<WorkflowSegmentState>();
-        }
-
-        var segments = new List<WorkflowSegmentState>();
-
-        // NOTE: Transcript JSON format (from FasterWhisperTranscriptionProvider) — Python/C# artifact contract:
-        // "segments", "start", "end", "text"
-        var transcriptJson = await File.ReadAllTextAsync(CurrentSession.TranscriptPath);
-        var transcriptData = JsonSerializer.Deserialize<JsonElement>(transcriptJson);
-        var transcriptSegments = transcriptData.GetProperty("segments");
-
-        var ttsSegmentPaths = CurrentSession.TtsSegmentAudioPaths;
-
-        // NOTE: Translation JSON format (from GoogleTranslationProvider) — Python/C# artifact contract:
-        // "segments", "id", "text", "translatedText"
-        Dictionary<string, string>? translationTexts = null;
-        if (!string.IsNullOrEmpty(CurrentSession.TranslationPath) && File.Exists(CurrentSession.TranslationPath))
-        {
-            translationTexts = new Dictionary<string, string>();
-            var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
-            var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
-            var translationSegments = translationData.GetProperty("segments");
-
-            foreach (var seg in translationSegments.EnumerateArray())
-            {
-                var id = seg.GetProperty("id").GetString();
-                if (id != null)
-                {
-                    var textProp = seg.GetProperty("translatedText");
-                    var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
-                    // Only count non-empty translations; empty string means the translation call failed.
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        translationTexts[id] = text;
-                    }
-                }
-            }
-        }
-
-        foreach (var seg in transcriptSegments.EnumerateArray())
-        {
-            var start = seg.GetProperty("start").GetDouble();
-            var id = SegmentId(start);
-
-            var end = seg.GetProperty("end").GetDouble();
-
-            var textProp = seg.GetProperty("text");
-            var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() ?? "" : "";
-
-            string? translatedText = null;
-            var hasTranslation = translationTexts != null && translationTexts.TryGetValue(id, out translatedText);
-            var hasTtsAudio = ttsSegmentPaths != null
-                && ttsSegmentPaths.TryGetValue(id, out var audioPath)
-                && File.Exists(audioPath);
-
-            segments.Add(new WorkflowSegmentState(
-                id,
-                start,
-                end,
-                text,
-                hasTranslation,
-                translatedText,
-                hasTtsAudio));
-        }
-
-        return segments;
+        return [.. await _artifactReader.BuildWorkflowSegmentsAsync(CurrentSession)];
     }
 
     // Stable segment ID derived from start time — must match the format written by GoogleTranslationProvider.
@@ -1096,18 +1134,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private string GetSessionDirectory() => SessionDirectoryFor(CurrentSession.SessionId);
 
     private string SessionDirectoryFor(Guid sessionId) =>
-        _perSessionStore.GetSessionDirectory(sessionId);
+        _sessionSwitchService.GetSessionDirectory(sessionId);
 
     /// <summary>
     /// Restores a previously-opened session by ID, stashing the current one first.
-    /// The caller is responsible for reloading the video transport after this returns.
+    /// The coordinator queues a declarative media reload request for the view layer.
     /// </summary>
     public void RestoreSession(Guid sessionId)
     {
         // Try in-memory cache first, then fall back to disk.
-        WorkflowSessionSnapshot? restored =
-            _mediaSnapshotCache.Values.FirstOrDefault(s => s.SessionId == sessionId)
-            ?? _perSessionStore.Load(sessionId);
+        var restored = _sessionSwitchService.LoadSession(sessionId, _mediaSnapshotCache);
 
         if (restored is null)
         {
@@ -1118,14 +1154,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         // Stash and persist the current session before switching.
         if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
         {
-            CacheMediaSnapshot(MediaKey(CurrentSession.SourceMediaPath), CurrentSession);
-            _perSessionStore.Save(CurrentSession);
-            _recentStore.Upsert(new RecentSessionEntry(
-                CurrentSession.SessionId,
-                CurrentSession.SourceMediaPath,
-                Path.GetFileName(CurrentSession.SourceMediaPath),
-                CurrentSession.Stage,
-                CurrentSession.LastUpdatedAtUtc));
+            RecentSessions = _sessionSwitchService.StashCurrentSession(
+                CurrentSession,
+                _mediaSnapshotCache,
+                MediaSnapshotCacheLimit);
         }
 
         var validated = ValidateArtifacts(restored);
@@ -1145,6 +1177,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         };
 
         _log.Info($"Restored session {sessionId} (stage: {CurrentSession.Stage}).");
+        QueueMediaReloadRequest(autoPlay: false, "session-restore");
         SaveCurrentSession();
         RecentSessions = _recentStore.Load();
     }

@@ -1,8 +1,8 @@
 using System;
 using System.IO;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
@@ -58,28 +58,28 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider
         if (!string.IsNullOrEmpty(artifactDir))
             Directory.CreateDirectory(artifactDir);
 
-        var transcript = new
+        var transcript = new TranscriptArtifact
         {
-            language = result.Language,
-            language_probability = result.LanguageProbability,
-            segments = System.Linq.Enumerable.Select(result.Segments, s => new
-            {
-                start = s.StartSeconds,
-                end = s.EndSeconds,
-                text = s.Text,
-            }),
+            Language = result.Language,
+            LanguageProbability = result.LanguageProbability,
+            Segments =
+            [
+                .. System.Linq.Enumerable.Select(result.Segments, s => new TranscriptSegmentArtifact
+                {
+                    Start = s.StartSeconds,
+                    End = s.EndSeconds,
+                    Text = s.Text,
+                })
+            ],
         };
 
-        var json = JsonSerializer.Serialize(transcript, new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(request.OutputJsonPath, json, cancellationToken);
+        await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(transcript), cancellationToken);
 
         _log.Info($"[ContainerizedTranscription] Complete: {result.Segments.Count} segments, lang={result.Language}");
 
         return result;
     }
 
-    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
-    {
-        return ContainerizedProviderReadiness.Check(settings, keyStore);
-    }
+    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
+        ContainerizedProviderReadiness.CheckTranscription(settings, keyStore);
 }

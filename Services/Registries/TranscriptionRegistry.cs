@@ -86,7 +86,7 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
         {
             ProviderNames.FasterWhisper => new FasterWhisperTranscriptionProvider(_log),
             ProviderNames.ContainerizedService => new ContainerizedTranscriptionProvider(
-                new ContainerizedInferenceClient(settings.ContainerizedServiceUrl, _log), _log),
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log), _log),
             _ => throw new PipelineProviderException(
                 $"Transcription provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

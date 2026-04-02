@@ -100,11 +100,13 @@ They become important when:
 
 Until then, the codebase should stay container-compatible without requiring containers.
 
-Current implementation note:
+Current supported implementation:
 
-- if a containerized provider is selected and the configured service URL points at `localhost`, the desktop app may attempt to start the repo's `docker compose` inference service automatically during startup
-- if the URL points at a remote host, the app only probes health; it does not try to launch anything locally
-- provider readiness must reflect live service health, not just URL presence
+- the only supported container path right now is an external/local inference service consumed over HTTP
+- the desktop app does not try to launch Docker, WSL, or another host runtime for you
+- `INFERENCE_SERVICE_URL` overrides the saved service URL at startup when present
+- provider readiness is based on `GET /health/live` plus `GET /capabilities`, not URL presence alone
+- the repo `docker-compose.yml` is a dev-only helper for the inference service; it is not a desktop-app deployment story
 
 ---
 

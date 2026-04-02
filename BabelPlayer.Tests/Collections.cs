@@ -11,3 +11,8 @@ public sealed class MediaTransportCollection
 public sealed class SessionWorkflowSharedCollection : ICollectionFixture<SessionWorkflowTemplateFixture>
 {
 }
+
+[CollectionDefinition("Environment", DisableParallelization = true)]
+public sealed class EnvironmentCollection
+{
+}

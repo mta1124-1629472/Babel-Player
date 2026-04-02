@@ -167,6 +167,21 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         Assert.Contains("transcription", coord.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void LoadMedia_ValidFile_QueuesAutoPlayMediaReloadRequest()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        var request = coord.ConsumePendingMediaReloadRequest();
+        Assert.NotNull(request);
+        Assert.True(request!.AutoPlay);
+        Assert.Equal(coord.CurrentSession.IngestedMediaPath, request.IngestedMediaPath);
+    }
+
     // ── ResetPipeline* ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -448,6 +463,72 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
 
         var invalidation = coord2.CheckSettingsInvalidation();
         Assert.Equal(PipelineInvalidation.Transcription, invalidation);
+    }
+
+    [Fact]
+    public void ApplyPipelineSettings_TranscriptionChange_ResetsPipelineAndRaisesSettingsModified()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+
+        var transcriptPath = CreateTempFile("{\"language\":\"es\",\"language_probability\":1.0,\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"hola\"}]}");
+        var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
+        _store.Save(coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+            SourceLanguage = "es",
+            TargetLanguage = _settings.TargetLanguage,
+            TranscriptionProvider = _settings.TranscriptionProvider,
+            TranscriptionModel = _settings.TranscriptionModel,
+            TranslationProvider = _settings.TranslationProvider,
+            TranslationModel = _settings.TranslationModel,
+            TtsProvider = _settings.TtsProvider,
+            TtsVoice = _settings.TtsVoice,
+        });
+
+        var coord2 = CreateCoordinator();
+        coord2.Initialize();
+
+        var settingsModified = false;
+        coord2.SettingsModified += () => settingsModified = true;
+
+        var result = coord2.ApplyPipelineSettings(new PipelineSettingsSelection(
+            ProviderNames.ContainerizedService,
+            "base",
+            _settings.TranslationProvider,
+            _settings.TranslationModel,
+            _settings.TtsProvider,
+            _settings.TtsVoice,
+            _settings.TargetLanguage));
+
+        Assert.True(settingsModified);
+        Assert.Equal(PipelineInvalidation.Transcription, result.Invalidation);
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, coord2.CurrentSession.Stage);
+        Assert.Null(coord2.CurrentSession.TranscriptPath);
+        Assert.Null(coord2.CurrentSession.TranslationPath);
+    }
+
+    [Fact]
+    public void RestoreSession_QueuesPausedMediaReloadRequest()
+    {
+        if (!File.Exists(_mediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_mediaPath);
+        coord.ConsumePendingMediaReloadRequest();
+
+        coord.RestoreSession(coord.CurrentSession.SessionId);
+
+        var request = coord.ConsumePendingMediaReloadRequest();
+        Assert.NotNull(request);
+        Assert.False(request!.AutoPlay);
+        Assert.Equal(coord.CurrentSession.IngestedMediaPath, request.IngestedMediaPath);
     }
 
     // ── SegmentId ─────────────────────────────────────────────────────────────

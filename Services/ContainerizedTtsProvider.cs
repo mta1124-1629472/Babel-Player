@@ -1,8 +1,8 @@
 using System;
 using System.IO;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
@@ -19,8 +19,6 @@ public sealed class ContainerizedTtsProvider : ITtsProvider
 {
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
-
-    private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
 
     public ContainerizedTtsProvider(ContainerizedInferenceClient client, AppLog log)
     {
@@ -59,15 +57,12 @@ public sealed class ContainerizedTtsProvider : ITtsProvider
         _log.Info($"[ContainerizedTts] Generating combined TTS (voice: {request.VoiceName})");
 
         // Read all translated segments and concatenate their text for combined output.
-        var json = await File.ReadAllTextAsync(request.TranslationJsonPath, cancellationToken);
-        var doc = JsonSerializer.Deserialize<JsonElement>(json);
-        var segments = doc.GetProperty("segments");
+        var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
 
         var parts = new System.Collections.Generic.List<string>();
-        foreach (var seg in segments.EnumerateArray())
+        foreach (var seg in translation.Segments ?? [])
         {
-            var textProp = seg.GetProperty("translatedText");
-            var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
+            var text = seg.TranslatedText;
             if (!string.IsNullOrWhiteSpace(text))
                 parts.Add(text!);
         }
@@ -108,8 +103,6 @@ public sealed class ContainerizedTtsProvider : ITtsProvider
         await _client.DownloadTtsAudioAsync(filename, localOutputPath, ct);
     }
 
-    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
-    {
-        return ContainerizedProviderReadiness.Check(settings, keyStore);
-    }
+    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
+        ContainerizedProviderReadiness.CheckTts(settings, keyStore);
 }

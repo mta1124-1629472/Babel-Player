@@ -11,18 +11,19 @@ namespace Babel.Player.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly SettingsService _settingsService;
-    private readonly ApiKeyStore? _apiKeyStore;
+    private readonly ModelDownloader _modelDownloader;
 
     public MainWindowViewModel(
         SessionWorkflowCoordinator coordinator,
         SettingsService settingsService,
+        ModelDownloader modelDownloader,
         ApiKeyStore? apiKeyStore = null,
         IErrorDialogService? errorDialogService = null,
         string? logFilePath = null)
     {
         Coordinator = coordinator;
         _settingsService = settingsService;
-        _apiKeyStore = apiKeyStore;
+        _modelDownloader = modelDownloader;
 
         Playback = new EmbeddedPlaybackViewModel(coordinator, apiKeyStore, errorDialogService, logFilePath);
         Inspection = new SegmentInspectionViewModel(Playback);
@@ -44,6 +45,13 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>Returns the settings service and current settings for constructing a <see cref="SettingsViewModel"/>.</summary>
     public (SettingsService Service, AppSettings Current) GetSettingsContext() =>
         (_settingsService, Coordinator.CurrentSettings);
+
+    public SettingsViewModel CreateSettingsViewModel(Avalonia.Controls.Window ownerWindow) =>
+        new(
+            _settingsService,
+            Coordinator,
+            ownerWindow,
+            new ModelsTabViewModel(_modelDownloader, Coordinator));
 
     [RelayCommand]
     private void RestoreSession(RecentSessionEntry entry) =>

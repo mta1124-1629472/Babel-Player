@@ -8,7 +8,6 @@ using Avalonia.Threading;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.ViewModels;
-using Babel.Player.Services.Credentials;
 
 namespace Babel.Player.Views;
 
@@ -23,6 +22,7 @@ public partial class MainWindow : Window
 
     // Cached handler refs so we can unsubscribe in OnClosed.
     private PropertyChangedEventHandler? _playbackPropertyChangedHandler;
+    private PropertyChangedEventHandler? _coordinatorPropertyChangedHandler;
     private EventHandler<PointerEventArgs>? _videoOverlayPointerMovedHandler;
 
     public MainWindow()
@@ -50,6 +50,8 @@ public partial class MainWindow : Window
         {
             _playbackPropertyChangedHandler = OnPlaybackPropertyChanged;
             vm.Playback.PropertyChanged += _playbackPropertyChangedHandler;
+            _coordinatorPropertyChangedHandler = OnCoordinatorPropertyChanged;
+            vm.Coordinator.PropertyChanged += _coordinatorPropertyChangedHandler;
 
             // Subscribe to PointerMoved on the transparent overlay Panel that sits above the
             // NativeControlHost (MpvVideoView). The native Win32 HWND does not bubble Avalonia
@@ -82,6 +84,8 @@ public partial class MainWindow : Window
         {
             if (_playbackPropertyChangedHandler is not null)
                 vm.Playback.PropertyChanged -= _playbackPropertyChangedHandler;
+            if (_coordinatorPropertyChangedHandler is not null)
+                vm.Coordinator.PropertyChanged -= _coordinatorPropertyChangedHandler;
 
             var overlay = this.FindControl<Panel>("VideoOverlayPanel");
             if (overlay is not null && _videoOverlayPointerMovedHandler is not null)
@@ -89,6 +93,7 @@ public partial class MainWindow : Window
         }
 
         _playbackPropertyChangedHandler = null;
+        _coordinatorPropertyChangedHandler = null;
         _videoOverlayPointerMovedHandler = null;
     }
 
@@ -112,6 +117,12 @@ public partial class MainWindow : Window
                     WindowState = vm.Playback.IsFullscreen ? WindowState.FullScreen : WindowState.Normal;
                 break;
         }
+    }
+
+    private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SessionWorkflowCoordinator.PendingMediaReloadRequest))
+            TryApplyPendingMediaReloadRequest();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -178,7 +189,7 @@ public partial class MainWindow : Window
                 {
                     _embeddedTransport = embedded;
                     embedded.AttachToWindow(hwnd);
-                    LoadMediaIntoPlayer();
+                    TryApplyPendingMediaReloadRequest();
                 }
             }
             catch (Exception ex)
@@ -210,12 +221,6 @@ public partial class MainWindow : Window
         try
         {
             vm.Coordinator.LoadMedia(path);
-
-            if (_embeddedTransport is not null)
-            {
-                LoadMediaIntoPlayer();
-                _embeddedTransport.Play();
-            }
         }
         catch (Exception ex)
         {
@@ -235,16 +240,8 @@ public partial class MainWindow : Window
     public void OnSettingsClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;
-        var (service, current) = vm.GetSettingsContext();
         var win = new SettingsWindow();
-        var downloader = new Babel.Player.Services.ModelDownloader(
-            new Babel.Player.Services.AppLog(
-                System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "BabelPlayer", "logs", "babel-player.log")));
-        var modelsTab = new Babel.Player.ViewModels.ModelsTabViewModel(downloader, vm.Coordinator);
-        var settingsVm = new SettingsViewModel(service, vm.Coordinator, win, modelsTab);
-        win.DataContext = settingsVm;
+        win.DataContext = vm.CreateSettingsViewModel(win);
         _ = win.ShowDialog(this);
     }
 
@@ -255,23 +252,26 @@ public partial class MainWindow : Window
         {
             vm.Coordinator.RestoreSession(entry.SessionId);
             cb.SelectedItem = null;   // act as a menu, not a persistent selection
-            LoadMediaIntoPlayer();
         }
     }
 
-    /// <summary>
-    /// Loads the current session's ingested media into the embedded transport (paused)
-    /// and re-applies any active subtitle track (mpv clears tracks on file load).
-    /// Called after Open Media, video handle ready, and RestoreSession.
-    /// </summary>
-    private void LoadMediaIntoPlayer()
+    private void TryApplyPendingMediaReloadRequest()
     {
-        if (DataContext is not MainWindowViewModel vm || _embeddedTransport is null) return;
-        var ingestedPath = vm.Coordinator.CurrentSession.IngestedMediaPath;
-        if (!string.IsNullOrEmpty(ingestedPath) && System.IO.File.Exists(ingestedPath))
-        {
-            _embeddedTransport.Load(ingestedPath);
-            vm.Playback.ReapplySubtitlesIfActive();
-        }
+        if (DataContext is not MainWindowViewModel vm || _embeddedTransport is null)
+            return;
+
+        var pending = vm.Coordinator.PendingMediaReloadRequest;
+        if (pending is null)
+            return;
+
+        var request = vm.Coordinator.ConsumePendingMediaReloadRequest();
+        if (request is null || !System.IO.File.Exists(request.IngestedMediaPath))
+            return;
+
+        _embeddedTransport.Load(request.IngestedMediaPath);
+        vm.Playback.ReapplySubtitlesIfActive();
+        vm.Playback.IsSourcePaused = !request.AutoPlay;
+        if (request.AutoPlay)
+            _embeddedTransport.Play();
     }
 }

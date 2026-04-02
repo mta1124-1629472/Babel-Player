@@ -58,9 +58,9 @@ asyncio.run(generate())
 
         var result = await RunPythonScriptAsync(
             script,
-            $"\"{request.TranslationJsonPath}\" \"{request.OutputAudioPath}\" \"{request.VoiceName}\"",
+            [request.TranslationJsonPath, request.OutputAudioPath, request.VoiceName],
             "tts",
-            cancellationToken);
+            cancellationToken: cancellationToken);
         ThrowIfFailed(result, "TTS");
 
         if (!File.Exists(request.OutputAudioPath))
@@ -94,9 +94,9 @@ except ImportError:
     import edge_tts
 
 async def generate():
-    text = sys.argv[1]
-    voice = sys.argv[2] if len(sys.argv) > 2 else 'en-US-AriaNeural'
-    output_path = sys.argv[3]
+    voice = sys.argv[1] if len(sys.argv) > 1 else 'en-US-AriaNeural'
+    output_path = sys.argv[2]
+    text = sys.stdin.read()
 
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_path)
@@ -110,9 +110,10 @@ asyncio.run(generate())
 
         var result = await RunPythonScriptAsync(
             script,
-            $"\"{request.Text}\" \"{request.VoiceName}\" \"{request.OutputAudioPath}\"",
+            [request.VoiceName, request.OutputAudioPath],
             "tts_seg",
-            cancellationToken);
+            standardInput: request.Text,
+            cancellationToken: cancellationToken);
         ThrowIfFailed(result, "Segment TTS");
 
         if (!File.Exists(request.OutputAudioPath))

@@ -5,30 +5,56 @@ using Babel.Player.Services.Settings;
 namespace Babel.Player.Services;
 
 /// <summary>
-/// Shared readiness gate for the containerized inference providers.
-/// Validates both configuration and live service health so the UI does not
-/// advertise the provider as usable when the service is down.
+/// Shared readiness gate for containerized providers.
+/// A provider is only ready when the service is live and explicitly advertises
+/// capability for that stage.
 /// </summary>
 public static class ContainerizedProviderReadiness
 {
-    public static ProviderReadiness Check(AppSettings settings, ApiKeyStore? keyStore = null)
+    public static ProviderReadiness CheckTranscription(AppSettings settings, ApiKeyStore? keyStore = null) =>
+        Check(settings, ContainerCapabilityStage.Transcription);
+
+    public static ProviderReadiness CheckTranslation(AppSettings settings, ApiKeyStore? keyStore = null) =>
+        Check(settings, ContainerCapabilityStage.Translation);
+
+    public static ProviderReadiness CheckTts(AppSettings settings, ApiKeyStore? keyStore = null) =>
+        Check(settings, ContainerCapabilityStage.Tts);
+
+    private static ProviderReadiness Check(
+        AppSettings settings,
+        ContainerCapabilityStage stage)
     {
-        if (string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
-            return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
+        var serviceUrl = settings.EffectiveContainerizedServiceUrl;
+        if (string.IsNullOrWhiteSpace(serviceUrl))
+            return new ProviderReadiness(false, "No containerized service URL configured.");
 
-        var health = ContainerizedInferenceClient.CheckHealth(
-            settings.ContainerizedServiceUrl,
-            timeoutSeconds: 2);
+        var health = ContainerizedInferenceClient.CheckHealth(serviceUrl, timeoutSeconds: 2);
+        if (!health.IsAvailable)
+        {
+            var detail = string.IsNullOrWhiteSpace(health.ErrorMessage)
+                ? health.ServiceUrl
+                : $"{health.ServiceUrl} ({health.ErrorMessage})";
+            return new ProviderReadiness(
+                false,
+                $"Containerized inference service is unavailable: {detail}");
+        }
 
-        if (health.IsAvailable)
-            return ProviderReadiness.Ready;
+        if (health.Capabilities is null || !health.Capabilities.IsReady(stage))
+        {
+            var detail = health.Capabilities?.Detail(stage);
+            var stageLabel = stage switch
+            {
+                ContainerCapabilityStage.Transcription => "transcription",
+                ContainerCapabilityStage.Translation => "translation",
+                _ => "TTS",
+            };
+            return new ProviderReadiness(
+                false,
+                string.IsNullOrWhiteSpace(detail)
+                    ? $"Containerized inference service is live but not ready for {stageLabel}."
+                    : $"Containerized inference service is not ready for {stageLabel}: {detail}");
+        }
 
-        var detail = string.IsNullOrWhiteSpace(health.ErrorMessage)
-            ? health.ServiceUrl
-            : $"{health.ServiceUrl} ({health.ErrorMessage})";
-
-        return new ProviderReadiness(
-            false,
-            $"Containerized inference service is unavailable: {detail}");
+        return ProviderReadiness.Ready;
     }
 }

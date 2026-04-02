@@ -40,9 +40,8 @@ To be direct about current limits:
 - **No audio mixing** — dubbed TTS and source audio are not mixed; they play independently
 - **No sync guarantee** — TTS follows the video segment-by-segment, not frame-accurate lip sync
 - **No export** — there is no way to export a dubbed video file yet
-- **No settings UI** — Python/FFmpeg paths are detected automatically or must be configured manually in the session store
+- **No setup wizard** — a settings UI exists, but Python, FFmpeg, and any external/local inference service still need to be installed and reachable
 - **Windows only** — libmpv is loaded via P/Invoke from a bundled DLL; macOS and Linux are not supported
-- **No offline TTS** — TTS currently requires a configured cloud or local Python inference endpoint
 - **No multi-language UI** — the interface is English only
 
 ---
@@ -84,11 +83,16 @@ source video
     └─ ingest (copy to session artifact dir)
         └─ transcribe (Whisper via Python subprocess)
             └─ translate (Python inference)
-                └─ TTS generation (per segment, Python)
+                └─ TTS generation (per segment, Python or external/local inference service)
                     └─ preview (libmpv + Avalonia UI)
 ```
 
-All artifacts are stored in a session directory under `%APPDATA%\BabelPlayer\sessions\`. The session survives restarts; switching between multiple source files within a run caches prior work in memory and restores it without re-running the pipeline.
+All artifacts are stored in a session directory under `%LOCALAPPDATA%\BabelPlayer\sessions\`. The session survives restarts; switching between multiple source files within a run caches prior work in memory and restores it without re-running the pipeline.
+
+Container note:
+- the supported container posture today is an external/local inference service consumed over HTTP
+- the desktop app does not package or launch itself in Docker
+- `INFERENCE_SERVICE_URL` overrides the saved container service URL at startup when set
 
 ---
 

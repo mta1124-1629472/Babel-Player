@@ -1,3 +1,5 @@
+using System;
+using System.Text.Json.Serialization;
 using Babel.Player.Models;
 
 namespace Babel.Player.Services.Settings;
@@ -7,6 +9,8 @@ namespace Babel.Player.Services.Settings;
 /// </summary>
 public sealed class AppSettings
 {
+    public const string InferenceServiceUrlEnvVar = "INFERENCE_SERVICE_URL";
+
     /// <summary>Transcription provider identifier (e.g. "faster-whisper", "openai-whisper-api").</summary>
     public string TranscriptionProvider { get; set; } = ProviderNames.FasterWhisper;
 
@@ -61,6 +65,18 @@ public sealed class AppSettings
     /// TranslationProvider, or TtsProvider is set to "containerized").
     /// </summary>
     public string ContainerizedServiceUrl { get; set; } = "http://localhost:8000";
+
+    [JsonIgnore]
+    public string EffectiveContainerizedServiceUrl
+    {
+        get
+        {
+            var overrideValue = Environment.GetEnvironmentVariable(InferenceServiceUrlEnvVar);
+            return string.IsNullOrWhiteSpace(overrideValue)
+                ? ContainerizedServiceUrl
+                : overrideValue.Trim();
+        }
+    }
 
     /// <summary>
     /// libmpv hardware video decode method.

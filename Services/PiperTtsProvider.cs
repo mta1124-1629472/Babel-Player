@@ -82,10 +82,10 @@ if not shutil.which('piper'):
         'and ensure the piper executable is on your system PATH.')
 
 
-text       = sys.argv[1]
-output_path = sys.argv[2]
-voice      = sys.argv[3]
-model_dir  = sys.argv[4]
+output_path = sys.argv[1]
+voice      = sys.argv[2]
+model_dir  = sys.argv[3]
+text       = sys.stdin.read()
 
 def find_model(voice, model_dir):
     search_dirs = []
@@ -129,9 +129,9 @@ print(f'Piper segment TTS generated: {output_path}')
 
         var result = await RunPythonScriptAsync(
             PiperScript,
-            $"\"{request.TranslationJsonPath}\" \"{request.OutputAudioPath}\" \"{request.VoiceName}\" \"{_modelDir}\"",
+            [request.TranslationJsonPath, request.OutputAudioPath, request.VoiceName, _modelDir],
             "piper_tts",
-            cancellationToken);
+            cancellationToken: cancellationToken);
         ThrowIfFailed(result, "Piper TTS");
 
         if (!File.Exists(request.OutputAudioPath))
@@ -152,9 +152,10 @@ print(f'Piper segment TTS generated: {output_path}')
 
         var result = await RunPythonScriptAsync(
             PiperSegmentScript,
-            $"\"{request.Text}\" \"{request.OutputAudioPath}\" \"{request.VoiceName}\" \"{_modelDir}\"",
+            [request.OutputAudioPath, request.VoiceName, _modelDir],
             "piper_tts_seg",
-            cancellationToken);
+            standardInput: request.Text,
+            cancellationToken: cancellationToken);
         ThrowIfFailed(result, "Piper segment TTS");
 
         if (!File.Exists(request.OutputAudioPath))

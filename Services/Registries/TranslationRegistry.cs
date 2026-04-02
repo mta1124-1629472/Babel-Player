@@ -94,7 +94,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
             ProviderNames.Nllb200 => new NllbTranslationProvider(_log, settings.TranslationModel),
             ProviderNames.GoogleTranslateFree => new GoogleTranslationProvider(_log),
             ProviderNames.ContainerizedService => new ContainerizedTranslationProvider(
-                new ContainerizedInferenceClient(settings.ContainerizedServiceUrl, _log), _log),
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log), _log),
             _ => throw new PipelineProviderException(
                 $"Translation provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")
