@@ -83,6 +83,19 @@ desktop.ini
 # Application data (session artifacts, logs, etc.)
 **/LocalApplicationData/
 **/AppData/Local/BabelPlayer/
+*.log
+app-output.log
+build.log
+test.log
+debug_info.md
+
+# Generated benchmark outputs
+benchmarks/
+
+# Local tool state
+.claude/settings.local.json
+.kilo/node_modules/
+.ruff_cache/
 
 # External binaries
 ffmpeg.exe

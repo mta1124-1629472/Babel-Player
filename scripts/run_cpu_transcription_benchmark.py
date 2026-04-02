@@ -472,13 +472,86 @@ def run_variant(provider: str, audio_path: Path, model: str, variant: Variant, c
     }
 
 
-def write_output(report: dict[str, Any], output_dir: Path, dataset_id: str, matrix_id: str) -> Path:
+def format_num(value: Any, digits: int = 3) -> str:
+    if isinstance(value, (int, float)):
+        return f"{value:.{digits}f}"
+    return str(value)
+
+
+def build_markdown_summary(report: dict[str, Any]) -> str:
+    env = report.get("environment_snapshot", {})
+    meta = report.get("normalized_inputs", {})
+    results = report.get("results", [])
+    limitations = report.get("limitations", [])
+
+    lines: list[str] = []
+    lines.append("# CPU Transcription Benchmark Summary")
+    lines.append("")
+    lines.append("## Environment Snapshot")
+    lines.append("")
+    lines.append(f"- MachineId: `{env.get('MachineId', 'unknown')}`")
+    lines.append(f"- OS: `{env.get('OS', 'unknown')} {env.get('OSVersion', '')}`")
+    lines.append(f"- CPU: `{env.get('CPU', 'unknown')}`")
+    lines.append(f"- Cores / Threads: `{env.get('PhysicalCores', 'unknown')} / {env.get('LogicalThreads', 'unknown')}`")
+    lines.append(f"- RAM (GB): total `{env.get('RAM_GB', 'unknown')}`, available `{env.get('AvailableRAM_GB', 'unknown')}`")
+    lines.append(f"- GPU: `{env.get('GPU', 'unknown')}` (VRAM `{env.get('GPU_RAM_GB', 'unknown')}` GB)")
+    lines.append("")
+    lines.append("## Normalized Inputs")
+    lines.append("")
+    lines.append(f"- Provider: `{meta.get('provider', 'unknown')}`")
+    lines.append(f"- Model: `{meta.get('model', 'unknown')}`")
+    lines.append(f"- Dataset ID: `{meta.get('dataset_id', 'unknown')}`")
+    lines.append(f"- Matrix ID: `{meta.get('matrix_id', 'unknown')}`")
+    lines.append(f"- Run Batch ID: `{meta.get('run_batch_id', 'unknown')}`")
+    lines.append(f"- Source: `{meta.get('source', 'unknown')}`")
+    lines.append("")
+
+    if results:
+        lines.append("## Results")
+        lines.append("")
+        lines.append("| Variant | Cache Mode | p50 (s) | p95 (s) | Mean (s) | Segments | Language |")
+        lines.append("|---|---|---:|---:|---:|---:|---|")
+        for row in results:
+            variant = row.get("variant", {}).get("label", "unknown")
+            lines.append(
+                f"| `{variant}` | `{row.get('cache_mode', 'unknown')}` | "
+                f"{format_num(row.get('p50_seconds'))} | "
+                f"{format_num(row.get('p95_seconds'))} | "
+                f"{format_num(row.get('mean_seconds'))} | "
+                f"{row.get('segment_count', 'unknown')} | "
+                f"{row.get('language', 'unknown')} |"
+            )
+        lines.append("")
+    else:
+        lines.append("## Results")
+        lines.append("")
+        lines.append("No measured results were recorded (dry-run mode or no completed executions).")
+        lines.append("")
+
+    if limitations:
+        lines.append("## Limitations")
+        lines.append("")
+        for limitation in limitations:
+            lines.append(f"- {limitation}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def write_output(report: dict[str, Any], output_dir: Path, dataset_id: str, matrix_id: str) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    filename = f"{timestamp}_{dataset_id}_{matrix_id}.json".replace("/", "-")
-    path = output_dir / filename
-    path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    return path
+    timestamp = report.get("normalized_inputs", {}).get("run_batch_id", "")
+    if isinstance(timestamp, str) and timestamp.startswith("bp.run."):
+        ts_token = timestamp.split(".")[2]
+    else:
+        ts_token = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+
+    base_name = f"{ts_token}_{dataset_id}_{matrix_id}".replace("/", "-")
+    json_path = output_dir / f"{base_name}.json"
+    md_path = output_dir / f"{base_name}.md"
+    json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    md_path.write_text(build_markdown_summary(report), encoding="utf-8")
+    return json_path, md_path
 
 
 def main() -> int:
@@ -515,8 +588,9 @@ def main() -> int:
         )
 
     if args.dry_run:
-        output_path = write_output(report, Path(args.output_dir), dataset_id, matrix_id)
-        print(f"Dry-run plan written to {output_path}")
+        output_json, output_md = write_output(report, Path(args.output_dir), dataset_id, matrix_id)
+        print(f"Dry-run plan written to {output_json}")
+        print(f"Dry-run markdown summary written to {output_md}")
         return 0
 
     source_path = Path(args.source).resolve()
@@ -527,8 +601,9 @@ def main() -> int:
             for cache_mode in args.cache_modes:
                 result = run_variant(args.provider, audio_path, args.model, variant, cache_mode, args)
                 report["results"].append(result)
-        output_path = write_output(report, Path(args.output_dir), dataset_id, matrix_id)
-        print(f"Benchmark results written to {output_path}")
+        output_json, output_md = write_output(report, Path(args.output_dir), dataset_id, matrix_id)
+        print(f"Benchmark results written to {output_json}")
+        print(f"Benchmark markdown summary written to {output_md}")
         return 0
     finally:
         if temp_artifact and temp_artifact.exists():
