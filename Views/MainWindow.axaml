@@ -505,14 +505,70 @@
                                 ToolTip.Tip="Skip to next segment" />
                     </StackPanel>
 
-                    <!-- Right: volume + fullscreen -->
+                    <!-- Right: volume (hover-reveal slider) + fullscreen -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2"
                                 VerticalAlignment="Center" HorizontalAlignment="Right">
-                        <Button Content="{Binding Playback.VolumeIconLabel}"
-                                Command="{Binding Playback.ToggleMuteCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
-                                Padding="6,5" FontSize="14"
-                                Background="Transparent" />
+
+                        <!--
+                            Volume control: a Panel that holds the mute button at the bottom
+                            and a popup-style vertical slider above it. The slider's IsVisible
+                            is toggled by code-behind on PointerEntered/PointerExited with a
+                            3-second retraction delay (DispatcherTimer named _volumeHideTimer).
+                        -->
+                        <Panel x:Name="VolumeControlPanel"
+                               Width="32"
+                               VerticalAlignment="Bottom"
+                               ClipToBounds="False">
+
+                            <!-- Vertical slider popup — sits above the mute button.
+                                 Bottom of the slider aligns with the top of the button
+                                 via negative TranslateTransform. Height=110 gives ~100 px
+                                 of travel plus top/bottom padding. -->
+                            <Border x:Name="VolumeSliderPopup"
+                                    IsVisible="False"
+                                    Background="#1E1E2C"
+                                    BorderBrush="#2A2A3A"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="6,8"
+                                    Width="32"
+                                    Height="110"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Top"
+                                    RenderTransformOrigin="0.5,1"
+                                    PointerEntered="OnVolumeAreaPointerEntered"
+                                    PointerExited="OnVolumeAreaPointerExited">
+                                <Border.RenderTransform>
+                                    <!-- Translate upward by slider height + button height so it
+                                         appears directly above the mute button. -->
+                                    <TranslateTransform Y="-144" />
+                                </Border.RenderTransform>
+                                <Slider x:Name="VolumeSlider"
+                                        Orientation="Vertical"
+                                        Minimum="0"
+                                        Maximum="1"
+                                        Value="{Binding Playback.SourceVolume, Mode=TwoWay}"
+                                        IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Stretch"
+                                        Width="20"
+                                        ToolTip.Tip="Volume" />
+                            </Border>
+
+                            <!-- Mute toggle button -->
+                            <Button x:Name="MuteButton"
+                                    Content="{Binding Playback.VolumeIconLabel}"
+                                    Command="{Binding Playback.ToggleMuteCommand}"
+                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                    Padding="6,5" FontSize="14"
+                                    Background="Transparent"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Bottom"
+                                    PointerEntered="OnVolumeAreaPointerEntered"
+                                    PointerExited="OnVolumeAreaPointerExited"
+                                    ToolTip.Tip="Mute / Unmute" />
+                        </Panel>
+
                         <Button Content="&#x26F6;"
                                 Command="{Binding Playback.ToggleFullscreenCommand}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
