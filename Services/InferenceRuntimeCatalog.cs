@@ -55,53 +55,78 @@ public static class InferenceRuntimeCatalog
     public static string NormalizeTranscriptionProvider(InferenceRuntime runtime, string? providerId)
     {
         if (runtime == InferenceRuntime.Containerized)
-            return ProviderNames.FasterWhisper;
+        {
+            return string.IsNullOrWhiteSpace(providerId) || string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal)
+                ? ProviderNames.FasterWhisper
+                : providerId;
+        }
 
         if (runtime == InferenceRuntime.Cloud)
         {
             return providerId switch
             {
+                null or "" => DefaultTranscriptionProvider(runtime),
                 ProviderNames.GoogleStt => ProviderNames.GoogleStt,
                 ProviderNames.OpenAiWhisperApi => ProviderNames.OpenAiWhisperApi,
-                _ => DefaultTranscriptionProvider(runtime),
+                _ => providerId,
             };
         }
 
-        return ProviderNames.FasterWhisper;
+        return string.IsNullOrWhiteSpace(providerId)
+            ? ProviderNames.FasterWhisper
+            : providerId;
     }
 
     public static string NormalizeTranslationProvider(InferenceRuntime runtime, string? providerId)
     {
         if (runtime == InferenceRuntime.Containerized)
-            return ProviderNames.GoogleTranslateFree;
+        {
+            return string.IsNullOrWhiteSpace(providerId) || string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal)
+                ? ProviderNames.GoogleTranslateFree
+                : providerId;
+        }
 
         if (runtime == InferenceRuntime.Local)
-            return ProviderNames.Nllb200;
+        {
+            return string.IsNullOrWhiteSpace(providerId)
+                ? ProviderNames.Nllb200
+                : providerId;
+        }
 
         return providerId switch
         {
+            null or "" => DefaultTranslationProvider(runtime),
             ProviderNames.Deepl => ProviderNames.Deepl,
             ProviderNames.OpenAi => ProviderNames.OpenAi,
             ProviderNames.GoogleTranslateFree => ProviderNames.GoogleTranslateFree,
-            _ => DefaultTranslationProvider(runtime),
+            _ => providerId,
         };
     }
 
     public static string NormalizeTtsProvider(InferenceRuntime runtime, string? providerId)
     {
         if (runtime == InferenceRuntime.Containerized)
-            return ProviderNames.EdgeTts;
+        {
+            return string.IsNullOrWhiteSpace(providerId) || string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal)
+                ? ProviderNames.EdgeTts
+                : providerId;
+        }
 
         if (runtime == InferenceRuntime.Local)
-            return ProviderNames.Piper;
+        {
+            return string.IsNullOrWhiteSpace(providerId)
+                ? ProviderNames.Piper
+                : providerId;
+        }
 
         return providerId switch
         {
+            null or "" => DefaultTtsProvider(runtime),
             ProviderNames.ElevenLabs => ProviderNames.ElevenLabs,
             ProviderNames.GoogleCloudTts => ProviderNames.GoogleCloudTts,
             ProviderNames.OpenAiTts => ProviderNames.OpenAiTts,
             ProviderNames.EdgeTts => ProviderNames.EdgeTts,
-            _ => DefaultTtsProvider(runtime),
+            _ => providerId,
         };
     }
 

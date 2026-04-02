@@ -62,13 +62,16 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     private AppSettings CreateMatchingSettings() =>
         new()
         {
+            TranscriptionRuntime = _settings.TranscriptionRuntime,
             TranscriptionProvider = _settings.TranscriptionProvider,
             TranscriptionModel = _settings.TranscriptionModel,
             TranscriptionCpuComputeType = _settings.TranscriptionCpuComputeType,
             TranscriptionCpuThreads = _settings.TranscriptionCpuThreads,
             TranscriptionNumWorkers = _settings.TranscriptionNumWorkers,
+            TranslationRuntime = _settings.TranslationRuntime,
             TranslationProvider = _settings.TranslationProvider,
             TranslationModel = _settings.TranslationModel,
+            TtsRuntime = _settings.TtsRuntime,
             TtsProvider = _settings.TtsProvider,
             TtsVoice = _settings.TtsVoice,
             TargetLanguage = _settings.TargetLanguage,
@@ -719,6 +722,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         });
 
         var changedSettings = CreateMatchingSettings();
+        changedSettings.TranslationRuntime = InferenceRuntime.Local;
         changedSettings.TranslationProvider = ProviderNames.Nllb200;
         changedSettings.TranslationModel = "nllb-200-distilled-600M";
 
@@ -753,6 +757,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         });
 
         var changedSettings = CreateMatchingSettings();
+        changedSettings.TranslationRuntime = InferenceRuntime.Local;
         changedSettings.TranslationProvider = ProviderNames.Nllb200;
         changedSettings.TranslationModel = "nllb-200-distilled-600M";
 
@@ -827,6 +832,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
 
         // Now change TTS settings
         var changedSettings = CreateMatchingSettings();
+        changedSettings.TtsRuntime = InferenceRuntime.Local;
         changedSettings.TtsProvider = ProviderNames.Piper;
         var coord2 = CreateCoordinator(changedSettings);
         coord2.Initialize();
@@ -861,7 +867,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
 
         // Change transcription provider
         var changedSettings = CreateMatchingSettings();
-        changedSettings.TranscriptionProvider = ProviderNames.ContainerizedService;
+        changedSettings.TranscriptionRuntime = InferenceRuntime.Containerized;
+        changedSettings.TranscriptionProvider = ProviderNames.FasterWhisper;
         var coord2 = CreateCoordinator(changedSettings);
         coord2.Initialize();
 
@@ -902,10 +909,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         coord2.SettingsModified += () => settingsModified = true;
 
         var result = coord2.ApplyPipelineSettings(new PipelineSettingsSelection(
-            ProviderNames.ContainerizedService,
+            InferenceRuntime.Containerized,
+            ProviderNames.FasterWhisper,
             "base",
+            _settings.TranslationRuntime,
             _settings.TranslationProvider,
             _settings.TranslationModel,
+            _settings.TtsRuntime,
             _settings.TtsProvider,
             _settings.TtsVoice,
             _settings.TargetLanguage));
@@ -1023,6 +1033,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         });
 
         var changedSettings = CreateMatchingSettings();
+        changedSettings.TranslationRuntime = InferenceRuntime.Local;
         changedSettings.TranslationProvider = ProviderNames.Nllb200;
         changedSettings.TranslationModel = "nllb-200-distilled-600M";
 
@@ -1030,10 +1041,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         coord.Initialize();
 
         var result = coord.ApplyPipelineSettings(new PipelineSettingsSelection(
+            changedSettings.TranscriptionRuntime,
             changedSettings.TranscriptionProvider,
             changedSettings.TranscriptionModel,
+            changedSettings.TranslationRuntime,
             changedSettings.TranslationProvider,
             changedSettings.TranslationModel,
+            changedSettings.TtsRuntime,
             changedSettings.TtsProvider,
             changedSettings.TtsVoice,
             changedSettings.TargetLanguage));
@@ -1131,17 +1145,39 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             _provider = provider;
         }
 
-        public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
+        public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(InferenceRuntime? runtime = null) =>
         [
-            new ProviderDescriptor(ProviderNames.EdgeTts, "Fake TTS", false, null, ["global-voice"])
+            new ProviderDescriptor(
+                ProviderNames.EdgeTts,
+                "Fake TTS",
+                false,
+                null,
+                ["global-voice"],
+                SupportedRuntimes: [InferenceRuntime.Cloud, InferenceRuntime.Containerized],
+                DefaultRuntime: InferenceRuntime.Cloud)
         ];
 
-        public ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null) => _provider;
+        public ITtsProvider CreateProvider(
+            string providerId,
+            AppSettings settings,
+            ApiKeyStore? keyStore = null,
+            InferenceRuntime? runtime = null) => _provider;
 
-        public ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore) =>
+        public ProviderReadiness CheckReadiness(
+            string providerId,
+            string modelOrVoice,
+            AppSettings settings,
+            ApiKeyStore? keyStore,
+            InferenceRuntime? runtime = null) =>
             ProviderReadiness.Ready;
 
-        public Task<bool> EnsureModelAsync(string providerId, string modelOrVoice, AppSettings settings, IProgress<double>? progress = null, CancellationToken ct = default) =>
+        public Task<bool> EnsureModelAsync(
+            string providerId,
+            string modelOrVoice,
+            AppSettings settings,
+            IProgress<double>? progress = null,
+            CancellationToken ct = default,
+            InferenceRuntime? runtime = null) =>
             Task.FromResult(true);
     }
 

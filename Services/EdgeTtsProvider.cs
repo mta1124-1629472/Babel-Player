@@ -13,6 +13,12 @@ public sealed class EdgeTtsProvider : PythonSubprocessServiceBase, ITtsProvider
         TtsRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(request.TranslationJsonPath))
+            throw new ArgumentException("Translation JSON path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
+            throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.VoiceName))
+            throw new ArgumentException("Voice name cannot be null or empty.", nameof(request));
         if (!File.Exists(request.TranslationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
@@ -82,6 +88,10 @@ asyncio.run(generate())
     {
         if (string.IsNullOrWhiteSpace(request.Text))
             throw new ArgumentException("Segment text cannot be empty", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
+            throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.VoiceName))
+            throw new ArgumentException("Voice name cannot be null or empty.", nameof(request));
 
         var script = @"
 import sys, asyncio

@@ -122,6 +122,12 @@ print(f'Piper segment TTS generated: {output_path}')
         TtsRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(request.TranslationJsonPath))
+            throw new ArgumentException("Translation JSON path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
+            throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.VoiceName))
+            throw new ArgumentException("Voice name cannot be null or empty.", nameof(request));
         if (!File.Exists(request.TranslationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
@@ -147,6 +153,10 @@ print(f'Piper segment TTS generated: {output_path}')
     {
         if (string.IsNullOrWhiteSpace(request.Text))
             throw new ArgumentException("Segment text cannot be empty", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
+            throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.VoiceName))
+            throw new ArgumentException("Voice name cannot be null or empty.", nameof(request));
 
         Log.Info($"Starting Piper segment TTS ({request.VoiceName}): {request.Text[..Math.Min(30, request.Text.Length)]}... -> {request.OutputAudioPath}");
 

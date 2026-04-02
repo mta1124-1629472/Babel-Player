@@ -81,5 +81,5 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
-        ContainerizedProviderReadiness.CheckTranscription(settings, keyStore);
+        ContainerizedProviderReadiness.CheckTranscription(settings);
 }

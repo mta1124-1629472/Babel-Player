@@ -104,5 +104,5 @@ public sealed class ContainerizedTtsProvider : ITtsProvider
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
-        ContainerizedProviderReadiness.CheckTts(settings, keyStore);
+        ContainerizedProviderReadiness.CheckTts(settings);
 }

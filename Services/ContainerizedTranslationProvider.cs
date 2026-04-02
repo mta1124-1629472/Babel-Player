@@ -192,6 +192,6 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
     {
-        return ContainerizedProviderReadiness.CheckTranslation(settings, keyStore);
+        return ContainerizedProviderReadiness.CheckTranslation(settings);
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using Babel.Player.Models;
@@ -135,22 +136,19 @@ public static class SessionSnapshotSemantics
     public static WorkflowSessionSnapshot NormalizeRuntimeProvenance(WorkflowSessionSnapshot snapshot) =>
         snapshot with
         {
-            TranscriptionRuntime = snapshot.TranscriptionRuntime
-                ?? InferenceRuntimeCatalog.InferTranscriptionRuntime(snapshot.TranscriptionProvider),
-            TranslationRuntime = snapshot.TranslationRuntime
-                ?? InferenceRuntimeCatalog.InferTranslationRuntime(snapshot.TranslationProvider),
-            TtsRuntime = snapshot.TtsRuntime
-                ?? InferenceRuntimeCatalog.InferTtsRuntime(snapshot.TtsProvider),
+            TranscriptionRuntime = ResolveRuntime(snapshot.TranscriptionRuntime, snapshot.TranscriptionProvider, InferenceRuntimeCatalog.InferTranscriptionRuntime),
+            TranslationRuntime = ResolveRuntime(snapshot.TranslationRuntime, snapshot.TranslationProvider, InferenceRuntimeCatalog.InferTranslationRuntime),
+            TtsRuntime = ResolveRuntime(snapshot.TtsRuntime, snapshot.TtsProvider, InferenceRuntimeCatalog.InferTtsRuntime),
             TranscriptionProvider = NormalizeStageProvider(
-                snapshot.TranscriptionRuntime ?? InferenceRuntimeCatalog.InferTranscriptionRuntime(snapshot.TranscriptionProvider),
+                ResolveRuntime(snapshot.TranscriptionRuntime, snapshot.TranscriptionProvider, InferenceRuntimeCatalog.InferTranscriptionRuntime),
                 snapshot.TranscriptionProvider,
                 InferenceRuntimeCatalog.NormalizeTranscriptionProvider),
             TranslationProvider = NormalizeStageProvider(
-                snapshot.TranslationRuntime ?? InferenceRuntimeCatalog.InferTranslationRuntime(snapshot.TranslationProvider),
+                ResolveRuntime(snapshot.TranslationRuntime, snapshot.TranslationProvider, InferenceRuntimeCatalog.InferTranslationRuntime),
                 snapshot.TranslationProvider,
                 InferenceRuntimeCatalog.NormalizeTranslationProvider),
             TtsProvider = NormalizeStageProvider(
-                snapshot.TtsRuntime ?? InferenceRuntimeCatalog.InferTtsRuntime(snapshot.TtsProvider),
+                ResolveRuntime(snapshot.TtsRuntime, snapshot.TtsProvider, InferenceRuntimeCatalog.InferTtsRuntime),
                 snapshot.TtsProvider,
                 InferenceRuntimeCatalog.NormalizeTtsProvider),
         };
@@ -196,14 +194,22 @@ public static class SessionSnapshotSemantics
             MediaLoadedAtUtc = null,
         };
 
-    private static string? NormalizeStageProvider(
-        InferenceRuntime runtime,
+    private static InferenceRuntime? ResolveRuntime(
+        InferenceRuntime? runtime,
         string? providerId,
-        Func<InferenceRuntime, string?, string> normalizeProvider)
+        System.Func<string?, InferenceRuntime> inferRuntime) =>
+        string.IsNullOrWhiteSpace(providerId)
+            ? null
+            : runtime ?? inferRuntime(providerId);
+
+    private static string? NormalizeStageProvider(
+        InferenceRuntime? runtime,
+        string? providerId,
+        System.Func<InferenceRuntime, string?, string> normalizeProvider)
     {
-        if (string.IsNullOrWhiteSpace(providerId))
+        if (string.IsNullOrWhiteSpace(providerId) || runtime is null)
             return null;
 
-        return normalizeProvider(runtime, providerId);
+        return normalizeProvider(runtime.Value, providerId);
     }
 }

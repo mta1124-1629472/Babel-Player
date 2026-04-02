@@ -57,6 +57,15 @@
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
 
                             <StackPanel Spacing="5">
+                                <TextBlock Text="Runtime" FontSize="12" Foreground="#808090" />
+                                <ComboBox ItemsSource="{Binding Playback.InferenceRuntimeOptions}"
+                                          SelectedItem="{Binding Playback.TranscriptionRuntime, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="#1E1E2C" Foreground="#C0C0D0"
+                                          BorderBrush="#2A2A3A" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5">
                                 <TextBlock Text="Provider" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.TranscriptionProviders}"
                                           SelectedItem="{Binding Playback.TranscriptionProvider, Mode=TwoWay}"
@@ -96,6 +105,15 @@
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
 
                             <StackPanel Spacing="5">
+                                <TextBlock Text="Runtime" FontSize="12" Foreground="#808090" />
+                                <ComboBox ItemsSource="{Binding Playback.InferenceRuntimeOptions}"
+                                          SelectedItem="{Binding Playback.TranslationRuntime, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="#1E1E2C" Foreground="#C0C0D0"
+                                          BorderBrush="#2A2A3A" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5">
                                 <TextBlock Text="Provider" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.TranslationProviders}"
                                           SelectedItem="{Binding Playback.TranslationProvider, Mode=TwoWay}"
@@ -133,6 +151,15 @@
                         <StackPanel Spacing="10">
                             <TextBlock Text="TEXT TO SPEECH" FontSize="10"
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Runtime" FontSize="12" Foreground="#808090" />
+                                <ComboBox ItemsSource="{Binding Playback.InferenceRuntimeOptions}"
+                                          SelectedItem="{Binding Playback.TtsRuntime, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="#1E1E2C" Foreground="#C0C0D0"
+                                          BorderBrush="#2A2A3A" />
+                            </StackPanel>
 
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Provider" FontSize="12" Foreground="#808090" />

@@ -16,6 +16,10 @@ public sealed class GoogleTranslationProvider : PythonSubprocessServiceBase, ITr
         TranslationRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(request.TranscriptJsonPath))
+            throw new ArgumentException("Transcript JSON path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.OutputJsonPath))
+            throw new ArgumentException("Output JSON path cannot be null or empty.", nameof(request));
         if (!File.Exists(request.TranscriptJsonPath))
             throw new FileNotFoundException($"Transcript file not found: {request.TranscriptJsonPath}");
 
@@ -123,6 +127,10 @@ asyncio.run(main())
     {
         if (string.IsNullOrWhiteSpace(request.SourceText))
             throw new ArgumentException("Source text cannot be empty", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.TranslationJsonPath))
+            throw new ArgumentException("Translation JSON path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.OutputJsonPath))
+            throw new ArgumentException("Output JSON path cannot be null or empty.", nameof(request));
         if (!File.Exists(request.TranslationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
