@@ -596,6 +596,21 @@ public sealed class SegmentInspectionTests
         return new EmbeddedPlaybackViewModel(coordinator);
     }
 
+    private static (EmbeddedPlaybackViewModel playback, FakeMediaTransport segmentPlayer, FakeMediaTransport sourcePlayer)
+        CreatePlaybackVmWithFakePlayers()
+    {
+        var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}");
+        var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.log"));
+        var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.json");
+        var store = new SessionSnapshotStore(storePath, log);
+        var segmentPlayer = new FakeMediaTransport();
+        var sourcePlayer = new FakeMediaTransport();
+        var coordinator = CreateCoordinator(store, log, caseDir, segmentPlayer, sourcePlayer);
+        coordinator.Initialize();
+        coordinator.GetOrCreateSourcePlayer();
+        return (new EmbeddedPlaybackViewModel(coordinator), segmentPlayer, sourcePlayer);
+    }
+
     [Fact]
     public void IsVisible_FalseWhenNoSegmentSelected()
     {
@@ -665,5 +680,17 @@ public sealed class SegmentInspectionTests
 
         playback.SelectedSegment = null;
         Assert.False(inspection.IsVisible);
+    }
+
+    [Fact]
+    public void SpeechRate_OnlyUpdatesTtsSegmentPlaybackRate()
+    {
+        var (playback, segmentPlayer, sourcePlayer) = CreatePlaybackVmWithFakePlayers();
+
+        playback.SpeechRate = 1.4;
+
+        Assert.Equal(1.4, playback.Coordinator.TtsPlaybackRate);
+        Assert.Equal(1.0, sourcePlayer.PlaybackRate);
+        Assert.Equal(1.0, segmentPlayer.PlaybackRate);
     }
 }

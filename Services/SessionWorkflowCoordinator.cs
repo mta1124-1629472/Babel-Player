@@ -66,6 +66,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private MediaReloadRequest? _pendingMediaReloadRequest;
 
+    [ObservableProperty]
+    private double _ttsPlaybackRate = 1.0;
+
     public bool HasRecentSessions => RecentSessions.Count > 0;
 
     public AppSettings CurrentSettings { get; private set; }
@@ -329,6 +332,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private IMediaTransport GetOrCreateSegmentPlayer()
     {
         var player = _transportManager.GetOrCreateSegmentPlayer();
+        player.PlaybackRate = TtsPlaybackRate;
 
         // Subscribe to segment lifecycle events exactly once.
         if (!_subscribedToSegmentEvents)
@@ -339,6 +343,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
 
         return player;
+    }
+
+    partial void OnTtsPlaybackRateChanged(double value)
+    {
+        if (_transportManager.SegmentPlayer is { } player)
+            player.PlaybackRate = value;
     }
 
     public async Task PlayTtsForSegmentAsync(string segmentId)

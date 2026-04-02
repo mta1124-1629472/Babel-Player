@@ -147,6 +147,23 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
     private string _ttsModelOrVoice = "en-US-AriaNeural";
 
+    // ── Multi-speaker routing controls ───────────────────────────────────────
+    [ObservableProperty]
+    private bool _isMultiSpeakerEnabled;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSpeakers))]
+    private ObservableCollection<string> _speakerIds = [];
+
+    [ObservableProperty]
+    private string? _selectedSpeakerId;
+
+    [ObservableProperty]
+    private string _selectedSpeakerAssignedVoice = "";
+
+    [ObservableProperty]
+    private string _selectedSpeakerReferenceAudioPath = "";
+
     private double _preMuteVolume = 1.0;
     private double _preDuckTransportVolume = 1.0;
     private bool _isDucked;
@@ -246,6 +263,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public string ActiveTranslationConfigLine =>
         $"{TranslationProvider} / {TranslationModel} · target {_coordinator.CurrentSettings.TargetLanguage}";
     public string ActiveTtsConfigLine => $"{TtsProvider} / {TtsModelOrVoice}";
+    public string SelectedSegmentSpeakerId => SelectedSegment?.SpeakerId ?? "—";
+    public string SelectedSegmentAssignedVoice => SelectedSegment?.AssignedVoice ?? "—";
+    public string SelectedSegmentReferenceStatus => SelectedSegment?.HasReferenceAudio == true ? "Yes" : "No";
+    public bool HasSpeakers => SpeakerIds.Count > 0;
 
     // ── Provider / model option lists ──────────────────────────────────────────
     public IReadOnlyList<string> TranscriptionProviders => [.. _coordinator.TranscriptionRegistry.GetAvailableProviders().Where(p => p.IsImplemented).Select(p => p.Id)];
@@ -456,8 +477,26 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnSelectedSegmentChanged(WorkflowSegmentState? value)
     {
+        OnPropertyChanged(nameof(SelectedSegmentSpeakerId));
+        OnPropertyChanged(nameof(SelectedSegmentAssignedVoice));
+        OnPropertyChanged(nameof(SelectedSegmentReferenceStatus));
+
+        if (!string.IsNullOrWhiteSpace(value?.SpeakerId) && SpeakerIds.Contains(value.SpeakerId))
+            SelectedSpeakerId = value.SpeakerId;
+
         if (_isUpdatingActiveSegment || value == null || !IsSourceMediaLoaded) return;
         _ = SeekAndPlayAsync(value);
+    }
+
+    partial void OnSelectedSpeakerIdChanged(string? value)
+    {
+        UpdateSelectedSpeakerDetails(value);
+    }
+
+    partial void OnIsMultiSpeakerEnabledChanged(bool value)
+    {
+        _coordinator.SetMultiSpeakerEnabled(value);
+        _ = RefreshSegmentsAsync();
     }
 
     private async Task SeekAndPlayAsync(WorkflowSegmentState segment)
@@ -521,8 +560,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnSpeechRateChanged(double value)
     {
-        var player = _coordinator.SourceMediaPlayer;
-        if (player != null) player.PlaybackRate = value;
+        _coordinator.TtsPlaybackRate = value;
     }
 
     partial void OnTranscriptionProviderChanged(string value)
@@ -663,6 +701,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             SelectedTtsOption =
                 _availableTtsOptions.FirstOrDefault(m => m.ModelId == TtsModelOrVoice)
                 ?? _availableTtsOptions.FirstOrDefault();
+
+            IsMultiSpeakerEnabled = _coordinator.CurrentSession.MultiSpeakerEnabled;
         }
         finally
         {
@@ -673,6 +713,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         OnPropertyChanged(nameof(AvailableTranslationModels));
         OnPropertyChanged(nameof(AvailableTtsOptions));
         RefreshProviderReadinessStatuses();
+        RebuildSpeakerIds();
     }
 
     private void NotifyActiveConfigChanged()
@@ -871,6 +912,51 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         var arr = value.ToArray();
         Array.Sort(arr, (a, b) => a.StartSeconds.CompareTo(b.StartSeconds));
         _sortedSegments = arr;
+        RebuildSpeakerIds();
+    }
+
+    private void RebuildSpeakerIds()
+    {
+        var ordered = Segments
+            .Select(segment => segment.SpeakerId)
+            .Where(speakerId => !string.IsNullOrWhiteSpace(speakerId))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(speakerId => speakerId, StringComparer.Ordinal)
+            .ToList();
+
+        SpeakerIds = new ObservableCollection<string>(ordered!);
+        OnPropertyChanged(nameof(HasSpeakers));
+
+        if (selectedSpeakerInvalid())
+        {
+            SelectedSpeakerId = SpeakerIds.FirstOrDefault();
+        }
+        else
+        {
+            UpdateSelectedSpeakerDetails(SelectedSpeakerId);
+        }
+
+        bool selectedSpeakerInvalid() => string.IsNullOrWhiteSpace(SelectedSpeakerId) || !SpeakerIds.Contains(SelectedSpeakerId);
+    }
+
+    private void UpdateSelectedSpeakerDetails(string? speakerId)
+    {
+        if (string.IsNullOrWhiteSpace(speakerId))
+        {
+            SelectedSpeakerAssignedVoice = string.Empty;
+            SelectedSpeakerReferenceAudioPath = string.Empty;
+            return;
+        }
+
+        var voiceMap = _coordinator.GetSpeakerVoiceAssignments();
+        var refMap = _coordinator.GetSpeakerReferenceAudioPaths();
+
+        SelectedSpeakerAssignedVoice = voiceMap.TryGetValue(speakerId, out var voice)
+            ? voice
+            : string.Empty;
+        SelectedSpeakerReferenceAudioPath = refMap.TryGetValue(speakerId, out var path)
+            ? path
+            : string.Empty;
     }
 
     private WorkflowSegmentState? FindSegmentAt(double positionSeconds)
@@ -1315,5 +1401,29 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             StatusErrorTitle ?? "Error details",
             StatusErrorDetail,
             _logFilePath);
+    }
+
+    [RelayCommand]
+    private async Task AssignSelectedSpeakerVoiceAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedSpeakerId) || string.IsNullOrWhiteSpace(TtsModelOrVoice))
+            return;
+
+        _coordinator.SetSpeakerVoiceAssignment(SelectedSpeakerId, TtsModelOrVoice);
+        StatusText = $"Assigned {TtsModelOrVoice} to {SelectedSpeakerId}.";
+        UpdateSelectedSpeakerDetails(SelectedSpeakerId);
+        await RefreshSegmentsAsync();
+    }
+
+    [RelayCommand]
+    private async Task ClearSelectedSpeakerVoiceAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedSpeakerId))
+            return;
+
+        _coordinator.RemoveSpeakerVoiceAssignment(SelectedSpeakerId);
+        StatusText = $"Cleared voice assignment for {SelectedSpeakerId}.";
+        UpdateSelectedSpeakerDetails(SelectedSpeakerId);
+        await RefreshSegmentsAsync();
     }
 }
