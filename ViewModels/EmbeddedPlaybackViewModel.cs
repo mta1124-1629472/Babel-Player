@@ -428,8 +428,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranscriptionModel = value;
-        RebuildTranscriptionModelOptions();
-        OnPropertyChanged(nameof(AvailableTranscriptionModels));
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Transcription);
     }
@@ -449,8 +447,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranslationModel = value;
-        RebuildTranslationModelOptions();
-        OnPropertyChanged(nameof(AvailableTranslationModels));
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Translation);
     }
@@ -470,8 +466,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TtsVoice = value;
-        RebuildTtsModelOptions();
-        OnPropertyChanged(nameof(AvailableTtsOptions));
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Tts);
     }

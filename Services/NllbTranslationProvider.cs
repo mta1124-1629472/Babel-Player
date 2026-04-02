@@ -71,7 +71,7 @@ for seg in data.get('segments', []):
     text   = seg.get('text', '')
     xlated = translate_text(text)
     results.append({
-        'id':             f'segment_{seg[\'start\']}',
+        'id':             'segment_' + str(seg['start']),
         'start':          seg['start'],
         'end':            seg['end'],
         'text':           text,
