@@ -99,6 +99,12 @@ public sealed class SessionSnapshotStoreTests : IDisposable
             TargetLanguage = "en",
             TtsPath = "/artifacts/tts.wav",
             TtsVoice = "en-US-Neural",
+            SpeakerVoiceAssignments = new() { ["spk_01"] = "en-US-AriaNeural" },
+            SpeakerReferenceAudioPaths = new() { ["spk_01"] = "/artifacts/speakers/spk_01.wav" },
+            MultiSpeakerEnabled = true,
+            DefaultTtsVoiceFallback = "en-US-AriaNeural",
+            DiarizationProvider = "speaker-diarization-local",
+            SpeakersDetectedAtUtc = now,
         };
         _store.Save(snapshot);
         var loaded = _store.Load().Snapshot!;
@@ -111,6 +117,12 @@ public sealed class SessionSnapshotStoreTests : IDisposable
         Assert.Equal(snapshot.TargetLanguage, loaded.TargetLanguage);
         Assert.Equal(snapshot.TtsPath, loaded.TtsPath);
         Assert.Equal(snapshot.TtsVoice, loaded.TtsVoice);
+        Assert.Equal(snapshot.SpeakerVoiceAssignments, loaded.SpeakerVoiceAssignments);
+        Assert.Equal(snapshot.SpeakerReferenceAudioPaths, loaded.SpeakerReferenceAudioPaths);
+        Assert.Equal(snapshot.MultiSpeakerEnabled, loaded.MultiSpeakerEnabled);
+        Assert.Equal(snapshot.DefaultTtsVoiceFallback, loaded.DefaultTtsVoiceFallback);
+        Assert.Equal(snapshot.DiarizationProvider, loaded.DiarizationProvider);
+        Assert.Equal(snapshot.SpeakersDetectedAtUtc, loaded.SpeakersDetectedAtUtc);
     }
 
     [Fact]

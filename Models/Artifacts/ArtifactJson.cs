@@ -79,6 +79,7 @@ public static class ArtifactJson
             if (string.IsNullOrWhiteSpace(segment.Text))
                 throw CreateInvalidArtifactException("transcript", contextLabel, $"Segment {i} is missing required 'text'.");
             ValidateSegmentBounds("transcript", contextLabel, i, segment.Start, segment.End);
+            ValidateOptionalSpeakerId("transcript", contextLabel, i, segment.SpeakerId);
         }
     }
 
@@ -103,7 +104,14 @@ public static class ArtifactJson
             if (segment.TranslatedText is null)
                 throw CreateInvalidArtifactException("translation", contextLabel, $"Segment {i} is missing required 'translatedText'.");
             ValidateSegmentBounds("translation", contextLabel, i, segment.Start, segment.End);
+            ValidateOptionalSpeakerId("translation", contextLabel, i, segment.SpeakerId);
         }
+    }
+
+    private static void ValidateOptionalSpeakerId(string artifactKind, string contextLabel, int index, string? speakerId)
+    {
+        if (speakerId is not null && string.IsNullOrWhiteSpace(speakerId))
+            throw CreateInvalidArtifactException(artifactKind, contextLabel, $"Segment {index} has invalid 'speakerId'.");
     }
 
     private static void ValidateSegmentBounds(string artifactKind, string contextLabel, int index, double start, double end)

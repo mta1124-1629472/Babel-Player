@@ -7,6 +7,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Credentials;
 using Babel.Player.ViewModels;
 
 namespace Babel.Player.Views;

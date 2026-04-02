@@ -306,10 +306,11 @@ public sealed class ModelTests
     [Fact]
     public void TranscriptSegment_ConstructsCorrectly()
     {
-        var seg = new TranscriptSegment(1.5, 3.0, "hello world");
+        var seg = new TranscriptSegment(1.5, 3.0, "hello world", "spk_01");
         Assert.Equal(1.5, seg.StartSeconds);
         Assert.Equal(3.0, seg.EndSeconds);
         Assert.Equal("hello world", seg.Text);
+        Assert.Equal("spk_01", seg.SpeakerId);
     }
 
     [Fact]
@@ -328,6 +329,26 @@ public sealed class ModelTests
         Assert.True(result.Success);
         Assert.Equal("es", result.SourceLanguage);
         Assert.Equal("en", result.TargetLanguage);
+    }
+
+    [Fact]
+    public void WorkflowSegmentState_ConstructsWithSpeakerMetadata()
+    {
+        var segment = new WorkflowSegmentState(
+            "segment_0.0",
+            0,
+            1,
+            "hola",
+            true,
+            "hello",
+            true,
+            "spk_01",
+            "en-US-AriaNeural",
+            true);
+
+        Assert.Equal("spk_01", segment.SpeakerId);
+        Assert.Equal("en-US-AriaNeural", segment.AssignedVoice);
+        Assert.True(segment.HasReferenceAudio);
     }
 
     [Fact]

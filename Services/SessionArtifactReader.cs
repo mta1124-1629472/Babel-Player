@@ -32,10 +32,12 @@ public sealed class SessionArtifactReader
 
         var transcript = await LoadTranscriptAsync(session.TranscriptPath, cancellationToken);
         Dictionary<string, string>? translationTexts = null;
+        Dictionary<string, string>? translationSpeakerIds = null;
         if (!string.IsNullOrWhiteSpace(session.TranslationPath) && File.Exists(session.TranslationPath))
         {
             var translation = await LoadTranslationAsync(session.TranslationPath, cancellationToken);
             translationTexts = new Dictionary<string, string>();
+            translationSpeakerIds = new Dictionary<string, string>();
             foreach (var segment in translation.Segments ?? [])
             {
                 if (!string.IsNullOrWhiteSpace(segment.Id) &&
@@ -43,10 +45,18 @@ public sealed class SessionArtifactReader
                 {
                     translationTexts[segment.Id] = segment.TranslatedText;
                 }
+
+                if (!string.IsNullOrWhiteSpace(segment.Id) &&
+                    !string.IsNullOrWhiteSpace(segment.SpeakerId))
+                {
+                    translationSpeakerIds[segment.Id] = segment.SpeakerId;
+                }
             }
         }
 
         var ttsSegmentPaths = session.TtsSegmentAudioPaths;
+        var speakerVoiceAssignments = session.SpeakerVoiceAssignments;
+        var speakerReferenceAudioPaths = session.SpeakerReferenceAudioPaths;
         var result = new List<WorkflowSegmentState>();
         foreach (var segment in transcript.Segments ?? [])
         {
@@ -57,6 +67,9 @@ public sealed class SessionArtifactReader
             var hasTtsAudio = ttsSegmentPaths != null
                 && ttsSegmentPaths.TryGetValue(id, out var audioPath)
                 && File.Exists(audioPath);
+            var speakerId = ResolveSpeakerId(segment, id, translationSpeakerIds);
+            var assignedVoice = ResolveAssignedVoice(speakerId, speakerVoiceAssignments);
+            var hasReferenceAudio = HasReferenceAudio(speakerId, speakerReferenceAudioPaths);
 
             result.Add(new WorkflowSegmentState(
                 id,
@@ -65,7 +78,10 @@ public sealed class SessionArtifactReader
                 segment.Text ?? string.Empty,
                 hasTranslation,
                 translatedText,
-                hasTtsAudio));
+                hasTtsAudio,
+                speakerId,
+                assignedVoice,
+                hasReferenceAudio));
         }
 
         return result;
@@ -99,5 +115,45 @@ public sealed class SessionArtifactReader
         }
 
         throw new InvalidOperationException($"Source text not found for segment '{segmentId}'.");
+    }
+
+    private static string? ResolveSpeakerId(
+        TranscriptSegmentArtifact segment,
+        string segmentId,
+        Dictionary<string, string>? translationSpeakerIds)
+    {
+        if (!string.IsNullOrWhiteSpace(segment.SpeakerId))
+            return segment.SpeakerId;
+
+        if (translationSpeakerIds is null)
+            return null;
+
+        return translationSpeakerIds.TryGetValue(segmentId, out var speakerId)
+            ? speakerId
+            : null;
+    }
+
+    private static string? ResolveAssignedVoice(
+        string? speakerId,
+        Dictionary<string, string>? speakerVoiceAssignments)
+    {
+        if (string.IsNullOrWhiteSpace(speakerId) || speakerVoiceAssignments is null)
+            return null;
+
+        return speakerVoiceAssignments.TryGetValue(speakerId, out var assignedVoice)
+            ? assignedVoice
+            : null;
+    }
+
+    private static bool HasReferenceAudio(
+        string? speakerId,
+        Dictionary<string, string>? speakerReferenceAudioPaths)
+    {
+        if (string.IsNullOrWhiteSpace(speakerId) || speakerReferenceAudioPaths is null)
+            return false;
+
+        return speakerReferenceAudioPaths.TryGetValue(speakerId, out var path)
+            && !string.IsNullOrWhiteSpace(path)
+            && File.Exists(path);
     }
 }

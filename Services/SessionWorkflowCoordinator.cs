@@ -337,11 +337,18 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         else
         {
             var snapshot = loadResult.Snapshot;
-            var validated = ValidateArtifacts(snapshot, "startup-load");
+            var validation = SessionSnapshotSemantics.ValidateArtifacts(snapshot);
+            var validated = validation.Snapshot;
 
             // Log any artifacts that were dropped by validation
             if (snapshot.Stage != validated.Stage)
                 _log.Warning($"Session stage downgraded on load: {snapshot.Stage} → {validated.Stage} (missing artifacts)");
+            if (validation.OriginalStage != validated.Stage)
+            {
+                _log.Warning(
+                    $"ValidateArtifacts[startup-load]: downgraded stage {validation.OriginalStage} -> {validated.Stage}; " +
+                    $"cleared={string.Join(",", validation.ClearedArtifacts)}; provenance={SessionSnapshotSemantics.DescribeSessionProvenance(validated)}");
+            }
 
             string statusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
                 ? "Resumed session with TTS. Dubbing complete."
@@ -445,7 +452,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             // Returning to a previously processed media — restore, validate, then copy into
             // that session's existing directory.
-            var validated = ValidateArtifacts(cached, "media-cache-restore");
+            var validation = SessionSnapshotSemantics.ValidateArtifacts(cached);
+            var validated = validation.Snapshot;
+            if (validation.OriginalStage != validated.Stage)
+            {
+                _log.Warning(
+                    $"ValidateArtifacts[media-cache-restore]: downgraded stage {validation.OriginalStage} -> {validated.Stage}; " +
+                    $"cleared={string.Join(",", validation.ClearedArtifacts)}; provenance={SessionSnapshotSemantics.DescribeSessionProvenance(validated)}");
+            }
 
             var sessionDir = _sessionSwitchService.GetSessionDirectory(validated.SessionId);
             var mediaDir = Path.Combine(sessionDir, "media");
@@ -526,100 +540,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             _mediaSnapshotCache,
             MediaSnapshotCacheLimit);
     }
-
-    private WorkflowSessionSnapshot ValidateArtifacts(WorkflowSessionSnapshot s, string reason)
-    {
-        var stage = s.Stage;
-        var originalStage = stage;
-        var cleared = new List<string>();
-
-        if (stage >= SessionWorkflowStage.TtsGenerated
-            && (string.IsNullOrEmpty(s.TtsPath) || !File.Exists(s.TtsPath)))
-        {
-            stage = SessionWorkflowStage.Translated;
-            s = ClearTtsOutputs(s);
-            cleared.Add("tts");
-        }
-
-        if (stage >= SessionWorkflowStage.Translated
-            && (string.IsNullOrEmpty(s.TranslationPath) || !File.Exists(s.TranslationPath)))
-        {
-            stage = SessionWorkflowStage.Transcribed;
-            s = ClearTranslationOutputs(s);
-            cleared.Add("translation");
-        }
-
-        if (stage >= SessionWorkflowStage.Transcribed
-            && (string.IsNullOrEmpty(s.TranscriptPath) || !File.Exists(s.TranscriptPath)))
-        {
-            stage = SessionWorkflowStage.MediaLoaded;
-            s = ClearTranscriptionOutputs(s);
-            cleared.Add("transcription");
-        }
-
-        if (stage >= SessionWorkflowStage.MediaLoaded
-            && (string.IsNullOrEmpty(s.IngestedMediaPath) || !File.Exists(s.IngestedMediaPath)))
-        {
-            stage = SessionWorkflowStage.Foundation;
-            s = ClearMediaLoadedOutputs(s);
-            cleared.Add("media");
-        }
-
-        var validated = s with { Stage = stage };
-        if (originalStage != stage)
-        {
-            _log.Warning(
-                $"ValidateArtifacts[{reason}]: downgraded stage {originalStage} -> {stage}; " +
-                $"cleared={string.Join(",", cleared)}; provenance={DescribeSessionProvenance(validated)}");
-        }
-
-        return validated;
-    }
-
-    private static WorkflowSessionSnapshot ClearTtsOutputs(WorkflowSessionSnapshot snapshot) =>
-        snapshot with
-        {
-            TtsPath = null,
-            TtsVoice = null,
-            TtsGeneratedAtUtc = null,
-            TtsSegmentsPath = null,
-            TtsSegmentAudioPaths = null,
-            TtsProvider = null,
-        };
-
-    private static WorkflowSessionSnapshot ClearTranslationOutputs(WorkflowSessionSnapshot snapshot) =>
-        ClearTtsOutputs(snapshot) with
-        {
-            TranslationPath = null,
-            TargetLanguage = null,
-            TranslatedAtUtc = null,
-            TranslationProvider = null,
-            TranslationModel = null,
-        };
-
-    private static WorkflowSessionSnapshot ClearTranscriptionOutputs(WorkflowSessionSnapshot snapshot) =>
-        ClearTranslationOutputs(snapshot) with
-        {
-            TranscriptPath = null,
-            SourceLanguage = null,
-            TranscribedAtUtc = null,
-            TranscriptionProvider = null,
-            TranscriptionModel = null,
-        };
-
-    private static WorkflowSessionSnapshot ClearMediaLoadedOutputs(WorkflowSessionSnapshot snapshot) =>
-        ClearTranscriptionOutputs(snapshot) with
-        {
-            IngestedMediaPath = null,
-            MediaLoadedAtUtc = null,
-        };
-
-    private static string DescribeSessionProvenance(WorkflowSessionSnapshot snapshot) =>
-        $"stage={snapshot.Stage}, " +
-        $"txc={snapshot.TranscriptionProvider ?? "<null>"}/{snapshot.TranscriptionModel ?? "<null>"}, " +
-        $"trn={snapshot.TranslationProvider ?? "<null>"}/{snapshot.TranslationModel ?? "<null>"}, " +
-        $"tts={snapshot.TtsProvider ?? "<null>"}/{snapshot.TtsVoice ?? "<null>"}, " +
-        $"srcLang={snapshot.SourceLanguage ?? "<null>"}, tgtLang={snapshot.TargetLanguage ?? "<null>"}";
 
     public void InjectTestTranscript(string transcriptPath, string? translationPath = null)
     {
@@ -845,7 +765,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             $"selection=({selection.TranscriptionProvider}/{selection.TranscriptionModel}, " +
             $"{selection.TranslationProvider}/{selection.TranslationModel}, " +
             $"{selection.TtsProvider}/{selection.TtsVoice}, target={selection.TargetLanguage ?? "<unchanged>"}), " +
-            $"provenance=({DescribeSessionProvenance(CurrentSession)})");
+            $"provenance=({SessionSnapshotSemantics.DescribeSessionProvenance(CurrentSession)})");
         var statusMessage = invalidation switch
         {
             PipelineInvalidation.Transcription => "Transcription settings changed — pipeline reset to media-loaded state.",
@@ -1241,7 +1161,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 MediaSnapshotCacheLimit);
         }
 
-        var validated = ValidateArtifacts(restored, "session-restore");
+        var validation = SessionSnapshotSemantics.ValidateArtifacts(restored);
+        var validated = validation.Snapshot;
+        if (validation.OriginalStage != validated.Stage)
+        {
+            _log.Warning(
+                $"ValidateArtifacts[session-restore]: downgraded stage {validation.OriginalStage} -> {validated.Stage}; " +
+                $"cleared={string.Join(",", validation.ClearedArtifacts)}; provenance={SessionSnapshotSemantics.DescribeSessionProvenance(validated)}");
+        }
         var nowUtc = DateTimeOffset.UtcNow;
         CurrentSession = validated with
         {
@@ -1273,63 +1200,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var cs = CurrentSession;
         var s  = CurrentSettings;
 
-        bool transcriptionChanged = cs.TranscriptionProvider != s.TranscriptionProvider
-            || cs.TranscriptionModel != s.TranscriptionModel;
-        bool translationChanged = cs.TranslationProvider != s.TranslationProvider
-            || cs.TranslationModel != s.TranslationModel
-            || cs.TargetLanguage != s.TargetLanguage;
-        bool ttsChanged = cs.TtsProvider != s.TtsProvider
-            || cs.TtsVoice != s.TtsVoice;
-
-        var effectiveStage = ResolveArtifactStage(cs);
-        var invalidation = effectiveStage switch
-        {
-            SessionWorkflowStage.Foundation => PipelineInvalidation.None,
-            SessionWorkflowStage.MediaLoaded => PipelineInvalidation.None,
-            SessionWorkflowStage.Transcribed => transcriptionChanged ? PipelineInvalidation.Transcription : PipelineInvalidation.None,
-            SessionWorkflowStage.Translated => transcriptionChanged
-                ? PipelineInvalidation.Transcription
-                : translationChanged
-                    ? PipelineInvalidation.Translation
-                    : PipelineInvalidation.None,
-            SessionWorkflowStage.TtsGenerated => transcriptionChanged
-                ? PipelineInvalidation.Transcription
-                : translationChanged
-                    ? PipelineInvalidation.Translation
-                    : ttsChanged
-                        ? PipelineInvalidation.Tts
-                        : PipelineInvalidation.None,
-            _ => PipelineInvalidation.None,
-        };
+        var effectiveStage = SessionSnapshotSemantics.ResolveArtifactStage(cs);
+        var invalidation = SessionSnapshotSemantics.ComputeInvalidation(cs, s);
 
         _log.Info(
-            $"CheckSettingsInvalidation: stage={cs.Stage}, effectiveStage={effectiveStage}, invalidation={invalidation}, provenance=({DescribeSessionProvenance(cs)})");
+            $"CheckSettingsInvalidation: stage={cs.Stage}, effectiveStage={effectiveStage}, invalidation={invalidation}, provenance=({SessionSnapshotSemantics.DescribeSessionProvenance(cs)})");
         return invalidation;
-    }
-
-    private static SessionWorkflowStage ResolveArtifactStage(WorkflowSessionSnapshot snapshot)
-    {
-        if (snapshot.Stage >= SessionWorkflowStage.TtsGenerated
-            && !string.IsNullOrWhiteSpace(snapshot.TtsPath)
-            && File.Exists(snapshot.TtsPath))
-            return SessionWorkflowStage.TtsGenerated;
-
-        if (snapshot.Stage >= SessionWorkflowStage.Translated
-            && !string.IsNullOrWhiteSpace(snapshot.TranslationPath)
-            && File.Exists(snapshot.TranslationPath))
-            return SessionWorkflowStage.Translated;
-
-        if (snapshot.Stage >= SessionWorkflowStage.Transcribed
-            && !string.IsNullOrWhiteSpace(snapshot.TranscriptPath)
-            && File.Exists(snapshot.TranscriptPath))
-            return SessionWorkflowStage.Transcribed;
-
-        if (snapshot.Stage >= SessionWorkflowStage.MediaLoaded
-            && !string.IsNullOrWhiteSpace(snapshot.IngestedMediaPath)
-            && File.Exists(snapshot.IngestedMediaPath))
-            return SessionWorkflowStage.MediaLoaded;
-
-        return SessionWorkflowStage.Foundation;
     }
 
     /// <summary>

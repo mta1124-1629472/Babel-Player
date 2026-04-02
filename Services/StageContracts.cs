@@ -22,7 +22,8 @@ public sealed record TranscriptionResult(
 public sealed record TranscriptSegment(
     double StartSeconds,
     double EndSeconds,
-    string Text);
+    string Text,
+    string? SpeakerId = null);
 
 // --- TRANSLATION ---
 public sealed record TranslationRequest(
@@ -52,7 +53,8 @@ public sealed record TranslatedSegment(
     double StartSeconds,
     double EndSeconds,
     string Text,
-    string TranslatedText);
+    string TranslatedText,
+    string? SpeakerId = null);
 
 // --- TTS ---
 public sealed record TtsRequest(

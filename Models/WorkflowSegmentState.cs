@@ -9,4 +9,7 @@ public sealed record WorkflowSegmentState(
     string SourceText,
     bool HasTranslation,
     string? TranslatedText,
-    bool HasTtsAudio);
+    bool HasTtsAudio,
+    string? SpeakerId = null,
+    string? AssignedVoice = null,
+    bool HasReferenceAudio = false);

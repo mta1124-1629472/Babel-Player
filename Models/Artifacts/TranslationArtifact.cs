@@ -31,4 +31,7 @@ public sealed class TranslationSegmentArtifact
 
     [JsonPropertyName("translatedText")]
     public string? TranslatedText { get; set; }
+
+    [JsonPropertyName("speakerId")]
+    public string? SpeakerId { get; set; }
 }

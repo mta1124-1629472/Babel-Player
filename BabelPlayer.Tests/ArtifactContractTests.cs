@@ -40,6 +40,7 @@ public sealed class ArtifactContractTests : IDisposable
                     End = 1.5,
                     Text = "hola",
                     TranslatedText = "hello",
+                    SpeakerId = "spk_01",
                 }
             ],
         };
@@ -56,8 +57,58 @@ public sealed class ArtifactContractTests : IDisposable
 
         var first = segments[0];
         Assert.True(first.TryGetProperty("translatedText", out _));
+                Assert.True(first.TryGetProperty("speakerId", out var speakerId));
+                Assert.Equal("spk_01", speakerId.GetString());
         Assert.False(first.TryGetProperty("TranslatedText", out _));
     }
+
+        [Fact]
+        public void DeserializeTranscript_WithSpeakerId_ReadsSpeakerId()
+        {
+                var json = """
+                {
+                    "language": "es",
+                    "language_probability": 0.99,
+                    "segments": [
+                        {
+                            "start": 0.0,
+                            "end": 1.5,
+                            "text": "hola",
+                            "speakerId": "spk_a"
+                        }
+                    ]
+                }
+                """;
+
+                var artifact = ArtifactJson.DeserializeTranscript(json, "transcript-with-speaker");
+                Assert.Single(artifact.Segments!);
+                Assert.Equal("spk_a", artifact.Segments![0].SpeakerId);
+        }
+
+        [Fact]
+        public void DeserializeTranslation_WithSpeakerId_ReadsSpeakerId()
+        {
+                var json = """
+                {
+                    "sourceLanguage": "es",
+                    "targetLanguage": "en",
+                    "segments": [
+                        {
+                            "id": "segment_0.0",
+                            "start": 0.0,
+                            "end": 1.5,
+                            "text": "hola",
+                            "translatedText": "hello",
+                            "speakerId": "spk_b"
+                        }
+                    ]
+                }
+                """;
+
+                var artifact = ArtifactJson.DeserializeTranslation(json, "translation-with-speaker");
+                Assert.Single(artifact.Segments!);
+                Assert.Equal("spk_b", artifact.Segments![0].SpeakerId);
+        }
 
     [Fact]
     public void DeserializeTranslation_MissingSegments_Throws()

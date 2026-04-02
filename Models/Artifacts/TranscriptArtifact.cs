@@ -25,4 +25,7 @@ public sealed class TranscriptSegmentArtifact
 
     [JsonPropertyName("text")]
     public string? Text { get; set; }
+
+    [JsonPropertyName("speakerId")]
+    public string? SpeakerId { get; set; }
 }

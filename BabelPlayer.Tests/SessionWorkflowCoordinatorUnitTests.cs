@@ -635,7 +635,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     }
 
     [Fact]
-    public void CheckSettingsInvalidation_TtsProviderChanged_ReturnsTts()
+    public void CheckSettingsInvalidation_Transcribed_TtsProviderChanged_ReturnsNone()
     {
         if (!File.Exists(_mediaPath)) return;
 
@@ -666,7 +666,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         coord2.Initialize();
 
         var invalidation = coord2.CheckSettingsInvalidation();
-        Assert.Equal(PipelineInvalidation.Tts, invalidation);
+        Assert.Equal(PipelineInvalidation.None, invalidation);
     }
 
     [Fact]
