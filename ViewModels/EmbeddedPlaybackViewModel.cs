@@ -198,6 +198,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             ?? _availableTtsOptions.FirstOrDefault();
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
+        _coordinator.SettingsModified += OnCoordinatorSettingsModified;
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         timer.Tick += OnPositionTimerTick;
@@ -242,6 +243,19 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public bool HasDiagnosticsWarning => !_coordinator.BootstrapDiagnostics.AllDependenciesAvailable;
     public string DiagnosticsWarningText => _coordinator.BootstrapDiagnostics.DiagnosticSummary;
     public string VoiceModelLabel => _coordinator.CurrentSession.TtsVoice ?? _coordinator.CurrentSettings.TtsVoice;
+    public string ActiveTranscriptionConfigLine => $"{TranscriptionProvider} / {TranscriptionModel}";
+    public string ActiveCpuTuningLine
+    {
+        get
+        {
+            var s = _coordinator.CurrentSettings;
+            var threads = s.TranscriptionCpuThreads > 0 ? s.TranscriptionCpuThreads.ToString() : "auto";
+            return $"{s.TranscriptionCpuComputeType} · threads {threads} · workers {Math.Max(1, s.TranscriptionNumWorkers)}";
+        }
+    }
+    public string ActiveTranslationConfigLine =>
+        $"{TranslationProvider} / {TranslationModel} · target {_coordinator.CurrentSettings.TargetLanguage}";
+    public string ActiveTtsConfigLine => $"{TtsProvider} / {TtsModelOrVoice}";
 
     // ── Provider / model option lists ──────────────────────────────────────────
     public IReadOnlyList<string> TranscriptionProviders => [.. _coordinator.TranscriptionRegistry.GetAvailableProviders().Where(p => p.IsImplemented).Select(p => p.Id)];
@@ -420,6 +434,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == TranscriptionModel)
             ?? _availableTranscriptionModels.FirstOrDefault();
         OnPropertyChanged(nameof(AvailableTranscriptionModels));
+        NotifyActiveConfigChanged();
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Transcription);
     }
@@ -431,6 +446,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == value)
             ?? _availableTranscriptionModels.FirstOrDefault();
         _coordinator.CurrentSettings.TranscriptionModel = value;
+        NotifyActiveConfigChanged();
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Transcription);
     }
@@ -463,6 +479,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             _availableTranslationModels.FirstOrDefault(m => m.ModelId == TranslationModel)
             ?? _availableTranslationModels.FirstOrDefault();
         OnPropertyChanged(nameof(AvailableTranslationModels));
+        NotifyActiveConfigChanged();
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Translation);
     }
@@ -474,6 +491,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             _availableTranslationModels.FirstOrDefault(m => m.ModelId == value)
             ?? _availableTranslationModels.FirstOrDefault();
         _coordinator.CurrentSettings.TranslationModel = value;
+        NotifyActiveConfigChanged();
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Translation);
     }
@@ -488,6 +506,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             _availableTtsOptions.FirstOrDefault(m => m.ModelId == TtsModelOrVoice)
             ?? _availableTtsOptions.FirstOrDefault();
         OnPropertyChanged(nameof(AvailableTtsOptions));
+        NotifyActiveConfigChanged();
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Tts);
     }
@@ -499,8 +518,22 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             _availableTtsOptions.FirstOrDefault(m => m.ModelId == value)
             ?? _availableTtsOptions.FirstOrDefault();
         _coordinator.CurrentSettings.TtsVoice = value;
+        NotifyActiveConfigChanged();
         NotifySettingsSave();
         ApplySmartWipe(PipelineInvalidation.Tts);
+    }
+
+    private void OnCoordinatorSettingsModified()
+    {
+        NotifyActiveConfigChanged();
+    }
+
+    private void NotifyActiveConfigChanged()
+    {
+        OnPropertyChanged(nameof(ActiveTranscriptionConfigLine));
+        OnPropertyChanged(nameof(ActiveCpuTuningLine));
+        OnPropertyChanged(nameof(ActiveTranslationConfigLine));
+        OnPropertyChanged(nameof(ActiveTtsConfigLine));
     }
 
     private void RebuildAllModelOptions()

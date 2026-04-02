@@ -194,6 +194,38 @@
                             </Grid>
                         </StackPanel>
 
+                        <!-- ACTIVE CONFIGURATION -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="ACTIVE CONFIG" FontSize="10"
+                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+
+                            <Grid ColumnDefinitions="56,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="ASR"
+                                           FontSize="11" Foreground="#4A4A60" />
+                                <TextBlock Grid.Row="0" Grid.Column="1"
+                                           Text="{Binding Playback.ActiveTranscriptionConfigLine}"
+                                           FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="CPU"
+                                           FontSize="11" Foreground="#4A4A60" />
+                                <TextBlock Grid.Row="1" Grid.Column="1"
+                                           Text="{Binding Playback.ActiveCpuTuningLine}"
+                                           FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="NMT"
+                                           FontSize="11" Foreground="#4A4A60" />
+                                <TextBlock Grid.Row="2" Grid.Column="1"
+                                           Text="{Binding Playback.ActiveTranslationConfigLine}"
+                                           FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="TTS"
+                                           FontSize="11" Foreground="#4A4A60" />
+                                <TextBlock Grid.Row="3" Grid.Column="1"
+                                           Text="{Binding Playback.ActiveTtsConfigLine}"
+                                           FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
+                            </Grid>
+                        </StackPanel>
+
                         <!-- DUB CONFIGURATION -->
                         <StackPanel Spacing="10">
                             <TextBlock Text="DUB CONFIGURATION" FontSize="10"

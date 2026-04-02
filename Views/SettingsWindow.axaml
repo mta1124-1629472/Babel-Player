@@ -33,6 +33,10 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- Theme -->
@@ -62,6 +66,32 @@
                     <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
                         <CheckBox IsChecked="{Binding AutoSaveEnabled}"
                                   Content="Auto-save session on exit"/>
+                    </StackPanel>
+
+                    <!-- Advanced CPU transcription tuning -->
+                    <StackPanel Grid.Row="4" Margin="0,18,0,0" Spacing="6">
+                        <TextBlock Text="Advanced: CPU Transcription" FontWeight="SemiBold"/>
+                        <TextBlock Opacity="0.65" TextWrapping="Wrap"
+                                   Text="These options tune CPU-only transcription. 0 threads means auto selection by the runtime."/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="CPU Compute Type:" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}"
+                                  SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}"
+                                  Width="150"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="6" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="CPU Threads (0=auto):" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="80"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="7" Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="Workers:" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="80"/>
                     </StackPanel>
                 </Grid>
             </TabItem>

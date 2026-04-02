@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Babel.Player.Services;
@@ -32,6 +33,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         SelectedTheme = current.Theme;
         MaxRecentSessions = current.MaxRecentSessions;
         AutoSaveEnabled = current.AutoSaveEnabled;
+        TranscriptionCpuComputeType = current.TranscriptionCpuComputeType;
+        TranscriptionCpuThreads = current.TranscriptionCpuThreads;
+        TranscriptionNumWorkers = current.TranscriptionNumWorkers;
 
         // Theme options
         ThemeOptions = new[] { "Light", "Dark", "System" };
@@ -90,6 +94,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string[] TtsVoiceOptions { get; }
 
+    public string[] TranscriptionCpuComputeTypeOptions { get; } =
+        ["int8", "int8_float16", "float32"];
+
     // Models tab
     public ModelsTabViewModel ModelsTab { get; }
 
@@ -100,6 +107,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     // Auto-save
     [ObservableProperty]
     private bool _autoSaveEnabled;
+
+    // Advanced transcription CPU tuning
+    [ObservableProperty]
+    private string _transcriptionCpuComputeType = "int8";
+
+    [ObservableProperty]
+    private int _transcriptionCpuThreads;
+
+    [ObservableProperty]
+    private int _transcriptionNumWorkers = 1;
 
     // Video hardware decode & encode
     [ObservableProperty]
@@ -168,6 +185,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         settings.Theme              = SelectedTheme ?? settings.Theme;
         settings.MaxRecentSessions  = MaxRecentSessions;
         settings.AutoSaveEnabled    = AutoSaveEnabled;
+        settings.TranscriptionCpuComputeType = string.IsNullOrWhiteSpace(TranscriptionCpuComputeType)
+            ? "int8"
+            : TranscriptionCpuComputeType;
+        settings.TranscriptionCpuThreads = Math.Max(0, TranscriptionCpuThreads);
+        settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
         settings.VideoHwdec         = VideoHwdec;
         settings.VideoGpuApi        = VideoGpuApi;
         settings.VideoExportEncoder = VideoExportEncoder;
