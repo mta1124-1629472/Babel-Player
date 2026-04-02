@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -19,6 +20,7 @@ namespace Babel.Player.Services;
 public sealed class GoogleApiClient : IDisposable
 {
     private const string TtsBaseUrl = "https://texttospeech.googleapis.com/v1/";
+    private const string SpeechBaseUrl = "https://speech.googleapis.com/v1/";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -49,6 +51,29 @@ public sealed class GoogleApiClient : IDisposable
     {
         using var response = await _httpClient.GetAsync($"voices?key={Uri.EscapeDataString(_apiKey)}", cancellationToken);
         return await ReadJsonAsync<GoogleVoicesInfo>(response, cancellationToken);
+    }
+
+    /// <summary>
+    /// Calls Cloud Speech-to-Text synchronous recognize endpoint with API-key auth.
+    /// Audio bytes are expected to be LINEAR16 wav at 16kHz mono.
+    /// </summary>
+    public async Task<GoogleSpeechRecognizeInfo> RecognizeSpeechAsync(
+        byte[] audioBytes,
+        string languageCode,
+        CancellationToken cancellationToken = default)
+    {
+        using var speechClient = new HttpClient { BaseAddress = new Uri(SpeechBaseUrl), Timeout = TimeSpan.FromMinutes(2) };
+        speechClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        speechClient.DefaultRequestHeaders.UserAgent.ParseAdd("BabelPlayer/1.0");
+
+        var payload = new GoogleRecognizeRequest(
+            new GoogleRecognizeConfig("LINEAR16", 16000, string.IsNullOrWhiteSpace(languageCode) ? "en-US" : languageCode),
+            new GoogleRecognizeAudio(Convert.ToBase64String(audioBytes)));
+
+        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var response = await speechClient.PostAsync($"speech:recognize?key={Uri.EscapeDataString(_apiKey)}", content, cancellationToken);
+        return await ReadJsonAsync<GoogleSpeechRecognizeInfo>(response, cancellationToken);
     }
 
     public void Dispose() => _httpClient.Dispose();
@@ -101,3 +126,25 @@ public sealed class GoogleApiException : Exception
         StatusCode = statusCode;
     }
 }
+
+public sealed record GoogleSpeechRecognizeInfo(
+    [property: JsonPropertyName("results")] GoogleSpeechResult[]? Results);
+
+public sealed record GoogleSpeechResult(
+    [property: JsonPropertyName("alternatives")] GoogleSpeechAlternative[]? Alternatives);
+
+public sealed record GoogleSpeechAlternative(
+    [property: JsonPropertyName("transcript")] string? Transcript,
+    [property: JsonPropertyName("confidence")] double Confidence = 0);
+
+internal sealed record GoogleRecognizeRequest(
+    [property: JsonPropertyName("config")] GoogleRecognizeConfig Config,
+    [property: JsonPropertyName("audio")] GoogleRecognizeAudio Audio);
+
+internal sealed record GoogleRecognizeConfig(
+    [property: JsonPropertyName("encoding")] string Encoding,
+    [property: JsonPropertyName("sampleRateHertz")] int SampleRateHertz,
+    [property: JsonPropertyName("languageCode")] string LanguageCode);
+
+internal sealed record GoogleRecognizeAudio(
+    [property: JsonPropertyName("content")] string Content);

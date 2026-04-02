@@ -103,6 +103,7 @@ Until then, the codebase should stay container-compatible without requiring cont
 Current supported implementation:
 
 - the only supported container path right now is an external/local inference service consumed over HTTP
+- in the app UI, `Containerized` is a runtime selection, not a provider name
 - the desktop app does not try to launch Docker, WSL, or another host runtime for you
 - `INFERENCE_SERVICE_URL` overrides the saved service URL at startup when present
 - provider readiness is based on `GET /health/live` plus `GET /capabilities`, not URL presence alone

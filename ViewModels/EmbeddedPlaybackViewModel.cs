@@ -879,21 +879,23 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             IsMultiSpeakerEnabled = _coordinator.CurrentSession.MultiSpeakerEnabled;
             IsAutoSpeakerDetectionEnabled =
                 string.Equals(_coordinator.CurrentSettings.DiarizationProvider, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
+
+            // Keep the synchronization guard active while Avalonia reconciles the
+            // refreshed ItemsSource/SelectedItem bindings to avoid recursive write-back.
+            OnPropertyChanged(nameof(TranscriptionProviders));
+            OnPropertyChanged(nameof(TranslationProviders));
+            OnPropertyChanged(nameof(TtsProviders));
+            OnPropertyChanged(nameof(AvailableTranscriptionModels));
+            OnPropertyChanged(nameof(AvailableTranslationModels));
+            OnPropertyChanged(nameof(AvailableTtsOptions));
+            RefreshAutoSpeakerDetectionStatus();
+            RefreshProviderReadinessStatuses();
+            RebuildSpeakerIds();
         }
         finally
         {
             _isSynchronizingPipelineSettings = false;
         }
-
-        OnPropertyChanged(nameof(TranscriptionProviders));
-        OnPropertyChanged(nameof(TranslationProviders));
-        OnPropertyChanged(nameof(TtsProviders));
-        OnPropertyChanged(nameof(AvailableTranscriptionModels));
-        OnPropertyChanged(nameof(AvailableTranslationModels));
-        OnPropertyChanged(nameof(AvailableTtsOptions));
-        RefreshAutoSpeakerDetectionStatus();
-        RefreshProviderReadinessStatuses();
-        RebuildSpeakerIds();
     }
 
     private void RefreshAutoSpeakerDetectionStatus()

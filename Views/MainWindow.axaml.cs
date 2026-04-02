@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.ComponentModel;
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -252,6 +253,30 @@ public partial class MainWindow : Window
         if (string.IsNullOrEmpty(path)) return;
 
         await vm.Playback.SetReferenceAudioForSelectedSpeaker(path);
+    }
+
+    public void OnAutoSpeakerSetupGuideClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Open both model gate pages the user needs to accept.
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://huggingface.co/pyannote/speaker-diarization-3.1",
+                UseShellExecute = true,
+            });
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://huggingface.co/pyannote/segmentation-3.0",
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            if (DataContext is MainWindowViewModel vm)
+                vm.Playback.StatusText = $"Failed to open setup guide: {ex.Message}";
+        }
     }
 
     public async void OnExportCaptionsClick(object? sender, RoutedEventArgs e)

@@ -36,6 +36,12 @@ Release bundles include:
 
 Release bundles do not include Python or any external/local provider runtimes. Those still need to be installed and reachable on your machine.
 
+Inference selection is now runtime-aware per stage:
+
+- `Local` runs the provider directly on your machine
+- `Containerized` calls an already-running HTTP inference service
+- `Cloud` uses the provider's remote API or hosted backend
+
 ## What It Does
 
 - Load a local video file
@@ -69,7 +75,7 @@ If you are building from source, you also need the [.NET 10 SDK](https://dotnet.
 
 1. Start the app.
 2. Open a local video file.
-3. Configure providers and any required API keys in Settings.
+3. Choose the runtime, provider, and model or voice for each stage, then add any required API keys in Settings.
 4. Run transcription, then translation, then TTS generation.
 5. Toggle dub mode to preview the result in the player.
 

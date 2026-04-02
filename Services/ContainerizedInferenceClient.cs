@@ -17,10 +17,15 @@ public sealed class ContainerizedInferenceClient
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = false };
 
     public ContainerizedInferenceClient(string inferenceServiceUrl, AppLog log)
+        : this(inferenceServiceUrl, log, null)
+    {
+    }
+
+    public ContainerizedInferenceClient(string inferenceServiceUrl, AppLog log, HttpClient? httpClient)
     {
         _inferenceServiceUrl = NormalizeBaseUrl(inferenceServiceUrl);
         _log = log;
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
     }
 
     public Task<ContainerHealthStatus> CheckHealthAsync(
