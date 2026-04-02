@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -28,7 +29,7 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
         if (!Dispatcher.UIThread.CheckAccess())
         {
             return Dispatcher.UIThread.InvokeAsync(() =>
-                ShowErrorAsync(title, fullDetail, logFilePath)).GetTask();
+                ShowErrorAsync(title, fullDetail, logFilePath));
         }
 
         ShowDialog(title, fullDetail, logFilePath);
