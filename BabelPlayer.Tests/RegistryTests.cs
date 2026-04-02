@@ -253,9 +253,9 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void AllRegistries_ContainerizedService_CheckReadiness_ReadyWhenUrlConfigured()
+    public void AllRegistries_ContainerizedService_CheckReadiness_NotReadyWhenServiceUnavailable()
     {
-        var settingsWithUrl = new AppSettings { ContainerizedServiceUrl = "http://localhost:8000" };
+        var settingsWithUrl = new AppSettings { ContainerizedServiceUrl = "http://127.0.0.1:1" };
 
         var transcription = _transcriptionRegistry.CheckReadiness(
             ProviderNames.ContainerizedService, "base", settingsWithUrl, null);
@@ -264,8 +264,8 @@ public sealed class RegistryTests : IDisposable
         var tts = _ttsRegistry.CheckReadiness(
             ProviderNames.ContainerizedService, "en-US-AriaNeural", settingsWithUrl, null);
 
-        Assert.True(transcription.IsReady);
-        Assert.True(translation.IsReady);
-        Assert.True(tts.IsReady);
+        Assert.False(transcription.IsReady);
+        Assert.False(translation.IsReady);
+        Assert.False(tts.IsReady);
     }
 }

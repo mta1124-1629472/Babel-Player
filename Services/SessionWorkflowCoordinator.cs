@@ -121,6 +121,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         bool translationProviderChanged = settings.TranslationProvider != CurrentSettings.TranslationProvider
             || settings.TranslationModel != CurrentSettings.TranslationModel;
         bool ttsProviderChanged = settings.TtsProvider != CurrentSettings.TtsProvider
+            || settings.TtsVoice != CurrentSettings.TtsVoice
             || settings.PiperModelDir != CurrentSettings.PiperModelDir;
 
         CurrentSettings = settings;
@@ -135,6 +136,18 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     private ITtsProvider CreateTtsService() =>
         TtsRegistry.CreateProvider(CurrentSettings.TtsProvider, CurrentSettings, KeyStore);
+
+    /// <summary>
+    /// Invalidates all cached provider service instances, forcing them to be recreated
+    /// on the next pipeline execution with fresh CurrentSettings. Called explicitly
+    /// when user clicks Clear or when a complete reset is needed.
+    /// </summary>
+    public void InvalidateAllProviderCaches()
+    {
+        _transcriptionService = null;
+        _translationService = null;
+        _ttsService = null;
+    }
 
     /// <summary>
     /// Raises SettingsModified so subscribers (e.g. MainWindowViewModel) can persist changes.

@@ -186,8 +186,6 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
     {
-        if (string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
-            return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
-        return ProviderReadiness.Ready;
+        return ContainerizedProviderReadiness.Check(settings, keyStore);
     }
 }

@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
@@ -20,6 +21,7 @@ public partial class App : Application
     private AppLog? _startupLog;
     private SettingsService? _settingsService;
     private ApiKeyStore? _apiKeyStore;
+    private ContainerizedInferenceManager? _containerizedInferenceManager;
 
     // Resolved once at startup so crash handlers can reference it without
     // touching the AppLog instance (which may itself be in a bad state).
@@ -56,6 +58,9 @@ public partial class App : Application
                 Path.Combine(appDataRoot, "state", "recent-sessions.json"), appLog);
 
             _apiKeyStore = new ApiKeyStore(appDataRoot);
+            _containerizedInferenceManager = new ContainerizedInferenceManager(
+                appLog,
+                appSettings.ContainerizedServiceUrl);
 
             try
             {
@@ -94,7 +99,15 @@ public partial class App : Application
 
             // Run heavy startup probes in background and publish results on UI thread.
             var coordinator = _sessionWorkflowCoordinator;
-            Task.Run(() => coordinator.GatherBootstrapWarmupData())
+            var settingsForWarmup = appSettings;
+            var inferenceManager = _containerizedInferenceManager;
+            Task.Run(() =>
+                {
+                    if (ShouldAutoStartLocalContainerizedInference(settingsForWarmup))
+                        inferenceManager?.EnsureAvailable();
+
+                    return coordinator.GatherBootstrapWarmupData();
+                })
                 .ContinueWith(t =>
                 {
                     if (t.IsCompletedSuccessfully)
@@ -125,6 +138,7 @@ public partial class App : Application
         try
         {
             _sessionWorkflowCoordinator.FlushPendingSave();
+            _containerizedInferenceManager?.StopManagedService();
         }
         catch (Exception ex)
         {
@@ -170,5 +184,21 @@ public partial class App : Application
 
         // 3. Show full error to the user.
         CrashReportWindow.ShowOnUiThread(msg, _logFilePath);
+    }
+
+    private static bool ShouldAutoStartLocalContainerizedInference(AppSettings settings)
+    {
+        if (settings.TranscriptionProvider != ProviderNames.ContainerizedService &&
+            settings.TranslationProvider != ProviderNames.ContainerizedService &&
+            settings.TtsProvider != ProviderNames.ContainerizedService)
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(settings.ContainerizedServiceUrl, UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.IsLoopback ||
+               string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -99,3 +99,4 @@ benchmarks/
 
 # External binaries
 ffmpeg.exe
+.codex/environments/environment.toml

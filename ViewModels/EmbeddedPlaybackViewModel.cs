@@ -528,6 +528,48 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         NotifyActiveConfigChanged();
     }
 
+    /// <summary>
+    /// Synchronizes all provider/model UI backing fields from CurrentSettings.
+    /// Called when CurrentSession changes (e.g., media restored from cache).
+    /// This ensures dropdowns always display the actual configured state,
+    /// not stale values from a previous session.
+    /// </summary>
+    private void SyncProviderModelFieldsFromSettings()
+    {
+        // Read all configuration fields directly from coordinator settings (no partial handlers)
+        _transcriptionProvider = _coordinator.CurrentSettings.TranscriptionProvider;
+        _transcriptionModel = _coordinator.CurrentSettings.TranscriptionModel;
+        _translationProvider = _coordinator.CurrentSettings.TranslationProvider;
+        _translationModel = _coordinator.CurrentSettings.TranslationModel;
+        _ttsProvider = _coordinator.CurrentSettings.TtsProvider;
+        _ttsModelOrVoice = _coordinator.CurrentSettings.TtsVoice;
+
+        // Rebuild available model lists for all providers
+        RebuildAllModelOptions();
+
+        // Re-sync dropdown selections to match the backing fields
+        SelectedTranscriptionModel =
+            _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == _transcriptionModel)
+            ?? _availableTranscriptionModels.FirstOrDefault();
+        SelectedTranslationModel =
+            _availableTranslationModels.FirstOrDefault(m => m.ModelId == _translationModel)
+            ?? _availableTranslationModels.FirstOrDefault();
+        SelectedTtsOption =
+            _availableTtsOptions.FirstOrDefault(m => m.ModelId == _ttsModelOrVoice)
+            ?? _availableTtsOptions.FirstOrDefault();
+
+        // Notify all related properties changed so UI bindings refresh
+        OnPropertyChanged(nameof(TranscriptionProvider));
+        OnPropertyChanged(nameof(TranscriptionModel));
+        OnPropertyChanged(nameof(AvailableTranscriptionModels));
+        OnPropertyChanged(nameof(TranslationProvider));
+        OnPropertyChanged(nameof(TranslationModel));
+        OnPropertyChanged(nameof(AvailableTranslationModels));
+        OnPropertyChanged(nameof(TtsProvider));
+        OnPropertyChanged(nameof(TtsModelOrVoice));
+        OnPropertyChanged(nameof(AvailableTtsOptions));
+    }
+
     private void NotifyActiveConfigChanged()
     {
         OnPropertyChanged(nameof(ActiveTranscriptionConfigLine));
@@ -739,6 +781,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                     SelectedSegment = null;
                     _isUpdatingActiveSegment = false;
                 }
+
+                // Sync provider/model UI fields from CurrentSettings when session changes.
+                // This ensures dropdowns always reflect the actual configured state,
+                // especially after session restore from cache.
+                SyncProviderModelFieldsFromSettings();
 
                 if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
                 {
@@ -1025,6 +1072,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private void ClearPipeline()
     {
         _coordinator.ResetPipelineToMediaLoaded();
+        _coordinator.InvalidateAllProviderCaches();  // Force provider instances to be recreated
         Segments.Clear();
         HasSegments = false;
         if (IsSubtitleModeOn) ToggleSubtitles();
