@@ -20,11 +20,12 @@ date: 2026-04-02
 - [ ] Manual verification against a live local inference container stack.
 
 ## What Was Verified
-1. `dotnet build BabelPlayer.csproj /p:UseSharedCompilation=false` completed successfully.
-2. `dotnet test BabelPlayer.Tests\\BabelPlayer.Tests.csproj` passed with 198 tests.
+1. `dotnet build BabelPlayer.csproj -c Release /p:UseSharedCompilation=false` completed successfully.
+2. `dotnet test BabelPlayer.Tests\\BabelPlayer.Tests.csproj -c Release` passed with 204 tests.
 3. `python scripts/check-architecture.py` passed all 10 checks.
-4. Manual app startup smoke succeeded: `dotnet run --project BabelPlayer.csproj /p:UseSharedCompilation=false` launched and remained running for 8 seconds without startup failure.
-5. App log recorded normal bootstrap completion with `Bootstrap: inference mode = SubprocessCpu (Local subprocess (CPU))`, confirming the non-container path did not regress.
+4. `python -m py_compile inference\\main.py` completed successfully.
+5. Manual app startup smoke succeeded: `dotnet run --no-build -c Release --project BabelPlayer.csproj` launched and remained running until the CLI timeout without startup failure.
+6. App log recorded normal bootstrap completion with `Bootstrap: inference mode = SubprocessCpu (Local subprocess (CPU))`, confirming the non-container path did not regress.
 
 ## What Was Not Verified
 - Live readiness and capability transition against a running local inference container.
@@ -36,7 +37,7 @@ date: 2026-04-02
 - Provider readiness updates: `Services/ContainerizedTranscriptionProvider.cs`, `Services/ContainerizedTranslationProvider.cs`, `Services/ContainerizedTtsProvider.cs`
 - Service contract: `Services/ContainerizedInferenceClient.cs`, `inference/main.py`
 - Dev container assets: `docker-compose.yml`, `inference/Dockerfile`, `inference/requirements.txt`
-- Test coverage: `BabelPlayer.Tests/RegistryTests.cs`
+- Test coverage: `BabelPlayer.Tests/RegistryTests.cs`, `BabelPlayer.Tests/ArtifactContractTests.cs`, `BabelPlayer.Tests/AppSettingsTests.cs`, `BabelPlayer.Tests/SessionWorkflowCoordinatorUnitTests.cs`
 - Startup log excerpt:
   - `App startup: session coordinator ready.`
   - `Bootstrap: all dependencies available.`
