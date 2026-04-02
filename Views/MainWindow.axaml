@@ -173,11 +173,17 @@
                             <TextBlock Text="API KEYS" FontSize="10"
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
 
+                            <TextBlock Text="Configure credentials for the providers selected above."
+                                       FontSize="11"
+                                       Foreground="#686878"
+                                       TextWrapping="Wrap" />
+
                             <Button HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"
-                                    Padding="0,7"
+                                    HorizontalContentAlignment="Left"
+                                    Padding="10,8"
                                     FontSize="12"
-                                    Background="#1C1C2C" Foreground="#8080A0"
+                                    Background="#1E1E2C" Foreground="#C0C0D0"
+                                    BorderBrush="#2A2A3A"
                                     CornerRadius="5"
                                     Click="OnApiKeysClick">
                                 <StackPanel Orientation="Horizontal" Spacing="5">

@@ -169,6 +169,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     private readonly DispatcherTimer _controlsHideTimer;
     private const int ControlsHideDelayMs = 3000;
+    private const double PositionUpdateThresholdMs = 0.5;
 
     public EmbeddedPlaybackViewModel(
         SessionWorkflowCoordinator coordinator,
@@ -336,8 +337,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         if (player == null || player.Duration == 0) return;
 
         _isUpdatingPositionFromTimer = true;
-        SourceDurationMs = player.Duration;
-        SourcePositionMs = player.CurrentTime;
+        var newDurationMs = player.Duration;
+        if (Math.Abs(SourceDurationMs - newDurationMs) > PositionUpdateThresholdMs)
+            SourceDurationMs = newDurationMs;
+
+        var newPositionMs = player.CurrentTime;
+        if (Math.Abs(SourcePositionMs - newPositionMs) > PositionUpdateThresholdMs)
+            SourcePositionMs = newPositionMs;
         _isUpdatingPositionFromTimer = false;
 
         UpdateActiveSegment();
@@ -786,6 +792,54 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         return positionSeconds < seg.EndSeconds ? seg : null;
     }
 
+    private WorkflowSegmentState? FindPreviousSegmentEndingBefore(double positionSeconds)
+    {
+        var arr = _sortedSegments;
+        if (arr.Length == 0)
+            return null;
+
+        int lo = 0, hi = arr.Length - 1, candidate = -1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            if (arr[mid].EndSeconds <= positionSeconds)
+            {
+                candidate = mid;
+                lo = mid + 1;
+            }
+            else
+            {
+                hi = mid - 1;
+            }
+        }
+
+        return candidate >= 0 ? arr[candidate] : null;
+    }
+
+    private WorkflowSegmentState? FindNextSegmentStartingAfter(double positionSeconds)
+    {
+        var arr = _sortedSegments;
+        if (arr.Length == 0)
+            return null;
+
+        int lo = 0, hi = arr.Length - 1, candidate = -1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            if (arr[mid].StartSeconds > positionSeconds)
+            {
+                candidate = mid;
+                hi = mid - 1;
+            }
+            else
+            {
+                lo = mid + 1;
+            }
+        }
+
+        return candidate >= 0 ? arr[candidate] : null;
+    }
+
     private void UpdateDubMode()
     {
         var currentSeg = FindSegmentAt(SourcePositionMs / 1000.0);
@@ -898,7 +952,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (!HasSegments) return;
         var currentSec = SourcePositionMs / 1000.0;
-        var prev = Segments.LastOrDefault(s => s.EndSeconds <= currentSec - 0.1);
+        var prev = FindPreviousSegmentEndingBefore(currentSec - 0.1);
         if (prev != null) _ = SeekAndPlayAsync(prev);
     }
 
@@ -907,7 +961,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (!HasSegments) return;
         var currentSec = SourcePositionMs / 1000.0;
-        var next = Segments.FirstOrDefault(s => s.StartSeconds > currentSec + 0.1);
+        var next = FindNextSegmentStartingAfter(currentSec + 0.1);
         if (next != null) _ = SeekAndPlayAsync(next);
     }
 
@@ -961,6 +1015,26 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             ApplySubtitleState();
     }
 
+    private void DeleteActiveSubtitleFile()
+    {
+        if (string.IsNullOrEmpty(_activeSrtPath))
+            return;
+
+        try
+        {
+            if (File.Exists(_activeSrtPath))
+                File.Delete(_activeSrtPath);
+        }
+        catch
+        {
+            // Best-effort cleanup only.
+        }
+        finally
+        {
+            _activeSrtPath = null;
+        }
+    }
+
     private void ApplySubtitleState()
     {
         if (_coordinator.SourceMediaPlayer is not LibMpvEmbeddedTransport player) return;
@@ -968,6 +1042,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         if (IsSubtitleModeOn)
         {
             var srt = SrtGenerator.Generate(Segments);
+            DeleteActiveSubtitleFile();
             _activeSrtPath = Path.Combine(Path.GetTempPath(), $"subs_{Guid.NewGuid():N}.srt");
             File.WriteAllText(_activeSrtPath, srt, Encoding.UTF8);
             player.RemoveAllSubtitleTracks();
@@ -977,6 +1052,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         else
         {
             player.SubtitlesVisible = false;
+            DeleteActiveSubtitleFile();
         }
     }
 
