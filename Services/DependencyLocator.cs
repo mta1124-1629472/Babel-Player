@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Babel.Player.Models;
 
 namespace Babel.Player.Services;
@@ -57,11 +58,15 @@ public static class DependencyLocator
     {
         foreach (var path in candidates)
         {
+            var resolved = ResolveExecutable(path);
+            if (resolved is null)
+                continue;
+
             try
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = path,
+                    FileName = resolved,
                     Arguments = versionArg,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -72,7 +77,7 @@ public static class DependencyLocator
                 if (proc != null)
                 {
                     if (proc.WaitForExit(ProbeTimeoutMs) && proc.ExitCode == 0)
-                        return path;
+                        return resolved;
                     else
                         try { proc.Kill(); } catch { /* best-effort cleanup */ }
                 }
@@ -83,5 +88,64 @@ public static class DependencyLocator
             }
         }
         return null;
+    }
+
+    private static string? ResolveExecutable(string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return null;
+
+        // Absolute or relative explicit path
+        if (candidate.Contains(Path.DirectorySeparatorChar) ||
+            candidate.Contains(Path.AltDirectorySeparatorChar) ||
+            Path.IsPathRooted(candidate))
+        {
+            return File.Exists(candidate) ? candidate : null;
+        }
+
+        // Command name: resolve against PATH (and PATHEXT on Windows) before spawning.
+        var pathEnv = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(pathEnv))
+            return null;
+
+        var extensions = GetExecutableExtensions();
+        var dirs = pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var dir in dirs)
+        {
+            var trimmedDir = dir.Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(trimmedDir))
+                continue;
+
+            foreach (var ext in extensions)
+            {
+                var full = Path.Combine(trimmedDir, candidate + ext);
+                if (File.Exists(full))
+                    return full;
+            }
+        }
+
+        return null;
+    }
+
+    private static string[] GetExecutableExtensions()
+    {
+        if (!OperatingSystem.IsWindows())
+            return [string.Empty];
+
+        var pathext = Environment.GetEnvironmentVariable("PATHEXT");
+        if (string.IsNullOrWhiteSpace(pathext))
+            return [".exe", ".cmd", ".bat", string.Empty];
+
+        var parsed = pathext
+            .Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .Select(ext => ext.Trim())
+            .Where(ext => !string.IsNullOrWhiteSpace(ext))
+            .ToList();
+
+        if (!parsed.Contains(string.Empty))
+            parsed.Add(string.Empty);
+
+        return [.. parsed];
     }
 }
