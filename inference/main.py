@@ -171,8 +171,16 @@ async def transcribe(
         temp_audio_path = TEMP_DIR / f"audio_{datetime.now().timestamp()}.wav"
         contents = await file.read()
         temp_audio_path.write_bytes(contents)
+
+        requested_cpu_threads = cpu_threads if (cpu_threads is not None and cpu_threads > 0) else "auto"
+        requested_num_workers = max(1, int(num_workers or 1))
+        requested_cpu_compute = cpu_compute_type or "int8"
         
-        logger.info(f"Transcribing file: {file.filename} (model: {model})")
+        logger.info(
+            f"Transcribing file: {file.filename} "
+            f"(model={model}, cpu_compute={requested_cpu_compute}, "
+            f"cpu_threads={requested_cpu_threads}, cpu_workers={requested_num_workers})"
+        )
         
         # Load model
         whisper = load_whisper_model(model, cpu_compute_type, cpu_threads, num_workers)

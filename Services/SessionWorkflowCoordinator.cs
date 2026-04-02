@@ -562,8 +562,21 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var fileName = Path.GetFileNameWithoutExtension(CurrentSession.IngestedMediaPath);
         var transcriptPath = Path.Combine(transcriptDir, $"{fileName}.json");
 
+        var cpuThreads = CurrentSettings.TranscriptionCpuThreads > 0
+            ? CurrentSettings.TranscriptionCpuThreads.ToString()
+            : "auto";
+        var cpuWorkers = Math.Max(1, CurrentSettings.TranscriptionNumWorkers);
+        var routeSummary =
+            $"provider={CurrentSettings.TranscriptionProvider}, model={CurrentSettings.TranscriptionModel}, " +
+            $"cpu_compute={CurrentSettings.TranscriptionCpuComputeType}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers}";
+        var hwSummary =
+            $"avx2={(HardwareSnapshot.HasAvx2 ? "yes" : "no")}, " +
+            $"avx512={(HardwareSnapshot.HasAvx512 ? "yes" : "no")}, " +
+            $"cuda={(HardwareSnapshot.HasCuda ? "yes" : "no")}";
+
         _log.Info($"Starting transcription: {CurrentSession.IngestedMediaPath} " +
-                  $"[{CurrentSettings.TranscriptionProvider}/{CurrentSettings.TranscriptionModel}]");
+                  $"[{CurrentSettings.TranscriptionProvider}/{CurrentSettings.TranscriptionModel}] " +
+                  $"route=({routeSummary}) hw=({hwSummary})");
 
         var result = await _transcriptionService.TranscribeAsync(
             new TranscriptionRequest(

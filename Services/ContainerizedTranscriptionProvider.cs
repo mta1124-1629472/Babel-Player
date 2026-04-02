@@ -33,7 +33,11 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider
         if (!File.Exists(request.SourceAudioPath))
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        _log.Info($"[ContainerizedTranscription] Transcribing: {request.SourceAudioPath} (model: {request.ModelName})");
+        var cpuThreads = request.CpuThreads > 0 ? request.CpuThreads.ToString() : "auto";
+        var cpuWorkers = Math.Max(1, request.NumWorkers);
+        var cpuCompute = string.IsNullOrWhiteSpace(request.CpuComputeType) ? "int8" : request.CpuComputeType;
+        _log.Info($"[ContainerizedTranscription] Transcribing: {request.SourceAudioPath} " +
+                  $"(model={request.ModelName}, cpu_compute={cpuCompute}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers})");
 
         var result = await _client.TranscribeAsync(
             request.SourceAudioPath,
