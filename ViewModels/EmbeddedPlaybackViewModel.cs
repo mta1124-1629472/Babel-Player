@@ -154,6 +154,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private IReadOnlyList<ModelOptionViewModel> _availableTranscriptionModels = [];
     private IReadOnlyList<ModelOptionViewModel> _availableTranslationModels = [];
     private IReadOnlyList<ModelOptionViewModel> _availableTtsOptions = [];
+    private string _transcriptionKeyStatus = string.Empty;
+    private string _translationKeyStatus = string.Empty;
+    private string _ttsKeyStatus = string.Empty;
 
     [ObservableProperty]
     private ModelOptionViewModel? _selectedTranscriptionModel;
@@ -260,20 +263,45 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _isPipelineProgressVisible;
 
     // ── API key / readiness status for UI lock indicators ──────────────────────
-    public string TranscriptionKeyStatus => GetReadinessStatus(
-        _coordinator.TranscriptionRegistry.CheckReadiness(TranscriptionProvider, TranscriptionModel, _coordinator.CurrentSettings, _apiKeyStore));
+    public string TranscriptionKeyStatus => _transcriptionKeyStatus;
 
-    public string TranslationKeyStatus => GetReadinessStatus(
-        _coordinator.TranslationRegistry.CheckReadiness(TranslationProvider, TranslationModel, _coordinator.CurrentSettings, _apiKeyStore));
+    public string TranslationKeyStatus => _translationKeyStatus;
 
-    public string TtsKeyStatus => GetReadinessStatus(
-        _coordinator.TtsRegistry.CheckReadiness(TtsProvider, TtsModelOrVoice, _coordinator.CurrentSettings, _apiKeyStore));
+    public string TtsKeyStatus => _ttsKeyStatus;
 
     private static string GetReadinessStatus(ProviderReadiness readiness)
     {
         if (readiness.IsReady) return "";
         if (readiness.RequiresModelDownload) return "⬇️ Download required (will run automatically)";
         return $"⚠️ {readiness.BlockingReason}";
+    }
+
+    private void RefreshProviderReadinessStatuses()
+    {
+        var newTranscription = GetReadinessStatus(
+            _coordinator.TranscriptionRegistry.CheckReadiness(TranscriptionProvider, TranscriptionModel, _coordinator.CurrentSettings, _apiKeyStore));
+        var newTranslation = GetReadinessStatus(
+            _coordinator.TranslationRegistry.CheckReadiness(TranslationProvider, TranslationModel, _coordinator.CurrentSettings, _apiKeyStore));
+        var newTts = GetReadinessStatus(
+            _coordinator.TtsRegistry.CheckReadiness(TtsProvider, TtsModelOrVoice, _coordinator.CurrentSettings, _apiKeyStore));
+
+        if (!string.Equals(_transcriptionKeyStatus, newTranscription, StringComparison.Ordinal))
+        {
+            _transcriptionKeyStatus = newTranscription;
+            OnPropertyChanged(nameof(TranscriptionKeyStatus));
+        }
+
+        if (!string.Equals(_translationKeyStatus, newTranslation, StringComparison.Ordinal))
+        {
+            _translationKeyStatus = newTranslation;
+            OnPropertyChanged(nameof(TranslationKeyStatus));
+        }
+
+        if (!string.Equals(_ttsKeyStatus, newTts, StringComparison.Ordinal))
+        {
+            _ttsKeyStatus = newTts;
+            OnPropertyChanged(nameof(TtsKeyStatus));
+        }
     }
 
     private void ClearStatusErrorDetail()
@@ -555,9 +583,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         OnPropertyChanged(nameof(AvailableTranscriptionModels));
         OnPropertyChanged(nameof(AvailableTranslationModels));
         OnPropertyChanged(nameof(AvailableTtsOptions));
-        OnPropertyChanged(nameof(TranscriptionKeyStatus));
-        OnPropertyChanged(nameof(TranslationKeyStatus));
-        OnPropertyChanged(nameof(TtsKeyStatus));
+        RefreshProviderReadinessStatuses();
     }
 
     private void NotifyActiveConfigChanged()
