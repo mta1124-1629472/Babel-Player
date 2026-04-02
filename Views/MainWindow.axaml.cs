@@ -233,7 +233,11 @@ public partial class MainWindow : Window
         if (DataContext is not MainWindowViewModel vm) return;
         var store = vm.Coordinator.KeyStore;
         if (store is null) return;
-        var dialog = new ApiKeysDialog { DataContext = new ApiKeysViewModel(store) };
+        var validationService = new ApiKeyValidationService(
+            vm.Coordinator.TranscriptionRegistry,
+            vm.Coordinator.TranslationRegistry,
+            vm.Coordinator.TtsRegistry);
+        var dialog = new ApiKeysDialog { DataContext = new ApiKeysViewModel(store, validationService) };
         _ = dialog.ShowDialog(this);
     }
 
