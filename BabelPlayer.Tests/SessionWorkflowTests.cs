@@ -702,12 +702,12 @@ public sealed class SegmentInspectionTests
         playback.TranslationProvider = ProviderNames.OpenAi;
         playback.TranslationModel = "gpt-4o-mini";
 
-        playback.TranslationRuntime = InferenceRuntime.Local;
+        playback.TranslationRuntime = ComputeProfile.Cpu;
 
-        Assert.Equal(InferenceRuntime.Local, playback.TranslationRuntime);
+        Assert.Equal(ComputeProfile.Cpu, playback.TranslationRuntime);
         Assert.Equal(ProviderNames.Nllb200, playback.TranslationProvider);
         Assert.Equal("nllb-200-distilled-600M", playback.TranslationModel);
-        Assert.Equal(InferenceRuntime.Local, playback.Coordinator.CurrentSettings.TranslationRuntime);
+        Assert.Equal(ComputeProfile.Cpu, playback.Coordinator.CurrentSettings.TranslationProfile);
         Assert.Equal(ProviderNames.Nllb200, playback.Coordinator.CurrentSettings.TranslationProvider);
         Assert.Equal("nllb-200-distilled-600M", playback.Coordinator.CurrentSettings.TranslationModel);
     }
@@ -718,12 +718,12 @@ public sealed class SegmentInspectionTests
         var playback = CreatePlaybackVm();
 
         playback.TtsModelOrVoice = "eleven_multilingual_v2";
-        playback.TtsRuntime = InferenceRuntime.Local;
+        playback.TtsRuntime = ComputeProfile.Cpu;
 
-        Assert.Equal(InferenceRuntime.Local, playback.TtsRuntime);
+        Assert.Equal(ComputeProfile.Cpu, playback.TtsRuntime);
         Assert.Equal(ProviderNames.Piper, playback.TtsProvider);
         Assert.Equal("en_US-lessac-medium", playback.TtsModelOrVoice);
-        Assert.Equal(InferenceRuntime.Local, playback.Coordinator.CurrentSettings.TtsRuntime);
+        Assert.Equal(ComputeProfile.Cpu, playback.Coordinator.CurrentSettings.TtsProfile);
         Assert.Equal(ProviderNames.Piper, playback.Coordinator.CurrentSettings.TtsProvider);
         Assert.Equal("en_US-lessac-medium", playback.Coordinator.CurrentSettings.TtsVoice);
     }
@@ -733,12 +733,12 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
-        playback.TranscriptionRuntime = InferenceRuntime.Containerized;
+        playback.TranscriptionRuntime = ComputeProfile.Gpu;
 
-        Assert.Equal(InferenceRuntime.Containerized, playback.TranscriptionRuntime);
+        Assert.Equal(ComputeProfile.Gpu, playback.TranscriptionRuntime);
         Assert.Equal(ProviderNames.FasterWhisper, playback.TranscriptionProvider);
         Assert.Equal("base", playback.TranscriptionModel);
-        Assert.Equal(InferenceRuntime.Containerized, playback.Coordinator.CurrentSettings.TranscriptionRuntime);
+        Assert.Equal(ComputeProfile.Gpu, playback.Coordinator.CurrentSettings.TranscriptionProfile);
         Assert.Equal(ProviderNames.FasterWhisper, playback.Coordinator.CurrentSettings.TranscriptionProvider);
         Assert.Equal("base", playback.Coordinator.CurrentSettings.TranscriptionModel);
     }

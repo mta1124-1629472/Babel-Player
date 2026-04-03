@@ -11,21 +11,21 @@ public sealed partial class SessionWorkflowCoordinator
             CurrentSettings.TranscriptionProvider,
             CurrentSettings,
             KeyStore,
-            CurrentSettings.TranscriptionRuntime);
+            CurrentSettings.TranscriptionProfile);
 
     private ITranslationProvider CreateTranslationService() =>
         TranslationRegistry.CreateProvider(
             CurrentSettings.TranslationProvider,
             CurrentSettings,
             KeyStore,
-            CurrentSettings.TranslationRuntime);
+            CurrentSettings.TranslationProfile);
 
     private ITtsProvider CreateTtsService() =>
         TtsRegistry.CreateProvider(
             CurrentSettings.TtsProvider,
             CurrentSettings,
             KeyStore,
-            CurrentSettings.TtsRuntime);
+            CurrentSettings.TtsProfile);
 
     private void RequestContainerizedAutostartForSettings() =>
         _containerizedInferenceManager?.RequestEnsureStarted(CurrentSettings, ContainerizedStartupTrigger.SettingsChanged);

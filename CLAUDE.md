@@ -18,8 +18,9 @@ Before making non-trivial changes, read:
 
 ## Current Milestone
 
-**Milestone 9 — Subtitle & Transcript Inspection** is complete. Check `docs/smoke/` for gate evidence.
-Next: Milestone 10 — Settings & Bootstrap.
+**Milestones 1–9** are complete. **Milestones 10 and 11** are partially complete (settings/bootstrap and local-offline expansion — see `docs/smoke/` for gate evidence on each).
+
+**Milestone 12 — Runtime Optimization and Hardware Routing** is in progress. Compute profiles (`CPU/GPU/Cloud`) and managed local GPU host are implemented; real NVIDIA hardware validation and live container smoke tests are still pending.
 
 ## Project Overview
 

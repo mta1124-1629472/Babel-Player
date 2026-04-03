@@ -20,10 +20,25 @@ public static class DependencyLocator
         var appDir = AppContext.BaseDirectory;
         var candidates = new[]
         {
+            ManagedRuntimeLayout.GetManagedPythonPath(),
             Path.Combine(appDir, "python.exe"),
             Path.Combine(appDir, "python", "python.exe"),
             "python",
             "python3",
+        };
+        return Probe(candidates, "--version");
+    }
+
+    /// <summary>Returns a working uv executable path, or null if not found.</summary>
+    public static string? FindUv()
+    {
+        var appDir = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            Path.Combine(appDir, "uv.exe"),
+            Path.Combine(appDir, "tools", "uv.exe"),
+            Path.Combine(appDir, "tools", "win-x64", "uv.exe"),
+            "uv",
         };
         return Probe(candidates, "--version");
     }

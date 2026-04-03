@@ -913,13 +913,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         coord2.SettingsModified += () => settingsModified = true;
 
         var result = coord2.ApplyPipelineSettings(new PipelineSettingsSelection(
-            InferenceRuntime.Containerized,
+            ComputeProfile.Gpu,
             ProviderNames.FasterWhisper,
             "base",
-            _settings.TranslationRuntime,
+            _settings.TranslationProfile,
             _settings.TranslationProvider,
             _settings.TranslationModel,
-            _settings.TtsRuntime,
+            _settings.TtsProfile,
             _settings.TtsProvider,
             _settings.TtsVoice,
             _settings.TargetLanguage));
@@ -939,13 +939,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         coord.Initialize();
 
         coord.ApplyPipelineSettings(new PipelineSettingsSelection(
-            InferenceRuntime.Containerized,
+            ComputeProfile.Gpu,
             ProviderNames.FasterWhisper,
             "base",
-            _settings.TranslationRuntime,
+            _settings.TranslationProfile,
             _settings.TranslationProvider,
             _settings.TranslationModel,
-            _settings.TtsRuntime,
+            _settings.TtsProfile,
             _settings.TtsProvider,
             _settings.TtsVoice,
             _settings.TargetLanguage));
@@ -1068,13 +1068,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         coord.Initialize();
 
         var result = coord.ApplyPipelineSettings(new PipelineSettingsSelection(
-            changedSettings.TranscriptionRuntime,
+            changedSettings.TranscriptionProfile,
             changedSettings.TranscriptionProvider,
             changedSettings.TranscriptionModel,
-            changedSettings.TranslationRuntime,
+            changedSettings.TranslationProfile,
             changedSettings.TranslationProvider,
             changedSettings.TranslationModel,
-            changedSettings.TtsRuntime,
+            changedSettings.TtsProfile,
             changedSettings.TtsProvider,
             changedSettings.TtsVoice,
             changedSettings.TargetLanguage));
@@ -1172,7 +1172,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             _provider = provider;
         }
 
-        public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(InferenceRuntime? runtime = null) =>
+        public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null) =>
         [
             new ProviderDescriptor(
                 ProviderNames.EdgeTts,
@@ -1184,18 +1184,21 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
                 DefaultRuntime: InferenceRuntime.Cloud)
         ];
 
+        public IReadOnlyList<string> GetAvailableModels(string providerId, ComputeProfile profile, AppSettings settings) =>
+            ["global-voice"];
+
         public ITtsProvider CreateProvider(
             string providerId,
             AppSettings settings,
             ApiKeyStore? keyStore = null,
-            InferenceRuntime? runtime = null) => _provider;
+            ComputeProfile? profile = null) => _provider;
 
         public ProviderReadiness CheckReadiness(
             string providerId,
             string modelOrVoice,
             AppSettings settings,
             ApiKeyStore? keyStore,
-            InferenceRuntime? runtime = null) =>
+            ComputeProfile? profile = null) =>
             ProviderReadiness.Ready;
 
         public Task<bool> EnsureModelAsync(
@@ -1204,7 +1207,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             AppSettings settings,
             IProgress<double>? progress = null,
             CancellationToken ct = default,
-            InferenceRuntime? runtime = null) =>
+            ComputeProfile? profile = null,
+            ApiKeyStore? keyStore = null) =>
             Task.FromResult(true);
     }
 

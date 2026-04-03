@@ -69,6 +69,7 @@ public sealed class ContainerizedInferenceManagerTests : IDisposable
         var settings = new AppSettings
         {
             AlwaysRunContainerAtAppStart = true,
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
             ContainerizedServiceUrl = "http://localhost:8000",
         };
 
@@ -93,7 +94,8 @@ public sealed class ContainerizedInferenceManagerTests : IDisposable
 
         var settings = new AppSettings
         {
-            TranscriptionRuntime = InferenceRuntime.Containerized,
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            TranscriptionProfile = ComputeProfile.Gpu,
             ContainerizedServiceUrl = "http://example.com:8000",
         };
 
@@ -124,7 +126,8 @@ public sealed class ContainerizedInferenceManagerTests : IDisposable
 
         var settings = new AppSettings
         {
-            TranscriptionRuntime = InferenceRuntime.Containerized,
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            TranscriptionProfile = ComputeProfile.Gpu,
             ContainerizedServiceUrl = "http://localhost:8000",
         };
 

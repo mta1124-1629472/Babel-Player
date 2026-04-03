@@ -37,6 +37,12 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.5" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>BabelPlayer.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
 <ItemGroup>
   <None Include="native\win-x64\libmpv-2.dll">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -46,6 +52,13 @@
 
 <ItemGroup Condition="Exists('tools\win-x64\ffmpeg.exe')">
   <None Include="tools\win-x64\ffmpeg.exe">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+  </None>
+</ItemGroup>
+
+<ItemGroup Condition="Exists('tools\win-x64\uv.exe')">
+  <None Include="tools\win-x64\uv.exe">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
   </None>

@@ -136,6 +136,7 @@ public sealed class ContainerizedInferenceClient
         string transcriptJson,
         string sourceLanguage,
         string targetLanguage,
+        string model,
         CancellationToken cancellationToken = default)
     {
         try
@@ -146,7 +147,8 @@ public sealed class ContainerizedInferenceClient
             [
                 new KeyValuePair<string, string>("transcript_json", transcriptJson),
                 new KeyValuePair<string, string>("source_language", sourceLanguage),
-                new KeyValuePair<string, string>("target_language", targetLanguage)
+                new KeyValuePair<string, string>("target_language", targetLanguage),
+                new KeyValuePair<string, string>("model", model),
             ]);
 
             using var response = await _httpClient.PostAsync(

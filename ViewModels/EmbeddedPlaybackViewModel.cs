@@ -29,12 +29,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _isUpdatingActiveSegment;
     private bool _isSynchronizingPipelineSettings;
     private WorkflowSegmentState? _lastDubbedSegment;
-    private readonly Dictionary<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> _transcriptionProvidersByRuntime = [];
-    private readonly Dictionary<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> _translationProvidersByRuntime = [];
-    private readonly Dictionary<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> _ttsProvidersByRuntime = [];
-    private readonly Dictionary<InferenceRuntime, IReadOnlyList<string>> _transcriptionProviderIdsByRuntime = [];
-    private readonly Dictionary<InferenceRuntime, IReadOnlyList<string>> _translationProviderIdsByRuntime = [];
-    private readonly Dictionary<InferenceRuntime, IReadOnlyList<string>> _ttsProviderIdsByRuntime = [];
+    private readonly Dictionary<ComputeProfile, IReadOnlyList<ProviderDescriptor>> _transcriptionProvidersByRuntime = [];
+    private readonly Dictionary<ComputeProfile, IReadOnlyList<ProviderDescriptor>> _translationProvidersByRuntime = [];
+    private readonly Dictionary<ComputeProfile, IReadOnlyList<ProviderDescriptor>> _ttsProvidersByRuntime = [];
+    private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _transcriptionProviderIdsByRuntime = [];
+    private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _translationProviderIdsByRuntime = [];
+    private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _ttsProviderIdsByRuntime = [];
     private CancellationTokenSource? _providerReadinessRefreshCts;
     private int _providerReadinessRefreshVersion;
     private ProviderSelectionSnapshot? _lastQueuedProviderReadinessSnapshot;
@@ -126,7 +126,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(AvailableTranscriptionModels))]
     [NotifyPropertyChangedFor(nameof(SelectedTranscriptionModel))]
     [NotifyPropertyChangedFor(nameof(TranscriptionKeyStatus))]
-    private InferenceRuntime _transcriptionRuntime = InferenceRuntime.Local;
+    private ComputeProfile _transcriptionRuntime = ComputeProfile.Cpu;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvailableTranscriptionModels))]
@@ -144,7 +144,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(AvailableTranslationModels))]
     [NotifyPropertyChangedFor(nameof(SelectedTranslationModel))]
     [NotifyPropertyChangedFor(nameof(TranslationKeyStatus))]
-    private InferenceRuntime _translationRuntime = InferenceRuntime.Cloud;
+    private ComputeProfile _translationRuntime = ComputeProfile.Cloud;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvailableTranslationModels))]
@@ -162,7 +162,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(AvailableTtsOptions))]
     [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
-    private InferenceRuntime _ttsRuntime = InferenceRuntime.Cloud;
+    private ComputeProfile _ttsRuntime = ComputeProfile.Cloud;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvailableTtsOptions))]
@@ -281,8 +281,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public static IReadOnlyList<string> PlaybackRateOptions { get; } =
         ["0.25x", "0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x"];
 
-    public static IReadOnlyList<InferenceRuntime> InferenceRuntimeOptions { get; } =
-        [InferenceRuntime.Local, InferenceRuntime.Containerized, InferenceRuntime.Cloud];
+    public static IReadOnlyList<ComputeProfile> InferenceRuntimeOptions { get; } =
+        [ComputeProfile.Cpu, ComputeProfile.Gpu, ComputeProfile.Cloud];
 
     public string SegmentPaneToggleLabel => IsSegmentPaneVisible ? "\u25C4" : "\u25BA";
 
@@ -357,16 +357,16 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public string TtsKeyStatus => _ttsKeyStatus;
 
     private sealed record ProviderSelectionSnapshot(
-        InferenceRuntime TranscriptionRuntime,
+        ComputeProfile TranscriptionRuntime,
         string TranscriptionProvider,
         string TranscriptionModel,
-        InferenceRuntime TranslationRuntime,
+        ComputeProfile TranslationRuntime,
         string TranslationProvider,
         string TranslationModel,
-        InferenceRuntime TtsRuntime,
+        ComputeProfile TtsRuntime,
         string TtsProvider,
         string TtsModelOrVoice,
-        string ContainerizedServiceUrl);
+        string GpuServiceUrl);
 
     private sealed record ProviderReadinessStatus(
         string TranscriptionStatus,
@@ -381,8 +381,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         if (readiness.RequiresModelDownload)
             return "⬇ Download required (will run automatically)";
 
-        if (readiness.BlockingReason?.StartsWith(
-                "Containerized inference service is starting",
+        if (readiness.BlockingReason?.Contains(
+                // Message format produced by ContainerizedProviderReadiness.MapProbeResultToReadiness:
+                // "{hostLabel} is starting at {serviceUrl}..."
+                " is starting at ",
                 StringComparison.Ordinal) == true)
         {
             return $"⏳ {readiness.BlockingReason}";
@@ -427,7 +429,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             $"selection=({snapshot.TranscriptionRuntime}/{snapshot.TranscriptionProvider}/{snapshot.TranscriptionModel}, " +
             $"{snapshot.TranslationRuntime}/{snapshot.TranslationProvider}/{snapshot.TranslationModel}, " +
             $"{snapshot.TtsRuntime}/{snapshot.TtsProvider}/{snapshot.TtsModelOrVoice}), " +
-            $"containerUrl={snapshot.ContainerizedServiceUrl}");
+            $"gpuServiceUrl={snapshot.GpuServiceUrl}");
 
         _ = RefreshProviderReadinessStatusesAsync(snapshot, version, cts.Token);
     }
@@ -450,7 +452,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 && _coordinator.ContainerizedProbe is not null)
             {
                 _ = await _coordinator.ContainerizedProbe.WaitForProbeAsync(
-                    snapshot.ContainerizedServiceUrl,
+                    snapshot.GpuServiceUrl,
                     forceRefresh: false,
                     waitTimeout: TimeSpan.FromSeconds(30),
                     cancellationToken);
@@ -522,9 +524,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     }
 
     private static bool UsesContainerizedRuntime(ProviderSelectionSnapshot snapshot) =>
-        snapshot.TranscriptionRuntime == InferenceRuntime.Containerized
-        || snapshot.TranslationRuntime == InferenceRuntime.Containerized
-        || snapshot.TtsRuntime == InferenceRuntime.Containerized;
+        snapshot.TranscriptionRuntime == ComputeProfile.Gpu
+        || snapshot.TranslationRuntime == ComputeProfile.Gpu
+        || snapshot.TtsRuntime == ComputeProfile.Gpu;
 
     private static bool ContainsStartingStatus(ProviderReadinessStatus status) =>
         IsStartingStatus(status.TranscriptionStatus)
@@ -707,13 +709,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _coordinator.TtsPlaybackRate = value;
     }
 
-    partial void OnTranscriptionRuntimeChanged(InferenceRuntime value)
+    partial void OnTranscriptionRuntimeChanged(ComputeProfile value)
     {
         if (_isSynchronizingPipelineSettings)
             return;
 
         var provider = ResolveTranscriptionProviderForRuntime(value, TranscriptionProvider);
-        var model = ResolveModelId(GetTranscriptionProviderDescriptors(value), provider, TranscriptionModel);
+        var model = ResolveTranscriptionModelId(value, provider, TranscriptionModel);
 
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(
             transcriptionRuntime: value,
@@ -725,7 +727,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (_isSynchronizingPipelineSettings || string.IsNullOrEmpty(value)) return;
 
-        var model = ResolveModelId(GetTranscriptionProviderDescriptors(TranscriptionRuntime), value, TranscriptionModel);
+        var model = ResolveTranscriptionModelId(TranscriptionRuntime, value, TranscriptionModel);
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(
             transcriptionProvider: value,
             transcriptionModel: model));
@@ -757,13 +759,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         TtsModelOrVoice = value.ModelId;
     }
 
-    partial void OnTranslationRuntimeChanged(InferenceRuntime value)
+    partial void OnTranslationRuntimeChanged(ComputeProfile value)
     {
         if (_isSynchronizingPipelineSettings)
             return;
 
         var provider = ResolveTranslationProviderForRuntime(value, TranslationProvider);
-        var model = ResolveModelId(GetTranslationProviderDescriptors(value), provider, TranslationModel);
+        var model = ResolveTranslationModelId(value, provider, TranslationModel);
 
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(
             translationRuntime: value,
@@ -775,7 +777,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (_isSynchronizingPipelineSettings || string.IsNullOrEmpty(value)) return;
 
-        var model = ResolveModelId(GetTranslationProviderDescriptors(TranslationRuntime), value, TranslationModel);
+        var model = ResolveTranslationModelId(TranslationRuntime, value, TranslationModel);
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(
             translationProvider: value,
             translationModel: model));
@@ -789,13 +791,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             translationModel: value));
     }
 
-    partial void OnTtsRuntimeChanged(InferenceRuntime value)
+    partial void OnTtsRuntimeChanged(ComputeProfile value)
     {
         if (_isSynchronizingPipelineSettings)
             return;
 
         var provider = ResolveTtsProviderForRuntime(value, TtsProvider);
-        var model = ResolveModelId(GetTtsProviderDescriptors(value), provider, TtsModelOrVoice);
+        var model = ResolveTtsModelId(value, provider, TtsModelOrVoice);
 
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(
             ttsRuntime: value,
@@ -807,7 +809,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         if (_isSynchronizingPipelineSettings || string.IsNullOrEmpty(value)) return;
 
-        var model = ResolveModelId(GetTtsProviderDescriptors(TtsRuntime), value, TtsModelOrVoice);
+        var model = ResolveTtsModelId(TtsRuntime, value, TtsModelOrVoice);
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(
             ttsProvider: value,
             ttsVoice: model));
@@ -841,9 +843,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         {
             SpeechRate = _coordinator.TtsPlaybackRate;
 
-            TranscriptionRuntime = _coordinator.CurrentSettings.TranscriptionRuntime;
-            TranslationRuntime = _coordinator.CurrentSettings.TranslationRuntime;
-            TtsRuntime = _coordinator.CurrentSettings.TtsRuntime;
+            TranscriptionRuntime = _coordinator.CurrentSettings.TranscriptionProfile;
+            TranslationRuntime = _coordinator.CurrentSettings.TranslationProfile;
+            TtsRuntime = _coordinator.CurrentSettings.TtsProfile;
 
             TranscriptionProvider = ResolveTranscriptionProviderForRuntime(
                 TranscriptionRuntime,
@@ -855,16 +857,16 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 TtsRuntime,
                 _coordinator.CurrentSettings.TtsProvider);
 
-            TranscriptionModel = ResolveModelId(
-                GetTranscriptionProviderDescriptors(TranscriptionRuntime),
+            TranscriptionModel = ResolveTranscriptionModelId(
+                TranscriptionRuntime,
                 TranscriptionProvider,
                 _coordinator.CurrentSettings.TranscriptionModel);
-            TranslationModel = ResolveModelId(
-                GetTranslationProviderDescriptors(TranslationRuntime),
+            TranslationModel = ResolveTranslationModelId(
+                TranslationRuntime,
                 TranslationProvider,
                 _coordinator.CurrentSettings.TranslationModel);
-            TtsModelOrVoice = ResolveModelId(
-                GetTtsProviderDescriptors(TtsRuntime),
+            TtsModelOrVoice = ResolveTtsModelId(
+                TtsRuntime,
                 TtsProvider,
                 _coordinator.CurrentSettings.TtsVoice);
 
@@ -948,24 +950,24 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private void RebuildTranscriptionModelOptions()
     {
         _availableTranscriptionModels =
-            [.. (GetTranscriptionProviderDescriptors(TranscriptionRuntime)
-                    .FirstOrDefault(p => p.Id == TranscriptionProvider)?.SupportedModels ?? ["default"])
+            [.. _coordinator.TranscriptionRegistry
+                .GetAvailableModels(TranscriptionProvider, TranscriptionRuntime, _coordinator.CurrentSettings)
                 .Select(m => new ModelOptionViewModel(m, GetTranscriptionModelAvailability(TranscriptionProvider, m)))];
     }
 
     private void RebuildTranslationModelOptions()
     {
         _availableTranslationModels =
-            [.. (GetTranslationProviderDescriptors(TranslationRuntime)
-                    .FirstOrDefault(p => p.Id == TranslationProvider)?.SupportedModels ?? ["default"])
+            [.. _coordinator.TranslationRegistry
+                .GetAvailableModels(TranslationProvider, TranslationRuntime, _coordinator.CurrentSettings)
                 .Select(m => new ModelOptionViewModel(m, GetTranslationModelAvailability(TranslationProvider, m)))];
     }
 
     private void RebuildTtsModelOptions()
     {
         _availableTtsOptions =
-            [.. (GetTtsProviderDescriptors(TtsRuntime)
-                    .FirstOrDefault(p => p.Id == TtsProvider)?.SupportedModels ?? ["default"])
+            [.. _coordinator.TtsRegistry
+                .GetAvailableModels(TtsProvider, TtsRuntime, _coordinator.CurrentSettings)
                 .Select(m => new ModelOptionViewModel(m, GetTtsModelAvailability(TtsProvider, m)))];
     }
 
@@ -1046,9 +1048,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     }
 
     private static void BuildProviderCache(
-        Dictionary<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> descriptorCache,
-        Dictionary<InferenceRuntime, IReadOnlyList<string>> idCache,
-        Func<InferenceRuntime, IReadOnlyList<ProviderDescriptor>> providerFactory)
+        Dictionary<ComputeProfile, IReadOnlyList<ProviderDescriptor>> descriptorCache,
+        Dictionary<ComputeProfile, IReadOnlyList<string>> idCache,
+        Func<ComputeProfile, IReadOnlyList<ProviderDescriptor>> providerFactory)
     {
         descriptorCache.Clear();
         idCache.Clear();
@@ -1065,37 +1067,37 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         }
     }
 
-    private IReadOnlyList<string> GetTranscriptionProviderIds(InferenceRuntime runtime) =>
+    private IReadOnlyList<string> GetTranscriptionProviderIds(ComputeProfile runtime) =>
         _transcriptionProviderIdsByRuntime.TryGetValue(runtime, out var providers)
             ? providers
             : [];
 
-    private IReadOnlyList<string> GetTranslationProviderIds(InferenceRuntime runtime) =>
+    private IReadOnlyList<string> GetTranslationProviderIds(ComputeProfile runtime) =>
         _translationProviderIdsByRuntime.TryGetValue(runtime, out var providers)
             ? providers
             : [];
 
-    private IReadOnlyList<string> GetTtsProviderIds(InferenceRuntime runtime) =>
+    private IReadOnlyList<string> GetTtsProviderIds(ComputeProfile runtime) =>
         _ttsProviderIdsByRuntime.TryGetValue(runtime, out var providers)
             ? providers
             : [];
 
-    private IReadOnlyList<ProviderDescriptor> GetTranscriptionProviderDescriptors(InferenceRuntime runtime) =>
+    private IReadOnlyList<ProviderDescriptor> GetTranscriptionProviderDescriptors(ComputeProfile runtime) =>
         _transcriptionProvidersByRuntime.TryGetValue(runtime, out var providers)
             ? providers
             : [];
 
-    private IReadOnlyList<ProviderDescriptor> GetTranslationProviderDescriptors(InferenceRuntime runtime) =>
+    private IReadOnlyList<ProviderDescriptor> GetTranslationProviderDescriptors(ComputeProfile runtime) =>
         _translationProvidersByRuntime.TryGetValue(runtime, out var providers)
             ? providers
             : [];
 
-    private IReadOnlyList<ProviderDescriptor> GetTtsProviderDescriptors(InferenceRuntime runtime) =>
+    private IReadOnlyList<ProviderDescriptor> GetTtsProviderDescriptors(ComputeProfile runtime) =>
         _ttsProvidersByRuntime.TryGetValue(runtime, out var providers)
             ? providers
             : [];
 
-    private string ResolveTranscriptionProviderForRuntime(InferenceRuntime runtime, string? providerId)
+    private string ResolveTranscriptionProviderForRuntime(ComputeProfile runtime, string? providerId)
     {
         var providers = GetTranscriptionProviderDescriptors(runtime);
         var normalized = InferenceRuntimeCatalog.NormalizeTranscriptionProvider(runtime, providerId);
@@ -1104,7 +1106,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             : providers.FirstOrDefault()?.Id ?? normalized;
     }
 
-    private string ResolveTranslationProviderForRuntime(InferenceRuntime runtime, string? providerId)
+    private string ResolveTranslationProviderForRuntime(ComputeProfile runtime, string? providerId)
     {
         var providers = GetTranslationProviderDescriptors(runtime);
         var normalized = InferenceRuntimeCatalog.NormalizeTranslationProvider(runtime, providerId);
@@ -1113,7 +1115,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             : providers.FirstOrDefault()?.Id ?? normalized;
     }
 
-    private string ResolveTtsProviderForRuntime(InferenceRuntime runtime, string? providerId)
+    private string ResolveTtsProviderForRuntime(ComputeProfile runtime, string? providerId)
     {
         var providers = GetTtsProviderDescriptors(runtime);
         var normalized = InferenceRuntimeCatalog.NormalizeTtsProvider(runtime, providerId);
@@ -1122,13 +1124,35 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             : providers.FirstOrDefault()?.Id ?? normalized;
     }
 
-    private static string ResolveModelId(
-        IReadOnlyList<ProviderDescriptor> providers,
+    private string ResolveTranscriptionModelId(
+        ComputeProfile runtime,
         string providerId,
+        string? preferredModel) =>
+        ResolveModelId(
+            _coordinator.TranscriptionRegistry.GetAvailableModels(providerId, runtime, _coordinator.CurrentSettings),
+            preferredModel);
+
+    private string ResolveTranslationModelId(
+        ComputeProfile runtime,
+        string providerId,
+        string? preferredModel) =>
+        ResolveModelId(
+            _coordinator.TranslationRegistry.GetAvailableModels(providerId, runtime, _coordinator.CurrentSettings),
+            preferredModel);
+
+    private string ResolveTtsModelId(
+        ComputeProfile runtime,
+        string providerId,
+        string? preferredModel) =>
+        ResolveModelId(
+            _coordinator.TtsRegistry.GetAvailableModels(providerId, runtime, _coordinator.CurrentSettings),
+            preferredModel);
+
+    private static string ResolveModelId(
+        IReadOnlyList<string> supportedModels,
         string? preferredModel)
     {
-        var supportedModels = providers.FirstOrDefault(provider => provider.Id == providerId)?.SupportedModels;
-        if (supportedModels is null || supportedModels.Count == 0)
+        if (supportedModels.Count == 0)
             return "default";
 
         if (!string.IsNullOrWhiteSpace(preferredModel)
@@ -1141,13 +1165,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     }
 
     private PipelineSettingsSelection CreatePipelineSettingsSelection(
-        InferenceRuntime? transcriptionRuntime = null,
+        ComputeProfile? transcriptionRuntime = null,
         string? transcriptionProvider = null,
         string? transcriptionModel = null,
-        InferenceRuntime? translationRuntime = null,
+        ComputeProfile? translationRuntime = null,
         string? translationProvider = null,
         string? translationModel = null,
-        InferenceRuntime? ttsRuntime = null,
+        ComputeProfile? ttsRuntime = null,
         string? ttsProvider = null,
         string? ttsVoice = null) =>
         new(

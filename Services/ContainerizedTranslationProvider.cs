@@ -22,11 +22,13 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
 {
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
+    private readonly string _model;
 
-    public ContainerizedTranslationProvider(ContainerizedInferenceClient client, AppLog log)
+    public ContainerizedTranslationProvider(ContainerizedInferenceClient client, AppLog log, string model)
     {
         _client = client;
         _log = log;
+        _model = model;
     }
 
     public async Task<TranslationResult> TranslateAsync(
@@ -45,6 +47,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
             transcriptJson,
             request.SourceLanguage,
             request.TargetLanguage,
+            _model,
             cancellationToken);
 
         if (!result.Success)
@@ -95,6 +98,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
             singleSegmentTranscript,
             request.SourceLanguage,
             request.TargetLanguage,
+            _model,
             cancellationToken);
 
         if (!result.Success || result.Segments.Count == 0)

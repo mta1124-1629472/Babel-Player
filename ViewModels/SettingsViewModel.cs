@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Registries;
 using SettingsService = Babel.Player.Services.Settings.SettingsService;
@@ -34,8 +35,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         SelectedTheme = current.Theme;
         MaxRecentSessions = current.MaxRecentSessions;
         AutoSaveEnabled = current.AutoSaveEnabled;
-        ContainerizedServiceUrl = current.ContainerizedServiceUrl;
-        AlwaysRunContainerAtAppStart = current.AlwaysRunContainerAtAppStart;
+        PreferredLocalGpuBackend = current.PreferredLocalGpuBackend;
+        AdvancedGpuServiceUrl = current.AdvancedGpuServiceUrl;
+        AlwaysStartLocalGpuRuntimeAtAppStart = current.AlwaysStartLocalGpuRuntimeAtAppStart;
         TranscriptionCpuComputeType = current.TranscriptionCpuComputeType;
         TranscriptionCpuThreads = current.TranscriptionCpuThreads;
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
@@ -95,10 +97,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     // Containerized local inference
     [ObservableProperty]
-    private string _containerizedServiceUrl = "http://localhost:8000";
+    private GpuHostBackend _preferredLocalGpuBackend = GpuHostBackend.ManagedVenv;
 
     [ObservableProperty]
-    private bool _alwaysRunContainerAtAppStart;
+    private string _advancedGpuServiceUrl = "http://127.0.0.1:8000";
+
+    [ObservableProperty]
+    private bool _alwaysStartLocalGpuRuntimeAtAppStart;
 
     // Advanced transcription CPU tuning
     [ObservableProperty]
@@ -128,6 +133,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string[] GpuApiOptions { get; } =
         ["auto", "d3d11", "vulkan", "opengl"];
+
+    public GpuHostBackend[] GpuBackendOptions { get; } =
+        [GpuHostBackend.ManagedVenv, GpuHostBackend.DockerHost];
 
     public string[] ExportEncoderOptions { get; } =
         ["auto", "h264_nvenc", "hevc_nvenc", "h264_amf", "hevc_amf",
@@ -177,10 +185,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         settings.Theme              = SelectedTheme ?? settings.Theme;
         settings.MaxRecentSessions  = MaxRecentSessions;
         settings.AutoSaveEnabled    = AutoSaveEnabled;
-        settings.ContainerizedServiceUrl = string.IsNullOrWhiteSpace(ContainerizedServiceUrl)
-            ? settings.ContainerizedServiceUrl
-            : ContainerizedServiceUrl.Trim();
-        settings.AlwaysRunContainerAtAppStart = AlwaysRunContainerAtAppStart;
+        settings.PreferredLocalGpuBackend = PreferredLocalGpuBackend;
+        settings.AdvancedGpuServiceUrl = string.IsNullOrWhiteSpace(AdvancedGpuServiceUrl)
+            ? settings.AdvancedGpuServiceUrl
+            : AdvancedGpuServiceUrl.Trim();
+        settings.AlwaysStartLocalGpuRuntimeAtAppStart = AlwaysStartLocalGpuRuntimeAtAppStart;
         settings.TranscriptionCpuComputeType = string.IsNullOrWhiteSpace(TranscriptionCpuComputeType)
             ? "int8"
             : TranscriptionCpuComputeType;

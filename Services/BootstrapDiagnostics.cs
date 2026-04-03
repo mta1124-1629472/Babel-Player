@@ -1,10 +1,12 @@
+using System;
 using System.Linq;
+using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
 /// <summary>
 /// Captures the result of probing the runtime environment for required external tools
-/// and the containerized inference service.
+/// and the configured GPU inference host.
 /// Call <see cref="Run"/> once at startup and expose the result as an observable property.
 /// </summary>
 public sealed record BootstrapDiagnostics(
@@ -38,7 +40,7 @@ public sealed record BootstrapDiagnostics(
 
     /// <summary>
     /// Human-readable inference mode line suitable for the hardware/bootstrap panel.
-    /// Shows whether GPU-backed containerized inference is available.
+    /// Shows whether a managed or Docker-backed local GPU host is available.
     /// </summary>
     public string InferenceLine
     {
@@ -49,9 +51,14 @@ public sealed record BootstrapDiagnostics(
                 var cuda = ContainerizedCudaAvailable
                     ? $"CUDA {ContainerizedCudaVersion ?? "\u2713"}"
                     : "CPU-only";
-                return $"Containerized ({cuda})";
+                return string.Equals(
+                    ContainerizedServiceUrl,
+                    AppSettings.ManagedGpuServiceUrl,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? $"GPU (Managed local, {cuda})"
+                    : $"GPU (Docker host, {cuda})";
             }
-            return "Local subprocess (CPU)";
+            return "CPU (Local subprocess)";
         }
     }
 

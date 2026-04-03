@@ -50,7 +50,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new ContainerizedTranslationProvider(client, _log);
+        var provider = new ContainerizedTranslationProvider(client, _log, "nllb-200-distilled-1.3B");
 
         var result = await provider.TranslateAsync(new TranslationRequest(
             transcriptPath,
@@ -88,7 +88,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new ContainerizedTranslationProvider(client, _log);
+        var provider = new ContainerizedTranslationProvider(client, _log, "nllb-200-distilled-1.3B");
 
         var result = await provider.TranslateSingleSegmentAsync(new SingleSegmentTranslationRequest(
             "hola",
@@ -129,7 +129,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new ContainerizedTranslationProvider(client, _log);
+        var provider = new ContainerizedTranslationProvider(client, _log, "nllb-200-distilled-1.3B");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => provider.TranslateAsync(new TranslationRequest(
             transcriptPath,
@@ -294,7 +294,11 @@ public sealed class ContainerizedProvidersTests : IDisposable
                 TtsReady: false,
                 TtsDetail: "tts disabled"))));
 
-        var settings = new AppSettings { ContainerizedServiceUrl = "http://localhost:8000" };
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            ContainerizedServiceUrl = "http://localhost:8000"
+        };
 
         var readiness = await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(settings, probe);
 
@@ -319,7 +323,11 @@ public sealed class ContainerizedProvidersTests : IDisposable
                 TtsReady: false,
                 TtsDetail: "model unavailable"))));
 
-        var settings = new AppSettings { ContainerizedServiceUrl = "http://localhost:8000" };
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            ContainerizedServiceUrl = "http://localhost:8000"
+        };
 
         var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
 
@@ -337,7 +345,11 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return ContainerHealthStatus.Unavailable(url, "connection refused");
         });
 
-        var settings = new AppSettings { ContainerizedServiceUrl = "http://localhost:8000" };
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            ContainerizedServiceUrl = "http://localhost:8000"
+        };
 
         var checking = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
         Assert.False(checking.IsReady);
@@ -346,7 +358,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
         await Task.Delay(100);
         var unavailable = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
         Assert.False(unavailable.IsReady);
-        Assert.Contains("Start your local inference service", unavailable.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Start your local Docker GPU host", unavailable.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -367,7 +379,11 @@ public sealed class ContainerizedProvidersTests : IDisposable
                     TtsReady: true,
                     TtsDetail: null))));
 
-        var settings = new AppSettings { ContainerizedServiceUrl = "http://localhost:8000" };
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            ContainerizedServiceUrl = "http://localhost:8000"
+        };
         _ = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
         Thread.Sleep(75);
         var readiness = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
@@ -395,7 +411,11 @@ public sealed class ContainerizedProvidersTests : IDisposable
                     TtsReady: true,
                     TtsDetail: null))));
 
-        var settings = new AppSettings { ContainerizedServiceUrl = "http://localhost:8000" };
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            ContainerizedServiceUrl = "http://localhost:8000"
+        };
         _ = ContainerizedProviderReadiness.CheckTts(settings, probe);
         Thread.Sleep(75);
         var readiness = ContainerizedProviderReadiness.CheckTts(settings, probe);

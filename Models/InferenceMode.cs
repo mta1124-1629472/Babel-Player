@@ -2,7 +2,7 @@ namespace Babel.Player.Models;
 
 /// <summary>
 /// Identifies the active inference execution path selected at startup
-/// based on hardware availability and container health.
+/// based on hardware availability and GPU-host health.
 /// </summary>
 public enum InferenceMode
 {
@@ -13,18 +13,16 @@ public enum InferenceMode
     SubprocessCpu,
 
     /// <summary>
-    /// Containerized inference service is healthy and responding.
-    /// All AI pipeline stages route to the Docker inference service.
-    /// GPU (CUDA) availability within the container is reported separately via
+    /// Docker-backed GPU inference host is healthy and responding.
+    /// GPU (CUDA) availability within the host is reported separately via
     /// <see cref="Services.BootstrapDiagnostics.ContainerizedCudaAvailable"/>.
-    /// This is the preferred mode when Docker + NVIDIA Container Toolkit are present.
+    /// This is the advanced GPU backend when Docker + NVIDIA Container Toolkit are present.
     /// </summary>
     Containerized,
 
     /// <summary>
-    /// PLACEHOLDER: Managed Python venv with optional GPU acceleration.
-    /// Intended for machines where Docker is not available but a local GPU path can be
-    /// bootstrapped automatically. Not yet implemented — explicit placeholder per AGENTS.md.
+    /// Managed Python venv GPU host is healthy and responding.
+    /// This is the default low-friction local GPU path for phase 1.
     /// </summary>
     ManagedVenv,
 }

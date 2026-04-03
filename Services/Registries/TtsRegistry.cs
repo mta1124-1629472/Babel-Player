@@ -11,11 +11,12 @@ namespace Babel.Player.Services.Registries;
 
 public interface ITtsRegistry
 {
-    IReadOnlyList<ProviderDescriptor> GetAvailableProviders(InferenceRuntime? runtime = null);
-    ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, InferenceRuntime? runtime = null);
-    ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore, InferenceRuntime? runtime = null);
+    IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null);
+    IReadOnlyList<string> GetAvailableModels(string providerId, ComputeProfile profile, AppSettings settings);
+    ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, ComputeProfile? profile = null);
+    ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore, ComputeProfile? profile = null);
     Task<bool> EnsureModelAsync(string providerId, string modelOrVoice, AppSettings settings,
-                                 IProgress<double>? progress = null, CancellationToken ct = default, InferenceRuntime? runtime = null);
+                                 IProgress<double>? progress = null, CancellationToken ct = default, ComputeProfile? profile = null, ApiKeyStore? keyStore = null);
 }
 
 public sealed class TtsRegistry : ITtsRegistry
@@ -29,8 +30,46 @@ public sealed class TtsRegistry : ITtsRegistry
         _containerizedProbe = containerizedProbe;
     }
 
-    public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(InferenceRuntime? runtime = null)
+    public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null)
     {
+        if (profile is null)
+        {
+            return
+            [
+                new(
+                    ProviderNames.Piper,
+                    "Piper (Local)",
+                    false,
+                    null,
+                    PiperVoices,
+                    SupportedRuntimes: [InferenceRuntime.Local],
+                    DefaultRuntime: InferenceRuntime.Local),
+                .. GetAvailableProviders(ComputeProfile.Cloud),
+            ];
+        }
+
+        if (profile == ComputeProfile.Cpu)
+        {
+            return
+            [
+                new(
+                    ProviderNames.Piper,
+                    "Piper (Local)",
+                    false,
+                    null,
+                    PiperVoices,
+                    SupportedRuntimes: [InferenceRuntime.Local],
+                    DefaultRuntime: InferenceRuntime.Local),
+            ];
+        }
+
+        if (profile == ComputeProfile.Gpu)
+        {
+            // GPU TTS remains gated in phase 1. Keep runtime support internal for legacy
+            // XTTS configurations, but do not surface it in public picker lists.
+            return [];
+        }
+
         var providers = new List<ProviderDescriptor>
         {
             new(
@@ -42,38 +81,11 @@ public sealed class TtsRegistry : ITtsRegistry
                 SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud),
             new(
-                ProviderNames.XttsContainer,
-                "XTTS v2 (Container)",
-                false,
-                null,
-                ["xtts-v2"],
-                SupportedRuntimes: [InferenceRuntime.Containerized],
-                DefaultRuntime: InferenceRuntime.Containerized,
-                IsImplemented: true,
-                Notes: "Voice cloning via reference audio, hosted in local container runtime."),
-            new(
-                ProviderNames.Piper,
-                "Piper (Local)",
-                false,
-                null,
-                PiperVoices,
-                SupportedRuntimes: [InferenceRuntime.Local],
-                DefaultRuntime: InferenceRuntime.Local),
-            new(
                 ProviderNames.ElevenLabs,
                 "ElevenLabs API",
                 true,
                 CredentialKeys.ElevenLabs,
                 ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5"],
-                SupportedRuntimes: [InferenceRuntime.Cloud],
-                DefaultRuntime: InferenceRuntime.Cloud,
-                IsImplemented: true),
-            new(
-                ProviderNames.GoogleCloudTts,
-                "Google Cloud TTS",
-                true,
-                CredentialKeys.GoogleAi,
-                ["standard", "wavenet", "neural2"],
                 SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud,
                 IsImplemented: true),
@@ -88,16 +100,36 @@ public sealed class TtsRegistry : ITtsRegistry
                 IsImplemented: true),
         };
 
-        return runtime is null
-            ? providers
-            : [.. providers.Where(p => p.EffectiveSupportedRuntimes.Contains(runtime.Value))];
+        return providers;
     }
 
-    public ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore, InferenceRuntime? runtime = null)
+    public IReadOnlyList<string> GetAvailableModels(string providerId, ComputeProfile profile, AppSettings settings)
     {
-        var resolvedRuntime = ResolveRuntime(providerId, settings, runtime);
-        var normalizedProviderId = InferenceRuntimeCatalog.NormalizeTtsProvider(resolvedRuntime, providerId);
-        var desc = GetAvailableProviders(resolvedRuntime).FirstOrDefault(p => p.Id == normalizedProviderId);
+        var normalizedProviderId = ResolveProviderId(providerId, settings, profile);
+        if (profile == ComputeProfile.Gpu && string.Equals(normalizedProviderId, ProviderNames.XttsContainer, StringComparison.Ordinal))
+            return ["xtts-v2"];
+
+        return GetAvailableProviders(profile)
+            .FirstOrDefault(p => p.Id == normalizedProviderId)?.SupportedModels
+            ?? ["default"];
+    }
+
+    public ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore, ComputeProfile? profile = null)
+    {
+        var resolvedProfile = ResolveProfile(providerId, settings, profile);
+        var resolvedRuntime = InferenceRuntimeCatalog.ResolveRuntime(resolvedProfile);
+        var normalizedProviderId = ResolveProviderId(providerId, settings, resolvedProfile);
+        var desc = (resolvedProfile == ComputeProfile.Gpu && string.Equals(normalizedProviderId, ProviderNames.XttsContainer, StringComparison.Ordinal))
+            ? new ProviderDescriptor(
+                ProviderNames.XttsContainer,
+                "XTTS v2 (Container)",
+                false,
+                null,
+                ["xtts-v2"],
+                SupportedRuntimes: [InferenceRuntime.Containerized],
+                DefaultRuntime: InferenceRuntime.Containerized,
+                IsImplemented: true)
+            : GetAvailableProviders(resolvedProfile).FirstOrDefault(p => p.Id == normalizedProviderId);
         if (desc == null)
             return new ProviderReadiness(false, $"Unknown TTS provider '{normalizedProviderId}'.");
         if (!desc.IsImplemented)
@@ -108,34 +140,32 @@ public sealed class TtsRegistry : ITtsRegistry
         if (resolvedRuntime == InferenceRuntime.Containerized)
             return ContainerizedProviderReadiness.CheckTts(settings, _containerizedProbe);
 
-        var provider = CreateProvider(normalizedProviderId, settings, keyStore, resolvedRuntime);
+        var provider = CreateProvider(normalizedProviderId, settings, keyStore, resolvedProfile);
         return provider.CheckReadiness(settings, keyStore);
     }
 
     public async Task<bool> EnsureModelAsync(string providerId, string modelOrVoice, AppSettings settings,
-                                              IProgress<double>? progress = null, CancellationToken ct = default, InferenceRuntime? runtime = null)
+                                              IProgress<double>? progress = null, CancellationToken ct = default, ComputeProfile? profile = null, ApiKeyStore? keyStore = null)
     {
-        var resolvedRuntime = ResolveRuntime(providerId, settings, runtime);
-        var normalizedProviderId = InferenceRuntimeCatalog.NormalizeTtsProvider(resolvedRuntime, providerId);
-        var desc = GetAvailableProviders(resolvedRuntime).FirstOrDefault(p => p.Id == normalizedProviderId);
+        var resolvedProfile = ResolveProfile(providerId, settings, profile);
+        var normalizedProviderId = ResolveProviderId(providerId, settings, resolvedProfile);
+        var desc = GetAvailableProviders(resolvedProfile).FirstOrDefault(p => p.Id == normalizedProviderId);
         if (desc == null || !desc.IsImplemented) return false;
-        var provider = CreateProvider(normalizedProviderId, settings, null, resolvedRuntime);
+        var provider = CreateProvider(normalizedProviderId, settings, keyStore, resolvedProfile);
         return await provider.EnsureReadyAsync(settings, progress, ct);
     }
 
-    public ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, InferenceRuntime? runtime = null)
+    public ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, ComputeProfile? profile = null)
     {
-        var resolvedRuntime = ResolveRuntime(providerId, settings, runtime);
-        var normalizedProviderId = InferenceRuntimeCatalog.NormalizeTtsProvider(resolvedRuntime, providerId);
+        var resolvedProfile = ResolveProfile(providerId, settings, profile);
+        var resolvedRuntime = InferenceRuntimeCatalog.ResolveRuntime(resolvedProfile);
+        var normalizedProviderId = ResolveProviderId(providerId, settings, resolvedProfile);
 
         if (resolvedRuntime == InferenceRuntime.Containerized)
         {
             return normalizedProviderId switch
             {
                 ProviderNames.XttsContainer => new XttsContainerTtsProvider(
-                    new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
-                    _log),
-                ProviderNames.EdgeTts => new ContainerizedTtsProvider(
                     new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
                     _log),
                 _ => throw new PipelineProviderException(
@@ -159,18 +189,32 @@ public sealed class TtsRegistry : ITtsRegistry
         };
     }
 
-    private static InferenceRuntime ResolveRuntime(
+    private static ComputeProfile ResolveProfile(
         string providerId,
         AppSettings settings,
-        InferenceRuntime? runtime)
+        ComputeProfile? profile)
     {
-        if (runtime.HasValue)
-            return runtime.Value;
+        if (profile.HasValue)
+            return profile.Value;
 
         if (string.Equals(settings.TtsProvider, providerId, StringComparison.Ordinal))
-            return settings.TtsRuntime;
+            return settings.TtsProfile;
 
-        return InferenceRuntimeCatalog.InferTtsRuntime(providerId);
+        return InferenceRuntimeCatalog.InferTtsProfile(providerId);
+    }
+
+    private static string ResolveProviderId(string providerId, AppSettings settings, ComputeProfile profile)
+    {
+        if (!InferenceRuntimeCatalog.IsKnownTtsProvider(providerId)
+            && !string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal))
+        {
+            return providerId;
+        }
+
+        if (string.Equals(settings.TtsProvider, providerId, StringComparison.Ordinal))
+            return InferenceRuntimeCatalog.NormalizeTtsProvider(profile, settings.TtsProvider);
+
+        return InferenceRuntimeCatalog.NormalizeTtsProvider(profile, providerId);
     }
     
     public static readonly IReadOnlyList<string> PiperVoices =

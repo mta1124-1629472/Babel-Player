@@ -235,10 +235,10 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TtsRegistry_GetAvailableProviders_ContainsXttsContainer()
+    public void TtsRegistry_GetAvailableProviders_HidesXttsContainerInPhase1()
     {
         var providers = _ttsRegistry.GetAvailableProviders();
-        Assert.Contains(providers, p => p.Id == ProviderNames.XttsContainer);
+        Assert.DoesNotContain(providers, p => p.Id == ProviderNames.XttsContainer);
     }
 
     [Fact]
@@ -257,15 +257,6 @@ public sealed class RegistryTests : IDisposable
             ProviderNames.ElevenLabs, "eleven_multilingual_v2", new AppSettings(), null);
         Assert.False(readiness.IsReady);
         Assert.NotNull(readiness.BlockingReason);
-    }
-
-    [Fact]
-    public void TtsRegistry_CheckReadiness_GoogleCloudTtsWithoutKey_ReturnsNotReady()
-    {
-        var readiness = _ttsRegistry.CheckReadiness(
-            ProviderNames.GoogleCloudTts, "standard", new AppSettings(), null);
-        Assert.False(readiness.IsReady);
-        Assert.Contains("API key missing", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -295,7 +286,7 @@ public sealed class RegistryTests : IDisposable
     public void TtsRegistry_CreateProvider_XttsContainer_DoesNotThrow_WhenRuntimeIsContainerized()
     {
         var settings = new AppSettings { TtsRuntime = InferenceRuntime.Containerized, TtsProvider = ProviderNames.XttsContainer };
-        var provider = _ttsRegistry.CreateProvider(ProviderNames.XttsContainer, settings, null, InferenceRuntime.Containerized);
+        var provider = _ttsRegistry.CreateProvider(ProviderNames.XttsContainer, settings, null, ComputeProfile.Gpu);
         Assert.NotNull(provider);
     }
 
@@ -304,13 +295,6 @@ public sealed class RegistryTests : IDisposable
     {
         // Key is empty — provider is created but CheckReadiness will report missing key.
         var provider = _ttsRegistry.CreateProvider(ProviderNames.ElevenLabs, new AppSettings(), null);
-        Assert.NotNull(provider);
-    }
-
-    [Fact]
-    public void TtsRegistry_CreateProvider_GoogleCloudTts_DoesNotThrow()
-    {
-        var provider = _ttsRegistry.CreateProvider(ProviderNames.GoogleCloudTts, new AppSettings(), null);
         Assert.NotNull(provider);
     }
 
@@ -348,14 +332,18 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void AllRegistries_ContainerizedService_CheckReadiness_RequiresConfiguredUrl()
     {
-        var settingsWithEmptyUrl = new AppSettings { ContainerizedServiceUrl = "" };
+        var settingsWithEmptyUrl = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            AdvancedGpuServiceUrl = ""
+        };
 
         var transcription = _transcriptionRegistry.CheckReadiness(
-            ProviderNames.FasterWhisper, "base", settingsWithEmptyUrl, null, InferenceRuntime.Containerized);
+            ProviderNames.FasterWhisper, "base", settingsWithEmptyUrl, null, ComputeProfile.Gpu);
         var translation = _translationRegistry.CheckReadiness(
-            ProviderNames.GoogleTranslateFree, "default", settingsWithEmptyUrl, null, InferenceRuntime.Containerized);
+            ProviderNames.Nllb200, "nllb-200-distilled-1.3B", settingsWithEmptyUrl, null, ComputeProfile.Gpu);
         var tts = _ttsRegistry.CheckReadiness(
-            ProviderNames.XttsContainer, "xtts-v2", settingsWithEmptyUrl, null, InferenceRuntime.Containerized);
+            ProviderNames.XttsContainer, "xtts-v2", settingsWithEmptyUrl, null, ComputeProfile.Gpu);
 
         Assert.False(transcription.IsReady);
         Assert.False(translation.IsReady);
@@ -365,14 +353,18 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void AllRegistries_ContainerizedService_CheckReadiness_NotReadyWhenServiceUnavailable()
     {
-        var settingsWithUrl = new AppSettings { ContainerizedServiceUrl = "http://127.0.0.1:1" };
+        var settingsWithUrl = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            AdvancedGpuServiceUrl = "http://127.0.0.1:1"
+        };
 
         var transcription = _transcriptionRegistry.CheckReadiness(
-            ProviderNames.FasterWhisper, "base", settingsWithUrl, null, InferenceRuntime.Containerized);
+            ProviderNames.FasterWhisper, "base", settingsWithUrl, null, ComputeProfile.Gpu);
         var translation = _translationRegistry.CheckReadiness(
-            ProviderNames.GoogleTranslateFree, "default", settingsWithUrl, null, InferenceRuntime.Containerized);
+            ProviderNames.Nllb200, "nllb-200-distilled-1.3B", settingsWithUrl, null, ComputeProfile.Gpu);
         var tts = _ttsRegistry.CheckReadiness(
-            ProviderNames.XttsContainer, "xtts-v2", settingsWithUrl, null, InferenceRuntime.Containerized);
+            ProviderNames.XttsContainer, "xtts-v2", settingsWithUrl, null, ComputeProfile.Gpu);
 
         Assert.False(transcription.IsReady);
         Assert.False(translation.IsReady);
@@ -380,18 +372,18 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TranscriptionRegistry_GetAvailableProviders_ContainerizedFiltersToHostedProviders()
+    public void TranscriptionRegistry_GetAvailableProviders_GpuFiltersToHostedProviders()
     {
-        var providers = _transcriptionRegistry.GetAvailableProviders(InferenceRuntime.Containerized);
+        var providers = _transcriptionRegistry.GetAvailableProviders(ComputeProfile.Gpu);
 
         Assert.Single(providers);
         Assert.Equal(ProviderNames.FasterWhisper, providers[0].Id);
     }
 
     [Fact]
-    public void TranslationRegistry_GetAvailableProviders_LocalFiltersToLocalProviders()
+    public void TranslationRegistry_GetAvailableProviders_CpuFiltersToLocalProviders()
     {
-        var providers = _translationRegistry.GetAvailableProviders(InferenceRuntime.Local);
+        var providers = _translationRegistry.GetAvailableProviders(ComputeProfile.Cpu);
 
         Assert.Single(providers);
         Assert.Equal(ProviderNames.Nllb200, providers[0].Id);
@@ -400,20 +392,52 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void TtsRegistry_GetAvailableProviders_CloudExcludesLocalOnlyProviders()
     {
-        var providers = _ttsRegistry.GetAvailableProviders(InferenceRuntime.Cloud);
+        var providers = _ttsRegistry.GetAvailableProviders(ComputeProfile.Cloud);
 
         Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.Piper);
         Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.XttsContainer);
+        Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.GoogleCloudTts);
         Assert.Contains(providers, provider => provider.Id == ProviderNames.EdgeTts);
     }
 
     [Fact]
-    public void TtsRegistry_GetAvailableProviders_ContainerizedIncludesXttsContainer()
+    public void TtsRegistry_GetAvailableProviders_GpuHidesGpuTtsInPhase1()
     {
-        var providers = _ttsRegistry.GetAvailableProviders(InferenceRuntime.Containerized);
+        var providers = _ttsRegistry.GetAvailableProviders(ComputeProfile.Gpu);
 
-        Assert.Contains(providers, provider => provider.Id == ProviderNames.XttsContainer);
-        Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.EdgeTts);
+        Assert.Empty(providers);
+    }
+
+    [Fact]
+    public void TranslationRegistry_GetAvailableModels_NllbCpuProfile_ReturnsOnlyCpuModel()
+    {
+        var settings = new AppSettings
+        {
+            TranslationProfile = ComputeProfile.Cpu,
+            TranslationProvider = ProviderNames.Nllb200
+        };
+
+        var models = _translationRegistry.GetAvailableModels(ProviderNames.Nllb200, ComputeProfile.Cpu, settings);
+
+        Assert.Equal(["nllb-200-distilled-600M"], models);
+        Assert.DoesNotContain("nllb-200-distilled-1.3B", models);
+        Assert.DoesNotContain("nllb-200-1.3B", models);
+    }
+
+    [Fact]
+    public void TranslationRegistry_GetAvailableModels_NllbGpuProfile_ReturnsOnlyGpuModels()
+    {
+        var settings = new AppSettings
+        {
+            TranslationProfile = ComputeProfile.Gpu,
+            TranslationProvider = ProviderNames.Nllb200
+        };
+
+        var models = _translationRegistry.GetAvailableModels(ProviderNames.Nllb200, ComputeProfile.Gpu, settings);
+
+        Assert.Contains("nllb-200-distilled-1.3B", models);
+        Assert.Contains("nllb-200-1.3B", models);
+        Assert.DoesNotContain("nllb-200-distilled-600M", models);
     }
 
     // ── DiarizationRegistry ───────────────────────────────────────────────────────

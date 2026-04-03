@@ -58,7 +58,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private IReadOnlyList<RecentSessionEntry> _recentSessions = [];
 
     [ObservableProperty]
-    private BootstrapDiagnostics _bootstrapDiagnostics = new(false, null, false, null, false, null, false, false, null, null);
+    private BootstrapDiagnostics _bootstrapDiagnostics = new(false, null, false, null, false, null, false, false, null, null, "Detecting...");
 
     [ObservableProperty]
     private HardwareSnapshot _hardwareSnapshot = HardwareSnapshot.Detecting;
@@ -168,16 +168,25 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     {
         settings.NormalizeLegacyInferenceSettings();
 
-        bool transcriptionProviderChanged = settings.TranscriptionRuntime != CurrentSettings.TranscriptionRuntime
+        bool transcriptionProviderChanged = settings.TranscriptionProfile != CurrentSettings.TranscriptionProfile
             || settings.TranscriptionProvider != CurrentSettings.TranscriptionProvider
-            || settings.TranscriptionModel != CurrentSettings.TranscriptionModel;
-        bool translationProviderChanged = settings.TranslationRuntime != CurrentSettings.TranslationRuntime
+            || settings.TranscriptionModel != CurrentSettings.TranscriptionModel
+            || (settings.TranscriptionProfile == ComputeProfile.Gpu
+                && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
+                    || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));
+        bool translationProviderChanged = settings.TranslationProfile != CurrentSettings.TranslationProfile
             || settings.TranslationProvider != CurrentSettings.TranslationProvider
-            || settings.TranslationModel != CurrentSettings.TranslationModel;
-        bool ttsProviderChanged = settings.TtsRuntime != CurrentSettings.TtsRuntime
+            || settings.TranslationModel != CurrentSettings.TranslationModel
+            || (settings.TranslationProfile == ComputeProfile.Gpu
+                && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
+                    || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));
+        bool ttsProviderChanged = settings.TtsProfile != CurrentSettings.TtsProfile
             || settings.TtsProvider != CurrentSettings.TtsProvider
             || settings.TtsVoice != CurrentSettings.TtsVoice
-            || settings.PiperModelDir != CurrentSettings.PiperModelDir;
+            || settings.PiperModelDir != CurrentSettings.PiperModelDir
+            || (settings.TtsProfile == ComputeProfile.Gpu
+                && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
+                    || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));
 
         CurrentSettings = settings;
 
@@ -220,7 +229,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public void Initialize()
     {
         // Heavy bootstrap probes and per-session snapshot preloading are warmed in background.
-        BootstrapDiagnostics = new BootstrapDiagnostics(false, null, false, null, false, null, false, false, null, null);
+        BootstrapDiagnostics = new BootstrapDiagnostics(false, null, false, null, false, null, false, false, null, null, "Detecting...");
 
         var nowUtc = DateTimeOffset.UtcNow;
         var loadResult = _store.Load();
@@ -287,7 +296,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public BootstrapWarmupData GatherBootstrapWarmupData()
     {
-        var diagnostics = BootstrapDiagnostics.Run(CurrentSettings.EffectiveContainerizedServiceUrl);
+        var diagnostics = BootstrapDiagnostics.Run(CurrentSettings.EffectiveGpuServiceUrl);
         var snapshots = _perSessionStore.LoadAll();
         var inferenceMode = ResolveInferenceMode(diagnostics);
         return new BootstrapWarmupData(diagnostics, snapshots, inferenceMode);
@@ -315,8 +324,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private static InferenceMode ResolveInferenceMode(BootstrapDiagnostics diagnostics)
     {
         if (diagnostics.ContainerizedServiceAvailable)
-            return InferenceMode.Containerized;
-        // ManagedVenv path is PLACEHOLDER — not yet implemented.
+        {
+            return string.Equals(
+                diagnostics.ContainerizedServiceUrl,
+                AppSettings.ManagedGpuServiceUrl,
+                StringComparison.OrdinalIgnoreCase)
+                ? InferenceMode.ManagedVenv
+                : InferenceMode.Containerized;
+        }
+
         return InferenceMode.SubprocessCpu;
     }
 
@@ -503,7 +519,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 CurrentSettings.TranscriptionModel,
                 CurrentSettings,
                 KeyStore,
-                CurrentSettings.TranscriptionRuntime);
+                CurrentSettings.TranscriptionProfile);
         if (!readiness.IsReady && !readiness.RequiresModelDownload)
             throw new PipelineProviderException(readiness.BlockingReason!);
 
@@ -516,7 +532,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     CurrentSettings,
                     progress,
                     cancellationToken,
-                    CurrentSettings.TranscriptionRuntime))
+                    CurrentSettings.TranscriptionProfile,
+                    KeyStore))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranscriptionModel}'.");
         }
 
@@ -538,7 +555,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             $"cpu_compute={CurrentSettings.TranscriptionCpuComputeType}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers}";
         var hwSummary =
             $"avx2={(HardwareSnapshot.HasAvx2 ? "yes" : "no")}, " +
-            $"avx512={(HardwareSnapshot.HasAvx512 ? "yes" : "no")}, " +
+            $"avx512={(HardwareSnapshot.HasAvx512F ? "yes" : "no")}, " +
             $"cuda={(HardwareSnapshot.HasCuda ? "yes" : "no")}";
 
         _log.Info($"Starting transcription: {CurrentSession.IngestedMediaPath} " +
@@ -644,17 +661,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         ArgumentException.ThrowIfNullOrWhiteSpace(selection.TtsVoice);
 
         var transcriptionProviderChanged =
-            CurrentSettings.TranscriptionRuntime != selection.TranscriptionRuntime ||
+            CurrentSettings.TranscriptionProfile != selection.TranscriptionRuntime ||
             !string.Equals(CurrentSettings.TranscriptionProvider, selection.TranscriptionProvider, StringComparison.Ordinal) ||
             !string.Equals(CurrentSettings.TranscriptionModel, selection.TranscriptionModel, StringComparison.Ordinal);
         var translationProviderChanged =
-            CurrentSettings.TranslationRuntime != selection.TranslationRuntime ||
+            CurrentSettings.TranslationProfile != selection.TranslationRuntime ||
             !string.Equals(CurrentSettings.TranslationProvider, selection.TranslationProvider, StringComparison.Ordinal) ||
             !string.Equals(CurrentSettings.TranslationModel, selection.TranslationModel, StringComparison.Ordinal) ||
             (!string.IsNullOrWhiteSpace(selection.TargetLanguage) &&
              !string.Equals(CurrentSettings.TargetLanguage, selection.TargetLanguage, StringComparison.Ordinal));
         var ttsProviderChanged =
-            CurrentSettings.TtsRuntime != selection.TtsRuntime ||
+            CurrentSettings.TtsProfile != selection.TtsRuntime ||
             !string.Equals(CurrentSettings.TtsProvider, selection.TtsProvider, StringComparison.Ordinal) ||
             !string.Equals(CurrentSettings.TtsVoice, selection.TtsVoice, StringComparison.Ordinal);
 
@@ -670,13 +687,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 CurrentSession.StatusMessage);
         }
 
-        CurrentSettings.TranscriptionRuntime = selection.TranscriptionRuntime;
+        CurrentSettings.TranscriptionProfile = selection.TranscriptionRuntime;
         CurrentSettings.TranscriptionProvider = selection.TranscriptionProvider;
         CurrentSettings.TranscriptionModel = selection.TranscriptionModel;
-        CurrentSettings.TranslationRuntime = selection.TranslationRuntime;
+        CurrentSettings.TranslationProfile = selection.TranslationRuntime;
         CurrentSettings.TranslationProvider = selection.TranslationProvider;
         CurrentSettings.TranslationModel = selection.TranslationModel;
-        CurrentSettings.TtsRuntime = selection.TtsRuntime;
+        CurrentSettings.TtsProfile = selection.TtsRuntime;
         CurrentSettings.TtsProvider = selection.TtsProvider;
         CurrentSettings.TtsVoice = selection.TtsVoice;
         if (!string.IsNullOrWhiteSpace(selection.TargetLanguage))
@@ -757,7 +774,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 CurrentSettings.TranslationModel,
                 CurrentSettings,
                 KeyStore,
-                CurrentSettings.TranslationRuntime);
+                CurrentSettings.TranslationProfile);
         if (!readiness.IsReady && !readiness.RequiresModelDownload)
             throw new PipelineProviderException(readiness.BlockingReason!);
 
@@ -769,7 +786,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     CurrentSettings,
                     progress,
                     cancellationToken,
-                    CurrentSettings.TranslationRuntime))
+                    CurrentSettings.TranslationProfile,
+                    KeyStore))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranslationModel}'.");
         }
 
@@ -841,7 +859,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 v,
                 CurrentSettings,
                 KeyStore,
-                CurrentSettings.TtsRuntime);
+                CurrentSettings.TtsProfile);
         if (!readiness.IsReady && !readiness.RequiresModelDownload)
             throw new PipelineProviderException(readiness.BlockingReason!);
 
@@ -853,7 +871,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     CurrentSettings,
                     progress,
                     cancellationToken,
-                    CurrentSettings.TtsRuntime))
+                    CurrentSettings.TtsProfile,
+                    KeyStore))
                 throw new InvalidOperationException($"Failed to download voice '{v}'.");
         }
 
@@ -1015,7 +1034,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 regenVoice,
                 CurrentSettings,
                 KeyStore,
-                CurrentSettings.TtsRuntime);
+                CurrentSettings.TtsProfile);
         if (!readiness.IsReady && !readiness.RequiresModelDownload)
             throw new PipelineProviderException(readiness.BlockingReason!);
 
@@ -1089,7 +1108,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 CurrentSettings.TranslationModel,
                 CurrentSettings,
                 KeyStore,
-                CurrentSettings.TranslationRuntime);
+                CurrentSettings.TranslationProfile);
         if (!readiness.IsReady && !readiness.RequiresModelDownload)
             throw new PipelineProviderException(readiness.BlockingReason!);
 

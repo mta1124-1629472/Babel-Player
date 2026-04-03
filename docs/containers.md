@@ -15,14 +15,15 @@ This is a deployment-posture document, not a mandate to build container infrastr
 
 ## Current Position
 
-The app should remain compatible with Python-backed inference services that can be hosted in more than one way over time.
+The app should remain compatible with Python-backed inference that can be hosted in more than one way over time.
 
 Expected hosting modes include:
 
 - native local execution
+- managed local GPU host execution
+- Docker-hosted local GPU execution
 - WSL-hosted execution
-- containerized execution
-- NVIDIA-managed serving paths where they actually fit the model stack
+- other NVIDIA-managed serving paths where they actually fit the model stack
 
 The desktop app should not assume one of these modes too early.
 
@@ -102,14 +103,34 @@ Until then, the codebase should stay container-compatible without requiring cont
 
 Current supported implementation:
 
-- the only supported container path right now is an external/local inference service consumed over HTTP
-- in the app UI, `Containerized` is a runtime selection, not a provider name
-- for loopback service URLs such as `http://localhost:8000`, the desktop app can optionally run `docker compose up -d inference`
-- local container autostart happens when a stage is set to `Containerized`, or when the `Always run local container at app start` setting is enabled
-- the desktop app does not try to launch remote hosts, WSL, or non-loopback container endpoints for you
-- `INFERENCE_SERVICE_URL` overrides the saved service URL at startup when present
-- provider readiness is based on `GET /health/live` plus `GET /capabilities`, not URL presence alone
-- the bundled `docker-compose.yml` is a same-machine local inference helper; it is not a remote deployment or orchestration story for the desktop app
+- the public app UI now exposes `CPU / GPU / Cloud`, not `Local / Containerized / Cloud`
+- the default public `GPU` path is the managed local GPU host
+- Docker is an advanced GPU backend, not the primary public-facing runtime choice
+- the Docker path still uses an external/local HTTP inference host consumed over the same health/capabilities contract
+- for loopback service URLs such as `http://localhost:8000`, the app can optionally run `docker compose up -d inference`
+- local Docker autostart happens only when the advanced GPU backend is set to Docker and either a GPU stage is selected or `Always start local GPU host at app start` is enabled
+- the desktop app does not try to launch remote hosts, WSL, or non-loopback endpoints for you
+- `INFERENCE_SERVICE_URL` overrides the saved Docker-host service URL at startup when present
+- readiness is based on `GET /health/live` plus `GET /capabilities`, not URL presence alone
+- the bundled `docker-compose.yml` is a same-machine helper for the advanced Docker backend; it is not a remote deployment or orchestration story for the desktop app
+
+## Managed Local GPU Posture
+
+The managed local GPU host is now the default low-friction GPU path.
+
+That means:
+
+- `GPU` is a compute-profile choice, not a promise that Docker is involved
+- the app is responsible for bootstrapping and starting the managed host
+- the host still speaks the same explicit HTTP contract as the Docker backend
+- host launch-time compute policy is chosen on the C# side and passed to Python as `--compute-type`
+
+Phase-1 managed host scope is intentionally narrow:
+
+- GPU transcription
+- GPU translation
+- no public GPU TTS yet
+- no GPU diarization yet
 
 ---
 

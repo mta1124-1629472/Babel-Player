@@ -1,8 +1,7 @@
-import os
+import argparse
 import json
 import logging
 import tempfile
-import uuid
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -12,9 +11,6 @@ from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTa
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from faster_whisper import WhisperModel
-from googletrans import Translator
-import edge_tts
-import asyncio
 
 # Configure logging
 logging.basicConfig(
@@ -33,19 +29,35 @@ app = FastAPI(
 # Global model instances (loaded once)
 whisper_model = None
 whisper_model_key = None
-translator = None
-xtts_model = None
+nllb_tokenizer = None
+nllb_model = None
+nllb_model_key = None
 
-# XTTS availability probe — None = not yet checked, True/False = result
-xtts_available: Optional[bool] = None
-xtts_error: Optional[str] = None
-
-# In-memory reference store: speaker_id -> {"audio_path": str, "transcript": str|None}
-xtts_reference_store: dict[str, dict] = {}
+HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
 TEMP_DIR.mkdir(exist_ok=True)
+
+FLORES = {
+    "en": "eng_Latn",
+    "es": "spa_Latn",
+    "fr": "fra_Latn",
+    "de": "deu_Latn",
+    "it": "ita_Latn",
+    "pt": "por_Latn",
+    "ru": "rus_Cyrl",
+    "zh": "zho_Hans",
+    "ja": "jpn_Jpan",
+    "ko": "kor_Hang",
+    "ar": "arb_Arab",
+    "hi": "hin_Deva",
+    "nl": "nld_Latn",
+    "pl": "pol_Latn",
+    "sv": "swe_Latn",
+    "tr": "tur_Latn",
+}
 
 # ============================================================================
 # Pydantic Models
@@ -97,11 +109,6 @@ class TtsResponse(BaseModel):
     file_size_bytes: int
     error_message: Optional[str] = None
 
-class XttsReferenceResponse(BaseModel):
-    success: bool
-    reference_id: str
-    error_message: Optional[str] = None
-
 class HealthResponse(BaseModel):
     status: str
     timestamp: str
@@ -116,48 +123,6 @@ class CapabilitiesResponse(BaseModel):
     transcription: StageCapability
     translation: StageCapability
     tts: StageCapability
-
-# ============================================================================
-# XTTS helpers
-# ============================================================================
-
-def _probe_xtts_available() -> bool:
-    """Attempt to import TTS.api and cache the result. Never raises."""
-    global xtts_available, xtts_error
-    if xtts_available is not None:
-        return xtts_available
-    try:
-        from TTS.api import TTS  # noqa: F401
-        xtts_available = True
-        xtts_error = None
-        logger.info("XTTS-v2 (TTS.api) import probe: available")
-    except Exception as e:
-        xtts_available = False
-        xtts_error = str(e)
-        logger.warning(f"XTTS-v2 (TTS.api) import probe: unavailable — {e}")
-    return xtts_available
-
-
-def get_xtts_model():
-    """Lazy-load XTTS-v2. Raises on failure."""
-    global xtts_model, xtts_available, xtts_error
-    if xtts_model is not None:
-        return xtts_model
-    try:
-        from TTS.api import TTS
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"Loading XTTS-v2 model on device '{device}'")
-        xtts_model = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2").to(device)
-        xtts_available = True
-        xtts_error = None
-        logger.info("XTTS-v2 model loaded successfully")
-        return xtts_model
-    except Exception as e:
-        xtts_available = False
-        xtts_error = str(e)
-        logger.error(f"Failed to load XTTS-v2 model: {e}", exc_info=True)
-        raise
-
 
 def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
     """Convert WAV to MP3 via ffmpeg. Raises RuntimeError on failure."""
@@ -177,27 +142,31 @@ def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
 # ============================================================================
 
 def get_stage_capabilities() -> CapabilitiesResponse:
-    xtts_ready = _probe_xtts_available()
-
-    if xtts_ready:
-        tts_detail = "edge-tts (cloud) available; xtts-v2 (GPU) available"
-    else:
-        tts_detail = f"edge-tts (cloud) available; xtts-v2 unavailable ({xtts_error})"
+    transcription_ready = HOST_DEVICE == "cuda"
+    translation_ready = _probe_nllb_available()
 
     return CapabilitiesResponse(
         transcription=StageCapability(
-            ready=True,
-            detail="faster-whisper available; model loads on demand",
+            ready=transcription_ready,
+            detail=(
+                f"faster-whisper ready on {HOST_DEVICE} with compute_type={HOST_COMPUTE_TYPE}"
+                if transcription_ready
+                else "CUDA is unavailable; managed GPU transcription is not ready"
+            ),
         ),
         translation=StageCapability(
-            ready=True,
-            detail="googletrans available",
+            ready=translation_ready,
+            detail=(
+                f"NLLB-200 ready on {HOST_DEVICE} with compute_type={HOST_COMPUTE_TYPE}"
+                if translation_ready
+                else _nllb_capability_detail()
+            ),
         ),
         tts=StageCapability(
-            # Truthful: ready only when XTTS-v2 is importable.
-            # edge-tts alone is a cloud path and does not constitute local GPU TTS readiness.
-            ready=xtts_ready,
-            detail=tts_detail,
+            # GPU TTS is intentionally gated in this host build. The field is kept in the
+            # API response so C# consumers can inspect it without breaking deserialization.
+            ready=False,
+            detail="Local GPU TTS is not enabled in this host build.",
         ),
     )
 
@@ -243,8 +212,8 @@ def load_whisper_model(
 ):
     global whisper_model, whisper_model_key
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    compute_type = "float16" if device == "cuda" else (cpu_compute_type or "int8")
+    device = HOST_DEVICE
+    compute_type = HOST_COMPUTE_TYPE
     effective_num_workers = max(1, int(num_workers or 1))
     effective_cpu_threads = int(cpu_threads) if cpu_threads is not None else None
     if effective_cpu_threads is not None and effective_cpu_threads <= 0:
@@ -272,6 +241,83 @@ def load_whisper_model(
         logger.info("Whisper model loaded successfully")
 
     return whisper_model
+
+
+def _probe_nllb_available() -> bool:
+    if HOST_DEVICE != "cuda":
+        return False
+
+    try:
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer  # noqa: F401
+        import sentencepiece  # noqa: F401
+        return HOST_COMPUTE_TYPE == "float16"
+    except Exception as exc:
+        logger.warning(f"NLLB capability probe failed: {exc}")
+        return False
+
+
+def _nllb_capability_detail() -> str:
+    if HOST_DEVICE != "cuda":
+        return "CUDA is unavailable; managed GPU translation is not ready"
+    if HOST_COMPUTE_TYPE != "float16":
+        return f"NLLB-200 requires compute_type=float16 on CUDA; current host compute_type={HOST_COMPUTE_TYPE}"
+    return "NLLB-200 dependencies are unavailable"
+
+
+def load_nllb_model(model_name: str):
+    global nllb_tokenizer, nllb_model, nllb_model_key
+
+    if HOST_DEVICE != "cuda":
+        raise RuntimeError("NLLB-200 GPU host requires CUDA.")
+    if HOST_COMPUTE_TYPE != "float16":
+        raise RuntimeError(
+            f"NLLB-200 does not support compute_type={HOST_COMPUTE_TYPE} in the managed host. Use float16."
+        )
+
+    desired_key = (model_name, HOST_DEVICE, HOST_COMPUTE_TYPE)
+    if nllb_model is None or nllb_model_key != desired_key:
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+        model_id = f"facebook/{model_name}"
+        logger.info(
+            f"Loading NLLB model '{model_id}' on device '{HOST_DEVICE}' with compute_type '{HOST_COMPUTE_TYPE}'"
+        )
+        nllb_tokenizer = AutoTokenizer.from_pretrained(model_id)
+        nllb_model = AutoModelForSeq2SeqLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.float16,
+        ).to(HOST_DEVICE)
+        nllb_model_key = desired_key
+        logger.info("NLLB model loaded successfully")
+
+    return nllb_tokenizer, nllb_model
+
+
+def translate_with_nllb(model_name: str, source_language: str, target_language: str, text: str) -> str:
+    if not text.strip():
+        return ""
+
+    tokenizer, model = load_nllb_model(model_name)
+    src_flores = FLORES.get(source_language, source_language)
+    tgt_flores = FLORES.get(target_language, target_language)
+    tokenizer.src_lang = src_flores
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=512,
+    ).to(HOST_DEVICE)
+    target_token_id = tokenizer.convert_tokens_to_ids(tgt_flores)
+
+    with torch.no_grad():
+        tokens = model.generate(
+            **inputs,
+            forced_bos_token_id=target_token_id,
+            max_length=512,
+        )
+
+    return tokenizer.batch_decode(tokens, skip_special_tokens=True)[0]
 
 @app.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe(
@@ -323,28 +369,21 @@ async def transcribe(
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============================================================================
-# Translation
+# Translation (NLLB-200 GPU host)
 # ============================================================================
-
-def get_translator():
-    global translator
-    if translator is None:
-        logger.info("Initializing Translator")
-        translator = Translator()
-    return translator
 
 @app.post("/translate", response_model=TranslationResponse)
 async def translate(
     transcript_json: str = Form(...),
     source_language: str = Form(...),
     target_language: str = Form(...),
+    model: str = Form(...),
 ):
     try:
         logger.info(f"Translating {source_language} -> {target_language}")
         transcript_data = json.loads(transcript_json)
         segments = transcript_data.get("segments", [])
 
-        trans = get_translator()
         translated_segments = []
         failures = []
 
@@ -353,8 +392,12 @@ async def translate(
             translated_text = ""
             if text:
                 try:
-                    result = trans.translate(text, src=source_language, dest=target_language)
-                    translated_text = result.text if result else ""
+                    translated_text = translate_with_nllb(
+                        model,
+                        source_language,
+                        target_language,
+                        text,
+                    )
                 except Exception as e:
                     segment_label = seg.get("start", index)
                     logger.error(f"Failed to translate segment {segment_label}: {e}")
@@ -384,7 +427,7 @@ async def translate(
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============================================================================
-# TTS — edge-tts (cloud/CPU path, unchanged)
+# TTS
 # ============================================================================
 
 @app.post("/tts", response_model=TtsResponse)
@@ -393,26 +436,7 @@ async def text_to_speech(
     voice: str = Form("en-US-AriaNeural"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """Generate speech via edge-tts (cloud, no GPU required)."""
-    temp_audio_path = None
-    try:
-        logger.info(f"Generating edge-tts for voice: {voice}")
-        temp_audio_path = TEMP_DIR / f"tts_{datetime.now().timestamp()}.mp3"
-        communicate = edge_tts.Communicate(text, voice)
-        await communicate.save(str(temp_audio_path))
-        file_size = temp_audio_path.stat().st_size
-        logger.info(f"edge-tts generation complete: {file_size} bytes")
-        return TtsResponse(
-            success=True,
-            voice=voice,
-            audio_path=str(temp_audio_path),
-            file_size_bytes=file_size,
-        )
-    except Exception as e:
-        logger.error(f"TTS generation failed: {e}", exc_info=True)
-        if temp_audio_path:
-            background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(e))
+    raise HTTPException(status_code=501, detail="Generic local GPU TTS is not enabled in this host build.")
 
 @app.get("/tts/audio/{filename}")
 async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
@@ -436,13 +460,12 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
 @app.on_event("startup")
 async def startup_event():
     logger.info("Inference service starting up")
-    cuda_available = torch.cuda.is_available()
-    logger.info(f"CUDA available: {cuda_available}")
-    if cuda_available:
+    logger.info(f"Host device: {HOST_DEVICE}")
+    logger.info(f"Host compute_type: {HOST_COMPUTE_TYPE}")
+    logger.info(f"CUDA available: {HOST_DEVICE == 'cuda'}")
+    if HOST_DEVICE == "cuda":
         logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
         logger.info(f"CUDA version: {torch.version.cuda}")
-    # Eagerly probe XTTS so /capabilities is accurate from the first request
-    _probe_xtts_available()
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -452,4 +475,22 @@ async def shutdown_event():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    parser = argparse.ArgumentParser(description="Babel Player managed inference host")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=18000)
+    parser.add_argument("--compute-type", default="int8")
+    args = parser.parse_args()
+
+    HOST_COMPUTE_TYPE = args.compute_type
+    HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+    if HOST_DEVICE == "cuda" and HOST_COMPUTE_TYPE != "float16":
+        raise RuntimeError(
+            f"CUDA host requires --compute-type float16. Received '{HOST_COMPUTE_TYPE}'."
+        )
+    if HOST_DEVICE != "cuda" and HOST_COMPUTE_TYPE != "int8":
+        raise RuntimeError(
+            f"CPU host requires --compute-type int8 in phase 1. Received '{HOST_COMPUTE_TYPE}'."
+        )
+
+    uvicorn.run(app, host=args.host, port=args.port)

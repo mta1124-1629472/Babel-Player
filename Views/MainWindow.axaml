@@ -57,12 +57,18 @@
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
 
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Runtime" FontSize="12" Foreground="#808090" />
+                                <TextBlock Text="Compute" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.InferenceRuntimeOptions}"
                                           SelectedItem="{Binding Playback.TranscriptionRuntime, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
-                                          Background="#1E1E2C" Foreground="#C0C0D0"
-                                          BorderBrush="#2A2A3A" />
+                                           HorizontalAlignment="Stretch" FontSize="12"
+                                           Background="#1E1E2C" Foreground="#C0C0D0"
+                                           BorderBrush="#2A2A3A">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Converter={StaticResource ComputeProfileDisplayConverter}}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
 
                             <StackPanel Spacing="5">
@@ -105,12 +111,18 @@
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
 
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Runtime" FontSize="12" Foreground="#808090" />
+                                <TextBlock Text="Compute" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.InferenceRuntimeOptions}"
                                           SelectedItem="{Binding Playback.TranslationRuntime, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
-                                          Background="#1E1E2C" Foreground="#C0C0D0"
-                                          BorderBrush="#2A2A3A" />
+                                           HorizontalAlignment="Stretch" FontSize="12"
+                                           Background="#1E1E2C" Foreground="#C0C0D0"
+                                           BorderBrush="#2A2A3A">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Converter={StaticResource ComputeProfileDisplayConverter}}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
 
                             <StackPanel Spacing="5">
@@ -153,12 +165,18 @@
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
 
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Runtime" FontSize="12" Foreground="#808090" />
+                                <TextBlock Text="Compute" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.InferenceRuntimeOptions}"
                                           SelectedItem="{Binding Playback.TtsRuntime, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
-                                          Background="#1E1E2C" Foreground="#C0C0D0"
-                                          BorderBrush="#2A2A3A" />
+                                           HorizontalAlignment="Stretch" FontSize="12"
+                                           Background="#1E1E2C" Foreground="#C0C0D0"
+                                           BorderBrush="#2A2A3A">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Converter={StaticResource ComputeProfileDisplayConverter}}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
 
                             <StackPanel Spacing="5">

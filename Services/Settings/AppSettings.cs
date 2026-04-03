@@ -10,12 +10,13 @@ namespace Babel.Player.Services.Settings;
 public sealed class AppSettings
 {
     public const string InferenceServiceUrlEnvVar = "INFERENCE_SERVICE_URL";
+    public const string ManagedGpuServiceUrl = "http://127.0.0.1:18000";
 
     /// <summary>Transcription provider identifier (e.g. "faster-whisper", "openai-whisper-api").</summary>
     public string TranscriptionProvider { get; set; } = ProviderNames.FasterWhisper;
 
-    /// <summary>Runtime host used for transcription: local, containerized, or cloud.</summary>
-    public InferenceRuntime TranscriptionRuntime { get; set; } = InferenceRuntime.Local;
+    /// <summary>Public compute profile used for transcription: CPU, GPU, or cloud.</summary>
+    public ComputeProfile TranscriptionProfile { get; set; } = ComputeProfile.Cpu;
 
     /// <summary>Transcription model name within the selected provider (e.g. "base", "large-v3").</summary>
     public string TranscriptionModel { get; set; } = "base";
@@ -44,8 +45,8 @@ public sealed class AppSettings
     /// <summary>Translation provider identifier (e.g. "google-translate-free", "openai").</summary>
     public string TranslationProvider { get; set; } = ProviderNames.GoogleTranslateFree;
 
-    /// <summary>Runtime host used for translation: local, containerized, or cloud.</summary>
-    public InferenceRuntime TranslationRuntime { get; set; } = InferenceRuntime.Cloud;
+    /// <summary>Public compute profile used for translation: CPU, GPU, or cloud.</summary>
+    public ComputeProfile TranslationProfile { get; set; } = ComputeProfile.Cloud;
 
     /// <summary>Translation model name within the selected provider (e.g. "default", "gpt-4o").</summary>
     public string TranslationModel { get; set; } = "default";
@@ -53,8 +54,8 @@ public sealed class AppSettings
     /// <summary>TTS provider identifier (e.g. "edge-tts", "elevenlabs").</summary>
     public string TtsProvider { get; set; } = ProviderNames.EdgeTts;
 
-    /// <summary>Runtime host used for TTS: local, containerized, or cloud.</summary>
-    public InferenceRuntime TtsRuntime { get; set; } = InferenceRuntime.Cloud;
+    /// <summary>Public compute profile used for TTS: CPU, GPU, or cloud.</summary>
+    public ComputeProfile TtsProfile { get; set; } = ComputeProfile.Cloud;
 
     /// <summary>
      /// TTS voice or model selection. For edge-tts this is an Edge-TTS voice name;
@@ -73,29 +74,74 @@ public sealed class AppSettings
     public string PiperModelDir { get; set; } = "";
 
     /// <summary>
-    /// Base URL of the containerized inference service used by any stage whose runtime
-    /// is set to Containerized.
+    /// Preferred local GPU hosting backend when a stage uses the GPU compute profile.
     /// </summary>
-    public string ContainerizedServiceUrl { get; set; } = "http://localhost:8000";
+    public GpuHostBackend PreferredLocalGpuBackend { get; set; } = GpuHostBackend.ManagedVenv;
 
     /// <summary>
-    /// When true, the app will attempt to start the local containerized inference host
-    /// during app startup even if no stage is currently set to the containerized runtime.
-    /// Only applies when the effective service URL points at a local loopback address.
+    /// When true, the app will attempt to start the selected local GPU host
+    /// during app startup even if no stage is currently set to the GPU profile.
     /// </summary>
-    public bool AlwaysRunContainerAtAppStart { get; set; } = false;
+    public bool AlwaysStartLocalGpuRuntimeAtAppStart { get; set; } = false;
+
+    /// <summary>
+    /// Base URL of the advanced Docker-hosted inference service used when
+    /// <see cref="PreferredLocalGpuBackend"/> is <see cref="GpuHostBackend.DockerHost"/>.
+    /// </summary>
+    public string AdvancedGpuServiceUrl { get; set; } = "http://127.0.0.1:8000";
 
     [JsonIgnore]
-    public string EffectiveContainerizedServiceUrl
+    public InferenceRuntime TranscriptionRuntime
+    {
+        get => InferenceRuntimeCatalog.ResolveRuntime(TranscriptionProfile);
+        set => TranscriptionProfile = InferenceRuntimeCatalog.MapLegacyRuntimeToProfile(value);
+    }
+
+    [JsonIgnore]
+    public InferenceRuntime TranslationRuntime
+    {
+        get => InferenceRuntimeCatalog.ResolveRuntime(TranslationProfile);
+        set => TranslationProfile = InferenceRuntimeCatalog.MapLegacyRuntimeToProfile(value);
+    }
+
+    [JsonIgnore]
+    public InferenceRuntime TtsRuntime
+    {
+        get => InferenceRuntimeCatalog.ResolveRuntime(TtsProfile);
+        set => TtsProfile = InferenceRuntimeCatalog.MapLegacyRuntimeToProfile(value);
+    }
+
+    [JsonIgnore]
+    public string ContainerizedServiceUrl
+    {
+        get => AdvancedGpuServiceUrl;
+        set => AdvancedGpuServiceUrl = value;
+    }
+
+    [JsonIgnore]
+    public bool AlwaysRunContainerAtAppStart
+    {
+        get => AlwaysStartLocalGpuRuntimeAtAppStart;
+        set => AlwaysStartLocalGpuRuntimeAtAppStart = value;
+    }
+
+    [JsonIgnore]
+    public string EffectiveGpuServiceUrl
     {
         get
         {
+            if (PreferredLocalGpuBackend == GpuHostBackend.ManagedVenv)
+                return ManagedGpuServiceUrl;
+
             var overrideValue = Environment.GetEnvironmentVariable(InferenceServiceUrlEnvVar);
             return string.IsNullOrWhiteSpace(overrideValue)
-                ? ContainerizedServiceUrl
+                ? AdvancedGpuServiceUrl
                 : overrideValue.Trim();
         }
     }
+
+    [JsonIgnore]
+    public string EffectiveContainerizedServiceUrl => EffectiveGpuServiceUrl;
 
     public void NormalizeLegacyInferenceSettings() =>
         InferenceRuntimeCatalog.NormalizeSettings(this);

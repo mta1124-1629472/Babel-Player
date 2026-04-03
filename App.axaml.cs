@@ -79,7 +79,9 @@ public partial class App : Application
             {
                 appLog.Info("App startup: initializing session coordinator.");
                 var containerizedProbe = new ContainerizedServiceProbe(appLog);
-                var containerizedManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
+                var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+                var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
+                var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
                 var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
                 var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
                 var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
@@ -96,7 +98,9 @@ public partial class App : Application
                 if (_sessionWorkflowCoordinator is null)
                 {
                     var containerizedProbe = new ContainerizedServiceProbe(appLog);
-                    var containerizedManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
+                    var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+                    var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
+                    var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
                     var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
                     var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
                     var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);

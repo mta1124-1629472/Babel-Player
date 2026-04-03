@@ -70,20 +70,34 @@
                                   Content="Auto-save session on exit"/>
                     </StackPanel>
 
-                    <!-- Containerized local inference -->
+                    <!-- Advanced GPU host settings -->
                     <StackPanel Grid.Row="4" Spacing="6">
-                        <TextBlock Text="Local Container Service URL:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding ContainerizedServiceUrl, Mode=TwoWay}"
+                        <TextBlock Text="Preferred Local GPU Backend:" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding GpuBackendOptions}"
+                                  SelectedItem="{Binding PreferredLocalGpuBackend, Mode=TwoWay}"
+                                   Width="240"
+                                   HorizontalAlignment="Left">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource GpuHostBackendDisplayConverter}}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Opacity="0.65"
+                                   TextWrapping="Wrap"
+                                   Text="Managed local GPU is the default low-friction path. Docker GPU host is available as an advanced backend."/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="5" Spacing="6">
+                        <TextBlock Text="Advanced GPU Service URL:" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding AdvancedGpuServiceUrl, Mode=TwoWay}"
                                  Width="320"
                                  HorizontalAlignment="Left"/>
                         <TextBlock Opacity="0.65"
                                    TextWrapping="Wrap"
-                                   Text="Used for containerized runtime checks and local autostart. Automatic startup only runs for loopback URLs such as http://localhost:8000."/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="20">
-                        <CheckBox IsChecked="{Binding AlwaysRunContainerAtAppStart}"
-                                  Content="Always run local container at app start"/>
+                                   Text="Used only when the Docker GPU backend is selected. Automatic Docker startup only runs for loopback URLs such as http://localhost:8000."/>
+                        <CheckBox IsChecked="{Binding AlwaysStartLocalGpuRuntimeAtAppStart}"
+                                  Content="Always start local GPU runtime at app start"/>
                     </StackPanel>
 
                     <!-- Advanced CPU transcription tuning -->

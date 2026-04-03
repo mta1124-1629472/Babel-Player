@@ -5,177 +5,240 @@ using Babel.Player.Services.Settings;
 namespace Babel.Player.Services;
 
 /// <summary>
-/// Centralizes stage-specific runtime/provider normalization so settings migration,
-/// registries, and session provenance use one mapping.
+/// Centralizes stage-specific compute-profile, runtime, and provider normalization so settings
+/// migration, registries, and session provenance use one mapping.
 /// </summary>
 public static class InferenceRuntimeCatalog
 {
-    public static InferenceRuntime InferTranscriptionRuntime(string? providerId) => providerId switch
+    public static ComputeProfile MapLegacyRuntimeToProfile(InferenceRuntime runtime) => runtime switch
     {
-        ProviderNames.ContainerizedService => InferenceRuntime.Containerized,
-        ProviderNames.OpenAiWhisperApi
-            or ProviderNames.GoogleStt
-            or ProviderNames.GeminiTranscription => InferenceRuntime.Cloud,
+        InferenceRuntime.Containerized => ComputeProfile.Gpu,
+        InferenceRuntime.Cloud => ComputeProfile.Cloud,
+        _ => ComputeProfile.Cpu,
+    };
+
+    public static InferenceRuntime ResolveRuntime(ComputeProfile profile) => profile switch
+    {
+        ComputeProfile.Gpu => InferenceRuntime.Containerized,
+        ComputeProfile.Cloud => InferenceRuntime.Cloud,
         _ => InferenceRuntime.Local,
     };
 
-    public static InferenceRuntime InferTranslationRuntime(string? providerId) => providerId switch
+    public static ComputeProfile InferTranscriptionProfile(string? providerId) => providerId switch
     {
-        ProviderNames.ContainerizedService => InferenceRuntime.Containerized,
-        ProviderNames.Nllb200 => InferenceRuntime.Local,
-        _ => InferenceRuntime.Cloud,
+        ProviderNames.OpenAiWhisperApi
+            or ProviderNames.GoogleStt
+            or ProviderNames.GeminiTranscription => ComputeProfile.Cloud,
+        _ => ComputeProfile.Cpu,
     };
 
-    public static InferenceRuntime InferTtsRuntime(string? providerId) => providerId switch
+    public static ComputeProfile InferTranslationProfile(string? providerId) => providerId switch
     {
-        ProviderNames.ContainerizedService => InferenceRuntime.Containerized,
-        ProviderNames.Piper => InferenceRuntime.Local,
-        _ => InferenceRuntime.Cloud,
+        ProviderNames.Deepl
+            or ProviderNames.OpenAi
+            or ProviderNames.GoogleTranslateFree
+            or ProviderNames.GeminiTranslation => ComputeProfile.Cloud,
+        _ => ComputeProfile.Cpu,
     };
 
-    public static string DefaultTranscriptionProvider(InferenceRuntime runtime) => runtime switch
+    public static ComputeProfile InferTtsProfile(string? providerId) => providerId switch
     {
-        InferenceRuntime.Containerized => ProviderNames.FasterWhisper,
-        InferenceRuntime.Cloud => ProviderNames.OpenAiWhisperApi,
+        ProviderNames.Piper => ComputeProfile.Cpu,
+        ProviderNames.XttsContainer => ComputeProfile.Gpu,
+        _ => ComputeProfile.Cloud,
+    };
+
+    public static string DefaultTranscriptionProvider(ComputeProfile profile) => profile switch
+    {
+        ComputeProfile.Cloud => ProviderNames.OpenAiWhisperApi,
         _ => ProviderNames.FasterWhisper,
     };
 
-    public static string DefaultTranslationProvider(InferenceRuntime runtime) => runtime switch
+    public static string DefaultTranslationProvider(ComputeProfile profile) => profile switch
     {
-        InferenceRuntime.Containerized => ProviderNames.GoogleTranslateFree,
-        InferenceRuntime.Local => ProviderNames.Nllb200,
+        ComputeProfile.Cpu or ComputeProfile.Gpu => ProviderNames.Nllb200,
         _ => ProviderNames.GoogleTranslateFree,
     };
 
-    public static string DefaultTtsProvider(InferenceRuntime runtime) => runtime switch
+    public static string DefaultTtsProvider(ComputeProfile profile) => profile switch
     {
-        InferenceRuntime.Containerized => ProviderNames.XttsContainer,
-        InferenceRuntime.Local => ProviderNames.Piper,
+        ComputeProfile.Cpu => ProviderNames.Piper,
+        ComputeProfile.Gpu => ProviderNames.XttsContainer,
         _ => ProviderNames.EdgeTts,
     };
 
-    public static string NormalizeTranscriptionProvider(InferenceRuntime runtime, string? providerId)
-    {
-        if (runtime == InferenceRuntime.Containerized)
-        {
-            return string.IsNullOrWhiteSpace(providerId) || string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal)
-                ? ProviderNames.FasterWhisper
-                : providerId;
-        }
+    public static string DefaultTranscriptionProvider(InferenceRuntime runtime) =>
+        DefaultTranscriptionProvider(MapLegacyRuntimeToProfile(runtime));
 
-        if (runtime == InferenceRuntime.Cloud)
+    public static string DefaultTranslationProvider(InferenceRuntime runtime) =>
+        DefaultTranslationProvider(MapLegacyRuntimeToProfile(runtime));
+
+    public static string DefaultTtsProvider(InferenceRuntime runtime) =>
+        DefaultTtsProvider(MapLegacyRuntimeToProfile(runtime));
+
+    public static string NormalizeTranscriptionProvider(ComputeProfile profile, string? providerId)
+    {
+        if (string.IsNullOrWhiteSpace(providerId))
+            return DefaultTranscriptionProvider(profile);
+
+        if (string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal))
+            return DefaultTranscriptionProvider(profile);
+
+        if (!IsKnownTranscriptionProvider(providerId))
+            return providerId;
+
+        if (profile == ComputeProfile.Cloud)
         {
             return providerId switch
             {
-                null or "" => DefaultTranscriptionProvider(runtime),
                 ProviderNames.GoogleStt => ProviderNames.GoogleStt,
-                ProviderNames.OpenAiWhisperApi => ProviderNames.OpenAiWhisperApi,
                 ProviderNames.GeminiTranscription => ProviderNames.GeminiTranscription,
-                _ => providerId,
+                ProviderNames.OpenAiWhisperApi => ProviderNames.OpenAiWhisperApi,
+                _ => DefaultTranscriptionProvider(profile),
             };
         }
 
-        return string.IsNullOrWhiteSpace(providerId)
-            ? ProviderNames.FasterWhisper
-            : providerId;
+        return ProviderNames.FasterWhisper;
     }
 
-    public static string NormalizeTranslationProvider(InferenceRuntime runtime, string? providerId)
+    public static string NormalizeTranslationProvider(ComputeProfile profile, string? providerId)
     {
-        if (runtime == InferenceRuntime.Containerized)
-        {
-            return string.IsNullOrWhiteSpace(providerId) || string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal)
-                ? ProviderNames.GoogleTranslateFree
-                : providerId;
-        }
+        if (string.IsNullOrWhiteSpace(providerId))
+            return DefaultTranslationProvider(profile);
 
-        if (runtime == InferenceRuntime.Local)
-        {
-            return string.IsNullOrWhiteSpace(providerId)
-                ? ProviderNames.Nllb200
-                : providerId;
-        }
+        if (string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal))
+            return DefaultTranslationProvider(profile);
+
+        if (!IsKnownTranslationProvider(providerId))
+            return providerId;
+
+        if (profile is ComputeProfile.Cpu or ComputeProfile.Gpu)
+            return ProviderNames.Nllb200;
 
         return providerId switch
         {
-            null or "" => DefaultTranslationProvider(runtime),
             ProviderNames.Deepl => ProviderNames.Deepl,
             ProviderNames.OpenAi => ProviderNames.OpenAi,
-            ProviderNames.GoogleTranslateFree => ProviderNames.GoogleTranslateFree,
             ProviderNames.GeminiTranslation => ProviderNames.GeminiTranslation,
-            _ => providerId,
+            ProviderNames.GoogleTranslateFree => ProviderNames.GoogleTranslateFree,
+            _ => DefaultTranslationProvider(profile),
         };
     }
 
-    public static string NormalizeTtsProvider(InferenceRuntime runtime, string? providerId)
+    public static string NormalizeTtsProvider(ComputeProfile profile, string? providerId)
     {
-        if (runtime == InferenceRuntime.Containerized)
-        {
-            return string.IsNullOrWhiteSpace(providerId) || string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal)
-                ? ProviderNames.XttsContainer
-                : providerId;
-        }
+        if (string.IsNullOrWhiteSpace(providerId))
+            return DefaultTtsProvider(profile);
 
-        if (runtime == InferenceRuntime.Local)
-        {
-            return string.IsNullOrWhiteSpace(providerId)
-                ? ProviderNames.Piper
-                : providerId;
-        }
+        if (string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal))
+            return DefaultTtsProvider(profile);
 
-        return providerId switch
+        if (!IsKnownTtsProvider(providerId))
+            return providerId;
+
+        return profile switch
         {
-            null or "" => DefaultTtsProvider(runtime),
-            ProviderNames.ElevenLabs => ProviderNames.ElevenLabs,
-            ProviderNames.GoogleCloudTts => ProviderNames.GoogleCloudTts,
-            ProviderNames.OpenAiTts => ProviderNames.OpenAiTts,
-            ProviderNames.EdgeTts => ProviderNames.EdgeTts,
-            _ => providerId,
+            ComputeProfile.Cpu => ProviderNames.Piper,
+            ComputeProfile.Gpu => ProviderNames.XttsContainer,
+            _ => providerId switch
+            {
+                ProviderNames.ElevenLabs => ProviderNames.ElevenLabs,
+                ProviderNames.GoogleCloudTts => ProviderNames.GoogleCloudTts,
+                ProviderNames.OpenAiTts => ProviderNames.OpenAiTts,
+                ProviderNames.EdgeTts => ProviderNames.EdgeTts,
+                _ => DefaultTtsProvider(profile),
+            },
         };
     }
+
+    public static InferenceRuntime InferTranscriptionRuntime(string? providerId) =>
+        ResolveRuntime(InferTranscriptionProfile(providerId));
+
+    public static InferenceRuntime InferTranslationRuntime(string? providerId) =>
+        ResolveRuntime(InferTranslationProfile(providerId));
+
+    public static InferenceRuntime InferTtsRuntime(string? providerId) =>
+        ResolveRuntime(InferTtsProfile(providerId));
+
+    public static string NormalizeTranscriptionProvider(InferenceRuntime runtime, string? providerId) =>
+        NormalizeTranscriptionProvider(MapLegacyRuntimeToProfile(runtime), providerId);
+
+    public static string NormalizeTranslationProvider(InferenceRuntime runtime, string? providerId) =>
+        NormalizeTranslationProvider(MapLegacyRuntimeToProfile(runtime), providerId);
+
+    public static string NormalizeTtsProvider(InferenceRuntime runtime, string? providerId) =>
+        NormalizeTtsProvider(MapLegacyRuntimeToProfile(runtime), providerId);
 
     public static void NormalizeSettings(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        settings.TranscriptionRuntime = ResolveConfiguredRuntime(
-            settings.TranscriptionRuntime,
+        settings.TranscriptionProfile = ResolveConfiguredProfile(
+            settings.TranscriptionProfile,
             settings.TranscriptionProvider,
-            InferTranscriptionRuntime);
-        settings.TranslationRuntime = ResolveConfiguredRuntime(
-            settings.TranslationRuntime,
+            InferTranscriptionProfile);
+        settings.TranslationProfile = ResolveConfiguredProfile(
+            settings.TranslationProfile,
             settings.TranslationProvider,
-            InferTranslationRuntime);
-        settings.TtsRuntime = ResolveConfiguredRuntime(
-            settings.TtsRuntime,
+            InferTranslationProfile);
+        settings.TtsProfile = ResolveConfiguredProfile(
+            settings.TtsProfile,
             settings.TtsProvider,
-            InferTtsRuntime);
+            InferTtsProfile);
 
         settings.TranscriptionProvider = NormalizeTranscriptionProvider(
-            settings.TranscriptionRuntime,
+            settings.TranscriptionProfile,
             settings.TranscriptionProvider);
         settings.TranslationProvider = NormalizeTranslationProvider(
-            settings.TranslationRuntime,
+            settings.TranslationProfile,
             settings.TranslationProvider);
         settings.TtsProvider = NormalizeTtsProvider(
-            settings.TtsRuntime,
+            settings.TtsProfile,
             settings.TtsProvider);
     }
 
-    private static InferenceRuntime ResolveConfiguredRuntime(
-        InferenceRuntime configuredRuntime,
+    private static ComputeProfile ResolveConfiguredProfile(
+        ComputeProfile configuredProfile,
         string? providerId,
-        Func<string?, InferenceRuntime> inferRuntime)
+        Func<string?, ComputeProfile> inferProfile)
     {
-        if (string.Equals(providerId, ProviderNames.ContainerizedService, StringComparison.Ordinal))
-            return InferenceRuntime.Containerized;
+        if (string.IsNullOrWhiteSpace(providerId))
+            return configuredProfile;
 
         return providerId switch
         {
-            null or "" => configuredRuntime,
-            _ => configuredRuntime == default && inferRuntime(providerId) != InferenceRuntime.Local
-                ? inferRuntime(providerId)
-                : configuredRuntime,
+            ProviderNames.ContainerizedService => ComputeProfile.Gpu,
+            _ => configuredProfile,
         };
     }
+
+    public static bool IsKnownTranscriptionProvider(string? providerId) => providerId switch
+    {
+        ProviderNames.FasterWhisper
+            or ProviderNames.OpenAiWhisperApi
+            or ProviderNames.GoogleStt
+            or ProviderNames.GeminiTranscription => true,
+        _ => false,
+    };
+
+    public static bool IsKnownTranslationProvider(string? providerId) => providerId switch
+    {
+        ProviderNames.Nllb200
+            or ProviderNames.GoogleTranslateFree
+            or ProviderNames.Deepl
+            or ProviderNames.OpenAi
+            or ProviderNames.GeminiTranslation => true,
+        _ => false,
+    };
+
+    public static bool IsKnownTtsProvider(string? providerId) => providerId switch
+    {
+        ProviderNames.Piper
+            or ProviderNames.EdgeTts
+            or ProviderNames.ElevenLabs
+            or ProviderNames.GoogleCloudTts
+            or ProviderNames.OpenAiTts
+            or ProviderNames.XttsContainer => true,
+        _ => false,
+    };
 }
