@@ -1,26 +1,48 @@
 #!/usr/bin/env python3
 """
-Babel Player Icon Generator — "B" Edition
+Babel Player Icon Generator
 Run: python generate_icon.py
 Output: babel_icon_full.png (1024x1024 RGBA PNG)
 Requires: Pillow  (pip install Pillow)
+
+Font fallback order (first found wins):
+  Windows: C:/Windows/Fonts/arialbd.ttf  (Arial Bold)
+  Linux:   /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+  macOS:   /System/Library/Fonts/Helvetica.ttc
 """
 
-import math, os
-from PIL import Image, ImageDraw
+import math, os, sys
+from PIL import Image, ImageDraw, ImageFont
 
 SIZE   = 1024
 PAD    = 18
 cx, cy = SIZE // 2, SIZE // 2
 R      = SIZE // 2 - PAD
 
-BG    = (13,  27,  52,  255)
-NAVY  = (22,  58,  105, 255)
-GOLD  = (185, 140, 50,  255)
+BG    = (13,  27,  52,  255)   # deep navy background
+NAVY  = (22,  58,  105, 255)   # ocean blue
+GOLD  = (185, 140, 50,  255)   # warm gold
 WHITE = (255, 255, 255, 255)
 LINE_W = 9
 CORNER = 180
 
+# --- Font resolution (cross-platform) ---
+FONT_CANDIDATES = [
+    "C:/Windows/Fonts/arialbd.ttf",          # Windows Arial Bold
+    "C:/Windows/Fonts/calibrib.ttf",         # Windows Calibri Bold
+    "C:/Windows/Fonts/segoeuib.ttf",         # Windows Segoe UI Bold
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  # Linux
+    "/System/Library/Fonts/Helvetica.ttc",   # macOS
+    "/Library/Fonts/Arial Bold.ttf",         # macOS alt
+]
+
+font_path = next((f for f in FONT_CANDIDATES if os.path.exists(f)), None)
+if font_path is None:
+    print("ERROR: No bold font found. Install Pillow's default or add a .ttf path above.")
+    sys.exit(1)
+print(f"Using font: {font_path}")
+
+# --- Helpers ---
 def rounded_rect(draw, xy, radius, fill):
     x0, y0, x1, y1 = xy
     draw.rectangle([x0+radius, y0, x1-radius, y1], fill=fill)
@@ -28,38 +50,33 @@ def rounded_rect(draw, xy, radius, fill):
     for ex, ey in [(x0,y0),(x1-2*radius,y0),(x0,y1-2*radius),(x1-2*radius,y1-2*radius)]:
         draw.ellipse([ex, ey, ex+2*radius, ey+2*radius], fill=fill)
 
-# "B" letterform — gold filled polygons + navy counter cutouts
-# All coords normalised to [-1, 1] globe space
-SPINE       = [(-0.42,-0.72),(-0.12,-0.72),(-0.12, 0.72),(-0.42, 0.72)]
-UPPER_BUMP  = [(-0.12,-0.72),(0.32,-0.72),(0.48,-0.60),(0.52,-0.44),(0.48,-0.28),(0.32,-0.18),(-0.12,-0.18)]
-LOWER_BUMP  = [(-0.12,-0.10),(0.36,-0.10),(0.54, 0.04),(0.58, 0.24),(0.52, 0.44),(0.36, 0.58),(-0.12, 0.72)]
-MID_CUTOUT  = [(-0.12,-0.18),(0.32,-0.18),(0.32,-0.10),(-0.12,-0.10)]
-INNER_UPPER = [(-0.10,-0.64),(0.24,-0.64),(0.36,-0.54),(0.38,-0.44),(0.34,-0.34),(0.22,-0.26),(-0.10,-0.26)]
-INNER_LOWER = [(-0.10,-0.02),(0.28,-0.02),(0.42, 0.12),(0.44, 0.26),(0.38, 0.40),(0.26, 0.50),(-0.10, 0.64)]
-
-def sc(pts):
-    return [(int(cx + x*R), int(cy + y*R)) for x, y in pts]
-
+# --- Build image ---
 img  = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
 draw = ImageDraw.Draw(img)
 rounded_rect(draw, [0, 0, SIZE-1, SIZE-1], CORNER, BG)
 
+# --- Globe layer ---
 globe = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
 gd    = ImageDraw.Draw(globe)
 gd.ellipse([cx-R, cy-R, cx+R, cy+R], fill=NAVY)
 
-for poly in [SPINE, UPPER_BUMP, LOWER_BUMP]:
-    gd.polygon(sc(poly), fill=GOLD)
-for poly in [MID_CUTOUT, INNER_UPPER, INNER_LOWER]:
-    gd.polygon(sc(poly), fill=NAVY)
+# --- Gold "B" using real font ---
+font_size = int(R * 1.44)
+font = ImageFont.truetype(font_path, font_size)
+bbox = gd.textbbox((0, 0), "B", font=font)
+bw, bh = bbox[2]-bbox[0], bbox[3]-bbox[1]
+b_x = cx - bw//2 - int(R * 0.04)
+b_y = cy - bh//2 - int(R * 0.02)
+gd.text((b_x, b_y), "B", font=font, fill=GOLD)
 
+# --- Circular clip ---
 mask = Image.new("L", (SIZE, SIZE), 0)
 ImageDraw.Draw(mask).ellipse([cx-R, cy-R, cx+R, cy+R], fill=255)
 globe.putalpha(mask)
 img.paste(globe, (0, 0), globe)
-
 draw = ImageDraw.Draw(img)
 
+# --- Grid lines ---
 for lon_deg in range(-90, 91, 30):
     lon = math.radians(lon_deg)
     pts = []
@@ -86,16 +103,18 @@ for lat_deg in [-60, -30, 0, 30, 60]:
 
 draw.ellipse([cx-R, cy-R, cx+R, cy+R], outline=WHITE, width=LINE_W+2)
 
-tri_h = int(R * 0.38)
-tri_w = int(R * 0.42)
-t_cx  = cx + int(R * 0.08)
-t_cy  = cy
+# --- Play triangle (sits in the open bowl of the B) ---
+tri_h = int(R * 0.36)
+tri_w = int(R * 0.40)
+t_cx  = cx + int(R * 0.14)
+t_cy  = cy + int(R * 0.02)
 draw.polygon([
     (t_cx - tri_w//2, t_cy - tri_h//2),
     (t_cx + tri_w//2, t_cy),
     (t_cx - tri_w//2, t_cy + tri_h//2),
 ], fill=WHITE)
 
+# --- Save ---
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "babel_icon_full.png")
 img.save(out, "PNG")
 print(f"Saved: {out}  ({SIZE}x{SIZE} RGBA PNG)")
