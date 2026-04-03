@@ -32,14 +32,28 @@ public sealed partial class SessionWorkflowCoordinator
 
     private Task EnsureContainerizedExecutionRuntimeStartedAsync(
         InferenceRuntime runtime,
+        CancellationToken cancellationToken = default) =>
+        EnsureContainerizedExecutionRuntimeStartedAsync(runtime, null, cancellationToken);
+
+    private async Task EnsureContainerizedExecutionRuntimeStartedAsync(
+        InferenceRuntime runtime,
+        string? stageLabel,
         CancellationToken cancellationToken = default)
     {
         if (runtime != InferenceRuntime.Containerized || _containerizedInferenceManager is null)
-            return Task.CompletedTask;
+            return;
 
-        return _containerizedInferenceManager.EnsureStartedAsync(
+        var result = await _containerizedInferenceManager.EnsureStartedAsync(
             CurrentSettings,
             ContainerizedStartupTrigger.Execution,
             cancellationToken);
+
+        if (result.Attempted && !result.IsReady)
+        {
+            var prefix = string.IsNullOrWhiteSpace(stageLabel)
+                ? "GPU inference host startup failed"
+                : $"{stageLabel} GPU inference host startup failed";
+            throw new PipelineProviderException($"{prefix}: {result.Message}");
+        }
     }
 }

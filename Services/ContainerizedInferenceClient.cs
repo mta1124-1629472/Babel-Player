@@ -252,6 +252,8 @@ public sealed class ContainerizedInferenceClient
 
     public async Task<TtsResult> XttsSegmentAsync(
         string text,
+        string model,
+        string? language = null,
         string? speakerId = null,
         string? referenceAudioPath = null,
         string? referenceId = null,
@@ -262,6 +264,9 @@ public sealed class ContainerizedInferenceClient
         {
             using var content = new MultipartFormDataContent();
             content.Add(new StringContent(text), "text");
+            content.Add(new StringContent(string.IsNullOrWhiteSpace(model) ? "xtts-v2" : model), "model");
+            if (!string.IsNullOrWhiteSpace(language))
+                content.Add(new StringContent(language), "language");
             if (!string.IsNullOrWhiteSpace(speakerId))
                 content.Add(new StringContent(speakerId), "speaker_id");
             if (!string.IsNullOrWhiteSpace(referenceId))
@@ -289,7 +294,7 @@ public sealed class ContainerizedInferenceClient
                 if (!result.Success)
                     throw new InvalidOperationException($"XTTS segment error: {result.ErrorMessage}");
 
-                return new TtsResult(true, result.AudioPath ?? "", result.Voice ?? "xtts-v2", result.FileSizeBytes, null);
+                return new TtsResult(true, result.AudioPath ?? "", result.Voice ?? model ?? "xtts-v2", result.FileSizeBytes, null);
             }
             finally
             {
@@ -299,7 +304,7 @@ public sealed class ContainerizedInferenceClient
         catch (Exception ex)
         {
             _log.Error($"XTTS segment synthesis failed: {ex.Message}", ex);
-            return new TtsResult(false, "", "xtts-v2", 0, ex.Message);
+            return new TtsResult(false, "", string.IsNullOrWhiteSpace(model) ? "xtts-v2" : model, 0, ex.Message);
         }
     }
 

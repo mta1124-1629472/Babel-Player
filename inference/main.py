@@ -1,10 +1,15 @@
 import argparse
 import json
 import logging
+import shutil
+import subprocess
+import sys
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+from uuid import uuid4
 
 import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
@@ -32,9 +37,13 @@ whisper_model_key = None
 nllb_tokenizer = None
 nllb_model = None
 nllb_model_key = None
+xtts_model = None
+xtts_model_key = None
+xtts_reference_registry: dict[str, dict[str, str | None]] = {}
 
 HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
+XTTS_MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -109,6 +118,11 @@ class TtsResponse(BaseModel):
     file_size_bytes: int
     error_message: Optional[str] = None
 
+class XttsReferenceResponse(BaseModel):
+    success: bool
+    reference_id: Optional[str] = None
+    error_message: Optional[str] = None
+
 class HealthResponse(BaseModel):
     status: str
     timestamp: str
@@ -124,11 +138,29 @@ class CapabilitiesResponse(BaseModel):
     translation: StageCapability
     tts: StageCapability
 
+def _resolve_ffmpeg_path() -> str:
+    script_dir = Path(__file__).resolve().parent
+    candidates = [
+        script_dir / "ffmpeg.exe",
+        script_dir / "tools" / "win-x64" / "ffmpeg.exe",
+        script_dir.parent / "ffmpeg.exe",
+        script_dir.parent / "tools" / "win-x64" / "ffmpeg.exe",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+
+    resolved = shutil.which("ffmpeg")
+    if resolved:
+        return resolved
+
+    raise RuntimeError("ffmpeg not found. XTTS output conversion requires ffmpeg.")
+
 def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
     """Convert WAV to MP3 via ffmpeg. Raises RuntimeError on failure."""
-    import subprocess
     cmd = [
-        "ffmpeg", "-y", "-i", str(wav_path),
+        _resolve_ffmpeg_path(), "-y", "-i", str(wav_path),
         "-codec:a", "libmp3lame", "-q:a", "3",
         str(mp3_path),
     ]
@@ -137,6 +169,56 @@ def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"ffmpeg conversion failed: {e.output.decode(errors='replace')}")
 
+def _temp_artifact_path(prefix: str, suffix: str) -> Path:
+    return TEMP_DIR / f"{prefix}_{datetime.now().timestamp()}_{uuid4().hex}{suffix}"
+
+def _normalize_xtts_model(model_name: Optional[str]) -> str:
+    if model_name is None:
+        return XTTS_MODEL_NAME
+
+    normalized = model_name.strip().lower()
+    if normalized in ("", "xtts-v2", XTTS_MODEL_NAME.lower()):
+        return XTTS_MODEL_NAME
+
+    raise RuntimeError(f"Unsupported XTTS model '{model_name}'. Only xtts-v2 is currently hosted.")
+
+def _normalize_xtts_voice_label(model_name: Optional[str]) -> str:
+    normalized = _normalize_xtts_model(model_name)
+    return "xtts-v2" if normalized == XTTS_MODEL_NAME else normalized
+
+def _normalize_xtts_language(language: Optional[str]) -> str:
+    if not language:
+        return "en"
+
+    normalized = language.strip().lower()
+    if normalized in ("zh", "zh-cn", "zh-hans"):
+        return "zh-cn"
+    if normalized in ("pt-br", "pt-pt"):
+        return "pt"
+    if "-" in normalized:
+        return normalized.split("-", 1)[0]
+    return normalized
+
+def _probe_xtts_available() -> bool:
+    if HOST_DEVICE != "cuda":
+        return False
+    if HOST_COMPUTE_TYPE != "float16":
+        return False
+
+    try:
+        from TTS.api import TTS  # noqa: F401
+        return True
+    except Exception as exc:
+        logger.warning(f"XTTS capability probe failed: {exc}")
+        return False
+
+def _xtts_capability_detail() -> str:
+    if HOST_DEVICE != "cuda":
+        return "CUDA is unavailable; managed GPU XTTS is not ready"
+    if HOST_COMPUTE_TYPE != "float16":
+        return f"XTTS requires compute_type=float16 on CUDA; current host compute_type={HOST_COMPUTE_TYPE}"
+    return "XTTS dependencies are unavailable"
+
 # ============================================================================
 # Capabilities / Health
 # ============================================================================
@@ -144,6 +226,7 @@ def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
 def get_stage_capabilities() -> CapabilitiesResponse:
     transcription_ready = HOST_DEVICE == "cuda"
     translation_ready = _probe_nllb_available()
+    tts_ready = _probe_xtts_available()
 
     return CapabilitiesResponse(
         transcription=StageCapability(
@@ -163,10 +246,12 @@ def get_stage_capabilities() -> CapabilitiesResponse:
             ),
         ),
         tts=StageCapability(
-            # GPU TTS is intentionally gated in this host build. The field is kept in the
-            # API response so C# consumers can inspect it without breaking deserialization.
-            ready=False,
-            detail="Local GPU TTS is not enabled in this host build.",
+            ready=tts_ready,
+            detail=(
+                f"XTTS v2 ready on {HOST_DEVICE} with compute_type={HOST_COMPUTE_TYPE}; reference audio required"
+                if tts_ready
+                else _xtts_capability_detail()
+            ),
         ),
     )
 
@@ -291,6 +376,31 @@ def load_nllb_model(model_name: str):
         logger.info("NLLB model loaded successfully")
 
     return nllb_tokenizer, nllb_model
+
+
+def load_xtts_model(model_name: Optional[str]):
+    global xtts_model, xtts_model_key
+
+    if HOST_DEVICE != "cuda":
+        raise RuntimeError("XTTS GPU host requires CUDA.")
+    if HOST_COMPUTE_TYPE != "float16":
+        raise RuntimeError(
+            f"XTTS does not support compute_type={HOST_COMPUTE_TYPE} in the managed GPU host. Use float16."
+        )
+
+    resolved_model = _normalize_xtts_model(model_name)
+    desired_key = (resolved_model, HOST_DEVICE, HOST_COMPUTE_TYPE)
+    if xtts_model is None or xtts_model_key != desired_key:
+        from TTS.api import TTS
+
+        logger.info(
+            f"Loading XTTS model '{resolved_model}' on device '{HOST_DEVICE}' with compute_type '{HOST_COMPUTE_TYPE}'"
+        )
+        xtts_model = TTS(resolved_model).to(HOST_DEVICE)
+        xtts_model_key = desired_key
+        logger.info("XTTS model loaded successfully")
+
+    return xtts_model
 
 
 def translate_with_nllb(model_name: str, source_language: str, target_language: str, text: str) -> str:
@@ -438,6 +548,119 @@ async def text_to_speech(
 ):
     raise HTTPException(status_code=501, detail="Generic local GPU TTS is not enabled in this host build.")
 
+@app.post("/tts/xtts/references", response_model=XttsReferenceResponse)
+async def register_xtts_reference(
+    speaker_id: str = Form(...),
+    transcript: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+):
+    try:
+        suffix = Path(file.filename or "reference.wav").suffix or ".wav"
+        stored_path = _temp_artifact_path(f"xtts_ref_{speaker_id}", suffix)
+        contents = await file.read()
+        stored_path.write_bytes(contents)
+
+        reference_id = uuid4().hex
+        xtts_reference_registry[reference_id] = {
+            "speaker_id": speaker_id,
+            "path": str(stored_path),
+            "transcript": transcript,
+        }
+
+        logger.info(f"Registered XTTS reference '{reference_id}' for speaker '{speaker_id}'")
+        return XttsReferenceResponse(success=True, reference_id=reference_id)
+    except Exception as e:
+        logger.error(f"Failed to register XTTS reference: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/tts/xtts/segment", response_model=TtsResponse)
+async def xtts_segment(
+    text: str = Form(...),
+    model: str = Form("xtts-v2"),
+    language: Optional[str] = Form("en"),
+    speaker_id: Optional[str] = Form(None),
+    reference_id: Optional[str] = Form(None),
+    reference_transcript: Optional[str] = Form(None),
+    reference_file: Optional[UploadFile] = File(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    temp_reference_path = None
+    temp_wav_path = None
+    temp_mp3_path = None
+    try:
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="XTTS text cannot be empty.")
+
+        resolved_reference_path = None
+        resolved_reference_transcript = reference_transcript
+
+        if reference_id:
+            reference_entry = xtts_reference_registry.get(reference_id)
+            if reference_entry is None:
+                raise HTTPException(status_code=404, detail=f"Unknown XTTS reference_id '{reference_id}'.")
+            resolved_reference_path = reference_entry.get("path")
+            if not resolved_reference_transcript:
+                resolved_reference_transcript = reference_entry.get("transcript")
+
+        if reference_file is not None:
+            suffix = Path(reference_file.filename or "reference.wav").suffix or ".wav"
+            temp_reference_path = _temp_artifact_path("xtts_inline_ref", suffix)
+            temp_reference_path.write_bytes(await reference_file.read())
+            resolved_reference_path = str(temp_reference_path)
+
+        if not resolved_reference_path:
+            raise HTTPException(
+                status_code=400,
+                detail="XTTS requires reference audio. Configure a speaker reference clip before generating GPU TTS.",
+            )
+
+        xtts = load_xtts_model(model)
+        normalized_language = _normalize_xtts_language(language)
+        temp_wav_path = _temp_artifact_path("xtts_segment", ".wav")
+        temp_mp3_path = _temp_artifact_path("xtts_segment", ".mp3")
+
+        logger.info(
+            f"Generating XTTS segment: speaker={speaker_id or '<none>'}, model={_normalize_xtts_voice_label(model)}, "
+            f"language={normalized_language}, reference_id={reference_id or '<inline>'}"
+        )
+
+        xtts.tts_to_file(
+            text=text,
+            speaker_wav=str(resolved_reference_path),
+            language=normalized_language,
+            file_path=str(temp_wav_path),
+        )
+        _wav_to_mp3(temp_wav_path, temp_mp3_path)
+
+        if temp_reference_path is not None:
+            background_tasks.add_task(lambda p=temp_reference_path: p.unlink(missing_ok=True))
+        if temp_wav_path is not None:
+            background_tasks.add_task(lambda p=temp_wav_path: p.unlink(missing_ok=True))
+
+        return TtsResponse(
+            success=True,
+            voice=_normalize_xtts_voice_label(model),
+            audio_path=str(temp_mp3_path),
+            file_size_bytes=temp_mp3_path.stat().st_size,
+        )
+    except HTTPException:
+        if temp_reference_path is not None:
+            background_tasks.add_task(lambda p=temp_reference_path: p.unlink(missing_ok=True))
+        if temp_wav_path is not None:
+            background_tasks.add_task(lambda p=temp_wav_path: p.unlink(missing_ok=True))
+        if temp_mp3_path is not None:
+            background_tasks.add_task(lambda p=temp_mp3_path: p.unlink(missing_ok=True))
+        raise
+    except Exception as e:
+        logger.error(f"XTTS segment synthesis failed: {e}", exc_info=True)
+        if temp_reference_path is not None:
+            background_tasks.add_task(lambda p=temp_reference_path: p.unlink(missing_ok=True))
+        if temp_wav_path is not None:
+            background_tasks.add_task(lambda p=temp_wav_path: p.unlink(missing_ok=True))
+        if temp_mp3_path is not None:
+            background_tasks.add_task(lambda p=temp_mp3_path: p.unlink(missing_ok=True))
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/tts/audio/{filename}")
 async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
     """Retrieve a generated TTS audio file by its basename."""
@@ -479,11 +702,17 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18000)
     parser.add_argument("--compute-type", default="int8")
+    parser.add_argument("--require-cuda", action="store_true")
     args = parser.parse_args()
 
     HOST_COMPUTE_TYPE = args.compute_type
     HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+    if args.require_cuda and HOST_DEVICE != "cuda":
+        raise RuntimeError(
+            "Managed GPU host requested CUDA, but torch.cuda.is_available() returned false. "
+            "Check the installed Torch CUDA build, NVIDIA driver, and whether the managed runtime can access the GPU."
+        )
     if HOST_DEVICE == "cuda" and HOST_COMPUTE_TYPE != "float16":
         raise RuntimeError(
             f"CUDA host requires --compute-type float16. Received '{HOST_COMPUTE_TYPE}'."

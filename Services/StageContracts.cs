@@ -63,7 +63,8 @@ public sealed record TtsRequest(
     string VoiceName,
     Dictionary<string, string>? SpeakerVoiceAssignments = null,
     Dictionary<string, string>? SpeakerReferenceAudioPaths = null,
-    string? DefaultVoiceFallback = null);
+    string? DefaultVoiceFallback = null,
+    string? Language = null);
 
 public sealed record SingleSegmentTtsRequest(
     string Text, 
@@ -71,7 +72,8 @@ public sealed record SingleSegmentTtsRequest(
     string VoiceName,
     string? SpeakerId = null,
     string? ReferenceAudioPath = null,
-    string? ReferenceTranscriptText = null);
+    string? ReferenceTranscriptText = null,
+    string? Language = null);
 
 public sealed record TtsResult(
     bool Success,

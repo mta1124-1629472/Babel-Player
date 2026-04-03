@@ -235,10 +235,10 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TtsRegistry_GetAvailableProviders_HidesXttsContainerInPhase1()
+    public void TtsRegistry_GetAvailableProviders_IncludesXttsContainer()
     {
         var providers = _ttsRegistry.GetAvailableProviders();
-        Assert.DoesNotContain(providers, p => p.Id == ProviderNames.XttsContainer);
+        Assert.Contains(providers, p => p.Id == ProviderNames.XttsContainer);
     }
 
     [Fact]
@@ -401,11 +401,13 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TtsRegistry_GetAvailableProviders_GpuHidesGpuTtsInPhase1()
+    public void TtsRegistry_GetAvailableProviders_GpuShowsXttsContainer()
     {
         var providers = _ttsRegistry.GetAvailableProviders(ComputeProfile.Gpu);
 
-        Assert.Empty(providers);
+        var xtts = Assert.Single(providers);
+        Assert.Equal(ProviderNames.XttsContainer, xtts.Id);
+        Assert.Contains("xtts-v2", xtts.SupportedModels);
     }
 
     [Fact]

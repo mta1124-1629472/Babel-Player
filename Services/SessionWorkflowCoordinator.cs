@@ -164,62 +164,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _segmentErrorHandler = (_, ex) => StopTtsPlayback();
     }
 
-    public void UpdateSettings(AppSettings settings)
-    {
-        settings.NormalizeLegacyInferenceSettings();
-
-        bool transcriptionProviderChanged = settings.TranscriptionProfile != CurrentSettings.TranscriptionProfile
-            || settings.TranscriptionProvider != CurrentSettings.TranscriptionProvider
-            || settings.TranscriptionModel != CurrentSettings.TranscriptionModel
-            || (settings.TranscriptionProfile == ComputeProfile.Gpu
-                && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
-                    || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));
-        bool translationProviderChanged = settings.TranslationProfile != CurrentSettings.TranslationProfile
-            || settings.TranslationProvider != CurrentSettings.TranslationProvider
-            || settings.TranslationModel != CurrentSettings.TranslationModel
-            || (settings.TranslationProfile == ComputeProfile.Gpu
-                && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
-                    || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));
-        bool ttsProviderChanged = settings.TtsProfile != CurrentSettings.TtsProfile
-            || settings.TtsProvider != CurrentSettings.TtsProvider
-            || settings.TtsVoice != CurrentSettings.TtsVoice
-            || settings.PiperModelDir != CurrentSettings.PiperModelDir
-            || (settings.TtsProfile == ComputeProfile.Gpu
-                && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
-                    || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));
-
-        CurrentSettings = settings;
-
-        if (transcriptionProviderChanged) _transcriptionService = null;
-        if (translationProviderChanged) _translationService = null;
-        if (ttsProviderChanged) _ttsService = null;
-    }
-
-    public MediaReloadRequest? ConsumePendingMediaReloadRequest()
-    {
-        var request = PendingMediaReloadRequest;
-        PendingMediaReloadRequest = null;
-        return request;
-    }
-
-    /// <summary>
-    /// Invalidates all cached provider service instances, forcing them to be recreated
-    /// on the next pipeline execution with fresh CurrentSettings. Called explicitly
-    /// when user clicks Clear or when a complete reset is needed.
-    /// </summary>
-    public void InvalidateAllProviderCaches()
-    {
-        _transcriptionService = null;
-        _translationService = null;
-        _ttsService = null;
-    }
-
-    /// <summary>
-    /// Raises SettingsModified so subscribers (e.g. MainWindowViewModel) can persist changes.
-    /// Call after any in-place mutation of CurrentSettings.
-    /// </summary>
-    public void NotifySettingsModified() => SettingsModified?.Invoke();
-
     public string StateFilePath => _store.StateFilePath;
 
     public string LogFilePath => _log.LogFilePath;
@@ -761,7 +705,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var lang = targetLanguage ?? CurrentSettings.TargetLanguage;
         var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TranslationRuntime, cancellationToken);
+        await EnsureContainerizedExecutionRuntimeStartedAsync(
+            CurrentSettings.TranslationRuntime,
+            "Translation",
+            cancellationToken);
 
         // Registry-owned readiness check
         var readiness = CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
@@ -846,7 +793,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         var v = voice ?? CurrentSettings.TtsVoice;
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime, cancellationToken);
+        await EnsureContainerizedExecutionRuntimeStartedAsync(
+            CurrentSettings.TtsRuntime,
+            "TTS",
+            cancellationToken);
 
         // Registry-owned readiness check
         var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
@@ -887,6 +837,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         _log.Info($"Starting TTS generation: {CurrentSession.TranslationPath} -> {ttsPath}");
 
+        var ttsLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
         var result = await _ttsService.GenerateTtsAsync(
             new TtsRequest(
                 CurrentSession.TranslationPath,
@@ -894,7 +845,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 v,
                 CurrentSession.SpeakerVoiceAssignments,
                 CurrentSession.SpeakerReferenceAudioPaths,
-                CurrentSession.DefaultTtsVoiceFallback),
+                CurrentSession.DefaultTtsVoiceFallback,
+                ttsLanguage),
             cancellationToken);
 
         if (!result.Success)
@@ -943,7 +895,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                             segmentAudioPath,
                             resolvedVoice,
                             seg.SpeakerId,
-                            referenceAudioPath),
+                            referenceAudioPath,
+                            Language: ttsLanguage),
                         cancellationToken);
 
                     if (segResult.Success && File.Exists(segmentAudioPath))
@@ -1025,7 +978,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime);
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime, "TTS");
 
         var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
             ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(CurrentSettings, _containerizedProbe)
@@ -1049,13 +1002,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText.Substring(0, Math.Min(30, segmentText.Length))}...");
 
+        var targetLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
         var result = await _ttsService.GenerateSegmentTtsAsync(
             new SingleSegmentTtsRequest(
                 segmentText,
                 segmentAudioPath,
                 regenVoice,
                 targetSegment?.SpeakerId,
-                referenceAudioPath));
+                referenceAudioPath,
+                Language: targetLanguage));
 
         if (!result.Success)
         {
@@ -1099,7 +1054,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
         }
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TranslationRuntime);
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TranslationRuntime, "Translation");
 
         var readiness = CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
             ? await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(CurrentSettings, _containerizedProbe)

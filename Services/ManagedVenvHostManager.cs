@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -19,6 +20,11 @@ public enum ManagedHostState
     Failed,
 }
 
+public sealed record ManagedGpuRuntimeValidationResult(
+    bool CudaAvailable,
+    string Message,
+    string? CudaVersion = null);
+
 public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDisposable
 {
     private static readonly TimeSpan PreflightHealthTimeout = TimeSpan.FromSeconds(1);
@@ -34,6 +40,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private readonly Func<string> _inferenceScriptResolver;
     private readonly Func<string> _requirementsPathResolver;
     private readonly Func<string> _constraintsPathResolver;
+    private readonly Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>> _runtimeValidator;
     private readonly object _gate = new();
     private Task<ContainerizedStartResult>? _inFlightStartTask;
     private Process? _hostProcess;
@@ -47,7 +54,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         Func<string>? runtimeRootResolver = null,
         Func<string>? inferenceScriptResolver = null,
         Func<string>? requirementsPathResolver = null,
-        Func<string>? constraintsPathResolver = null)
+        Func<string>? constraintsPathResolver = null,
+        Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>>? runtimeValidator = null)
     {
         _log = log;
         _probe = probe;
@@ -58,6 +66,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         _inferenceScriptResolver = inferenceScriptResolver ?? ResolveInferenceScriptPath;
         _requirementsPathResolver = requirementsPathResolver ?? ResolveRequirementsPath;
         _constraintsPathResolver = constraintsPathResolver ?? ResolveConstraintsPath;
+        _runtimeValidator = runtimeValidator ?? ValidateManagedGpuRuntimeAsync;
     }
 
     public ManagedHostState State { get; private set; } = ManagedHostState.NotInstalled;
@@ -169,6 +178,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             State = ManagedHostState.Installing;
             await RunUvBootstrapAsync(uvPath, venvDir, pythonPath, requirementsPath, constraintsPath, cancellationToken);
             await File.WriteAllTextAsync(markerPath, bootstrapVersion, cancellationToken);
+        }
+
+        var runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+        if (!runtimeValidation.CudaAvailable)
+        {
+            return Fail(
+                $"Managed local GPU runtime validation failed: {runtimeValidation.Message}");
         }
 
         State = ManagedHostState.Starting;
@@ -293,7 +309,73 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         psi.ArgumentList.Add("18000");
         psi.ArgumentList.Add("--compute-type");
         psi.ArgumentList.Add(computeType);
+        psi.ArgumentList.Add("--require-cuda");
         return psi;
+    }
+
+    private static async Task<ManagedGpuRuntimeValidationResult> ValidateManagedGpuRuntimeAsync(
+        string pythonPath,
+        CancellationToken cancellationToken)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add(
+            "import json, torch; print(json.dumps({'cuda_available': bool(torch.cuda.is_available()), 'cuda_version': getattr(torch.version, 'cuda', None)}))");
+
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start managed GPU runtime validation process.");
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+
+        if (process.ExitCode != 0)
+        {
+            return new ManagedGpuRuntimeValidationResult(
+                false,
+                $"Managed Python runtime could not validate torch/CUDA availability: {stderr}".Trim());
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(stdout);
+            var root = document.RootElement;
+            var cudaAvailable = root.TryGetProperty("cuda_available", out var cudaAvailableElement)
+                && cudaAvailableElement.GetBoolean();
+            var cudaVersion = root.TryGetProperty("cuda_version", out var cudaVersionElement)
+                && cudaVersionElement.ValueKind != JsonValueKind.Null
+                ? cudaVersionElement.GetString()
+                : null;
+
+            if (cudaAvailable)
+            {
+                return new ManagedGpuRuntimeValidationResult(
+                    true,
+                    $"Managed Python runtime can access CUDA{(string.IsNullOrWhiteSpace(cudaVersion) ? string.Empty : $" {cudaVersion}")}.",
+                    cudaVersion);
+            }
+
+            return new ManagedGpuRuntimeValidationResult(
+                false,
+                "PyTorch is installed, but torch.cuda.is_available() returned false. Check the installed Torch CUDA build, NVIDIA driver, and whether the managed runtime can see the GPU.",
+                cudaVersion);
+        }
+        catch (Exception ex)
+        {
+            return new ManagedGpuRuntimeValidationResult(
+                false,
+                $"Managed Python runtime returned an invalid CUDA validation payload: {ex.Message}. Raw output: {stdout}".Trim());
+        }
     }
 
     private async Task RunProcessAsync(
