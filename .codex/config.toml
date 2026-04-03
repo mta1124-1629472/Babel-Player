@@ -1,6 +1,6 @@
 approval_policy = "on-failure"
-model = "gpt-5.4-mini"
-model_reasoning_effort = "medium"
+model = "gpt-5.4"
+model_reasoning_effort = "extra high"
 personality = "pragmatic"
 sandbox_mode = 'danger-full-access'
 
@@ -8,6 +8,10 @@ sandbox_mode = 'danger-full-access'
 multi_agent = true
 
 [mcp_servers]
+[mcp.servers.claude]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-claude"]
+
 [mcp_servers.MCP_DOCKER]
 command = 'docker.exe'
 args = ['mcp', 'gateway', 'run']
@@ -28,6 +32,7 @@ args = ['@playwright/mcp@latest']
 command = 'npx'
 
 [mcp_servers.avalonia-docs]
+
 enabled = true
 url = "https://docs-mcp.avaloniaui.net/mcp"
 
