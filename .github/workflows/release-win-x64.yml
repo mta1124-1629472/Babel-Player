@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version_override:
+        description: "Version number to embed (e.g. 1.2.0-dev). Defaults to 0.0.0-dev when not set."
+        required: false
+        default: "0.0.0-dev"
 
 permissions:
   contents: write
@@ -54,13 +59,32 @@ jobs:
           Remove-Item -Path "ffmpeg_temp" -Recurse -Force
 
       - name: Publish self-contained build
-        run: >
-          dotnet publish BabelPlayer.csproj
-          --configuration Release
-          -r win-x64
-          --self-contained true
-          -p:PublishSingleFile=false
-          -o ./publish
+        shell: pwsh
+        run: |
+          # Resolve version: strip leading 'v' from tag (e.g. v1.2.0 -> 1.2.0),
+          # or fall back to the workflow_dispatch override input.
+          $refName = "${{ github.ref_name }}"
+          $override = "${{ github.event.inputs.version_override }}"
+          if ($refName -match '^v\d') {
+            $version = $refName.TrimStart('v')
+          } elseif (-not [string]::IsNullOrWhiteSpace($override)) {
+            $version = $override
+          } else {
+            $version = "0.0.0-dev"
+          }
+          $buildDate = (Get-Date -Format "yyyy-MM-dd")
+
+          Write-Host "Embedding version=$version  buildDate=$buildDate"
+
+          dotnet publish BabelPlayer.csproj `
+            --configuration Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:Version=$version `
+            -p:InformationalVersion=$version `
+            -p:BuildDate=$buildDate `
+            -o ./publish
 
       - name: Verify publish output
         shell: pwsh
