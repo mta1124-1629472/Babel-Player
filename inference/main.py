@@ -23,6 +23,8 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+uvicorn_logger = logging.getLogger("uvicorn.error")
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
 
 # Initialize FastAPI
 app = FastAPI(
@@ -172,6 +174,28 @@ def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
 def _temp_artifact_path(prefix: str, suffix: str) -> Path:
     return TEMP_DIR / f"{prefix}_{datetime.now().timestamp()}_{uuid4().hex}{suffix}"
 
+
+def _log_host_runtime_state(context: str) -> None:
+    logger.info(
+        "Managed host runtime state (%s): device=%s compute_type=%s cuda_available=%s cuda_version=%s temp_dir=%s",
+        context,
+        HOST_DEVICE,
+        HOST_COMPUTE_TYPE,
+        torch.cuda.is_available(),
+        torch.version.cuda,
+        TEMP_DIR,
+    )
+    if torch.cuda.is_available():
+        try:
+            logger.info(
+                "Managed host CUDA device (%s): index=0 name=%s capability=%s",
+                context,
+                torch.cuda.get_device_name(0),
+                ".".join(str(part) for part in torch.cuda.get_device_capability(0)),
+            )
+        except Exception as exc:
+            logger.warning("Failed to query CUDA device details during %s: %s", context, exc)
+
 def _normalize_xtts_model(model_name: Optional[str]) -> str:
     if model_name is None:
         return XTTS_MODEL_NAME
@@ -261,6 +285,11 @@ async def health_live():
     try:
         cuda_available = torch.cuda.is_available()
         cuda_version = torch.version.cuda if cuda_available else None
+        logger.info(
+            "Health probe served: status=healthy cuda_available=%s cuda_version=%s",
+            cuda_available,
+            cuda_version,
+        )
         return HealthResponse(
             status="healthy",
             timestamp=datetime.utcnow().isoformat(),
@@ -280,7 +309,14 @@ async def health_check():
 async def capabilities():
     """Stage-specific readiness details for the desktop app."""
     try:
-        return get_stage_capabilities()
+        capabilities = get_stage_capabilities()
+        logger.info(
+            "Capabilities probe served: transcription_ready=%s translation_ready=%s tts_ready=%s",
+            capabilities.transcription.ready,
+            capabilities.translation.ready,
+            capabilities.tts.ready,
+        )
+        return capabilities
     except Exception as e:
         logger.error(f"Capability probe failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -454,6 +490,7 @@ async def transcribe(
             f"(model={model}, cpu_compute={requested_cpu_compute}, "
             f"cpu_threads={requested_cpu_threads}, cpu_workers={requested_num_workers})"
         )
+        logger.info("Transcription temp audio path: %s", temp_audio_path)
 
         whisper = load_whisper_model(model, cpu_compute_type, cpu_threads, num_workers)
         segments, info = whisper.transcribe(str(temp_audio_path), language=language)
@@ -490,9 +527,15 @@ async def translate(
     model: str = Form(...),
 ):
     try:
-        logger.info(f"Translating {source_language} -> {target_language}")
+        logger.info(
+            "Translating transcript: source=%s target=%s model=%s",
+            source_language,
+            target_language,
+            model,
+        )
         transcript_data = json.loads(transcript_json)
         segments = transcript_data.get("segments", [])
+        logger.info("Translation request contains %s segments", len(segments))
 
         translated_segments = []
         failures = []
@@ -567,7 +610,12 @@ async def register_xtts_reference(
             "transcript": transcript,
         }
 
-        logger.info(f"Registered XTTS reference '{reference_id}' for speaker '{speaker_id}'")
+        logger.info(
+            "Registered XTTS reference '%s' for speaker '%s' at path=%s",
+            reference_id,
+            speaker_id,
+            stored_path,
+        )
         return XttsReferenceResponse(success=True, reference_id=reference_id)
     except Exception as e:
         logger.error(f"Failed to register XTTS reference: {e}", exc_info=True)
@@ -623,6 +671,12 @@ async def xtts_segment(
             f"Generating XTTS segment: speaker={speaker_id or '<none>'}, model={_normalize_xtts_voice_label(model)}, "
             f"language={normalized_language}, reference_id={reference_id or '<inline>'}"
         )
+        logger.info(
+            "XTTS artifact paths: reference_path=%s wav_path=%s mp3_path=%s",
+            resolved_reference_path,
+            temp_wav_path,
+            temp_mp3_path,
+        )
 
         xtts.tts_to_file(
             text=text,
@@ -668,6 +722,7 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
         file_path = TEMP_DIR / filename
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Audio file not found")
+        logger.info("Serving TTS audio artifact: %s", file_path)
         background_tasks.add_task(lambda p=file_path: p.unlink(missing_ok=True))
         return FileResponse(file_path, media_type="audio/mpeg")
     except HTTPException:
@@ -683,18 +738,15 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
 @app.on_event("startup")
 async def startup_event():
     logger.info("Inference service starting up")
-    logger.info(f"Host device: {HOST_DEVICE}")
-    logger.info(f"Host compute_type: {HOST_COMPUTE_TYPE}")
-    logger.info(f"CUDA available: {HOST_DEVICE == 'cuda'}")
-    if HOST_DEVICE == "cuda":
-        logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
-        logger.info(f"CUDA version: {torch.version.cuda}")
+    _log_host_runtime_state("startup")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Inference service shutting down")
+    _log_host_runtime_state("shutdown")
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+        logger.info("Cleared CUDA cache during shutdown")
 
 if __name__ == "__main__":
     import uvicorn
@@ -707,6 +759,15 @@ if __name__ == "__main__":
 
     HOST_COMPUTE_TYPE = args.compute_type
     HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    logger.info(
+        "Managed inference host launch args: host=%s port=%s compute_type=%s require_cuda=%s python=%s",
+        args.host,
+        args.port,
+        args.compute_type,
+        args.require_cuda,
+        sys.executable,
+    )
+    _log_host_runtime_state("preflight")
 
     if args.require_cuda and HOST_DEVICE != "cuda":
         raise RuntimeError(
@@ -722,4 +783,9 @@ if __name__ == "__main__":
             f"CPU host requires --compute-type int8 in phase 1. Received '{HOST_COMPUTE_TYPE}'."
         )
 
-    uvicorn.run(app, host=args.host, port=args.port)
+    uvicorn_logger.info(
+        "Starting uvicorn for managed inference host on %s:%s",
+        args.host,
+        args.port,
+    )
+    uvicorn.run(app, host=args.host, port=args.port, access_log=True, log_level="info")

@@ -40,6 +40,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private readonly Func<string> _inferenceScriptResolver;
     private readonly Func<string> _requirementsPathResolver;
     private readonly Func<string> _constraintsPathResolver;
+    private readonly Func<string, string, string, string, string, CancellationToken, Task> _bootstrapRunner;
     private readonly Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>> _runtimeValidator;
     private readonly Func<string, string, string, string, CancellationToken, Task> _hostProcessStarter;
     private readonly object _gate = new();
@@ -56,6 +57,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         Func<string>? inferenceScriptResolver = null,
         Func<string>? requirementsPathResolver = null,
         Func<string>? constraintsPathResolver = null,
+        Func<string, string, string, string, string, CancellationToken, Task>? bootstrapRunner = null,
         Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>>? runtimeValidator = null,
         Func<string, string, string, string, CancellationToken, Task>? hostProcessStarter = null)
     {
@@ -68,6 +70,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         _inferenceScriptResolver = inferenceScriptResolver ?? ResolveInferenceScriptPath;
         _requirementsPathResolver = requirementsPathResolver ?? ResolveRequirementsPath;
         _constraintsPathResolver = constraintsPathResolver ?? ResolveConstraintsPath;
+        _bootstrapRunner = bootstrapRunner ?? RunUvBootstrapAsync;
         _runtimeValidator = runtimeValidator ?? ValidateManagedGpuRuntimeAsync;
         _hostProcessStarter = hostProcessStarter ?? StartHostProcessAsync;
     }
@@ -78,7 +81,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
     public void RequestEnsureStarted(AppSettings settings, ContainerizedStartupTrigger trigger)
     {
-        _ = EnsureStartedAsync(settings, trigger);
+        BackgroundTaskObserver.Observe(
+            EnsureStartedAsync(settings, trigger),
+            _log,
+            "Managed GPU host autostart");
     }
 
     public async Task<ContainerizedStartResult> EnsureStartedAsync(
@@ -112,7 +118,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             }
             else
             {
-                _inFlightStartTask = EnsureStartedCoreAsync(trigger, cancellationToken);
+                _inFlightStartTask = EnsureStartedCoreSafeAsync(trigger, cancellationToken);
                 task = _inFlightStartTask;
             }
         }
@@ -148,6 +154,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         CancellationToken cancellationToken)
     {
         var hardware = _hardwareSnapshotProvider();
+        _log.Info(
+            $"Managed GPU host startup requested: trigger={trigger}, " +
+            $"cuda={hardware.HasCuda}, gpu='{hardware.GpuName ?? "<none>"}', " +
+            $"cuda_version='{hardware.CudaVersion ?? "<none>"}', avx2={hardware.HasAvx2}");
         if (!hardware.HasCuda)
             return Fail("Managed local GPU requires a CUDA-capable NVIDIA GPU.");
 
@@ -170,19 +180,52 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var venvDir = Path.Combine(runtimeRoot, ".venv");
         var pythonPath = Path.Combine(venvDir, "Scripts", "python.exe");
         Directory.CreateDirectory(runtimeRoot);
+        _log.Info(
+            $"Managed GPU runtime paths: runtime_root={runtimeRoot}, venv_dir={venvDir}, python={pythonPath}, " +
+            $"script={inferenceScriptPath}, requirements={requirementsPath}, constraints={constraintsPath}, uv={uvPath}, compute_type={computeType}");
 
         var bootstrapVersion = ComputeBootstrapVersion(inferenceScriptPath, requirementsPath, constraintsPath);
         var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
         var markerValue = File.Exists(markerPath) ? await File.ReadAllTextAsync(markerPath, cancellationToken) : null;
         var needsBootstrap = !File.Exists(pythonPath) || !string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal);
+        _log.Info(
+            $"Managed GPU runtime bootstrap state: python_exists={File.Exists(pythonPath)}, marker_exists={File.Exists(markerPath)}, " +
+            $"marker_matches={string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal)}, needs_bootstrap={needsBootstrap}, " +
+            $"bootstrap_version={bootstrapVersion}, marker_path={markerPath}");
 
         if (needsBootstrap)
         {
             State = ManagedHostState.Installing;
-            await RunUvBootstrapAsync(uvPath, venvDir, pythonPath, requirementsPath, constraintsPath, cancellationToken);
+            var rebuildExistingRuntime = Directory.Exists(venvDir);
+            _log.Info(
+                rebuildExistingRuntime
+                    ? $"Rebuilding stale or incomplete managed GPU runtime at {venvDir}."
+                    : $"Bootstrapping managed GPU runtime at {venvDir}.");
+
+            try
+            {
+                await _bootstrapRunner(
+                    uvPath,
+                    venvDir,
+                    pythonPath,
+                    requirementsPath,
+                    constraintsPath,
+                    cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Fail($"Managed local GPU runtime bootstrap failed: {ex.Message}");
+            }
+
             await File.WriteAllTextAsync(markerPath, bootstrapVersion, cancellationToken);
+            _log.Info($"Managed GPU runtime bootstrap completed at {venvDir}.");
+        }
+        else
+        {
+            _log.Info($"Managed GPU runtime already matches bootstrap version at {venvDir}; skipping bootstrap.");
         }
 
+        _log.Info($"Validating managed GPU runtime via {pythonPath}.");
         var runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
         if (!runtimeValidation.CudaAvailable)
         {
@@ -194,6 +237,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"Managed GPU runtime validation passed: {runtimeValidation.Message}");
 
         State = ManagedHostState.Starting;
+        _log.Info(
+            $"Launching managed GPU host process: url={AppSettings.ManagedGpuServiceUrl}, compute_type={computeType}, host_pid_path={Path.Combine(runtimeRoot, "managed-host.pid")}");
         await _hostProcessStarter(
             pythonPath,
             inferenceScriptPath,
@@ -201,6 +246,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             Path.Combine(runtimeRoot, "managed-host.pid"),
             cancellationToken);
 
+        _log.Info(
+            $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={PostStartProbeTimeout.TotalSeconds}s");
         var readiness = _probe is not null
             ? await _probe.WaitForProbeAsync(
                 AppSettings.ManagedGpuServiceUrl,
@@ -208,6 +255,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 waitTimeout: PostStartProbeTimeout,
                 cancellationToken)
             : FromHealth(await SafeCheckHealthAsync(AppSettings.ManagedGpuServiceUrl, PostStartProbeTimeout, cancellationToken));
+
+        _log.Info(
+            $"Managed GPU host readiness probe result: state={readiness.State}, error='{readiness.ErrorDetail ?? "<none>"}', " +
+            $"cuda_available={readiness.CudaAvailable}, cuda_version='{readiness.CudaVersion ?? "<none>"}'");
 
         if (readiness.State == ContainerizedProbeState.Available)
         {
@@ -222,6 +273,25 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         return Fail(
             $"Managed local GPU host failed to become ready at {AppSettings.ManagedGpuServiceUrl}: {readiness.ErrorDetail ?? readiness.State.ToString()}");
+    }
+
+    private async Task<ContainerizedStartResult> EnsureStartedCoreSafeAsync(
+        ContainerizedStartupTrigger trigger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await EnsureStartedCoreAsync(trigger, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Managed GPU host startup failed unexpectedly.", ex);
+            return Fail($"Managed local GPU host startup failed unexpectedly: {ex.Message}");
+        }
     }
 
     private async Task RunUvBootstrapAsync(
@@ -239,6 +309,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             Path.GetDirectoryName(venvDir) ?? AppContext.BaseDirectory,
             cancellationToken,
             "venv",
+            "--clear",
             "--python",
             PythonVersion,
             venvDir);
@@ -283,6 +354,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         _hostProcess = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start managed GPU host process.");
+
+        _log.Info($"Managed GPU host process started with pid={_hostProcess.Id}.");
 
         _ = DrainProcessStreamAsync(_hostProcess.StandardOutput, "managed-gpu");
         _ = DrainProcessStreamAsync(_hostProcess.StandardError, "managed-gpu:stderr");
@@ -354,6 +427,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         try
         {
+            stdout = stdout.Trim();
+            stderr = stderr.Trim();
             using var document = JsonDocument.Parse(stdout);
             var root = document.RootElement;
             var cudaAvailable = root.TryGetProperty("cuda_available", out var cudaAvailableElement)
@@ -403,6 +478,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         foreach (var argument in arguments)
             psi.ArgumentList.Add(argument);
 
+        _log.Info(
+            $"Running managed GPU process: file={fileName}, working_directory={workingDirectory}, args={string.Join(' ', arguments)}");
+
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
 
@@ -411,6 +489,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         await process.WaitForExitAsync(cancellationToken);
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
+
+        _log.Info(
+            $"Managed GPU process exited: file={fileName}, exit_code={process.ExitCode}");
 
         if (process.ExitCode != 0)
             throw new InvalidOperationException(
@@ -441,7 +522,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     {
         try
         {
-            return await _healthCheckFunc(serviceUrl, timeout, cancellationToken);
+            _log.Info($"Managed GPU host health probe starting: url={serviceUrl}, timeout={timeout.TotalSeconds}s");
+            var health = await _healthCheckFunc(serviceUrl, timeout, cancellationToken);
+            _log.Info(
+                $"Managed GPU host health probe finished: available={health.IsAvailable}, " +
+                $"cuda_available={health.CudaAvailable}, cuda_version='{health.CudaVersion ?? "<none>"}', " +
+                $"error='{health.ErrorMessage ?? "<none>"}'");
+            return health;
         }
         catch (Exception ex)
         {

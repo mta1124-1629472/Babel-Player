@@ -73,7 +73,10 @@ public sealed class ContainerizedInferenceManager : IContainerizedInferenceManag
 
     public void RequestEnsureStarted(AppSettings settings, ContainerizedStartupTrigger trigger)
     {
-        _ = EnsureStartedAsync(settings, trigger);
+        BackgroundTaskObserver.Observe(
+            EnsureStartedAsync(settings, trigger),
+            _log,
+            "Container autostart");
     }
 
     public async Task<ContainerizedStartResult> EnsureStartedAsync(
@@ -107,7 +110,7 @@ public sealed class ContainerizedInferenceManager : IContainerizedInferenceManag
             }
             else
             {
-                _inFlightStartTask = EnsureStartedCoreAsync(serviceUrl, trigger, cancellationToken);
+                _inFlightStartTask = EnsureStartedCoreSafeAsync(serviceUrl, trigger, cancellationToken);
                 task = _inFlightStartTask;
             }
         }
@@ -199,6 +202,29 @@ public sealed class ContainerizedInferenceManager : IContainerizedInferenceManag
         _log.Info(
             $"Container autostart result: trigger={trigger}, ready={readinessResult.IsReady}, message={readinessResult.Message}");
         return readinessResult;
+    }
+
+    private async Task<ContainerizedStartResult> EnsureStartedCoreSafeAsync(
+        string serviceUrl,
+        ContainerizedStartupTrigger trigger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await EnsureStartedCoreAsync(serviceUrl, trigger, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Container autostart failed unexpectedly.", ex);
+            return new ContainerizedStartResult(
+                true,
+                false,
+                $"Local containerized inference startup failed unexpectedly: {ex.Message}");
+        }
     }
 
     private static bool ShouldAttemptStart(AppSettings settings, ContainerizedStartupTrigger trigger)

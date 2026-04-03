@@ -139,6 +139,28 @@ public sealed class ContainerizedInferenceManagerTests : IDisposable
         Assert.All(results, result => Assert.True(result.IsReady));
     }
 
+    [Fact]
+    public async Task RequestEnsureStarted_UnexpectedFailure_IsLoggedWithoutFaultingBackgroundTask()
+    {
+        var manager = CreateManager(
+            healthCheckFunc: (_, _, _) => Task.FromResult(ContainerHealthStatus.Unavailable("http://localhost:8000", "down")),
+            startComposeFunc: (_, _) => throw new InvalidOperationException("docker compose crashed"));
+
+        manager.RequestEnsureStarted(
+            new AppSettings
+            {
+                AlwaysRunContainerAtAppStart = true,
+                PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+                ContainerizedServiceUrl = "http://localhost:8000",
+            },
+            ContainerizedStartupTrigger.AppStartup);
+
+        var logContents = await WaitForLogAsync("Container autostart failed unexpectedly.");
+
+        Assert.Contains("Container autostart failed unexpectedly.", logContents, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Unobserved task exception", logContents, StringComparison.OrdinalIgnoreCase);
+    }
+
     private ContainerizedInferenceManager CreateManager(
         Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>> healthCheckFunc,
         Func<ContainerComposeStartRequest, CancellationToken, Task<ContainerComposeStartResult>> startComposeFunc)
@@ -150,5 +172,23 @@ public sealed class ContainerizedInferenceManagerTests : IDisposable
             startComposeFunc: startComposeFunc,
             dockerResolver: () => "docker",
             composeFileResolver: () => _composeFilePath);
+    }
+
+    private async Task<string> WaitForLogAsync(string expectedText)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        while (true)
+        {
+            cts.Token.ThrowIfCancellationRequested();
+            if (File.Exists(_log.LogFilePath))
+            {
+                var contents = await File.ReadAllTextAsync(_log.LogFilePath, cts.Token);
+                if (contents.Contains(expectedText, StringComparison.OrdinalIgnoreCase))
+                    return contents;
+            }
+
+            await Task.Delay(25, cts.Token);
+        }
     }
 }
