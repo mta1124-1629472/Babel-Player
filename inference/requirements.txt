@@ -1,13 +1,10 @@
 fastapi==0.115.4
 uvicorn==0.30.6
 pydantic==2.9.2
+pydantic-settings==2.3.1
 python-multipart==0.0.9
 faster-whisper==1.2.1
 numpy==1.26.4
 scipy==1.14.1
-googletrans==4.0.0rc1
-edge-tts==6.1.6
-TTS==0.22.0
-pydantic-settings==2.3.1
-TTS[all]==0.22.0
 pydub==0.25.1
+edge-tts==6.1.6
