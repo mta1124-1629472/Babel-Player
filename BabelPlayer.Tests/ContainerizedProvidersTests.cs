@@ -326,6 +326,60 @@ public sealed class ContainerizedProvidersTests : IDisposable
     }
 
     [Fact]
+    public async Task XttsContainerTtsProvider_GenerateTtsAsync_UsesSingleSpeakerDefaultReferenceForSpeakerlessSegments()
+    {
+        var translationPath = Path.Combine(_dir, "xtts-translation-single.json");
+        var outputPath = Path.Combine(_dir, "xtts-single.mp3");
+        var defaultRef = Path.Combine(_dir, "single-speaker-ref.wav");
+        await File.WriteAllTextAsync(translationPath,
+            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
+        await File.WriteAllBytesAsync(defaultRef, Encoding.UTF8.GetBytes("ref-single"));
+
+        var segmentBodies = new List<string>();
+        var client = CreateClient(async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/references")
+            {
+                return await Json(HttpStatusCode.OK, "{\"success\":true,\"reference_id\":\"single-ref\"}");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/segment")
+            {
+                var body = await request.Content!.ReadAsStringAsync(ct);
+                segmentBodies.Add(body);
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"xtts-v2\",\"audio_path\":\"/tmp/single.mp3\",\"file_size_bytes\":8}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/single.mp3")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(Encoding.UTF8.GetBytes("S"))
+                };
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new XttsContainerTtsProvider(client, _log);
+        var result = await provider.GenerateTtsAsync(new TtsRequest(
+            translationPath,
+            outputPath,
+            "xtts-v2",
+            SpeakerReferenceAudioPaths: new Dictionary<string, string>
+            {
+                [XttsReferenceKeys.SingleSpeakerDefault] = defaultRef,
+            },
+            Language: "en"));
+
+        Assert.True(result.Success);
+        Assert.True(File.Exists(outputPath));
+        Assert.Single(segmentBodies);
+        Assert.Contains("single-ref", segmentBodies[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ContainerizedTranscriptionProvider_TranscribeAsync_ThrowsWhenInputMissing()
     {
         var client = CreateClient((_, _) =>

@@ -652,6 +652,61 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         Assert.Equal("spk_02", fakeTts.LastSegmentRequest.SpeakerId);
     }
 
+    [Fact]
+    public async Task RegenerateSegmentTts_SingleSpeakerXtts_UsesDefaultReferenceClip()
+    {
+        var fakeTts = new FakeTtsProvider();
+        var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
+        var settings = CreateMatchingSettings();
+        settings.TtsProvider = ProviderNames.XttsContainer;
+
+        var coord = new SessionWorkflowCoordinator(
+            _store,
+            _log,
+            settings,
+            _perSessionStore,
+            _recentStore,
+            new TranscriptionRegistry(_log),
+            new TranslationRegistry(_log),
+            fakeTtsRegistry);
+        coord.Initialize();
+
+        var translationPath = CreateTempFile("""
+        {
+          "sourceLanguage": "es",
+          "targetLanguage": "en",
+          "segments": [
+            {
+              "id": "segment_0.0",
+              "start": 0.0,
+              "end": 1.0,
+              "text": "hola",
+              "translatedText": "hello"
+            }
+          ]
+        }
+        """);
+        var defaultRefPath = Path.Combine(_dir, "xtts-single-ref.wav");
+        await File.WriteAllBytesAsync(defaultRefPath, [1, 2, 3]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranslationPath = translationPath,
+            TtsVoice = "xtts-v2",
+            MultiSpeakerEnabled = false,
+            SpeakerReferenceAudioPaths = new Dictionary<string, string>
+            {
+                [XttsReferenceKeys.SingleSpeakerDefault] = defaultRefPath,
+            },
+        };
+
+        await coord.RegenerateSegmentTtsAsync("segment_0.0");
+
+        Assert.NotNull(fakeTts.LastSegmentRequest);
+        Assert.Equal(defaultRefPath, fakeTts.LastSegmentRequest!.ReferenceAudioPath);
+    }
+
     // ── CheckSettingsInvalidation ─────────────────────────────────────────────
 
     [Fact]
@@ -1214,10 +1269,14 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
 
     private sealed class FakeTtsProvider : ITtsProvider
     {
+        public TtsRequest? LastRequest { get; private set; }
         public SingleSegmentTtsRequest? LastSegmentRequest { get; private set; }
 
-        public Task<TtsResult> GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, 1, null));
+        public Task<TtsResult> GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            return Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, 1, null));
+        }
 
         public Task<TtsResult> GenerateSegmentTtsAsync(SingleSegmentTtsRequest request, CancellationToken cancellationToken = default)
         {

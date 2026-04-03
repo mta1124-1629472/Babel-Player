@@ -181,16 +181,24 @@ public sealed partial class SessionWorkflowCoordinator
 
     private string? ResolveReferenceAudioForSegment(TranslationSegmentArtifact segment)
     {
-        if (!CurrentSession.MultiSpeakerEnabled)
+        if (CurrentSession.SpeakerReferenceAudioPaths is null)
             return null;
 
-        var speakerId = segment.SpeakerId;
-        if (string.IsNullOrWhiteSpace(speakerId) || CurrentSession.SpeakerReferenceAudioPaths is null)
-            return null;
+        if (CurrentSession.MultiSpeakerEnabled)
+        {
+            var speakerId = segment.SpeakerId;
+            if (string.IsNullOrWhiteSpace(speakerId))
+                return null;
 
-        return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var path) &&
-               !string.IsNullOrWhiteSpace(path)
-            ? path
+            return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var speakerPath) &&
+                   !string.IsNullOrWhiteSpace(speakerPath)
+                ? speakerPath
+                : null;
+        }
+
+        return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(XttsReferenceKeys.SingleSpeakerDefault, out var defaultPath) &&
+               !string.IsNullOrWhiteSpace(defaultPath)
+            ? defaultPath
             : null;
     }
 

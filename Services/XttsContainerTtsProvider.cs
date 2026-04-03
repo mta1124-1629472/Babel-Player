@@ -301,12 +301,19 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
 
     private static string? ResolveReferenceAudioForSegment(TranslationSegmentArtifact segment, TtsRequest request)
     {
-        if (string.IsNullOrWhiteSpace(segment.SpeakerId) || request.SpeakerReferenceAudioPaths is null)
+        if (request.SpeakerReferenceAudioPaths is null)
             return null;
 
-        return request.SpeakerReferenceAudioPaths.TryGetValue(segment.SpeakerId!, out var referencePath)
-               && !string.IsNullOrWhiteSpace(referencePath)
-            ? referencePath
+        if (!string.IsNullOrWhiteSpace(segment.SpeakerId)
+            && request.SpeakerReferenceAudioPaths.TryGetValue(segment.SpeakerId!, out var referencePath)
+            && !string.IsNullOrWhiteSpace(referencePath))
+        {
+            return referencePath;
+        }
+
+        return request.SpeakerReferenceAudioPaths.TryGetValue(XttsReferenceKeys.SingleSpeakerDefault, out var defaultReferencePath)
+               && !string.IsNullOrWhiteSpace(defaultReferencePath)
+            ? defaultReferencePath
             : null;
     }
 

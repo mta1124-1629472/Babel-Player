@@ -828,6 +828,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
 
         _ttsService ??= CreateTtsService();
+        await EnsureSingleSpeakerXttsReferenceClipAsync(cancellationToken);
 
         var sessionDir = GetSessionDirectory();
         var ttsDir = Path.Combine(sessionDir, "tts");
@@ -975,6 +976,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var regenVoice = targetSegment is not null
             ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
             : CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
+        await EnsureSingleSpeakerXttsReferenceClipAsync();
         var referenceAudioPath = targetSegment is not null
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;
