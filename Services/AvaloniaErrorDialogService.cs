@@ -229,12 +229,17 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
 
         if (Avalonia.Application.Current?.ApplicationLifetime is
             Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime dt &&
-            dt.MainWindow is { } main)
+            dt.MainWindow is { IsVisible: true } main)
         {
-            _ = dialog.ShowDialog(main);
+            _ = dialog.ShowDialog(main).ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                    _log.Error("ErrorDialog ShowDialog failed.", t.Exception?.InnerException ?? t.Exception!);
+            }, TaskScheduler.Default);
         }
         else
         {
+            // Owner not available or not yet visible — fall back to non-modal show
             dialog.Show();
         }
     }
