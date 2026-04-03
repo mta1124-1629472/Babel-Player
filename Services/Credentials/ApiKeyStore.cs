@@ -20,15 +20,16 @@ public sealed class ApiKeyStore
 
     /// <summary>Canonical provider IDs managed by this store (in display order).</summary>
     public static IReadOnlyList<string> KnownProviders { get; } =
-        [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.ElevenLabs, CredentialKeys.Deepl];
+        [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl];
 
     public static string GetDisplayName(string providerKey) => providerKey switch
     {
-        CredentialKeys.OpenAi     => "OpenAI",
-        CredentialKeys.GoogleAi   => "Google AI",
-        CredentialKeys.ElevenLabs => "ElevenLabs",
-        CredentialKeys.Deepl      => "DeepL",
-        _                         => providerKey,
+        CredentialKeys.OpenAi       => "OpenAI",
+        CredentialKeys.GoogleAi     => "Google AI (STT / Cloud TTS)",
+        CredentialKeys.GoogleGemini => "Google Gemini",
+        CredentialKeys.ElevenLabs   => "ElevenLabs",
+        CredentialKeys.Deepl        => "DeepL",
+        _                           => providerKey,
     };
 
     public ApiKeyStore(string filePath)

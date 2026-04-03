@@ -39,7 +39,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
                 false,
                 null,
                 ["default"],
-                SupportedRuntimes: [InferenceRuntime.Cloud, InferenceRuntime.Containerized],
+                SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud,
                 Notes: "Uses googletrans==4.0.0rc1 which scrapes Google's private endpoints. May break without warning when Google changes its API."),
             new(
@@ -57,7 +57,8 @@ public sealed class TranslationRegistry : ITranslationRegistry
                 CredentialKeys.Deepl,
                 ["default"],
                 SupportedRuntimes: [InferenceRuntime.Cloud],
-                DefaultRuntime: InferenceRuntime.Cloud),
+                DefaultRuntime: InferenceRuntime.Cloud,
+                IsImplemented: true),
             new(
                 ProviderNames.OpenAi,
                 "OpenAI API",
@@ -65,7 +66,17 @@ public sealed class TranslationRegistry : ITranslationRegistry
                 CredentialKeys.OpenAi,
                 ["gpt-4o", "gpt-4o-mini"],
                 SupportedRuntimes: [InferenceRuntime.Cloud],
-                DefaultRuntime: InferenceRuntime.Cloud),
+                DefaultRuntime: InferenceRuntime.Cloud,
+                IsImplemented: true),
+            new(
+                ProviderNames.GeminiTranslation,
+                "Google Gemini",
+                true,
+                CredentialKeys.GoogleGemini,
+                ["gemini-2.0-flash", "gemini-2.5-flash-preview-04-17"],
+                SupportedRuntimes: [InferenceRuntime.Cloud],
+                DefaultRuntime: InferenceRuntime.Cloud,
+                IsImplemented: true),
         };
 
         return runtime is null
@@ -125,6 +136,10 @@ public sealed class TranslationRegistry : ITranslationRegistry
             ProviderNames.OpenAi => new OpenAiTranslationProvider(
                 _log,
                 keyStore?.GetKey(CredentialKeys.OpenAi) ?? string.Empty,
+                settings.TranslationModel),
+            ProviderNames.GeminiTranslation => new GeminiTranslationProvider(
+                _log,
+                keyStore?.GetKey(CredentialKeys.GoogleGemini) ?? string.Empty,
                 settings.TranslationModel),
             _ => throw new PipelineProviderException(
                 $"Translation provider '{providerId}' is not implemented. " +

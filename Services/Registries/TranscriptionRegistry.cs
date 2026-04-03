@@ -59,6 +59,17 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
                 SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud,
                 IsImplemented: true),
+            new(
+                ProviderNames.GeminiTranscription,
+                "Google Gemini",
+                true,
+                CredentialKeys.GoogleGemini,
+                ["gemini-2.0-flash", "gemini-2.5-flash-preview-04-17"],
+                SupportedRuntimes: [InferenceRuntime.Cloud],
+                DefaultRuntime: InferenceRuntime.Cloud,
+                IsImplemented: true,
+                Notes: "Supports one-pass transcription + translation via GeminiTranscribeMode.TranscribeAndTranslate. " +
+                       "When using TranscribeAndTranslate mode, skip the translation stage in the workflow coordinator."),
         };
 
         return runtime is null
@@ -117,6 +128,9 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
             ProviderNames.GoogleStt => new GoogleSttTranscriptionProvider(
                 _log,
                 keyStore?.GetKey(CredentialKeys.GoogleAi) ?? string.Empty),
+            ProviderNames.GeminiTranscription => new GeminiTranscriptionProvider(
+                _log,
+                keyStore?.GetKey(CredentialKeys.GoogleGemini) ?? string.Empty),
             _ => throw new PipelineProviderException(
                 $"Transcription provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

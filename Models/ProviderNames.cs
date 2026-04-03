@@ -11,15 +11,17 @@ public static class ProviderNames
     public const string ContainerizedService = "containerized";
 
     // ── Transcription ──────────────────────────────────────────────────────────
-    public const string FasterWhisper    = "faster-whisper";
-    public const string OpenAiWhisperApi = "openai-whisper-api";
-    public const string GoogleStt        = "google-stt";
+    public const string FasterWhisper         = "faster-whisper";
+    public const string OpenAiWhisperApi       = "openai-whisper-api";
+    public const string GoogleStt             = "google-stt";
+    public const string GeminiTranscription   = "gemini-transcription";
 
     // ── Translation ────────────────────────────────────────────────────────────
-    public const string GoogleTranslateFree = "google-translate-free";
-    public const string Nllb200             = "nllb-200";
-    public const string Deepl               = "deepl";
-    public const string OpenAi              = "openai";
+    public const string GoogleTranslateFree   = "google-translate-free";
+    public const string Nllb200               = "nllb-200";
+    public const string Deepl                 = "deepl";
+    public const string OpenAi                = "openai";
+    public const string GeminiTranslation     = "gemini-translation";
 
     // ── TTS ────────────────────────────────────────────────────────────────────
     public const string EdgeTts        = "edge-tts";
@@ -39,8 +41,9 @@ public static class ProviderNames
 /// </summary>
 public static class CredentialKeys
 {
-    public const string OpenAi     = "openai";
-    public const string GoogleAi   = "google-ai";
-    public const string ElevenLabs = "elevenlabs";
-    public const string Deepl      = "deepl";
+    public const string OpenAi        = "openai";
+    public const string GoogleAi      = "google-ai";      // Google STT / Google Cloud TTS
+    public const string GoogleGemini  = "google-gemini";  // Gemini transcription + translation
+    public const string ElevenLabs    = "elevenlabs";
+    public const string Deepl         = "deepl";
 }
