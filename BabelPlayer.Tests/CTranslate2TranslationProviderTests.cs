@@ -43,7 +43,7 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             File.WriteAllText(
                 arguments[1],
                 "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
-            return Task.FromResult(provider.SuccessResult());
+            return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
         };
 
         var result = await provider.TranslateAsync(new TranslationRequest(
@@ -74,7 +74,7 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             File.WriteAllText(
                 arguments[2],
                 "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"greetings\"},{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"adios\",\"translatedText\":\"bye\"}]}");
-            return Task.FromResult(provider.SuccessResult());
+            return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
         };
 
         var result = await provider.TranslateSingleSegmentAsync(new SingleSegmentTranslationRequest(
@@ -111,6 +111,6 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             OnRun?.Invoke(arguments, scriptPrefix, standardInput)
             ?? Task.FromResult(new ScriptResult(0, string.Empty, string.Empty));
 
-        public ScriptResult SuccessResult() => new(0, string.Empty, string.Empty);
+        public static ScriptResult SuccessResult() => new(0, string.Empty, string.Empty);
     }
 }

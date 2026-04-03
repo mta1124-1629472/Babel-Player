@@ -170,6 +170,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public string LogFilePath => _log.LogFilePath;
     internal AppLog Log => _log;
     internal ContainerizedServiceProbe? ContainerizedProbe => _containerizedProbe;
+    public IContainerizedInferenceManager? ContainerizedInferenceManager => _containerizedInferenceManager;
 
     public void Initialize()
     {

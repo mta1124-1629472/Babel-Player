@@ -33,7 +33,7 @@ public abstract class PythonSubprocessServiceBase
     }
 
     /// <summary>Captures the output of a single Python subprocess invocation.</summary>
-    protected sealed record ScriptResult(int ExitCode, string Stdout, string Stderr);
+    public sealed record ScriptResult(int ExitCode, string Stdout, string Stderr);
 
     /// <summary>
     /// Writes <paramref name="scriptContent"/> to a uniquely-named temp file, runs it

@@ -13,13 +13,18 @@ public enum ContainerizedStartupTrigger
     AppStartup,
     SettingsChanged,
     Execution,
+    Manual,
 }
 
 public sealed record ContainerizedStartResult(
     bool Attempted,
     bool IsReady,
     string Message,
-    string? ComposeFilePath = null);
+    string? ComposeFilePath = null)
+{
+    public static readonly ContainerizedStartResult AlreadyRunning = new(false, true, "Already running.");
+    public static readonly ContainerizedStartResult Started = new(true, true, "Started.");
+}
 
 public interface IContainerizedInferenceManager
 {
