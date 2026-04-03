@@ -559,7 +559,15 @@ def load_xtts_model(model_name: Optional[str]):
 
         snapshot_path = _find_xtts_hf_snapshot()
         if snapshot_path:
-            config_path = str(Path(snapshot_path) / "config.json")
+            # Pass the model checkpoint (.pth) as model_path and the config.json
+            # as config_path explicitly.  Some TTS versions treat a .json model_path
+            # as a config reference and fall back to config.model_args paths (which
+            # are null in HuggingFace snapshots) for lazily-loaded components such as
+            # the DVAE and speaker encoder.  That fallback ultimately calls
+            # torch.load(None) → open(None) → TypeError.  Using the actual .pth file
+            # avoids all path-inference ambiguity across TTS library versions.
+            model_pth_path = str(Path(snapshot_path) / "model.pth")
+            config_json_path = str(Path(snapshot_path) / "config.json")
             logger.info(
                 "Loading XTTS model from HuggingFace snapshot: %s (device=%s, compute_type=%s)",
                 snapshot_path,
@@ -567,7 +575,8 @@ def load_xtts_model(model_name: Optional[str]):
                 effective_compute_type,
             )
             xtts_model = tts_factory(
-                model_path=config_path,
+                model_path=model_pth_path,
+                config_path=config_json_path,
                 progress_bar=False,
                 gpu=(HOST_DEVICE == "cuda"),
             )
