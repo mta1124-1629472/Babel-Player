@@ -67,6 +67,22 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     }
 
     [Fact]
+    public void CreateHostProcessStartInfo_OmitsRequireCudaForInt8()
+    {
+        var psi = ManagedVenvHostManager.CreateHostProcessStartInfo(
+            "python.exe",
+            Path.Combine(_dir, "main.py"),
+            "int8");
+
+        var args = psi.ArgumentList.ToArray();
+        Assert.Contains("--compute-type", args);
+        var index = Array.IndexOf(args, "--compute-type");
+        Assert.True(index >= 0 && index < args.Length - 1);
+        Assert.Equal("int8", args[index + 1]);
+        Assert.DoesNotContain("--require-cuda", args);
+    }
+
+    [Fact]
     public async Task EnsureStartedAsync_GpuSelectedWithoutCuda_FailsWithoutFallingBack()
     {
         var manager = new ManagedVenvHostManager(

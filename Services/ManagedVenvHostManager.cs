@@ -352,7 +352,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var psi = CreateHostProcessStartInfo(pythonPath, inferenceScriptPath, computeType);
 
         _log.Info(
-            $"Starting managed GPU host: python={pythonPath}, script={inferenceScriptPath}, compute_type={computeType}");
+            $"Starting managed GPU host: python={pythonPath}, script={inferenceScriptPath}, compute_type={computeType}, require_cuda={(computeType == "float16")}");
 
         _hostProcess = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start managed GPU host process.");
@@ -390,7 +390,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         psi.ArgumentList.Add("18000");
         psi.ArgumentList.Add("--compute-type");
         psi.ArgumentList.Add(computeType);
-        psi.ArgumentList.Add("--require-cuda");
+        
+        // Only require CUDA when running GPU-accelerated float16 compute type
+        if (computeType == "float16")
+        {
+            psi.ArgumentList.Add("--require-cuda");
+        }
+        
         return psi;
     }
 

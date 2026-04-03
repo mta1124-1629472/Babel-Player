@@ -751,6 +751,15 @@
                                 VerticalAlignment="Center"
                                 ToolTip.Tip="Volume" />
 
+                        <Button Content="Panes"
+                                Command="{Binding Playback.ToggleSegmentPaneCommand}"
+                                IsVisible="{Binding Playback.IsPanePullTabVisible}"
+                                Padding="7,4" FontSize="11"
+                                Background="#2A2A3A"
+                                Foreground="#C0C0D0"
+                                CornerRadius="4"
+                                ToolTip.Tip="Reopen side panes" />
+
                         <Button Content="&#x26F6;"
                                 Command="{Binding Playback.ToggleFullscreenCommand}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
