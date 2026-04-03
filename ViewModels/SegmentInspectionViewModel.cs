@@ -5,7 +5,7 @@ using Babel.Player.Models;
 
 namespace Babel.Player.ViewModels;
 
-public partial class SegmentInspectionViewModel : ViewModelBase
+public partial class SegmentInspectionViewModel : ViewModelBase, IDisposable
 {
     private readonly EmbeddedPlaybackViewModel _playback;
 
@@ -68,5 +68,10 @@ public partial class SegmentInspectionViewModel : ViewModelBase
 
         var duration = segment.EndSeconds - segment.StartSeconds;
         TimingLabel = $"{segment.StartSeconds:F1}s → {segment.EndSeconds:F1}s ({duration:F1}s)";
+    }
+
+    public void Dispose()
+    {
+        _playback.PropertyChanged -= OnPlaybackPropertyChanged;
     }
 }

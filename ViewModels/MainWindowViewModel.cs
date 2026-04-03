@@ -8,7 +8,7 @@ using SettingsService = Babel.Player.Services.Settings.SettingsService;
 
 namespace Babel.Player.ViewModels;
 
-public partial class MainWindowViewModel : ViewModelBase
+public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly SettingsService _settingsService;
     private readonly ModelDownloader _modelDownloader;
@@ -29,7 +29,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Inspection = new SegmentInspectionViewModel(Playback);
 
         // Persist settings whenever the left-panel dropdowns change them in-place
-        Coordinator.SettingsModified += () => _settingsService.Save(Coordinator.CurrentSettings);
+        Coordinator.SettingsModified += OnCoordinatorSettingsModified;
     }
 
     public SessionWorkflowCoordinator Coordinator { get; }
@@ -53,4 +53,14 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void RestoreSession(RecentSessionEntry entry) =>
         Coordinator.RestoreSession(entry.SessionId);
+
+    public void Dispose()
+    {
+        Coordinator.SettingsModified -= OnCoordinatorSettingsModified;
+        Inspection.Dispose();
+        Playback.Dispose();
+    }
+
+    private void OnCoordinatorSettingsModified() =>
+        _settingsService.Save(Coordinator.CurrentSettings);
 }

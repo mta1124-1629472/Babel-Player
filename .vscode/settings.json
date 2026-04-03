@@ -1,4 +1,57 @@
 {
     "github.copilot.chat.agent.autoFix": true,
-    "python-envs.defaultEnvManager": "ms-python.python:system"
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "tasks.tasks": [
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "build",
+                "BabelPlayer.csproj",
+                "--no-restore",
+                "--no-incremental",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "never",
+                "close": true,
+                "panel": "shared",
+                "clear": true,
+                "echo": false,
+                "focus": false
+            },
+            "problemMatcher": "$msCompile",
+            "detail": "Compiler for C#"
+        },
+        {
+            "label": "clean",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "clean",
+                "BabelPlayer.csproj",
+                "--no-restore"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "never",
+                "close": true,
+                "panel": "shared",
+                "clear": true,
+                "echo": false,
+                "focus": false
+            },
+            "problemMatcher": "$msCompile",
+            "detail": "Clean project"
+        }
+    ]
 }

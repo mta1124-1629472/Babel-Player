@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -355,7 +356,7 @@ public sealed partial class SessionWorkflowCoordinator
         var segmentsDir = Path.Combine(ttsDir, "segments", mediaName);
         Directory.CreateDirectory(segmentsDir);
 
-        var segmentAudioPaths = new Dictionary<string, string>();
+        var segmentAudioPaths = new ConcurrentDictionary<string, string>();
         int totalSegments = 0;
         try
         {
@@ -364,61 +365,72 @@ public sealed partial class SessionWorkflowCoordinator
                 .Where(seg => !string.IsNullOrWhiteSpace(seg.Id) && !string.IsNullOrWhiteSpace(seg.TranslatedText))
                 .ToList()
                 ?? [];
-            var segmentOrdinal = 0;
 
-            foreach (var seg in candidateSegments)
-            {
-                var id = seg.Id;
-                var text = seg.TranslatedText;
+            totalSegments = candidateSegments.Count;
+            int completed = 0;
+            int parallelism = Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
 
-                if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(id))
+            ReportStage(
+                stageContext,
+                $"Generating {totalSegments} segment clips (concurrency={parallelism})…",
+                progress01: 0,
+                isIndeterminate: true);
+
+            await Parallel.ForEachAsync(
+                candidateSegments,
+                new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = cancellationToken },
+                async (seg, ct) =>
                 {
-                    _log.Info($"Skipping segment {id}: empty text or ID");
-                    continue;
-                }
+                    var id = seg.Id;
+                    var text = seg.TranslatedText;
 
-                totalSegments++;
-                segmentOrdinal++;
-                var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
-                var resolvedVoice = ResolveVoiceForSegment(seg, v);
-                var referenceAudioPath = ResolveReferenceAudioForSegment(seg);
-
-                ReportStage(
-                    stageContext,
-                    $"Generating segment clip {segmentOrdinal} of {candidateSegments.Count} for {id} using voice {resolvedVoice}{(string.IsNullOrWhiteSpace(seg.SpeakerId) ? string.Empty : $" (speaker {seg.SpeakerId})")}…",
-                    progress01: 0,
-                    isIndeterminate: true);
-
-                _log.Info($"Generating TTS for segment {id} (voice={resolvedVoice}, speaker={seg.SpeakerId ?? "<none>"}): {text.Substring(0, Math.Min(30, text.Length))}...");
-
-                try
-                {
-                    var segResult = await _ttsService.GenerateSegmentTtsAsync(
-                        new SingleSegmentTtsRequest(
-                            text,
-                            segmentAudioPath,
-                            resolvedVoice,
-                            seg.SpeakerId,
-                            referenceAudioPath,
-                            Language: ttsLanguage),
-                        cancellationToken);
-
-                    if (segResult.Success && File.Exists(segmentAudioPath))
+                    if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(id))
                     {
-                        segmentAudioPaths[id] = segmentAudioPath;
-                        _log.Info($"Segment TTS generated: {id} -> {segmentAudioPath}");
+                        _log.Info($"Skipping segment {id}: empty text or ID");
+                        return;
                     }
-                    else
+
+                    var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
+                    var resolvedVoice = ResolveVoiceForSegment(seg, v);
+                    var referenceAudioPath = ResolveReferenceAudioForSegment(seg);
+
+                    _log.Info($"Generating TTS for segment {id} (voice={resolvedVoice}, speaker={seg.SpeakerId ?? "<none>"}): {text[..Math.Min(30, text.Length)]}...");
+
+                    try
                     {
-                        _log.Warning($"Segment TTS failed or file missing: {id}");
+                        var segResult = await _ttsService.GenerateSegmentTtsAsync(
+                            new SingleSegmentTtsRequest(
+                                text,
+                                segmentAudioPath,
+                                resolvedVoice,
+                                seg.SpeakerId,
+                                referenceAudioPath,
+                                Language: ttsLanguage),
+                            ct);
+
+                        if (segResult.Success && File.Exists(segmentAudioPath))
+                        {
+                            segmentAudioPaths[id] = segmentAudioPath;
+                            var done = Interlocked.Increment(ref completed);
+                            ReportStage(
+                                stageContext,
+                                $"Generated segment clip {done} of {totalSegments}…",
+                                progress01: (double)done / totalSegments,
+                                isIndeterminate: false);
+                            _log.Info($"Segment TTS generated: {id} -> {segmentAudioPath}");
+                        }
+                        else
+                        {
+                            _log.Warning($"Segment TTS failed or file missing: {id}");
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    _log.Error($"Segment TTS generation failed for {id}: {ex.Message}", ex);
-                }
-            }
+                    catch (Exception ex)
+                    {
+                        _log.Error($"Segment TTS generation failed for {id}: {ex.Message}", ex);
+                    }
+                });
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _log.Error($"Error generating per-segment TTS: {ex.Message}", ex);
@@ -444,7 +456,7 @@ public sealed partial class SessionWorkflowCoordinator
             TtsVoice = v,
             TtsGeneratedAtUtc = nowUtc,
             TtsSegmentsPath = segmentsDir,
-            TtsSegmentAudioPaths = segmentAudioPaths,
+            TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
             TtsRuntime = CurrentSettings.TtsRuntime,
             TtsProvider = CurrentSettings.TtsProvider,
             StatusMessage = ttsStatusMessage,
