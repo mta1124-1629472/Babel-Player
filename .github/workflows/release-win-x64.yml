@@ -151,6 +151,47 @@ jobs:
           "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "checksum_path=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+
+      - name: Build installer
+        id: installer
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ([string]::IsNullOrWhiteSpace($tag) -or $tag -eq "main") {
+            $tag = "manual"
+          }
+          $refName = "${{ github.ref_name }}"
+          $override = "${{ github.event.inputs.version_override }}"
+          if ($refName -match '^v\d') {
+            $version = $refName.TrimStart('v')
+          } elseif (-not [string]::IsNullOrWhiteSpace($override)) {
+            $version = $override
+          } else {
+            $version = "0.0.0-dev"
+          }
+
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $isccPath `
+            /DSetupVersion=$version `
+            installer\babel-player.iss
+
+          $installerPath = "dist\Babel-Player-$version-win-x64-setup.exe"
+          if (-not (Test-Path $installerPath)) {
+            throw "Installer not found at $installerPath"
+          }
+
+          $hash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksumPath = "dist\Babel-Player-$version-win-x64-setup.sha256"
+          "$hash  $(Split-Path $installerPath -Leaf)" | Set-Content -Path $checksumPath
+
+          "installer_path=$installerPath"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "installer_checksum=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -167,5 +208,7 @@ jobs:
           files: |
             ${{ steps.package.outputs.zip_path }}
             ${{ steps.package.outputs.checksum_path }}
+            ${{ steps.installer.outputs.installer_path }}
+            ${{ steps.installer.outputs.installer_checksum }}
           body_path: docs/install-windows-release.md
           generate_release_notes: true

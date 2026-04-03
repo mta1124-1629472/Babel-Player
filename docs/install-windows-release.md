@@ -1,46 +1,75 @@
 # Babel Player for Windows
 
-This GitHub release ships a portable `win-x64` build of Babel Player.
+## Download
 
-## What is included
+| Option | File | Best for |
+|---|---|---|
+| **Installer** (recommended) | `Babel-Player-<version>-win-x64-setup.exe` | Most users — adds Start Menu shortcut + uninstaller |
+| **Portable ZIP** | `Babel-Player-<version>-win-x64-portable.zip` | USB drives, no-install environments |
 
-- `BabelPlayer.exe`
-- the .NET runtime needed to run the app
-- `libmpv-2.dll`
-- `ffmpeg.exe`
+Verify your download (optional):
+```powershell
+Get-FileHash .\Babel-Player-*-setup.exe -Algorithm SHA256
+```
+Compare against the matching `.sha256` file.
 
-You do **not** need to install the .NET runtime separately for this release build.
+---
 
-## What you still need
+## What's Included
 
-- Windows 10 or 11 x64
-- Python 3.10 or newer on `PATH`
-- any model/runtime prerequisites for the providers you choose inside the app
+- `BabelPlayer.exe` — the app
+- .NET runtime — bundled, no separate install needed
+- `libmpv-2.dll` — video playback
+- `ffmpeg.exe` — audio extraction and processing
 
-Examples:
+---
 
-- `faster-whisper` requires Python packages and local model downloads
-- `nllb-200` requires Python packages and local model downloads
-- `piper` requires Python packages and a Piper voice model
-- `containerized` requires a reachable inference service URL
+## System Requirements
 
-## Install
+- Windows 10 or 11, 64-bit
+- Python 3.10 or newer on `PATH` (required for AI providers)
+- GPU optional but recommended for transcription/TTS
 
-1. Download `Babel-Player-<version>-win-x64-portable.zip`
-2. Download `Babel-Player-<version>-win-x64-portable.sha256`
-3. Extract the zip to a normal folder such as `C:\Apps\BabelPlayer`
-4. Run `BabelPlayer.exe`
+---
 
-## First-run notes
+## AI Provider Prerequisites
 
-- Session data lives under `%LOCALAPPDATA%\BabelPlayer`
-- The app bundles `ffmpeg.exe` and `libmpv-2.dll`
-- Provider configuration, API keys, and model downloads are still your responsibility
-- If you use the containerized provider, `INFERENCE_SERVICE_URL` overrides the saved service URL at startup
+The app manages a local Python venv automatically, but you are responsible for any model downloads the first time you use a provider.
 
-## Current limits
+| Provider | What gets downloaded on first use |
+|---|---|
+| `faster-whisper` | Whisper model weights (~150 MB – 3 GB depending on model size) |
+| `nllb-200` | NLLB translation model (~2.5 GB) |
+| `xtts-v2` | Coqui XTTS v2 voice model (~2 GB) |
+| `piper` | Piper voice model of your choice |
+| `containerized` | Nothing — points to an external inference service URL |
 
-- Portable zip only; no installer yet
-- Windows only
-- No export pipeline yet
-- Python is not bundled
+---
+
+## First Run
+
+### Installer
+1. Run `Babel-Player-<version>-win-x64-setup.exe`
+2. Follow the wizard — installs to `%LocalAppData%\Programs\BabelPlayer` by default (no admin required)
+3. Launch from the Start Menu shortcut
+
+### Portable ZIP
+1. Download and extract to any folder (e.g. `C:\Apps\BabelPlayer`)
+2. Run `BabelPlayer.exe`
+
+---
+
+## Notes
+
+- App data and settings live under `%LOCALAPPDATA%\BabelPlayer`
+- The Python venv is created automatically on first provider use under `%LOCALAPPDATA%\BabelPlayer\runtime\venv`
+- If using the containerized provider, set `INFERENCE_SERVICE_URL` as an environment variable to override the saved URL at startup
+- To uninstall the installer version: **Settings → Apps** or the Start Menu uninstall shortcut
+
+---
+
+## Known Limitations
+
+- Windows only (Linux/macOS not yet supported)
+- Python must be installed separately — it is not bundled
+- Export pipeline not yet available
