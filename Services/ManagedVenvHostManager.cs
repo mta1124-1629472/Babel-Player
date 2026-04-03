@@ -29,7 +29,7 @@ public sealed record ManagedGpuRuntimeValidationResult(
 public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDisposable
 {
     private static readonly TimeSpan PreflightHealthTimeout = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan PostStartProbeTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan PostStartProbeTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan VenvUnlockTimeout = TimeSpan.FromSeconds(5);
     private const string PythonVersion = "3.11.6";

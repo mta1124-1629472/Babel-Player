@@ -19,7 +19,6 @@ import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from faster_whisper import WhisperModel
 
 # Configure logging
 logging.basicConfig(
@@ -388,6 +387,7 @@ def load_whisper_model(
     desired_key = (model_name, device, compute_type, effective_cpu_threads, effective_num_workers)
 
     if whisper_model is None or whisper_model_key != desired_key:
+        whisper_module = import_module("faster_whisper")
         init_kwargs = {
             "device": device,
             "compute_type": compute_type,
@@ -406,7 +406,7 @@ def load_whisper_model(
             effective_cpu_threads if effective_cpu_threads is not None else "auto",
             effective_num_workers,
         )
-        whisper_model = WhisperModel(model_name, **init_kwargs)
+        whisper_model = whisper_module.WhisperModel(model_name, **init_kwargs)
         whisper_model_key = desired_key
         logger.info("Whisper model loaded successfully")
 
