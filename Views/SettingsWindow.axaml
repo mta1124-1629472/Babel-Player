@@ -27,105 +27,132 @@
             
             <!-- General Tab -->
             <TabItem Header="General">
-                <Grid Margin="20">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="20">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                    <!-- Theme -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="Theme:" VerticalAlignment="Center"/>
-                        <ComboBox ItemsSource="{Binding ThemeOptions}"
-                                  SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
-                                  Width="150"/>
-                    </StackPanel>
+                        <!-- Theme -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="20">
+                            <TextBlock Text="Theme:" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding ThemeOptions}"
+                                      SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
+                                      Width="150"/>
+                        </StackPanel>
 
-                    <!-- Default TTS Voice (hidden — wiring kept, not shown in UI) -->
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20" IsVisible="False">
-                        <TextBlock Text="Default TTS Voice:" VerticalAlignment="Center"/>
-                        <ComboBox ItemsSource="{Binding TtsVoiceOptions}"
-                                  SelectedItem="{Binding SelectedVoice, Mode=TwoWay}"
-                                  Width="200"/>
-                    </StackPanel>
+                        <!-- Default TTS Voice (hidden — wiring kept, not shown in UI) -->
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20" IsVisible="False">
+                            <TextBlock Text="Default TTS Voice:" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding TtsVoiceOptions}"
+                                      SelectedItem="{Binding SelectedVoice, Mode=TwoWay}"
+                                      Width="200"/>
+                        </StackPanel>
 
-                    <!-- Recent Sessions -->
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="Max Recent Sessions:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding MaxRecentSessions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="60"/>
-                    </StackPanel>
+                        <!-- Recent Sessions -->
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="20">
+                            <TextBlock Text="Max Recent Sessions:" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding MaxRecentSessions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="60"/>
+                        </StackPanel>
 
-                    <!-- Auto-save -->
-                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
-                        <CheckBox IsChecked="{Binding AutoSaveEnabled}"
-                                  Content="Auto-save session on exit"/>
-                    </StackPanel>
+                        <!-- Auto-save -->
+                        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
+                            <CheckBox IsChecked="{Binding AutoSaveEnabled}"
+                                      Content="Auto-save session on exit"/>
+                        </StackPanel>
 
-                    <!-- Advanced GPU host settings -->
-                    <StackPanel Grid.Row="4" Spacing="6">
-                        <TextBlock Text="Preferred Local GPU Backend:" VerticalAlignment="Center"/>
-                        <ComboBox ItemsSource="{Binding GpuBackendOptions}"
-                                  SelectedItem="{Binding PreferredLocalGpuBackend, Mode=TwoWay}"
-                                   Width="240"
-                                   HorizontalAlignment="Left">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Converter={StaticResource GpuHostBackendDisplayConverter}}"/>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock Opacity="0.65"
-                                   TextWrapping="Wrap"
-                                   Text="Managed local GPU is the default low-friction path. Docker GPU host is available as an advanced backend."/>
-                    </StackPanel>
+                        <!-- Advanced GPU host settings -->
+                        <StackPanel Grid.Row="4" Spacing="6">
+                            <TextBlock Text="Preferred Local GPU Backend:" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding GpuBackendOptions}"
+                                      SelectedItem="{Binding PreferredLocalGpuBackend, Mode=TwoWay}"
+                                      Width="240"
+                                      HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Converter={StaticResource GpuHostBackendDisplayConverter}}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Opacity="0.65"
+                                       TextWrapping="Wrap"
+                                       Text="Managed local GPU is the default low-friction path. Docker GPU host is available as an advanced backend."/>
+                        </StackPanel>
 
-                    <StackPanel Grid.Row="5" Spacing="6">
-                        <TextBlock Text="Advanced GPU Service URL:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding AdvancedGpuServiceUrl, Mode=TwoWay}"
-                                 Width="320"
-                                 HorizontalAlignment="Left"/>
-                        <TextBlock Opacity="0.65"
-                                   TextWrapping="Wrap"
-                                   Text="Used only when the Docker GPU backend is selected. Automatic Docker startup only runs for loopback URLs such as http://localhost:8000."/>
-                        <CheckBox IsChecked="{Binding AlwaysStartLocalGpuRuntimeAtAppStart}"
-                                  Content="Always start local GPU runtime at app start"/>
-                    </StackPanel>
+                        <!-- Backend restart row -->
+                        <Border Grid.Row="5"
+                                Margin="0,6,0,6"
+                                Padding="10,8"
+                                Background="#1A1A2A"
+                                CornerRadius="6">
+                            <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                                <TextBlock Text="Backend status:"
+                                           VerticalAlignment="Center"
+                                           Opacity="0.75"
+                                           FontSize="12"/>
+                                <TextBlock Text="{Binding BackendStatusText}"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           FontWeight="Medium"/>
+                                <Button Content="&#x27F3; Restart"
+                                        Command="{Binding RestartBackendCommand}"
+                                        IsEnabled="{Binding CanRestartBackend}"
+                                        Padding="10,4"
+                                        FontSize="12"
+                                        ToolTip.Tip="Kill and restart the active GPU backend process (venv or Docker). Useful after changing providers or after a timeout."/>
+                            </StackPanel>
+                        </Border>
 
-                    <!-- Advanced CPU transcription tuning -->
-                    <StackPanel Grid.Row="6" Margin="0,18,0,0" Spacing="6">
-                        <TextBlock Text="Advanced: CPU Transcription" FontWeight="SemiBold"/>
-                        <TextBlock Opacity="0.65" TextWrapping="Wrap"
-                                   Text="These options tune CPU-only transcription. 0 threads means auto selection by the runtime."/>
-                    </StackPanel>
+                        <StackPanel Grid.Row="6" Spacing="6">
+                            <TextBlock Text="Advanced GPU Service URL:" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding AdvancedGpuServiceUrl, Mode=TwoWay}"
+                                     Width="320"
+                                     HorizontalAlignment="Left"/>
+                            <TextBlock Opacity="0.65"
+                                       TextWrapping="Wrap"
+                                       Text="Used only when the Docker GPU backend is selected. Automatic Docker startup only runs for loopback URLs such as http://localhost:8000."/>
+                            <CheckBox IsChecked="{Binding AlwaysStartLocalGpuRuntimeAtAppStart}"
+                                      Content="Always start local GPU runtime at app start"/>
+                        </StackPanel>
 
-                    <StackPanel Grid.Row="7" Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="CPU Compute Type:" VerticalAlignment="Center"/>
-                        <ComboBox ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}"
-                                  SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}"
-                                  Width="150"/>
-                    </StackPanel>
+                        <!-- Advanced CPU transcription tuning -->
+                        <StackPanel Grid.Row="7" Margin="0,18,0,0" Spacing="6">
+                            <TextBlock Text="Advanced: CPU Transcription" FontWeight="SemiBold"/>
+                            <TextBlock Opacity="0.65" TextWrapping="Wrap"
+                                       Text="These options tune CPU-only transcription. 0 threads means auto selection by the runtime."/>
+                        </StackPanel>
 
-                    <StackPanel Grid.Row="8" Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="CPU Threads (0=auto):" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="80"/>
-                    </StackPanel>
+                        <StackPanel Grid.Row="8" Orientation="Horizontal" Spacing="20">
+                            <TextBlock Text="CPU Compute Type:" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}"
+                                      SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}"
+                                      Width="150"/>
+                        </StackPanel>
 
-                    <StackPanel Grid.Row="9" Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="Workers:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="80"/>
-                    </StackPanel>
-                </Grid>
+                        <StackPanel Grid.Row="9" Orientation="Horizontal" Spacing="20">
+                            <TextBlock Text="CPU Threads (0=auto):" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="80"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="10" Orientation="Horizontal" Spacing="20">
+                            <TextBlock Text="Workers:" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="80"/>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
             </TabItem>
 
             <!-- Hotkeys Tab -->
@@ -210,7 +237,7 @@
                                   IsEnabled="{Binding VideoUseGpuNext}"
                                   Content="RTX Video Super Resolution (VSR)"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                    Text="AI upscaling via NVIDIA d3d11vpp. Requires RTX GPU, driver ≥ 551.23, and 'RTX Video Enhancement' enabled in NVIDIA Control Panel." />
+                                    Text="AI upscaling via NVIDIA d3d11vpp. Requires RTX GPU, driver &#x2265; 551.23, and 'RTX Video Enhancement' enabled in NVIDIA Control Panel." />
 
                         <StackPanel Orientation="Horizontal" Spacing="12"
                                     IsEnabled="{Binding VideoVsrEnabled}">
@@ -221,7 +248,7 @@
                                     Width="140"/>
                             <TextBlock Text="{Binding VideoVsrQuality}" VerticalAlignment="Center" Width="14"/>
                             <TextBlock Opacity="0.55" VerticalAlignment="Center"
-                                       Text="(1 = Performance · 4 = Quality)"/>
+                                       Text="(1 = Performance &#xB7; 4 = Quality)"/>
                         </StackPanel>
 
                         <!-- HDR -->

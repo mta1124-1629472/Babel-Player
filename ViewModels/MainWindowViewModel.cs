@@ -28,15 +28,11 @@ public partial class MainWindowViewModel : ViewModelBase
         Playback = new EmbeddedPlaybackViewModel(coordinator, apiKeyStore, errorDialogService, logFilePath);
         Inspection = new SegmentInspectionViewModel(Playback);
 
-
         // Persist settings whenever the left-panel dropdowns change them in-place
         Coordinator.SettingsModified += () => _settingsService.Save(Coordinator.CurrentSettings);
     }
 
-
     public SessionWorkflowCoordinator Coordinator { get; }
-
-
 
     public EmbeddedPlaybackViewModel Playback { get; }
 
@@ -51,7 +47,8 @@ public partial class MainWindowViewModel : ViewModelBase
             _settingsService,
             Coordinator,
             ownerWindow,
-            new ModelsTabViewModel(_modelDownloader, Coordinator));
+            new ModelsTabViewModel(_modelDownloader, Coordinator),
+            containerizedManager: Coordinator.ContainerizedInferenceManager);
 
     [RelayCommand]
     private void RestoreSession(RecentSessionEntry entry) =>
