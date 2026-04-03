@@ -71,6 +71,23 @@ If the change affects behavior that can be manually exercised, also run the rele
 A change is not done because it compiles.
 It is done when the milestone gate it touches is actually demonstrated.
 
+### Troubleshooting script (`/troubleshoot`)
+
+When a contributor or agent reports build/test instability, run `/troubleshoot` as a standard diagnostic script:
+
+1. `dotnet build`
+2. `dotnet test`
+3. `python scripts/check-architecture.py`
+4. `python -m py_compile inference/main.py`
+
+Treat this output as required evidence in bug reports and fix PRs:
+
+- failing step
+- first concrete error
+- impacted files/symbols
+
+This keeps troubleshooting repeatable and prevents vague "it failed" reports.
+
 ### Smoke notes
 
 For milestone work, include a short smoke note in the PR description or related notes.

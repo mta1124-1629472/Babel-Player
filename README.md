@@ -103,6 +103,30 @@ Run the tests with:
 dotnet test
 ```
 
+## Troubleshooting Script (`/troubleshoot`)
+
+Use the following script when you want a fast, consistent repo health check.
+
+1. Build the app (`dotnet build`)
+2. Run the full test suite (`dotnet test`)
+3. Run architecture guardrails (`python scripts/check-architecture.py`)
+4. Validate Python inference entrypoint syntax (`python -m py_compile inference/main.py`)
+
+Expected result for a healthy workspace:
+
+- build succeeds
+- tests pass
+- architecture check reports all checks passed
+- Python compile step exits cleanly with no syntax errors
+
+If any step fails, capture:
+
+- failing command output
+- affected file(s)
+- first error message and stack trace (if any)
+
+Then open a fix task with that evidence and treat `/troubleshoot` output as the baseline diagnostic artifact.
+
 ## Project Layout
 
 - `App.axaml.cs` owns startup and composition
