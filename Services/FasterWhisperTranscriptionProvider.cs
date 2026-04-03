@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.Intrinsics.X86;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -82,9 +83,8 @@ public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessService
                 throw new InvalidOperationException($"Unsupported audio format: {extension}. Supported formats: wav, mp3, flac, ogg, mp4, avi, mkv, mov");
             }
 
-            var cpuComputeType = string.IsNullOrWhiteSpace(request.CpuComputeType)
-                ? "int8"
-                : request.CpuComputeType;
+            var cpuComputeType = ResolveEffectiveCpuComputeType(
+                string.IsNullOrWhiteSpace(request.CpuComputeType) ? "int8" : request.CpuComputeType);
             var cpuThreads = request.CpuThreads;
             var numWorkers = request.NumWorkers < 1 ? 1 : request.NumWorkers;
 
@@ -191,6 +191,24 @@ print('Transcription complete')
         }
         return true;
     }
+
+    /// <summary>
+    /// Validates the requested CPU compute type against actual hardware capabilities.
+    /// ctranslate2 on CPU requires AVX-512F for int8_float16 and float16; downgrades to int8 when unavailable.
+    /// </summary>
+    private string ResolveEffectiveCpuComputeType(string requested)
+    {
+        bool needsAvx512 = requested is "int8_float16" or "float16";
+        if (!needsAvx512) return requested;
+
+        bool hasAvx512 = false;
+        try { hasAvx512 = Avx512F.IsSupported; } catch { /* hardware intrinsic may throw on unsupported OS */ }
+
+        if (hasAvx512) return requested;
+
+        const string effective = "int8";
+        Log.Warning($"CPU compute type '{requested}' requires AVX-512F which is not available on this CPU. " +
+                    $"Downgrading to '{effective}' for this run. Change in Settings > Transcription to suppress this warning.");
+        return effective;
+    }
 }
-
-
