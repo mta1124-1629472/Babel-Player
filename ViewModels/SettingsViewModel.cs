@@ -73,6 +73,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ToggleFullscreenHotkey      = "F11";
     }
 
+    // ── About ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Version string read from the assembly at runtime (e.g. "Version 1.2.0").</summary>
+    public string AppVersion   => $"Version {BuildInfo.Version}";
+
+    /// <summary>Build date string read from the assembly at runtime (e.g. "Build date: 2026-04-03").</summary>
+    public string AppBuildDate => $"Build date: {BuildInfo.BuildDate}";
+
     // ── Backend restart ───────────────────────────────────────────────────────
 
     [ObservableProperty]
