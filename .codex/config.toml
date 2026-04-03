@@ -8,9 +8,6 @@ sandbox_mode = 'danger-full-access'
 multi_agent = true
 
 [mcp_servers]
-[mcp.servers.claude]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-claude"]
 
 [mcp_servers.MCP_DOCKER]
 command = 'docker.exe'
@@ -32,7 +29,6 @@ args = ['@playwright/mcp@latest']
 command = 'npx'
 
 [mcp_servers.avalonia-docs]
-
 enabled = true
 url = "https://docs-mcp.avaloniaui.net/mcp"
 
