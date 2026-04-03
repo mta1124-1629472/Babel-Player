@@ -719,15 +719,20 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "cmd.exe",
+            FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "sleep",
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        psi.ArgumentList.Add("/c");
-        psi.ArgumentList.Add("ping");
-        psi.ArgumentList.Add("-n");
-        psi.ArgumentList.Add("30");
-        psi.ArgumentList.Add("127.0.0.1");
+
+        if (OperatingSystem.IsWindows())
+        {
+            psi.ArgumentList.Add("/c");
+            psi.ArgumentList.Add("ping -n 30 127.0.0.1");
+        }
+        else
+        {
+            psi.ArgumentList.Add("30");
+        }
 
         return Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start test process.");
