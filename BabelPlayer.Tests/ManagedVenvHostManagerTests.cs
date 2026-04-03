@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -291,6 +293,154 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureStartedAsync_TrackedStaleHostWithBootstrap_KillsProcessAndRebuilds()
+    {
+        var bootstrapCalls = 0;
+        var healthCheckCount = 0;
+
+        using var staleProcess = StartLongRunningProcess();
+        var manager = new ManagedVenvHostManager(
+            _log,
+            healthCheckFunc: (serviceUrl, _, _) =>
+            {
+                healthCheckCount++;
+                var health = healthCheckCount == 1
+                    ? ContainerHealthStatus.Unavailable(serviceUrl, "offline")
+                    : new ContainerHealthStatus(true, true, "12.8", serviceUrl, null);
+                return Task.FromResult(health);
+            },
+            hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
+            uvResolver: () => Path.Combine(_dir, "uv.exe"),
+            runtimeRootResolver: () => _dir,
+            inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
+            requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
+            constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            bootstrapRunner: (_, _, pythonPath, _, _, token) =>
+            {
+                bootstrapCalls++;
+                Directory.CreateDirectory(Path.GetDirectoryName(pythonPath)!);
+                return File.WriteAllTextAsync(pythonPath, string.Empty, token);
+            },
+            runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
+                true,
+                "Managed Python runtime can access CUDA 12.8.",
+                "12.8")),
+            hostProcessStarter: (_, _, _, hostPidPath, token) =>
+                File.WriteAllTextAsync(hostPidPath, "12345", token));
+
+        PrepareRuntimeArtifacts(writeBootstrapMarker: false);
+        File.WriteAllText(Path.Combine(_dir, "managed-host.pid"), staleProcess.Id.ToString());
+        SetTrackedHostProcess(manager, staleProcess);
+
+        var result = await manager.EnsureStartedAsync(
+            new AppSettings
+            {
+                TranslationProfile = ComputeProfile.Gpu,
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv
+            },
+            ContainerizedStartupTrigger.Execution);
+
+        Assert.True(result.Attempted);
+        Assert.True(result.IsReady);
+        Assert.Equal(1, bootstrapCalls);
+        await WaitForExitAsync(staleProcess);
+    }
+
+    [Fact]
+    public async Task EnsureStartedAsync_HealthUnavailableWithTrackedHost_RestartsInsteadOfReusing()
+    {
+        var healthCheckCount = 0;
+        var hostStartCalls = 0;
+
+        using var staleProcess = StartLongRunningProcess();
+        var manager = new ManagedVenvHostManager(
+            _log,
+            healthCheckFunc: (serviceUrl, _, _) =>
+            {
+                healthCheckCount++;
+                var health = healthCheckCount == 1
+                    ? ContainerHealthStatus.Unavailable(serviceUrl, "offline")
+                    : new ContainerHealthStatus(true, true, "12.8", serviceUrl, null);
+                return Task.FromResult(health);
+            },
+            hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
+            uvResolver: () => Path.Combine(_dir, "uv.exe"),
+            runtimeRootResolver: () => _dir,
+            inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
+            requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
+            constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
+                true,
+                "Managed Python runtime can access CUDA 12.8.",
+                "12.8")),
+            hostProcessStarter: (_, _, _, hostPidPath, token) =>
+            {
+                hostStartCalls++;
+                return File.WriteAllTextAsync(hostPidPath, "12345", token);
+            });
+
+        PrepareBootstrappedRuntimeArtifacts();
+        SetTrackedHostProcess(manager, staleProcess);
+
+        var result = await manager.EnsureStartedAsync(
+            new AppSettings
+            {
+                TtsProfile = ComputeProfile.Gpu,
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv
+            },
+            ContainerizedStartupTrigger.Execution);
+
+        Assert.True(result.Attempted);
+        Assert.True(result.IsReady);
+        Assert.Equal(1, hostStartCalls);
+        await WaitForExitAsync(staleProcess);
+    }
+
+    [Fact]
+    public async Task EnsureStartedAsync_StalePidFileWithoutLiveProcess_RemovesItAndContinues()
+    {
+        var healthCheckCount = 0;
+
+        var manager = new ManagedVenvHostManager(
+            _log,
+            healthCheckFunc: (serviceUrl, _, _) =>
+            {
+                healthCheckCount++;
+                var health = healthCheckCount == 1
+                    ? ContainerHealthStatus.Unavailable(serviceUrl, "offline")
+                    : new ContainerHealthStatus(true, true, "12.8", serviceUrl, null);
+                return Task.FromResult(health);
+            },
+            hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
+            uvResolver: () => Path.Combine(_dir, "uv.exe"),
+            runtimeRootResolver: () => _dir,
+            inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
+            requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
+            constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
+                true,
+                "Managed Python runtime can access CUDA 12.8.",
+                "12.8")),
+            hostProcessStarter: (_, _, _, hostPidPath, token) =>
+                File.WriteAllTextAsync(hostPidPath, "12345", token));
+
+        PrepareBootstrappedRuntimeArtifacts();
+        File.WriteAllText(Path.Combine(_dir, "managed-host.pid"), "999999");
+
+        var result = await manager.EnsureStartedAsync(
+            new AppSettings
+            {
+                TranscriptionProfile = ComputeProfile.Gpu,
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv
+            },
+            ContainerizedStartupTrigger.Execution);
+
+        Assert.True(result.Attempted);
+        Assert.True(result.IsReady);
+        Assert.Equal("12345", File.ReadAllText(Path.Combine(_dir, "managed-host.pid")));
+    }
+
+    [Fact]
     public async Task EnsureStartedAsync_BootstrapFailure_ReturnsFailedResultWithProcessDetail()
     {
         var manager = new ManagedVenvHostManager(
@@ -320,6 +470,37 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         Assert.Contains("exit code 2", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(ManagedHostState.Failed, manager.State);
         Assert.Equal(result.Message, manager.FailureReason);
+    }
+
+    [Fact]
+    public async Task EnsureStartedAsync_LockedRuntimeBootstrapFailure_ReturnsExplicitLockedRuntimeMessage()
+    {
+        var manager = new ManagedVenvHostManager(
+            _log,
+            healthCheckFunc: AlwaysUnavailableHealthCheck(),
+            hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
+            uvResolver: () => Path.Combine(_dir, "uv.exe"),
+            runtimeRootResolver: () => _dir,
+            inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
+            requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
+            constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            bootstrapRunner: (_, _, _, _, _, _) => throw new InvalidOperationException(
+                "Process 'uv venv --clear' failed with exit code 2: failed to remove directory '\\\\?\\C:\\test\\.venv\\Scripts': Access is denied. (os error 5)"));
+
+        PrepareRuntimeArtifacts(writeBootstrapMarker: false);
+
+        var result = await manager.EnsureStartedAsync(
+            new AppSettings
+            {
+                TranslationProfile = ComputeProfile.Gpu,
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv
+            },
+            ContainerizedStartupTrigger.Execution);
+
+        Assert.True(result.Attempted);
+        Assert.False(result.IsReady);
+        Assert.Contains("locked by a stale host process", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(".venv", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -431,6 +612,43 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         {
             cts.Token.ThrowIfCancellationRequested();
             await Task.Delay(25, cts.Token);
+        }
+    }
+
+    private static Process StartLongRunningProcess()
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("/c");
+        psi.ArgumentList.Add("ping");
+        psi.ArgumentList.Add("-n");
+        psi.ArgumentList.Add("30");
+        psi.ArgumentList.Add("127.0.0.1");
+
+        return Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start test process.");
+    }
+
+    private static void SetTrackedHostProcess(ManagedVenvHostManager manager, Process process)
+    {
+        var field = typeof(ManagedVenvHostManager).GetField("_hostProcess", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Could not find _hostProcess field.");
+        field.SetValue(manager, process);
+    }
+
+    private static async Task WaitForExitAsync(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                await process.WaitForExitAsync();
+        }
+        catch
+        {
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
@@ -29,6 +30,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 {
     private static readonly TimeSpan PreflightHealthTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan PostStartProbeTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan VenvUnlockTimeout = TimeSpan.FromSeconds(5);
     private const string PythonVersion = "3.11.6";
 
     private readonly AppLog _log;
@@ -105,6 +108,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         if (preflight.IsAvailable)
         {
             State = ManagedHostState.Ready;
+            _log.Info("Managed GPU host startup path: reuse");
             return new ContainerizedStartResult(false, true, $"Managed local GPU host already available at {serviceUrl}.");
         }
 
@@ -179,6 +183,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var runtimeRoot = _runtimeRootResolver();
         var venvDir = Path.Combine(runtimeRoot, ".venv");
         var pythonPath = Path.Combine(venvDir, "Scripts", "python.exe");
+        var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
         Directory.CreateDirectory(runtimeRoot);
         _log.Info(
             $"Managed GPU runtime paths: runtime_root={runtimeRoot}, venv_dir={venvDir}, python={pythonPath}, " +
@@ -201,6 +206,15 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 rebuildExistingRuntime
                     ? $"Rebuilding stale or incomplete managed GPU runtime at {venvDir}."
                     : $"Bootstrapping managed GPU runtime at {venvDir}.");
+            _log.Info(rebuildExistingRuntime
+                ? "Managed GPU host startup path: bootstrap-rebuild"
+                : "Managed GPU host startup path: bootstrap-fresh");
+
+            await RecoverStaleHostProcessesAsync(
+                pythonPath,
+                hostPidPath,
+                stopTrackedProcess: true,
+                cancellationToken);
 
             try
             {
@@ -214,7 +228,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             }
             catch (InvalidOperationException ex)
             {
-                return Fail($"Managed local GPU runtime bootstrap failed: {ex.Message}");
+                return Fail(DescribeBootstrapFailure(ex, venvDir));
             }
 
             await File.WriteAllTextAsync(markerPath, bootstrapVersion, cancellationToken);
@@ -236,11 +250,20 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         _log.Info(
             $"Managed GPU runtime validation passed: {runtimeValidation.Message}");
 
+        var stoppedStaleHost = await RecoverStaleHostProcessesAsync(
+            pythonPath,
+            hostPidPath,
+            stopTrackedProcess: true,
+            cancellationToken);
+
         State = ManagedHostState.Starting;
+        _log.Info(stoppedStaleHost
+            ? "Managed GPU host startup path: stale-host-stop"
+            : "Managed GPU host startup path: fresh-start");
         _log.Info(
             $"Launching managed GPU host process: url={AppSettings.ManagedGpuServiceUrl}, " +
             $"compute_type={computeType}, gpu_architecture={hardware.GpuComputeCapability ?? "<unknown>"}, " +
-            $"host_pid_path={Path.Combine(runtimeRoot, "managed-host.pid")}");
+            $"host_pid_path={hostPidPath}");
             
         // Log FP8 request details if applicable
         if (computeType == "float8")
@@ -254,7 +277,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             pythonPath,
             inferenceScriptPath,
             computeType,
-            Path.Combine(runtimeRoot, "managed-host.pid"),
+            hostPidPath,
             cancellationToken);
 
         _log.Info(
@@ -282,8 +305,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 $"Managed local GPU host ready at {AppSettings.ManagedGpuServiceUrl} (compute_type={computeType}).");
         }
 
-        return Fail(
-            $"Managed local GPU host failed to become ready at {AppSettings.ManagedGpuServiceUrl}: {readiness.ErrorDetail ?? readiness.State.ToString()}");
+        return Fail(BuildReadinessFailureMessage(readiness));
     }
 
     private async Task<ContainerizedStartResult> EnsureStartedCoreSafeAsync(
@@ -348,18 +370,6 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string hostPidPath,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            if (_hostProcess is { HasExited: false })
-            {
-                _log.Info("Managed GPU host process already running; reusing existing process.");
-                return;
-            }
-        }
-        catch
-        {
-        }
-
         var psi = CreateHostProcessStartInfo(pythonPath, inferenceScriptPath, computeType);
 
         _log.Info(
@@ -377,6 +387,232 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             hostPidPath,
             _hostProcess.Id.ToString(),
             cancellationToken);
+    }
+
+    private async Task<bool> RecoverStaleHostProcessesAsync(
+        string pythonPath,
+        string hostPidPath,
+        bool stopTrackedProcess,
+        CancellationToken cancellationToken)
+    {
+        var stoppedAny = false;
+
+        if (stopTrackedProcess && await StopTrackedHostProcessAsync(cancellationToken))
+            stoppedAny = true;
+
+        if (await StopPidFileHostProcessAsync(hostPidPath, pythonPath, cancellationToken))
+            stoppedAny = true;
+
+        if (await StopRemainingManagedPythonProcessesAsync(pythonPath, cancellationToken))
+            stoppedAny = true;
+
+        await DeletePidFileIfPresentAsync(hostPidPath);
+        await WaitForVenvUnlockAsync(pythonPath, cancellationToken);
+        return stoppedAny;
+    }
+
+    private async Task<bool> StopTrackedHostProcessAsync(CancellationToken cancellationToken)
+    {
+        Process? trackedProcess;
+        try
+        {
+            trackedProcess = _hostProcess is { HasExited: false } ? _hostProcess : null;
+        }
+        catch
+        {
+            trackedProcess = null;
+        }
+
+        if (trackedProcess is null)
+            return false;
+
+        _log.Warning($"Stopping tracked stale managed GPU host process pid={trackedProcess.Id} before restart.");
+        var stopped = await StopProcessAsync(trackedProcess, "tracked host process", cancellationToken);
+        if (stopped)
+            _hostProcess = null;
+
+        return stopped;
+    }
+
+    private async Task<bool> StopPidFileHostProcessAsync(
+        string hostPidPath,
+        string pythonPath,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(hostPidPath))
+            return false;
+
+        string pidText;
+        try
+        {
+            pidText = (await File.ReadAllTextAsync(hostPidPath, cancellationToken)).Trim();
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Failed to read managed GPU host pid file '{hostPidPath}': {ex.Message}");
+            return false;
+        }
+
+        if (!int.TryParse(pidText, out var pid) || pid <= 0)
+        {
+            _log.Warning($"Managed GPU host pid file '{hostPidPath}' contained an invalid pid '{pidText}'. Removing stale pid file.");
+            await DeletePidFileIfPresentAsync(hostPidPath);
+            return false;
+        }
+
+        Process? process;
+        try
+        {
+            process = Process.GetProcessById(pid);
+        }
+        catch (ArgumentException)
+        {
+            _log.Info($"Managed GPU host pid file '{hostPidPath}' pointed to exited process pid={pid}. Removing stale pid file.");
+            await DeletePidFileIfPresentAsync(hostPidPath);
+            return false;
+        }
+
+        if (!IsManagedPythonProcess(process, pythonPath))
+        {
+            _log.Warning(
+                $"Managed GPU host pid file '{hostPidPath}' points to unrelated live process pid={pid}; leaving the process alone and replacing pid file on next successful start.");
+            return false;
+        }
+
+        _log.Warning($"Stopping stale managed GPU host from pid file pid={pid} before restart.");
+        var stopped = await StopProcessAsync(process, "pid-file host process", cancellationToken);
+        if (stopped)
+            await DeletePidFileIfPresentAsync(hostPidPath);
+
+        return stopped;
+    }
+
+    private async Task<bool> StopRemainingManagedPythonProcessesAsync(
+        string pythonPath,
+        CancellationToken cancellationToken)
+    {
+        var stoppedAny = false;
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(pythonPath)))
+        {
+            try
+            {
+                if (!IsManagedPythonProcess(process, pythonPath))
+                    continue;
+
+                _log.Warning($"Stopping stray managed GPU python process pid={process.Id} before restart.");
+                if (await StopProcessAsync(process, "managed python process", cancellationToken))
+                    stoppedAny = true;
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        return stoppedAny;
+    }
+
+    private async Task<bool> StopProcessAsync(
+        Process process,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (process.HasExited)
+                return false;
+        }
+        catch
+        {
+            return false;
+        }
+
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to stop stale managed GPU {reason} pid={process.Id}: {ex.Message}",
+                ex);
+        }
+
+        try
+        {
+            using var shutdownCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            shutdownCts.CancelAfter(HostShutdownTimeout);
+            await process.WaitForExitAsync(shutdownCts.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new InvalidOperationException(
+                $"Timed out waiting for stale managed GPU {reason} pid={process.Id} to exit.");
+        }
+
+        return true;
+    }
+
+    private async Task WaitForVenvUnlockAsync(string pythonPath, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(pythonPath))
+            return;
+
+        var start = Stopwatch.StartNew();
+        while (start.Elapsed < VenvUnlockTimeout)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                using var stream = new FileStream(
+                    pythonPath,
+                    FileMode.Open,
+                    FileAccess.ReadWrite,
+                    FileShare.None);
+                return;
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        throw new InvalidOperationException(
+            $"Managed local GPU runtime remained locked after stale host shutdown: {pythonPath}");
+    }
+
+    private static bool IsManagedPythonProcess(Process process, string pythonPath)
+    {
+        try
+        {
+            var processPath = process.MainModule?.FileName;
+            return !string.IsNullOrWhiteSpace(processPath)
+                && string.Equals(processPath, pythonPath, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task DeletePidFileIfPresentAsync(string hostPidPath)
+    {
+        if (!File.Exists(hostPidPath))
+            return;
+
+        try
+        {
+            File.Delete(hostPidPath);
+            await Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Failed to remove managed GPU host pid file '{hostPidPath}': {ex.Message}");
+        }
     }
 
     internal static ProcessStartInfo CreateHostProcessStartInfo(
@@ -578,6 +814,38 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         FailureReason = message;
         _log.Warning(message);
         return new ContainerizedStartResult(true, false, message);
+    }
+
+    private string DescribeBootstrapFailure(Exception ex, string venvDir)
+    {
+        var detail = ex.Message.Trim();
+        if (!IsLockedRuntimeFailure(detail))
+            return $"Managed local GPU runtime bootstrap failed: {detail}";
+
+        return
+            $"Managed local GPU runtime is locked by a stale host process under {venvDir}. " +
+            $"The app attempted automatic recovery but the runtime still could not be rebuilt. Details: {detail}";
+    }
+
+    private static bool IsLockedRuntimeFailure(string message) =>
+        message.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("failed to remove directory", StringComparison.OrdinalIgnoreCase)
+        || message.Contains(".venv\\Scripts", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("remained locked", StringComparison.OrdinalIgnoreCase);
+
+    private string BuildReadinessFailureMessage(ContainerizedProbeResult readiness)
+    {
+        var detail = readiness.ErrorDetail ?? readiness.State.ToString();
+        try
+        {
+            if (_hostProcess is { HasExited: true } hostProcess)
+                detail = $"managed host exited before readiness probe completed with exit code {hostProcess.ExitCode}";
+        }
+        catch
+        {
+        }
+
+        return $"Managed local GPU host failed to become ready at {AppSettings.ManagedGpuServiceUrl}: {detail}";
     }
 
     private static string ComputeBootstrapVersion(
