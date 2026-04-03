@@ -52,7 +52,7 @@
                                         <TextBox Grid.Column="0"
                                                  Text="{Binding KeyValue, Mode=TwoWay}"
                                                  PasswordChar="{Binding MaskChar}"
-                                                 PlaceholderText="Paste key here…"
+                                                 PlaceholderText="{Binding PlaceholderText}"
                                                  FontFamily="Consolas,monospace"
                                                  FontSize="12"
                                                  Background="#12121A"

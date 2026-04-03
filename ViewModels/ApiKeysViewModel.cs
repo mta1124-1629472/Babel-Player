@@ -42,6 +42,7 @@ public sealed partial class ApiKeyEntryViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(StatusText))]
     [NotifyPropertyChangedFor(nameof(StatusDotColor))]
     [NotifyPropertyChangedFor(nameof(StatusTextColor))]
+    [NotifyPropertyChangedFor(nameof(PlaceholderText))]
     private bool _isKeySet;
 
     [ObservableProperty]
@@ -65,6 +66,7 @@ public sealed partial class ApiKeyEntryViewModel : ViewModelBase
     public string StatusText  => IsKeySet ? "Saved" : "Not set";
     public string StatusDotColor  => IsKeySet ? "#22C55E" : "#404058";
     public string StatusTextColor => IsKeySet ? "#22C55E" : "#606070";
+    public string PlaceholderText => IsKeySet ? "Key saved — paste to replace" : "Paste key here…";
 
     public bool CanValidateLive => string.IsNullOrEmpty(_validationAvailabilityText) && !IsValidating;
 
