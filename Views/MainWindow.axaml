@@ -8,7 +8,7 @@
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="650"
         x:Class="Babel.Player.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/babelplayer.ico"
+        Icon="/Assets/Icons/app.ico"
         Title="Babel Player"
         Width="1100" Height="650"
         MinWidth="900" MinHeight="500"

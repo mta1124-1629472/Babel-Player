@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="680"
         x:Class="Babel.Player.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
-        Icon="/Assets/babelplayer.ico"
+        Icon="/Assets/Icons/app.ico"
         Title="Babel Player - Settings"
         Width="640" Height="680"
         MinWidth="520" MinHeight="540">
