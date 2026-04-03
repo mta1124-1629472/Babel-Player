@@ -35,8 +35,12 @@ whisper_model = None
 whisper_model_key = None
 translator = None
 xtts_model = None
-xtts_available = None
-xtts_error = None
+
+# XTTS availability probe — None = not yet checked, True/False = result
+xtts_available: Optional[bool] = None
+xtts_error: Optional[str] = None
+
+# In-memory reference store: speaker_id -> {"audio_path": str, "transcript": str|None}
 xtts_reference_store: dict[str, dict] = {}
 
 # Temporary directory for artifacts
@@ -93,6 +97,11 @@ class TtsResponse(BaseModel):
     file_size_bytes: int
     error_message: Optional[str] = None
 
+class XttsReferenceResponse(BaseModel):
+    success: bool
+    reference_id: str
+    error_message: Optional[str] = None
+
 class HealthResponse(BaseModel):
     status: str
     timestamp: str
@@ -109,26 +118,71 @@ class CapabilitiesResponse(BaseModel):
     tts: StageCapability
 
 # ============================================================================
-# Health Check
+# XTTS helpers
+# ============================================================================
+
+def _probe_xtts_available() -> bool:
+    """Attempt to import TTS.api and cache the result. Never raises."""
+    global xtts_available, xtts_error
+    if xtts_available is not None:
+        return xtts_available
+    try:
+        from TTS.api import TTS  # noqa: F401
+        xtts_available = True
+        xtts_error = None
+        logger.info("XTTS-v2 (TTS.api) import probe: available")
+    except Exception as e:
+        xtts_available = False
+        xtts_error = str(e)
+        logger.warning(f"XTTS-v2 (TTS.api) import probe: unavailable — {e}")
+    return xtts_available
+
+
+def get_xtts_model():
+    """Lazy-load XTTS-v2. Raises on failure."""
+    global xtts_model, xtts_available, xtts_error
+    if xtts_model is not None:
+        return xtts_model
+    try:
+        from TTS.api import TTS
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        logger.info(f"Loading XTTS-v2 model on device '{device}'")
+        xtts_model = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2").to(device)
+        xtts_available = True
+        xtts_error = None
+        logger.info("XTTS-v2 model loaded successfully")
+        return xtts_model
+    except Exception as e:
+        xtts_available = False
+        xtts_error = str(e)
+        logger.error(f"Failed to load XTTS-v2 model: {e}", exc_info=True)
+        raise
+
+
+def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
+    """Convert WAV to MP3 via ffmpeg. Raises RuntimeError on failure."""
+    import subprocess
+    cmd = [
+        "ffmpeg", "-y", "-i", str(wav_path),
+        "-codec:a", "libmp3lame", "-q:a", "3",
+        str(mp3_path),
+    ]
+    try:
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"ffmpeg conversion failed: {e.output.decode(errors='replace')}")
+
+# ============================================================================
+# Capabilities / Health
 # ============================================================================
 
 def get_stage_capabilities() -> CapabilitiesResponse:
-    global xtts_available, xtts_error
+    xtts_ready = _probe_xtts_available()
 
-    if xtts_available is None:
-        try:
-            from TTS.api import TTS  # noqa: F401
-            xtts_available = True
-            xtts_error = None
-        except Exception as e:
-            xtts_available = False
-            xtts_error = str(e)
-
-    tts_detail = "edge-tts available"
-    if xtts_available:
-        tts_detail += "; xtts-v2 available"
+    if xtts_ready:
+        tts_detail = "edge-tts (cloud) available; xtts-v2 (GPU) available"
     else:
-        tts_detail += f"; xtts-v2 unavailable ({xtts_error})"
+        tts_detail = f"edge-tts (cloud) available; xtts-v2 unavailable ({xtts_error})"
 
     return CapabilitiesResponse(
         transcription=StageCapability(
@@ -140,7 +194,9 @@ def get_stage_capabilities() -> CapabilitiesResponse:
             detail="googletrans available",
         ),
         tts=StageCapability(
-            ready=True,
+            # Truthful: ready only when XTTS-v2 is importable.
+            # edge-tts alone is a cloud path and does not constitute local GPU TTS readiness.
+            ready=xtts_ready,
             detail=tts_detail,
         ),
     )
@@ -151,12 +207,11 @@ async def health_live():
     try:
         cuda_available = torch.cuda.is_available()
         cuda_version = torch.version.cuda if cuda_available else None
-        
         return HealthResponse(
             status="healthy",
             timestamp=datetime.utcnow().isoformat(),
             cuda_available=cuda_available,
-            cuda_version=cuda_version
+            cuda_version=cuda_version,
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -177,13 +232,16 @@ async def capabilities():
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
-# Transcription Endpoint
+# Transcription
 # ============================================================================
 
-def load_whisper_model(model_name: str, cpu_compute_type: str = "int8", cpu_threads: Optional[int] = None, num_workers: int = 1):
-    """Load Whisper model with GPU support."""
-    global whisper_model
-    global whisper_model_key
+def load_whisper_model(
+    model_name: str,
+    cpu_compute_type: str = "int8",
+    cpu_threads: Optional[int] = None,
+    num_workers: int = 1,
+):
+    global whisper_model, whisper_model_key
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     compute_type = "float16" if device == "cuda" else (cpu_compute_type or "int8")
@@ -211,8 +269,8 @@ def load_whisper_model(model_name: str, cpu_compute_type: str = "int8", cpu_thre
         )
         whisper_model = WhisperModel(model_name, **init_kwargs)
         whisper_model_key = desired_key
-        logger.info(f"Whisper model loaded successfully")
-    
+        logger.info("Whisper model loaded successfully")
+
     return whisper_model
 
 @app.post("/transcribe", response_model=TranscriptionResponse)
@@ -223,12 +281,10 @@ async def transcribe(
     cpu_compute_type: str = "int8",
     cpu_threads: Optional[int] = None,
     num_workers: int = 1,
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """Transcribe audio file using Whisper."""
     temp_audio_path = None
     try:
-        # Save uploaded file
         temp_audio_path = TEMP_DIR / f"audio_{datetime.now().timestamp()}.wav"
         contents = await file.read()
         temp_audio_path.write_bytes(contents)
@@ -236,38 +292,29 @@ async def transcribe(
         requested_cpu_threads = cpu_threads if (cpu_threads is not None and cpu_threads > 0) else "auto"
         requested_num_workers = max(1, int(num_workers or 1))
         requested_cpu_compute = cpu_compute_type or "int8"
-        
+
         logger.info(
             f"Transcribing file: {file.filename} "
             f"(model={model}, cpu_compute={requested_cpu_compute}, "
             f"cpu_threads={requested_cpu_threads}, cpu_workers={requested_num_workers})"
         )
-        
-        # Load model
+
         whisper = load_whisper_model(model, cpu_compute_type, cpu_threads, num_workers)
-        
-        # Transcribe
         segments, info = whisper.transcribe(str(temp_audio_path), language=language)
-        
-        # Convert to response format
-        transcript_segments = []
-        for seg in segments:
-            transcript_segments.append(TranscriptSegment(
-                start=seg.start,
-                end=seg.end,
-                text=seg.text.strip()
-            ))
-        
+
+        transcript_segments = [
+            TranscriptSegment(start=seg.start, end=seg.end, text=seg.text.strip())
+            for seg in segments
+        ]
+
         logger.info(f"Transcription complete: {len(transcript_segments)} segments, language: {info.language}")
-        
-        # Schedule cleanup
         background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
-        
+
         return TranscriptionResponse(
             success=True,
             language=info.language or "unknown",
             language_probability=info.language_probability or 0.0,
-            segments=transcript_segments
+            segments=transcript_segments,
         )
     except Exception as e:
         logger.error(f"Transcription failed: {e}", exc_info=True)
@@ -276,11 +323,10 @@ async def transcribe(
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============================================================================
-# Translation Endpoint
+# Translation
 # ============================================================================
 
 def get_translator():
-    """Get or create Translator instance."""
     global translator
     if translator is None:
         logger.info("Initializing Translator")
@@ -291,25 +337,20 @@ def get_translator():
 async def translate(
     transcript_json: str = Form(...),
     source_language: str = Form(...),
-    target_language: str = Form(...)
+    target_language: str = Form(...),
 ):
-    """Translate transcript segments."""
     try:
         logger.info(f"Translating {source_language} -> {target_language}")
-        
-        # Parse transcript JSON
         transcript_data = json.loads(transcript_json)
         segments = transcript_data.get("segments", [])
-        
-        # Translate each segment
+
         trans = get_translator()
         translated_segments = []
         failures = []
-        
+
         for index, seg in enumerate(segments):
             text = seg.get("text", "")
             translated_text = ""
-            
             if text:
                 try:
                     result = trans.translate(text, src=source_language, dest=target_language)
@@ -319,104 +360,53 @@ async def translate(
                     logger.error(f"Failed to translate segment {segment_label}: {e}")
                     failures.append(f"segment {segment_label}: {e}")
                     continue
-            
             translated_segments.append(TranslatedSegment(
                 start=seg.get("start", 0),
                 end=seg.get("end", 0),
                 text=text,
-                translated_text=translated_text
+                translated_text=translated_text,
             ))
 
         if failures:
             raise RuntimeError(
                 "Translation failed; no fallback was applied. " + "; ".join(failures)
             )
-        
+
         logger.info(f"Translation complete: {len(translated_segments)} segments translated")
-        
         return TranslationResponse(
             success=True,
             source_language=source_language,
             target_language=target_language,
-            segments=translated_segments
+            segments=translated_segments,
         )
     except Exception as e:
         logger.error(f"Translation failed: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============================================================================
-# TTS Endpoint
+# TTS — edge-tts (cloud/CPU path, unchanged)
 # ============================================================================
-
-def get_xtts_model():
-    global xtts_model, xtts_available, xtts_error
-
-    if xtts_model is not None:
-        return xtts_model
-
-    try:
-        from TTS.api import TTS
-
-        logger.info("Loading XTTS model (tts_models/multilingual/multi-dataset/xtts_v2)")
-        xtts_model = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2")
-        xtts_available = True
-        xtts_error = None
-        return xtts_model
-    except Exception as e:
-        xtts_available = False
-        xtts_error = str(e)
-        raise
-
-
-def save_xtts_wav_to_mp3(wav_path: Path, mp3_path: Path):
-    import subprocess
-
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        str(wav_path),
-        "-codec:a",
-        "libmp3lame",
-        "-q:a",
-        "3",
-        str(mp3_path),
-    ]
-
-    try:
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-    except Exception as e:
-        raise RuntimeError(f"ffmpeg conversion failed: {e}")
-
 
 @app.post("/tts", response_model=TtsResponse)
 async def text_to_speech(
     text: str = Form(...),
     voice: str = Form("en-US-AriaNeural"),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """Generate speech from text using edge-tts."""
+    """Generate speech via edge-tts (cloud, no GPU required)."""
     temp_audio_path = None
     try:
-        logger.info(f"Generating TTS for voice: {voice}")
-        
+        logger.info(f"Generating edge-tts for voice: {voice}")
         temp_audio_path = TEMP_DIR / f"tts_{datetime.now().timestamp()}.mp3"
-        
-        # Generate speech
         communicate = edge_tts.Communicate(text, voice)
         await communicate.save(str(temp_audio_path))
-        
         file_size = temp_audio_path.stat().st_size
-        logger.info(f"TTS generation complete: {file_size} bytes")
-        
-        # Note: Client must retrieve the file before cleanup happens
-        # In production, you'd stream the file or use a more robust cleanup strategy
-        
+        logger.info(f"edge-tts generation complete: {file_size} bytes")
         return TtsResponse(
             success=True,
             voice=voice,
             audio_path=str(temp_audio_path),
-            file_size_bytes=file_size
+            file_size_bytes=file_size,
         )
     except Exception as e:
         logger.error(f"TTS generation failed: {e}", exc_info=True)
@@ -424,146 +414,39 @@ async def text_to_speech(
             background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
         raise HTTPException(status_code=400, detail=str(e))
 
-
-@app.post("/tts/xtts/references")
-async def register_xtts_reference(
-    speaker_id: str = Form(...),
-    file: UploadFile = File(...),
-    transcript: Optional[str] = Form(None)
-):
-    """Register a reusable XTTS reference clip and return a reference_id."""
-    temp_ref_path = None
-    try:
-        temp_ref_path = TEMP_DIR / f"xtts_ref_{uuid.uuid4().hex}.wav"
-        temp_ref_path.write_bytes(await file.read())
-
-        reference_id = f"ref_{uuid.uuid4().hex}"
-        xtts_reference_store[reference_id] = {
-            "speaker_id": speaker_id,
-            "path": str(temp_ref_path),
-            "transcript": transcript,
-            "created_at": datetime.utcnow().isoformat(),
-        }
-
-        return {
-            "success": True,
-            "reference_id": reference_id,
-            "speaker_id": speaker_id,
-            "error_message": None,
-        }
-    except Exception as e:
-        logger.error(f"XTTS reference registration failed: {e}", exc_info=True)
-        if temp_ref_path:
-            temp_ref_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/tts/xtts/segment", response_model=TtsResponse)
-async def xtts_segment(
-    text: str = Form(...),
-    speaker_id: Optional[str] = Form(None),
-    reference_id: Optional[str] = Form(None),
-    reference_file: Optional[UploadFile] = File(None),
-    reference_transcript: Optional[str] = Form(None),
-    language: Optional[str] = Form(None),
-    background_tasks: BackgroundTasks = BackgroundTasks()
-):
-    """Generate XTTS segment from text with optional voice-clone reference."""
-    wav_path = None
-    mp3_path = None
-    temp_ref_path = None
-
-    try:
-        model = get_xtts_model()
-
-        if reference_id:
-            ref = xtts_reference_store.get(reference_id)
-            if not ref:
-                raise HTTPException(status_code=404, detail=f"Unknown reference_id '{reference_id}'")
-            speaker_wav = ref["path"]
-            if not os.path.exists(speaker_wav):
-                raise HTTPException(status_code=404, detail=f"Reference audio missing for '{reference_id}'")
-        elif reference_file is not None:
-            temp_ref_path = TEMP_DIR / f"xtts_inline_ref_{uuid.uuid4().hex}.wav"
-            temp_ref_path.write_bytes(await reference_file.read())
-            speaker_wav = str(temp_ref_path)
-        else:
-            raise HTTPException(status_code=400, detail="XTTS requires reference_id or reference_file")
-
-        wav_path = TEMP_DIR / f"xtts_{datetime.now().timestamp()}_{uuid.uuid4().hex}.wav"
-        mp3_path = TEMP_DIR / f"xtts_{datetime.now().timestamp()}_{uuid.uuid4().hex}.mp3"
-
-        # Use Coqui XTTS API
-        tts_kwargs = {
-            "text": text,
-            "speaker_wav": speaker_wav,
-            "language": language or "en",
-            "file_path": str(wav_path),
-        }
-        model.tts_to_file(**tts_kwargs)
-
-        save_xtts_wav_to_mp3(wav_path, mp3_path)
-
-        file_size = mp3_path.stat().st_size
-        background_tasks.add_task(lambda p=wav_path: p.unlink(missing_ok=True))
-
-        if temp_ref_path is not None:
-            background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
-
-        return TtsResponse(
-            success=True,
-            voice="xtts-v2",
-            audio_path=str(mp3_path),
-            file_size_bytes=file_size,
-            error_message=None,
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"XTTS segment synthesis failed: {e}", exc_info=True)
-        if wav_path:
-            wav_path.unlink(missing_ok=True)
-        if mp3_path:
-            mp3_path.unlink(missing_ok=True)
-        if temp_ref_path:
-            temp_ref_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=str(e))
-
-
 @app.get("/tts/audio/{filename}")
 async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
-    """Retrieve generated TTS audio file."""
+    """Retrieve a generated TTS audio file by its basename."""
     try:
         file_path = TEMP_DIR / filename
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Audio file not found")
-        
-        # Schedule cleanup after response
         background_tasks.add_task(lambda p=file_path: p.unlink(missing_ok=True))
-        
         return FileResponse(file_path, media_type="audio/mpeg")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to retrieve TTS audio: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============================================================================
-# Startup/Shutdown Events
+# Startup / Shutdown
 # ============================================================================
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize resources on startup."""
     logger.info("Inference service starting up")
-    logger.info(f"CUDA available: {torch.cuda.is_available()}")
-    if torch.cuda.is_available():
+    cuda_available = torch.cuda.is_available()
+    logger.info(f"CUDA available: {cuda_available}")
+    if cuda_available:
         logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
         logger.info(f"CUDA version: {torch.version.cuda}")
+    # Eagerly probe XTTS so /capabilities is accurate from the first request
+    _probe_xtts_available()
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Clean up on shutdown."""
     logger.info("Inference service shutting down")
-    # Clear GPU cache if available
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
