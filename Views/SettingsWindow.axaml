@@ -49,8 +49,8 @@
                                   Width="150"/>
                     </StackPanel>
 
-                    <!-- Default TTS Voice -->
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20">
+                    <!-- Default TTS Voice (hidden — wiring kept, not shown in UI) -->
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20" IsVisible="False">
                         <TextBlock Text="Default TTS Voice:" VerticalAlignment="Center"/>
                         <ComboBox ItemsSource="{Binding TtsVoiceOptions}"
                                   SelectedItem="{Binding SelectedVoice, Mode=TwoWay}"
