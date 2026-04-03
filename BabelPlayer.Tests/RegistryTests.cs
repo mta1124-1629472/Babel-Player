@@ -235,6 +235,13 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
+    public void TtsRegistry_GetAvailableProviders_ContainsXttsContainer()
+    {
+        var providers = _ttsRegistry.GetAvailableProviders();
+        Assert.Contains(providers, p => p.Id == ProviderNames.XttsContainer);
+    }
+
+    [Fact]
     public void TtsRegistry_CheckReadiness_UnknownProvider_ReturnsNotReady()
     {
         var readiness = _ttsRegistry.CheckReadiness("nonexistent-provider", "voice", new AppSettings(), null);
@@ -281,6 +288,14 @@ public sealed class RegistryTests : IDisposable
     public void TtsRegistry_CreateProvider_EdgeTts_DoesNotThrow()
     {
         var provider = _ttsRegistry.CreateProvider(ProviderNames.EdgeTts, new AppSettings(), null);
+        Assert.NotNull(provider);
+    }
+
+    [Fact]
+    public void TtsRegistry_CreateProvider_XttsContainer_DoesNotThrow_WhenRuntimeIsContainerized()
+    {
+        var settings = new AppSettings { TtsRuntime = InferenceRuntime.Containerized, TtsProvider = ProviderNames.XttsContainer };
+        var provider = _ttsRegistry.CreateProvider(ProviderNames.XttsContainer, settings, null, InferenceRuntime.Containerized);
         Assert.NotNull(provider);
     }
 
@@ -340,7 +355,7 @@ public sealed class RegistryTests : IDisposable
         var translation = _translationRegistry.CheckReadiness(
             ProviderNames.GoogleTranslateFree, "default", settingsWithEmptyUrl, null, InferenceRuntime.Containerized);
         var tts = _ttsRegistry.CheckReadiness(
-            ProviderNames.EdgeTts, "en-US-AriaNeural", settingsWithEmptyUrl, null, InferenceRuntime.Containerized);
+            ProviderNames.XttsContainer, "xtts-v2", settingsWithEmptyUrl, null, InferenceRuntime.Containerized);
 
         Assert.False(transcription.IsReady);
         Assert.False(translation.IsReady);
@@ -357,7 +372,7 @@ public sealed class RegistryTests : IDisposable
         var translation = _translationRegistry.CheckReadiness(
             ProviderNames.GoogleTranslateFree, "default", settingsWithUrl, null, InferenceRuntime.Containerized);
         var tts = _ttsRegistry.CheckReadiness(
-            ProviderNames.EdgeTts, "en-US-AriaNeural", settingsWithUrl, null, InferenceRuntime.Containerized);
+            ProviderNames.XttsContainer, "xtts-v2", settingsWithUrl, null, InferenceRuntime.Containerized);
 
         Assert.False(transcription.IsReady);
         Assert.False(translation.IsReady);
@@ -388,7 +403,17 @@ public sealed class RegistryTests : IDisposable
         var providers = _ttsRegistry.GetAvailableProviders(InferenceRuntime.Cloud);
 
         Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.Piper);
+        Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.XttsContainer);
         Assert.Contains(providers, provider => provider.Id == ProviderNames.EdgeTts);
+    }
+
+    [Fact]
+    public void TtsRegistry_GetAvailableProviders_ContainerizedIncludesXttsContainer()
+    {
+        var providers = _ttsRegistry.GetAvailableProviders(InferenceRuntime.Containerized);
+
+        Assert.Contains(providers, provider => provider.Id == ProviderNames.XttsContainer);
+        Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.EdgeTts);
     }
 
     // ── DiarizationRegistry ───────────────────────────────────────────────────────

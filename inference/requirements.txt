@@ -7,4 +7,5 @@ numpy==1.26.4
 scipy==1.14.1
 googletrans==4.0.0rc1
 edge-tts==6.1.6
+TTS==0.22.0
 pydantic-settings==2.3.1

@@ -377,6 +377,7 @@ public sealed class ModelTests
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.FasterWhisper));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.GoogleTranslateFree));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.EdgeTts));
+        Assert.False(string.IsNullOrWhiteSpace(ProviderNames.XttsContainer));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Piper));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Nllb200));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.ContainerizedService));
@@ -404,6 +405,7 @@ public sealed class ModelTests
             ProviderNames.Deepl,
             ProviderNames.OpenAi,
             ProviderNames.EdgeTts,
+            ProviderNames.XttsContainer,
             ProviderNames.Piper,
             ProviderNames.ElevenLabs,
             ProviderNames.GoogleCloudTts,
@@ -411,5 +413,19 @@ public sealed class ModelTests
             ProviderNames.ContainerizedService,
         };
         Assert.Equal(names.Length, new System.Collections.Generic.HashSet<string>(names).Count);
+    }
+
+    [Fact]
+    public void InferenceRuntimeCatalog_DefaultTtsProvider_ContainerizedIsXttsContainer()
+    {
+        var provider = InferenceRuntimeCatalog.DefaultTtsProvider(InferenceRuntime.Containerized);
+        Assert.Equal(ProviderNames.XttsContainer, provider);
+    }
+
+    [Fact]
+    public void InferenceRuntimeCatalog_NormalizeTtsProvider_ContainerizedBlankIsXttsContainer()
+    {
+        var provider = InferenceRuntimeCatalog.NormalizeTtsProvider(InferenceRuntime.Containerized, "");
+        Assert.Equal(ProviderNames.XttsContainer, provider);
     }
 }

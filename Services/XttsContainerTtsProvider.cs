@@ -19,6 +19,7 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
 {
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
+    private readonly Dictionary<string, string> _referenceIdBySpeakerPath = new(StringComparer.OrdinalIgnoreCase);
 
     public XttsContainerTtsProvider(ContainerizedInferenceClient client, AppLog log)
     {
@@ -38,10 +39,17 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
 
         _log.Info($"[XttsContainerTts] Segment synth start (speaker={request.SpeakerId ?? "<none>"})");
 
+        var referenceId = await ResolveReferenceIdAsync(
+            request.SpeakerId,
+            request.ReferenceAudioPath,
+            request.ReferenceTranscriptText,
+            cancellationToken);
+
         var result = await _client.XttsSegmentAsync(
             request.Text,
             request.SpeakerId,
             request.ReferenceAudioPath,
+            referenceId,
             request.ReferenceTranscriptText,
             cancellationToken);
 
@@ -87,10 +95,17 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
         var combined = string.Join(" ", parts);
         _log.Info($"[XttsContainerTts] Combined synth start (segments={parts.Count}, speaker={defaultSpeakerId ?? "<none>"})");
 
+        var referenceId = await ResolveReferenceIdAsync(
+            defaultSpeakerId,
+            defaultReferencePath,
+            null,
+            cancellationToken);
+
         var result = await _client.XttsSegmentAsync(
             combined,
             defaultSpeakerId,
             defaultReferencePath,
+            referenceId,
             null,
             cancellationToken);
 
@@ -114,5 +129,28 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
             Directory.CreateDirectory(outputDir);
 
         await _client.DownloadTtsAudioAsync(filename, localOutputPath, ct);
+    }
+
+    private async Task<string?> ResolveReferenceIdAsync(
+        string? speakerId,
+        string? referenceAudioPath,
+        string? referenceTranscript,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(referenceAudioPath))
+            return null;
+
+        var key = $"{speakerId ?? "<none>"}|{referenceAudioPath}";
+        if (_referenceIdBySpeakerPath.TryGetValue(key, out var cachedReferenceId))
+            return cachedReferenceId;
+
+        var generatedReferenceId = await _client.RegisterXttsReferenceAsync(
+            speakerId ?? "speaker",
+            referenceAudioPath,
+            referenceTranscript,
+            ct);
+
+        _referenceIdBySpeakerPath[key] = generatedReferenceId;
+        return generatedReferenceId;
     }
 }

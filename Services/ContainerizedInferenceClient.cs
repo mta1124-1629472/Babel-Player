@@ -252,6 +252,7 @@ public sealed class ContainerizedInferenceClient
         string text,
         string? speakerId = null,
         string? referenceAudioPath = null,
+        string? referenceId = null,
         string? referenceTranscript = null,
         CancellationToken cancellationToken = default)
     {
@@ -261,6 +262,8 @@ public sealed class ContainerizedInferenceClient
             content.Add(new StringContent(text), "text");
             if (!string.IsNullOrWhiteSpace(speakerId))
                 content.Add(new StringContent(speakerId), "speaker_id");
+            if (!string.IsNullOrWhiteSpace(referenceId))
+                content.Add(new StringContent(referenceId), "reference_id");
             if (!string.IsNullOrWhiteSpace(referenceTranscript))
                 content.Add(new StringContent(referenceTranscript), "reference_transcript");
 

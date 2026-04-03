@@ -424,6 +424,112 @@ async def text_to_speech(
             background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
         raise HTTPException(status_code=400, detail=str(e))
 
+
+@app.post("/tts/xtts/references")
+async def register_xtts_reference(
+    speaker_id: str = Form(...),
+    file: UploadFile = File(...),
+    transcript: Optional[str] = Form(None)
+):
+    """Register a reusable XTTS reference clip and return a reference_id."""
+    temp_ref_path = None
+    try:
+        temp_ref_path = TEMP_DIR / f"xtts_ref_{uuid.uuid4().hex}.wav"
+        temp_ref_path.write_bytes(await file.read())
+
+        reference_id = f"ref_{uuid.uuid4().hex}"
+        xtts_reference_store[reference_id] = {
+            "speaker_id": speaker_id,
+            "path": str(temp_ref_path),
+            "transcript": transcript,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+
+        return {
+            "success": True,
+            "reference_id": reference_id,
+            "speaker_id": speaker_id,
+            "error_message": None,
+        }
+    except Exception as e:
+        logger.error(f"XTTS reference registration failed: {e}", exc_info=True)
+        if temp_ref_path:
+            temp_ref_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/tts/xtts/segment", response_model=TtsResponse)
+async def xtts_segment(
+    text: str = Form(...),
+    speaker_id: Optional[str] = Form(None),
+    reference_id: Optional[str] = Form(None),
+    reference_file: Optional[UploadFile] = File(None),
+    reference_transcript: Optional[str] = Form(None),
+    language: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """Generate XTTS segment from text with optional voice-clone reference."""
+    wav_path = None
+    mp3_path = None
+    temp_ref_path = None
+
+    try:
+        model = get_xtts_model()
+
+        if reference_id:
+            ref = xtts_reference_store.get(reference_id)
+            if not ref:
+                raise HTTPException(status_code=404, detail=f"Unknown reference_id '{reference_id}'")
+            speaker_wav = ref["path"]
+            if not os.path.exists(speaker_wav):
+                raise HTTPException(status_code=404, detail=f"Reference audio missing for '{reference_id}'")
+        elif reference_file is not None:
+            temp_ref_path = TEMP_DIR / f"xtts_inline_ref_{uuid.uuid4().hex}.wav"
+            temp_ref_path.write_bytes(await reference_file.read())
+            speaker_wav = str(temp_ref_path)
+        else:
+            raise HTTPException(status_code=400, detail="XTTS requires reference_id or reference_file")
+
+        wav_path = TEMP_DIR / f"xtts_{datetime.now().timestamp()}_{uuid.uuid4().hex}.wav"
+        mp3_path = TEMP_DIR / f"xtts_{datetime.now().timestamp()}_{uuid.uuid4().hex}.mp3"
+
+        # Use Coqui XTTS API
+        tts_kwargs = {
+            "text": text,
+            "speaker_wav": speaker_wav,
+            "language": language or "en",
+            "file_path": str(wav_path),
+        }
+        model.tts_to_file(**tts_kwargs)
+
+        save_xtts_wav_to_mp3(wav_path, mp3_path)
+
+        file_size = mp3_path.stat().st_size
+        background_tasks.add_task(lambda p=wav_path: p.unlink(missing_ok=True))
+
+        if temp_ref_path is not None:
+            background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
+
+        return TtsResponse(
+            success=True,
+            voice="xtts-v2",
+            audio_path=str(mp3_path),
+            file_size_bytes=file_size,
+            error_message=None,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"XTTS segment synthesis failed: {e}", exc_info=True)
+        if wav_path:
+            wav_path.unlink(missing_ok=True)
+        if mp3_path:
+            mp3_path.unlink(missing_ok=True)
+        if temp_ref_path:
+            temp_ref_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/tts/audio/{filename}")
 async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
     """Retrieve generated TTS audio file."""
