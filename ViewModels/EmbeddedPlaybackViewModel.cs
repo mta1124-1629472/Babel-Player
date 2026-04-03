@@ -108,7 +108,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private string _selectedPlaybackRate = "1x";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DubModeLabel))]
     private bool _isDubModeOn;
 
     [ObservableProperty]
@@ -305,7 +304,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 ? "\U0001F509"
                 : "\U0001F50A";
 
-    public string DubModeLabel => IsDubModeOn ? "🎙 Dub: On" : "🎙 Dub: Off";
+    public string DubModeLabel => "🎙 Dub";
 
     public string SubtitleToggleLabel => IsSubtitleModeOn ? "CC ✓" : "CC";
 
@@ -350,10 +349,29 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     // ── Pipeline Progress ──────────────────────────────────────────────────────
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
     private double _pipelineProgressPercent;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
     private bool _isPipelineProgressVisible;
+
+    [ObservableProperty]
+    private string _pipelineStageTitle = string.Empty;
+
+    [ObservableProperty]
+    private string _pipelineStageDetail = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
+    private bool _isPipelineProgressIndeterminate;
+
+    public string PipelineProgressStatusLine =>
+        !IsPipelineProgressVisible
+            ? string.Empty
+            : IsPipelineProgressIndeterminate
+                ? "Current stage progress is active, but this provider has not reported a numeric percentage yet."
+                : $"Current stage progress: {PipelineProgressPercent:P0}. The bar resets for each remaining pipeline stage.";
 
     // ── API key / readiness status for UI lock indicators ──────────────────────
     public string TranscriptionKeyStatus => _transcriptionKeyStatus;
@@ -1662,6 +1680,34 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         StatusText = "Playback stopped.";
     }
 
+    internal void ApplyPipelineStageUpdate(SessionWorkflowCoordinator.PipelineStageUpdate update)
+    {
+        PipelineStageTitle = $"Stage {update.StageIndex} of {update.StageCount}: {update.Title}";
+        PipelineStageDetail = update.Detail;
+        PipelineProgressPercent = update.Progress01;
+        IsPipelineProgressIndeterminate = update.IsIndeterminate;
+        IsPipelineProgressVisible = true;
+    }
+
+    internal void ShowPipelineRefreshDetail(string detail)
+    {
+        if (!IsPipelineProgressVisible)
+            return;
+
+        PipelineStageDetail = detail;
+        PipelineProgressPercent = 1.0;
+        IsPipelineProgressIndeterminate = true;
+    }
+
+    internal void ResetPipelineProgressState()
+    {
+        PipelineStageTitle = string.Empty;
+        PipelineStageDetail = string.Empty;
+        PipelineProgressPercent = 0;
+        IsPipelineProgressIndeterminate = false;
+        IsPipelineProgressVisible = false;
+    }
+
     private CancellationTokenSource? _pipelineCts;
 
     [RelayCommand]
@@ -1671,7 +1717,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         {
             _pipelineCts.Cancel();
             StatusText = "Canceling pipeline...";
-            IsPipelineProgressVisible = false;
+            ResetPipelineProgressState();
             ClearStatusErrorDetail();
         }
     }
@@ -1690,19 +1736,19 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _pipelineCts?.Cancel();
         _pipelineCts = new CancellationTokenSource();
         var ct = _pipelineCts.Token;
-
-        var progress = new Progress<double>(p =>
-        {
-            PipelineProgressPercent = p;
-            IsPipelineProgressVisible = p > 0;
-        });
+        ResetPipelineProgressState();
+        var stageProgress = new Progress<SessionWorkflowCoordinator.PipelineStageUpdate>(ApplyPipelineStageUpdate);
 
         try
         {
             IsBusy = true;
             StatusText = "Running pipeline…";
             ClearStatusErrorDetail();
-            await _coordinator.AdvancePipelineAsync(progress, ct);
+            await _coordinator.AdvancePipelineAsync(
+                progress: null,
+                stageProgress: stageProgress,
+                cancellationToken: ct);
+            ShowPipelineRefreshDetail("Loading segments and refreshing playback data…");
             StatusText = "Loading segments…";
             await RefreshSegmentsAsync();
             StatusText = _coordinator.CurrentSession.StatusMessage;
@@ -1721,7 +1767,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
-            IsPipelineProgressVisible = false;
+            ResetPipelineProgressState();
             _pipelineCts?.Dispose();
             _pipelineCts = null;
         }

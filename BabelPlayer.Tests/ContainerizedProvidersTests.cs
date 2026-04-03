@@ -664,6 +664,66 @@ public sealed class ContainerizedProvidersTests : IDisposable
         Assert.Equal("warming", health.Capabilities.TranslationDetail);
     }
 
+    [Fact]
+    public async Task ContainerizedInferenceClient_CheckHealthAsync_ReturnsLiveButWarmingWhenCapabilitiesProbeFails()
+    {
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/health/live")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"status\":\"healthy\",\"cuda_available\":true,\"cuda_version\":\"12.8\"}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
+                throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 5 seconds elapsing.");
+
+            return Json(HttpStatusCode.NotFound, "{\"status\":\"not-found\"}");
+        });
+
+        var health = await client.CheckHealthAsync();
+
+        Assert.True(health.IsAvailable);
+        Assert.True(health.CudaAvailable);
+        Assert.NotNull(health.Capabilities);
+        Assert.False(health.Capabilities!.TranscriptionReady);
+        Assert.False(health.Capabilities.TranslationReady);
+        Assert.False(health.Capabilities.TtsReady);
+        Assert.Contains("warming or failed", health.Capabilities.TranslationDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("warming or failed", health.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContainerizedProviderReadiness_CheckTranslationForExecutionAsync_ReturnsLiveButWarmingMessage()
+    {
+        var warmingDetail = "Capabilities probe is still warming or failed: timeout";
+        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+            true,
+            true,
+            "12.8",
+            "http://localhost:8000",
+            warmingDetail,
+            new ContainerCapabilitiesSnapshot(
+                TranscriptionReady: false,
+                TranscriptionDetail: warmingDetail,
+                TranslationReady: false,
+                TranslationDetail: warmingDetail,
+                TtsReady: false,
+                TtsDetail: warmingDetail))));
+
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+            ContainerizedServiceUrl = "http://localhost:8000"
+        };
+
+        var readiness = await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(settings, probe);
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains("live but translation capability is still warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+    }
+
     private ContainerizedInferenceClient CreateClient(
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
     {

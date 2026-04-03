@@ -189,6 +189,106 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureStartedAsync_PostStartProbeRetriesUntilHostBecomesAvailable()
+    {
+        var probeCalls = 0;
+        var probe = new ContainerizedServiceProbe(_log, (url, _, _) =>
+        {
+            var currentCall = Interlocked.Increment(ref probeCalls);
+            var health = currentCall < 3
+                ? ContainerHealthStatus.Unavailable(url, $"connection refused #{currentCall}")
+                : new ContainerHealthStatus(
+                    true,
+                    true,
+                    "12.8",
+                    url,
+                    null,
+                    new ContainerCapabilitiesSnapshot(
+                        TranscriptionReady: true,
+                        TranscriptionDetail: null,
+                        TranslationReady: false,
+                        TranslationDetail: "Capabilities probe is still warming or failed: timeout",
+                        TtsReady: false,
+                        TtsDetail: "Capabilities probe is still warming or failed: timeout"));
+            return Task.FromResult(health);
+        });
+
+        var manager = new ManagedVenvHostManager(
+            _log,
+            probe: probe,
+            healthCheckFunc: AlwaysUnavailableHealthCheck(),
+            hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
+            uvResolver: () => Path.Combine(_dir, "uv.exe"),
+            runtimeRootResolver: () => _dir,
+            inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
+            requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
+            constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
+                true,
+                "Managed Python runtime can access CUDA 12.8.",
+                "12.8")),
+            hostProcessStarter: (_, _, _, hostPidPath, token) =>
+                File.WriteAllTextAsync(hostPidPath, "12345", token));
+
+        PrepareBootstrappedRuntimeArtifacts();
+
+        var result = await manager.EnsureStartedAsync(
+            new AppSettings
+            {
+                TranslationProfile = ComputeProfile.Gpu,
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv
+            },
+            ContainerizedStartupTrigger.Execution);
+
+        Assert.True(result.Attempted);
+        Assert.True(result.IsReady);
+        Assert.True(probeCalls >= 3);
+    }
+
+    [Fact]
+    public async Task EnsureStartedAsync_PostStartProbeFailureReturnsLastUnavailableDetail()
+    {
+        var probeCalls = 0;
+        var probe = new ContainerizedServiceProbe(_log, (url, _, _) =>
+        {
+            var currentCall = Interlocked.Increment(ref probeCalls);
+            return Task.FromResult(ContainerHealthStatus.Unavailable(url, $"connection refused #{currentCall}"));
+        });
+
+        var manager = new ManagedVenvHostManager(
+            _log,
+            probe: probe,
+            healthCheckFunc: AlwaysUnavailableHealthCheck(),
+            hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
+            uvResolver: () => Path.Combine(_dir, "uv.exe"),
+            runtimeRootResolver: () => _dir,
+            inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
+            requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
+            constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
+                true,
+                "Managed Python runtime can access CUDA 12.8.",
+                "12.8")),
+            hostProcessStarter: (_, _, _, hostPidPath, token) =>
+                File.WriteAllTextAsync(hostPidPath, "12345", token));
+
+        PrepareBootstrappedRuntimeArtifacts();
+
+        var result = await manager.EnsureStartedAsync(
+            new AppSettings
+            {
+                TtsProfile = ComputeProfile.Gpu,
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv
+            },
+            ContainerizedStartupTrigger.Execution);
+
+        Assert.True(result.Attempted);
+        Assert.False(result.IsReady);
+        Assert.Contains("connection refused", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(probeCalls >= 2);
+    }
+
+    [Fact]
     public async Task EnsureStartedAsync_StaleExistingVenv_RebuildsRuntimeInsteadOfFailing()
     {
         var bootstrapCalls = 0;

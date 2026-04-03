@@ -27,6 +27,7 @@ public sealed class ContainerizedServiceProbe
     private static readonly TimeSpan PassiveProbeTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan AvailableTtl = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan UnavailableTtl = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan WaitRetryDelay = TimeSpan.FromMilliseconds(250);
 
     private readonly ConcurrentDictionary<string, ProbeEntry> _entries =
         new(StringComparer.OrdinalIgnoreCase);
@@ -95,43 +96,83 @@ public sealed class ContainerizedServiceProbe
         var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
         var entry = _entries.GetOrAdd(normalizedUrl, _ => new ProbeEntry());
         var budget = waitTimeout ?? PassiveProbeTimeout;
-        var nowUtc = DateTimeOffset.UtcNow;
-        Task<ContainerizedProbeResult> task;
+        var startedAt = Stopwatch.StartNew();
+        ContainerizedProbeResult? lastCompletedResult = null;
 
-        lock (entry.Gate)
+        while (true)
         {
-            if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var nowUtc = DateTimeOffset.UtcNow;
+            if (!forceRefresh)
             {
-                _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}, mode=wait");
-                return entry.CachedResult;
+                lock (entry.Gate)
+                {
+                    if (entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
+                    {
+                        _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}, mode=wait");
+                        return entry.CachedResult;
+                    }
+                }
             }
 
-            if (entry.InFlightTask is not null)
+            var remaining = budget - startedAt.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+                break;
+
+            Task<ContainerizedProbeResult> task;
+            lock (entry.Gate)
             {
-                _log.Info($"Container probe reuse in-flight: url={normalizedUrl}, mode=wait");
-                task = entry.InFlightTask;
+                if (entry.InFlightTask is not null)
+                {
+                    _log.Info($"Container probe reuse in-flight: url={normalizedUrl}, mode=wait");
+                    task = entry.InFlightTask;
+                }
+                else
+                {
+                    task = StartProbeTask(normalizedUrl, remaining);
+                    entry.InFlightTask = task;
+                    _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={remaining.TotalMilliseconds}, mode=wait, forceRefresh={forceRefresh}");
+                    ObserveCompletion(normalizedUrl, entry, task);
+                }
             }
-            else
+
+            using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            attemptCts.CancelAfter(remaining);
+
+            try
             {
-                task = StartProbeTask(normalizedUrl, budget);
-                entry.InFlightTask = task;
-                _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={budget.TotalMilliseconds}, mode=wait, forceRefresh={forceRefresh}");
-                ObserveCompletion(normalizedUrl, entry, task);
+                var result = await task.WaitAsync(attemptCts.Token);
+                lastCompletedResult = result;
+                if (result.State == ContainerizedProbeState.Available)
+                    return result;
+
+                var retryDelay = budget - startedAt.Elapsed;
+                if (retryDelay <= TimeSpan.Zero)
+                    break;
+
+                var actualDelay = retryDelay < WaitRetryDelay ? retryDelay : WaitRetryDelay;
+                _log.Info(
+                    $"Container probe wait retrying: url={normalizedUrl}, state={result.State}, " +
+                    $"detail={result.ErrorDetail ?? "<none>"}, retryInMs={actualDelay.TotalMilliseconds}");
+                await Task.Delay(actualDelay, cancellationToken);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                break;
             }
         }
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(budget);
+        if (lastCompletedResult is not null)
+        {
+            _log.Info(
+                $"Container probe wait budget exhausted: url={normalizedUrl}, " +
+                $"returning_state={lastCompletedResult.State}, detail={lastCompletedResult.ErrorDetail ?? "<none>"}");
+            return lastCompletedResult;
+        }
 
-        try
-        {
-            return await task.WaitAsync(timeoutCts.Token);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            _log.Info($"Container probe wait timed out: url={normalizedUrl}, timeoutMs={budget.TotalMilliseconds}");
-            return Checking(normalizedUrl);
-        }
+        _log.Info($"Container probe wait timed out before any probe completed: url={normalizedUrl}, timeoutMs={budget.TotalMilliseconds}");
+        return Checking(normalizedUrl);
     }
 
     private async void ObserveCompletion(

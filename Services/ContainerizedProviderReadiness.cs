@@ -119,9 +119,7 @@ public static class ContainerizedProviderReadiness
             };
             return new ProviderReadiness(
                 false,
-                string.IsNullOrWhiteSpace(detail)
-                    ? $"{hostLabel} is live but missing {stageLabel} capability."
-                    : $"{hostLabel} is live but missing {stageLabel} capability: {detail}");
+                BuildCapabilityNotReadyMessage(hostLabel, stageLabel, detail));
         }
 
         return ProviderReadiness.Ready;
@@ -159,4 +157,18 @@ public static class ContainerizedProviderReadiness
         settings.PreferredLocalGpuBackend == GpuHostBackend.ManagedVenv
             ? "Managed local GPU host"
             : "Docker GPU host";
+
+    private static string BuildCapabilityNotReadyMessage(string hostLabel, string stageLabel, string? detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+            return $"{hostLabel} is live but {stageLabel} capability is not ready.";
+
+        if (detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
+            || detail.Contains("probe", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{hostLabel} is live but {stageLabel} capability is still warming: {detail}";
+        }
+
+        return $"{hostLabel} is live but missing {stageLabel} capability: {detail}";
+    }
 }

@@ -11,6 +11,7 @@ namespace Babel.Player.Services;
 
 public sealed class ContainerizedInferenceClient
 {
+    private const string CapabilitiesWarmupPrefix = "Capabilities probe is still warming or failed";
     private readonly HttpClient _httpClient;
     private readonly AppLog _log;
     private readonly string _inferenceServiceUrl;
@@ -341,30 +342,50 @@ public sealed class ContainerizedInferenceClient
             if (!string.Equals(live.Status, "healthy", StringComparison.OrdinalIgnoreCase))
                 return ContainerHealthStatus.Unavailable(serviceUrl, $"Unexpected live status '{live.Status ?? "unknown"}'.");
 
-            using var capabilitiesResponse = await httpClient.GetAsync(
-                $"{serviceUrl}/capabilities",
-                cancellationToken);
-            var capabilities = await DeserializeResponseAsync<CapabilitiesResponseDto>(capabilitiesResponse, cancellationToken);
+            ContainerCapabilitiesSnapshot capabilities;
+            string? capabilitiesError = null;
+            try
+            {
+                using var capabilitiesResponse = await httpClient.GetAsync(
+                    $"{serviceUrl}/capabilities",
+                    cancellationToken);
+                var capabilitiesDto = await DeserializeResponseAsync<CapabilitiesResponseDto>(capabilitiesResponse, cancellationToken);
+                capabilities = new ContainerCapabilitiesSnapshot(
+                    capabilitiesDto.Transcription?.Ready ?? false,
+                    capabilitiesDto.Transcription?.Detail,
+                    capabilitiesDto.Translation?.Ready ?? false,
+                    capabilitiesDto.Translation?.Detail,
+                    capabilitiesDto.Tts?.Ready ?? false,
+                    capabilitiesDto.Tts?.Detail);
+            }
+            catch (Exception ex)
+            {
+                capabilitiesError = $"{CapabilitiesWarmupPrefix}: {ex.Message}";
+                capabilities = CreateUnavailableCapabilitiesSnapshot(capabilitiesError);
+            }
 
             return new ContainerHealthStatus(
                 IsAvailable: true,
                 CudaAvailable: live.CudaAvailable,
                 CudaVersion: live.CudaVersion,
                 ServiceUrl: serviceUrl,
-                ErrorMessage: null,
-                Capabilities: new ContainerCapabilitiesSnapshot(
-                    capabilities.Transcription?.Ready ?? false,
-                    capabilities.Transcription?.Detail,
-                    capabilities.Translation?.Ready ?? false,
-                    capabilities.Translation?.Detail,
-                    capabilities.Tts?.Ready ?? false,
-                    capabilities.Tts?.Detail));
+                ErrorMessage: capabilitiesError,
+                Capabilities: capabilities);
         }
         catch (Exception ex)
         {
             return ContainerHealthStatus.Unavailable(serviceUrl, ex.Message);
         }
     }
+
+    private static ContainerCapabilitiesSnapshot CreateUnavailableCapabilitiesSnapshot(string detail) =>
+        new(
+            TranscriptionReady: false,
+            TranscriptionDetail: detail,
+            TranslationReady: false,
+            TranslationDetail: detail,
+            TtsReady: false,
+            TtsDetail: detail);
 
     private static async Task<T> DeserializeResponseAsync<T>(
         HttpResponseMessage response,

@@ -2,6 +2,7 @@
 # pylint: disable=missing-module-docstring,missing-class-docstring,missing-function-docstring,invalid-name,global-statement,line-too-long,broad-exception-caught
 
 import argparse
+import importlib.util
 import json
 import logging
 import shutil
@@ -263,12 +264,11 @@ def _probe_xtts_available() -> bool:
     if effective_type != "float16":
         return False
 
-    try:
-        import_module("TTS.api")
-        return True
-    except ImportError as exc:
-        logger.warning("XTTS capability probe failed: %s", exc)
+    if importlib.util.find_spec("TTS.api") is None:
+        logger.warning("XTTS capability probe failed: TTS.api is unavailable")
         return False
+
+    return True
 
 
 def _xtts_capability_detail() -> str:
@@ -417,18 +417,20 @@ def _probe_nllb_available() -> bool:
     if HOST_DEVICE != "cuda":
         return False
 
-    try:
-        import_module("transformers")
-        import_module("sentencepiece")
-
-        effective_type = _get_effective_compute_type("translation")
-        if effective_type != "float16":
-            return False
-
-        return True
-    except ImportError as exc:
-        logger.warning("NLLB capability probe failed: %s", exc)
+    effective_type = _get_effective_compute_type("translation")
+    if effective_type != "float16":
         return False
+
+    missing_modules = [
+        module_name
+        for module_name in ("transformers", "sentencepiece")
+        if importlib.util.find_spec(module_name) is None
+    ]
+    if missing_modules:
+        logger.warning("NLLB capability probe failed: missing dependencies %s", ", ".join(missing_modules))
+        return False
+
+    return True
 
 
 def _nllb_capability_detail() -> str:

@@ -465,24 +465,41 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- Footer: Run Pipeline + status -->
+                <!-- Footer: pipeline actions + verbose progress -->
                 <Border Grid.Row="2" Padding="16,12"
                         BorderBrush="#252530" BorderThickness="0,1,0,0">
                     <StackPanel Spacing="8">
-                        <Button HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                VerticalContentAlignment="Center"
-                                Padding="0,9"
-                                FontSize="12"
-                                Background="#252530"
-                                Foreground="#C0C0D0"
-                                CornerRadius="6"
-                                Click="OnOpenMediaClick">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="📁" VerticalAlignment="Center" />
-                                <TextBlock Text="Open Media" VerticalAlignment="Center" />
+                        <Border Padding="12,10"
+                                Background="#151522"
+                                BorderBrush="#2B2940"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                IsVisible="{Binding Playback.IsPipelineProgressVisible}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="{Binding Playback.PipelineStageTitle}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="#F0F0F8"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Playback.PipelineStageDetail}"
+                                           FontSize="11"
+                                           Foreground="#C0C0D0"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Playback.PipelineProgressStatusLine}"
+                                           FontSize="10"
+                                           Foreground="#8A88A8"
+                                           TextWrapping="Wrap" />
+                                <ProgressBar Minimum="0"
+                                             Maximum="1"
+                                             Value="{Binding Playback.PipelineProgressPercent}"
+                                             IsIndeterminate="{Binding Playback.IsPipelineProgressIndeterminate}"
+                                             Height="8"
+                                             Foreground="#7C3AED"
+                                             Background="#2A2A3A"
+                                             HorizontalAlignment="Stretch"
+                                             Margin="0,2,0,0" />
                             </StackPanel>
-                        </Button>
+                        </Border>
 
                         <Button HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
@@ -547,13 +564,6 @@
                                 <TextBlock Text="Cancel Pipeline" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        
-                        <ProgressBar Minimum="0" Maximum="1" 
-                                     Value="{Binding Playback.PipelineProgressPercent}"
-                                     IsVisible="{Binding Playback.IsPipelineProgressVisible}"
-                                     Height="4" Foreground="#7C3AED" Background="#2A2A3A"
-                                     HorizontalAlignment="Stretch" Margin="0,4"/>
-
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                             <TextBlock Grid.Column="0"
                                        FontSize="11"
@@ -638,18 +648,50 @@
             <!-- Controls bar -->
             <Border Grid.Row="3" Padding="10,7"
                     IsVisible="{Binding Playback.IsControlsVisible}">
+                <Border.Styles>
+                    <Style Selector="Button.control-pill">
+                        <Setter Property="Foreground" Value="#A8A8C8" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderBrush" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="1" />
+                        <Setter Property="CornerRadius" Value="6" />
+                    </Style>
+                    <Style Selector="Button.control-pill:pointerover /template/ ContentPresenter">
+                        <Setter Property="Background" Value="#1D1D2A" />
+                    </Style>
+                    <Style Selector="Button.control-pill:pressed /template/ ContentPresenter">
+                        <Setter Property="Background" Value="#252537" />
+                    </Style>
+                    <Style Selector="Button.control-pill.active">
+                        <Setter Property="Foreground" Value="#E7DBFF" />
+                        <Setter Property="BorderBrush" Value="#6C4AF2" />
+                    </Style>
+                    <Style Selector="Button.control-pill.active /template/ ContentPresenter">
+                        <Setter Property="Background" Value="#312350" />
+                    </Style>
+                </Border.Styles>
                 <Grid ColumnDefinitions="*,Auto,*">
 
-                    <!-- Left: CC + dub mode toggle -->
+                    <!-- Left: open media + CC + dub mode toggle -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2"
                                 VerticalAlignment="Center">
+                        <Button Classes="control-pill"
+                                Content="📁"
+                                Padding="6,5"
+                                FontSize="14"
+                                Background="Transparent"
+                                Click="OnOpenMediaClick"
+                                ToolTip.Tip="Open media" />
                         <Button Content="{Binding Playback.SubtitleToggleLabel}"
+                                Classes="control-pill"
                                 Command="{Binding Playback.ToggleSubtitlesCommand}"
                                 IsEnabled="{Binding Playback.HasSegments}"
                                 Padding="6,5" FontSize="14"
                                 Background="Transparent"
                                 ToolTip.Tip="Toggle subtitles (CC)" />
                         <Button Content="{Binding Playback.DubModeLabel}"
+                                Classes="control-pill"
+                                Classes.active="{Binding Playback.IsDubModeOn}"
                                 Command="{Binding Playback.ToggleDubModeCommand}"
                                 IsEnabled="{Binding Playback.HasSegments}"
                                 Padding="6,5" FontSize="14"

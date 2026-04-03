@@ -292,7 +292,16 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         _log.Info(
             $"Managed GPU host readiness probe result: state={readiness.State}, error='{readiness.ErrorDetail ?? "<none>"}', " +
-            $"cuda_available={readiness.CudaAvailable}, cuda_version='{readiness.CudaVersion ?? "<none>"}'");
+            $"cuda_available={readiness.CudaAvailable}, cuda_version='{readiness.CudaVersion ?? "<none>"}', " +
+            $"capabilities={FormatCapabilities(readiness.Capabilities)}");
+
+        if (readiness.State == ContainerizedProbeState.Available
+            && readiness.Capabilities is not null
+            && !AllCapabilitiesReady(readiness.Capabilities))
+        {
+            _log.Info(
+                $"Managed GPU host is live while capabilities are still warming: {FormatCapabilities(readiness.Capabilities)}");
+        }
 
         if (readiness.State == ContainerizedProbeState.Available)
         {
@@ -846,6 +855,22 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
 
         return $"Managed local GPU host failed to become ready at {AppSettings.ManagedGpuServiceUrl}: {detail}";
+    }
+
+    private static bool AllCapabilitiesReady(ContainerCapabilitiesSnapshot capabilities) =>
+        capabilities.TranscriptionReady
+        && capabilities.TranslationReady
+        && capabilities.TtsReady;
+
+    private static string FormatCapabilities(ContainerCapabilitiesSnapshot? capabilities)
+    {
+        if (capabilities is null)
+            return "<none>";
+
+        return
+            $"tx={capabilities.TranscriptionReady}('{capabilities.TranscriptionDetail ?? "<none>"}'), " +
+            $"tl={capabilities.TranslationReady}('{capabilities.TranslationDetail ?? "<none>"}'), " +
+            $"tts={capabilities.TtsReady}('{capabilities.TtsDetail ?? "<none>"}')";
     }
 
     private static string ComputeBootstrapVersion(
