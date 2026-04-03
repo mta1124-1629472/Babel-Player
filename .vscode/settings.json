@@ -1,3 +1,4 @@
 {
-    "github.copilot.chat.agent.autoFix": true
+    "github.copilot.chat.agent.autoFix": true,
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }

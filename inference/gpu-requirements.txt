@@ -1,9 +1,9 @@
 --index-url https://download.pytorch.org/whl/cu128
 --extra-index-url https://pypi.org/simple
 
-torch==2.8.0
-torchaudio==2.8.0
-torchvision==0.23.0
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128
+torchvision==0.23.0+cu128
 
 fastapi==0.115.4
 uvicorn==0.30.6

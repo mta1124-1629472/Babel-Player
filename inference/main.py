@@ -1,3 +1,6 @@
+# pyright: reportMissingImports=false
+# pylint: disable=missing-module-docstring,missing-class-docstring,missing-function-docstring,invalid-name,global-statement,line-too-long,broad-exception-caught
+
 import argparse
 import json
 import logging
@@ -5,10 +8,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterable
+from importlib import import_module
 from pathlib import Path
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 import torch
@@ -24,7 +27,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 uvicorn_logger = logging.getLogger("uvicorn.error")
-uvicorn_access_logger = logging.getLogger("uvicorn.access")
 
 # Initialize FastAPI
 app = FastAPI(
@@ -168,8 +170,10 @@ def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
     ]
     try:
         subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"ffmpeg conversion failed: {e.output.decode(errors='replace')}")
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"ffmpeg conversion failed: {exc.output.decode(errors='replace')}"
+        ) from exc
 
 def _temp_artifact_path(prefix: str, suffix: str) -> Path:
     return TEMP_DIR / f"{prefix}_{datetime.now().timestamp()}_{uuid4().hex}{suffix}"
@@ -230,10 +234,10 @@ def _probe_xtts_available() -> bool:
         return False
 
     try:
-        from TTS.api import TTS  # noqa: F401
+        import_module("TTS.api")
         return True
-    except Exception as exc:
-        logger.warning(f"XTTS capability probe failed: {exc}")
+    except ImportError as exc:
+        logger.warning("XTTS capability probe failed: %s", exc)
         return False
 
 def _xtts_capability_detail() -> str:
@@ -296,9 +300,9 @@ async def health_live():
             cuda_available=cuda_available,
             cuda_version=cuda_version,
         )
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        logger.error("Health check failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -309,17 +313,17 @@ async def health_check():
 async def capabilities():
     """Stage-specific readiness details for the desktop app."""
     try:
-        capabilities = get_stage_capabilities()
+        capability_snapshot = get_stage_capabilities()
         logger.info(
             "Capabilities probe served: transcription_ready=%s translation_ready=%s tts_ready=%s",
-            capabilities.transcription.ready,
-            capabilities.translation.ready,
-            capabilities.tts.ready,
+            capability_snapshot.transcription.ready,
+            capability_snapshot.translation.ready,
+            capability_snapshot.tts.ready,
         )
-        return capabilities
-    except Exception as e:
-        logger.error(f"Capability probe failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        return capability_snapshot
+    except Exception as exc:
+        logger.error("Capability probe failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 # ============================================================================
 # Transcription
@@ -335,6 +339,7 @@ def load_whisper_model(
 
     device = HOST_DEVICE
     compute_type = HOST_COMPUTE_TYPE
+    requested_cpu_compute_type = cpu_compute_type or "int8"
     effective_num_workers = max(1, int(num_workers or 1))
     effective_cpu_threads = int(cpu_threads) if cpu_threads is not None else None
     if effective_cpu_threads is not None and effective_cpu_threads <= 0:
@@ -352,10 +357,14 @@ def load_whisper_model(
             init_kwargs["cpu_threads"] = effective_cpu_threads
 
         logger.info(
-            f"Loading Whisper model '{model_name}' on device '{device}' "
-            f"with compute_type '{compute_type}', "
-            f"cpu_threads='{effective_cpu_threads if effective_cpu_threads is not None else 'auto'}', "
-            f"num_workers='{effective_num_workers}'"
+            "Loading Whisper model '%s' on device '%s' with host_compute_type='%s', "
+            "requested_cpu_compute_type='%s', cpu_threads='%s', num_workers='%s'",
+            model_name,
+            device,
+            compute_type,
+            requested_cpu_compute_type,
+            effective_cpu_threads if effective_cpu_threads is not None else "auto",
+            effective_num_workers,
         )
         whisper_model = WhisperModel(model_name, **init_kwargs)
         whisper_model_key = desired_key
@@ -369,11 +378,11 @@ def _probe_nllb_available() -> bool:
         return False
 
     try:
-        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer  # noqa: F401
-        import sentencepiece  # noqa: F401
+        import_module("transformers")
+        import_module("sentencepiece")
         return HOST_COMPUTE_TYPE == "float16"
-    except Exception as exc:
-        logger.warning(f"NLLB capability probe failed: {exc}")
+    except ImportError as exc:
+        logger.warning("NLLB capability probe failed: %s", exc)
         return False
 
 
@@ -397,14 +406,19 @@ def load_nllb_model(model_name: str):
 
     desired_key = (model_name, HOST_DEVICE, HOST_COMPUTE_TYPE)
     if nllb_model is None or nllb_model_key != desired_key:
-        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+        transformers_module = import_module("transformers")
+        auto_model = transformers_module.AutoModelForSeq2SeqLM
+        auto_tokenizer = transformers_module.AutoTokenizer
 
         model_id = f"facebook/{model_name}"
         logger.info(
-            f"Loading NLLB model '{model_id}' on device '{HOST_DEVICE}' with compute_type '{HOST_COMPUTE_TYPE}'"
+            "Loading NLLB model '%s' on device '%s' with compute_type '%s'",
+            model_id,
+            HOST_DEVICE,
+            HOST_COMPUTE_TYPE,
         )
-        nllb_tokenizer = AutoTokenizer.from_pretrained(model_id)
-        nllb_model = AutoModelForSeq2SeqLM.from_pretrained(
+        nllb_tokenizer = auto_tokenizer.from_pretrained(model_id)
+        nllb_model = auto_model.from_pretrained(
             model_id,
             torch_dtype=torch.float16,
         ).to(HOST_DEVICE)
@@ -427,12 +441,16 @@ def load_xtts_model(model_name: Optional[str]):
     resolved_model = _normalize_xtts_model(model_name)
     desired_key = (resolved_model, HOST_DEVICE, HOST_COMPUTE_TYPE)
     if xtts_model is None or xtts_model_key != desired_key:
-        from TTS.api import TTS
+        tts_module = import_module("TTS.api")
+        tts_factory = tts_module.TTS
 
         logger.info(
-            f"Loading XTTS model '{resolved_model}' on device '{HOST_DEVICE}' with compute_type '{HOST_COMPUTE_TYPE}'"
+            "Loading XTTS model '%s' on device '%s' with compute_type '%s'",
+            resolved_model,
+            HOST_DEVICE,
+            HOST_COMPUTE_TYPE,
         )
-        xtts_model = TTS(resolved_model).to(HOST_DEVICE)
+        xtts_model = tts_factory(resolved_model).to(HOST_DEVICE)
         xtts_model_key = desired_key
         logger.info("XTTS model loaded successfully")
 
@@ -486,9 +504,12 @@ async def transcribe(
         requested_cpu_compute = cpu_compute_type or "int8"
 
         logger.info(
-            f"Transcribing file: {file.filename} "
-            f"(model={model}, cpu_compute={requested_cpu_compute}, "
-            f"cpu_threads={requested_cpu_threads}, cpu_workers={requested_num_workers})"
+            "Transcribing file '%s' (model=%s, cpu_compute=%s, cpu_threads=%s, cpu_workers=%s)",
+            file.filename,
+            model,
+            requested_cpu_compute,
+            requested_cpu_threads,
+            requested_num_workers,
         )
         logger.info("Transcription temp audio path: %s", temp_audio_path)
 
@@ -500,7 +521,11 @@ async def transcribe(
             for seg in segments
         ]
 
-        logger.info(f"Transcription complete: {len(transcript_segments)} segments, language: {info.language}")
+        logger.info(
+            "Transcription complete: segments=%s language=%s",
+            len(transcript_segments),
+            info.language,
+        )
         background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
 
         return TranscriptionResponse(
@@ -509,11 +534,11 @@ async def transcribe(
             language_probability=info.language_probability or 0.0,
             segments=transcript_segments,
         )
-    except Exception as e:
-        logger.error(f"Transcription failed: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error("Transcription failed: %s", exc, exc_info=True)
         if temp_audio_path:
             background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 # ============================================================================
 # Translation (NLLB-200 GPU host)
@@ -551,10 +576,10 @@ async def translate(
                         target_language,
                         text,
                     )
-                except Exception as e:
+                except Exception as exc:
                     segment_label = seg.get("start", index)
-                    logger.error(f"Failed to translate segment {segment_label}: {e}")
-                    failures.append(f"segment {segment_label}: {e}")
+                    logger.error("Failed to translate segment %s: %s", segment_label, exc)
+                    failures.append(f"segment {segment_label}: {exc}")
                     continue
             translated_segments.append(TranslatedSegment(
                 start=seg.get("start", 0),
@@ -568,16 +593,19 @@ async def translate(
                 "Translation failed; no fallback was applied. " + "; ".join(failures)
             )
 
-        logger.info(f"Translation complete: {len(translated_segments)} segments translated")
+        logger.info(
+            "Translation complete: translated_segments=%s",
+            len(translated_segments),
+        )
         return TranslationResponse(
             success=True,
             source_language=source_language,
             target_language=target_language,
             segments=translated_segments,
         )
-    except Exception as e:
-        logger.error(f"Translation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as exc:
+        logger.error("Translation failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 # ============================================================================
 # TTS
@@ -617,9 +645,9 @@ async def register_xtts_reference(
             stored_path,
         )
         return XttsReferenceResponse(success=True, reference_id=reference_id)
-    except Exception as e:
-        logger.error(f"Failed to register XTTS reference: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as exc:
+        logger.error("Failed to register XTTS reference: %s", exc, exc_info=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @app.post("/tts/xtts/segment", response_model=TtsResponse)
 async def xtts_segment(
@@ -668,8 +696,11 @@ async def xtts_segment(
         temp_mp3_path = _temp_artifact_path("xtts_segment", ".mp3")
 
         logger.info(
-            f"Generating XTTS segment: speaker={speaker_id or '<none>'}, model={_normalize_xtts_voice_label(model)}, "
-            f"language={normalized_language}, reference_id={reference_id or '<inline>'}"
+            "Generating XTTS segment: speaker=%s model=%s language=%s reference_id=%s",
+            speaker_id or "<none>",
+            _normalize_xtts_voice_label(model),
+            normalized_language,
+            reference_id or "<inline>",
         )
         logger.info(
             "XTTS artifact paths: reference_path=%s wav_path=%s mp3_path=%s",
@@ -705,15 +736,15 @@ async def xtts_segment(
         if temp_mp3_path is not None:
             background_tasks.add_task(lambda p=temp_mp3_path: p.unlink(missing_ok=True))
         raise
-    except Exception as e:
-        logger.error(f"XTTS segment synthesis failed: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error("XTTS segment synthesis failed: %s", exc, exc_info=True)
         if temp_reference_path is not None:
             background_tasks.add_task(lambda p=temp_reference_path: p.unlink(missing_ok=True))
         if temp_wav_path is not None:
             background_tasks.add_task(lambda p=temp_wav_path: p.unlink(missing_ok=True))
         if temp_mp3_path is not None:
             background_tasks.add_task(lambda p=temp_mp3_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @app.get("/tts/audio/{filename}")
 async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
@@ -727,9 +758,9 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
         return FileResponse(file_path, media_type="audio/mpeg")
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Failed to retrieve TTS audio: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as exc:
+        logger.error("Failed to retrieve TTS audio: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 # ============================================================================
 # Startup / Shutdown
