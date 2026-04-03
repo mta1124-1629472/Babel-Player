@@ -85,6 +85,22 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     }
 
     [Fact]
+    public void CreateHostProcessStartInfo_IncludesRequireCudaForFloat8()
+    {
+        var psi = ManagedVenvHostManager.CreateHostProcessStartInfo(
+            "python.exe",
+            Path.Combine(_dir, "main.py"),
+            "float8");
+
+        var args = psi.ArgumentList.ToArray();
+        Assert.Contains("--compute-type", args);
+        var index = Array.IndexOf(args, "--compute-type");
+        Assert.True(index >= 0 && index < args.Length - 1);
+        Assert.Equal("float8", args[index + 1]);
+        Assert.Contains("--require-cuda", args);
+    }
+
+    [Fact]
     public async Task EnsureStartedAsync_GpuSelectedWithoutCuda_FailsWithoutFallingBack()
     {
         var manager = new ManagedVenvHostManager(
@@ -494,6 +510,55 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         Assert.True(result.IsReady);
         Assert.Equal(1, hostStartCalls);
         await WaitForExitAsync(staleProcess);
+    }
+
+    [Fact]
+    public async Task EnsureStartedAsync_SettingsChangedTimeoutWithTrackedHost_DefersRestart()
+    {
+        var hostStartCalls = 0;
+
+        using var trackedProcess = StartLongRunningProcess();
+        var manager = new ManagedVenvHostManager(
+            _log,
+            healthCheckFunc: (serviceUrl, _, _) =>
+                Task.FromResult(ContainerHealthStatus.Unavailable(
+                    serviceUrl,
+                    "The request was canceled due to the configured HttpClient.Timeout of 1 seconds elapsing.")),
+            hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
+            uvResolver: () => Path.Combine(_dir, "uv.exe"),
+            runtimeRootResolver: () => _dir,
+            inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
+            requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
+            constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
+                true,
+                "Managed Python runtime can access CUDA 12.8.",
+                "12.8")),
+            hostProcessStarter: (_, _, _, hostPidPath, token) =>
+            {
+                hostStartCalls++;
+                return File.WriteAllTextAsync(hostPidPath, "12345", token);
+            });
+
+        PrepareBootstrappedRuntimeArtifacts();
+        SetTrackedHostProcess(manager, trackedProcess);
+
+        var result = await manager.EnsureStartedAsync(
+            new AppSettings
+            {
+                TranslationProfile = ComputeProfile.Gpu,
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv
+            },
+            ContainerizedStartupTrigger.SettingsChanged);
+
+        Assert.False(result.Attempted);
+        Assert.True(result.IsReady);
+        Assert.Contains("deferring restart", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, hostStartCalls);
+        Assert.False(trackedProcess.HasExited);
+
+        trackedProcess.Kill(entireProcessTree: true);
+        await WaitForExitAsync(trackedProcess);
     }
 
     [Fact]

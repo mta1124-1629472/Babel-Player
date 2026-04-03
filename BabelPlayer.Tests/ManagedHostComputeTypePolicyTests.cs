@@ -91,9 +91,9 @@ public sealed class ManagedHostComputeTypePolicyTests
     }
 
     [Fact]
-    public void ResolveLaunchComputeType_BlackwellGpu_ReturnsFloat16ForSharedHostReliability()
+    public void ResolveLaunchComputeType_BlackwellGpu_ReturnsFloat8()
     {
-        // Arrange: even on Blackwell, the shared managed host stays on float16 until all stages support float8.
+        // Arrange: Blackwell defaults to float8.
         var hardwareSnapshot = new HardwareSnapshot(
             IsDetecting: false,
             CpuName: "Intel Core i9",
@@ -115,7 +115,35 @@ public sealed class ManagedHostComputeTypePolicyTests
         var computeType = ManagedHostComputeTypePolicy.ResolveLaunchComputeType(hardwareSnapshot, ComputeProfile.Gpu);
 
         // Assert
-        Assert.Equal("float16", computeType);
+        Assert.Equal("float8", computeType);
+    }
+
+    [Fact]
+    public void ResolveLaunchComputeType_GpuProfileNonNvidiaFallback_ReturnsInt8()
+    {
+        // Arrange: GPU profile requested, but no CUDA/NVIDIA path is available.
+        var hardwareSnapshot = new HardwareSnapshot(
+            IsDetecting: false,
+            CpuName: "AMD Ryzen 9",
+            CpuCores: 12,
+            HasAvx: true, HasAvx2: true, HasAvx512F: false,
+            SystemRamGb: 64,
+            GpuName: "AMD Radeon RX 7900 XTX",
+            GpuVramMb: 24576,
+            HasCuda: false, CudaVersion: null,
+            HasOpenVino: false, OpenVinoVersion: null,
+            NpuLabel: null,
+            IsRtxCapable: false,
+            IsVsrDriverSufficient: false,
+            NvidiaDriverVersion: null,
+            IsHdrDisplayAvailable: false,
+            GpuComputeCapability: null);
+
+        // Act
+        var computeType = ManagedHostComputeTypePolicy.ResolveLaunchComputeType(hardwareSnapshot, ComputeProfile.Gpu);
+
+        // Assert
+        Assert.Equal("int8", computeType);
     }
 
     [Fact]

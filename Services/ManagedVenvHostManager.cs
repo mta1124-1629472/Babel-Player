@@ -112,6 +112,17 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return new ContainerizedStartResult(false, true, $"Managed local GPU host already available at {serviceUrl}.");
         }
 
+        if (ShouldDeferRestartForBusyHost(preflight, trigger))
+        {
+            State = ManagedHostState.Ready;
+            _log.Info(
+                $"Managed GPU host startup deferred: trigger={trigger}, reason='busy host suspected', detail='{preflight.ErrorMessage ?? "<none>"}'");
+            return new ContainerizedStartResult(
+                false,
+                true,
+                $"Managed local GPU host is running but did not answer health probe quickly; deferring restart ({trigger}).");
+        }
+
         Task<ContainerizedStartResult> task;
         lock (_gate)
         {
@@ -382,7 +393,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var psi = CreateHostProcessStartInfo(pythonPath, inferenceScriptPath, computeType);
 
         _log.Info(
-            $"Starting managed GPU host: python={pythonPath}, script={inferenceScriptPath}, compute_type={computeType}, require_cuda={(computeType == "float16")}");
+            $"Starting managed GPU host: python={pythonPath}, script={inferenceScriptPath}, compute_type={computeType}, require_cuda={RequiresCuda(computeType)}");
 
         _hostProcess = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start managed GPU host process.");
@@ -647,8 +658,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         psi.ArgumentList.Add("--compute-type");
         psi.ArgumentList.Add(computeType);
         
-        // Only require CUDA when running GPU-accelerated float16 compute type
-        if (computeType == "float16")
+        // Any GPU compute type requires CUDA at host startup.
+        if (RequiresCuda(computeType))
         {
             psi.ArgumentList.Add("--require-cuda");
         }
@@ -842,6 +853,45 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         || message.Contains(".venv\\Scripts", StringComparison.OrdinalIgnoreCase)
         || message.Contains("remained locked", StringComparison.OrdinalIgnoreCase);
 
+    private bool ShouldDeferRestartForBusyHost(
+        ContainerHealthStatus preflight,
+        ContainerizedStartupTrigger trigger)
+    {
+        if (trigger != ContainerizedStartupTrigger.AppStartup
+            && trigger != ContainerizedStartupTrigger.SettingsChanged)
+        {
+            return false;
+        }
+
+        if (!IsTrackedHostProcessRunning())
+            return false;
+
+        return IsTransientBusyHealthFailure(preflight.ErrorMessage);
+    }
+
+    private bool IsTrackedHostProcessRunning()
+    {
+        try
+        {
+            return _hostProcess is { HasExited: false };
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsTransientBusyHealthFailure(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+            return false;
+
+        return error.Contains("HttpClient.Timeout", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("request was canceled", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("operation was canceled", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("timed out", StringComparison.OrdinalIgnoreCase);
+    }
+
     private string BuildReadinessFailureMessage(ContainerizedProbeResult readiness)
     {
         var detail = readiness.ErrorDetail ?? readiness.State.ToString();
@@ -905,4 +955,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             health.CudaAvailable,
             health.CudaVersion,
             health.Capabilities);
+
+    private static bool RequiresCuda(string computeType) =>
+        string.Equals(computeType, "float16", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(computeType, "float8", StringComparison.OrdinalIgnoreCase);
 }

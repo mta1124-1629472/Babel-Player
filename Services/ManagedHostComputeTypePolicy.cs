@@ -6,16 +6,17 @@ public static class ManagedHostComputeTypePolicy
 {
     /// <summary>
     /// Determines the compute type to request for the managed inference host based on hardware.
-    /// Reliability-first policy:
-    ///   - Any managed GPU host uses "float16" so shared translation/TTS stages stay truthful and ready.
-    ///   - CPU-only or no GPU uses "int8".
+    /// Fallback policy:
+    ///   - Blackwell CUDA GPUs request "float8" by default.
+    ///   - Older CUDA-capable NVIDIA GPUs request "float16".
+    ///   - CPU-only or non-NVIDIA paths use "int8".
     ///
-    /// Float8 remains a follow-up once all managed GPU stages support it end-to-end.
+    /// Stage-specific runtime validation can still downgrade float8 where unsupported.
     /// </summary>
     public static string ResolveLaunchComputeType(HardwareSnapshot hardwareSnapshot, ComputeProfile profile)
     {
         if (profile == ComputeProfile.Gpu && hardwareSnapshot.HasCuda)
-            return "float16";
+            return hardwareSnapshot.IsBlackwellCapable ? "float8" : "float16";
 
         // CPU-only or no GPU
         return "int8";
