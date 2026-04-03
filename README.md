@@ -1,10 +1,21 @@
 # Babel Player
 
+[![Sponsor](https://img.shields.io/github/sponsors/mta1124-1629472?label=Sponsor&logo=GitHub)](https://github.com/sponsors/mta1124-1629472)
+[![CI](https://github.com/mta1124-1629472/Babel-Player/actions/workflows/ci.yml/badge.svg)](https://github.com/mta1124-1629472/Babel-Player/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/mta1124-1629472/Babel-Player)](https://github.com/mta1124-1629472/Babel-Player/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows-blue)](#requirements)
+[![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
+[![Alpha](https://img.shields.io/badge/status-early%20alpha-orange)](#what-does-not-work-yet)
+
 Babel Player is a Windows desktop dubbing workstation for local media.
 
 It takes a source file through:
 
 `source media -> timed transcript -> translated dialogue -> spoken dubbed output -> in-context preview and refinement`
+
+Babel Player is built and maintained by a solo developer. If you want to support ongoing development:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/R5R01WOOYW)
 
 ![Babel Player preview](Assets/preview.png)
 
