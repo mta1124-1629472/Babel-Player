@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -12,7 +13,7 @@ using SettingsService = Babel.Player.Services.Settings.SettingsService;
 
 namespace Babel.Player.ViewModels;
 
-public sealed partial class SettingsViewModel : ViewModelBase
+public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 {
     private readonly SettingsService _settingsService;
     private readonly SessionWorkflowCoordinator _coordinator;
@@ -65,6 +66,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _videoToneMapping    = current.VideoToneMapping;
         _videoTargetPeak     = current.VideoTargetPeak;
         _videoHdrComputePeak = current.VideoHdrComputePeak;
+
+        _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
         // Hotkeys (default values)
         PlayPauseHotkey             = "Space";
@@ -232,6 +235,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string[] ToneMappingOptions { get; } = ["bt.2390", "mobius", "clip", "auto"];
 
+    public string VsrSupportHintText => _coordinator.VideoEnhancementDiagnostics.SupportHintText;
+    public string VsrRequestedStateText => _coordinator.VideoEnhancementDiagnostics.RequestedStateText;
+    public string VsrResolvedStateText => _coordinator.VideoEnhancementDiagnostics.ResolvedStateText;
+    public string VsrReasonText => _coordinator.VideoEnhancementDiagnostics.LastReasonText;
+    public string VsrFilterText => _coordinator.VideoEnhancementDiagnostics.LastFilterText;
+
     // ── Hotkeys ───────────────────────────────────────────────────────────────
 
     [ObservableProperty]
@@ -292,6 +301,26 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private void Cancel()
     {
         _ownerWindow.Close();
+    }
+
+    public void Dispose()
+    {
+        _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
+        _restartCts?.Cancel();
+        _restartCts?.Dispose();
+        _restartCts = null;
+    }
+
+    private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics))
+            return;
+
+        OnPropertyChanged(nameof(VsrSupportHintText));
+        OnPropertyChanged(nameof(VsrRequestedStateText));
+        OnPropertyChanged(nameof(VsrResolvedStateText));
+        OnPropertyChanged(nameof(VsrReasonText));
+        OnPropertyChanged(nameof(VsrFilterText));
     }
 
     // ── Null-object for tests / design-time ───────────────────────────────────

@@ -33,8 +33,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     private readonly IMediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
+    private bool _subscribedToSourceDiagnostics;
     private readonly EventHandler _segmentEndedHandler;
     private readonly EventHandler<Exception> _segmentErrorHandler;
+    private readonly Action<VsrDiagnosticSnapshot> _vsrDiagnosticChangedHandler;
+    private VsrDiagnosticSnapshot? _latestVsrDiagnostic;
     private readonly Dictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -62,6 +65,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     [ObservableProperty]
     private HardwareSnapshot _hardwareSnapshot = HardwareSnapshot.Detecting;
+
+    private VideoEnhancementDiagnostics _videoEnhancementDiagnostics = VideoEnhancementDiagnostics.Initial;
 
     [ObservableProperty]
     private InferenceMode _inferenceMode = InferenceMode.SubprocessCpu;
@@ -163,6 +168,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) => StopTtsPlayback();
         _segmentErrorHandler = (_, ex) => StopTtsPlayback();
+        _vsrDiagnosticChangedHandler = RecordVsrDiagnosticSnapshot;
+
+        RefreshVideoEnhancementDiagnostics();
     }
 
     public string StateFilePath => _store.StateFilePath;
@@ -171,6 +179,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     internal AppLog Log => _log;
     internal ContainerizedServiceProbe? ContainerizedProbe => _containerizedProbe;
     public IContainerizedInferenceManager? ContainerizedInferenceManager => _containerizedInferenceManager;
+    internal VideoEnhancementDiagnostics VideoEnhancementDiagnostics
+    {
+        get => _videoEnhancementDiagnostics;
+        private set => SetProperty(ref _videoEnhancementDiagnostics, value);
+    }
 
     public void Initialize()
     {

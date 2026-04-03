@@ -305,7 +305,14 @@ public sealed partial class SessionWorkflowCoordinator
     }
 
     public IMediaTransport GetOrCreateSourcePlayer() =>
-        _transportManager.GetOrCreateSourcePlayer();
+        GetOrCreateSourcePlayerWithDiagnostics();
+
+    private IMediaTransport GetOrCreateSourcePlayerWithDiagnostics()
+    {
+        var player = _transportManager.GetOrCreateSourcePlayer();
+        EnsureSourcePlayerDiagnosticsSubscribed(player);
+        return player;
+    }
 
     public IMediaTransport? SourceMediaPlayer => _transportManager.SourceMediaPlayer;
 
@@ -320,6 +327,13 @@ public sealed partial class SessionWorkflowCoordinator
             segmentPlayer.Ended -= _segmentEndedHandler;
             segmentPlayer.ErrorOccurred -= _segmentErrorHandler;
             _subscribedToSegmentEvents = false;
+        }
+
+        if (_subscribedToSourceDiagnostics
+            && _transportManager.SourceMediaPlayer is LibMpvEmbeddedTransport embedded)
+        {
+            embedded.VsrDiagnosticChanged -= _vsrDiagnosticChangedHandler;
+            _subscribedToSourceDiagnostics = false;
         }
 
         _transportManager.Dispose();

@@ -9,6 +9,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
+        Closed += OnClosed;
     }
 
     private void OnCancelClick(object? sender, RoutedEventArgs e)
@@ -27,5 +28,11 @@ public partial class SettingsWindow : Window
     {
         if (DataContext is SettingsViewModel vm)
             vm.OKCommand.Execute(null);
+    }
+
+    private void OnClosed(object? sender, System.EventArgs e)
+    {
+        if (DataContext is System.IDisposable disposable)
+            disposable.Dispose();
     }
 }

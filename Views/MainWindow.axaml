@@ -620,6 +620,20 @@
                 <Border Background="Black" Margin="0">
                     <v:MpvVideoView x:Name="VideoView" />
                 </Border>
+                <Border HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="12"
+                        Padding="10,6"
+                        Background="#151522"
+                        BorderBrush="#2B2940"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        IsVisible="{Binding Playback.HasVsrPlaybackStatus}">
+                    <TextBlock Text="{Binding Playback.VsrPlaybackStatusText}"
+                               FontSize="11"
+                               Foreground="#E6E3FF"
+                               TextWrapping="Wrap" />
+                </Border>
                 <Panel x:Name="VideoOverlayPanel" Background="Transparent" />
 
             </Grid>

@@ -42,7 +42,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     // Display dimensions supplied by the host (set via SetDisplaySize).
     private int _displayWidth;
     private int _displayHeight;
-    private string? _lastVsrDiagnosticKey;
+    private VsrDiagnosticSnapshot? _lastVsrDiagnostic;
 
     private delegate IntPtr mpv_create_delegate();
     private delegate int mpv_initialize_delegate(IntPtr handle);
@@ -75,6 +75,10 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     public event EventHandler? Ended;
     public event EventHandler<Exception>? ErrorOccurred;
 #pragma warning restore CS0067
+
+    internal event Action<VsrDiagnosticSnapshot>? VsrDiagnosticChanged;
+
+    internal VsrDiagnosticSnapshot? LastVsrDiagnostic => _lastVsrDiagnostic;
 
     public LibMpvEmbeddedTransport(VideoPlaybackOptions? options = null, AppLog? log = null)
     {
@@ -427,7 +431,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         if (_options.UseGpuNext && _options.VsrEnabled)
         {
             _mpv_command_string!(_handle, "vf remove @vsr");
-            _lastVsrDiagnosticKey = null;
+            _lastVsrDiagnostic = null;
         }
 
         _mpv_command_string!(_handle, "stop");
@@ -485,19 +489,36 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         // Query video dimensions.
         var wStr = GetPropertyString("width");
         var hStr = GetPropertyString("height");
+        var runtimeVideoOutput = GetPropertyString("current-vo") ?? GetPropertyString("vo");
+        var runtimeGpuContext = GetPropertyString("gpu-context");
+        var runtimeHwdec = GetPropertyString("hwdec-current") ?? GetPropertyString("hwdec");
         if (!int.TryParse(wStr, out int videoW) || videoW <= 0)
         {
-            LogVsrDiagnosticOnce(
-                $"skip:{trigger}:video-width-unavailable",
-                $"RTX VSR skipped: trigger={trigger}, reason=video-width-unavailable, raw_width='{wStr ?? "<null>"}'");
+            EmitVsrDiagnostic(
+                CreateVsrDiagnosticSnapshot(
+                    trigger,
+                    _options,
+                    VsrFilterPlan.Skip("video-width-unavailable", 0, 0, _displayWidth, _displayHeight, string.Empty),
+                    backendResultCode: null,
+                    videoOutput: runtimeVideoOutput,
+                    gpuContext: runtimeGpuContext,
+                    hwdecCurrent: runtimeHwdec,
+                    reasonTextOverride: $"video width is unavailable (raw value '{wStr ?? "<null>"}')"));
             return;
         }
 
         if (!int.TryParse(hStr, out int videoH) || videoH <= 0)
         {
-            LogVsrDiagnosticOnce(
-                $"skip:{trigger}:video-height-unavailable",
-                $"RTX VSR skipped: trigger={trigger}, reason=video-height-unavailable, raw_height='{hStr ?? "<null>"}'");
+            EmitVsrDiagnostic(
+                CreateVsrDiagnosticSnapshot(
+                    trigger,
+                    _options,
+                    VsrFilterPlan.Skip("video-height-unavailable", videoW, 0, _displayWidth, _displayHeight, string.Empty),
+                    backendResultCode: null,
+                    videoOutput: runtimeVideoOutput,
+                    gpuContext: runtimeGpuContext,
+                    hwdecCurrent: runtimeHwdec,
+                    reasonTextOverride: $"video height is unavailable (raw value '{hStr ?? "<null>"}')"));
             return;
         }
 
@@ -515,11 +536,15 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
         if (!plan.ShouldApply || string.IsNullOrWhiteSpace(plan.FilterChain))
         {
-            LogVsrDiagnosticOnce(
-                $"skip:{trigger}:{plan.Reason}:{plan.VideoWidth}x{plan.VideoHeight}:{plan.DisplayWidth}x{plan.DisplayHeight}:{plan.HwPixelFormat}",
-                $"RTX VSR skipped: trigger={trigger}, reason={plan.Reason}, " +
-                $"video={plan.VideoWidth}x{plan.VideoHeight}, display={plan.DisplayWidth}x{plan.DisplayHeight}, " +
-                $"hwfmt='{plan.HwPixelFormat}', scale={plan.Scale:F1}");
+            EmitVsrDiagnostic(
+                CreateVsrDiagnosticSnapshot(
+                    trigger,
+                    _options,
+                    plan,
+                    backendResultCode: null,
+                    videoOutput: runtimeVideoOutput,
+                    gpuContext: runtimeGpuContext,
+                    hwdecCurrent: runtimeHwdec));
             return;
         }
 
@@ -529,19 +554,27 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
         if (addResult < 0)
         {
-            _log?.Warning(
-                $"RTX VSR filter rejected by libmpv: trigger={trigger}, result={addResult}, " +
-                $"filter='{plan.FilterChain}', video={plan.VideoWidth}x{plan.VideoHeight}, " +
-                $"display={plan.DisplayWidth}x{plan.DisplayHeight}, hwfmt='{plan.HwPixelFormat}'");
-            _lastVsrDiagnosticKey = null;
+            EmitVsrDiagnostic(
+                CreateVsrDiagnosticSnapshot(
+                    trigger,
+                    _options,
+                    plan,
+                    backendResultCode: addResult,
+                    videoOutput: runtimeVideoOutput,
+                    gpuContext: runtimeGpuContext,
+                    hwdecCurrent: runtimeHwdec));
             return;
         }
 
-        LogVsrDiagnosticOnce(
-            $"applied:{trigger}:{plan.FilterChain}",
-            $"RTX VSR applied: trigger={trigger}, filter='{plan.FilterChain}', " +
-            $"video={plan.VideoWidth}x{plan.VideoHeight}, display={plan.DisplayWidth}x{plan.DisplayHeight}, " +
-            $"hwfmt='{plan.HwPixelFormat}', scale={plan.Scale:F1}");
+        EmitVsrDiagnostic(
+            CreateVsrDiagnosticSnapshot(
+                trigger,
+                _options,
+                plan,
+                backendResultCode: addResult,
+                videoOutput: runtimeVideoOutput,
+                gpuContext: runtimeGpuContext,
+                hwdecCurrent: runtimeHwdec));
     }
 
     internal static VsrFilterPlan EvaluateVsrFilterPlan(
@@ -656,14 +689,99 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             throw new InvalidOperationException($"Failed to set libmpv option: {name}={value}");
     }
 
-    private void LogVsrDiagnosticOnce(string key, string message)
+    internal static VsrDiagnosticSnapshot CreateVsrDiagnosticSnapshot(
+        string trigger,
+        VideoPlaybackOptions options,
+        VsrFilterPlan plan,
+        int? backendResultCode,
+        string? videoOutput,
+        string? gpuContext,
+        string? hwdecCurrent,
+        string? reasonTextOverride = null)
     {
-        if (_lastVsrDiagnosticKey == key)
+        var state = !plan.ShouldApply || string.IsNullOrWhiteSpace(plan.FilterChain)
+            ? VsrDiagnosticState.Skipped
+            : backendResultCode is < 0
+                ? VsrDiagnosticState.Rejected
+                : backendResultCode == 0
+                    ? VsrDiagnosticState.Applied
+                    : VsrDiagnosticState.NotEvaluated;
+
+        return new VsrDiagnosticSnapshot(
+            State: state,
+            Trigger: trigger,
+            UseGpuNextRequested: options.UseGpuNext,
+            VsrRequested: options.VsrEnabled,
+            VsrQuality: options.VsrQuality,
+            ResolvedPlan: plan.ShouldApply ? "apply" : "skip",
+            ReasonCode: state switch
+            {
+                VsrDiagnosticState.Applied => "applied",
+                VsrDiagnosticState.Rejected => "command-rejected",
+                _ => plan.Reason,
+            },
+            ReasonText: reasonTextOverride ?? DescribeVsrReason(plan, backendResultCode),
+            FilterChain: plan.FilterChain,
+            VideoWidth: plan.VideoWidth,
+            VideoHeight: plan.VideoHeight,
+            DisplayWidth: plan.DisplayWidth,
+            DisplayHeight: plan.DisplayHeight,
+            Scale: plan.Scale,
+            HwPixelFormat: plan.HwPixelFormat,
+            BackendResultCode: backendResultCode,
+            BackendResultLabel: DescribeBackendResultLabel(backendResultCode),
+            VideoOutput: videoOutput,
+            GpuContext: gpuContext,
+            HwdecCurrent: hwdecCurrent);
+    }
+
+    private void EmitVsrDiagnostic(VsrDiagnosticSnapshot snapshot)
+    {
+        if (_lastVsrDiagnostic == snapshot)
             return;
 
-        _lastVsrDiagnosticKey = key;
-        _log?.Info(message);
+        _lastVsrDiagnostic = snapshot;
+        VsrDiagnosticChanged?.Invoke(snapshot);
+
+        var message =
+            $"RTX VSR diagnostic: state={snapshot.State}, trigger={snapshot.Trigger}, " +
+            $"requested_gpu_next={snapshot.UseGpuNextRequested}, requested_vsr={snapshot.VsrRequested}, quality={snapshot.VsrQuality}, " +
+            $"resolved_plan={snapshot.ResolvedPlan}, reason={snapshot.ReasonCode}, reason_text='{snapshot.ReasonText}', " +
+            $"backend='{snapshot.BackendSummary}', filter='{snapshot.FilterChain ?? "<none>"}', " +
+            $"video={snapshot.VideoWidth}x{snapshot.VideoHeight}, display={snapshot.DisplayWidth}x{snapshot.DisplayHeight}, " +
+            $"scale={snapshot.Scale:F1}, hwfmt='{snapshot.HwPixelFormat}', vo='{snapshot.VideoOutput ?? "<unknown>"}', " +
+            $"gpu_context='{snapshot.GpuContext ?? "<unknown>"}', hwdec='{snapshot.HwdecCurrent ?? "<unknown>"}'";
+
+        if (snapshot.State == VsrDiagnosticState.Rejected)
+            _log?.Warning(message);
+        else
+            _log?.Info(message);
     }
+
+    internal static string DescribeBackendResultLabel(int? backendResultCode) =>
+        backendResultCode switch
+        {
+            null => "no backend command issued",
+            0 => "libmpv accepted the vf add command",
+            -12 => "libmpv rejected the vf add command",
+            _ => $"libmpv command failed with result {backendResultCode}",
+        };
+
+    private static string DescribeVsrReason(VsrFilterPlan plan, int? backendResultCode) =>
+        backendResultCode switch
+        {
+            < 0 => DescribeBackendResultLabel(backendResultCode),
+            0 => "the VSR filter was applied successfully",
+            _ => plan.Reason switch
+            {
+                "video-width-unavailable" => "video width is unavailable",
+                "video-height-unavailable" => "video height is unavailable",
+                "video-size-unavailable" => "video size is unavailable",
+                "display-size-unavailable" => "display size is unavailable",
+                "no-upscaling-required" => "no upscaling is required",
+                _ => plan.Reason,
+            },
+        };
 }
 
 internal sealed record VsrFilterPlan(

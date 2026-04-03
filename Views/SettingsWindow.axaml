@@ -251,6 +251,63 @@
                                        Text="(1 = Performance &#xB7; 4 = Quality)"/>
                         </StackPanel>
 
+                        <Border Background="#151522"
+                                BorderBrush="#2B2940"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,10"
+                                Margin="0,8,0,0">
+                            <Grid ColumnDefinitions="118,*"
+                                  RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                  ColumnSpacing="10"
+                                  RowSpacing="6">
+                                <TextBlock Grid.Row="0" Grid.Column="0"
+                                           Text="Support"
+                                           FontWeight="SemiBold"
+                                           Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="0" Grid.Column="1"
+                                           Text="{Binding VsrSupportHintText}"
+                                           TextWrapping="Wrap"
+                                           Foreground="#D8D6F2" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0"
+                                           Text="Requested"
+                                           FontWeight="SemiBold"
+                                           Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="1" Grid.Column="1"
+                                           Text="{Binding VsrRequestedStateText}"
+                                           TextWrapping="Wrap"
+                                           Foreground="#D8D6F2" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0"
+                                           Text="Resolved"
+                                           FontWeight="SemiBold"
+                                           Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="2" Grid.Column="1"
+                                           Text="{Binding VsrResolvedStateText}"
+                                           TextWrapping="Wrap"
+                                           Foreground="#D8D6F2" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0"
+                                           Text="Last reason"
+                                           FontWeight="SemiBold"
+                                           Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="3" Grid.Column="1"
+                                           Text="{Binding VsrReasonText}"
+                                           TextWrapping="Wrap"
+                                           Foreground="#D8D6F2" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0"
+                                           Text="Last filter"
+                                           FontWeight="SemiBold"
+                                           Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="4" Grid.Column="1"
+                                           Text="{Binding VsrFilterText}"
+                                           TextWrapping="Wrap"
+                                           Foreground="#D8D6F2" />
+                            </Grid>
+                        </Border>
+
                         <!-- HDR -->
                         <CheckBox IsChecked="{Binding VideoHdrEnabled, Mode=TwoWay}"
                                   IsEnabled="{Binding VideoUseGpuNext}"

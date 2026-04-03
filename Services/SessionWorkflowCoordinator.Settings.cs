@@ -35,6 +35,8 @@ public sealed partial class SessionWorkflowCoordinator
         if (transcriptionProviderChanged) _transcriptionService = null;
         if (translationProviderChanged) _translationService = null;
         if (ttsProviderChanged) _ttsService = null;
+
+        RefreshVideoEnhancementDiagnostics();
     }
 
     public MediaReloadRequest? ConsumePendingMediaReloadRequest()
@@ -60,5 +62,9 @@ public sealed partial class SessionWorkflowCoordinator
     /// Raises SettingsModified so subscribers (e.g. MainWindowViewModel) can persist changes.
     /// Call after any in-place mutation of CurrentSettings.
     /// </summary>
-    public void NotifySettingsModified() => SettingsModified?.Invoke();
+    public void NotifySettingsModified()
+    {
+        RefreshVideoEnhancementDiagnostics();
+        SettingsModified?.Invoke();
+    }
 }

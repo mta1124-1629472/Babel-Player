@@ -315,6 +315,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     public bool HasErrorDetails => !string.IsNullOrWhiteSpace(StatusErrorDetail);
     public bool HasDiagnosticsWarning => !_coordinator.BootstrapDiagnostics.AllDependenciesAvailable;
     public string DiagnosticsWarningText => _coordinator.BootstrapDiagnostics.DiagnosticSummary;
+    public bool HasVsrPlaybackStatus => _coordinator.VideoEnhancementDiagnostics.HasPlaybackStatus;
+    public string VsrPlaybackStatusText => _coordinator.VideoEnhancementDiagnostics.PlaybackStatusText;
     public string VoiceModelLabel => _coordinator.CurrentSession.TtsVoice ?? _coordinator.CurrentSettings.TtsVoice;
     public string ActiveTranscriptionConfigLine => $"{TranscriptionRuntime} / {TranscriptionProvider} / {TranscriptionModel}";
     public string ActiveCpuTuningLine
@@ -1448,6 +1450,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 OnPropertyChanged(nameof(HwRamLine));
                 OnPropertyChanged(nameof(HwNpuLine));
                 OnPropertyChanged(nameof(HwLibsLine));
+                break;
+            case nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics):
+                OnPropertyChanged(nameof(HasVsrPlaybackStatus));
+                OnPropertyChanged(nameof(VsrPlaybackStatusText));
                 break;
             case nameof(SessionWorkflowCoordinator.CurrentSession):
                 OnPropertyChanged(nameof(VoiceModelLabel));
