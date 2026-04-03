@@ -378,7 +378,7 @@ def load_whisper_model(
     global whisper_model, whisper_model_key
 
     device = HOST_DEVICE
-    compute_type = HOST_COMPUTE_TYPE
+    compute_type = _get_effective_compute_type("transcription")
     requested_cpu_compute_type = cpu_compute_type or "int8"
     effective_num_workers = max(1, int(num_workers or 1))
     effective_cpu_threads = int(cpu_threads) if cpu_threads is not None else None
@@ -449,12 +449,14 @@ def load_nllb_model(model_name: str):
 
     if HOST_DEVICE != "cuda":
         raise RuntimeError("NLLB-200 GPU host requires CUDA.")
-    if HOST_COMPUTE_TYPE != "float16":
+    
+    effective_compute_type = _get_effective_compute_type("translation")
+    if effective_compute_type != "float16":
         raise RuntimeError(
-            f"NLLB-200 does not support compute_type={HOST_COMPUTE_TYPE} in the managed host. Use float16."
+            f"NLLB-200 does not support compute_type={effective_compute_type} in the managed host. Use float16."
         )
 
-    desired_key = (model_name, HOST_DEVICE, HOST_COMPUTE_TYPE)
+    desired_key = (model_name, HOST_DEVICE, effective_compute_type)
     if nllb_model is None or nllb_model_key != desired_key:
         transformers_module = import_module("transformers")
         auto_model = transformers_module.AutoModelForSeq2SeqLM
@@ -465,7 +467,7 @@ def load_nllb_model(model_name: str):
             "Loading NLLB model '%s' on device '%s' with compute_type '%s'",
             model_id,
             HOST_DEVICE,
-            HOST_COMPUTE_TYPE,
+            effective_compute_type,
         )
         nllb_tokenizer = auto_tokenizer.from_pretrained(model_id)
         nllb_model = auto_model.from_pretrained(
@@ -484,13 +486,15 @@ def load_xtts_model(model_name: Optional[str]):
 
     if HOST_DEVICE != "cuda":
         raise RuntimeError("XTTS GPU host requires CUDA.")
-    if HOST_COMPUTE_TYPE != "float16":
+    
+    effective_compute_type = _get_effective_compute_type("tts")
+    if effective_compute_type != "float16":
         raise RuntimeError(
-            f"XTTS does not support compute_type={HOST_COMPUTE_TYPE} in the managed GPU host. Use float16."
+            f"XTTS does not support compute_type={effective_compute_type} in the managed GPU host. Use float16."
         )
 
     resolved_model = _normalize_xtts_model(model_name)
-    desired_key = (resolved_model, HOST_DEVICE, HOST_COMPUTE_TYPE)
+    desired_key = (resolved_model, HOST_DEVICE, effective_compute_type)
     if xtts_model is None or xtts_model_key != desired_key:
         tts_module = import_module("TTS.api")
         tts_factory = tts_module.TTS
@@ -499,7 +503,7 @@ def load_xtts_model(model_name: Optional[str]):
             "Loading XTTS model '%s' on device '%s' with compute_type '%s'",
             resolved_model,
             HOST_DEVICE,
-            HOST_COMPUTE_TYPE,
+            effective_compute_type,
         )
         xtts_model = tts_factory(resolved_model).to(HOST_DEVICE)
         xtts_model_key = desired_key

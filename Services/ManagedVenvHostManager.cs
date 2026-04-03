@@ -238,7 +238,18 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         State = ManagedHostState.Starting;
         _log.Info(
-            $"Launching managed GPU host process: url={AppSettings.ManagedGpuServiceUrl}, compute_type={computeType}, host_pid_path={Path.Combine(runtimeRoot, "managed-host.pid")}");
+            $"Launching managed GPU host process: url={AppSettings.ManagedGpuServiceUrl}, " +
+            $"compute_type={computeType}, gpu_architecture={hardware.GpuComputeCapability ?? "<unknown>"}, " +
+            $"host_pid_path={Path.Combine(runtimeRoot, "managed-host.pid")}");
+            
+        // Log FP8 request details if applicable
+        if (computeType == "float8")
+        {
+            _log.Info(
+                $"FP8 compute type detected: blackwell_capable={hardware.IsBlackwellCapable}, " +
+                $"gpu_compute_capability={hardware.GpuComputeCapability ?? "<unknown>"}, " +
+                $"Note: Python host will validate and downgrade to float16 if any stage does not support FP8");
+        }
         await _hostProcessStarter(
             pythonPath,
             inferenceScriptPath,
