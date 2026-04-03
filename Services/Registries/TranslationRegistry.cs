@@ -44,6 +44,15 @@ public sealed class TranslationRegistry : ITranslationRegistry
                     [.. GetCpuNllbModels(), .. GetGpuNllbModels()],
                     SupportedRuntimes: [InferenceRuntime.Local, InferenceRuntime.Containerized],
                     DefaultRuntime: InferenceRuntime.Local),
+                new(
+                    ProviderNames.CTranslate2,
+                    "CTranslate2 (Local Lightweight, recommended)",
+                    false,
+                    null,
+                    GetCTranslate2Models(),
+                    SupportedRuntimes: [InferenceRuntime.Local],
+                    DefaultRuntime: InferenceRuntime.Local,
+                    Notes: "Recommended lightweight local translation option."),
                 .. GetAvailableProviders(ComputeProfile.Cloud),
             ];
         }
@@ -60,6 +69,15 @@ public sealed class TranslationRegistry : ITranslationRegistry
                     GetCpuNllbModels(),
                     SupportedRuntimes: [InferenceRuntime.Local],
                     DefaultRuntime: InferenceRuntime.Local),
+                new(
+                    ProviderNames.CTranslate2,
+                    "CTranslate2 (Local Lightweight, recommended)",
+                    false,
+                    null,
+                    GetCTranslate2Models(),
+                    SupportedRuntimes: [InferenceRuntime.Local],
+                    DefaultRuntime: InferenceRuntime.Local,
+                    Notes: "Recommended lightweight local translation option."),
             ];
         }
 
@@ -128,6 +146,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
         {
             ProviderNames.Nllb200 when profile == ComputeProfile.Cpu => GetCpuNllbModels(),
             ProviderNames.Nllb200 when profile == ComputeProfile.Gpu => GetGpuNllbModels(),
+            ProviderNames.CTranslate2 when profile == ComputeProfile.Cpu => GetCTranslate2Models(),
             _ => GetAvailableProviders(profile)
                 .FirstOrDefault(p => p.Id == normalizedProviderId)?.SupportedModels
                 ?? ["default"],
@@ -183,6 +202,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
         return normalizedProviderId switch
         {
             ProviderNames.Nllb200 => new NllbTranslationProvider(_log, settings.TranslationModel),
+            ProviderNames.CTranslate2 => new CTranslate2TranslationProvider(_log, settings.TranslationModel),
             ProviderNames.GoogleTranslateFree => new GoogleTranslationProvider(_log),
             ProviderNames.Deepl => new DeepLTranslationProvider(
                 _log,
@@ -234,4 +254,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
 
     private static IReadOnlyList<string> GetGpuNllbModels() =>
         ["nllb-200-distilled-1.3B", "nllb-200-1.3B"];
+
+    private static IReadOnlyList<string> GetCTranslate2Models() =>
+        ["nllb-200-distilled-600M"];
 }

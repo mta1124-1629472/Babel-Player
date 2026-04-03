@@ -19,6 +19,7 @@ public static class ProviderNames
     // ── Translation ────────────────────────────────────────────────────────────
     public const string GoogleTranslateFree   = "google-translate-free";
     public const string Nllb200               = "nllb-200";
+    public const string CTranslate2           = "ctranslate2";
     public const string Deepl                 = "deepl";
     public const string OpenAi                = "openai";
     public const string GeminiTranslation     = "gemini-translation";

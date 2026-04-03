@@ -112,7 +112,17 @@ public static class InferenceRuntimeCatalog
         if (!IsKnownTranslationProvider(providerId))
             return providerId;
 
-        if (profile is ComputeProfile.Cpu or ComputeProfile.Gpu)
+        if (profile == ComputeProfile.Cpu)
+        {
+            return providerId switch
+            {
+                ProviderNames.CTranslate2 => ProviderNames.CTranslate2,
+                ProviderNames.Nllb200 => ProviderNames.Nllb200,
+                _ => DefaultTranslationProvider(profile),
+            };
+        }
+
+        if (profile == ComputeProfile.Gpu)
             return ProviderNames.Nllb200;
 
         return providerId switch
@@ -224,6 +234,7 @@ public static class InferenceRuntimeCatalog
     public static bool IsKnownTranslationProvider(string? providerId) => providerId switch
     {
         ProviderNames.Nllb200
+            or ProviderNames.CTranslate2
             or ProviderNames.GoogleTranslateFree
             or ProviderNames.Deepl
             or ProviderNames.OpenAi
