@@ -2,9 +2,11 @@
 # pylint: disable=missing-module-docstring,missing-class-docstring,missing-function-docstring,invalid-name,global-statement,line-too-long,broad-exception-caught
 
 import argparse
+import asyncio
 import importlib.util
 import json
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -482,12 +484,37 @@ def load_nllb_model(model_name: str):
     return nllb_tokenizer, nllb_model
 
 
+def _find_xtts_hf_snapshot() -> Optional[str]:
+    """Locate the XTTS v2 model in the HuggingFace local cache.
+
+    Returns the path to the most-recently-written snapshot directory that
+    contains both ``config.json`` and ``model.pth``, or ``None`` when no
+    valid snapshot is found.
+    """
+    hf_home = os.environ.get(
+        "HF_HOME",
+        str(Path.home() / ".cache" / "huggingface"),
+    )
+    snapshots_dir = Path(hf_home) / "hub" / "models--coqui--XTTS-v2" / "snapshots"
+    if not snapshots_dir.exists():
+        return None
+    candidates = sorted(
+        snapshots_dir.iterdir(),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for snapshot in candidates:
+        if (snapshot / "config.json").exists() and (snapshot / "model.pth").exists():
+            return str(snapshot)
+    return None
+
+
 def load_xtts_model(model_name: Optional[str]):
     global xtts_model, xtts_model_key
 
     if HOST_DEVICE != "cuda":
         raise RuntimeError("XTTS GPU host requires CUDA.")
-    
+
     effective_compute_type = _get_effective_compute_type("tts")
     if effective_compute_type != "float16":
         raise RuntimeError(
@@ -500,13 +527,34 @@ def load_xtts_model(model_name: Optional[str]):
         tts_module = import_module("TTS.api")
         tts_factory = tts_module.TTS
 
-        logger.info(
-            "Loading XTTS model '%s' on device '%s' with compute_type '%s'",
-            resolved_model,
-            HOST_DEVICE,
-            effective_compute_type,
-        )
-        xtts_model = tts_factory(resolved_model).to(HOST_DEVICE)
+        snapshot_path = _find_xtts_hf_snapshot()
+        if snapshot_path:
+            config_path = str(Path(snapshot_path) / "config.json")
+            logger.info(
+                "Loading XTTS model from HuggingFace snapshot: %s (device=%s, compute_type=%s)",
+                snapshot_path,
+                HOST_DEVICE,
+                effective_compute_type,
+            )
+            xtts_model = tts_factory(
+                model_path=config_path,
+                progress_bar=False,
+                gpu=(HOST_DEVICE == "cuda"),
+            )
+        else:
+            logger.warning(
+                "XTTS HuggingFace snapshot not found; falling back to Coqui registry for '%s' "
+                "(this may trigger a slow network download)",
+                resolved_model,
+            )
+            logger.info(
+                "Loading XTTS model '%s' on device '%s' with compute_type '%s'",
+                resolved_model,
+                HOST_DEVICE,
+                effective_compute_type,
+            )
+            xtts_model = tts_factory(resolved_model).to(HOST_DEVICE)
+
         xtts_model_key = desired_key
         logger.info("XTTS model loaded successfully")
 
@@ -746,7 +794,6 @@ async def xtts_segment(
                 detail="XTTS requires reference audio. Configure a speaker reference clip before generating GPU TTS.",
             )
 
-        xtts = load_xtts_model(model)
         normalized_language = _normalize_xtts_language(language)
         temp_wav_path = _temp_artifact_path("xtts_segment", ".wav")
         temp_mp3_path = _temp_artifact_path("xtts_segment", ".mp3")
@@ -765,13 +812,21 @@ async def xtts_segment(
             temp_mp3_path,
         )
 
-        xtts.tts_to_file(
-            text=text,
-            speaker_wav=str(resolved_reference_path),
-            language=normalized_language,
-            file_path=str(temp_wav_path),
-        )
-        _wav_to_mp3(temp_wav_path, temp_mp3_path)
+        _resolved_ref = str(resolved_reference_path)
+        _wav = temp_wav_path
+        _mp3 = temp_mp3_path
+
+        def _run_synthesis() -> None:
+            loaded = load_xtts_model(model)
+            loaded.tts_to_file(
+                text=text,
+                speaker_wav=_resolved_ref,
+                language=normalized_language,
+                file_path=str(_wav),
+            )
+            _wav_to_mp3(_wav, _mp3)
+
+        await asyncio.to_thread(_run_synthesis)
 
         if temp_reference_path is not None:
             background_tasks.add_task(lambda p=temp_reference_path: p.unlink(missing_ok=True))
