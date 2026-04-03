@@ -752,8 +752,8 @@
                                 ToolTip.Tip="Volume" />
 
                         <Button Content="Panes"
-                                Command="{Binding Playback.ToggleSegmentPaneCommand}"
-                                IsVisible="{Binding Playback.IsPanePullTabVisible}"
+                                Command="{Binding Playback.ReopenPanesCommand}"
+                                IsVisible="{Binding Playback.IsReopenPanesControlVisible}"
                                 Padding="7,4" FontSize="11"
                                 Background="#2A2A3A"
                                 Foreground="#C0C0D0"
