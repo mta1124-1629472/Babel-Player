@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using Babel.Player.Models;
 
@@ -55,11 +54,13 @@ public sealed class RecentSessionsStore
     {
         try
         {
-            var current = (_cache ?? Load().ToList()).ToList();
+            var current = _cache != null
+                ? new List<RecentSessionEntry>(_cache)
+                : new List<RecentSessionEntry>((IEnumerable<RecentSessionEntry>)Load());
             current.RemoveAll(e => e.SessionId == entry.SessionId);
             current.Insert(0, entry);
             if (current.Count > MaxEntries)
-                current = current.Take(MaxEntries).ToList();
+                current.RemoveRange(MaxEntries, current.Count - MaxEntries);
 
             _cache = current;
             File.WriteAllText(_filePath, JsonSerializer.Serialize(current, SerializerOptions));

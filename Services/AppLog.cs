@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
-public sealed class AppLog : IDisposable
+public sealed class AppLog : IDisposable, IAsyncDisposable
 {
     private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
     private const int MaxArchivedFiles = 4; // keep 4 archives + 1 current = 5 total
@@ -67,6 +67,14 @@ public sealed class AppLog : IDisposable
         _channel.Writer.TryComplete();
         _cts.Cancel();
         try { _writerTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        _cts.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _channel.Writer.TryComplete();
+        _cts.Cancel();
+        try { await _writerTask.ConfigureAwait(false); } catch { }
         _cts.Dispose();
     }
 

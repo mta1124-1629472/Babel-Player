@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Babel.Player.Services;
@@ -64,7 +65,8 @@ public sealed record TtsRequest(
     Dictionary<string, string>? SpeakerVoiceAssignments = null,
     Dictionary<string, string>? SpeakerReferenceAudioPaths = null,
     string? DefaultVoiceFallback = null,
-    string? Language = null);
+    string? Language = null,
+    IProgress<(int Completed, int Total)>? SegmentProgress = null);
 
 public sealed record SingleSegmentTtsRequest(
     string Text, 

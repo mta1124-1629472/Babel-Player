@@ -87,8 +87,8 @@ public abstract class PythonSubprocessServiceBase
             var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
             await Task.WhenAll(stdoutTask, stderrTask, stdinTask);
             await proc.WaitForExitAsync(cancellationToken);
-            var stdout = stdoutTask.Result;
-            var stderr = stderrTask.Result;
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
 
             return new ScriptResult(proc.ExitCode, stdout, stderr);
         }

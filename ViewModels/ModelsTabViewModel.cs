@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Babel.Player.Models;
@@ -13,17 +14,19 @@ namespace Babel.Player.ViewModels;
 /// </summary>
 public sealed class ModelsTabViewModel : ViewModelBase
 {
-    public ObservableCollection<ModelDownloadEntry> Models { get; } = [];
+    public ObservableCollection<ModelDownloadEntry> Models { get; }
 
     public ModelsTabViewModel(ModelDownloader downloader, SessionWorkflowCoordinator coordinator)
     {
+        var entries = new List<ModelDownloadEntry>();
+
         // ── Faster Whisper ────────────────────────────────────────────────────
         var fwModels = coordinator.TranscriptionRegistry.GetAvailableProviders()
                            .FirstOrDefault(p => p.Id == ProviderNames.FasterWhisper)?.SupportedModels ?? [];
         foreach (var model in fwModels)
         {
             var m = model; // capture
-            Models.Add(new ModelDownloadEntry(
+            entries.Add(new ModelDownloadEntry(
                 providerLabel: "Faster Whisper",
                 modelId: m,
                 isDownloadedFunc: () => ModelDownloader.IsFasterWhisperDownloaded(m),
@@ -37,7 +40,7 @@ public sealed class ModelsTabViewModel : ViewModelBase
         foreach (var model in nllbModels)
         {
             var m = model;
-            Models.Add(new ModelDownloadEntry(
+            entries.Add(new ModelDownloadEntry(
                 providerLabel: "NLLB-200",
                 modelId: m,
                 isDownloadedFunc: () => ModelDownloader.IsNllbDownloaded(m),
@@ -51,7 +54,7 @@ public sealed class ModelsTabViewModel : ViewModelBase
         foreach (var model in ctranslateModels)
         {
             var m = model;
-            Models.Add(new ModelDownloadEntry(
+            entries.Add(new ModelDownloadEntry(
                 providerLabel: "CTranslate2",
                 modelId: m,
                 isDownloadedFunc: () => ModelDownloader.IsCTranslate2TranslationModelDownloaded(m),
@@ -66,7 +69,7 @@ public sealed class ModelsTabViewModel : ViewModelBase
         {
             var v = voice;
             var dir = coordinator.CurrentSettings.PiperModelDir;
-            Models.Add(new ModelDownloadEntry(
+            entries.Add(new ModelDownloadEntry(
                 providerLabel: "Piper",
                 modelId: v,
                 isDownloadedFunc: () => ModelDownloader.IsPiperVoiceDownloaded(v, dir),
@@ -76,11 +79,13 @@ public sealed class ModelsTabViewModel : ViewModelBase
 
         // ── XTTS v2 ───────────────────────────────────────────────────────────
         // Single monolithic model — no per-variant list needed.
-        Models.Add(new ModelDownloadEntry(
+        entries.Add(new ModelDownloadEntry(
             providerLabel: "XTTS v2",
             modelId: "xtts-v2",
             isDownloadedFunc: () => ModelDownloader.IsXttsDownloaded(),
             downloadFunc: (progress, token) => downloader.DownloadXttsAsync(progress, token),
             downloader: downloader));
+
+        Models = new ObservableCollection<ModelDownloadEntry>(entries);
     }
 }

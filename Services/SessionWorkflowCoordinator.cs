@@ -441,7 +441,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TtsProvider = null,
             StatusMessage = "Pipeline reset. Ready to run."
         };
-        SaveCurrentSession();
     }
 
     public void ResetPipelineToTranscribed()
@@ -466,7 +465,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TtsProvider = null,
             StatusMessage = "Pipeline reset to transcribed state."
         };
-        SaveCurrentSession();
     }
 
     public void ResetPipelineToTranslated()
@@ -485,13 +483,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             TtsProvider = null,
             StatusMessage = "Pipeline reset to translated state."
         };
-        SaveCurrentSession();
     }
 
     public void ClearPipeline()
     {
         ResetPipelineToMediaLoaded();
         InvalidateAllProviderCaches();
+        SaveCurrentSession();
     }
 
     public PipelineSettingsApplyResult ApplyPipelineSettings(PipelineSettingsSelection selection)
@@ -665,14 +663,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
 
         var currentSegments = CurrentSession.TtsSegmentAudioPaths ?? new Dictionary<string, string>();
-        var updatedSegments = new Dictionary<string, string>(currentSegments)
-        {
-            [segmentId] = segmentAudioPath
-        };
+        currentSegments[segmentId] = segmentAudioPath;
 
         CurrentSession = CurrentSession with
         {
-            TtsSegmentAudioPaths = updatedSegments,
+            TtsSegmentAudioPaths = currentSegments,
             StatusMessage = $"Regenerated TTS for segment {segmentId}.",
         };
 

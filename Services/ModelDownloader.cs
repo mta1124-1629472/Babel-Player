@@ -148,7 +148,7 @@ except Exception as e:
             {
                 while (true)
                 {
-                    string? line = await proc.StandardError.ReadLineAsync();
+                    string? line = await proc.StandardError.ReadLineAsync(token);
                     if (line == null) break;
                     
                     if (progress != null)

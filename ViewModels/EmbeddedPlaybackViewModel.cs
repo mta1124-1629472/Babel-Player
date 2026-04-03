@@ -18,7 +18,7 @@ using Babel.Player.Services.Registries;
 
 namespace Babel.Player.ViewModels;
 
-public partial class EmbeddedPlaybackViewModel : ViewModelBase
+public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 {
     private readonly SessionWorkflowCoordinator _coordinator;
     private readonly ApiKeyStore? _apiKeyStore;
@@ -244,6 +244,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [ObservableProperty]
     private ModelOptionViewModel? _selectedTtsOption;
 
+    private DispatcherTimer? _positionTimer;
     private readonly DispatcherTimer _controlsHideTimer;
     private const int ControlsHideDelayMs = 3000;
     private const double PositionUpdateThresholdMs = 0.5;
@@ -266,9 +267,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
         _coordinator.SettingsModified += OnCoordinatorSettingsModified;
 
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-        timer.Tick += OnPositionTimerTick;
-        timer.Start();
+        _positionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _positionTimer.Tick += OnPositionTimerTick;
+        _positionTimer.Start();
 
         _controlsHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ControlsHideDelayMs) };
         _controlsHideTimer.Tick += OnControlsHideTimerTick;
@@ -910,11 +911,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             IsAutoSpeakerDetectionEnabled =
                 string.Equals(_coordinator.CurrentSettings.DiarizationProvider, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
 
-            // Keep the synchronization guard active while Avalonia reconciles the
-            // refreshed ItemsSource/SelectedItem bindings to avoid recursive write-back.
-            OnPropertyChanged(nameof(TranscriptionProviders));
-            OnPropertyChanged(nameof(TranslationProviders));
-            OnPropertyChanged(nameof(TtsProviders));
+            // Notify after RebuildAllModelOptions() so bindings read the rebuilt backing fields.
             OnPropertyChanged(nameof(AvailableTranscriptionModels));
             OnPropertyChanged(nameof(AvailableTranslationModels));
             OnPropertyChanged(nameof(AvailableTtsOptions));
@@ -1868,5 +1865,25 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         StatusText = $"Cleared reference audio for {SelectedSpeakerId}.";
         UpdateSelectedSpeakerDetails(SelectedSpeakerId);
         await RefreshSegmentsAsync();
+    }
+
+    public void Dispose()
+    {
+        _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
+        _coordinator.SettingsModified -= OnCoordinatorSettingsModified;
+
+        if (_positionTimer is not null)
+        {
+            _positionTimer.Stop();
+            _positionTimer.Tick -= OnPositionTimerTick;
+            _positionTimer = null;
+        }
+
+        _controlsHideTimer.Stop();
+        _controlsHideTimer.Tick -= OnControlsHideTimerTick;
+
+        _providerReadinessRefreshCts?.Cancel();
+        _providerReadinessRefreshCts?.Dispose();
+        _providerReadinessRefreshCts = null;
     }
 }

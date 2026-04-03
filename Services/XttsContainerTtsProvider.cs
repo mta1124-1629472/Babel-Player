@@ -90,6 +90,10 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
         var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
+        var validSegments = (translation.Segments ?? [])
+            .Where(seg => !string.IsNullOrWhiteSpace(seg.TranslatedText))
+            .ToList();
+        var totalSegments = validSegments.Count;
         var segmentAudioPaths = new List<string>();
         var workDir = Path.Combine(
             Path.GetTempPath(),
@@ -99,12 +103,10 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
 
         try
         {
+            request.SegmentProgress?.Report((0, totalSegments));
             var segmentIndex = 0;
-            foreach (var seg in translation.Segments ?? [])
+            foreach (var seg in validSegments)
             {
-                if (string.IsNullOrWhiteSpace(seg.TranslatedText))
-                    continue;
-
                 segmentIndex++;
                 var resolvedModel = ResolveModel(ResolveVoiceForSegment(seg, request));
                 var referenceAudioPath = ResolveReferenceAudioForSegment(seg, request);
@@ -145,6 +147,7 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
 
                 await DownloadToOutputPathAsync(result.AudioPath, segmentAudioPath, cancellationToken);
                 segmentAudioPaths.Add(segmentAudioPath);
+                request.SegmentProgress?.Report((segmentIndex, totalSegments));
             }
 
             if (segmentAudioPaths.Count == 0)
