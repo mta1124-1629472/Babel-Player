@@ -186,8 +186,9 @@ public sealed class AppSettings
 
     /// <summary>
     /// Enable the mpv HDR output pipeline (target-colorspace-hint + tone-mapping).
-    /// Required for the OS/driver to receive a correct HDR signal.
-    /// Pair with NVIDIA RTX HDR in NVIDIA Control Panel for AI SDR-to-HDR conversion.
+    /// Requests an HDR-capable mpv output path for the OS/display pipeline.
+    /// Pair with NVIDIA RTX HDR in NVIDIA Control Panel when the playback surface
+    /// is one NVIDIA supports for driver-level SDR-to-HDR conversion.
     /// Requires an HDR-capable display with Windows HDR enabled.
     /// Takes effect on app restart.
     /// </summary>

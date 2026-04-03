@@ -71,6 +71,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     {
         var manager = new ManagedVenvHostManager(
             _log,
+            healthCheckFunc: AlwaysUnavailableHealthCheck(),
             hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: false, hasAvx2: false));
 
         var settings = new AppSettings
@@ -91,6 +92,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     {
         var manager = new ManagedVenvHostManager(
             _log,
+            healthCheckFunc: AlwaysUnavailableHealthCheck(),
             hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
             uvResolver: () => Path.Combine(_dir, "uv.exe"),
             runtimeRootResolver: () => _dir,
@@ -277,6 +279,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     {
         var manager = new ManagedVenvHostManager(
             _log,
+            healthCheckFunc: AlwaysUnavailableHealthCheck(),
             hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
             uvResolver: () => Path.Combine(_dir, "uv.exe"),
             runtimeRootResolver: () => _dir,
@@ -308,6 +311,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     {
         var manager = new ManagedVenvHostManager(
             _log,
+            healthCheckFunc: AlwaysUnavailableHealthCheck(),
             hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
             uvResolver: () => Path.Combine(_dir, "uv.exe"),
             runtimeRootResolver: () => _dir,
@@ -354,6 +358,10 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             IsVsrDriverSufficient: hasCuda,
             NvidiaDriverVersion: hasCuda ? "552.00" : null,
             IsHdrDisplayAvailable: false);
+
+    private static Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>> AlwaysUnavailableHealthCheck(
+        string errorMessage = "offline") =>
+        (serviceUrl, _, _) => Task.FromResult(ContainerHealthStatus.Unavailable(serviceUrl, errorMessage));
 
     private static string ComputeBootstrapVersion(string inferenceScriptPath, string requirementsPath, string constraintsPath)
     {

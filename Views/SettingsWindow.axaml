@@ -210,7 +210,7 @@
                                   IsEnabled="{Binding VideoUseGpuNext}"
                                   Content="RTX Video Super Resolution (VSR)"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                   Text="AI upscaling via NVIDIA d3d11vpp. Requires RTX GPU, driver ≥ 551.23, and 'RTX Video Enhancement' enabled in NVIDIA Control Panel." />
+                                    Text="AI upscaling via NVIDIA d3d11vpp. Requires RTX GPU, driver ≥ 551.23, and 'RTX Video Enhancement' enabled in NVIDIA Control Panel." />
 
                         <StackPanel Orientation="Horizontal" Spacing="12"
                                     IsEnabled="{Binding VideoVsrEnabled}">
@@ -230,7 +230,7 @@
                                   Content="HDR Output Pipeline"
                                   Margin="0,8,0,0"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                   Text="Enables target-colorspace-hint so mpv sends a proper HDR signal to Windows. Pair with NVIDIA RTX HDR in NVIDIA Control Panel for AI SDR→HDR conversion. Requires an HDR display with Windows HDR enabled." />
+                                   Text="Enables mpv's HDR output path so Windows receives an HDR-capable signal. Pair with NVIDIA RTX HDR in NVIDIA Control Panel when the playback surface is one NVIDIA supports. Requires an HDR display with Windows HDR enabled." />
 
                         <StackPanel Spacing="8" IsEnabled="{Binding VideoHdrEnabled}">
                             <StackPanel Orientation="Horizontal" Spacing="12">

@@ -20,8 +20,8 @@ namespace Babel.Player.Services;
 /// VSR is applied dynamically when a file finishes loading: a background event-polling thread
 /// detects the MPV_EVENT_FILE_LOADED event (id 8), queries the video dimensions, computes the
 /// upscale factor required to reach the display resolution, and issues the d3d11vpp filter
-/// command.  The filter is silently skipped when preconditions are not met (no upscaling
-/// needed, unsupported pixel format, VSR disabled, or d3d11vpp unavailable in this build).
+/// command. The transport logs whether the filter was applied or skipped so RTX playback
+/// diagnostics distinguish requested state from active state.
 /// </summary>
 public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 {
@@ -33,6 +33,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
     // Options captured at construction for VSR application on file-load.
     private readonly VideoPlaybackOptions _options;
+    private readonly AppLog? _log;
 
     // Background event-loop thread for MPV_EVENT_FILE_LOADED.
     private Thread? _eventThread;
@@ -41,6 +42,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     // Display dimensions supplied by the host (set via SetDisplaySize).
     private int _displayWidth;
     private int _displayHeight;
+    private string? _lastVsrDiagnosticKey;
 
     private delegate IntPtr mpv_create_delegate();
     private delegate int mpv_initialize_delegate(IntPtr handle);
@@ -74,9 +76,10 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     public event EventHandler<Exception>? ErrorOccurred;
 #pragma warning restore CS0067
 
-    public LibMpvEmbeddedTransport(VideoPlaybackOptions? options = null)
+    public LibMpvEmbeddedTransport(VideoPlaybackOptions? options = null, AppLog? log = null)
     {
         _options = options ?? new VideoPlaybackOptions();
+        _log = log;
 
         _dllHandle = LoadLibMpvDll();
         if (_dllHandle == IntPtr.Zero)
@@ -110,7 +113,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         // ── HDR pipeline options (gpu-next + HDR display required) ────────────
         if (_options.UseGpuNext && _options.HdrEnabled)
         {
-            // Pass a proper HDR signal to the OS/driver (triggers RTX HDR in NVCP).
+            // Request mpv's HDR-capable output path. NVIDIA RTX HDR still depends on
+            // Windows HDR state and whether the playback surface is one NVIDIA hooks.
             SetOption("target-colorspace-hint", "yes");
             // Tone-mapping algorithm for HDR → display peak mapping.
             SetOption("tone-mapping", _options.ToneMapping);
@@ -138,6 +142,14 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _isPaused = true;
         _hasEnded = false;
 
+        if (_options.UseGpuNext && _options.HdrEnabled)
+        {
+            _log?.Info(
+                $"Configured mpv HDR output path: gpu-next={_options.UseGpuNext}, " +
+                $"tone_mapping={_options.ToneMapping}, target_peak='{_options.TargetPeak}', " +
+                "note=driver-level RTX HDR activation still depends on a supported NVIDIA playback path.");
+        }
+
         // Start the background event loop only when VSR may be applied.
         if (_options.UseGpuNext && _options.VsrEnabled)
             StartEventThread();
@@ -150,8 +162,22 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     /// </summary>
     public void SetDisplaySize(int width, int height)
     {
-        _displayWidth  = width;
+        width = Math.Max(0, width);
+        height = Math.Max(0, height);
+
+        if (_displayWidth == width && _displayHeight == height)
+            return;
+
+        _displayWidth = width;
         _displayHeight = height;
+
+        if (_options.UseGpuNext && _options.VsrEnabled)
+        {
+            _log?.Info($"Updated embedded video surface size: width={width}, height={height}");
+
+            if (_isLoaded && _handle != IntPtr.Zero)
+                ApplyVsrFilter("display-size-updated");
+        }
     }
 
     /// <summary>
@@ -399,7 +425,10 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
         // Remove any previously applied VSR filter before loading a new file.
         if (_options.UseGpuNext && _options.VsrEnabled)
+        {
             _mpv_command_string!(_handle, "vf remove @vsr");
+            _lastVsrDiagnosticKey = null;
+        }
 
         _mpv_command_string!(_handle, "stop");
         _isLoaded = false;
@@ -441,54 +470,111 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             int eventId = Marshal.ReadInt32(eventPtr);
             if (eventId != MpvEventFileLoaded) continue;
 
-            ApplyVsrFilter();
+            ApplyVsrFilter("file-loaded");
         }
     }
 
     /// <summary>
     /// Computes the VSR scale factor from video vs. display dimensions and issues
-    /// the d3d11vpp filter command.  Silently skips when preconditions are not met.
+    /// the d3d11vpp filter command. Logs the reason when the request is skipped.
     /// </summary>
-    private void ApplyVsrFilter()
+    private void ApplyVsrFilter(string trigger)
     {
         if (_disposed || _handle == IntPtr.Zero) return;
 
         // Query video dimensions.
         var wStr = GetPropertyString("width");
         var hStr = GetPropertyString("height");
-        if (!int.TryParse(wStr, out int videoW) || videoW <= 0) return;
-        if (!int.TryParse(hStr, out int videoH) || videoH <= 0) return;
+        if (!int.TryParse(wStr, out int videoW) || videoW <= 0)
+        {
+            LogVsrDiagnosticOnce(
+                $"skip:{trigger}:video-width-unavailable",
+                $"RTX VSR skipped: trigger={trigger}, reason=video-width-unavailable, raw_width='{wStr ?? "<null>"}'");
+            return;
+        }
 
-        int dispW = _displayWidth  > 0 ? _displayWidth  : videoW;
-        int dispH = _displayHeight > 0 ? _displayHeight : videoH;
+        if (!int.TryParse(hStr, out int videoH) || videoH <= 0)
+        {
+            LogVsrDiagnosticOnce(
+                $"skip:{trigger}:video-height-unavailable",
+                $"RTX VSR skipped: trigger={trigger}, reason=video-height-unavailable, raw_height='{hStr ?? "<null>"}'");
+            return;
+        }
 
-        // Compute the upscale factor needed along the larger axis.
-        double scaleExact = Math.Max(dispW, dispH) / (double)Math.Max(videoW, videoH);
-
-        // Snap to the nearest 0.1 to avoid floating-point filter noise.
-        double scale = Math.Floor(scaleExact * 10.0) / 10.0;
-
-        // Do not apply VSR when no upscaling is required.
-        if (scale <= 1.0) return;
-
-        // d3d11vpp only works reliably on nv12 / yuv420p.
-        // For 10-bit sources a format conversion is prepended automatically.
         var hwFmt = GetPropertyString("video-params/hw-pixelformat")
                     ?? GetPropertyString("video-params/pixelformat")
-                    ?? "";
+                    ?? string.Empty;
 
-        bool needsFormatConv = hwFmt != "nv12" && hwFmt != "yuv420p" && !string.IsNullOrEmpty(hwFmt);
+        var plan = EvaluateVsrFilterPlan(
+            videoW,
+            videoH,
+            _displayWidth,
+            _displayHeight,
+            hwFmt,
+            _options.VsrQuality);
 
-        // Quality level: 1 (Performance) … 4 (Quality); clamp to valid range.
-        int quality = Math.Clamp(_options.VsrQuality, 1, 4);
-
-        string filterChain = needsFormatConv
-            ? $"@vsr:lavfi=[format=nv12],d3d11vpp:scaling-mode=nvidia:scale={scale:F1}:scaling-quality={quality}"
-            : $"@vsr:d3d11vpp:scaling-mode=nvidia:scale={scale:F1}:scaling-quality={quality}";
+        if (!plan.ShouldApply || string.IsNullOrWhiteSpace(plan.FilterChain))
+        {
+            LogVsrDiagnosticOnce(
+                $"skip:{trigger}:{plan.Reason}:{plan.VideoWidth}x{plan.VideoHeight}:{plan.DisplayWidth}x{plan.DisplayHeight}:{plan.HwPixelFormat}",
+                $"RTX VSR skipped: trigger={trigger}, reason={plan.Reason}, " +
+                $"video={plan.VideoWidth}x{plan.VideoHeight}, display={plan.DisplayWidth}x{plan.DisplayHeight}, " +
+                $"hwfmt='{plan.HwPixelFormat}', scale={plan.Scale:F1}");
+            return;
+        }
 
         // Remove any stale filter first, then add the new one.
         _mpv_command_string!(_handle, "vf remove @vsr");
-        _mpv_command_string!(_handle, $"vf add {filterChain}");
+        int addResult = _mpv_command_string!(_handle, $"vf add {plan.FilterChain}");
+
+        if (addResult < 0)
+        {
+            _log?.Warning(
+                $"RTX VSR filter rejected by libmpv: trigger={trigger}, result={addResult}, " +
+                $"filter='{plan.FilterChain}', video={plan.VideoWidth}x{plan.VideoHeight}, " +
+                $"display={plan.DisplayWidth}x{plan.DisplayHeight}, hwfmt='{plan.HwPixelFormat}'");
+            _lastVsrDiagnosticKey = null;
+            return;
+        }
+
+        LogVsrDiagnosticOnce(
+            $"applied:{trigger}:{plan.FilterChain}",
+            $"RTX VSR applied: trigger={trigger}, filter='{plan.FilterChain}', " +
+            $"video={plan.VideoWidth}x{plan.VideoHeight}, display={plan.DisplayWidth}x{plan.DisplayHeight}, " +
+            $"hwfmt='{plan.HwPixelFormat}', scale={plan.Scale:F1}");
+    }
+
+    internal static VsrFilterPlan EvaluateVsrFilterPlan(
+        int videoWidth,
+        int videoHeight,
+        int displayWidth,
+        int displayHeight,
+        string hwPixelFormat,
+        int vsrQuality)
+    {
+        if (videoWidth <= 0 || videoHeight <= 0)
+            return VsrFilterPlan.Skip("video-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat);
+
+        if (displayWidth <= 0 || displayHeight <= 0)
+            return VsrFilterPlan.Skip("display-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat);
+
+        double scaleExact = Math.Max(displayWidth, displayHeight) / (double)Math.Max(videoWidth, videoHeight);
+        double scale = Math.Floor(scaleExact * 10.0) / 10.0;
+
+        if (scale <= 1.0)
+            return VsrFilterPlan.Skip("no-upscaling-required", videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat, scale);
+
+        bool needsFormatConversion =
+            !string.IsNullOrEmpty(hwPixelFormat) &&
+            hwPixelFormat != "nv12" &&
+            hwPixelFormat != "yuv420p";
+
+        int quality = Math.Clamp(vsrQuality, 1, 4);
+        string filterChain = needsFormatConversion
+            ? $"@vsr:lavfi=[format=nv12],d3d11vpp:scaling-mode=nvidia:scale={scale:F1}:scaling-quality={quality}"
+            : $"@vsr:d3d11vpp:scaling-mode=nvidia:scale={scale:F1}:scaling-quality={quality}";
+
+        return VsrFilterPlan.Apply(filterChain, scale, videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat);
     }
 
     private IntPtr LoadLibMpvDll()
@@ -569,4 +655,63 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         if (_mpv_set_option_string!(_handle, name, value) < 0)
             throw new InvalidOperationException($"Failed to set libmpv option: {name}={value}");
     }
+
+    private void LogVsrDiagnosticOnce(string key, string message)
+    {
+        if (_lastVsrDiagnosticKey == key)
+            return;
+
+        _lastVsrDiagnosticKey = key;
+        _log?.Info(message);
+    }
+}
+
+internal sealed record VsrFilterPlan(
+    bool ShouldApply,
+    string Reason,
+    double Scale,
+    string? FilterChain,
+    int VideoWidth,
+    int VideoHeight,
+    int DisplayWidth,
+    int DisplayHeight,
+    string HwPixelFormat)
+{
+    public static VsrFilterPlan Skip(
+        string reason,
+        int videoWidth,
+        int videoHeight,
+        int displayWidth,
+        int displayHeight,
+        string hwPixelFormat,
+        double scale = 0.0) =>
+        new(
+            ShouldApply: false,
+            Reason: reason,
+            Scale: scale,
+            FilterChain: null,
+            VideoWidth: videoWidth,
+            VideoHeight: videoHeight,
+            DisplayWidth: displayWidth,
+            DisplayHeight: displayHeight,
+            HwPixelFormat: hwPixelFormat);
+
+    public static VsrFilterPlan Apply(
+        string filterChain,
+        double scale,
+        int videoWidth,
+        int videoHeight,
+        int displayWidth,
+        int displayHeight,
+        string hwPixelFormat) =>
+        new(
+            ShouldApply: true,
+            Reason: "apply",
+            Scale: scale,
+            FilterChain: filterChain,
+            VideoWidth: videoWidth,
+            VideoHeight: videoHeight,
+            DisplayWidth: displayWidth,
+            DisplayHeight: displayHeight,
+            HwPixelFormat: hwPixelFormat);
 }

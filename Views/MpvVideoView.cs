@@ -11,7 +11,16 @@ namespace Babel.Player.Views;
 /// </summary>
 public partial class MpvVideoView : NativeControlHost
 {
+    private const int GwlWndProc = -4;
+    private const uint WmMouseMove = 0x0200;
+    private const uint WmLButtonDown = 0x0201;
+    private const uint WmRButtonDown = 0x0204;
+    private const uint WmMButtonDown = 0x0207;
+    private const uint WmMouseWheel = 0x020A;
+
     private IntPtr _childHwnd = IntPtr.Zero;
+    private IntPtr _previousWndProc = IntPtr.Zero;
+    private WndProcDelegate? _wndProcDelegate;
 
     /// <summary>
     /// The native window handle that libmpv should render into.
@@ -23,6 +32,13 @@ public partial class MpvVideoView : NativeControlHost
     /// Fired when the native window handle becomes available.
     /// </summary>
     public event EventHandler<IntPtr>? HandleReady;
+
+    /// <summary>
+    /// Fired when the native child HWND reports pointer activity.
+    /// Used by fullscreen chrome auto-hide logic to recover controls while the mouse
+    /// is over the native video surface.
+    /// </summary>
+    public event EventHandler? NativePointerActivity;
 
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
     {
@@ -43,6 +59,7 @@ public partial class MpvVideoView : NativeControlHost
 
             if (_childHwnd != IntPtr.Zero)
             {
+                HookNativeWndProc();
                 HandleReady?.Invoke(this, _childHwnd);
                 return new PlatformHandle(_childHwnd, "HWND");
             }
@@ -56,6 +73,7 @@ public partial class MpvVideoView : NativeControlHost
     {
         if (_childHwnd != IntPtr.Zero && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
+            UnhookNativeWndProc();
             DestroyWindow(_childHwnd);
             _childHwnd = IntPtr.Zero;
         }
@@ -72,6 +90,49 @@ public partial class MpvVideoView : NativeControlHost
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool DestroyWindow(IntPtr hWnd);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static partial IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [LibraryImport("user32.dll", EntryPoint = "CallWindowProcW")]
+    private static partial IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [LibraryImport("user32.dll", EntryPoint = "DefWindowProcW")]
+    private static partial IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    private void HookNativeWndProc()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || _childHwnd == IntPtr.Zero || _previousWndProc != IntPtr.Zero)
+            return;
+
+        _wndProcDelegate = NativeWndProc;
+        var newProcPtr = Marshal.GetFunctionPointerForDelegate(_wndProcDelegate);
+        _previousWndProc = SetWindowLongPtr(_childHwnd, GwlWndProc, newProcPtr);
+    }
+
+    private void UnhookNativeWndProc()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || _childHwnd == IntPtr.Zero || _previousWndProc == IntPtr.Zero)
+            return;
+
+        _ = SetWindowLongPtr(_childHwnd, GwlWndProc, _previousWndProc);
+        _previousWndProc = IntPtr.Zero;
+        _wndProcDelegate = null;
+    }
+
+    private IntPtr NativeWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        if (msg is WmMouseMove or WmLButtonDown or WmRButtonDown or WmMButtonDown or WmMouseWheel)
+            NativePointerActivity?.Invoke(this, EventArgs.Empty);
+
+        if (_previousWndProc != IntPtr.Zero)
+            return CallWindowProc(_previousWndProc, hWnd, msg, wParam, lParam);
+
+        return DefWindowProc(hWnd, msg, wParam, lParam);
+    }
 }
 
 /// <summary>

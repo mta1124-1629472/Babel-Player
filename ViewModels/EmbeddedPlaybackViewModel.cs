@@ -91,14 +91,17 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
     private bool _isFullscreen;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SegmentPaneToggleLabel))]
+    [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
     private bool _isSegmentPaneVisible = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
     private bool _isControlsVisible = true;
 
     [ObservableProperty]
@@ -288,6 +291,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     // Visible always in windowed mode; follows controls auto-hide in fullscreen
     public bool IsPullTabVisible => !IsFullscreen || IsControlsVisible;
+
+    // Pull tabs appear only when panes are collapsed and the chrome is visible.
+    public bool IsPanePullTabVisible => !IsSegmentPaneVisible && IsPullTabVisible;
 
     public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6\uFE0E" : "\u23F8\uFE0E";
 

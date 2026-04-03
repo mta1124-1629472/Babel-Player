@@ -28,10 +28,17 @@
                 <!-- Header -->
                 <Border Grid.Row="0" Padding="16,14,16,12"
                         BorderBrush="#252530" BorderThickness="0,0,0,1">
-                    <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
                         <TextBlock Grid.Column="0" Text="Pipeline" FontSize="15" FontWeight="SemiBold"
                                    Foreground="#F0F0F8" VerticalAlignment="Center" />
                         <Button Grid.Column="1"
+                                Content="{Binding Playback.SegmentPaneToggleLabel}"
+                                Command="{Binding Playback.ToggleSegmentPaneCommand}"
+                                Padding="8,4" FontSize="11"
+                                Background="#2A2A3A" Foreground="#A0A0B0"
+                                CornerRadius="4"
+                                ToolTip.Tip="Toggle side panes" />
+                        <Button Grid.Column="2"
                                 Padding="8,4" FontSize="11"
                                 Background="#2A2A3A" Foreground="#A0A0B0"
                                 CornerRadius="4"
@@ -472,6 +479,21 @@
                         <Button HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
+                                Padding="0,9"
+                                FontSize="12"
+                                Background="#252530"
+                                Foreground="#C0C0D0"
+                                CornerRadius="6"
+                                Click="OnOpenMediaClick">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="📁" VerticalAlignment="Center" />
+                                <TextBlock Text="Open Media" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
                                 Padding="0,10"
                                 FontSize="13" FontWeight="SemiBold"
                                 Foreground="White"
@@ -545,8 +567,14 @@
                                        Foreground="#3A3A50"
                                        HorizontalAlignment="Center"
                                        TextWrapping="Wrap"
-                                       MaxHeight="52"
-                                       Text="{Binding Playback.StatusText, StringFormat='● {0}'}" />
+                                       MaxHeight="52">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="● Stage: {1} · {0}">
+                                        <Binding Path="Playback.StatusText" />
+                                        <Binding Path="Coordinator.CurrentSession.Stage" />
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
 
                             <Button Grid.Column="1"
                                     Command="{Binding Playback.ShowStatusErrorDetailsCommand}"
@@ -573,54 +601,11 @@
         <!-- ═══════════════════════════════════════════════════
              CENTER PANEL: Video player
              ═══════════════════════════════════════════════════ -->
-        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto,Auto"
+        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto"
               Background="#0E0E14">
 
-            <!-- Top bar: Open Media + panels toggle + Stage badge + Settings -->
-            <Border Grid.Row="0" Padding="10,8"
-                    BorderBrush="#252530" BorderThickness="0,0,0,1">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
-                    <Button Grid.Column="0" x:Name="OpenMediaButton"
-                            Click="OnOpenMediaClick"
-                            Padding="10,5" FontSize="12"
-                            Background="#252530" Foreground="#C0C0D0"
-                            CornerRadius="4">
-                        <TextBlock Text="Open Media" />
-                    </Button>
-                    <Button Grid.Column="1"
-                            Click="OnExportCaptionsClick"
-                            Padding="8,5" FontSize="12"
-                            Background="#252530" Foreground="#C0C0D0"
-                            CornerRadius="4"
-                            Margin="6,0,0,0"
-                            ToolTip.Tip="Export captions as SRT">
-                        <TextBlock Text="Export Captions" />
-                    </Button>
-                    <Button Grid.Column="2"
-                            Content="{Binding Playback.SegmentPaneToggleLabel}"
-                            Command="{Binding Playback.ToggleSegmentPaneCommand}"
-                            Padding="8,5" FontSize="12"
-                            Background="#252530" Foreground="#C0C0D0"
-                            CornerRadius="4"
-                            ToolTip.Tip="Toggle panels" />
-                    <Border Grid.Column="3" Background="#252530"
-                            CornerRadius="4" Padding="8,4" Margin="6,0,0,0">
-                        <TextBlock FontSize="12" Foreground="#8080A0"
-                                   Text="{Binding Coordinator.CurrentSession.Stage, StringFormat='Stage: {0}'}" />
-                    </Border>
-                    <Button Grid.Column="4"
-                            Click="OnSettingsClick"
-                            Padding="8,5" FontSize="12"
-                            Background="#252530" Foreground="#C0C0D0"
-                            CornerRadius="4" Margin="6,0,0,0"
-                            ToolTip.Tip="Settings">
-                        <TextBlock Text="&#x2699;" />
-                    </Button>
-                </Grid>
-            </Border>
-
             <!-- Diagnostics warning bar (hidden when all deps available) -->
-            <Border Grid.Row="1" Background="#2A1200" Padding="10,5"
+            <Border Grid.Row="0" Background="#2A1200" Padding="10,5"
                     BorderBrush="#5A2800" BorderThickness="0,0,0,1"
                     IsVisible="{Binding Playback.HasDiagnosticsWarning}">
                 <TextBlock Text="{Binding Playback.DiagnosticsWarningText}"
@@ -628,15 +613,45 @@
             </Border>
 
             <!-- Video surface -->
-            <Grid Grid.Row="2">
+            <Grid Grid.Row="1">
                 <Border Background="Black" Margin="0">
                     <v:MpvVideoView x:Name="VideoView" />
                 </Border>
                 <Panel x:Name="VideoOverlayPanel" Background="Transparent" />
+
+                <Border HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="6,0,0,0"
+                        CornerRadius="4"
+                        Background="#252530"
+                        IsVisible="{Binding Playback.IsPanePullTabVisible}">
+                    <Button Content="▶"
+                            Command="{Binding Playback.ToggleSegmentPaneCommand}"
+                            Padding="6,14"
+                            FontSize="12"
+                            Background="Transparent"
+                            Foreground="#C0C0D0"
+                            ToolTip.Tip="Expand side panes" />
+                </Border>
+
+                <Border HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,6,0"
+                        CornerRadius="4"
+                        Background="#252530"
+                        IsVisible="{Binding Playback.IsPanePullTabVisible}">
+                    <Button Content="◀"
+                            Command="{Binding Playback.ToggleSegmentPaneCommand}"
+                            Padding="6,14"
+                            FontSize="12"
+                            Background="Transparent"
+                            Foreground="#C0C0D0"
+                            ToolTip.Tip="Expand side panes" />
+                </Border>
             </Grid>
 
             <!-- Scrub bar -->
-            <Border Grid.Row="3" Padding="12,5"
+            <Border Grid.Row="2" Padding="12,5"
                     IsVisible="{Binding Playback.IsControlsVisible}">
                 <Grid ColumnDefinitions="40,*,40">
                     <TextBlock Grid.Column="0"
@@ -657,7 +672,7 @@
             </Border>
 
             <!-- Controls bar -->
-            <Border Grid.Row="4" Padding="10,7"
+            <Border Grid.Row="3" Padding="10,7"
                     IsVisible="{Binding Playback.IsControlsVisible}">
                 <Grid ColumnDefinitions="*,Auto,*">
 
@@ -741,6 +756,13 @@
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                 Padding="6,5" FontSize="14"
                                 Background="Transparent" />
+
+                        <Button Content="&#x2699;"
+                                Click="OnSettingsClick"
+                                Padding="6,5" FontSize="14"
+                                Background="Transparent"
+                                Foreground="#C0C0D0"
+                                ToolTip.Tip="Settings" />
                     </StackPanel>
 
                 </Grid>
@@ -759,16 +781,27 @@
                 <!-- Header -->
                 <Border Grid.Row="0" Padding="14,11"
                         BorderBrush="#252530" BorderThickness="0,0,0,1">
-                    <Grid ColumnDefinitions="*,Auto,Auto">
+                    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
                         <TextBlock Grid.Column="0" Text="Segments" FontSize="14"
                                    FontWeight="SemiBold" Foreground="#F0F0F8"
                                    VerticalAlignment="Center" />
                         <TextBlock Grid.Column="1" FontSize="11" Foreground="#4A4A60"
-                                   VerticalAlignment="Center" Margin="0,0,10,0"
-                                   Text="{Binding Playback.Segments.Count, StringFormat='{}{0} Items'}" />
-                        
+                                    VerticalAlignment="Center" Margin="0,0,10,0"
+                                    Text="{Binding Playback.Segments.Count, StringFormat='{}{0} Items'}" />
+
+                        <Button Grid.Column="2"
+                                Click="OnExportCaptionsClick"
+                                Padding="7,3"
+                                FontSize="11"
+                                Background="#252530"
+                                Foreground="#C0C0D0"
+                                CornerRadius="4"
+                                ToolTip.Tip="Export captions as SRT">
+                            <TextBlock Text="Export" />
+                        </Button>
+
                         <!-- REFRESH BUTTON -->
-                        <Button Grid.Column="2" 
+                        <Button Grid.Column="3"
                                 Command="{Binding Playback.RefreshSegmentsCommand}"
                                 Background="Transparent" Padding="6,2"
                                 Foreground="#A0A0B0" ToolTip.Tip="Refresh segments data">
@@ -780,6 +813,16 @@
                                 </Style>
                             </Button.Styles>
                         </Button>
+
+                        <Button Grid.Column="4"
+                                Content="{Binding Playback.SegmentPaneToggleLabel}"
+                                Command="{Binding Playback.ToggleSegmentPaneCommand}"
+                                Padding="8,4"
+                                FontSize="11"
+                                Background="#2A2A3A"
+                                Foreground="#A0A0B0"
+                                CornerRadius="4"
+                                ToolTip.Tip="Toggle side panes" />
                     </Grid>
                 </Border>
 

@@ -12,17 +12,20 @@ public sealed class MediaTransportManager : IMediaTransportManager
     private readonly IMediaTransport? _injectedSegmentPlayer;
     private readonly IMediaTransport? _injectedSourcePlayer;
     private readonly VideoPlaybackOptions? _videoOptions;
+    private readonly AppLog? _log;
     private IMediaTransport? _segmentPlayer;
     private IMediaTransport? _sourceMediaPlayer;
 
     public MediaTransportManager(
         IMediaTransport? segmentPlayer = null,
         IMediaTransport? sourcePlayer = null,
-        VideoPlaybackOptions? videoOptions = null)
+        VideoPlaybackOptions? videoOptions = null,
+        AppLog? log = null)
     {
         _injectedSegmentPlayer = segmentPlayer;
         _injectedSourcePlayer  = sourcePlayer;
         _videoOptions          = videoOptions;
+        _log                   = log;
     }
 
     public IMediaTransport GetOrCreateSegmentPlayer()
@@ -33,7 +36,7 @@ public sealed class MediaTransportManager : IMediaTransportManager
 
     public IMediaTransport GetOrCreateSourcePlayer()
     {
-        _sourceMediaPlayer ??= _injectedSourcePlayer ?? new LibMpvEmbeddedTransport(_videoOptions);
+        _sourceMediaPlayer ??= _injectedSourcePlayer ?? new LibMpvEmbeddedTransport(_videoOptions, _log);
         return _sourceMediaPlayer;
     }
 

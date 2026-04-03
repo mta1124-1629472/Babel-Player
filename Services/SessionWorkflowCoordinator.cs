@@ -157,7 +157,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 HdrEnabled:     settings.VideoHdrEnabled,
                 ToneMapping:    settings.VideoToneMapping,
                 TargetPeak:     settings.VideoTargetPeak,
-                HdrComputePeak: settings.VideoHdrComputePeak));
+                HdrComputePeak: settings.VideoHdrComputePeak),
+            log: log);
 
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) => StopTtsPlayback();

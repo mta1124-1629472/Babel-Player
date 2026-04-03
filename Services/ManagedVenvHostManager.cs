@@ -320,6 +320,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             cancellationToken,
             "pip",
             "install",
+            "--index-strategy",
+            "unsafe-best-match",
             "--python",
             pythonPath,
             "-r",

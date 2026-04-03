@@ -420,8 +420,9 @@ def load_nllb_model(model_name: str):
         nllb_tokenizer = auto_tokenizer.from_pretrained(model_id)
         nllb_model = auto_model.from_pretrained(
             model_id,
-            torch_dtype=torch.float16,
-        ).to(HOST_DEVICE)
+            dtype=torch.float16,
+            device_map=HOST_DEVICE,
+        )
         nllb_model_key = desired_key
         logger.info("NLLB model loaded successfully")
 

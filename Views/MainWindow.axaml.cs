@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.ComponentModel;
 using System.Diagnostics;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -22,6 +23,8 @@ public partial class MainWindow : Window
     private PropertyChangedEventHandler? _playbackPropertyChangedHandler;
     private PropertyChangedEventHandler? _coordinatorPropertyChangedHandler;
     private EventHandler<PointerEventArgs>? _videoOverlayPointerMovedHandler;
+    private EventHandler<SizeChangedEventArgs>? _videoViewSizeChangedHandler;
+    private EventHandler? _videoNativePointerActivityHandler;
 
     public MainWindow()
     {
@@ -31,6 +34,10 @@ public partial class MainWindow : Window
         if (videoView is not null)
         {
             videoView.HandleReady += OnVideoHandleReady;
+            _videoViewSizeChangedHandler = OnVideoViewSizeChanged;
+            videoView.SizeChanged += _videoViewSizeChangedHandler;
+            _videoNativePointerActivityHandler = OnVideoNativePointerActivity;
+            videoView.NativePointerActivity += _videoNativePointerActivityHandler;
         }
     }
 
@@ -74,12 +81,30 @@ public partial class MainWindow : Window
                 overlay.PointerMoved -= _videoOverlayPointerMovedHandler;
         }
 
+        var videoView = this.FindControl<MpvVideoView>("VideoView");
+        if (videoView is not null)
+        {
+            videoView.HandleReady -= OnVideoHandleReady;
+            if (_videoViewSizeChangedHandler is not null)
+                videoView.SizeChanged -= _videoViewSizeChangedHandler;
+            if (_videoNativePointerActivityHandler is not null)
+                videoView.NativePointerActivity -= _videoNativePointerActivityHandler;
+        }
+
         _playbackPropertyChangedHandler = null;
         _coordinatorPropertyChangedHandler = null;
         _videoOverlayPointerMovedHandler = null;
+        _videoViewSizeChangedHandler = null;
+        _videoNativePointerActivityHandler = null;
     }
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+            vm.Playback.NotifyControlsActivity();
+    }
+
+    private void OnVideoNativePointerActivity(object? sender, EventArgs e)
     {
         if (DataContext is MainWindowViewModel vm)
             vm.Playback.NotifyControlsActivity();
@@ -129,6 +154,8 @@ public partial class MainWindow : Window
                 if (player is LibMpvEmbeddedTransport embedded)
                 {
                     _embeddedTransport = embedded;
+                    if (sender is MpvVideoView videoView)
+                        UpdateEmbeddedTransportDisplaySize(videoView);
                     embedded.AttachToWindow(hwnd);
                     TryApplyPendingMediaReloadRequest();
                 }
@@ -138,6 +165,23 @@ public partial class MainWindow : Window
                 System.Diagnostics.Debug.WriteLine($"Video init error: {ex.Message}");
             }
         }
+    }
+
+    private void OnVideoViewSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (sender is MpvVideoView videoView)
+            UpdateEmbeddedTransportDisplaySize(videoView);
+    }
+
+    private void UpdateEmbeddedTransportDisplaySize(MpvVideoView videoView)
+    {
+        if (_embeddedTransport is null)
+            return;
+
+        var scale = TopLevel.GetTopLevel(videoView)?.RenderScaling ?? 1.0;
+        var width = Math.Max(0, (int)Math.Round(videoView.Bounds.Width * scale));
+        var height = Math.Max(0, (int)Math.Round(videoView.Bounds.Height * scale));
+        _embeddedTransport.SetDisplaySize(width, height);
     }
 
     public async void OnOpenMediaClick(object? sender, RoutedEventArgs e)

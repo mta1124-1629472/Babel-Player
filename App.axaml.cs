@@ -73,7 +73,8 @@ public partial class App : Application
                     HdrEnabled:     appSettings.VideoHdrEnabled,
                     ToneMapping:    appSettings.VideoToneMapping,
                     TargetPeak:     appSettings.VideoTargetPeak,
-                    HdrComputePeak: appSettings.VideoHdrComputePeak));
+                    HdrComputePeak: appSettings.VideoHdrComputePeak),
+                log: appLog);
 
             try
             {
