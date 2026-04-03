@@ -30,6 +30,65 @@ public sealed partial class ModelDownloader
         return await DownloadHuggingFaceModelAsync(repoId, progress, token);
     }
 
+    public async Task<bool> DownloadCTranslate2TranslationModelAsync(string model, IProgress<double>? progress = null, CancellationToken token = default)
+    {
+        string? pythonPath = DependencyLocator.FindPython();
+        if (pythonPath == null)
+            throw new InvalidOperationException("Python required for preparing CTranslate2 translation models.");
+
+        string repoId = $"facebook/{model}";
+        string outputDir = GetCTranslate2TranslationModelDir(model);
+        Directory.CreateDirectory(Path.GetDirectoryName(outputDir)!);
+
+        string script = @"
+import json
+import os
+import shutil
+import sys
+
+try:
+    from huggingface_hub import snapshot_download
+    from ctranslate2.converters import TransformersConverter
+except ImportError:
+    print('[progress] 5', flush=True)
+    os.system(f'""{sys.executable}"" -m pip install huggingface_hub ctranslate2 transformers sentencepiece')
+    from huggingface_hub import snapshot_download
+    from ctranslate2.converters import TransformersConverter
+
+repo_id = sys.argv[1]
+output_dir = sys.argv[2]
+quantization = sys.argv[3]
+tmp_output_dir = output_dir + '.tmp'
+
+print('[progress] 15', flush=True)
+snapshot_dir = snapshot_download(repo_id=repo_id)
+
+if os.path.isdir(tmp_output_dir):
+    shutil.rmtree(tmp_output_dir)
+
+print('[progress] 55', flush=True)
+converter = TransformersConverter(model_name_or_path=snapshot_dir)
+converter.convert(tmp_output_dir, quantization=quantization)
+
+metadata_path = os.path.join(tmp_output_dir, 'babel_ct2_metadata.json')
+with open(metadata_path, 'w', encoding='utf-8') as metadata_file:
+    json.dump({'repo_id': repo_id, 'source_snapshot': snapshot_dir, 'quantization': quantization}, metadata_file, indent=2)
+
+if os.path.isdir(output_dir):
+    shutil.rmtree(output_dir)
+shutil.move(tmp_output_dir, output_dir)
+print('[progress] 100', flush=True)
+";
+
+        return await RunPythonModelPrepScriptAsync(
+            pythonPath,
+            script,
+            [repoId, outputDir, "int8"],
+            progress,
+            token,
+            $"CTranslate2 translation model {repoId}");
+    }
+
     /// <summary>
     /// Downloads the XTTS v2 model weights from HuggingFace (coqui/XTTS-v2).
     /// The download is ~1.8 GB and requires Python + huggingface_hub.
@@ -261,6 +320,15 @@ except Exception as e:
         return IsDownloadedInHfCache(modelPath);
     }
 
+    public static bool IsCTranslate2TranslationModelDownloaded(string model)
+    {
+        string convertedPath = GetCTranslate2TranslationModelDir(model);
+        return Directory.Exists(convertedPath)
+            && File.Exists(Path.Combine(convertedPath, "model.bin"))
+            && File.Exists(Path.Combine(convertedPath, "config.json"))
+            && IsNllbDownloaded(model);
+    }
+
     /// <summary>
     /// Returns true when the XTTS v2 model snapshot is present in the local HuggingFace cache.
     /// </summary>
@@ -321,6 +389,141 @@ except Exception as e:
         return Path.Combine(userProfile, ".cache", "huggingface", "hub");
     }
 
+    public static string GetCTranslate2TranslationModelDir(string model)
+    {
+        var root = OperatingSystem.IsWindows()
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BabelPlayer",
+                "translation-models",
+                "ctranslate2")
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".local",
+                "share",
+                "BabelPlayer",
+                "translation-models",
+                "ctranslate2");
+
+        return Path.Combine(root, SanitizeModelDirectoryName(model));
+    }
+
+    private async Task<bool> RunPythonModelPrepScriptAsync(
+        string pythonPath,
+        string scriptContent,
+        string[] arguments,
+        IProgress<double>? progress,
+        CancellationToken token,
+        string logLabel)
+    {
+        string scriptPath = Path.Combine(Path.GetTempPath(), $"model_prep_{Guid.NewGuid():N}.py");
+        await File.WriteAllTextAsync(scriptPath, scriptContent, token);
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = pythonPath,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            psi.ArgumentList.Add(scriptPath);
+            foreach (var argument in arguments)
+                psi.ArgumentList.Add(argument);
+
+            using var proc = Process.Start(psi);
+            if (proc == null) return false;
+
+            _log.Info($"Started model preparation for {logLabel}. This may take a few minutes...");
+
+            var stdoutTask = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    var line = await proc.StandardOutput.ReadLineAsync(token);
+                    if (line == null) break;
+
+                    TryReportProgress(line, progress);
+                    _log.Info($"[model-prep] {line}");
+                }
+            }, token);
+
+            var stderrTask = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    var line = await proc.StandardError.ReadLineAsync(token);
+                    if (line == null) break;
+
+                    TryReportProgress(line, progress);
+                    _log.Warning($"[model-prep] {line}");
+                }
+            }, token);
+
+            try
+            {
+                await proc.WaitForExitAsync(token);
+                await Task.WhenAll(stdoutTask, stderrTask);
+            }
+            catch (OperationCanceledException)
+            {
+                proc.Kill();
+                throw;
+            }
+
+            if (proc.ExitCode != 0)
+            {
+                _log.Error($"Model preparation failed for {logLabel}", new Exception($"Python downloader exited with code {proc.ExitCode}."));
+                return false;
+            }
+
+            progress?.Report(1.0);
+            _log.Info($"Model preparation succeeded for {logLabel}.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Exception during model preparation: {ex.Message}", ex);
+            return false;
+        }
+        finally
+        {
+            if (File.Exists(scriptPath))
+                File.Delete(scriptPath);
+        }
+    }
+
+    private static void TryReportProgress(string line, IProgress<double>? progress)
+    {
+        if (progress is null)
+            return;
+
+        var explicitMatch = ExplicitProgressRegex().Match(line);
+        if (explicitMatch.Success && double.TryParse(explicitMatch.Groups[1].Value, out var explicitPct))
+        {
+            progress.Report(explicitPct / 100.0);
+            return;
+        }
+
+        var genericMatch = ProgressRegex().Match(line);
+        if (genericMatch.Success && double.TryParse(genericMatch.Groups[1].Value, out var pct))
+            progress.Report(pct / 100.0);
+    }
+
+    private static string SanitizeModelDirectoryName(string model)
+    {
+        foreach (var invalidChar in Path.GetInvalidFileNameChars())
+            model = model.Replace(invalidChar, '_');
+
+        return model.Replace('/', '_').Replace('\\', '_');
+    }
+
     [System.Text.RegularExpressions.GeneratedRegex(@"(\d+)%")]
     private static partial System.Text.RegularExpressions.Regex ProgressRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\[progress\]\s*(\d+)")]
+    private static partial System.Text.RegularExpressions.Regex ExplicitProgressRegex();
 }

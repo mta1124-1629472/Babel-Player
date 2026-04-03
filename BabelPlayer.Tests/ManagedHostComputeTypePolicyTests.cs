@@ -91,9 +91,9 @@ public sealed class ManagedHostComputeTypePolicyTests
     }
 
     [Fact]
-    public void ResolveLaunchComputeType_BlackwellGpu_ReturnsFloat8()
+    public void ResolveLaunchComputeType_BlackwellGpu_ReturnsFloat16ForSharedHostReliability()
     {
-        // Arrange: Blackwell GPU (compute capability 10.0)
+        // Arrange: even on Blackwell, the shared managed host stays on float16 until all stages support float8.
         var hardwareSnapshot = new HardwareSnapshot(
             IsDetecting: false,
             CpuName: "Intel Core i9",
@@ -115,7 +115,7 @@ public sealed class ManagedHostComputeTypePolicyTests
         var computeType = ManagedHostComputeTypePolicy.ResolveLaunchComputeType(hardwareSnapshot, ComputeProfile.Gpu);
 
         // Assert
-        Assert.Equal("float8", computeType);
+        Assert.Equal("float16", computeType);
     }
 
     [Fact]

@@ -45,6 +45,20 @@ public sealed class ModelsTabViewModel : ViewModelBase
                 downloader: downloader));
         }
 
+        // ── CTranslate2 ───────────────────────────────────────────────────────
+        var ctranslateModels = coordinator.TranslationRegistry.GetAvailableProviders()
+                                  .FirstOrDefault(p => p.Id == ProviderNames.CTranslate2)?.SupportedModels ?? [];
+        foreach (var model in ctranslateModels)
+        {
+            var m = model;
+            Models.Add(new ModelDownloadEntry(
+                providerLabel: "CTranslate2",
+                modelId: m,
+                isDownloadedFunc: () => ModelDownloader.IsCTranslate2TranslationModelDownloaded(m),
+                downloadFunc: (progress, token) => downloader.DownloadCTranslate2TranslationModelAsync(m, progress, token),
+                downloader: downloader));
+        }
+
         // ── Piper ─────────────────────────────────────────────────────────────
         var piperVoices = coordinator.TtsRegistry.GetAvailableProviders()
                               .FirstOrDefault(p => p.Id == ProviderNames.Piper)?.SupportedModels ?? [];

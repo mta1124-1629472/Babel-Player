@@ -988,6 +988,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         providerId switch
         {
             ProviderNames.Nllb200 => ModelDownloader.IsNllbDownloaded(model),
+            ProviderNames.CTranslate2 => ModelDownloader.IsCTranslate2TranslationModelDownloaded(model),
             _ => null,
         };
 

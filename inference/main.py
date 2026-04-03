@@ -420,12 +420,11 @@ def _probe_nllb_available() -> bool:
     try:
         import_module("transformers")
         import_module("sentencepiece")
-        
-        # NLLB on GPU requires float16 or float8 (float8 must be validated per-stage)
+
         effective_type = _get_effective_compute_type("translation")
-        if effective_type not in ("float16", "float8"):
+        if effective_type != "float16":
             return False
-        
+
         return True
     except ImportError as exc:
         logger.warning("NLLB capability probe failed: %s", exc)
@@ -437,9 +436,9 @@ def _nllb_capability_detail() -> str:
         return "CUDA is unavailable; managed GPU translation is not ready"
     
     effective_type = _get_effective_compute_type("translation")
-    if effective_type not in ("float16", "float8"):
+    if effective_type != "float16":
         downgrade_reason = COMPUTE_DOWNGRADE_REASONS.get("translation", "compute type mismatch")
-        return f"NLLB-200 requires float16 or float8; downgraded to {effective_type} ({downgrade_reason})"
+        return f"NLLB-200 requires compute_type=float16 on CUDA; downgraded to {effective_type} ({downgrade_reason})"
     
     return f"NLLB-200 ready on {HOST_DEVICE} with compute_type={effective_type}"
 

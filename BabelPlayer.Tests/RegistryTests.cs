@@ -147,6 +147,13 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
+    public void TranslationRegistry_GetAvailableProviders_ContainsCTranslate2()
+    {
+        var providers = _translationRegistry.GetAvailableProviders();
+        Assert.Contains(providers, p => p.Id == ProviderNames.CTranslate2);
+    }
+
+    [Fact]
     public void TranslationRegistry_CheckReadiness_UnknownProvider_ReturnsNotReady()
     {
         var readiness = _translationRegistry.CheckReadiness("nonexistent-provider", "default", new AppSettings(), null);
@@ -204,6 +211,18 @@ public sealed class RegistryTests : IDisposable
             ProviderNames.OpenAi,
             new AppSettings { TranslationProvider = ProviderNames.OpenAi, TranslationModel = "gpt-4o-mini" },
             null);
+
+        Assert.NotNull(provider);
+    }
+
+    [Fact]
+    public void TranslationRegistry_CreateProvider_CTranslate2_DoesNotThrow()
+    {
+        var provider = _translationRegistry.CreateProvider(
+            ProviderNames.CTranslate2,
+            new AppSettings { TranslationProvider = ProviderNames.CTranslate2, TranslationModel = "nllb-200-distilled-600M" },
+            null,
+            ComputeProfile.Cpu);
 
         Assert.NotNull(provider);
     }
@@ -385,8 +404,8 @@ public sealed class RegistryTests : IDisposable
     {
         var providers = _translationRegistry.GetAvailableProviders(ComputeProfile.Cpu);
 
-        Assert.Single(providers);
-        Assert.Equal(ProviderNames.Nllb200, providers[0].Id);
+        Assert.Contains(providers, provider => provider.Id == ProviderNames.Nllb200);
+        Assert.Contains(providers, provider => provider.Id == ProviderNames.CTranslate2);
     }
 
     [Fact]
@@ -440,6 +459,20 @@ public sealed class RegistryTests : IDisposable
         Assert.Contains("nllb-200-distilled-1.3B", models);
         Assert.Contains("nllb-200-1.3B", models);
         Assert.DoesNotContain("nllb-200-distilled-600M", models);
+    }
+
+    [Fact]
+    public void TranslationRegistry_GetAvailableModels_CTranslate2CpuProfile_ReturnsOnlyLightweightModel()
+    {
+        var settings = new AppSettings
+        {
+            TranslationProfile = ComputeProfile.Cpu,
+            TranslationProvider = ProviderNames.CTranslate2
+        };
+
+        var models = _translationRegistry.GetAvailableModels(ProviderNames.CTranslate2, ComputeProfile.Cpu, settings);
+
+        Assert.Equal(["nllb-200-distilled-600M"], models);
     }
 
     // ── DiarizationRegistry ───────────────────────────────────────────────────────

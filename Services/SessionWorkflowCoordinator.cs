@@ -706,38 +706,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var lang = targetLanguage ?? CurrentSettings.TargetLanguage;
         var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(
-            CurrentSettings.TranslationRuntime,
-            "Translation",
-            cancellationToken);
-
-        // Registry-owned readiness check
-        var readiness = CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
-            ? await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(
-                CurrentSettings,
-                _containerizedProbe,
-                cancellationToken)
-            : TranslationRegistry.CheckReadiness(
-                CurrentSettings.TranslationProvider,
-                CurrentSettings.TranslationModel,
-                CurrentSettings,
-                KeyStore,
-                CurrentSettings.TranslationProfile);
-        if (!readiness.IsReady && !readiness.RequiresModelDownload)
-            throw new PipelineProviderException(readiness.BlockingReason!);
-
-        if (readiness.RequiresModelDownload)
-        {
-            if (!await TranslationRegistry.EnsureModelAsync(
-                    CurrentSettings.TranslationProvider,
-                    CurrentSettings.TranslationModel,
-                    CurrentSettings,
-                    progress,
-                    cancellationToken,
-                    CurrentSettings.TranslationProfile,
-                    KeyStore))
-                throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranslationModel}'.");
-        }
+        await EnsureTranslationExecutionReadyAsync(progress, cancellationToken);
 
         _translationService ??= CreateTranslationService();
 
@@ -1057,18 +1026,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
         }
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TranslationRuntime, "Translation");
-
-        var readiness = CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
-            ? await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(CurrentSettings, _containerizedProbe)
-            : TranslationRegistry.CheckReadiness(
-                CurrentSettings.TranslationProvider,
-                CurrentSettings.TranslationModel,
-                CurrentSettings,
-                KeyStore,
-                CurrentSettings.TranslationProfile);
-        if (!readiness.IsReady && !readiness.RequiresModelDownload)
-            throw new PipelineProviderException(readiness.BlockingReason!);
+        await EnsureTranslationExecutionReadyAsync(cancellationToken: cancellationToken);
 
         _translationService ??= CreateTranslationService();
 
