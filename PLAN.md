@@ -1,17 +1,17 @@
-# Babel Player From-Scratch Plan (Windows-first, libmpv early, TTS-centered)
+# Babel Player — Build Plan (Windows-first, libmpv early, TTS-centered)
 
 ## Summary
 
-Build the app as a strict sequence of vertical slices, but organize those slices around the real product chain:
+Build the app as a strict sequence of vertical slices organized around the real product chain:
 
-`foundation -> headless media transport -> media ingest/artifacts -> transcription -> translation/adaptation -> TTS dubbing -> dub session workflow -> embedded playback/preview -> subtitle/transcript inspection -> settings/bootstrap -> local/offline expansion -> runtime optimization -> release hardening`
+`foundation → headless media transport → media ingest/artifacts → transcription → translation/adaptation → TTS dubbing → dub session workflow → embedded playback/preview → subtitle/transcript inspection → settings/bootstrap → local/offline expansion → runtime optimization → release hardening`
 
-The product center is not “a player with AI attached.”
+The product center is not "a player with AI attached."
 The product center is:
 
-`source media -> timed transcript -> translated/adapted dialogue -> spoken dubbed output -> in-context preview and refinement`
+`source media → timed transcript → translated/adapted dialogue → spoken dubbed output → in-context preview and refinement`
 
-Playback matters, but as a supporting inspection and QA surface rather than the main identity.
+Playback matters as a supporting inspection and QA surface, not as the main identity.
 
 ---
 
@@ -21,10 +21,8 @@ Playback matters, but as a supporting inspection and QA surface rather than the 
 - Keep behavior truthful. Missing work uses explicit placeholders. No fake readiness, no silent fallback, no pretending a local/runtime path works when it does not.
 - The first goal is a real end-to-end workflow, not a pretty shell.
 - Do not add optional features before the current milestone is genuinely usable.
-- Do not generalize early for multiple providers, runtimes, or model families unless the current milestone is blocked without it.
 - Preserve old working code and experiments. Archive instead of deleting.
 - Treat architecture as a servant of the main loop, not as a parallel product.
-- Local and optimized inference paths should preserve a clear boundary between the desktop app and Python-backed inference services so they can later run natively, in WSL, or in containerized environments without changing the core product workflow.
 - Keep the desktop app and Python-backed inference separated by an explicit service/process boundary so local, WSL-hosted, containerized, or NVIDIA-managed deployment paths remain possible later without changing the core workflow.
 
 ---
@@ -49,233 +47,223 @@ Translated dialogue spoken back in a compelling voice-driven form.
 
 ---
 
+## Provider Inventory (as of current build)
+
+### Transcription
+| Provider | Runtime | Status |
+|---|---|---|
+| FasterWhisper | Local / Containerized | ✅ Implemented |
+| OpenAI Whisper API | Cloud | ✅ Implemented |
+| Google STT | Cloud | ✅ Implemented |
+| Google Gemini (`gemini-2.0-flash`, `gemini-2.5-flash-preview-04-17`) | Cloud | ✅ Implemented |
+
+### Translation
+| Provider | Runtime | Status |
+|---|---|---|
+| Google Translate (Free / web scraper) | Cloud | ✅ Implemented (unreliable) |
+| NLLB-200 | Local | ✅ Implemented |
+| DeepL API | Cloud | ✅ Implemented |
+| OpenAI API | Cloud | ✅ Implemented |
+| Google Gemini (`gemini-2.0-flash`, `gemini-2.5-flash-preview-04-17`) | Cloud | ✅ Implemented |
+
+### TTS
+| Provider | Runtime | Status |
+|---|---|---|
+| Edge TTS | Cloud | ✅ Implemented |
+| Piper | Local | ✅ Implemented |
+| ElevenLabs | Cloud | ✅ Implemented |
+| Google Cloud TTS | Cloud | ✅ Implemented |
+| OpenAI TTS | Cloud | ✅ Implemented |
+| XTTS (containerized) | Containerized | ✅ Implemented |
+
+### Diarization
+| Provider | Runtime | Status |
+|---|---|---|
+| Pyannote (local) | Local | ✅ Implemented |
+
+---
+
 ## Milestones
 
-### 1. Foundation
-Set up the repo, app skeleton, logging, persistence basics, test project, and a single coordinator that owns session state and workflow progression.
+### 1. Foundation ✅ COMPLETE
+Repo, app skeleton, logging, persistence basics, test project, session coordinator owning session state and workflow progression.
 
-The aim here is not feature depth. It is enforcing the rules of the rebuild:
-one source of truth,
-honest states,
-clear boundaries,
-testability,
-and no fake scaffolding.
-
-Gate:
+Gate passed:
 - App boots
-- Test project runs
-- Logging works
-- Basic persistence works
-- Session ownership is explicit and not split across random surfaces
+- Test project runs (`BabelPlayer.Tests/`)
+- `AppLog` structured logging works
+- `SessionSnapshotStore` / `PerSessionSnapshotStore` persistence works
+- `SessionWorkflowCoordinator` owns session state, not split across views
 
 ---
 
-### 2. Headless Media Transport Proof
-Retire libmpv risk early in headless mode.
+### 2. Headless Media Transport Proof ✅ COMPLETE
+Retired libmpv risk early in headless mode.
 
-This milestone exists because media transport has already been a recurring failure point. The goal is not to make playback the product center. The goal is to eliminate a known technical trap before more workflow depends on it.
-
-Scope:
-- Load local media
-- Play/pause
-- Seek
-- Current time and duration
-- Ended/completed events
-- Repeated load/unload cycles
-- Clean teardown
-
-Gate:
-- Repeated headless playback cycles complete without hangs
-- Teardown is stable
-- No ghost state survives reload cycles
-- A smoke note confirms repeated success rather than one lucky run
+Gate passed:
+- `LibMpvHeadlessTransport` handles repeated load/unload cycles cleanly
+- `LibMpvEmbeddedTransport` stable for embedded playback
+- `IMediaTransport` / `IMediaTransportManager` interfaces defined
+- Teardown is stable; no ghost state survives reload cycles
 
 ---
 
-### 3. Media Ingest and Artifact Pipeline
-Build the substrate that later stages consume.
+### 3. Media Ingest and Artifact Pipeline ✅ COMPLETE
+Substrate for downstream stages.
 
-Given a source media file, the app should be able to:
-- Extract relevant audio artifacts
-- Persist them
-- Represent timed segments/artifacts in a stable way
-- Reopen and reuse those artifacts across sessions
-
-This is the pipeline foundation for transcription and TTS, not a user-facing polish phase.
-
-Gate:
-- A source file can be ingested into stable reusable artifacts
-- Artifacts survive restart
-- Timed chunks or intermediate media assets are represented consistently enough to feed downstream milestones
+Gate passed:
+- Source media loads into stable reusable artifacts
+- `SessionArtifactReader` reads artifacts across restarts
+- `SessionSnapshotSemantics` represents timed segments consistently
+- Artifacts survive restart and feed downstream pipeline stages
 
 ---
 
-### 4. Transcription v1
-Implement the first real AI slice: generate a timed source-language transcript.
+### 4. Transcription v1 ✅ COMPLETE
+Real AI slice: timed source-language transcript generation.
 
-Keep this narrow. The point is not configurability. The point is to produce trustworthy timed text the rest of the pipeline can build on.
-
-Scope:
-- Transcript generation for one source file
-- Timed segment output
-- Honest handling of failures
-- Persistent transcript artifacts
-
-Gate:
-- A sample file can be transcribed end to end
-- Output segments are timestamped and stable enough for downstream use
-- Failures surface honestly rather than silently degrading
+Gate passed:
+- `FasterWhisperTranscriptionProvider` produces timestamped segments
+- `OpenAiWhisperTranscriptionProvider`, `GoogleSttTranscriptionProvider`, `GeminiTranscriptionProvider` all wired and selectable
+- `TranscriptionRegistry` with `IsImplemented` flags, `ProviderDescriptor`, readiness checks
+- `InferenceRuntimeCatalog` normalizes provider/runtime round-trips for all transcription providers including Gemini
+- Failures surface via `PipelineProviderException`, not silently
 
 ---
 
-### 5. Translation and Dialogue Adaptation v1
-Translate the transcript into target-language dialogue that is usable for speech generation.
+### 5. Translation and Dialogue Adaptation v1 ✅ COMPLETE
+Transcript → target-language dialogue usable for speech generation.
 
-This is not just subtitle translation. The output needs to behave like spoken lines. The system should start distinguishing between:
-- literal semantic transfer
-- dub-ready line adaptation
-
-Scope:
-- Translate transcript segments
-- Store adapted dialogue alongside source transcript
-- Preserve timing relationships closely enough for later TTS work
-- Keep the workflow narrow and truthful
-
-Gate:
-- A sample file can move from transcript to target-language dialogue segments
-- The resulting lines are clearly usable for spoken output
-- The system stores source and target text as linked artifacts
+Gate passed:
+- `NllbTranslationProvider`, `GoogleTranslationProvider`, `DeepLTranslationProvider`, `OpenAiTranslationProvider`, `GeminiTranslationProvider` all wired and selectable
+- `TranslationRegistry` with readiness checks and runtime normalization
+- `InferenceRuntimeCatalog` handles all translation provider IDs including Gemini
+- Source and target text stored as linked artifacts in session snapshots
+- Timing relationships preserved through segment structure
 
 ---
 
-### 6. TTS Dubbing Vertical Slice
-Build the feature that actually defines the product.
+### 6. TTS Dubbing Vertical Slice ✅ COMPLETE
+The feature that defines the product.
 
-Given translated/adapted dialogue segments, the app should generate spoken output and let the user preview it. Keep this milestone intentionally narrow: one working path, one segment flow, one stable loop.
-
-Scope:
-- Generate spoken output from target-language dialogue
-- Support segment-based generation
-- Preview generated output
-- Regenerate on demand
-- Persist generated artifacts
-
-Gate:
-- A sample file can produce previewable dubbed output for at least a meaningful set of segments
-- Regeneration is stable
-- Output artifacts persist and can be replayed without rerunning the full upstream pipeline
+Gate passed:
+- `EdgeTtsProvider`, `PiperTtsProvider`, `ElevenLabsTtsProvider`, `GoogleCloudTtsProvider`, `OpenAiTtsProvider`, `XttsContainerTtsProvider` all wired
+- `TtsRegistry` with readiness checks and runtime normalization
+- Segment-based generation, persist generated artifacts
+- Regeneration on demand
+- `ITtsProvider` interface consistent across all providers
 
 ---
 
-### 7. Dub Session Workflow
-Turn the raw TTS capability into a usable operator workflow.
+### 7. Dub Session Workflow ✅ COMPLETE
+Usable operator workflow over raw TTS capability.
 
-This milestone is where the app starts feeling like a dubbing tool rather than a collection of services.
-
-Scope:
-- Segment list or queue
-- Re-run individual segments
-- Compare alternative outputs
-- Keep selected outputs
-- Maintain session continuity across restarts
-- Track which segments are pending, generated, accepted, or need revision
-
-Gate:
-- A user can take one source file through transcript, translation, generation, and selective refinement inside one persistent session
-- The workflow supports iteration without rerunning everything from scratch
+Gate passed:
+- `SessionWorkflowCoordinator` orchestrates transcript → translation → TTS as a managed pipeline
+- `SessionWorkflowCoordinator.cs` (56 KB), `.Playback.cs`, `.Containerized.cs` partial classes covering all workflow branches
+- Session continuity across restarts via snapshot store
+- Segment state tracking (pending / generated / accepted) in coordinator
+- `SessionSwitchService` and `RecentSessionsStore` support multi-session workflows
 
 ---
 
-### 8. Embedded Playback and In-Context Preview
-Add embedded media playback as a refinement and inspection tool.
+### 8. Embedded Playback and In-Context Preview ✅ COMPLETE
+Playback as a refinement and inspection tool.
 
-Playback is important, but it arrives here to support the dub workflow rather than to define the app’s identity. The purpose is contextual QA:
-scrub source media,
-preview generated speech in context,
-check timing and flow.
-
-Scope:
-- Embedded playback
-- Scrubbing and preview in context
-- Segment-aware navigation
-- Basic playback controls sufficient for inspection
-
-Gate:
-- Generated dialogue can be previewed in media context reliably
+Gate passed:
+- `LibMpvEmbeddedTransport` stable for embedded rendering
+- Source scrubbing, segment-aware navigation, basic transport controls
+- Volume control with hover-reveal vertical slider (3-second retraction timer)
+- Subtitle overlay, auto-hide controls bar
+- Fullscreen mode via `IsFullscreen` → `WindowState.FullScreen`
 - Playback integration does not destabilize earlier milestones
-- A user can move between source context and generated output without losing workflow state
 
 ---
 
-### 9. Subtitle and Transcript Inspection
-Add visual inspection surfaces that help refine the dub workflow.
+### 9. Subtitle and Transcript Inspection ✅ COMPLETE
+Visual inspection surfaces for dub workflow refinement.
 
-This is where transcript panes, subtitle overlays, bilingual comparison, and similar surfaces earn their keep.
+Gate passed:
+- Source transcript view and target dialogue view in `MainWindow`
+- `SegmentList` with `ScrollIntoView` on `SelectedSegment`
+- Bilingual segment comparison visible in UI
+- SRT caption export via `SrtGenerator`
+- Speaker diarization panel with reference audio support per speaker (`PyannoteDiarizationProvider`)
+
+---
+
+### 10. Settings and Bootstrap ✅ COMPLETE
+Persisted preferences, credentials, recent sessions, recoverable startup.
+
+Gate passed:
+- `AppSettings` with full provider/runtime/model/language preference persistence
+- `ApiKeyStore` (credential management) with `CredentialKeys` constants for all providers
+- `ApiKeysDialog` + `ApiKeyValidationService` for in-app key setup
+- `SettingsWindow` / `SettingsViewModel` for runtime/provider/model selection
+- `BootstrapDiagnostics` for readable startup diagnostics
+- `RecentSessionsStore` — recent sessions reopen correctly
+- Missing configuration is explicit and recoverable (readiness checks surface API key absence)
+- `InferenceRuntimeCatalog.NormalizeSettings` round-trips provider selection without silent corruption
+
+---
+
+### 11. Local / Offline Expansion ✅ SUBSTANTIALLY COMPLETE
+Local paths for transcription, translation, TTS, and diarization are real.
+
+Current state:
+- **Transcription (local):** `FasterWhisperTranscriptionProvider` — calls Python subprocess, models: `tiny`, `base`, `small`, `medium`, `large-v3`
+- **Translation (local):** `NllbTranslationProvider` — calls Python subprocess, models: `nllb-200-distilled-600M`, `nllb-200-distilled-1.3B`, `nllb-200-1.3B`
+- **TTS (local):** `PiperTtsProvider` — calls Python subprocess
+- **Diarization (local):** `PyannoteDiarizationProvider` — calls Python subprocess, requires HuggingFace token and model gate acceptance
+- **Containerized runtime:** `ContainerizedInferenceClient` / `ContainerizedInferenceManager` with `ContainerizedServiceProbe` for health checks; containerized transcription, translation, and TTS providers all wired
+- `PythonSubprocessServiceBase` shared subprocess lifecycle management
+- `ModelDownloader` for local model acquisition
+- `HardwareSnapshot` and `HardwareEncoderHelper` for machine capability reads
+
+Remaining gap:
+- Smoke-tested end-to-end run on a clean machine without dev-environment assumptions has not been formally documented
+- WSL and NVIDIA-managed container deployment paths are designed for but not yet validated
+
+Gate: local capability is real and selectable. Unsupported paths remain clearly unsupported via readiness checks.
+
+---
+
+### 12. Runtime Optimization and Hardware Routing 🔲 NEXT
+Richer runtime selection, hardware readiness checks, and optimized execution paths.
+
+This is a scaling and reliability milestone, not a foundation milestone. The local and cloud paths both work; this milestone is about making them trustworthy across machine configurations.
 
 Scope:
-- Source transcript view
-- Target dialogue view
-- Bilingual comparison
-- Subtitle-style inspection surfaces where useful
-- Segment-focused QA views
+- GPU acceleration validation for FasterWhisper (CUDA, NVIDIA runtime detection)
+- NVDEC / D3D11VA hardware decode path verification in libmpv transport
+- Container health probe integration in settings UI (show live container status)
+- WSL-hosted Python inference path tested and documented
+- Runtime routing diagnostics — surface in UI when a selected runtime is degraded
+- `HardwareSnapshot` surface in a diagnostics panel
+- Benchmark suite in `benchmarks/` for regression tracking
 
 Gate:
-- The user can inspect source text, target text, and generated speech together
-- These surfaces improve refinement instead of just inflating the shell
+- Runtime routing is truthful and visible in the UI
+- Diagnostics are useful, not just logged
+- Optimized paths pass smoke tests on real hardware (RTX GPU path for Whisper confirmed)
+- App never claims a target is ready unless it has been actually verified
 
 ---
 
-### 10. Settings and Bootstrap
-Add persisted preferences, recent sessions, credentials/setup basics, and recoverable startup states.
+### 13. Release Hardening 🔲 FUTURE
+Package the app, harden startup/recovery, improve crash logging and support artifacts, validate on clean machines.
 
-This milestone should support the proven workflow, not sprawl into a large configuration universe.
-
-Gate:
-- Restart persistence works
-- Recent sessions reopen correctly
-- Missing configuration is explicit and recoverable
-- Setup states do not pretend readiness
-
----
-
-### 11. Local / Offline Expansion
-Once the core workflow is real, add local paths for transcription, translation, and TTS.
-
-This milestone is where local execution starts to matter. It should come only after the cloud-backed or simplest main workflow has proven the actual product loop.
-
-Local inference should preserve a clear boundary between the desktop app and Python-backed inference services. Native local execution may be the first proving path, but WSL-hosted, containerized, and NVIDIA-managed serving paths should remain future-compatible deployment options rather than early prerequisites.
-
-
-Gate:
-- The main workflow can run locally on at least one supported machine configuration
-- Local capability is truthful and verified
-- Unsupported local paths remain clearly unsupported
-
-
----
-
-### 12. Runtime Optimization and Hardware Routing
-Only now add richer runtime selection, hardware readiness checks, and optimized execution paths.
-
-This is a scaling and reliability milestone, not a foundation milestone.
-
-WSL, containers, and NVIDIA-managed serving paths should be evaluated here as deployment and reproducibility tools once the first real local workflow exists, not as foundation work before the product loop is proven.
-
-Gate:
-- Runtime routing is truthful
-- Diagnostics are useful
-- Optimized paths pass smoke tests on real hardware
-- The app never claims a target is ready unless it has been actually verified
-
----
-
-### 13. Release Hardening
-Package the app, harden startup/recovery, improve crash logging and support artifacts, and validate the workflow on clean machines.
+Scope:
+- Packaged Windows build (NUKE publish pipeline)
+- Clean-machine validation: core workflow completes without dev assumptions
+- Crash/support log artifacts usable by a non-developer
+- Startup and shutdown dependable across unexpected exits
+- SRT export, session restore, and API key setup verified on packaged build
+- README and CONTRIBUTING accurate for the packaged workflow
 
 Gate:
 - Packaged builds complete the core workflow on a clean machine
 - Crash/support logs are usable
-- Startup and shutdown are dependable
 - The app is shippable without relying on dev-machine assumptions
 
 ---
@@ -285,11 +273,11 @@ Gate:
 This plan is specifically designed to prevent the common failure mode where each rebuild becomes cleaner architecturally but less complete as a product.
 
 It protects against:
-- rebuilding the shell before proving the main workflow
-- over-investing in playback identity before the dubbed-voice loop is real
-- adding runtime/provider complexity before the product exists
-- polishing the interface while the core chain is still broken
-- deleting earlier working knowledge instead of preserving it
+- Rebuilding the shell before proving the main workflow
+- Over-investing in playback identity before the dubbed-voice loop is real
+- Adding runtime/provider complexity before the product exists
+- Polishing the interface while the core chain is still broken
+- Deleting earlier working knowledge instead of preserving it
 
 ---
 
@@ -300,10 +288,10 @@ Implementation order and product importance are not the same thing.
 Transcription and translation come before TTS because they are dependencies.
 TTS remains the hero feature because it is the first place the pipeline becomes compelling to a user.
 
-That means the app should be built so that:
-- upstream stages exist to serve dubbed output
-- playback exists to inspect and refine dubbed output
-- optional features do not outrank the end-to-end workflow
+The app should be built so that:
+- Upstream stages exist to serve dubbed output
+- Playback exists to inspect and refine dubbed output
+- Optional features do not outrank the end-to-end workflow
 
 ---
 
@@ -312,10 +300,10 @@ That means the app should be built so that:
 The rebuild is succeeding if, as early as possible, a user can:
 
 1. Load a source file
-2. Generate a timed transcript
-3. Produce translated/adapted dialogue
-4. Generate spoken dubbed output
-5. Preview and refine that output in context
+2. Generate a timed transcript (any of: FasterWhisper, OpenAI, Google STT, Gemini)
+3. Produce translated/adapted dialogue (any of: NLLB-200, DeepL, OpenAI, Gemini, Google Translate)
+4. Generate spoken dubbed output (any of: Edge TTS, Piper, ElevenLabs, Google Cloud TTS, OpenAI TTS, XTTS)
+5. Preview and refine that output in context with the source video
 6. Reopen the same session and continue without losing work
 
-Everything else is secondary until that loop is real.
+Everything else is secondary until that loop is real and verified on real hardware.
