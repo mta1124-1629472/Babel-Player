@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -21,7 +22,11 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
     private readonly Func<IReadOnlyList<string>, string, CancellationToken, Task> _combineAudioFunc;
-    private readonly Dictionary<string, string> _referenceIdBySpeakerPath = new(StringComparer.OrdinalIgnoreCase);
+
+    // Static so that reference IDs registered in a prior session are reused
+    // for the lifetime of the running XTTS server without re-uploading audio.
+    private static readonly ConcurrentDictionary<string, string> _referenceIdBySpeakerPath =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public XttsContainerTtsProvider(
         ContainerizedInferenceClient client,
@@ -103,10 +108,13 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
                 segmentIndex++;
                 var resolvedModel = ResolveModel(ResolveVoiceForSegment(seg, request));
                 var referenceAudioPath = ResolveReferenceAudioForSegment(seg, request);
+
+                // Pass seg.Text (source transcript) so the server can skip its
+                // internal Whisper transcription during reference registration.
                 var referenceId = await ResolveReferenceIdAsync(
                     seg.SpeakerId,
                     referenceAudioPath,
-                    null,
+                    seg.Text,
                     cancellationToken);
                 if (string.IsNullOrWhiteSpace(referenceAudioPath) && string.IsNullOrWhiteSpace(referenceId))
                 {
