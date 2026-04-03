@@ -659,7 +659,11 @@
                 </Grid>
             </Border>
 
-            <!-- Controls bar -->
+            <!-- Controls bar
+                 Layout: Auto | Auto | Auto
+                 Left and Right columns size to their content; center is always
+                 centred in the remaining space via HorizontalAlignment=Center.
+                 This prevents either side from stealing space from the other. -->
             <Border Grid.Row="3" Padding="10,7"
                     IsVisible="{Binding Playback.IsControlsVisible}">
                 <Border.Styles>
@@ -684,7 +688,14 @@
                         <Setter Property="Background" Value="#312350" />
                     </Style>
                 </Border.Styles>
-                <Grid ColumnDefinitions="*,Auto,*">
+
+                <!-- Use a single Grid that fills the bar width.
+                     Col 0 (Auto) = left group, aligned Left
+                     Col 1 (*) = spacer so center group truly centres
+                     Col 2 (Auto) = center group, centred
+                     Col 3 (*) = spacer
+                     Col 4 (Auto) = right group, aligned Right -->
+                <Grid ColumnDefinitions="Auto,*,Auto,*,Auto">
 
                     <!-- Left: open media + CC + dub mode toggle -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2"
@@ -712,8 +723,8 @@
                                 Background="Transparent" />
                     </StackPanel>
 
-                    <!-- Center: playback buttons -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2"
+                    <!-- Center: playback buttons (truly centred between left and right) -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2"
                                 VerticalAlignment="Center" HorizontalAlignment="Center">
                         <Button Content="&#x23EE;&#xFE0E;"
                                 Command="{Binding Playback.SkipBackwardCommand}"
@@ -748,21 +759,21 @@
                                 ToolTip.Tip="Skip to next segment" />
                     </StackPanel>
 
-                    <!-- Right: volume + fullscreen -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                    <!-- Right: volume + fullscreen + settings -->
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6"
                                 VerticalAlignment="Center" HorizontalAlignment="Right">
                         <Button x:Name="MuteButton"
-                                Width="38"
+                                Width="32"
                                 Content="{Binding Playback.VolumeIconLabel}"
                                 Command="{Binding Playback.ToggleMuteCommand}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
-                                Padding="6,5" FontSize="14"
+                                Padding="4,5" FontSize="14"
                                 Background="Transparent"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 ToolTip.Tip="Mute / Unmute" />
                         <Slider x:Name="VolumeSlider"
-                                Width="120"
+                                Width="90"
                                 Orientation="Horizontal"
                                 Minimum="0"
                                 Maximum="1"
