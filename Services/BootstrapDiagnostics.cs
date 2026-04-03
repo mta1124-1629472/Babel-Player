@@ -17,7 +17,8 @@ public sealed record BootstrapDiagnostics(
     bool ContainerizedServiceAvailable,
     bool ContainerizedCudaAvailable,
     string? ContainerizedCudaVersion,
-    string? ContainerizedServiceUrl)
+    string? ContainerizedServiceUrl,
+    string CpuVectorLine)
 {
     /// <summary>
     /// True only when all hard-required runtime dependencies are present.
@@ -46,7 +47,7 @@ public sealed record BootstrapDiagnostics(
             if (ContainerizedServiceAvailable)
             {
                 var cuda = ContainerizedCudaAvailable
-                    ? $"CUDA {ContainerizedCudaVersion ?? "✓"}"
+                    ? $"CUDA {ContainerizedCudaVersion ?? "\u2713"}"
                     : "CPU-only";
                 return $"Containerized ({cuda})";
             }
@@ -62,7 +63,14 @@ public sealed record BootstrapDiagnostics(
     /// Base URL of the containerized inference service to health-check.
     /// Pass <c>null</c> to skip the container probe (fields default to unavailable/false/null).
     /// </param>
-    public static BootstrapDiagnostics Run(string? containerServiceUrl = null)
+    /// <param name="hardwareSnapshot">
+    /// Optional pre-computed <see cref="HardwareSnapshot"/>. When supplied the CPU vector
+    /// line is taken from it directly, avoiding a redundant AVX probe. When null a
+    /// lightweight AVX-only snapshot is taken inline.
+    /// </param>
+    public static BootstrapDiagnostics Run(
+        string? containerServiceUrl = null,
+        HardwareSnapshot? hardwareSnapshot = null)
     {
         var pythonPath = DependencyLocator.FindPython();
         var ffmpegPath = DependencyLocator.FindFfmpeg();
@@ -74,6 +82,11 @@ public sealed record BootstrapDiagnostics(
         else
             containerHealth = ContainerHealthStatus.Unavailable(containerServiceUrl ?? "");
 
+        // Prefer the caller-supplied snapshot (already computed at startup).
+        // Fall back to a lightweight inline probe if none was supplied.
+        var cpuVectorLine = hardwareSnapshot?.CpuVectorLine
+            ?? InlineAvxProbe();
+
         return new BootstrapDiagnostics(
             pythonPath is not null, pythonPath,
             ffmpegPath is not null, ffmpegPath,
@@ -81,6 +94,25 @@ public sealed record BootstrapDiagnostics(
             containerHealth.IsAvailable,
             containerHealth.CudaAvailable,
             containerHealth.CudaVersion,
-            containerServiceUrl);
+            containerServiceUrl,
+            cpuVectorLine);
+    }
+
+    // ── Inline AVX probe (used only when no HardwareSnapshot is supplied) ──────
+
+    /// <summary>
+    /// Lightweight AVX tier detection that mirrors <see cref="HardwareSnapshot.CpuVectorLine"/>
+    /// without requiring a full hardware snapshot run.
+    /// </summary>
+    private static string InlineAvxProbe()
+    {
+        try
+        {
+            if (System.Runtime.Intrinsics.X86.Avx512F.IsSupported) return "AVX-512F";
+            if (System.Runtime.Intrinsics.X86.Avx2.IsSupported)   return "AVX2";
+            if (System.Runtime.Intrinsics.X86.Avx.IsSupported)    return "AVX (no AVX2 \u2014 reduced inference performance)";
+        }
+        catch { /* fall through */ }
+        return "none detected (inference will be significantly slower)";
     }
 }

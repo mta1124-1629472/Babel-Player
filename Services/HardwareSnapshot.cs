@@ -14,8 +14,9 @@ public sealed record HardwareSnapshot(
     bool IsDetecting,
     string? CpuName,
     int CpuCores,
+    bool HasAvx,
     bool HasAvx2,
-    bool HasAvx512,
+    bool HasAvx512F,
     double SystemRamGb,
     string? GpuName,
     long? GpuVramMb,
@@ -33,7 +34,7 @@ public sealed record HardwareSnapshot(
     public static HardwareSnapshot Detecting { get; } = new(
         IsDetecting: true,
         CpuName: null, CpuCores: 0,
-        HasAvx2: false, HasAvx512: false,
+        HasAvx: false, HasAvx2: false, HasAvx512F: false,
         SystemRamGb: 0,
         GpuName: null, GpuVramMb: null,
         HasCuda: false, CudaVersion: null,
@@ -50,12 +51,27 @@ public sealed record HardwareSnapshot(
     {
         get
         {
-            if (IsDetecting) return "Detecting…";
-            var name = CpuName ?? "Unknown CPU";
-            var cores = CpuCores > 0 ? $" · {CpuCores}c" : "";
-            var avx2 = HasAvx2 ? " · AVX2 ✓" : " · AVX2 ✗";
-            var avx512 = HasAvx512 ? " · AVX-512 ✓" : " · AVX-512 ✗";
-            return $"{name}{cores}{avx2}{avx512}";
+            if (IsDetecting) return "Detecting\u2026";
+            var name  = CpuName ?? "Unknown CPU";
+            var cores = CpuCores > 0 ? $" \u00b7 {CpuCores}c" : "";
+            return $"{name}{cores} \u00b7 {CpuVectorLine}";
+        }
+    }
+
+    /// <summary>
+    /// Human-readable CPU vector capability tier.
+    /// Suitable for both the hardware panel and bootstrap diagnostics.
+    /// Examples: "AVX-512F", "AVX2", "AVX (no AVX2 \u2014 reduced performance)", "none detected"
+    /// </summary>
+    public string CpuVectorLine
+    {
+        get
+        {
+            if (IsDetecting) return "Detecting\u2026";
+            if (HasAvx512F) return "AVX-512F";
+            if (HasAvx2)    return "AVX2";
+            if (HasAvx)     return "AVX (no AVX2 \u2014 reduced inference performance)";
+            return "none detected (inference will be significantly slower)";
         }
     }
 
@@ -63,10 +79,10 @@ public sealed record HardwareSnapshot(
     {
         get
         {
-            if (IsDetecting) return "Detecting…";
-            if (GpuName == null) return "—";
-            var vram = GpuVramMb.HasValue ? $" · {GpuVramMb.Value / 1024.0:F0} GB VRAM" : "";
-            var cuda = HasCuda ? $" · CUDA {CudaVersion ?? "✓"}" : "";
+            if (IsDetecting) return "Detecting\u2026";
+            if (GpuName == null) return "\u2014";
+            var vram = GpuVramMb.HasValue ? $" \u00b7 {GpuVramMb.Value / 1024.0:F0} GB VRAM" : "";
+            var cuda = HasCuda ? $" \u00b7 CUDA {CudaVersion ?? "\u2713"}" : "";
             return $"{GpuName}{vram}{cuda}";
         }
     }
@@ -75,21 +91,21 @@ public sealed record HardwareSnapshot(
     {
         get
         {
-            if (IsDetecting) return "Detecting…";
-            return SystemRamGb > 0 ? $"{SystemRamGb:F0} GB" : "—";
+            if (IsDetecting) return "Detecting\u2026";
+            return SystemRamGb > 0 ? $"{SystemRamGb:F0} GB" : "\u2014";
         }
     }
 
-    public string NpuLine => IsDetecting ? "Detecting…" : (NpuLabel ?? "—");
+    public string NpuLine => IsDetecting ? "Detecting\u2026" : (NpuLabel ?? "\u2014");
 
     public string LibsLine
     {
         get
         {
-            if (IsDetecting) return "Detecting…";
+            if (IsDetecting) return "Detecting\u2026";
             var ov = HasOpenVino
-                ? $"OpenVINO {OpenVinoVersion ?? "✓"}"
-                : "OpenVINO ✗";
+                ? $"OpenVINO {OpenVinoVersion ?? "\u2713"}"
+                : "OpenVINO \u2717";
             return ov;
         }
     }
@@ -104,8 +120,9 @@ public sealed record HardwareSnapshot(
     {
         var cpuName   = DetectCpuName();
         var cpuCores  = Environment.ProcessorCount;
+        var hasAvx    = TryAvx();
         var hasAvx2   = TryAvx2();
-        var hasAvx512 = TryAvx512();
+        var hasAvx512 = TryAvx512F();
         var ramGb     = DetectRamGb();
 
         var (gpuName, gpuVramMb)          = DetectGpu();
@@ -119,7 +136,7 @@ public sealed record HardwareSnapshot(
         return new HardwareSnapshot(
             IsDetecting: false,
             CpuName: cpuName, CpuCores: cpuCores,
-            HasAvx2: hasAvx2, HasAvx512: hasAvx512,
+            HasAvx: hasAvx, HasAvx2: hasAvx2, HasAvx512F: hasAvx512,
             SystemRamGb: ramGb,
             GpuName: gpuName, GpuVramMb: gpuVramMb,
             HasCuda: hasCuda, CudaVersion: cudaVer,
@@ -167,13 +184,19 @@ public sealed record HardwareSnapshot(
         return null;
     }
 
+    private static bool TryAvx()
+    {
+        try { return Avx.IsSupported; }
+        catch { return false; }
+    }
+
     private static bool TryAvx2()
     {
         try { return Avx2.IsSupported; }
         catch { return false; }
     }
 
-    private static bool TryAvx512()
+    private static bool TryAvx512F()
     {
         try { return Avx512F.IsSupported; }
         catch { return false; }
@@ -185,8 +208,6 @@ public sealed record HardwareSnapshot(
     {
         try
         {
-            // GC.GetGCMemoryInfo().TotalAvailableMemoryBytes reflects physical RAM
-            // on a non-containerised machine, which is the typical desktop scenario.
             var info = GC.GetGCMemoryInfo();
             return info.TotalAvailableMemoryBytes / (1024.0 * 1024.0 * 1024.0);
         }
@@ -223,10 +244,6 @@ public sealed record HardwareSnapshot(
 
     // ── NVIDIA driver version (via nvidia-smi) ────────────────────────────────
 
-    /// <summary>
-    /// Returns the driver version string and whether it meets the minimum required for
-    /// RTX Video Super Resolution (≥ 551.23).
-    /// </summary>
     private static (string? version, bool isSufficient) DetectNvidiaDriver()
     {
         var output = RunAndCapture("nvidia-smi",
@@ -236,7 +253,6 @@ public sealed record HardwareSnapshot(
         var ver = output.Trim().Split('\n')[0].Trim();
         if (string.IsNullOrEmpty(ver)) return (null, false);
 
-        // Driver versions on Windows follow a nnn.nn format (e.g. "551.23", "572.16")
         bool sufficient = false;
         var parts = ver.Split('.');
         if (parts.Length >= 2
@@ -260,22 +276,14 @@ public sealed record HardwareSnapshot(
         return m.Success ? (true, m.Groups[1].Value) : (false, null);
     }
 
-    // ── HDR display (Windows-only, WMI fallback) ──────────────────────────────
+    // ── HDR display (Windows-only) ────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns true when at least one connected display reports HDR capability via the
-    /// Windows registry (HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\SceneChangeDetect).
-    /// Falls back gracefully to false on non-Windows or when the key is absent.
-    /// </summary>
     private static bool DetectHdrDisplay()
     {
         if (!OperatingSystem.IsWindows()) return false;
 
         try
         {
-            // Windows stores per-display HDR support under the display adapter key.
-            // The presence of any HDR-enabled monitor is surfaced via WMI or the registry.
-            // We use a lightweight registry probe that works without WMI activation.
             using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
                 @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration");
             if (key == null) return false;
@@ -288,7 +296,6 @@ public sealed record HardwareSnapshot(
                 {
                     using var child = subkey.OpenSubKey(childName);
                     if (child == null) continue;
-                    // "HDRSupported" value present and non-zero → HDR display
                     var hdrVal = child.GetValue("HDRSupported");
                     if (hdrVal is int i && i != 0) return true;
                     if (hdrVal is uint u && u != 0) return true;
