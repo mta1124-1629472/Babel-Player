@@ -47,6 +47,10 @@ xtts_reference_registry: dict[str, dict[str, str | None]] = {}
 
 HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
+# Tracks effective compute type after per-stage validation and potential downgrades
+EFFECTIVE_HOST_COMPUTE_TYPE = HOST_COMPUTE_TYPE
+# Tracks downgrade reasons per stage for UI/logging projection
+COMPUTE_DOWNGRADE_REASONS: dict[str, str] = {}
 XTTS_MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 
 # Temporary directory for artifacts
@@ -200,6 +204,30 @@ def _log_host_runtime_state(context: str) -> None:
         except Exception as exc:
             logger.warning("Failed to query CUDA device details during %s: %s", context, exc)
 
+def _get_effective_compute_type(stage: str) -> str:
+    """
+    Returns the effective compute type for a given stage (transcription, translation, tts).
+    If FP8 is requested but unsupported, downgrades to float16 and logs the reason.
+    """
+    if HOST_COMPUTE_TYPE != "float8":
+        return HOST_COMPUTE_TYPE
+    
+    # FP8 is requested; check if stage supports it
+    # For now, stages require float16; FP8 support will be validated per-model/stage
+    if stage in ("transcription", "translation", "tts"):
+        # NLLB and XTTS currently require float16; Whisper can work with float8 but we default to float16 for safety
+        downgrade_reason = f"{stage} does not support float8 in this release; downgrading to float16"
+        if stage not in COMPUTE_DOWNGRADE_REASONS:
+            COMPUTE_DOWNGRADE_REASONS[stage] = downgrade_reason
+            logger.warning(
+                "Compute type downgrade for %s: requested float8 but using float16 (%s)",
+                stage,
+                downgrade_reason
+            )
+        return "float16"
+    
+    return HOST_COMPUTE_TYPE
+
 def _normalize_xtts_model(model_name: Optional[str]) -> str:
     if model_name is None:
         return XTTS_MODEL_NAME
@@ -230,7 +258,9 @@ def _normalize_xtts_language(language: Optional[str]) -> str:
 def _probe_xtts_available() -> bool:
     if HOST_DEVICE != "cuda":
         return False
-    if HOST_COMPUTE_TYPE != "float16":
+    
+    effective_type = _get_effective_compute_type("tts")
+    if effective_type != "float16":
         return False
 
     try:
@@ -240,11 +270,16 @@ def _probe_xtts_available() -> bool:
         logger.warning("XTTS capability probe failed: %s", exc)
         return False
 
+
 def _xtts_capability_detail() -> str:
     if HOST_DEVICE != "cuda":
         return "CUDA is unavailable; managed GPU XTTS is not ready"
-    if HOST_COMPUTE_TYPE != "float16":
-        return f"XTTS requires compute_type=float16 on CUDA; current host compute_type={HOST_COMPUTE_TYPE}"
+    
+    effective_type = _get_effective_compute_type("tts")
+    if effective_type != "float16":
+        downgrade_reason = COMPUTE_DOWNGRADE_REASONS.get("tts", "compute type mismatch")
+        return f"XTTS requires compute_type=float16 on CUDA; downgraded to {effective_type} ({downgrade_reason})"
+    
     return "XTTS dependencies are unavailable"
 
 # ============================================================================
@@ -253,14 +288,19 @@ def _xtts_capability_detail() -> str:
 
 def get_stage_capabilities() -> CapabilitiesResponse:
     transcription_ready = HOST_DEVICE == "cuda"
+    transcription_effective_type = _get_effective_compute_type("transcription")
+    
     translation_ready = _probe_nllb_available()
+    translation_effective_type = _get_effective_compute_type("translation")
+    
     tts_ready = _probe_xtts_available()
+    tts_effective_type = _get_effective_compute_type("tts")
 
     return CapabilitiesResponse(
         transcription=StageCapability(
             ready=transcription_ready,
             detail=(
-                f"faster-whisper ready on {HOST_DEVICE} with compute_type={HOST_COMPUTE_TYPE}"
+                f"faster-whisper ready on {HOST_DEVICE} with compute_type={transcription_effective_type}"
                 if transcription_ready
                 else "CUDA is unavailable; managed GPU transcription is not ready"
             ),
@@ -268,7 +308,7 @@ def get_stage_capabilities() -> CapabilitiesResponse:
         translation=StageCapability(
             ready=translation_ready,
             detail=(
-                f"NLLB-200 ready on {HOST_DEVICE} with compute_type={HOST_COMPUTE_TYPE}"
+                f"NLLB-200 ready on {HOST_DEVICE} with compute_type={translation_effective_type}"
                 if translation_ready
                 else _nllb_capability_detail()
             ),
@@ -276,7 +316,7 @@ def get_stage_capabilities() -> CapabilitiesResponse:
         tts=StageCapability(
             ready=tts_ready,
             detail=(
-                f"XTTS v2 ready on {HOST_DEVICE} with compute_type={HOST_COMPUTE_TYPE}; reference audio required"
+                f"XTTS v2 ready on {HOST_DEVICE} with compute_type={tts_effective_type}; reference audio required"
                 if tts_ready
                 else _xtts_capability_detail()
             ),
@@ -380,7 +420,13 @@ def _probe_nllb_available() -> bool:
     try:
         import_module("transformers")
         import_module("sentencepiece")
-        return HOST_COMPUTE_TYPE == "float16"
+        
+        # NLLB on GPU requires float16 or float8 (float8 must be validated per-stage)
+        effective_type = _get_effective_compute_type("translation")
+        if effective_type not in ("float16", "float8"):
+            return False
+        
+        return True
     except ImportError as exc:
         logger.warning("NLLB capability probe failed: %s", exc)
         return False
@@ -389,9 +435,13 @@ def _probe_nllb_available() -> bool:
 def _nllb_capability_detail() -> str:
     if HOST_DEVICE != "cuda":
         return "CUDA is unavailable; managed GPU translation is not ready"
-    if HOST_COMPUTE_TYPE != "float16":
-        return f"NLLB-200 requires compute_type=float16 on CUDA; current host compute_type={HOST_COMPUTE_TYPE}"
-    return "NLLB-200 dependencies are unavailable"
+    
+    effective_type = _get_effective_compute_type("translation")
+    if effective_type not in ("float16", "float8"):
+        downgrade_reason = COMPUTE_DOWNGRADE_REASONS.get("translation", "compute type mismatch")
+        return f"NLLB-200 requires float16 or float8; downgraded to {effective_type} ({downgrade_reason})"
+    
+    return f"NLLB-200 ready on {HOST_DEVICE} with compute_type={effective_type}"
 
 
 def load_nllb_model(model_name: str):
@@ -806,14 +856,29 @@ if __name__ == "__main__":
             "Managed GPU host requested CUDA, but torch.cuda.is_available() returned false. "
             "Check the installed Torch CUDA build, NVIDIA driver, and whether the managed runtime can access the GPU."
         )
-    if HOST_DEVICE == "cuda" and HOST_COMPUTE_TYPE != "float16":
+    
+    # Validate compute type is supported by the host device
+    valid_compute_types = {"float8", "float16", "int8"}
+    if HOST_COMPUTE_TYPE not in valid_compute_types:
         raise RuntimeError(
-            f"CUDA host requires --compute-type float16. Received '{HOST_COMPUTE_TYPE}'."
+            f"Invalid compute type '{HOST_COMPUTE_TYPE}'. Must be one of: {', '.join(valid_compute_types)}"
         )
-    if HOST_DEVICE != "cuda" and HOST_COMPUTE_TYPE != "int8":
-        raise RuntimeError(
-            f"CPU host requires --compute-type int8 in phase 1. Received '{HOST_COMPUTE_TYPE}'."
-        )
+    
+    if HOST_DEVICE == "cuda":
+        # CUDA host supports float8, float16
+        if HOST_COMPUTE_TYPE not in ("float8", "float16"):
+            raise RuntimeError(
+                f"CUDA host requires --compute-type float8 or float16. Received '{HOST_COMPUTE_TYPE}'."
+            )
+    else:
+        # CPU host only supports int8
+        if HOST_COMPUTE_TYPE != "int8":
+            raise RuntimeError(
+                f"CPU host requires --compute-type int8. Received '{HOST_COMPUTE_TYPE}'."
+            )
+    
+    # Initialize effective compute type (may be downgraded per-stage)
+    EFFECTIVE_HOST_COMPUTE_TYPE = HOST_COMPUTE_TYPE
 
     uvicorn_logger.info(
         "Starting uvicorn for managed inference host on %s:%s",

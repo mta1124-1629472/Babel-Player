@@ -28,7 +28,8 @@ public sealed record HardwareSnapshot(
     bool IsRtxCapable,
     bool IsVsrDriverSufficient,
     string? NvidiaDriverVersion,
-    bool IsHdrDisplayAvailable)
+    bool IsHdrDisplayAvailable,
+    string? GpuComputeCapability = null)
 {
     /// <summary>Placeholder shown while background detection is still running.</summary>
     public static HardwareSnapshot Detecting { get; } = new(
@@ -43,7 +44,8 @@ public sealed record HardwareSnapshot(
         IsRtxCapable: false,
         IsVsrDriverSufficient: false,
         NvidiaDriverVersion: null,
-        IsHdrDisplayAvailable: false);
+        IsHdrDisplayAvailable: false,
+        GpuComputeCapability: null);
 
     // ── Formatted display lines ────────────────────────────────────────────────
 
@@ -110,6 +112,22 @@ public sealed record HardwareSnapshot(
         }
     }
 
+    /// <summary>
+    /// True if GPU has Blackwell or newer compute capability (SM 10.0+).
+    /// Used to gate FP8 compute type selection.
+    /// </summary>
+    public bool IsBlackwellCapable
+    {
+        get
+        {
+            if (GpuComputeCapability == null) return false;
+            var parts = GpuComputeCapability.Split('.');
+            if (parts.Length < 1 || !int.TryParse(parts[0], out var major))
+                return false;
+            return major >= 10;
+        }
+    }
+
     // ── Detection ──────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -132,6 +150,7 @@ public sealed record HardwareSnapshot(
         var (driverVer, isVsrSufficient)  = DetectNvidiaDriver();
         var isRtx                         = IsRtxGpu(gpuName);
         var isHdr                         = DetectHdrDisplay();
+        var gpuComputeCapability          = DetectGpuComputeCapability();
 
         return new HardwareSnapshot(
             IsDetecting: false,
@@ -145,7 +164,8 @@ public sealed record HardwareSnapshot(
             IsRtxCapable: isRtx,
             IsVsrDriverSufficient: isVsrSufficient,
             NvidiaDriverVersion: driverVer,
-            IsHdrDisplayAvailable: isHdr);
+            IsHdrDisplayAvailable: isHdr,
+            GpuComputeCapability: gpuComputeCapability);
     }
 
     // ── CPU ────────────────────────────────────────────────────────────────────
@@ -240,6 +260,29 @@ public sealed record HardwareSnapshot(
     {
         if (gpuName == null) return false;
         return gpuName.Contains("RTX", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ── GPU compute capability (via Python torch) ─────────────────────────────
+
+    private static string? DetectGpuComputeCapability()
+    {
+        if (!DetectCuda().Item1) return null; // No CUDA available
+
+        var python = DependencyLocator.FindPython();
+        if (python == null) return null;
+
+        // Use Python to probe torch.cuda.get_device_capability(0)
+        var pythonScript = "import torch; cap = torch.cuda.get_device_capability(0); print(f\"{cap[0]}.{cap[1]}\")";
+        var output = RunAndCapture(python, $"-c \"{pythonScript}\"");
+        if (output == null) return null;
+
+        var trimmed = output.Trim();
+        // Validate format: should be "major.minor"
+        var parts = trimmed.Split('.');
+        if (parts.Length == 2 && int.TryParse(parts[0], out _) && int.TryParse(parts[1], out _))
+            return trimmed;
+
+        return null;
     }
 
     // ── NVIDIA driver version (via nvidia-smi) ────────────────────────────────

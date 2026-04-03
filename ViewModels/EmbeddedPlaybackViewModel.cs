@@ -97,7 +97,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SegmentPaneToggleLabel))]
     [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
-    [NotifyPropertyChangedFor(nameof(IsReopenPanesControlVisible))]
     private bool _isSegmentPaneVisible = true;
 
     [ObservableProperty]
@@ -295,9 +294,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     // Pull tabs appear only when panes are collapsed and the chrome is visible.
     public bool IsPanePullTabVisible => !IsSegmentPaneVisible && IsPullTabVisible;
-
-    // Video controls "Panes" button appears whenever panes are collapsed.
-    public bool IsReopenPanesControlVisible => !IsSegmentPaneVisible;
 
     public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6\uFE0E" : "\u23F8\uFE0E";
 
@@ -1557,15 +1553,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         {
             IsSegmentPaneVisible = !IsSegmentPaneVisible;
         }
-    }
-
-    [RelayCommand]
-    private void ReopenPanes()
-    {
-        if (IsSubtitleModeOn)
-            IsSubtitleModeOn = false;
-
-        IsSegmentPaneVisible = true;
     }
 
     [RelayCommand]
