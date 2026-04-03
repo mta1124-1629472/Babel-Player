@@ -1026,7 +1026,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
         }
 
-        await EnsureTranslationExecutionReadyAsync(cancellationToken: cancellationToken);
+        await EnsureTranslationExecutionReadyAsync();
 
         _translationService ??= CreateTranslationService();
 
