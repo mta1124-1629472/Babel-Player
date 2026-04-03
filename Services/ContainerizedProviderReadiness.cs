@@ -166,7 +166,7 @@ public static class ContainerizedProviderReadiness
         if (detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
             || detail.Contains("probe", StringComparison.OrdinalIgnoreCase))
         {
-            return $"{hostLabel} is live but {stageLabel} capability is still warming: {detail}";
+            return $"{hostLabel} is live but {stageLabel} capability is still warming (missing {stageLabel} capability): {detail}";
         }
 
         return $"{hostLabel} is live but missing {stageLabel} capability: {detail}";

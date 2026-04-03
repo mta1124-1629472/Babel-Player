@@ -79,12 +79,12 @@ public sealed class XttsContainerTtsProvider : ITtsProvider, IAsyncDisposable
         var language = ResolveLanguage(request.Language);
         var model = ResolveModel(request.VoiceName);
 
-        var result = await _client.XttsSegmentAsync(
+        var result = await SynthesizeSegmentWithRetryAsync(
             request.Text,
             model,
             language,
             request.SpeakerId,
-            request.ReferenceAudioPath,
+            referenceAudioPath,
             referenceId,
             request.ReferenceTranscriptText,
             cancellationToken);
@@ -152,7 +152,7 @@ public sealed class XttsContainerTtsProvider : ITtsProvider, IAsyncDisposable
                     $"[XttsContainerTts] Combined synth segment start " +
                     $"(segment={seg.Id ?? segmentIndex.ToString()}, speaker={seg.SpeakerId ?? "<none>"}, model={resolvedModel})");
 
-                var result = await _client.XttsSegmentAsync(
+                var result = await SynthesizeSegmentWithRetryAsync(
                     seg.TranslatedText!,
                     resolvedModel,
                     language,
@@ -296,6 +296,57 @@ public sealed class XttsContainerTtsProvider : ITtsProvider, IAsyncDisposable
         await _client.DownloadTtsAudioAsync(filename, localOutputPath, ct);
     }
 
+    /// <summary>
+    /// Calls <see cref="ContainerizedInferenceClient.XttsSegmentAsync"/> and, when the
+    /// server reports an unknown <paramref name="referenceId"/> (HTTP 404 — typically after
+    /// a server restart that clears the in-memory reference registry), evicts the stale
+    /// cache entry, re-registers the reference audio, and retries once.
+    /// </summary>
+    private async Task<TtsResult> SynthesizeSegmentWithRetryAsync(
+        string text,
+        string model,
+        string? language,
+        string? speakerId,
+        string? referenceAudioPath,
+        string? referenceId,
+        string? referenceTranscript,
+        CancellationToken ct)
+    {
+        var result = await _client.XttsSegmentAsync(
+            text, model, language, speakerId, referenceAudioPath, referenceId, referenceTranscript, ct);
+
+        if (result.Success || string.IsNullOrWhiteSpace(referenceId) || string.IsNullOrWhiteSpace(referenceAudioPath))
+            return result;
+
+        // If the server reports the reference_id is unknown the Python server likely restarted
+        // and cleared its in-memory registry.  Evict the stale cache entry, re-register the
+        // reference audio, then retry the synthesis once with the fresh ID.
+        if (result.ErrorMessage is not null
+            && result.ErrorMessage.Contains("reference_id", StringComparison.OrdinalIgnoreCase)
+            && result.ErrorMessage.Contains("unknown", StringComparison.OrdinalIgnoreCase))
+        {
+            _log.Info("[XttsContainerTts] Stale reference_id detected; re-registering reference audio and retrying.");
+
+            var cacheKey = $"{speakerId ?? "<none>"}|{referenceAudioPath}";
+            _referenceIdBySpeakerPath.TryRemove(cacheKey, out _);
+            _sessionReferenceIds.Remove(cacheKey);
+
+            var freshReferenceId = await _client.RegisterXttsReferenceAsync(
+                speakerId ?? "speaker",
+                referenceAudioPath,
+                referenceTranscript,
+                ct);
+
+            _referenceIdBySpeakerPath[cacheKey] = freshReferenceId;
+            _sessionReferenceIds[cacheKey] = freshReferenceId;
+
+            result = await _client.XttsSegmentAsync(
+                text, model, language, speakerId, referenceAudioPath, freshReferenceId, referenceTranscript, ct);
+        }
+
+        return result;
+    }
+
     private async Task<string?> ResolveReferenceIdAsync(
         string? speakerId,
         string? referenceAudioPath,
@@ -326,6 +377,12 @@ public sealed class XttsContainerTtsProvider : ITtsProvider, IAsyncDisposable
     public async Task ResetSessionAsync()
     {
         _log.Info("[XttsContainerTts] Resetting session state");
+
+        // Remove static-cache entries that were registered during this session so that
+        // a server restart between sessions does not leave stale reference IDs in the
+        // cache (the Python server's in-memory registry is cleared on restart).
+        foreach (var key in _sessionReferenceIds.Keys)
+            _referenceIdBySpeakerPath.TryRemove(key, out _);
 
         _sessionReferenceIds.Clear();
 
@@ -413,8 +470,17 @@ public sealed class XttsContainerTtsProvider : ITtsProvider, IAsyncDisposable
         };
     }
 
+    // The only XTTS model hosted by the Python inference server is "xtts-v2".
+    // The VoiceName field is repurposed as the model selector for XTTS; if it carries
+    // an edge-tts–style voice name (e.g. "en-US-AriaNeural") or any other non-XTTS
+    // value, fall back to the canonical "xtts-v2" so the server never rejects it.
+    private static readonly HashSet<string> ValidXttsModelNames =
+        new(StringComparer.OrdinalIgnoreCase) { "xtts-v2" };
+
     private static string ResolveModel(string? voiceName) =>
-        string.IsNullOrWhiteSpace(voiceName) ? "xtts-v2" : voiceName.Trim();
+        !string.IsNullOrWhiteSpace(voiceName) && ValidXttsModelNames.Contains(voiceName.Trim())
+            ? voiceName.Trim()
+            : "xtts-v2";
 
     private static string SanitizeFileComponent(string value)
     {

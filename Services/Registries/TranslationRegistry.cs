@@ -193,10 +193,20 @@ public sealed class TranslationRegistry : ITranslationRegistry
 
         if (resolvedRuntime == InferenceRuntime.Containerized)
         {
+            // "default" is the sentinel for edge-tts/cloud providers and is not a valid NLLB model name.
+            // Fall back to the smallest GPU NLLB model so the Python server can load it.
+            var containerizedModel = settings.TranslationModel;
+            if (string.IsNullOrWhiteSpace(containerizedModel)
+                || string.Equals(containerizedModel, "default", StringComparison.OrdinalIgnoreCase)
+                || !GetGpuNllbModels().Contains(containerizedModel))
+            {
+                containerizedModel = GetGpuNllbModels()[0];
+            }
+
             return new ContainerizedTranslationProvider(
                 new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
                 _log,
-                settings.TranslationModel);
+                containerizedModel);
         }
 
         return normalizedProviderId switch

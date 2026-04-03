@@ -60,22 +60,52 @@ TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
 TEMP_DIR.mkdir(exist_ok=True)
 
 FLORES = {
+    # Latin-script European
     "en": "eng_Latn",
     "es": "spa_Latn",
     "fr": "fra_Latn",
     "de": "deu_Latn",
     "it": "ita_Latn",
     "pt": "por_Latn",
-    "ru": "rus_Cyrl",
-    "zh": "zho_Hans",
-    "ja": "jpn_Jpan",
-    "ko": "kor_Hang",
-    "ar": "arb_Arab",
-    "hi": "hin_Deva",
     "nl": "nld_Latn",
     "pl": "pol_Latn",
     "sv": "swe_Latn",
     "tr": "tur_Latn",
+    "ro": "ron_Latn",
+    "cs": "ces_Latn",
+    "da": "dan_Latn",
+    "fi": "fin_Latn",
+    "hu": "hun_Latn",
+    "nb": "nob_Latn",
+    "sk": "slk_Latn",
+    "hr": "hrv_Latn",
+    "uk": "ukr_Cyrl",
+    "ca": "cat_Latn",
+    "id": "ind_Latn",
+    "ms": "zsm_Latn",
+    "vi": "vie_Latn",
+    "sw": "swh_Latn",
+    "af": "afr_Latn",
+    # Cyrillic
+    "ru": "rus_Cyrl",
+    "bg": "bul_Cyrl",
+    "sr": "srp_Cyrl",
+    # CJK
+    "zh": "zho_Hans",
+    "zh-cn": "zho_Hans",
+    "zh-tw": "zho_Hant",
+    "ja": "jpn_Jpan",
+    "ko": "kor_Hang",
+    # Arabic / Devanagari / other
+    "ar": "arb_Arab",
+    "hi": "hin_Deva",
+    "bn": "ben_Beng",
+    "ta": "tam_Taml",
+    "te": "tel_Telu",
+    "he": "heb_Hebr",
+    "fa": "pes_Arab",
+    "ur": "urd_Arab",
+    "th": "tha_Thai",
 }
 
 # ============================================================================
@@ -566,8 +596,20 @@ def translate_with_nllb(model_name: str, source_language: str, target_language: 
         return ""
 
     tokenizer, model = load_nllb_model(model_name)
-    src_flores = FLORES.get(source_language, source_language)
-    tgt_flores = FLORES.get(target_language, target_language)
+    src_flores = FLORES.get(source_language)
+    tgt_flores = FLORES.get(target_language)
+
+    if src_flores is None:
+        raise RuntimeError(
+            f"Source language '{source_language}' is not in the FLORES-200 map used by NLLB. "
+            "Add the language code to the FLORES dict in inference/main.py."
+        )
+    if tgt_flores is None:
+        raise RuntimeError(
+            f"Target language '{target_language}' is not in the FLORES-200 map used by NLLB. "
+            "Add the language code to the FLORES dict in inference/main.py."
+        )
+
     tokenizer.src_lang = src_flores
     inputs = tokenizer(
         text,
