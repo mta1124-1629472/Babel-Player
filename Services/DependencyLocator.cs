@@ -18,15 +18,20 @@ public static class DependencyLocator
     public static string? FindPython()
     {
         var appDir = AppContext.BaseDirectory;
+        var managedPython = ManagedRuntimeLayout.GetManagedPythonPath();
+        if (ProbePythonCandidate(managedPython, requirePip: true))
+            return managedPython;
+
         var candidates = new[]
         {
-            ManagedRuntimeLayout.GetManagedPythonPath(),
             Path.Combine(appDir, "python.exe"),
             Path.Combine(appDir, "python", "python.exe"),
             "python",
             "python3",
         };
-        return Probe(candidates, "--version");
+
+        return ProbePython(candidates, requirePip: true)
+            ?? ProbePython(candidates, requirePip: false);
     }
 
     /// <summary>Returns a working uv executable path, or null if not found.</summary>
@@ -90,32 +95,63 @@ public static class DependencyLocator
             if (resolved is null)
                 continue;
 
-            try
-            {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = resolved,
-                    Arguments = versionArg,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-                using var proc = Process.Start(psi);
-                if (proc != null)
-                {
-                    if (proc.WaitForExit(ProbeTimeoutMs) && proc.ExitCode == 0)
-                        return resolved;
-                    else
-                        try { proc.Kill(); } catch { /* best-effort cleanup */ }
-                }
-            }
-            catch
-            {
-                // Not found at this path — continue probing
-            }
+            if (ProbeExecutable(resolved, versionArg))
+                return resolved;
         }
         return null;
+    }
+
+    private static string? ProbePython(string[] candidates, bool requirePip)
+    {
+        foreach (var candidate in candidates)
+        {
+            var resolved = ResolveExecutable(candidate);
+            if (resolved is null)
+                continue;
+
+            if (ProbePythonCandidate(resolved, requirePip))
+                return resolved;
+        }
+
+        return null;
+    }
+
+    private static bool ProbePythonCandidate(string candidate, bool requirePip)
+    {
+        var resolved = ResolveExecutable(candidate);
+        if (resolved is null || !ProbeExecutable(resolved, "--version"))
+            return false;
+
+        return !requirePip || ProbeExecutable(resolved, "-m pip --version");
+    }
+
+    private static bool ProbeExecutable(string fileName, string arguments)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using var proc = Process.Start(psi);
+            if (proc is null)
+                return false;
+
+            if (proc.WaitForExit(ProbeTimeoutMs) && proc.ExitCode == 0)
+                return true;
+
+            try { proc.Kill(); } catch { /* best-effort cleanup */ }
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string? ResolveExecutable(string candidate)

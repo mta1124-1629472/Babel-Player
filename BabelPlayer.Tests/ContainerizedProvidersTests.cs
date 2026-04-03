@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -179,6 +180,152 @@ public sealed class ContainerizedProvidersTests : IDisposable
     }
 
     [Fact]
+    public async Task XttsContainerTtsProvider_GenerateSegmentTtsAsync_PostsModelAndLanguageAndDownloadsAudio()
+    {
+        var outputPath = Path.Combine(_dir, "xtts-segment.mp3");
+        var referenceAudioPath = Path.Combine(_dir, "speaker-a.wav");
+        await File.WriteAllBytesAsync(referenceAudioPath, Encoding.UTF8.GetBytes("ref-audio"));
+        var audioBytes = Encoding.UTF8.GetBytes("xtts-segment-bytes");
+        string? postedBody = null;
+
+        var client = CreateClient(async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/references")
+            {
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"reference_id\":\"ref-speaker-a\"}");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/segment")
+            {
+                postedBody = await request.Content!.ReadAsStringAsync(ct);
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"xtts-v2\",\"audio_path\":\"/tmp/xtts-segment.mp3\",\"file_size_bytes\":18}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/xtts-segment.mp3")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(audioBytes)
+                };
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new XttsContainerTtsProvider(client, _log);
+
+        var result = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
+            "hello there",
+            outputPath,
+            "xtts-v2",
+            SpeakerId: "speaker-a",
+            ReferenceAudioPath: referenceAudioPath,
+            Language: "en-US"));
+
+        Assert.True(result.Success);
+        Assert.Equal(outputPath, result.AudioPath);
+        Assert.True(File.Exists(outputPath));
+        Assert.Equal(audioBytes, await File.ReadAllBytesAsync(outputPath));
+        Assert.Contains("xtts-v2", postedBody, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("en", postedBody, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("speaker-a", postedBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task XttsContainerTtsProvider_GenerateTtsAsync_UsesSpeakerAssignmentsAndReferences()
+    {
+        var translationPath = Path.Combine(_dir, "xtts-translation.json");
+        var outputPath = Path.Combine(_dir, "xtts-combined.mp3");
+        var speakerARef = Path.Combine(_dir, "speaker-a.wav");
+        var speakerBRef = Path.Combine(_dir, "speaker-b.wav");
+        await File.WriteAllTextAsync(translationPath,
+            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\",\"speakerId\":\"speaker-a\"},{\"id\":\"segment_1\",\"start\":1.0,\"end\":2.0,\"text\":\"mundo\",\"translatedText\":\"world\",\"speakerId\":\"speaker-b\"}]}");
+        await File.WriteAllBytesAsync(speakerARef, Encoding.UTF8.GetBytes("ref-a"));
+        await File.WriteAllBytesAsync(speakerBRef, Encoding.UTF8.GetBytes("ref-b"));
+
+        var segmentBodies = new List<string>();
+        var combineInputs = new List<string>();
+        var client = CreateClient(async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/references")
+            {
+                var body = await request.Content!.ReadAsStringAsync(ct);
+                var referenceId = body.Contains("speaker-a", StringComparison.OrdinalIgnoreCase) ? "ref-a" : "ref-b";
+                return await Json(HttpStatusCode.OK,
+                    $"{{\"success\":true,\"reference_id\":\"{referenceId}\"}}");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/segment")
+            {
+                var body = await request.Content!.ReadAsStringAsync(ct);
+                segmentBodies.Add(body);
+                var audioName = segmentBodies.Count == 1 ? "speaker-a.mp3" : "speaker-b.mp3";
+                return await Json(HttpStatusCode.OK,
+                    $"{{\"success\":true,\"voice\":\"xtts-v2\",\"audio_path\":\"/tmp/{audioName}\",\"file_size_bytes\":8}}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/speaker-a.mp3")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(Encoding.UTF8.GetBytes("A"))
+                };
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/speaker-b.mp3")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(Encoding.UTF8.GetBytes("B"))
+                };
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new XttsContainerTtsProvider(
+            client,
+            _log,
+            async (segmentAudioPaths, destinationPath, _) =>
+            {
+                combineInputs.AddRange(segmentAudioPaths);
+                var combined = new List<byte>();
+                foreach (var segmentPath in segmentAudioPaths)
+                    combined.AddRange(await File.ReadAllBytesAsync(segmentPath));
+                await File.WriteAllBytesAsync(destinationPath, combined.ToArray());
+            });
+
+        var result = await provider.GenerateTtsAsync(new TtsRequest(
+            translationPath,
+            outputPath,
+            "xtts-v2",
+            SpeakerVoiceAssignments: new Dictionary<string, string>
+            {
+                ["speaker-a"] = "xtts-v2",
+                ["speaker-b"] = "xtts-v2",
+            },
+            SpeakerReferenceAudioPaths: new Dictionary<string, string>
+            {
+                ["speaker-a"] = speakerARef,
+                ["speaker-b"] = speakerBRef,
+            },
+            Language: "en"));
+
+        Assert.True(result.Success);
+        Assert.Equal(outputPath, result.AudioPath);
+        Assert.True(File.Exists(outputPath));
+        Assert.Equal("AB", Encoding.UTF8.GetString(await File.ReadAllBytesAsync(outputPath)));
+        Assert.Equal(2, combineInputs.Count);
+        Assert.Equal(2, segmentBodies.Count);
+        Assert.Contains("speaker-a", segmentBodies[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ref-a", segmentBodies[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("speaker-b", segmentBodies[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ref-b", segmentBodies[1], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ContainerizedTranscriptionProvider_TranscribeAsync_ThrowsWhenInputMissing()
     {
         var client = CreateClient((_, _) =>
@@ -355,8 +502,16 @@ public sealed class ContainerizedProvidersTests : IDisposable
         Assert.False(checking.IsReady);
         Assert.Contains("starting", checking.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
-        await Task.Delay(100);
-        var unavailable = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+        var unavailable = checking;
+        for (var i = 0; i < 40; i++)
+        {
+            await Task.Delay(50);
+            unavailable = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+            if (!string.IsNullOrWhiteSpace(unavailable.BlockingReason) &&
+                !unavailable.BlockingReason.Contains("starting", StringComparison.OrdinalIgnoreCase))
+                break;
+        }
+
         Assert.False(unavailable.IsReady);
         Assert.Contains("Start your local Docker GPU host", unavailable.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }

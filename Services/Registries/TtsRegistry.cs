@@ -44,6 +44,7 @@ public sealed class TtsRegistry : ITtsRegistry
                     PiperVoices,
                     SupportedRuntimes: [InferenceRuntime.Local],
                     DefaultRuntime: InferenceRuntime.Local),
+                .. GetAvailableProviders(ComputeProfile.Gpu),
                 .. GetAvailableProviders(ComputeProfile.Cloud),
             ];
         }
@@ -65,9 +66,18 @@ public sealed class TtsRegistry : ITtsRegistry
 
         if (profile == ComputeProfile.Gpu)
         {
-            // GPU TTS remains gated in phase 1. Keep runtime support internal for legacy
-            // XTTS configurations, but do not surface it in public picker lists.
-            return [];
+            return
+            [
+                new(
+                    ProviderNames.XttsContainer,
+                    "XTTS v2 (Local GPU Host)",
+                    false,
+                    null,
+                    ["xtts-v2"],
+                    SupportedRuntimes: [InferenceRuntime.Containerized],
+                    DefaultRuntime: InferenceRuntime.Containerized,
+                    IsImplemented: true),
+            ];
         }
 
         var providers = new List<ProviderDescriptor>
@@ -122,7 +132,7 @@ public sealed class TtsRegistry : ITtsRegistry
         var desc = (resolvedProfile == ComputeProfile.Gpu && string.Equals(normalizedProviderId, ProviderNames.XttsContainer, StringComparison.Ordinal))
             ? new ProviderDescriptor(
                 ProviderNames.XttsContainer,
-                "XTTS v2 (Container)",
+                "XTTS v2 (Local GPU Host)",
                 false,
                 null,
                 ["xtts-v2"],
