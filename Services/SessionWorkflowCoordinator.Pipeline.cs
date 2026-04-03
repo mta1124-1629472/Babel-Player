@@ -312,9 +312,9 @@ public sealed partial class SessionWorkflowCoordinator
 
         ReportStage(
             stageContext,
-            $"Generating combined dub audio with {CurrentSettings.TtsProvider} / {v}. After the full output is ready, per-segment clips will be generated for in-context playback.",
+            $"Starting TTS synthesis with {CurrentSettings.TtsProvider} / {v}. Generating combined dub audio — progress will appear below.",
             progress01: 0,
-            isIndeterminate: true);
+            isIndeterminate: false);
 
         var sessionDir = GetSessionDirectory();
         var ttsDir = Path.Combine(sessionDir, "tts");
@@ -326,6 +326,13 @@ public sealed partial class SessionWorkflowCoordinator
         _log.Info($"Starting TTS generation: {CurrentSession.TranslationPath} -> {ttsPath}");
 
         var ttsLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
+        var combinedProgress = new Progress<(int Completed, int Total)>(update =>
+            ReportStage(
+                stageContext,
+                $"Generating combined dub audio: segment {update.Completed} of {update.Total}…",
+                progress01: update.Total > 0 ? (double)update.Completed / update.Total : 0,
+                isIndeterminate: false));
+
         var result = await _ttsService.GenerateTtsAsync(
             new TtsRequest(
                 CurrentSession.TranslationPath,
@@ -334,7 +341,8 @@ public sealed partial class SessionWorkflowCoordinator
                 CurrentSession.SpeakerVoiceAssignments,
                 CurrentSession.SpeakerReferenceAudioPaths,
                 CurrentSession.DefaultTtsVoiceFallback,
-                ttsLanguage),
+                ttsLanguage,
+                SegmentProgress: combinedProgress),
             cancellationToken);
 
         if (!result.Success)
