@@ -13,7 +13,9 @@ public static class InferenceRuntimeCatalog
     public static InferenceRuntime InferTranscriptionRuntime(string? providerId) => providerId switch
     {
         ProviderNames.ContainerizedService => InferenceRuntime.Containerized,
-        ProviderNames.OpenAiWhisperApi or ProviderNames.GoogleStt => InferenceRuntime.Cloud,
+        ProviderNames.OpenAiWhisperApi
+            or ProviderNames.GoogleStt
+            or ProviderNames.GeminiTranscription => InferenceRuntime.Cloud,
         _ => InferenceRuntime.Local,
     };
 
@@ -68,6 +70,7 @@ public static class InferenceRuntimeCatalog
                 null or "" => DefaultTranscriptionProvider(runtime),
                 ProviderNames.GoogleStt => ProviderNames.GoogleStt,
                 ProviderNames.OpenAiWhisperApi => ProviderNames.OpenAiWhisperApi,
+                ProviderNames.GeminiTranscription => ProviderNames.GeminiTranscription,
                 _ => providerId,
             };
         }
@@ -99,6 +102,7 @@ public static class InferenceRuntimeCatalog
             ProviderNames.Deepl => ProviderNames.Deepl,
             ProviderNames.OpenAi => ProviderNames.OpenAi,
             ProviderNames.GoogleTranslateFree => ProviderNames.GoogleTranslateFree,
+            ProviderNames.GeminiTranslation => ProviderNames.GeminiTranslation,
             _ => providerId,
         };
     }
