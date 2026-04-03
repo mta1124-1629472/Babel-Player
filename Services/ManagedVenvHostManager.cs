@@ -41,6 +41,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private readonly Func<string> _requirementsPathResolver;
     private readonly Func<string> _constraintsPathResolver;
     private readonly Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>> _runtimeValidator;
+    private readonly Func<string, string, string, string, CancellationToken, Task> _hostProcessStarter;
     private readonly object _gate = new();
     private Task<ContainerizedStartResult>? _inFlightStartTask;
     private Process? _hostProcess;
@@ -55,7 +56,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         Func<string>? inferenceScriptResolver = null,
         Func<string>? requirementsPathResolver = null,
         Func<string>? constraintsPathResolver = null,
-        Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>>? runtimeValidator = null)
+        Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>>? runtimeValidator = null,
+        Func<string, string, string, string, CancellationToken, Task>? hostProcessStarter = null)
     {
         _log = log;
         _probe = probe;
@@ -67,6 +69,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         _requirementsPathResolver = requirementsPathResolver ?? ResolveRequirementsPath;
         _constraintsPathResolver = constraintsPathResolver ?? ResolveConstraintsPath;
         _runtimeValidator = runtimeValidator ?? ValidateManagedGpuRuntimeAsync;
+        _hostProcessStarter = hostProcessStarter ?? StartHostProcessAsync;
     }
 
     public ManagedHostState State { get; private set; } = ManagedHostState.NotInstalled;
@@ -187,8 +190,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 $"Managed local GPU runtime validation failed: {runtimeValidation.Message}");
         }
 
+        _log.Info(
+            $"Managed GPU runtime validation passed: {runtimeValidation.Message}");
+
         State = ManagedHostState.Starting;
-        await StartHostProcessAsync(
+        await _hostProcessStarter(
             pythonPath,
             inferenceScriptPath,
             computeType,
