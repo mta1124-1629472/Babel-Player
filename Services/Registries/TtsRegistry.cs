@@ -177,7 +177,8 @@ public sealed class TtsRegistry : ITtsRegistry
             {
                 ProviderNames.XttsContainer => new XttsContainerTtsProvider(
                     new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
-                    _log),
+                    _log,
+                    new XttsReferenceExtractor(_log)),
                 _ => throw new PipelineProviderException(
                     $"Containerized TTS provider '{providerId}' is not implemented. Select a supported provider.")
             };

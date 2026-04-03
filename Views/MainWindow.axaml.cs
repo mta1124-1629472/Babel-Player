@@ -184,17 +184,22 @@ public partial class MainWindow : Window
         _embeddedTransport.SetDisplaySize(width, height);
     }
 
+    private static readonly string[] VideoExtensions = ["*.mp4", "*.mkv", "*.avi", "*.webm", "*.mov"];
+    private static readonly string[] AudioExtensions = ["*.wav", "*.mp3", "*.flac", "*.ogg", "*.m4a"];
+    private static readonly string[] AllFilesPattern = ["*.*"];
+    private static readonly string[] SrtPattern = ["*.srt"];
+
     public async void OnOpenMediaClick(object? sender, RoutedEventArgs e)
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Open Media File",
             AllowMultiple = false,
-            FileTypeFilter = new[]
-            {
-                new FilePickerFileType("Video Files") { Patterns = new[] { "*.mp4", "*.mkv", "*.avi", "*.webm", "*.mov" } },
-                new FilePickerFileType("All Files") { Patterns = new[] { "*.*" } },
-            }
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Video Files") { Patterns = VideoExtensions },
+                new FilePickerFileType("All Files") { Patterns = AllFilesPattern },
+            ]
         });
 
         if (files.Count == 0) return;
@@ -222,11 +227,11 @@ public partial class MainWindow : Window
         {
             Title = $"Select reference clip for {vm.Playback.SelectedSpeakerId}",
             AllowMultiple = false,
-            FileTypeFilter = new[]
-            {
-                new FilePickerFileType("Audio Files") { Patterns = new[] { "*.wav", "*.mp3", "*.flac", "*.ogg", "*.m4a" } },
-                new FilePickerFileType("All Files") { Patterns = new[] { "*.*" } },
-            }
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Audio Files") { Patterns = AudioExtensions },
+                new FilePickerFileType("All Files") { Patterns = AllFilesPattern },
+            ]
         });
 
         if (files.Count == 0) return;
@@ -281,10 +286,10 @@ public partial class MainWindow : Window
             Title = "Export Captions",
             DefaultExtension = "srt",
             SuggestedFileName = suggestedName,
-            FileTypeChoices = new[]
-            {
-                new FilePickerFileType("SubRip Subtitle") { Patterns = new[] { "*.srt" } },
-            }
+            FileTypeChoices =
+            [
+                new FilePickerFileType("SubRip Subtitle") { Patterns = SrtPattern },
+            ]
         });
 
         if (file is null)

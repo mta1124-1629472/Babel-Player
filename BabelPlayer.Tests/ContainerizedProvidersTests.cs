@@ -214,7 +214,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new XttsContainerTtsProvider(client, _log);
+        var provider = new XttsContainerTtsProvider(client, _log, new XttsReferenceExtractor(_log));
 
         var result = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
             "hello there",
@@ -288,6 +288,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
         var provider = new XttsContainerTtsProvider(
             client,
             _log,
+            new XttsReferenceExtractor(_log),
             async (segmentAudioPaths, destinationPath, _) =>
             {
                 combineInputs.AddRange(segmentAudioPaths);
@@ -362,7 +363,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new XttsContainerTtsProvider(client, _log);
+        var provider = new XttsContainerTtsProvider(client, _log, new XttsReferenceExtractor(_log));
         var result = await provider.GenerateTtsAsync(new TtsRequest(
             translationPath,
             outputPath,

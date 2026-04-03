@@ -59,23 +59,25 @@ public sealed record TranslatedSegment(
 
 // --- TTS ---
 public sealed record TtsRequest(
-    string TranslationJsonPath, 
-    string OutputAudioPath, 
+    string TranslationJsonPath,
+    string OutputAudioPath,
     string VoiceName,
     Dictionary<string, string>? SpeakerVoiceAssignments = null,
     Dictionary<string, string>? SpeakerReferenceAudioPaths = null,
     string? DefaultVoiceFallback = null,
     string? Language = null,
+    string? SourceVideoPath = null,
     IProgress<(int Completed, int Total)>? SegmentProgress = null);
 
 public sealed record SingleSegmentTtsRequest(
-    string Text, 
-    string OutputAudioPath, 
+    string Text,
+    string OutputAudioPath,
     string VoiceName,
     string? SpeakerId = null,
     string? ReferenceAudioPath = null,
     string? ReferenceTranscriptText = null,
-    string? Language = null);
+    string? Language = null,
+    string? SourceVideoPath = null);
 
 public sealed record TtsResult(
     bool Success,

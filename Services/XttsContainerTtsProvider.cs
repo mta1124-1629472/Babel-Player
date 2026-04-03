@@ -17,10 +17,11 @@ namespace Babel.Player.Services;
 /// TTS provider backed by containerized XTTS endpoints.
 /// Uses per-segment reference audio when available to enable voice cloning.
 /// </summary>
-public sealed class XttsContainerTtsProvider : ITtsProvider
+public sealed class XttsContainerTtsProvider : ITtsProvider, IAsyncDisposable
 {
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
+    private readonly XttsReferenceExtractor _extractor;
     private readonly Func<IReadOnlyList<string>, string, CancellationToken, Task> _combineAudioFunc;
 
     // Static so that reference IDs registered in a prior session are reused
@@ -28,13 +29,20 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
     private static readonly ConcurrentDictionary<string, string> _referenceIdBySpeakerPath =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Instance-level cache for reference ID per session (speaker -> referenceId)
+    private readonly Dictionary<string, string> _sessionReferenceIds = new(StringComparer.OrdinalIgnoreCase);
+    private string? _autoExtractedReferencePath;
+    private bool _disposed;
+
     public XttsContainerTtsProvider(
         ContainerizedInferenceClient client,
         AppLog log,
+        XttsReferenceExtractor extractor,
         Func<IReadOnlyList<string>, string, CancellationToken, Task>? combineAudioFunc = null)
     {
         _client = client;
         _log = log;
+        _extractor = extractor;
         _combineAudioFunc = combineAudioFunc ?? CombineAudioSegmentsAsync;
     }
 
@@ -50,15 +58,23 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
 
         _log.Info($"[XttsContainerTts] Segment synth start (speaker={request.SpeakerId ?? "<none>"})");
 
+        // Lazy auto-extraction: if no reference audio provided but source video is available
+        var referenceAudioPath = request.ReferenceAudioPath;
+        if (string.IsNullOrWhiteSpace(referenceAudioPath) && !string.IsNullOrWhiteSpace(request.SourceVideoPath))
+        {
+            referenceAudioPath = await EnsureAutoExtractedReferenceAsync(request.SourceVideoPath, cancellationToken);
+        }
+
         var referenceId = await ResolveReferenceIdAsync(
             request.SpeakerId,
-            request.ReferenceAudioPath,
+            referenceAudioPath,
             request.ReferenceTranscriptText,
             cancellationToken);
-        if (string.IsNullOrWhiteSpace(request.ReferenceAudioPath) && string.IsNullOrWhiteSpace(referenceId))
+
+        if (string.IsNullOrWhiteSpace(referenceAudioPath) && string.IsNullOrWhiteSpace(referenceId))
         {
             throw new InvalidOperationException(
-                "XTTS requires a speaker reference audio clip. Assign a reference clip before generating GPU TTS.");
+                "XTTS requires a speaker reference audio clip. Provide ReferenceAudioPath or SourceVideoPath.");
         }
         var language = ResolveLanguage(request.Language);
         var model = ResolveModel(request.VoiceName);
@@ -110,6 +126,14 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
                 segmentIndex++;
                 var resolvedModel = ResolveModel(ResolveVoiceForSegment(seg, request));
                 var referenceAudioPath = ResolveReferenceAudioForSegment(seg, request);
+
+                // Lazy auto-extraction for single-speaker mode
+                if (string.IsNullOrWhiteSpace(referenceAudioPath) &&
+                    !string.IsNullOrWhiteSpace(request.SourceVideoPath) &&
+                    (request.SpeakerReferenceAudioPaths?.Count ?? 0) == 0)
+                {
+                    referenceAudioPath = await EnsureAutoExtractedReferenceAsync(request.SourceVideoPath, cancellationToken);
+                }
 
                 // Pass seg.Text (source transcript) so the server can skip its
                 // internal Whisper transcription during reference registration.
@@ -292,7 +316,53 @@ public sealed class XttsContainerTtsProvider : ITtsProvider
             ct);
 
         _referenceIdBySpeakerPath[key] = generatedReferenceId;
+        _sessionReferenceIds[key] = generatedReferenceId;
         return generatedReferenceId;
+    }
+
+    /// <summary>
+    /// Resets the session state, clearing cached reference IDs and deleting auto-extracted reference audio.
+    /// </summary>
+    public async Task ResetSessionAsync()
+    {
+        _log.Info("[XttsContainerTts] Resetting session state");
+
+        _sessionReferenceIds.Clear();
+
+        if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
+        {
+            await _extractor.DeleteAsync();
+            _autoExtractedReferencePath = null;
+        }
+    }
+
+    /// <summary>
+    /// Disposes the provider and cleans up any auto-extracted reference audio.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+            return;
+
+        await ResetSessionAsync();
+        await _extractor.DisposeAsync();
+        _disposed = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private async Task<string?> EnsureAutoExtractedReferenceAsync(string sourceVideoPath, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
+        {
+            return _autoExtractedReferencePath;
+        }
+
+        _log.Info($"[XttsContainerTts] Auto-extracting reference audio from: {sourceVideoPath}");
+        _autoExtractedReferencePath = await _extractor.ExtractReferenceAsync(sourceVideoPath, ct);
+        return _autoExtractedReferencePath;
     }
 
     private static string ResolveVoiceForSegment(TranslationSegmentArtifact segment, TtsRequest request)
