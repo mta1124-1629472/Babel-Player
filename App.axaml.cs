@@ -116,9 +116,17 @@ public partial class App : Application
             desktop.Exit += OnDesktopExit;
             desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose;
 
+            var errorDialogService = new AvaloniaErrorDialogService(appLog);
+
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(_sessionWorkflowCoordinator, _settingsService, modelDownloader, _apiKeyStore, logFilePath: _logFilePath),
+                DataContext = new MainWindowViewModel(
+                    _sessionWorkflowCoordinator,
+                    _settingsService,
+                    modelDownloader,
+                    _apiKeyStore,
+                    errorDialogService,
+                    logFilePath: _logFilePath),
             };
 
             // Run heavy startup probes in background and publish results on UI thread.
