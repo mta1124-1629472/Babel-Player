@@ -59,5 +59,14 @@ public sealed class ModelsTabViewModel : ViewModelBase
                 downloadFunc: (progress, token) => downloader.DownloadPiperVoiceAsync(v, dir, progress, token),
                 downloader: downloader));
         }
+
+        // ── XTTS v2 ───────────────────────────────────────────────────────────
+        // Single monolithic model — no per-variant list needed.
+        Models.Add(new ModelDownloadEntry(
+            providerLabel: "XTTS v2",
+            modelId: "xtts-v2",
+            isDownloadedFunc: () => ModelDownloader.IsXttsDownloaded(),
+            downloadFunc: (progress, token) => downloader.DownloadXttsAsync(progress, token),
+            downloader: downloader));
     }
 }
