@@ -5,13 +5,13 @@
         xmlns:models="using:Babel.Player.Models"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="650"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="700"
         x:Class="Babel.Player.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/Icons/app.ico"
         Title="Babel Player"
-        Width="1100" Height="650"
-        MinWidth="900" MinHeight="500"
+        Width="1280" Height="700"
+        MinWidth="960" MinHeight="520"
         RequestedThemeVariant="Dark"
         Background="#12121A">
 
