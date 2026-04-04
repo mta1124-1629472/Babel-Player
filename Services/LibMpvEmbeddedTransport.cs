@@ -638,6 +638,20 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
                     if (handle != IntPtr.Zero) return handle;
                 }
             }
+
+            // Also try the native/win-x64 subdirectory of the base directory — this is where
+            // CopyToOutputDirectory places the DLL when built or published (preserving the
+            // native\win-x64\ relative path structure).
+            string nativeSubDir = Path.Combine(baseDir, "native", "win-x64");
+            foreach (string dllName in possibleNames)
+            {
+                string path = Path.Combine(nativeSubDir, dllName);
+                if (File.Exists(path))
+                {
+                    IntPtr handle = NativeLibrary.Load(path);
+                    if (handle != IntPtr.Zero) return handle;
+                }
+            }
         }
         catch
         {
