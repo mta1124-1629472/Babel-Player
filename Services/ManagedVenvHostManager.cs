@@ -105,12 +105,15 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
-        if (preflight.IsAvailable)
+        if (preflight.IsAvailable && !IsScriptChangedSinceLastStart())
         {
             State = ManagedHostState.Ready;
             _log.Info("Managed GPU host startup path: reuse");
             return new ContainerizedStartResult(false, true, $"Managed local GPU host already available at {serviceUrl}.");
         }
+
+        if (preflight.IsAvailable)
+            _log.Info("Managed GPU host script changed since last start; will stop stale process and restart.");
 
         if (ShouldDeferRestartForBusyHost(preflight, trigger))
         {
@@ -938,6 +941,27 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"tx={capabilities.TranscriptionReady}('{capabilities.TranscriptionDetail ?? "<none>"}'), " +
             $"tl={capabilities.TranslationReady}('{capabilities.TranslationDetail ?? "<none>"}'), " +
             $"tts={capabilities.TtsReady}('{capabilities.TtsDetail ?? "<none>"}')";
+    }
+
+    private bool IsScriptChangedSinceLastStart()
+    {
+        try
+        {
+            var runtimeRoot = _runtimeRootResolver();
+            var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
+            if (!File.Exists(markerPath))
+                return true; // no record of what's running — assume changed
+            var storedHash = File.ReadAllText(markerPath).Trim();
+            var currentHash = ComputeBootstrapVersion(
+                _inferenceScriptResolver(),
+                _requirementsPathResolver(),
+                _constraintsPathResolver());
+            return !string.Equals(storedHash, currentHash, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false; // can't determine — assume unchanged to avoid spurious restarts
+        }
     }
 
     private static string ComputeBootstrapVersion(

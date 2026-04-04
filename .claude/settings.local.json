@@ -34,7 +34,14 @@
       "Bash(grep -v \"^$\")",
       "Bash(dotnet remove:*)",
       "Bash(dir \"D:\\\\Dev\\\\Babel-Player\\\\docs\\\\smoke\"\")",
-      "Bash(gh run:*)"
+      "Bash(gh run:*)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill /PID 31268 /F)",
+      "Bash(cmd /c \"taskkill /PID 31268 /F\")",
+      "Bash(cmd /c \"taskkill /PID 31268 /F 2>&1\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(cmd /c \"taskkill /PID 31268 /F && echo killed || echo failed\")",
+      "Bash(powershell -Command \"Stop-Process -Id 31268 -Force; Write-Host ''done''\")"
     ]
   }
 }
