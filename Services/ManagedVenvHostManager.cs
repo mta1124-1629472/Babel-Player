@@ -717,13 +717,17 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         psi.ArgumentList.Add("18000");
         psi.ArgumentList.Add("--compute-type");
         psi.ArgumentList.Add(computeType);
-        
+
         // Any GPU compute type requires CUDA at host startup.
         if (RequiresCuda(computeType))
         {
             psi.ArgumentList.Add("--require-cuda");
         }
-        
+
+        // Make CUDA kernel errors synchronous so the Python traceback points at the
+        // actual failing op rather than a random later API call.
+        psi.Environment["CUDA_LAUNCH_BLOCKING"] = "1";
+
         return psi;
     }
 

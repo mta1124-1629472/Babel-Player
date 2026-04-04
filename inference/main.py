@@ -629,12 +629,16 @@ async def qwen_segment(
 
         def _synth_and_write() -> None:
             import soundfile as sf
+            # Use x_vector_only_mode=True: capture speaker voice via embedding only.
+            # ICL mode (x_vector_only_mode=False) prepends reference codec tokens to the
+            # generation prefix; if those token indices exceed the codec vocab size the
+            # CUDA kernel raises a device-side assert. x_vector mode is robust and still
+            # captures the speaker's voice identity from ref_audio.
             wavs, sample_rate = tts.generate_voice_clone(
                 text=text,
                 language=lang,
                 ref_audio=ref_audio_path,
-                ref_text=reference_text or None,
-                x_vector_only_mode=not bool(reference_text),
+                x_vector_only_mode=True,
                 non_streaming_mode=True,
             )
             sf.write(str(out_path), wavs[0], sample_rate, subtype="PCM_16")
