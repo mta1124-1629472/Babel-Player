@@ -569,7 +569,10 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
         qwen_model = Qwen3TTSModel.from_pretrained(
             model_name,
             device_map=HOST_DEVICE,
-            torch_dtype=torch.float16 if HOST_DEVICE == "cuda" else torch.float32,
+            # bfloat16: same exponent range as float32, avoids float16 softmax
+            # underflow where all logits saturate to ±inf → probs all-zero →
+            # torch.multinomial assertion failure in the code_predictor.
+            torch_dtype=torch.bfloat16 if HOST_DEVICE == "cuda" else torch.float32,
         )
         qwen_model_key = model_name
         logger.info("Qwen3-TTS loaded")
