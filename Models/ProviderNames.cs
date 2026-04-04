@@ -7,16 +7,16 @@ namespace Babel.Player.Models;
 /// </summary>
 public static class ProviderNames
 {
-    // ── Containerized inference service (all stages) ──────────────────────────
+    // ── Containerized inference service (all stages) ─────────────────────────
     public const string ContainerizedService = "containerized";
 
-    // ── Transcription ──────────────────────────────────────────────────────────
+    // ── Transcription ───────────────────────────────────────────────────────
     public const string FasterWhisper         = "faster-whisper";
     public const string OpenAiWhisperApi       = "openai-whisper-api";
     public const string GoogleStt             = "google-stt";
     public const string GeminiTranscription   = "gemini-transcription";
 
-    // ── Translation ────────────────────────────────────────────────────────────
+    // ── Translation ──────────────────────────────────────────────────────
     public const string GoogleTranslateFree   = "google-translate-free";
     public const string Nllb200               = "nllb-200";
     public const string CTranslate2           = "ctranslate2";
@@ -24,7 +24,7 @@ public static class ProviderNames
     public const string OpenAi                = "openai";
     public const string GeminiTranslation     = "gemini-translation";
 
-    // ── TTS ────────────────────────────────────────────────────────────────────
+    // ── TTS ──────────────────────────────────────────────────────────────
     public const string EdgeTts        = "edge-tts";
     public const string Piper          = "piper";
     public const string ElevenLabs     = "elevenlabs";
@@ -33,7 +33,7 @@ public static class ProviderNames
     public const string XttsContainer  = "xtts-container";
     public const string Qwen           = "qwen-tts";
 
-    // ── Diarization ────────────────────────────────────────────────────────────
+    // ── Diarization ─────────────────────────────────────────────────────
     public const string PyannoteLocal = "pyannote-local";
 }
 
@@ -48,4 +48,5 @@ public static class CredentialKeys
     public const string GoogleGemini  = "google-gemini";  // Gemini transcription + translation
     public const string ElevenLabs    = "elevenlabs";
     public const string Deepl         = "deepl";
+    public const string HuggingFace   = "huggingface";    // pyannote diarization pipeline
 }

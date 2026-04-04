@@ -20,7 +20,7 @@ public sealed class ApiKeyStore
 
     /// <summary>Canonical provider IDs managed by this store (in display order).</summary>
     public static IReadOnlyList<string> KnownProviders { get; } =
-        [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl];
+        [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl, CredentialKeys.HuggingFace];
 
     public static string GetDisplayName(string providerKey) => providerKey switch
     {
@@ -29,6 +29,7 @@ public sealed class ApiKeyStore
         CredentialKeys.GoogleGemini => "Google Gemini",
         CredentialKeys.ElevenLabs   => "ElevenLabs",
         CredentialKeys.Deepl        => "DeepL",
+        CredentialKeys.HuggingFace  => "HuggingFace (pyannote diarization)",
         _                           => providerKey,
     };
 
@@ -53,7 +54,7 @@ public sealed class ApiKeyStore
         return normalized;
     }
 
-    // ── Public API ──────────────────────────────────────────────────────────────
+    // ── Public API ───────────────────────────────────────────────────────
 
     public bool HasKey(string provider)
     {
@@ -96,7 +97,7 @@ public sealed class ApiKeyStore
             SaveRaw(keys);
     }
 
-    // ── Storage helpers ────────────────────────────────────────────────────────
+    // ── Storage helpers ─────────────────────────────────────────────
 
     private Dictionary<string, string> LoadRaw()
     {
@@ -127,7 +128,7 @@ public sealed class ApiKeyStore
         }
     }
 
-    // ── Encryption helpers ─────────────────────────────────────────────────────
+    // ── Encryption helpers ─────────────────────────────────────────────
 
     private static string Protect(string plaintext)
     {

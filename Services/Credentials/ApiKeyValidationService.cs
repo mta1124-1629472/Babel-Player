@@ -63,6 +63,10 @@ public sealed class ApiKeyValidationService
         if (credentialKey == CredentialKeys.GoogleAi)
             return await ValidateGoogleAsync(apiKey.Trim(), cancellationToken);
 
+        // HuggingFace tokens can be format-validated offline (hf_... prefix).
+        if (credentialKey == CredentialKeys.HuggingFace)
+            return ValidateHuggingFaceFormat(apiKey.Trim());
+
         var implementedProviders = GetImplementedProviders(credentialKey);
         if (implementedProviders.Count == 0)
             return ApiKeyValidationResult.Unavailable(
@@ -76,6 +80,20 @@ public sealed class ApiKeyValidationService
             _ => ApiKeyValidationResult.Unavailable(
                 "Live validation is not implemented for this credential yet."),
         };
+    }
+
+    private static ApiKeyValidationResult ValidateHuggingFaceFormat(string token)
+    {
+        // HuggingFace user access tokens start with "hf_" and are at least 30 characters.
+        // This is an offline format check only — it does not verify the token against the API.
+        if (!token.StartsWith("hf_", StringComparison.Ordinal) || token.Length < 30)
+            return ApiKeyValidationResult.Failure(
+                "Token does not look like a valid HuggingFace user access token (expected \"hf_\" prefix, ≥30 characters). " +
+                "Get yours at https://huggingface.co/settings/tokens.");
+
+        return ApiKeyValidationResult.Success(
+            "Token format looks valid. Note: the pyannote/speaker-diarization model also requires " +
+            "accepting its gated-model license on HuggingFace before use.");
     }
 
     private async Task<ApiKeyValidationResult> ValidateElevenLabsAsync(
@@ -192,7 +210,7 @@ public sealed class ApiKeyValidationService
     // implemented provider. Add entries here when validation is wired but the
     // full provider implementation is still pending.
     private static bool HasDirectValidationProbe(string credentialKey) =>
-        credentialKey is CredentialKeys.GoogleAi;
+        credentialKey is CredentialKeys.GoogleAi or CredentialKeys.HuggingFace;
 
     private async Task<ApiKeyValidationResult> ValidateGoogleAsync(
         string apiKey,

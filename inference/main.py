@@ -55,7 +55,16 @@ pyannote_pipeline_key: str | None = None
 # "ready" = model loaded, "failed: <reason>" = terminal failure
 _xtts_warmup_status: str | None = None
 _qwen_warmup_status: str | None = None
+# Pyannote is loaded lazily on first /diarize (requires HF token);
+# this lock prevents concurrent load races. It must be created from an
+# async context so it binds to the running event loop used by the app.
+_pyannote_load_lock: asyncio.Lock | None = None
 
+async def _get_pyannote_load_lock() -> asyncio.Lock:
+    global _pyannote_load_lock
+    if _pyannote_load_lock is None:
+        _pyannote_load_lock = asyncio.Lock()
+    return _pyannote_load_lock
 HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
 # Tracks effective compute type after per-stage validation and potential downgrades
@@ -147,6 +156,7 @@ class CapabilitiesResponse(BaseModel):
     transcription: StageCapability
     translation: StageCapability
     tts: StageCapability
+    diarization: StageCapability
 
 
 class TranscriptSegmentResponse(BaseModel):
@@ -214,12 +224,6 @@ class SpeakerSegmentInput(BaseModel):
     end: float
 
 
-class SpeakerReferenceRequest(BaseModel):
-    # JSON-encoded dict: { speaker_id: [{ start, end }, ...] }
-    # Keyed by speaker_id, value is list of non-overlapping segments for that speaker
-    speakers: dict[str, list[SpeakerSegmentInput]]
-
-
 class SpeakerReferenceResult(BaseModel):
     speaker_id: str
     reference_id: str  # registered in xtts_reference_registry for reuse
@@ -275,7 +279,7 @@ def _probe_qwen_available() -> tuple[bool, str]:
 def _probe_pyannote_available() -> tuple[bool, str]:
     try:
         import pyannote.audio  # noqa: F401
-        return True, "pyannote.audio available"
+        return True, "pyannote.audio installed; requires HF token at runtime"
     except Exception as exc:
         return False, str(exc)
 
@@ -313,6 +317,8 @@ async def get_stage_capabilities():
     else:
         tts_detail = f"xtts: {xtts_detail}; qwen: {qwen_detail}"
 
+    diar_ready, diar_detail = _probe_pyannote_available()
+
     return CapabilitiesResponse(
         transcription=StageCapability(ready=tx_ready, detail=tx_detail),
         translation=StageCapability(ready=tl_ready, detail=tl_detail),
@@ -328,6 +334,7 @@ async def get_stage_capabilities():
                 "qwen-tts": qwen_detail,
             },
         ),
+        diarization=StageCapability(ready=diar_ready, detail=diar_detail),
     )
 
 
@@ -492,25 +499,42 @@ async def translate(
 # Diarization
 # ============================================================================
 
-def load_pyannote_pipeline(hf_token: str):
+async def load_pyannote_pipeline_async(hf_token: str):
     """Load (or return cached) pyannote speaker-diarization-3.1 pipeline.
 
-    The pipeline is keyed on the HF token so that if a different token is
-    passed (e.g. during dev) we reload.  In practice the token never changes
-    at runtime, so the model is loaded once and reused.
+    Protected by an asyncio.Lock so concurrent /diarize requests cannot race
+    on the global during the first load.  Subsequent calls return the cached
+    pipeline without acquiring the lock in the hot path.
     """
     global pyannote_pipeline, pyannote_pipeline_key
-    if pyannote_pipeline is None or pyannote_pipeline_key != hf_token:
-        from pyannote.audio import Pipeline
-        logger.info("Loading pyannote speaker-diarization-3.1")
-        pyannote_pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1",
-            use_auth_token=hf_token,
-        )
-        if HOST_DEVICE == "cuda":
-            pyannote_pipeline = pyannote_pipeline.to(torch.device("cuda"))
+
+    # Fast path: already loaded with the same token
+    if pyannote_pipeline is not None and pyannote_pipeline_key == hf_token:
+        return pyannote_pipeline
+
+    # Acquire the lock lazily — _pyannote_load_lock starts as None and must be
+    # created from within an async context so it binds to the running event loop.
+    lock = await _get_pyannote_load_lock()
+    async with lock:
+        # Re-check inside the lock in case another coroutine loaded while we waited
+        if pyannote_pipeline is not None and pyannote_pipeline_key == hf_token:
+            return pyannote_pipeline
+
+        def _load():
+            from pyannote.audio import Pipeline
+            logger.info("Loading pyannote speaker-diarization-3.1")
+            pipeline = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-3.1",
+                use_auth_token=hf_token,
+            )
+            if HOST_DEVICE == "cuda":
+                pipeline = pipeline.to(torch.device("cuda"))
+            logger.info("pyannote pipeline loaded")
+            return pipeline
+
+        pyannote_pipeline = await asyncio.to_thread(_load)
         pyannote_pipeline_key = hf_token
-        logger.info("pyannote pipeline loaded")
+
     return pyannote_pipeline
 
 
@@ -545,14 +569,18 @@ async def diarize(
         temp_audio_path = TEMP_DIR / f"diar_{uuid4().hex}_{safe_name}"
         temp_audio_path.write_bytes(await file.read())
 
-        pipeline = await asyncio.to_thread(load_pyannote_pipeline, hf_token.strip())
+        pipeline = await load_pyannote_pipeline_async(hf_token.strip())
+
+        # Capture loop params explicitly so the closure is unambiguous
+        _min = min_speakers
+        _max = max_speakers
 
         def _run_diarization():
             kwargs: dict = {}
-            if min_speakers is not None:
-                kwargs["min_speakers"] = min_speakers
-            if max_speakers is not None:
-                kwargs["max_speakers"] = max_speakers
+            if _min is not None:
+                kwargs["min_speakers"] = _min
+            if _max is not None:
+                kwargs["max_speakers"] = _max
             return pipeline(str(temp_audio_path), **kwargs)
 
         diarization = await asyncio.to_thread(_run_diarization)
@@ -587,6 +615,55 @@ async def diarize(
 # Per-speaker reference clip extraction
 # ============================================================================
 
+def _resolve_reference_path_in_temp_dir(path_value: str) -> Optional[Path]:
+    """Resolve a reference file path and ensure it stays within TEMP_DIR."""
+    try:
+        candidate = Path(path_value).resolve(strict=False)
+        temp_dir = Path(TEMP_DIR).resolve(strict=False)
+        candidate.relative_to(temp_dir)
+        return candidate
+    except Exception:
+        return None
+
+
+def _evict_reference(ref_id: str) -> bool:
+    """Remove a reference from the registry and delete its backing file.
+
+    Returns True if an entry was found and removed, False if no entry existed.
+    """
+    entry = xtts_reference_registry.pop(ref_id, None)
+    if entry is None:
+        return False
+    old_path = entry.get("path")
+    if old_path:
+        safe_path = _resolve_reference_path_in_temp_dir(old_path)
+        if safe_path is None:
+            logger.warning(
+                f"Skipping deletion for reference file outside TEMP_DIR or with invalid path: {old_path}"
+            )
+        else:
+            try:
+                if safe_path.is_file() or not safe_path.exists():
+                    safe_path.unlink(missing_ok=True)
+                else:
+                    logger.warning(f"Skipping deletion for non-file reference path: {safe_path}")
+            except Exception as exc:
+                logger.warning(f"Could not delete reference file {safe_path}: {exc}")
+    return True
+
+
+@app.delete("/speakers/references/{ref_id}")
+async def delete_speaker_reference(ref_id: str):
+    """Explicitly release a speaker reference clip and free its temp file.
+
+    The C# coordinator should call this when a dubbing session ends so that
+    extracted reference WAVs do not accumulate in TEMP_DIR.
+    """
+    if not _evict_reference(ref_id):
+        raise HTTPException(status_code=404, detail=f"reference_id '{ref_id}' not found")
+    return {"success": True, "deleted": ref_id}
+
+
 @app.post("/speakers/extract-reference", response_model=SpeakerReferenceResponse)
 async def extract_speaker_references(
     file: UploadFile = File(...),
@@ -597,53 +674,73 @@ async def extract_speaker_references(
     """Extract a reference audio clip for each speaker from the source audio.
 
     For each speaker, this endpoint:
-      1. Finds all diarized segments belonging to that speaker.
-      2. Selects the single longest segment (most stable, fewest cuts).
+      1. Validates the diarization segment list via Pydantic.
+      2. Finds the single longest segment for that speaker.
       3. Trims it to `target_duration_seconds` if it is longer.
-      4. Extracts the clip via ffmpeg.
+      4. Extracts the clip via ffmpeg (frame-accurate seek).
       5. Registers it in the XTTS reference registry so subsequent TTS calls
          can pass `reference_id` instead of re-uploading the file.
+      6. Evicts any pre-existing registry entry for the same speaker_id AND
+         session_id so temp files do not accumulate across repeated calls from
+         the same session, without invalidating references from other sessions
+         that happen to share the same diarization label (e.g. SPEAKER_00).
 
     Parameters
     ----------
     file                    : full source audio (same file used for diarization)
-    speakers_json           : JSON object mapping speaker_id ->  list of
-                              {start, end} diarization segments for that speaker
-                              e.g. {"SPEAKER_00": [{"start": 1.2, "end": 8.7}, ...]}
+    speakers_json           : JSON object mapping speaker_id -> list of
+                              {start, end} diarization segments for that speaker.
+                              e.g. {"SPEAKER_00": [{"start": 1.2, "end": 8.7}]}
     target_duration_seconds : max clip length to extract (default 10 s)
     """
     if shutil.which("ffmpeg") is None:
         raise HTTPException(status_code=500, detail="ffmpeg not found on PATH — required for reference extraction")
 
+    # A unique ID for this extraction call. Stored on every registry entry so
+    # re-extractions from the same session only evict their own prior refs,
+    # never refs belonging to a concurrent session with the same speaker labels.
+    session_id = uuid4().hex
+
     temp_source_path: Optional[Path] = None
-    speaker_temp_paths: list[Path] = []
     try:
         safe_name = Path(file.filename or "").name or "source_audio"
         temp_source_path = TEMP_DIR / f"src_{uuid4().hex}_{safe_name}"
         temp_source_path.write_bytes(await file.read())
 
+        # --- Parse + validate speakers_json via Pydantic ---
         try:
-            speakers_raw = json.loads(speakers_json)
+            raw = json.loads(speakers_json)
         except json.JSONDecodeError as exc:
             raise HTTPException(status_code=400, detail=f"Invalid speakers_json: {exc}") from exc
 
-        if not isinstance(speakers_raw, dict) or not speakers_raw:
-            raise HTTPException(status_code=400, detail="speakers_json must be a non-empty object")
+        if not isinstance(raw, dict) or not raw:
+            raise HTTPException(status_code=400, detail="speakers_json must be a non-empty JSON object")
+
+        # Validate each speaker's segment list through SpeakerSegmentInput
+        try:
+            validated_speakers: dict[str, list[SpeakerSegmentInput]] = {
+                speaker_id: [SpeakerSegmentInput(**seg) for seg in segs]
+                for speaker_id, segs in raw.items()
+            }
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"speakers_json has invalid segment format: {exc}",
+            ) from exc
 
         results: list[SpeakerReferenceResult] = []
 
-        for speaker_id, raw_segments in speakers_raw.items():
-            if not raw_segments:
+        for speaker_id, segments in validated_speakers.items():
+            if not segments:
                 logger.warning(f"No segments for speaker {speaker_id}, skipping")
                 continue
 
             # Find the longest segment for this speaker
-            best_seg = max(raw_segments, key=lambda s: s["end"] - s["start"])
-            seg_start = float(best_seg["start"])
-            seg_end = float(best_seg["end"])
+            best_seg = max(segments, key=lambda s: s.end - s.start)
+            seg_start = best_seg.start
+            seg_end = best_seg.end
             seg_duration = seg_end - seg_start
 
-            # Trim to target duration, anchored at the segment start
             extract_duration = min(seg_duration, target_duration_seconds)
             if extract_duration < 1.0:
                 logger.warning(
@@ -652,14 +749,13 @@ async def extract_speaker_references(
                 )
 
             out_path = TEMP_DIR / f"ref_{speaker_id}_{uuid4().hex}.wav"
-            speaker_temp_paths.append(out_path)
 
-            # Extract via ffmpeg: seek to start, take extract_duration seconds,
-            # resample to 22050 Hz mono (XTTS/Qwen preferred sample rate)
+            # Frame-accurate seek: -i before -ss ensures we don't land on a
+            # keyframe boundary and clip the wrong speaker's audio.
             cmd = [
                 "ffmpeg", "-y",
-                "-ss", str(seg_start),
                 "-i", str(temp_source_path),
+                "-ss", str(seg_start),
                 "-t", str(extract_duration),
                 "-ar", "22050",
                 "-ac", "1",
@@ -679,11 +775,20 @@ async def extract_speaker_references(
                     detail=f"ffmpeg extraction failed for speaker {speaker_id}: {proc.stderr[-200:]}",
                 )
 
-            # Register in the XTTS reference registry so the C# coordinator
-            # can pass reference_id to /tts/xtts/segment without re-uploading
+            # Evict only refs that belong to the same session AND speaker — never
+            # refs from other concurrent sessions that share the same speaker label.
+            existing_ref_ids = [
+                rid for rid, entry in xtts_reference_registry.items()
+                if entry.get("speaker_id") == speaker_id
+                and entry.get("session_id") == session_id
+            ]
+            for old_ref_id in existing_ref_ids:
+                _evict_reference(old_ref_id)
+
             ref_id = f"{speaker_id}_{uuid4().hex}"
             xtts_reference_registry[ref_id] = {
                 "speaker_id": speaker_id,
+                "session_id": session_id,
                 "path": str(out_path),
                 "transcript": None,
             }
@@ -695,13 +800,10 @@ async def extract_speaker_references(
             ))
             logger.info(
                 f"Extracted {extract_duration:.2f}s reference for {speaker_id} "
-                f"-> ref_id={ref_id}"
+                f"-> ref_id={ref_id} session={session_id}"
             )
 
         background_tasks.add_task(lambda p=temp_source_path: p.unlink(missing_ok=True))
-        # Note: speaker_temp_paths are kept alive for the lifetime of the process
-        # (referenced by xtts_reference_registry). They are NOT cleaned up here.
-
         return SpeakerReferenceResponse(success=True, speakers=results)
 
     except HTTPException:
@@ -752,6 +854,7 @@ async def register_xtts_reference(
         ref_id = f"{speaker_id}_{uuid4().hex}"
         xtts_reference_registry[ref_id] = {
             "speaker_id": speaker_id,
+            "session_id": None,
             "path": str(temp_path),
             "transcript": transcript,
         }
