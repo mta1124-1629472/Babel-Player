@@ -48,6 +48,8 @@ xtts_model_key = None
 xtts_reference_registry: dict[str, dict[str, str | None]] = {}
 qwen_model = None
 qwen_model_key = None
+pyannote_pipeline = None
+pyannote_pipeline_key: str | None = None
 
 # Warmup state: None = not started, "warming" = in progress,
 # "ready" = model loaded, "failed: <reason>" = terminal failure
@@ -191,6 +193,46 @@ class XttsReferenceResponse(BaseModel):
 
 
 # ============================================================================
+# Diarization models
+# ============================================================================
+
+class DiarizationSegment(BaseModel):
+    start: float
+    end: float
+    speaker_id: str
+
+
+class DiarizationResponse(BaseModel):
+    success: bool
+    segments: list[DiarizationSegment]
+    speaker_count: int
+    error_message: Optional[str] = None
+
+
+class SpeakerSegmentInput(BaseModel):
+    start: float
+    end: float
+
+
+class SpeakerReferenceRequest(BaseModel):
+    # JSON-encoded dict: { speaker_id: [{ start, end }, ...] }
+    # Keyed by speaker_id, value is list of non-overlapping segments for that speaker
+    speakers: dict[str, list[SpeakerSegmentInput]]
+
+
+class SpeakerReferenceResult(BaseModel):
+    speaker_id: str
+    reference_id: str  # registered in xtts_reference_registry for reuse
+    duration_seconds: float
+
+
+class SpeakerReferenceResponse(BaseModel):
+    success: bool
+    speakers: list[SpeakerReferenceResult]
+    error_message: Optional[str] = None
+
+
+# ============================================================================
 # Capability probes
 # ============================================================================
 
@@ -228,6 +270,14 @@ def _probe_qwen_available() -> tuple[bool, str]:
     if status == "ready":
         return True, f"Qwen3-TTS model loaded on {HOST_DEVICE}"
     return False, f"Qwen3-TTS warmup {status}"
+
+
+def _probe_pyannote_available() -> tuple[bool, str]:
+    try:
+        import pyannote.audio  # noqa: F401
+        return True, "pyannote.audio available"
+    except Exception as exc:
+        return False, str(exc)
 
 
 # ============================================================================
@@ -269,8 +319,6 @@ async def get_stage_capabilities():
         tts=StageCapability(
             ready=tts_ready,
             detail=tts_detail,
-            # FIX: use "xtts-container" (C# provider ID) not "xtts-v2" (model name)
-            # so ContainerCapabilitiesSnapshot.TryGetTtsProviderReadiness() finds it
             providers={
                 "xtts-container": xtts_ready,
                 "qwen-tts": qwen_ready,
@@ -375,17 +423,14 @@ def load_nllb_model(model_name: str):
         from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
         logger.info(f"Loading NLLB '{normalized_model_name}' on {HOST_DEVICE}")
         nllb_tokenizer = AutoTokenizer.from_pretrained(normalized_model_name)
-        # FIX: load with correct dtype directly to avoid float32 OOM on CUDA
         model_kwargs: dict = {}
         if HOST_DEVICE == "cuda":
             cuda_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
             model_kwargs["torch_dtype"] = cuda_dtype
             model_kwargs["device_map"] = "cuda"
         nllb_model = AutoModelForSeq2SeqLM.from_pretrained(normalized_model_name, **model_kwargs)
-        # FIX: set eval mode after loading to avoid tracking gradients at inference time
         nllb_model.eval()
         if HOST_DEVICE != "cuda":
-            # device_map handles GPU placement above; only needed for CPU
             nllb_model = nllb_model.to(HOST_DEVICE)
         nllb_model_key = normalized_model_name
         logger.info("NLLB loaded")
@@ -420,11 +465,9 @@ async def translate(
             text = seg.get("text", "")
             t_text = ""
             if text:
-                # FIX: set src_lang so NLLB encodes the source language token correctly
                 tokenizer.src_lang = src_flores
                 inputs = tokenizer(text, return_tensors="pt").to(HOST_DEVICE)
                 forced = tokenizer.convert_tokens_to_ids([tgt_flores])
-                # FIX: wrap in no_grad to avoid unnecessary gradient tracking in production
                 with torch.no_grad():
                     out = nllb.generate(**inputs, forced_bos_token_id=forced[0], max_length=512)
                 t_text = tokenizer.batch_decode(out, skip_special_tokens=True)[0]
@@ -442,6 +485,231 @@ async def translate(
         )
     except Exception as exc:
         logger.error(f"Translation failed: {exc}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+# ============================================================================
+# Diarization
+# ============================================================================
+
+def load_pyannote_pipeline(hf_token: str):
+    """Load (or return cached) pyannote speaker-diarization-3.1 pipeline.
+
+    The pipeline is keyed on the HF token so that if a different token is
+    passed (e.g. during dev) we reload.  In practice the token never changes
+    at runtime, so the model is loaded once and reused.
+    """
+    global pyannote_pipeline, pyannote_pipeline_key
+    if pyannote_pipeline is None or pyannote_pipeline_key != hf_token:
+        from pyannote.audio import Pipeline
+        logger.info("Loading pyannote speaker-diarization-3.1")
+        pyannote_pipeline = Pipeline.from_pretrained(
+            "pyannote/speaker-diarization-3.1",
+            use_auth_token=hf_token,
+        )
+        if HOST_DEVICE == "cuda":
+            pyannote_pipeline = pyannote_pipeline.to(torch.device("cuda"))
+        pyannote_pipeline_key = hf_token
+        logger.info("pyannote pipeline loaded")
+    return pyannote_pipeline
+
+
+@app.post("/diarize", response_model=DiarizationResponse)
+async def diarize(
+    file: UploadFile = File(...),
+    hf_token: str = Form(...),
+    min_speakers: Optional[int] = Form(None),
+    max_speakers: Optional[int] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """Run speaker diarization on an audio file.
+
+    Returns time-stamped speaker segments that can be merged with Whisper
+    transcript segments on the C# side to assign a speaker_id to each
+    transcript segment.
+
+    Parameters
+    ----------
+    file        : audio file (WAV preferred; any ffmpeg-readable format works)
+    hf_token    : HuggingFace access token accepted on
+                  huggingface.co/pyannote/speaker-diarization-3.1
+    min_speakers: optional hint — minimum expected speaker count
+    max_speakers: optional hint — maximum expected speaker count
+    """
+    if not hf_token or not hf_token.strip():
+        raise HTTPException(status_code=400, detail="hf_token is required for pyannote diarization")
+
+    temp_audio_path: Optional[Path] = None
+    try:
+        safe_name = Path(file.filename or "").name or "audio"
+        temp_audio_path = TEMP_DIR / f"diar_{uuid4().hex}_{safe_name}"
+        temp_audio_path.write_bytes(await file.read())
+
+        pipeline = await asyncio.to_thread(load_pyannote_pipeline, hf_token.strip())
+
+        def _run_diarization():
+            kwargs: dict = {}
+            if min_speakers is not None:
+                kwargs["min_speakers"] = min_speakers
+            if max_speakers is not None:
+                kwargs["max_speakers"] = max_speakers
+            return pipeline(str(temp_audio_path), **kwargs)
+
+        diarization = await asyncio.to_thread(_run_diarization)
+
+        segments: list[DiarizationSegment] = []
+        speakers: set[str] = set()
+        for turn, _, speaker in diarization.itertracks(yield_label=True):
+            segments.append(DiarizationSegment(
+                start=round(turn.start, 3),
+                end=round(turn.end, 3),
+                speaker_id=speaker,
+            ))
+            speakers.add(speaker)
+
+        background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
+        return DiarizationResponse(
+            success=True,
+            segments=segments,
+            speaker_count=len(speakers),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Diarization failed: {exc}", exc_info=True)
+        if temp_audio_path:
+            background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+# ============================================================================
+# Per-speaker reference clip extraction
+# ============================================================================
+
+@app.post("/speakers/extract-reference", response_model=SpeakerReferenceResponse)
+async def extract_speaker_references(
+    file: UploadFile = File(...),
+    speakers_json: str = Form(...),
+    target_duration_seconds: float = Form(10.0),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """Extract a reference audio clip for each speaker from the source audio.
+
+    For each speaker, this endpoint:
+      1. Finds all diarized segments belonging to that speaker.
+      2. Selects the single longest segment (most stable, fewest cuts).
+      3. Trims it to `target_duration_seconds` if it is longer.
+      4. Extracts the clip via ffmpeg.
+      5. Registers it in the XTTS reference registry so subsequent TTS calls
+         can pass `reference_id` instead of re-uploading the file.
+
+    Parameters
+    ----------
+    file                    : full source audio (same file used for diarization)
+    speakers_json           : JSON object mapping speaker_id ->  list of
+                              {start, end} diarization segments for that speaker
+                              e.g. {"SPEAKER_00": [{"start": 1.2, "end": 8.7}, ...]}
+    target_duration_seconds : max clip length to extract (default 10 s)
+    """
+    if shutil.which("ffmpeg") is None:
+        raise HTTPException(status_code=500, detail="ffmpeg not found on PATH — required for reference extraction")
+
+    temp_source_path: Optional[Path] = None
+    speaker_temp_paths: list[Path] = []
+    try:
+        safe_name = Path(file.filename or "").name or "source_audio"
+        temp_source_path = TEMP_DIR / f"src_{uuid4().hex}_{safe_name}"
+        temp_source_path.write_bytes(await file.read())
+
+        try:
+            speakers_raw = json.loads(speakers_json)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid speakers_json: {exc}") from exc
+
+        if not isinstance(speakers_raw, dict) or not speakers_raw:
+            raise HTTPException(status_code=400, detail="speakers_json must be a non-empty object")
+
+        results: list[SpeakerReferenceResult] = []
+
+        for speaker_id, raw_segments in speakers_raw.items():
+            if not raw_segments:
+                logger.warning(f"No segments for speaker {speaker_id}, skipping")
+                continue
+
+            # Find the longest segment for this speaker
+            best_seg = max(raw_segments, key=lambda s: s["end"] - s["start"])
+            seg_start = float(best_seg["start"])
+            seg_end = float(best_seg["end"])
+            seg_duration = seg_end - seg_start
+
+            # Trim to target duration, anchored at the segment start
+            extract_duration = min(seg_duration, target_duration_seconds)
+            if extract_duration < 1.0:
+                logger.warning(
+                    f"Longest segment for {speaker_id} is only {extract_duration:.2f}s — "
+                    "voice clone quality may be poor"
+                )
+
+            out_path = TEMP_DIR / f"ref_{speaker_id}_{uuid4().hex}.wav"
+            speaker_temp_paths.append(out_path)
+
+            # Extract via ffmpeg: seek to start, take extract_duration seconds,
+            # resample to 22050 Hz mono (XTTS/Qwen preferred sample rate)
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", str(seg_start),
+                "-i", str(temp_source_path),
+                "-t", str(extract_duration),
+                "-ar", "22050",
+                "-ac", "1",
+                "-f", "wav",
+                str(out_path),
+            ]
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode != 0:
+                logger.error(f"ffmpeg failed for {speaker_id}: {proc.stderr}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"ffmpeg extraction failed for speaker {speaker_id}: {proc.stderr[-200:]}",
+                )
+
+            # Register in the XTTS reference registry so the C# coordinator
+            # can pass reference_id to /tts/xtts/segment without re-uploading
+            ref_id = f"{speaker_id}_{uuid4().hex}"
+            xtts_reference_registry[ref_id] = {
+                "speaker_id": speaker_id,
+                "path": str(out_path),
+                "transcript": None,
+            }
+
+            results.append(SpeakerReferenceResult(
+                speaker_id=speaker_id,
+                reference_id=ref_id,
+                duration_seconds=round(extract_duration, 3),
+            ))
+            logger.info(
+                f"Extracted {extract_duration:.2f}s reference for {speaker_id} "
+                f"-> ref_id={ref_id}"
+            )
+
+        background_tasks.add_task(lambda p=temp_source_path: p.unlink(missing_ok=True))
+        # Note: speaker_temp_paths are kept alive for the lifetime of the process
+        # (referenced by xtts_reference_registry). They are NOT cleaned up here.
+
+        return SpeakerReferenceResponse(success=True, speakers=results)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Reference extraction failed: {exc}", exc_info=True)
+        if temp_source_path:
+            background_tasks.add_task(lambda p=temp_source_path: p.unlink(missing_ok=True))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
@@ -478,7 +746,6 @@ async def register_xtts_reference(
 ):
     temp_path = None
     try:
-        # FIX: sanitize filename to prevent path traversal
         safe_filename = Path(file.filename or "").name
         temp_path = TEMP_DIR / f"ref_{uuid4().hex}_{safe_filename}"
         temp_path.write_bytes(await file.read())
@@ -512,14 +779,12 @@ async def xtts_segment(
         raise HTTPException(status_code=503, detail=f"XTTS model not available: {_xtts_warmup_status}")
 
     temp_ref_path = None
-    # FIX: write .wav not .mp3 — TTS.tts_to_file() writes PCM, not MP3
     out_path = TEMP_DIR / f"xtts_{uuid4().hex}.wav"
     try:
         tts = load_xtts_model(XTTS_MODEL_NAME)
 
         ref_audio_path: Optional[str] = None
         if reference_file is not None:
-            # FIX: sanitize filename to prevent path traversal
             safe_ref_name = Path(reference_file.filename or "").name
             temp_ref_path = TEMP_DIR / f"ref_{uuid4().hex}_{safe_ref_name}"
             temp_ref_path.write_bytes(await reference_file.read())
@@ -569,9 +834,6 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
         qwen_model = Qwen3TTSModel.from_pretrained(
             model_name,
             device_map=HOST_DEVICE,
-            # bfloat16: same exponent range as float32, avoids float16 softmax
-            # underflow where all logits saturate to ±inf → probs all-zero →
-            # torch.multinomial assertion failure in the code_predictor.
             torch_dtype=torch.bfloat16 if HOST_DEVICE == "cuda" else torch.float32,
         )
         qwen_model_key = model_name
@@ -615,7 +877,6 @@ async def qwen_segment(
 
         ref_audio_path: Optional[str] = None
         if reference_file is not None:
-            # FIX: sanitize filename to prevent path traversal
             safe_reference_name = os.path.basename(reference_file.filename or "")
             if not safe_reference_name:
                 safe_reference_name = "reference_audio"
@@ -632,11 +893,6 @@ async def qwen_segment(
 
         def _synth_and_write() -> None:
             import soundfile as sf
-            # Use x_vector_only_mode=True: capture speaker voice via embedding only.
-            # ICL mode (x_vector_only_mode=False) prepends reference codec tokens to the
-            # generation prefix; if those token indices exceed the codec vocab size the
-            # CUDA kernel raises a device-side assert. x_vector mode is robust and still
-            # captures the speaker's voice identity from ref_audio.
             wavs, sample_rate = tts.generate_voice_clone(
                 text=text,
                 language=lang,
@@ -676,7 +932,6 @@ async def qwen_segment(
 
 @app.get("/tts/audio/{filename}")
 async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
-    # FIX: sanitize filename + enforce path stays under TEMP_DIR to prevent traversal
     safe_filename = os.path.basename(filename)
     if not safe_filename or safe_filename in (".", ".."):
         raise HTTPException(status_code=400, detail="Invalid audio filename")
@@ -752,9 +1007,6 @@ async def startup_event():
     if torch.cuda.is_available():
         logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
         logger.info(f"CUDA version: {torch.version.cuda}")
-    # Pre-resolve transformers lazy imports on the main thread to prevent
-    # race conditions when XTTS and Qwen warmup threads import concurrently.
-    # transformers uses _LazyModule which is not thread-safe during first resolution.
     try:
         import transformers as _tf
         from transformers import AutoConfig, AutoModel, AutoProcessor  # noqa: F401
@@ -780,7 +1032,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
-    # FIX: restore flags expected by ManagedVenvHostManager.CreateHostProcessStartInfo()
     parser.add_argument("--compute-type", default=None,
                         help="Override compute type (float16, int8, etc.)")
     parser.add_argument("--require-cuda", action="store_true",
