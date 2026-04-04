@@ -68,20 +68,24 @@ public sealed class ContainerizedServiceProbeTests
         var callCount = 0;
         var log = new AppLog(Path.GetTempFileName());
 
-        var probe = new ContainerizedServiceProbe(log, (url, _, _) =>
-        {
-            var currentCall = Interlocked.Increment(ref callCount);
-            var health = currentCall < 3
-                ? ContainerHealthStatus.Unavailable(url, $"connection refused #{currentCall}")
-                : new ContainerHealthStatus(
-                    IsAvailable: true,
-                    CudaAvailable: true,
-                    CudaVersion: "12.8",
-                    ServiceUrl: url,
-                    ErrorMessage: null,
-                    Capabilities: new ContainerCapabilitiesSnapshot(true, null, true, null, true, null));
-            return Task.FromResult(health);
-        });
+        // retryDelay: 10ms  → many retries fit within the 1 s budget on any CI machine
+        var probe = new ContainerizedServiceProbe(
+            log,
+            (url, _, _) =>
+            {
+                var currentCall = Interlocked.Increment(ref callCount);
+                var health = currentCall < 3
+                    ? ContainerHealthStatus.Unavailable(url, $"connection refused #{currentCall}")
+                    : new ContainerHealthStatus(
+                        IsAvailable: true,
+                        CudaAvailable: true,
+                        CudaVersion: "12.8",
+                        ServiceUrl: url,
+                        ErrorMessage: null,
+                        Capabilities: new ContainerCapabilitiesSnapshot(true, null, true, null, true, null));
+                return Task.FromResult(health);
+            },
+            retryDelay: TimeSpan.FromMilliseconds(10));
 
         var result = await probe.WaitForProbeAsync(
             "http://localhost:8000",
@@ -98,11 +102,15 @@ public sealed class ContainerizedServiceProbeTests
         var callCount = 0;
         var log = new AppLog(Path.GetTempFileName());
 
-        var probe = new ContainerizedServiceProbe(log, (url, _, _) =>
-        {
-            var currentCall = Interlocked.Increment(ref callCount);
-            return Task.FromResult(ContainerHealthStatus.Unavailable(url, $"connection refused #{currentCall}"));
-        });
+        // retryDelay: 10ms  → many cycles easily fit inside the 650 ms budget
+        var probe = new ContainerizedServiceProbe(
+            log,
+            (url, _, _) =>
+            {
+                var currentCall = Interlocked.Increment(ref callCount);
+                return Task.FromResult(ContainerHealthStatus.Unavailable(url, $"connection refused #{currentCall}"));
+            },
+            retryDelay: TimeSpan.FromMilliseconds(10));
 
         var result = await probe.WaitForProbeAsync(
             "http://localhost:8000",

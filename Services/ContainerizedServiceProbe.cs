@@ -27,19 +27,29 @@ public sealed class ContainerizedServiceProbe
     private static readonly TimeSpan PassiveProbeTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan AvailableTtl = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan UnavailableTtl = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan WaitRetryDelay = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan DefaultWaitRetryDelay = TimeSpan.FromMilliseconds(250);
 
     private readonly ConcurrentDictionary<string, ProbeEntry> _entries =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly AppLog _log;
     private readonly Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>> _probeFunc;
 
+    // Configurable for testing: controls the pause between successive probe retries
+    // inside WaitForProbeAsync. Defaults to 250 ms in production.
+    private readonly TimeSpan _waitRetryDelay;
+
     public ContainerizedServiceProbe(
         AppLog log,
-        Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>>? probeFunc = null)
+        Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>>? probeFunc = null,
+        TimeSpan? retryDelay = null)
     {
+        if (retryDelay.HasValue && retryDelay.Value <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(retryDelay), retryDelay, "Retry delay must be greater than TimeSpan.Zero.");
+        }
         _log = log;
         _probeFunc = probeFunc ?? ContainerizedInferenceClient.CheckHealthAsync;
+        _waitRetryDelay = retryDelay ?? DefaultWaitRetryDelay;
     }
 
     public ContainerizedProbeResult GetCurrentOrStartBackgroundProbe(string? serviceUrl)
@@ -151,7 +161,7 @@ public sealed class ContainerizedServiceProbe
                 if (retryDelay <= TimeSpan.Zero)
                     break;
 
-                var actualDelay = retryDelay < WaitRetryDelay ? retryDelay : WaitRetryDelay;
+                var actualDelay = retryDelay < _waitRetryDelay ? retryDelay : _waitRetryDelay;
                 _log.Info(
                     $"Container probe wait retrying: url={normalizedUrl}, state={result.State}, " +
                     $"detail={result.ErrorDetail ?? "<none>"}, retryInMs={actualDelay.TotalMilliseconds}");
