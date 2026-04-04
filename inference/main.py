@@ -49,6 +49,11 @@ xtts_reference_registry: dict[str, dict[str, str | None]] = {}
 qwen_model = None
 qwen_model_key = None
 
+# Warmup state: None = not started, "warming" = in progress,
+# "ready" = model loaded, "failed: <reason>" = terminal failure
+_xtts_warmup_status: str | None = None
+_qwen_warmup_status: str | None = None
+
 HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
 # Tracks effective compute type after per-stage validation and potential downgrades
@@ -207,19 +212,22 @@ def _probe_nllb_available() -> tuple[bool, str]:
 
 
 def _probe_xtts_available() -> tuple[bool, str]:
-    try:
-        from TTS.api import TTS  # noqa: F401
-        return True, "Coqui TTS available"
-    except Exception as exc:
-        return False, str(exc)
+    status = _xtts_warmup_status
+    if status is None or status == "warming":
+        return False, "XTTS model warming up"
+    if status == "ready":
+        return True, f"XTTS model loaded on {HOST_DEVICE}"
+    # status starts with "failed: ..."
+    return False, f"XTTS warmup {status}"
 
 
 def _probe_qwen_available() -> tuple[bool, str]:
-    try:
-        import qwen_tts  # noqa: F401
-        return True, "qwen-tts available"
-    except Exception as exc:
-        return False, str(exc)
+    status = _qwen_warmup_status
+    if status is None or status == "warming":
+        return False, "Qwen3-TTS warming up"
+    if status == "ready":
+        return True, f"Qwen3-TTS model loaded on {HOST_DEVICE}"
+    return False, f"Qwen3-TTS warmup {status}"
 
 
 # ============================================================================
@@ -498,6 +506,11 @@ async def xtts_segment(
     reference_file: Optional[UploadFile] = File(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    if _xtts_warmup_status == "warming":
+        raise HTTPException(status_code=503, detail="XTTS model is still loading, please wait")
+    if _xtts_warmup_status is not None and _xtts_warmup_status.startswith("failed"):
+        raise HTTPException(status_code=503, detail=f"XTTS model not available: {_xtts_warmup_status}")
+
     temp_ref_path = None
     # FIX: write .wav not .mp3 — TTS.tts_to_file() writes PCM, not MP3
     out_path = TEMP_DIR / f"xtts_{uuid4().hex}.wav"
@@ -584,6 +597,11 @@ async def qwen_segment(
     reference_file: Optional[UploadFile] = File(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    if _qwen_warmup_status == "warming":
+        raise HTTPException(status_code=503, detail="Qwen3-TTS model is still loading, please wait")
+    if _qwen_warmup_status is not None and _qwen_warmup_status.startswith("failed"):
+        raise HTTPException(status_code=503, detail=f"Qwen3-TTS model not available: {_qwen_warmup_status}")
+
     temp_ref_path: Optional[Path] = None
     out_path = TEMP_DIR / f"qwen_{uuid4().hex}.wav"
 
@@ -668,6 +686,50 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
 
 
 # ============================================================================
+# Model warmup (background tasks launched at startup)
+# ============================================================================
+
+async def _warmup_xtts():
+    global _xtts_warmup_status
+    _xtts_warmup_status = "warming"
+    try:
+        logger.info("XTTS warmup starting")
+        await asyncio.to_thread(load_xtts_model)
+        _xtts_warmup_status = "ready"
+        logger.info("XTTS warmup complete")
+    except Exception as exc:
+        _xtts_warmup_status = f"failed: {exc}"
+        logger.warning(f"XTTS warmup failed: {exc}", exc_info=True)
+
+
+async def _warmup_qwen():
+    global _qwen_warmup_status
+    _qwen_warmup_status = "warming"
+    try:
+        logger.info("Qwen3-TTS warmup starting")
+        await asyncio.to_thread(load_qwen_model)
+        _qwen_warmup_status = "ready"
+        logger.info("Qwen3-TTS warmup complete")
+    except OSError as exc:
+        reason = str(exc)
+        if "Errno 22" in reason or "Invalid argument" in reason:
+            reason = (
+                f"Windows memory-mapping failure ({reason}). "
+                "Try increasing your Windows page file size or use the smaller 0.6B model."
+            )
+        elif "paging file" in reason.lower():
+            reason = (
+                f"Insufficient virtual memory ({reason}). "
+                "Increase your Windows page file size or use the smaller 0.6B model."
+            )
+        _qwen_warmup_status = f"failed: {reason}"
+        logger.warning(f"Qwen3-TTS warmup failed: {reason}", exc_info=True)
+    except Exception as exc:
+        _qwen_warmup_status = f"failed: {exc}"
+        logger.warning(f"Qwen3-TTS warmup failed: {exc}", exc_info=True)
+
+
+# ============================================================================
 # Startup / shutdown
 # ============================================================================
 
@@ -678,6 +740,8 @@ async def startup_event():
     if torch.cuda.is_available():
         logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
         logger.info(f"CUDA version: {torch.version.cuda}")
+    asyncio.create_task(_warmup_xtts())
+    asyncio.create_task(_warmup_qwen())
 
 
 @app.on_event("shutdown")
