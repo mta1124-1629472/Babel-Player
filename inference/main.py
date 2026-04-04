@@ -564,12 +564,11 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
     """Lazy-load Qwen3-TTS pipeline; cached globally per model name."""
     global qwen_model, qwen_model_key
     if qwen_model is None or qwen_model_key != model_name:
-        import qwen_tts  # noqa: F401  -- confirms package present
-        from qwen_tts import QwenTTS
+        from qwen_tts import Qwen3TTSModel
         logger.info(f"Loading Qwen3-TTS '{model_name}' on {HOST_DEVICE}")
-        qwen_model = QwenTTS.from_pretrained(
+        qwen_model = Qwen3TTSModel.from_pretrained(
             model_name,
-            device=HOST_DEVICE,
+            device_map=HOST_DEVICE,
             torch_dtype=torch.float16 if HOST_DEVICE == "cuda" else torch.float32,
         )
         qwen_model_key = model_name
@@ -623,16 +622,22 @@ async def qwen_segment(
 
         lang = (language or "en").strip().lower()
 
+        if ref_audio_path is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Qwen3-TTS Base model requires reference audio (reference_file)")
+
         def _synth_and_write() -> None:
             import soundfile as sf
-            result = tts.synthesise(
+            wavs, sample_rate = tts.generate_voice_clone(
                 text=text,
-                reference_audio=ref_audio_path,
-                reference_text=reference_text or "",
                 language=lang,
+                ref_audio=ref_audio_path,
+                ref_text=reference_text or None,
+                x_vector_only_mode=not bool(reference_text),
+                non_streaming_mode=True,
             )
-            sample_rate, audio_data = result
-            sf.write(str(out_path), audio_data, sample_rate, subtype="PCM_16")
+            sf.write(str(out_path), wavs[0], sample_rate, subtype="PCM_16")
 
         await asyncio.to_thread(_synth_and_write)
 
