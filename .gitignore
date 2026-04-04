@@ -38,6 +38,7 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+publish-preview/
 
 # Visual Studio cache/options
 .vs/
@@ -105,5 +106,3 @@ benchmarks/
 ffmpeg.exe
 .codex/environments/environment.toml
 inference/__pycache__/
-dist/Babel-Player-0.0.0-dev-win-x64-setup.exe
-publish/Avalonia.DesignerSupport.dll
