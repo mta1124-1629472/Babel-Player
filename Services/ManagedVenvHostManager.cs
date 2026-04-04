@@ -557,10 +557,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string reason,
         CancellationToken cancellationToken)
     {
+        int pid;
         try
         {
             if (process.HasExited)
                 return false;
+            pid = process.Id;
         }
         catch
         {
@@ -573,24 +575,58 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException(
-                $"Failed to stop stale managed GPU {reason} pid={process.Id}: {ex.Message}",
-                ex);
+            _log.Warning($"process.Kill() failed for stale managed GPU {reason} pid={pid}: {ex.Message}. Trying taskkill fallback.");
         }
 
+        // Wait for the process to exit
+        var exited = await WaitForProcessExitAsync(process, HostShutdownTimeout, cancellationToken);
+        if (exited)
+            return true;
+
+        // Process didn't die — escalate to taskkill /F /T (kills the whole process tree forcibly)
+        _log.Warning($"Stale managed GPU {reason} pid={pid} did not exit after Kill(); escalating to taskkill /F /T.");
         try
         {
-            using var shutdownCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            shutdownCts.CancelAfter(HostShutdownTimeout);
-            await process.WaitForExitAsync(shutdownCts.Token);
+            using var taskkill = Process.Start(new ProcessStartInfo
+            {
+                FileName = "taskkill",
+                Arguments = $"/F /T /PID {pid}",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+            taskkill?.WaitForExit(5000);
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"taskkill /F /T /PID {pid} failed: {ex.Message}");
+        }
+
+        exited = await WaitForProcessExitAsync(process, TimeSpan.FromSeconds(5), cancellationToken);
+        if (!exited)
+            throw new InvalidOperationException(
+                $"Timed out waiting for stale managed GPU {reason} pid={pid} to exit even after taskkill /F /T.");
+
+        return true;
+    }
+
+    private static async Task<bool> WaitForProcessExitAsync(
+        Process process,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(timeout);
+            await process.WaitForExitAsync(cts.Token);
+            return true;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new InvalidOperationException(
-                $"Timed out waiting for stale managed GPU {reason} pid={process.Id} to exit.");
+            return false;
         }
-
-        return true;
     }
 
     private async Task WaitForVenvUnlockAsync(string pythonPath, CancellationToken cancellationToken)
@@ -870,7 +906,6 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private static bool IsLockedRuntimeFailure(string message) =>
         message.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
         || message.Contains("failed to remove directory", StringComparison.OrdinalIgnoreCase)
-        || message.Contains(".venv\\Scripts", StringComparison.OrdinalIgnoreCase)
         || message.Contains("remained locked", StringComparison.OrdinalIgnoreCase);
 
     private bool ShouldDeferRestartForBusyHost(
