@@ -254,17 +254,29 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
             : null;
     }
 
+    // qwen-tts 0.1.1 expects full English language names, not BCP-47 codes.
+    // Supported: auto, chinese, english, french, german, italian, japanese, korean, portuguese, russian, spanish
     private static string ResolveLanguage(string? language)
     {
         if (string.IsNullOrWhiteSpace(language))
-            return "en";
+            return "english";
 
         var normalized = language.Trim().ToLowerInvariant();
-        return normalized switch
+        // Strip region suffix first (e.g. "zh-cn" → "zh", "pt-br" → "pt")
+        var code = normalized.Contains('-') ? normalized.Split('-', 2)[0] : normalized;
+        return code switch
         {
-            "zh" or "zh-hans" or "zh-cn" => "zh-cn",
-            "pt-br" or "pt-pt" => "pt",
-            _ when normalized.Contains('-') => normalized.Split('-', 2)[0],
+            "en" => "english",
+            "zh" => "chinese",
+            "fr" => "french",
+            "de" => "german",
+            "it" => "italian",
+            "ja" => "japanese",
+            "ko" => "korean",
+            "pt" => "portuguese",
+            "ru" => "russian",
+            "es" => "spanish",
+            // Already a full name (e.g. passed directly) or "auto"
             _ => normalized,
         };
     }

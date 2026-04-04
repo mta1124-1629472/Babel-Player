@@ -620,7 +620,7 @@ async def qwen_segment(
             temp_ref_path.write_bytes(await reference_file.read())
             ref_audio_path = str(temp_ref_path)
 
-        lang = (language or "en").strip().lower()
+        lang = (language or "english").strip().lower()
 
         if ref_audio_path is None:
             raise HTTPException(
