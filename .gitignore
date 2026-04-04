@@ -93,7 +93,6 @@ debug_info.md
 benchmarks/
 
 # Local tool state
-.claude/settings.local.json
 .kilo/node_modules/
 .ruff_cache/
 .codex/config.toml
