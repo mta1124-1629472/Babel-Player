@@ -90,6 +90,7 @@ desktop.ini
 app-output.log
 build.log
 test.log
+dist/
 
 # Generated benchmark outputs
 benchmarks/
@@ -103,3 +104,4 @@ benchmarks/
 ffmpeg.exe
 .codex/environments/environment.toml
 inference/__pycache__/
+dist/Babel-Player-0.0.0-dev-win-x64-setup.exe
