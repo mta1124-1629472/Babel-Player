@@ -20,9 +20,10 @@ jobs:
     runs-on: windows-latest
 
     env:
-      # Pin ffmpeg to a specific release to prevent silent breakage from always-latest.
-      # Update this when a newer release has been validated.
-      FFMPEG_VERSION: "2025-04-14-git-3b2a9668b3-essentials_build"
+      # Pin ffmpeg to a specific build from the GyanD GitHub mirror (zip format, reliable CDN).
+      # Source: https://github.com/GyanD/codexffmpeg/releases
+      # Update this value when a newer build has been validated.
+      FFMPEG_VERSION: "2026-03-30-git-e54e117998"
 
     steps:
       - name: Checkout
@@ -54,9 +55,12 @@ jobs:
       - name: Download FFmpeg for Windows x64
         shell: pwsh
         run: |
-          $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-${{ env.FFMPEG_VERSION }}.zip"
+          # Download from GyanD GitHub mirror - stable zip format, pinned version.
+          # Release page: https://github.com/GyanD/codexffmpeg/releases/tag/${{ env.FFMPEG_VERSION }}
+          $version = "${{ env.FFMPEG_VERSION }}"
+          $ffmpegUrl = "https://github.com/GyanD/codexffmpeg/releases/download/$version/ffmpeg-$version-essentials_build.zip"
           $ffmpegZip = "ffmpeg.zip"
-          Write-Host "Downloading FFmpeg ${{ env.FFMPEG_VERSION }} from $ffmpegUrl"
+          Write-Host "Downloading FFmpeg $version from $ffmpegUrl"
           Invoke-WebRequest -Uri $ffmpegUrl -OutFile $ffmpegZip
           Expand-Archive -Path $ffmpegZip -DestinationPath "ffmpeg_temp"
           $ffmpegExe = Get-ChildItem -Path "ffmpeg_temp" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
@@ -209,7 +213,6 @@ jobs:
 
           "installer_path=$installerPath"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "installer_checksum=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
