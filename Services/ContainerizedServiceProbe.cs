@@ -120,8 +120,14 @@ public sealed class ContainerizedServiceProbe
                 {
                     if (entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
                     {
-                        _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}, mode=wait");
-                        return entry.CachedResult;
+                        if (entry.CachedResult.State == ContainerizedProbeState.Available)
+                        {
+                            _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}, mode=wait");
+                            return entry.CachedResult;
+                        }
+
+                        _log.Info(
+                            $"Container probe cache stale-for-wait: url={normalizedUrl}, state={entry.CachedResult.State}, mode=wait; continuing retries");
                     }
                 }
             }
