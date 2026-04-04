@@ -1,10 +1,29 @@
-fastapi==0.115.4
-uvicorn==0.30.6
-pydantic==2.9.2
-pydantic-settings==2.3.1
-python-multipart==0.0.9
-faster-whisper==1.2.1
-numpy==1.26.4
-scipy==1.14.1
-pydub==0.25.1
-edge-tts==6.1.6
+# Core inference dependencies
+fastapi==0.104.0
+uvicorn[standard]==0.24.0
+pydantic==2.0.0
+python-multipart==0.0.6
+
+# Transcription
+faster-whisper==0.10.0
+
+# Translation
+ctranslate2==3.20.0
+sentencepiece==0.1.99
+
+# TTS - Coqui XTTS
+tts==0.22.0
+
+# TTS - Qwen3-TTS
+qwen-tts==0.1.1
+soundfile==0.12.1
+
+# Shared ML
+torch==2.1.0
+transformers==4.51.0
+# FIX: was "accelerator==1.2.0" (wrong package name); correct package is "accelerate"
+accelerate==1.12.0
+
+# Utilities
+numpy==1.24.0
+requests==2.31.0
