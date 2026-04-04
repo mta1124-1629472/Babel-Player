@@ -765,14 +765,16 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         string errorMessage = "offline") =>
         (serviceUrl, _, _) => Task.FromResult(ContainerHealthStatus.Unavailable(serviceUrl, errorMessage));
 
-    private static string ComputeBootstrapVersion(string inferenceScriptPath, string requirementsPath, string constraintsPath)
+    private static string ComputeBootstrapVersion(string requirementsPath, string constraintsPath)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(File.ReadAllText(inferenceScriptPath));
         builder.AppendLine(File.ReadAllText(requirementsPath));
         builder.AppendLine(File.ReadAllText(constraintsPath));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
     }
+
+    private static string ComputeScriptVersion(string inferenceScriptPath) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath))));
 
     private void PrepareBootstrappedRuntimeArtifacts() =>
         PrepareRuntimeArtifacts(writeBootstrapMarker: true);
@@ -792,13 +794,19 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         {
             File.WriteAllText(
                 Path.Combine(_dir, ".bootstrap-version"),
-                ComputeBootstrapVersion(scriptPath, requirementsPath, constraintsPath));
+                ComputeBootstrapVersion(requirementsPath, constraintsPath));
+            File.WriteAllText(
+                Path.Combine(_dir, ".script-version"),
+                ComputeScriptVersion(scriptPath));
         }
         else
         {
             var markerPath = Path.Combine(_dir, ".bootstrap-version");
             if (File.Exists(markerPath))
                 File.Delete(markerPath);
+            var scriptMarkerPath = Path.Combine(_dir, ".script-version");
+            if (File.Exists(scriptMarkerPath))
+                File.Delete(scriptMarkerPath);
         }
     }
 

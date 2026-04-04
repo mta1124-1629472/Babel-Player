@@ -220,7 +220,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"Managed GPU runtime paths: runtime_root={runtimeRoot}, venv_dir={venvDir}, python={pythonPath}, " +
             $"script={inferenceScriptPath}, requirements={requirementsPath}, constraints={constraintsPath}, uv={uvPath}, compute_type={computeType}");
 
-        var bootstrapVersion = ComputeBootstrapVersion(inferenceScriptPath, requirementsPath, constraintsPath);
+        var bootstrapVersion = ComputeBootstrapVersion(requirementsPath, constraintsPath);
         var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
         var markerValue = File.Exists(markerPath) ? await File.ReadAllTextAsync(markerPath, cancellationToken) : null;
         var needsBootstrap = !File.Exists(pythonPath) || !string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal);
@@ -310,6 +310,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             computeType,
             hostPidPath,
             cancellationToken);
+
+        // Record which script version is running so IsScriptChangedSinceLastStart can detect edits
+        var scriptVersionPath = Path.Combine(runtimeRoot, ".script-version");
+        await File.WriteAllTextAsync(scriptVersionPath, ComputeScriptVersion(inferenceScriptPath), cancellationToken);
 
         _log.Info(
             $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={PostStartProbeTimeout.TotalSeconds}s");
@@ -983,15 +987,25 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         try
         {
             var runtimeRoot = _runtimeRootResolver();
-            var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
-            if (!File.Exists(markerPath))
-                return true; // no record of what's running — assume changed
-            var storedHash = File.ReadAllText(markerPath).Trim();
-            var currentHash = ComputeBootstrapVersion(
-                _inferenceScriptResolver(),
+
+            // Check if dependencies changed (would need full venv rebuild)
+            var depsMarkerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
+            if (!File.Exists(depsMarkerPath))
+                return true;
+            var storedDepsHash = File.ReadAllText(depsMarkerPath).Trim();
+            var currentDepsHash = ComputeBootstrapVersion(
                 _requirementsPathResolver(),
                 _constraintsPathResolver());
-            return !string.Equals(storedHash, currentHash, StringComparison.Ordinal);
+            if (!string.Equals(storedDepsHash, currentDepsHash, StringComparison.Ordinal))
+                return true;
+
+            // Check if inference script changed (needs process restart only)
+            var scriptMarkerPath = Path.Combine(runtimeRoot, ".script-version");
+            if (!File.Exists(scriptMarkerPath))
+                return true;
+            var storedScriptHash = File.ReadAllText(scriptMarkerPath).Trim();
+            var currentScriptHash = ComputeScriptVersion(_inferenceScriptResolver());
+            return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
         catch
         {
@@ -1000,16 +1014,20 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     }
 
     private static string ComputeBootstrapVersion(
-        string inferenceScriptPath,
         string requirementsPath,
         string constraintsPath)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(File.ReadAllText(inferenceScriptPath));
         builder.AppendLine(File.ReadAllText(requirementsPath));
         builder.AppendLine(File.ReadAllText(constraintsPath));
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
+        return Convert.ToHexString(bytes);
+    }
+
+    private static string ComputeScriptVersion(string inferenceScriptPath)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath)));
         return Convert.ToHexString(bytes);
     }
 
