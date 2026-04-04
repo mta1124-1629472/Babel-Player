@@ -37,10 +37,7 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore
-        run: dotnet restore BabelPlayer.csproj
-
-      - name: Build
-        run: dotnet build BabelPlayer.csproj --no-restore --configuration Release
+        run: dotnet restore BabelPlayer.csproj -r win-x64
 
       - name: Run architecture checks
         run: python scripts/check-architecture.py
@@ -48,7 +45,6 @@ jobs:
       - name: Run core tests
         run: >
           dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
-          --no-build
           --configuration Release
           --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation"
 
