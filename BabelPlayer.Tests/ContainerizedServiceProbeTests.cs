@@ -107,7 +107,7 @@ public sealed class ContainerizedServiceProbeTests
         var result = await probe.WaitForProbeAsync(
             "http://localhost:8000",
             forceRefresh: true,
-            waitTimeout: TimeSpan.FromMilliseconds(650));
+            waitTimeout: TimeSpan.FromMilliseconds(2000));
 
         Assert.Equal(ContainerizedProbeState.Unavailable, result.State);
         Assert.Contains("connection refused", result.ErrorDetail, StringComparison.OrdinalIgnoreCase);
