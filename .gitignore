@@ -16,7 +16,10 @@ bld/
 bin/
 obj/
 .vs/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
 TestResults/
 *.user
 *.suo
@@ -87,7 +90,6 @@ desktop.ini
 app-output.log
 build.log
 test.log
-debug_info.md
 
 # Generated benchmark outputs
 benchmarks/
