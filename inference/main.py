@@ -12,13 +12,46 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import wave
 from importlib import import_module
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-import torch
+try:
+    import torch
+    TORCH_IMPORT_ERROR: Optional[str] = None
+except ModuleNotFoundError as torch_import_exc:
+    TORCH_IMPORT_ERROR = str(torch_import_exc)
+
+    class _TorchVersionShim:
+        cuda = None
+
+    class _TorchCudaShim:
+        @staticmethod
+        def is_available() -> bool:
+            return False
+
+        @staticmethod
+        def empty_cache() -> None:
+            return None
+
+        @staticmethod
+        def get_device_name(_index: int) -> str:
+            return "unavailable"
+
+        @staticmethod
+        def get_device_capability(_index: int) -> tuple[int, int]:
+            return (0, 0)
+
+    class _TorchShim:
+        cuda = _TorchCudaShim()
+        version = _TorchVersionShim()
+        float16 = "float16"
+        bfloat16 = "bfloat16"
+
+    torch = _TorchShim()  # type: ignore[assignment]
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -114,6 +147,9 @@ xtts_model_key = None
 xtts_reference_registry: dict[str, dict[str, str | None]] = {}
 qwen_model = None
 qwen_model_key = None
+qwen_model_dtype: Optional[str] = None
+qwen_model_attn_impl: Optional[str] = None
+qwen_forced_model: Optional[str] = None
 # Qwen voice-clone prompt cache: maps hash(ref_audio_bytes + ref_text) → prompt items
 qwen_voice_clone_prompt_cache: dict[str, object] = {}
 # Qwen3-TTS startup pre-warm state
@@ -127,6 +163,7 @@ EFFECTIVE_HOST_COMPUTE_TYPE = HOST_COMPUTE_TYPE
 # Tracks downgrade reasons per stage for UI/logging projection
 COMPUTE_DOWNGRADE_REASONS: dict[str, str] = {}
 XTTS_MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
+MANAGED_HOST_DRY_RUN = False
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -151,6 +188,9 @@ QWEN_LANGUAGE_MAP: dict[str, str] = {
     "ja": "Japanese",
     "ko": "Korean",
 }
+
+QWEN_MODEL_PRIMARY = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+QWEN_MODEL_FALLBACK = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
 
 FLORES = {
     # Latin-script European
@@ -316,6 +356,24 @@ def _temp_artifact_path(prefix: str, suffix: str) -> Path:
     return TEMP_DIR / f"{prefix}_{datetime.now().timestamp()}_{uuid4().hex}{suffix}"
 
 
+def _is_dry_run_enabled() -> bool:
+    return MANAGED_HOST_DRY_RUN
+
+
+def _write_silent_mp3(output_path: Path, seconds: float = 0.35, sample_rate: int = 22050) -> None:
+    temp_wav = _temp_artifact_path("dryrun_tts", ".wav")
+    try:
+        frame_count = max(1, int(sample_rate * seconds))
+        with wave.open(str(temp_wav), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(b"\x00\x00" * frame_count)
+        _wav_to_mp3(temp_wav, output_path)
+    finally:
+        temp_wav.unlink(missing_ok=True)
+
+
 def _log_host_runtime_state(context: str) -> None:
     logger.info(
         "Managed host runtime state (%s): device=%s compute_type=%s cuda_available=%s cuda_version=%s temp_dir=%s",
@@ -434,6 +492,27 @@ def _qwen_capability_detail() -> str:
 # ============================================================================
 
 def get_stage_capabilities() -> CapabilitiesResponse:
+    if _is_dry_run_enabled():
+        return CapabilitiesResponse(
+            transcription=StageCapability(
+                ready=True,
+                detail="Dry-run mode: transcription capability simulated",
+            ),
+            translation=StageCapability(
+                ready=True,
+                detail="Dry-run mode: translation capability simulated",
+            ),
+            tts=StageCapability(
+                ready=True,
+                detail="Dry-run mode: TTS capability simulated",
+                providers={"qwen-tts": True, "xtts-container": True},
+                provider_details={
+                    "qwen-tts": "Dry-run mode: Qwen3-TTS simulated",
+                    "xtts-container": "Dry-run mode: XTTS simulated",
+                },
+            ),
+        )
+
     transcription_ready = HOST_DEVICE == "cuda"
     transcription_effective_type = _get_effective_compute_type("transcription")
     
@@ -445,7 +524,14 @@ def get_stage_capabilities() -> CapabilitiesResponse:
     qwen_provider_ready = qwen_ready and qwen_warmup_complete
 
     if qwen_provider_ready:
-        qwen_detail = f"Qwen3-TTS ready on {HOST_DEVICE}; reference audio required"
+        dtype_label = qwen_model_dtype or "unknown"
+        attn_label = qwen_model_attn_impl or "unknown-attn"
+        fallback_note = (
+            f"; model fallback active ({QWEN_MODEL_PRIMARY} -> {qwen_forced_model})"
+            if qwen_forced_model and qwen_forced_model != QWEN_MODEL_PRIMARY
+            else ""
+        )
+        qwen_detail = f"Qwen3-TTS ready on {HOST_DEVICE} ({dtype_label}, attn={attn_label}){fallback_note}; reference audio required"
     elif qwen_warmup_error:
         qwen_detail = f"Qwen3-TTS warmup failed: {qwen_warmup_error}"
     elif qwen_ready:
@@ -786,12 +872,17 @@ def _qwen_attn_implementation() -> str:
 
 def _normalize_qwen_model(model_name: Optional[str]) -> str:
     valid = {
-        "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-        "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        QWEN_MODEL_FALLBACK,
+        QWEN_MODEL_PRIMARY,
     }
-    if model_name and model_name.strip() in valid:
-        return model_name.strip()
-    return "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+    requested = model_name.strip() if model_name and model_name.strip() in valid else QWEN_MODEL_PRIMARY
+
+    # If the primary model has already been forced down due to runtime incompatibility,
+    # keep future requests on the proven working fallback to avoid repeated hard failures.
+    if qwen_forced_model and requested == QWEN_MODEL_PRIMARY:
+        return qwen_forced_model
+
+    return requested
 
 
 def _normalize_qwen_language(language: Optional[str]) -> str:
@@ -811,6 +902,28 @@ def _build_qwen_load_kwargs(attn_impl: str) -> dict[str, object]:
         "offload_state_dict": True,
     }
     return load_kwargs
+
+
+def _is_qwen_dtype_retryable_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "invalid argument" in message
+        or "bfloat16" in message
+        or "bf16" in message
+        or "not implemented for" in message
+        or "unsupported" in message and "dtype" in message
+    )
+
+
+def _is_qwen_attn_retryable_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "invalid argument" in message
+        or "flash" in message and "attn" in message
+        or "flash_attention" in message
+        or "cutlass" in message
+        or "xformers" in message
+    )
 
 
 def _format_qwen_load_error(exc: Exception) -> str:
@@ -895,13 +1008,13 @@ def _resolve_qwen_warmup_model() -> Optional[str]:
 
 
 def load_qwen_model(model_name: Optional[str]):
-    global qwen_model, qwen_model_key
+    global qwen_model, qwen_model_key, qwen_model_dtype, qwen_model_attn_impl, qwen_forced_model
 
     if HOST_DEVICE != "cuda":
         raise RuntimeError("Qwen3-TTS managed host requires CUDA.")
 
-    resolved_model = _normalize_qwen_model(model_name)
-    desired_key = (resolved_model, HOST_DEVICE)
+    requested_model = _normalize_qwen_model(model_name)
+    desired_key = (requested_model, HOST_DEVICE)
     if qwen_model is None or qwen_model_key != desired_key:
         qwen_tts_module = import_module("qwen_tts")
         Qwen3TTSModel = qwen_tts_module.Qwen3TTSModel
@@ -909,20 +1022,107 @@ def load_qwen_model(model_name: Optional[str]):
         load_kwargs = _build_qwen_load_kwargs(attn_impl)
         logger.info(
             "Loading Qwen3-TTS model '%s' on device '%s' (attn=%s, dtype=bfloat16, low_cpu_mem_usage=%s, offload_state_dict=%s)",
-            resolved_model,
+            requested_model,
             HOST_DEVICE,
             attn_impl,
             load_kwargs.get("low_cpu_mem_usage"),
             load_kwargs.get("offload_state_dict"),
         )
-        try:
-            qwen_model = Qwen3TTSModel.from_pretrained(resolved_model, **load_kwargs)
-        except Exception as exc:
-            formatted_error = _format_qwen_load_error(exc)
-            logger.error("Qwen3-TTS model load failed for '%s': %s", resolved_model, formatted_error, exc_info=True)
-            raise RuntimeError(formatted_error) from exc
-        qwen_model_key = desired_key
-        logger.info("Qwen3-TTS model '%s' loaded successfully", resolved_model)
+
+        # Attempt order:
+        # 1) preferred attn + bfloat16
+        # 2) preferred attn + float16 (dtype fallback)
+        # 3) eager + float16 (kernel fallback)
+        attempts: list[tuple[str, object]] = [
+            (attn_impl, torch.bfloat16),
+            (attn_impl, torch.float16),
+        ]
+        if attn_impl != "eager":
+            attempts.append(("eager", torch.float16))
+
+        def _attempt_load(target_model: str) -> Optional[Exception]:
+            last_error: Optional[Exception] = None
+            for index, (candidate_attn, candidate_dtype) in enumerate(attempts):
+                candidate_kwargs = _build_qwen_load_kwargs(candidate_attn)
+                candidate_kwargs["dtype"] = candidate_dtype
+                try:
+                    nonlocal requested_model
+                    qwen_model_local = Qwen3TTSModel.from_pretrained(target_model, **candidate_kwargs)
+                    # Promote successful load into module globals.
+                    globals()["qwen_model"] = qwen_model_local
+                    globals()["qwen_model_dtype"] = "bfloat16" if candidate_dtype == torch.bfloat16 else "float16"
+                    globals()["qwen_model_attn_impl"] = candidate_attn
+                    requested_model = target_model
+                    if index > 0:
+                        logger.info(
+                            "Qwen3-TTS model '%s' loaded successfully via fallback (dtype=%s, attn=%s)",
+                            target_model,
+                            qwen_model_dtype,
+                            candidate_attn,
+                        )
+                    return None
+                except Exception as exc:
+                    last_error = exc
+                    is_last = index == len(attempts) - 1
+                    if is_last:
+                        return exc
+
+                    next_attn, next_dtype = attempts[index + 1]
+                    can_retry = _is_qwen_dtype_retryable_error(exc) or _is_qwen_attn_retryable_error(exc)
+                    if not can_retry:
+                        return exc
+
+                    next_dtype_label = "bfloat16" if next_dtype == torch.bfloat16 else "float16"
+                    logger.warning(
+                        "Qwen3-TTS load attempt failed for '%s' (dtype=%s, attn=%s): %s; retrying with dtype=%s, attn=%s",
+                        target_model,
+                        "bfloat16" if candidate_dtype == torch.bfloat16 else "float16",
+                        candidate_attn,
+                        exc,
+                        next_dtype_label,
+                        next_attn,
+                    )
+
+            return last_error
+
+        last_exc = _attempt_load(requested_model)
+        if qwen_model is None and last_exc is not None:
+            retryable = _is_qwen_dtype_retryable_error(last_exc) or _is_qwen_attn_retryable_error(last_exc)
+            if requested_model == QWEN_MODEL_PRIMARY and retryable:
+                logger.warning(
+                    "Qwen3-TTS primary model '%s' failed with retryable error (%s); falling back to '%s'",
+                    QWEN_MODEL_PRIMARY,
+                    last_exc,
+                    QWEN_MODEL_FALLBACK,
+                )
+                fallback_exc = _attempt_load(QWEN_MODEL_FALLBACK)
+                if qwen_model is None and fallback_exc is not None:
+                    formatted_error = _format_qwen_load_error(fallback_exc)
+                    logger.error(
+                        "Qwen3-TTS fallback model '%s' load failed: %s",
+                        QWEN_MODEL_FALLBACK,
+                        formatted_error,
+                        exc_info=True,
+                    )
+                    raise RuntimeError(formatted_error) from fallback_exc
+                qwen_forced_model = QWEN_MODEL_FALLBACK
+            else:
+                formatted_error = _format_qwen_load_error(last_exc)
+                logger.error(
+                    "Qwen3-TTS model load failed for '%s' after all fallback attempts: %s",
+                    requested_model,
+                    formatted_error,
+                    exc_info=True,
+                )
+                raise RuntimeError(formatted_error) from last_exc
+
+        qwen_model_key = (requested_model, HOST_DEVICE)
+        logger.info(
+            "Qwen3-TTS model '%s' loaded successfully (dtype=%s, attn=%s)",
+            requested_model,
+            qwen_model_dtype or "unknown",
+            qwen_model_attn_impl or "unknown",
+        )
 
     return qwen_model
 
@@ -981,6 +1181,15 @@ async def transcribe(
 ):
     temp_audio_path = None
     try:
+        if _is_dry_run_enabled():
+            logger.info("Dry-run transcription request received (model=%s, language=%s)", model, language or "auto")
+            return TranscriptionResponse(
+                success=True,
+                language=language or "es",
+                language_probability=1.0,
+                segments=[TranscriptSegment(start=0.0, end=1.5, text="dry-run transcript segment")],
+            )
+
         temp_audio_path = TEMP_DIR / f"audio_{datetime.now().timestamp()}.wav"
         contents = await file.read()
         temp_audio_path.write_bytes(contents)
@@ -1038,6 +1247,31 @@ async def translate(
     model: str = Form(...),
 ):
     try:
+        if _is_dry_run_enabled():
+            transcript_data = json.loads(transcript_json)
+            segments = transcript_data.get("segments", [])
+            translated_segments = [
+                TranslatedSegment(
+                    start=seg.get("start", 0.0),
+                    end=seg.get("end", 0.0),
+                    text=seg.get("text", ""),
+                    translated_text=f"{seg.get('text', '')} [dry-run {target_language}]".strip(),
+                )
+                for seg in segments
+            ]
+            logger.info(
+                "Dry-run translation request served: source=%s target=%s segments=%s",
+                source_language,
+                target_language,
+                len(translated_segments),
+            )
+            return TranslationResponse(
+                success=True,
+                source_language=source_language,
+                target_language=target_language,
+                segments=translated_segments,
+            )
+
         logger.info(
             "Translating transcript: source=%s target=%s model=%s",
             source_language,
@@ -1150,6 +1384,19 @@ async def xtts_segment(
     temp_wav_path = None
     temp_mp3_path = None
     try:
+        if _is_dry_run_enabled():
+            if not text.strip():
+                raise HTTPException(status_code=400, detail="XTTS text cannot be empty.")
+            temp_mp3_path = _temp_artifact_path("xtts_segment", ".mp3")
+            _write_silent_mp3(temp_mp3_path)
+            logger.info("Dry-run XTTS segment request served")
+            return TtsResponse(
+                success=True,
+                voice=_normalize_xtts_voice_label(model),
+                audio_path=str(temp_mp3_path),
+                file_size_bytes=temp_mp3_path.stat().st_size,
+            )
+
         if not text.strip():
             raise HTTPException(status_code=400, detail="XTTS text cannot be empty.")
 
@@ -1252,6 +1499,20 @@ async def qwen_segment(
     temp_wav_path = None
     temp_mp3_path = None
     try:
+        if _is_dry_run_enabled():
+            if not text.strip():
+                raise HTTPException(status_code=400, detail="Qwen TTS text cannot be empty.")
+            resolved_model = _normalize_qwen_model(model)
+            temp_mp3_path = _temp_artifact_path("qwen_segment", ".mp3")
+            _write_silent_mp3(temp_mp3_path)
+            logger.info("Dry-run Qwen3-TTS segment request served (model=%s)", resolved_model)
+            return TtsResponse(
+                success=True,
+                voice=resolved_model,
+                audio_path=str(temp_mp3_path),
+                file_size_bytes=temp_mp3_path.stat().st_size,
+            )
+
         if not text.strip():
             raise HTTPException(status_code=400, detail="Qwen TTS text cannot be empty.")
 
@@ -1373,6 +1634,15 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
 async def startup_event():
     logger.info("Inference service starting up")
     _log_host_runtime_state("startup")
+    if _is_dry_run_enabled():
+        global qwen_warmup_complete, qwen_warmup_error, qwen_model_dtype, qwen_model_attn_impl
+        qwen_warmup_complete = True
+        qwen_warmup_error = None
+        qwen_model_dtype = "dry-run"
+        qwen_model_attn_impl = "dry-run"
+        logger.info("Managed inference host is running in dry-run mode; model warmups are skipped")
+        return
+
     if _probe_qwen_available():
         import threading
         warmup_model = _resolve_qwen_warmup_model()
@@ -1404,19 +1674,38 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=18000)
     parser.add_argument("--compute-type", default="int8")
     parser.add_argument("--require-cuda", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+
+    MANAGED_HOST_DRY_RUN = args.dry_run or os.environ.get("BABEL_INFERENCE_DRY_RUN", "0").lower() in ("1", "true", "yes", "on")
+
+    if TORCH_IMPORT_ERROR and not MANAGED_HOST_DRY_RUN:
+        raise RuntimeError(
+            "PyTorch is required for managed inference host when dry-run mode is disabled. "
+            f"Import error: {TORCH_IMPORT_ERROR}"
+        )
 
     HOST_COMPUTE_TYPE = args.compute_type
     HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(
-        "Managed inference host launch args: host=%s port=%s compute_type=%s require_cuda=%s python=%s",
+        "Managed inference host launch args: host=%s port=%s compute_type=%s require_cuda=%s dry_run=%s python=%s",
         args.host,
         args.port,
         args.compute_type,
         args.require_cuda,
+        MANAGED_HOST_DRY_RUN,
         sys.executable,
     )
     _log_host_runtime_state("preflight")
+
+    if MANAGED_HOST_DRY_RUN:
+        uvicorn_logger.info(
+            "Starting uvicorn in dry-run mode on %s:%s",
+            args.host,
+            args.port,
+        )
+        uvicorn.run(app, host=args.host, port=args.port, access_log=True, log_level="info")
+        sys.exit(0)
 
     if args.require_cuda and HOST_DEVICE != "cuda":
         raise RuntimeError(

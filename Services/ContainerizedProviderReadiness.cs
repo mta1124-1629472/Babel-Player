@@ -4,6 +4,7 @@ using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,6 +18,8 @@ namespace Babel.Player.Services;
 public static class ContainerizedProviderReadiness
 {
     private static readonly TimeSpan ExecutionProbeBudget = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan CapabilityWarmupBudget = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan CapabilityWarmupRetryDelay = TimeSpan.FromSeconds(2);
 
     public static ProviderReadiness CheckTranscription(
         AppSettings settings,
@@ -85,7 +88,43 @@ public static class ContainerizedProviderReadiness
             waitTimeout: ExecutionProbeBudget,
             cancellationToken);
 
+        if (IsCapabilityActivelyWarming(probeResult, stage, settings))
+        {
+            var warmupSw = Stopwatch.StartNew();
+            while (warmupSw.Elapsed < CapabilityWarmupBudget)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Delay(CapabilityWarmupRetryDelay, cancellationToken);
+                probeResult = await probe.WaitForProbeAsync(
+                    serviceUrl,
+                    forceRefresh: true,
+                    waitTimeout: ExecutionProbeBudget,
+                    cancellationToken);
+                if (!IsCapabilityActivelyWarming(probeResult, stage, settings))
+                    break;
+            }
+        }
+
         return MapProbeResultToReadiness(settings, probeResult, stage);
+    }
+
+    private static bool IsCapabilityActivelyWarming(
+        ContainerizedProbeResult probeResult,
+        ContainerCapabilityStage stage,
+        AppSettings settings)
+    {
+        if (probeResult.State != ContainerizedProbeState.Available || probeResult.Capabilities is null)
+            return false;
+
+        if (IsStageReadyForSelection(settings, probeResult.Capabilities, stage, out var detail))
+            return false;
+
+        // Retry only for active warmup (e.g. "Qwen3-TTS warming up").
+        // Do NOT retry for terminal failures ("warmup failed") or probe timeouts
+        // ("Capabilities probe is still warming or failed") — both contain "failed".
+        return detail is not null
+            && detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
+            && !detail.Contains("failed", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static ProviderReadiness MapProbeResultToReadiness(

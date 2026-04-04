@@ -381,6 +381,101 @@ public sealed class ContainerizedProvidersTests : IDisposable
     }
 
     [Fact]
+    public async Task XttsContainerTtsProvider_GenerateTtsAsync_RetriesTimeoutAndThenSucceeds()
+    {
+        var translationPath = Path.Combine(_dir, "xtts-timeout-retry.json");
+        var outputPath = Path.Combine(_dir, "xtts-timeout-retry.mp3");
+        var defaultRef = Path.Combine(_dir, "xtts-timeout-ref.wav");
+        await File.WriteAllTextAsync(translationPath,
+            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
+        await File.WriteAllBytesAsync(defaultRef, Encoding.UTF8.GetBytes("ref-timeout"));
+
+        var segmentCalls = 0;
+        var client = CreateClient(async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/references")
+                return await Json(HttpStatusCode.OK, "{\"success\":true,\"reference_id\":\"timeout-ref\"}");
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/segment")
+            {
+                segmentCalls++;
+                if (segmentCalls == 1)
+                    throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 600 seconds elapsing.");
+
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"xtts-v2\",\"audio_path\":\"/tmp/xtts-timeout.mp3\",\"file_size_bytes\":8}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/xtts-timeout.mp3")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(Encoding.UTF8.GetBytes("T"))
+                };
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new XttsContainerTtsProvider(client, _log, new XttsReferenceExtractor(_log));
+
+        var result = await provider.GenerateTtsAsync(new TtsRequest(
+            translationPath,
+            outputPath,
+            "xtts-v2",
+            SpeakerReferenceAudioPaths: new Dictionary<string, string>
+            {
+                [XttsReferenceKeys.SingleSpeakerDefault] = defaultRef,
+            },
+            Language: "en"));
+
+        Assert.True(result.Success);
+        Assert.True(File.Exists(outputPath));
+        Assert.Equal(2, segmentCalls);
+    }
+
+    [Fact]
+    public async Task XttsContainerTtsProvider_GenerateTtsAsync_StopsAfterBoundedTimeoutRetries()
+    {
+        var translationPath = Path.Combine(_dir, "xtts-timeout-fail.json");
+        var outputPath = Path.Combine(_dir, "xtts-timeout-fail.mp3");
+        var defaultRef = Path.Combine(_dir, "xtts-timeout-fail-ref.wav");
+        await File.WriteAllTextAsync(translationPath,
+            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
+        await File.WriteAllBytesAsync(defaultRef, Encoding.UTF8.GetBytes("ref-timeout-fail"));
+
+        var segmentCalls = 0;
+        var client = CreateClient(async (request, _) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/references")
+                return await Json(HttpStatusCode.OK, "{\"success\":true,\"reference_id\":\"timeout-fail-ref\"}");
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/xtts/segment")
+            {
+                segmentCalls++;
+                throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 600 seconds elapsing.");
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new XttsContainerTtsProvider(client, _log, new XttsReferenceExtractor(_log));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(new TtsRequest(
+            translationPath,
+            outputPath,
+            "xtts-v2",
+            SpeakerReferenceAudioPaths: new Dictionary<string, string>
+            {
+                [XttsReferenceKeys.SingleSpeakerDefault] = defaultRef,
+            },
+            Language: "en")));
+
+        Assert.Contains("combined synthesis failed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, segmentCalls); // initial try + one timeout retry
+    }
+
+    [Fact]
     public async Task ContainerizedTranscriptionProvider_TranscribeAsync_ThrowsWhenInputMissing()
     {
         var client = CreateClient((_, _) =>
@@ -912,6 +1007,91 @@ public sealed class ContainerizedProvidersTests : IDisposable
         Assert.False(readiness.IsReady);
         Assert.Contains("paging file", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContainerizedProviderReadiness_CheckTtsForExecutionAsync_WaitsForActiveWarmingThenReturnsReady()
+    {
+        // Simulates Qwen3-TTS loading: first probe returns "warming up" (active warmup),
+        // second probe returns ready. Expects the method to retry and ultimately return ready.
+        var callCount = 0;
+        var probe = new ContainerizedServiceProbe(_log, (_, _, _) =>
+        {
+            callCount++;
+            var ready = callCount >= 2;
+            return Task.FromResult(new ContainerHealthStatus(
+                true,
+                true,
+                "12.8",
+                "http://localhost:8000",
+                null,
+                new ContainerCapabilitiesSnapshot(
+                    TranscriptionReady: true,
+                    TranscriptionDetail: null,
+                    TranslationReady: true,
+                    TranslationDetail: null,
+                    TtsReady: ready,
+                    TtsDetail: ready ? null : "Qwen3-TTS warming up",
+                    TtsProviders: new Dictionary<string, bool> { [ProviderNames.Qwen] = ready },
+                    TtsProviderDetails: ready
+                        ? new Dictionary<string, string>()
+                        : new Dictionary<string, string> { [ProviderNames.Qwen] = "Qwen3-TTS warming up" })));
+        });
+
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+            ContainerizedServiceUrl = "http://localhost:8000",
+            TtsProvider = ProviderNames.Qwen,
+        };
+
+        var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
+
+        Assert.True(readiness.IsReady);
+        Assert.Null(readiness.BlockingReason);
+        Assert.True(callCount >= 2, "Expected at least two probe calls during warmup wait.");
+    }
+
+    [Fact]
+    public async Task ContainerizedProviderReadiness_CheckTtsForExecutionAsync_DoesNotRetryTerminalWarmupFailure()
+    {
+        // Simulates a terminal failure (paging file OOM). Should not retry — returns not-ready immediately.
+        var callCount = 0;
+        var probe = new ContainerizedServiceProbe(_log, (_, _, _) =>
+        {
+            callCount++;
+            return Task.FromResult(new ContainerHealthStatus(
+                true,
+                true,
+                "12.8",
+                "http://localhost:8000",
+                null,
+                new ContainerCapabilitiesSnapshot(
+                    TranscriptionReady: true,
+                    TranscriptionDetail: null,
+                    TranslationReady: true,
+                    TranslationDetail: null,
+                    TtsReady: true,
+                    TtsDetail: "XTTS v2 ready",
+                    TtsProviders: new Dictionary<string, bool> { [ProviderNames.Qwen] = false },
+                    TtsProviderDetails: new Dictionary<string, string>
+                    {
+                        [ProviderNames.Qwen] = "Qwen3-TTS warmup failed: paging file too small",
+                    })));
+        });
+
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+            ContainerizedServiceUrl = "http://localhost:8000",
+            TtsProvider = ProviderNames.Qwen,
+        };
+
+        var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains("paging file", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, callCount);  // exactly one probe — no retries
     }
 
     private ContainerizedInferenceClient CreateClient(

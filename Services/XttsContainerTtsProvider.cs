@@ -19,6 +19,9 @@ namespace Babel.Player.Services;
 /// </summary>
 public sealed class XttsContainerTtsProvider : ITtsProvider, IAsyncDisposable
 {
+    private const int MaxTimeoutRetriesPerSegment = 1;
+    private static readonly TimeSpan TimeoutRetryDelay = TimeSpan.FromSeconds(2);
+
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
     private readonly XttsReferenceExtractor _extractor;
@@ -312,39 +315,78 @@ public sealed class XttsContainerTtsProvider : ITtsProvider, IAsyncDisposable
         string? referenceTranscript,
         CancellationToken ct)
     {
-        var result = await _client.XttsSegmentAsync(
-            text, model, language, speakerId, referenceAudioPath, referenceId, referenceTranscript, ct);
+        var currentReferenceId = referenceId;
+        var refreshedReferenceId = false;
+        var timeoutRetries = 0;
 
-        if (result.Success || string.IsNullOrWhiteSpace(referenceId) || string.IsNullOrWhiteSpace(referenceAudioPath))
-            return result;
-
-        // If the server reports the reference_id is unknown the Python server likely restarted
-        // and cleared its in-memory registry.  Evict the stale cache entry, re-register the
-        // reference audio, then retry the synthesis once with the fresh ID.
-        if (result.ErrorMessage is not null
-            && result.ErrorMessage.Contains("reference_id", StringComparison.OrdinalIgnoreCase)
-            && result.ErrorMessage.Contains("unknown", StringComparison.OrdinalIgnoreCase))
+        while (true)
         {
-            _log.Info("[XttsContainerTts] Stale reference_id detected; re-registering reference audio and retrying.");
-
-            var cacheKey = $"{speakerId ?? "<none>"}|{referenceAudioPath}";
-            _referenceIdBySpeakerPath.TryRemove(cacheKey, out _);
-            _sessionReferenceIds.Remove(cacheKey);
-
-            var freshReferenceId = await _client.RegisterXttsReferenceAsync(
-                speakerId ?? "speaker",
+            var result = await _client.XttsSegmentAsync(
+                text,
+                model,
+                language,
+                speakerId,
                 referenceAudioPath,
+                currentReferenceId,
                 referenceTranscript,
                 ct);
 
-            _referenceIdBySpeakerPath[cacheKey] = freshReferenceId;
-            _sessionReferenceIds[cacheKey] = freshReferenceId;
+            if (result.Success)
+                return result;
 
-            result = await _client.XttsSegmentAsync(
-                text, model, language, speakerId, referenceAudioPath, freshReferenceId, referenceTranscript, ct);
+            // If the server reports the reference_id is unknown the Python server likely restarted
+            // and cleared its in-memory registry. Evict the stale cache entry, re-register the
+            // reference audio, then retry once with the fresh ID.
+            if (!refreshedReferenceId
+                && !string.IsNullOrWhiteSpace(currentReferenceId)
+                && !string.IsNullOrWhiteSpace(referenceAudioPath)
+                && result.ErrorMessage is not null
+                && result.ErrorMessage.Contains("reference_id", StringComparison.OrdinalIgnoreCase)
+                && result.ErrorMessage.Contains("unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                _log.Info("[XttsContainerTts] Stale reference_id detected; re-registering reference audio and retrying.");
+
+                var cacheKey = $"{speakerId ?? "<none>"}|{referenceAudioPath}";
+                _referenceIdBySpeakerPath.TryRemove(cacheKey, out _);
+                _sessionReferenceIds.Remove(cacheKey);
+
+                var freshReferenceId = await _client.RegisterXttsReferenceAsync(
+                    speakerId ?? "speaker",
+                    referenceAudioPath,
+                    referenceTranscript,
+                    ct);
+
+                _referenceIdBySpeakerPath[cacheKey] = freshReferenceId;
+                _sessionReferenceIds[cacheKey] = freshReferenceId;
+                currentReferenceId = freshReferenceId;
+                refreshedReferenceId = true;
+                continue;
+            }
+
+            if (IsHttpClientTimeoutError(result.ErrorMessage)
+                && timeoutRetries < MaxTimeoutRetriesPerSegment)
+            {
+                timeoutRetries++;
+                _log.Info(
+                    $"[XttsContainerTts] XTTS segment timed out; retrying attempt {timeoutRetries + 1} " +
+                    $"of {MaxTimeoutRetriesPerSegment + 1} after {TimeoutRetryDelay.TotalSeconds:0}s delay.");
+                await Task.Delay(TimeoutRetryDelay, ct);
+                continue;
+            }
+
+            return result;
         }
+    }
 
-        return result;
+    private static bool IsHttpClientTimeoutError(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+            return false;
+
+        return errorMessage.Contains("HttpClient.Timeout", StringComparison.OrdinalIgnoreCase)
+            || (errorMessage.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+                && errorMessage.Contains("elapsed", StringComparison.OrdinalIgnoreCase))
+            || errorMessage.Contains("request was canceled", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<string?> ResolveReferenceIdAsync(
