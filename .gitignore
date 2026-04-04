@@ -91,6 +91,7 @@ app-output.log
 build.log
 test.log
 dist/
+publish/
 
 # Generated benchmark outputs
 benchmarks/
@@ -105,3 +106,4 @@ ffmpeg.exe
 .codex/environments/environment.toml
 inference/__pycache__/
 dist/Babel-Player-0.0.0-dev-win-x64-setup.exe
+publish/Avalonia.DesignerSupport.dll
