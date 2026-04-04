@@ -745,6 +745,18 @@ async def startup_event():
     if torch.cuda.is_available():
         logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
         logger.info(f"CUDA version: {torch.version.cuda}")
+    # Pre-resolve transformers lazy imports on the main thread to prevent
+    # race conditions when XTTS and Qwen warmup threads import concurrently.
+    # transformers uses _LazyModule which is not thread-safe during first resolution.
+    try:
+        import transformers as _tf
+        from transformers import AutoConfig, AutoModel, AutoProcessor  # noqa: F401
+        if not hasattr(_tf, "BeamSearchScorer"):
+            from transformers.generation.beam_search import BeamSearchScorer as _bsc
+            _tf.BeamSearchScorer = _bsc
+    except Exception:
+        pass
+
     asyncio.create_task(_warmup_xtts())
     asyncio.create_task(_warmup_qwen())
 
