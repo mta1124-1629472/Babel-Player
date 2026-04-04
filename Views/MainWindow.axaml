@@ -264,8 +264,8 @@
                             </Grid>
                         </StackPanel>
 
-                        <!-- SPEAKER ROUTING -->
-                        <StackPanel Spacing="10">
+                        <!-- SPEAKER ROUTING (hidden: single-speaker GPU TTS is the active flow) -->
+                        <StackPanel Spacing="10" IsVisible="False">
                             <TextBlock Text="SPEAKER ROUTING" FontSize="10"
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
 
