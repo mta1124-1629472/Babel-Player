@@ -90,7 +90,7 @@ jobs:
 
           dotnet publish BabelPlayer.csproj `
             --configuration Release `
-            -r win-x64 `
+            -p:RuntimeIdentifier=win-x64 `
             --self-contained true `
             -p:PublishSingleFile=false `
             -p:Version=$version `
