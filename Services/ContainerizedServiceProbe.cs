@@ -147,6 +147,10 @@ public sealed class ContainerizedServiceProbe
                 }
             }
 
+            // After dispatching or reusing the first probe, stop bypassing the cache
+            // so that subsequent loop iterations can short-circuit on a populated entry.
+            forceRefresh = false;
+
             using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             attemptCts.CancelAfter(remaining);
 
@@ -190,7 +194,21 @@ public sealed class ContainerizedServiceProbe
         ProbeEntry entry,
         Task<ContainerizedProbeResult> task)
     {
-        var result = await task.ConfigureAwait(false);
+        ContainerizedProbeResult result;
+        try
+        {
+            result = await task.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _log.Info($"Container probe observer caught fault: url={normalizedUrl}, error={ex.Message}");
+            result = new ContainerizedProbeResult(
+                normalizedUrl,
+                ContainerizedProbeState.Unavailable,
+                DateTimeOffset.UtcNow,
+                ex.Message);
+        }
+
         var ttl = result.State switch
         {
             ContainerizedProbeState.Available => AvailableTtl,
