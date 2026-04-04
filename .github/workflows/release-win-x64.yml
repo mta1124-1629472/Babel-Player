@@ -19,6 +19,11 @@ jobs:
     name: Publish Windows x64 Self-Contained Release
     runs-on: windows-latest
 
+    env:
+      # Pin ffmpeg to a specific release to prevent silent breakage from always-latest.
+      # Update this when a newer release has been validated.
+      FFMPEG_VERSION: "2025-04-14-git-3b2a9668b3-essentials_build"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,8 +54,9 @@ jobs:
       - name: Download FFmpeg for Windows x64
         shell: pwsh
         run: |
-          $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-${{ env.FFMPEG_VERSION }}.zip"
           $ffmpegZip = "ffmpeg.zip"
+          Write-Host "Downloading FFmpeg ${{ env.FFMPEG_VERSION }} from $ffmpegUrl"
           Invoke-WebRequest -Uri $ffmpegUrl -OutFile $ffmpegZip
           Expand-Archive -Path $ffmpegZip -DestinationPath "ffmpeg_temp"
           $ffmpegExe = Get-ChildItem -Path "ffmpeg_temp" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
@@ -91,18 +97,31 @@ jobs:
       - name: Verify publish output
         shell: pwsh
         run: |
-          $exePath = "./publish/BabelPlayer.exe"
-          if (-not (Test-Path $exePath)) {
-            throw "Expected executable not found at $exePath"
+          $missing = @()
+
+          # Core app binaries
+          if (-not (Test-Path "./publish/BabelPlayer.exe"))  { $missing += "BabelPlayer.exe" }
+          if (-not (Test-Path "./publish/ffmpeg.exe"))       { $missing += "ffmpeg.exe" }
+          if (-not (Test-Path "./publish/libmpv-2.dll"))     { $missing += "libmpv-2.dll" }
+          if (-not (Test-Path "./publish/uv.exe"))           { $missing += "uv.exe" }
+
+          # Inference directory and required files
+          $inferenceFiles = @(
+            "inference/main.py",
+            "inference/requirements.txt",
+            "inference/gpu-requirements.txt",
+            "inference/gpu-constraints.txt"
+          )
+          foreach ($f in $inferenceFiles) {
+            if (-not (Test-Path "./publish/$f")) { $missing += $f }
           }
-          $ffmpegPath = "./publish/ffmpeg.exe"
-          if (-not (Test-Path $ffmpegPath)) {
-            throw "Expected FFmpeg binary not found at $ffmpegPath"
+
+          if ($missing.Count -gt 0) {
+            $list = $missing -join ", "
+            throw "Publish output is missing required files: $list"
           }
-          $mpvPath = "./publish/libmpv-2.dll"
-          if (-not (Test-Path $mpvPath)) {
-            throw "Expected libmpv binary not found at $mpvPath"
-          }
+
+          Write-Host "Publish verification passed. All required files present."
 
       - name: Stage release bundle
         id: stage_bundle
