@@ -606,6 +606,46 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task Dispose_WithPidTrackedManagedPythonProcess_KillsProcessAndRemovesPidFile()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var runtimeRoot = _dir;
+        var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(pythonPath)!);
+
+        var systemCmdPath = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        File.Copy(systemCmdPath, pythonPath, overwrite: true);
+
+        var pidPath = Path.Combine(runtimeRoot, "managed-host.pid");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonPath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("/c");
+        psi.ArgumentList.Add("ping -n 30 127.0.0.1");
+
+        using var staleProcess = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start fake managed python process.");
+        File.WriteAllText(pidPath, staleProcess.Id.ToString());
+
+        var manager = new ManagedVenvHostManager(
+            _log,
+            runtimeRootResolver: () => runtimeRoot);
+
+        manager.Dispose();
+
+        await WaitForExitAsync(staleProcess);
+
+        Assert.True(staleProcess.HasExited);
+        Assert.False(File.Exists(pidPath));
+    }
+
+    [Fact]
     public async Task EnsureStartedAsync_BootstrapFailure_ReturnsFailedResultWithProcessDetail()
     {
         var manager = new ManagedVenvHostManager(

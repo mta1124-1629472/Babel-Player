@@ -3,6 +3,7 @@ using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -102,15 +103,15 @@ public static class ContainerizedProviderReadiness
 
         if (probeResult.State == ContainerizedProbeState.Unavailable)
         {
-            var detail = string.IsNullOrWhiteSpace(probeResult.ErrorDetail)
+            var unreachableDetail = string.IsNullOrWhiteSpace(probeResult.ErrorDetail)
                 ? probeResult.ServiceUrl
                 : $"{probeResult.ServiceUrl} ({probeResult.ErrorDetail})";
-            return new ProviderReadiness(false, BuildUnreachableMessage(settings, probeResult.ServiceUrl, detail));
+            return new ProviderReadiness(false, BuildUnreachableMessage(settings, probeResult.ServiceUrl, unreachableDetail));
         }
 
-        if (probeResult.Capabilities is null || !probeResult.Capabilities.IsReady(stage))
+        string? detail = null;
+        if (probeResult.Capabilities is null || !IsStageReadyForSelection(settings, probeResult.Capabilities, stage, out detail))
         {
-            var detail = probeResult.Capabilities?.Detail(stage);
             var stageLabel = stage switch
             {
                 ContainerCapabilityStage.Transcription => "transcription",
@@ -170,5 +171,27 @@ public static class ContainerizedProviderReadiness
         }
 
         return $"{hostLabel} is live but missing {stageLabel} capability: {detail}";
+    }
+
+    private static bool IsStageReadyForSelection(
+        AppSettings settings,
+        ContainerCapabilitiesSnapshot capabilities,
+        ContainerCapabilityStage stage,
+        out string? detail)
+    {
+        detail = capabilities.Detail(stage);
+
+        if (stage != ContainerCapabilityStage.Tts)
+            return capabilities.IsReady(stage);
+
+        var providerId = settings.TtsProvider;
+        if (string.IsNullOrWhiteSpace(providerId))
+            return capabilities.IsReady(stage);
+
+        if (!capabilities.TryGetTtsProviderReadiness(providerId, out var providerReady, out var providerDetail))
+            return capabilities.IsReady(stage);
+
+        detail = string.IsNullOrWhiteSpace(providerDetail) ? detail : providerDetail;
+        return providerReady;
     }
 }

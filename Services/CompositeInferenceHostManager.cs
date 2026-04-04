@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -5,7 +6,7 @@ using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
-public sealed class CompositeInferenceHostManager : IContainerizedInferenceManager
+public sealed class CompositeInferenceHostManager : IContainerizedInferenceManager, IDisposable
 {
     private readonly ManagedVenvHostManager _managedHostManager;
     private readonly IContainerizedInferenceManager _dockerHostManager;
@@ -29,6 +30,28 @@ public sealed class CompositeInferenceHostManager : IContainerizedInferenceManag
         CancellationToken cancellationToken = default)
     {
         return SelectManager(settings).EnsureStartedAsync(settings, trigger, cancellationToken);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            _managedHostManager.Dispose();
+        }
+        catch
+        {
+        }
+
+        if (_dockerHostManager is IDisposable disposableDockerManager)
+        {
+            try
+            {
+                disposableDockerManager.Dispose();
+            }
+            catch
+            {
+            }
+        }
     }
 
     private IContainerizedInferenceManager SelectManager(AppSettings settings) =>

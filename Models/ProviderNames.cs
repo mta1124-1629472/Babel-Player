@@ -31,6 +31,7 @@ public static class ProviderNames
     public const string GoogleCloudTts = "google-cloud-tts";
     public const string OpenAiTts      = "openai-tts";
     public const string XttsContainer  = "xtts-container";
+    public const string Qwen           = "qwen-tts";
 
     // ── Diarization ────────────────────────────────────────────────────────────
     public const string PyannoteLocal = "pyannote-local";

@@ -3,6 +3,7 @@
 
 import argparse
 import asyncio
+import builtins
 import importlib.util
 import json
 import logging
@@ -21,6 +22,71 @@ import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+
+def _ensure_transformers_beamsearch_compat() -> None:
+    """
+    Ensure `from transformers import BeamSearchScorer` succeeds for TTS 0.22.0.
+
+    transformers>=4.46 removed BeamSearchScorer from the public API; in 4.57.x
+    the original module is gone. XTTS in TTS 0.22.0 still imports that symbol.
+    XTTS synthesis does not rely on beam search, so a sentinel stub is safe.
+    """
+    try:
+        import transformers as _t_compat
+
+        if not hasattr(_t_compat, "BeamSearchScorer"):
+            class _BeamSearchScorerStub:  # type: ignore[no-redef]
+                """Sentinel stub: beam-search symbol removed in newer transformers."""
+
+                def __init__(self, *_unused_args, **_unused_kwargs):
+                    raise RuntimeError(
+                        "BeamSearchScorer has been removed from transformers >= 4.46.0; "
+                        "beam-search path in TTS is unavailable."
+                    )
+
+            _t_compat.BeamSearchScorer = _BeamSearchScorerStub
+            logging.getLogger(__name__).warning(
+                "transformers compat: injected BeamSearchScorer stub for TTS 0.22.0 import compatibility."
+            )
+
+        # transformers is a lazy module that can consult __getattr__ during
+        # `from transformers import ...`; ensure BeamSearchScorer resolves even
+        # if internal import structures are recomputed.
+        if callable(getattr(_t_compat, "__getattr__", None)) and not getattr(_t_compat, "_bp_beamsearch_patch", False):
+            _original_getattr = _t_compat.__getattr__
+
+            def _patched_getattr(name):
+                if name == "BeamSearchScorer":
+                    return _t_compat.__dict__["BeamSearchScorer"]
+                return _original_getattr(name)
+
+            _t_compat.__getattr__ = _patched_getattr
+            _t_compat._bp_beamsearch_patch = True
+
+        # Validate importability exactly as XTTS does it.
+        from transformers import BeamSearchScorer as _unused_beam_search_scorer  # noqa: F401
+    except Exception as _compat_exc:  # pragma: no cover
+        logging.getLogger(__name__).warning("transformers compat shim failed: %s", _compat_exc)
+
+
+_ensure_transformers_beamsearch_compat()
+
+
+def _with_transformers_compat_import_hook(action):
+    """Run an action while enforcing BeamSearchScorer compatibility on imports."""
+    original_import = builtins.__import__
+
+    def _compat_import(name, globals=None, locals=None, fromlist=(), level=0):
+        module = original_import(name, globals, locals, fromlist, level)
+        if name == "transformers" or name.startswith("transformers."):
+            _ensure_transformers_beamsearch_compat()
+        return module
+
+    builtins.__import__ = _compat_import
+    try:
+        return action()
+    finally:
+        builtins.__import__ = original_import
 
 # Configure logging
 logging.basicConfig(
@@ -46,6 +112,13 @@ nllb_model_key = None
 xtts_model = None
 xtts_model_key = None
 xtts_reference_registry: dict[str, dict[str, str | None]] = {}
+qwen_model = None
+qwen_model_key = None
+# Qwen voice-clone prompt cache: maps hash(ref_audio_bytes + ref_text) → prompt items
+qwen_voice_clone_prompt_cache: dict[str, object] = {}
+# Qwen3-TTS startup pre-warm state
+qwen_warmup_complete: bool = False
+qwen_warmup_error: Optional[str] = None
 
 HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
@@ -58,6 +131,26 @@ XTTS_MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
 TEMP_DIR.mkdir(exist_ok=True)
+
+# Qwen3-TTS language mapping: BCP-47 / common codes → Qwen language label
+QWEN_LANGUAGE_MAP: dict[str, str] = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "pt-br": "Portuguese",
+    "pt-pt": "Portuguese",
+    "ru": "Russian",
+    "zh": "Chinese",
+    "zh-cn": "Chinese",
+    "zh-hans": "Chinese",
+    "zh-tw": "Chinese",
+    "zh-hant": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+}
 
 FLORES = {
     # Latin-script European
@@ -163,6 +256,12 @@ class XttsReferenceResponse(BaseModel):
     reference_id: Optional[str] = None
     error_message: Optional[str] = None
 
+class QwenTtsRequest(BaseModel):
+    text: str
+    model: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+    language: Optional[str] = None
+    reference_text: Optional[str] = None
+
 class HealthResponse(BaseModel):
     status: str
     timestamp: str
@@ -172,6 +271,8 @@ class HealthResponse(BaseModel):
 class StageCapability(BaseModel):
     ready: bool
     detail: Optional[str] = None
+    providers: Optional[dict[str, bool]] = None
+    provider_details: Optional[dict[str, str]] = None
 
 class CapabilitiesResponse(BaseModel):
     transcription: StageCapability
@@ -313,6 +414,21 @@ def _xtts_capability_detail() -> str:
     
     return "XTTS dependencies are unavailable"
 
+
+def _probe_qwen_available() -> bool:
+    if HOST_DEVICE != "cuda":
+        return False
+    if importlib.util.find_spec("qwen_tts") is None:
+        logger.warning("Qwen capability probe failed: qwen_tts package is unavailable")
+        return False
+    return True
+
+
+def _qwen_capability_detail() -> str:
+    if HOST_DEVICE != "cuda":
+        return "CUDA is unavailable; Qwen3-TTS requires CUDA"
+    return "qwen_tts package is unavailable; install qwen-tts"
+
 # ============================================================================
 # Capabilities / Health
 # ============================================================================
@@ -324,8 +440,45 @@ def get_stage_capabilities() -> CapabilitiesResponse:
     translation_ready = _probe_nllb_available()
     translation_effective_type = _get_effective_compute_type("translation")
     
-    tts_ready = _probe_xtts_available()
-    tts_effective_type = _get_effective_compute_type("tts")
+    xtts_ready = _probe_xtts_available()
+    qwen_ready = _probe_qwen_available()
+    qwen_provider_ready = qwen_ready and qwen_warmup_complete
+
+    if qwen_provider_ready:
+        qwen_detail = f"Qwen3-TTS ready on {HOST_DEVICE}; reference audio required"
+    elif qwen_warmup_error:
+        qwen_detail = f"Qwen3-TTS warmup failed: {qwen_warmup_error}"
+    elif qwen_ready:
+        qwen_detail = "Qwen3-TTS warming up"
+    else:
+        qwen_detail = _qwen_capability_detail()
+
+    if xtts_ready:
+        xtts_detail = f"XTTS v2 ready on {HOST_DEVICE}; reference audio required"
+    else:
+        xtts_detail = _xtts_capability_detail()
+
+    tts_provider_ready = {
+        "qwen-tts": qwen_provider_ready,
+        "xtts-container": xtts_ready,
+    }
+    tts_provider_detail = {
+        "qwen-tts": qwen_detail,
+        "xtts-container": xtts_detail,
+    }
+    tts_ready = any(tts_provider_ready.values())
+
+    tts_providers = []
+    if qwen_provider_ready:
+        tts_providers.append("Qwen3-TTS")
+    elif qwen_ready:
+        tts_providers.append(qwen_detail)
+    if xtts_ready:
+        tts_providers.append("XTTS v2")
+    elif not tts_ready:
+        tts_providers.append(xtts_detail)
+
+    tts_detail = f"{', '.join(tts_providers)} ready on {HOST_DEVICE}; reference audio required" if tts_ready else "; ".join(tts_provider_detail.values())
 
     return CapabilitiesResponse(
         transcription=StageCapability(
@@ -346,11 +499,9 @@ def get_stage_capabilities() -> CapabilitiesResponse:
         ),
         tts=StageCapability(
             ready=tts_ready,
-            detail=(
-                f"XTTS v2 ready on {HOST_DEVICE} with compute_type={tts_effective_type}; reference audio required"
-                if tts_ready
-                else _xtts_capability_detail()
-            ),
+            detail=tts_detail,
+            providers=tts_provider_ready,
+            provider_details=tts_provider_detail,
         ),
     )
 
@@ -554,6 +705,7 @@ def load_xtts_model(model_name: Optional[str]):
     resolved_model = _normalize_xtts_model(model_name)
     desired_key = (resolved_model, HOST_DEVICE, effective_compute_type)
     if xtts_model is None or xtts_model_key != desired_key:
+        _ensure_transformers_beamsearch_compat()
         tts_module = import_module("TTS.api")
         tts_factory = tts_module.TTS
 
@@ -574,12 +726,34 @@ def load_xtts_model(model_name: Optional[str]):
                 HOST_DEVICE,
                 effective_compute_type,
             )
-            xtts_model = tts_factory(
-                model_path=model_pth_path,
-                config_path=config_json_path,
-                progress_bar=False,
-                gpu=(HOST_DEVICE == "cuda"),
-            )
+            try:
+                xtts_model = _with_transformers_compat_import_hook(
+                    lambda: tts_factory(
+                        model_path=model_pth_path,
+                        config_path=config_json_path,
+                        progress_bar=False,
+                        gpu=(HOST_DEVICE == "cuda"),
+                    )
+                )
+            except FileNotFoundError as ex:
+                # Older/newer TTS internals disagree on whether `model_path` is the
+                # checkpoint file path or the snapshot directory. If passing
+                # model.pth leads to a nested lookup like model.pth/model.pth,
+                # retry with the snapshot directory.
+                if "model.pth/model.pth" not in str(ex).replace("\\", "/"):
+                    raise
+                logger.warning(
+                    "XTTS checkpoint path fallback triggered (%s); retrying with snapshot directory.",
+                    ex,
+                )
+                xtts_model = _with_transformers_compat_import_hook(
+                    lambda: tts_factory(
+                        model_path=str(snapshot_path),
+                        config_path=config_json_path,
+                        progress_bar=False,
+                        gpu=(HOST_DEVICE == "cuda"),
+                    )
+                )
         else:
             logger.warning(
                 "XTTS HuggingFace snapshot not found; falling back to Coqui registry for '%s' "
@@ -600,9 +774,166 @@ def load_xtts_model(model_name: Optional[str]):
     return xtts_model
 
 
+_QWEN_FLASH_ATTN_AVAILABLE: Optional[bool] = None
+
+
+def _qwen_attn_implementation() -> str:
+    global _QWEN_FLASH_ATTN_AVAILABLE
+    if _QWEN_FLASH_ATTN_AVAILABLE is None:
+        _QWEN_FLASH_ATTN_AVAILABLE = importlib.util.find_spec("flash_attn") is not None
+    return "flash_attention_2" if _QWEN_FLASH_ATTN_AVAILABLE else "eager"
+
+
+def _normalize_qwen_model(model_name: Optional[str]) -> str:
+    valid = {
+        "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+    }
+    if model_name and model_name.strip() in valid:
+        return model_name.strip()
+    return "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+
+
+def _normalize_qwen_language(language: Optional[str]) -> str:
+    if not language:
+        return "auto"
+    key = language.strip().lower()
+    return QWEN_LANGUAGE_MAP.get(key, "auto")
+
+
+def _build_qwen_load_kwargs(attn_impl: str) -> dict[str, object]:
+    load_kwargs: dict[str, object] = {
+        "device_map": f"{HOST_DEVICE}:0",
+        "dtype": torch.bfloat16,
+        "attn_implementation": attn_impl,
+        # Keep state-dict loading conservative to reduce peak host commit usage.
+        "low_cpu_mem_usage": True,
+        "offload_state_dict": True,
+    }
+    return load_kwargs
+
+
+def _format_qwen_load_error(exc: Exception) -> str:
+    message = str(exc)
+    if os.name == "nt" and ("os error 1455" in message.lower() or "paging file is too small" in message.lower()):
+        return (
+            "Windows paging file is too small to load the selected Qwen3-TTS model. "
+            "Increase virtual memory or use the smaller Qwen model. "
+            f"Original error: {message}"
+        )
+    return message
+
+
+# Minimum available commit headroom (bytes) required to safely load the 1.7B model.
+# safetensors safe_open() maps the entire weight file into committed virtual address
+# space; the 1.7B model is ~3.4 GiB and peak commit during from_pretrained is roughly
+# 2× that. 8 GiB is deliberately conservative to leave headroom for CUDA runtime init.
+_QWEN_LARGE_MODEL_MIN_COMMIT_BYTES: int = 8 * 1024 ** 3  # 8 GiB
+
+
+def _resolve_qwen_warmup_model() -> Optional[str]:
+    """
+    Return the Qwen3-TTS model name to use for startup pre-warm.
+
+    On Windows, queries GlobalMemoryStatusEx to measure available commit-charge
+    headroom (ullAvailPageFile = commit limit − current commit charge). If that
+    headroom is below _QWEN_LARGE_MODEL_MIN_COMMIT_BYTES the 0.6B model is chosen
+    to avoid ERROR_COMMITMENT_LIMIT (os error 1455) during safetensors mmap load.
+    On all other platforms, or if the query fails, returns None so that
+    _normalize_qwen_model(None) picks the default 1.7B model.
+    """
+    if os.name != "nt":
+        return None
+
+    try:
+        import ctypes
+        import ctypes.wintypes
+
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength",                  ctypes.c_ulong),
+                ("dwMemoryLoad",              ctypes.c_ulong),
+                ("ullTotalPhys",              ctypes.c_ulonglong),
+                ("ullAvailPhys",              ctypes.c_ulonglong),
+                ("ullTotalPageFile",          ctypes.c_ulonglong),
+                ("ullAvailPageFile",          ctypes.c_ulonglong),   # commit limit − commit charge
+                ("ullTotalVirtual",           ctypes.c_ulonglong),
+                ("ullAvailVirtual",           ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual",   ctypes.c_ulonglong),
+            ]
+
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(stat)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+            logger.warning("GlobalMemoryStatusEx returned False; using default Qwen warmup model")
+            return None
+
+        available_commit_gib = stat.ullAvailPageFile / (1024 ** 3)
+        threshold_gib = _QWEN_LARGE_MODEL_MIN_COMMIT_BYTES / (1024 ** 3)
+        logger.info(
+            "Windows commit headroom: available=%.1f GiB, threshold=%.1f GiB",
+            available_commit_gib,
+            threshold_gib,
+        )
+
+        if stat.ullAvailPageFile < _QWEN_LARGE_MODEL_MIN_COMMIT_BYTES:
+            small_model = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+            logger.info(
+                "Commit headroom %.1f GiB < %.1f GiB threshold; "
+                "selecting smaller Qwen model '%s' for warmup to avoid os error 1455",
+                available_commit_gib,
+                threshold_gib,
+                small_model,
+            )
+            return small_model
+
+        return None  # sufficient headroom — _normalize_qwen_model(None) → 1.7B
+
+    except Exception as exc:
+        logger.warning("Windows commit headroom query failed (%s); using default Qwen warmup model", exc)
+        return None
+
+
+def load_qwen_model(model_name: Optional[str]):
+    global qwen_model, qwen_model_key
+
+    if HOST_DEVICE != "cuda":
+        raise RuntimeError("Qwen3-TTS managed host requires CUDA.")
+
+    resolved_model = _normalize_qwen_model(model_name)
+    desired_key = (resolved_model, HOST_DEVICE)
+    if qwen_model is None or qwen_model_key != desired_key:
+        qwen_tts_module = import_module("qwen_tts")
+        Qwen3TTSModel = qwen_tts_module.Qwen3TTSModel
+        attn_impl = _qwen_attn_implementation()
+        load_kwargs = _build_qwen_load_kwargs(attn_impl)
+        logger.info(
+            "Loading Qwen3-TTS model '%s' on device '%s' (attn=%s, dtype=bfloat16, low_cpu_mem_usage=%s, offload_state_dict=%s)",
+            resolved_model,
+            HOST_DEVICE,
+            attn_impl,
+            load_kwargs.get("low_cpu_mem_usage"),
+            load_kwargs.get("offload_state_dict"),
+        )
+        try:
+            qwen_model = Qwen3TTSModel.from_pretrained(resolved_model, **load_kwargs)
+        except Exception as exc:
+            formatted_error = _format_qwen_load_error(exc)
+            logger.error("Qwen3-TTS model load failed for '%s': %s", resolved_model, formatted_error, exc_info=True)
+            raise RuntimeError(formatted_error) from exc
+        qwen_model_key = desired_key
+        logger.info("Qwen3-TTS model '%s' loaded successfully", resolved_model)
+
+    return qwen_model
+
+
+def _qwen_prompt_cache_key(audio_bytes: bytes, reference_text: str) -> str:
+    import hashlib
+    digest = hashlib.md5(audio_bytes + reference_text.encode("utf-8")).hexdigest()
+    return digest
+
+
 def translate_with_nllb(model_name: str, source_language: str, target_language: str, text: str) -> str:
-    if not text.strip():
-        return ""
 
     tokenizer, model = load_nllb_model(model_name)
     src_flores = FLORES.get(source_language)
@@ -908,9 +1239,119 @@ async def xtts_segment(
             background_tasks.add_task(lambda p=temp_mp3_path: p.unlink(missing_ok=True))
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+@app.post("/tts/qwen/segment", response_model=TtsResponse)
+async def qwen_segment(
+    text: str = Form(...),
+    model: str = Form("Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+    language: Optional[str] = Form(None),
+    reference_text: Optional[str] = Form(None),
+    reference_file: Optional[UploadFile] = File(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    temp_reference_path = None
+    temp_wav_path = None
+    temp_mp3_path = None
+    try:
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="Qwen TTS text cannot be empty.")
+
+        if reference_file is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Qwen3-TTS requires reference audio. Provide a speaker reference clip.",
+            )
+
+        suffix = Path(reference_file.filename or "reference.wav").suffix or ".wav"
+        temp_reference_path = _temp_artifact_path("qwen_ref", suffix)
+        ref_bytes = await reference_file.read()
+        temp_reference_path.write_bytes(ref_bytes)
+
+        resolved_model = _normalize_qwen_model(model)
+        resolved_language = _normalize_qwen_language(language)
+        resolved_reference_text = (reference_text or "").strip()
+
+        temp_wav_path = _temp_artifact_path("qwen_segment", ".wav")
+        temp_mp3_path = _temp_artifact_path("qwen_segment", ".mp3")
+
+        logger.info(
+            "Generating Qwen3-TTS segment: model=%s language=%s has_ref_text=%s",
+            resolved_model,
+            resolved_language,
+            bool(resolved_reference_text),
+        )
+
+        def _run_synthesis() -> None:
+            model_instance = load_qwen_model(resolved_model)
+
+            # Build a reusable voice-clone prompt, caching by content hash to avoid
+            # recomputing per-segment token extraction when the same reference is reused.
+            cache_key = _qwen_prompt_cache_key(ref_bytes, resolved_reference_text)
+            prompt_items = qwen_voice_clone_prompt_cache.get(cache_key)
+            if prompt_items is None:
+                ref_audio_arg = str(temp_reference_path)
+                prompt_kwargs: dict = {"ref_audio": ref_audio_arg}
+                if resolved_reference_text:
+                    prompt_kwargs["ref_text"] = resolved_reference_text
+                else:
+                    prompt_kwargs["x_vector_only_mode"] = True
+                prompt_items = model_instance.create_voice_clone_prompt(**prompt_kwargs)
+                qwen_voice_clone_prompt_cache[cache_key] = prompt_items
+
+            lang_arg = resolved_language if resolved_language != "auto" else None
+            generate_kwargs: dict = {
+                "text": text,
+                "voice_clone_prompt": prompt_items,
+            }
+            if lang_arg:
+                generate_kwargs["language"] = lang_arg
+
+            wavs, sr = model_instance.generate_voice_clone(**generate_kwargs)
+
+            import scipy.io.wavfile as wavfile
+            import numpy as np
+            audio = wavs[0]
+            if hasattr(audio, "dtype") and not hasattr(audio.dtype, "itemsize"):
+                pass  # unexpected type; let scipy handle it
+            elif hasattr(audio, "dtype") and str(audio.dtype).startswith("float"):
+                # Convert float audio [-1, 1] to int16 PCM for broad WAV compatibility
+                audio = np.clip(audio, -1.0, 1.0)
+                audio = (audio * 32767).astype(np.int16)
+            wavfile.write(str(temp_wav_path), sr, audio)
+            _wav_to_mp3(temp_wav_path, temp_mp3_path)
+
+        await asyncio.to_thread(_run_synthesis)
+
+        if temp_reference_path is not None:
+            background_tasks.add_task(lambda p=temp_reference_path: p.unlink(missing_ok=True))
+        if temp_wav_path is not None:
+            background_tasks.add_task(lambda p=temp_wav_path: p.unlink(missing_ok=True))
+
+        return TtsResponse(
+            success=True,
+            voice=resolved_model,
+            audio_path=str(temp_mp3_path),
+            file_size_bytes=temp_mp3_path.stat().st_size,
+        )
+    except HTTPException:
+        if temp_reference_path is not None:
+            background_tasks.add_task(lambda p=temp_reference_path: p.unlink(missing_ok=True))
+        if temp_wav_path is not None:
+            background_tasks.add_task(lambda p=temp_wav_path: p.unlink(missing_ok=True))
+        if temp_mp3_path is not None:
+            background_tasks.add_task(lambda p=temp_mp3_path: p.unlink(missing_ok=True))
+        raise
+    except Exception as exc:
+        logger.error("Qwen3-TTS segment synthesis failed: %s", exc, exc_info=True)
+        if temp_reference_path is not None:
+            background_tasks.add_task(lambda p=temp_reference_path: p.unlink(missing_ok=True))
+        if temp_wav_path is not None:
+            background_tasks.add_task(lambda p=temp_wav_path: p.unlink(missing_ok=True))
+        if temp_mp3_path is not None:
+            background_tasks.add_task(lambda p=temp_mp3_path: p.unlink(missing_ok=True))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
 @app.get("/tts/audio/{filename}")
 async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
-    """Retrieve a generated TTS audio file by its basename."""
     try:
         file_path = TEMP_DIR / filename
         if not file_path.exists():
@@ -932,6 +1373,21 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
 async def startup_event():
     logger.info("Inference service starting up")
     _log_host_runtime_state("startup")
+    if _probe_qwen_available():
+        import threading
+        warmup_model = _resolve_qwen_warmup_model()
+        def _warmup_qwen():
+            global qwen_warmup_complete, qwen_warmup_error
+            try:
+                resolved = warmup_model or _normalize_qwen_model(None)
+                logger.info("Pre-warming Qwen3-TTS model '%s' in background thread", resolved)
+                load_qwen_model(warmup_model)
+                qwen_warmup_complete = True
+                logger.info("Qwen3-TTS pre-warm complete (model='%s')", resolved)
+            except Exception as exc:
+                qwen_warmup_error = str(exc)
+                logger.warning("Qwen3-TTS pre-warm failed: %s", exc, exc_info=True)
+        threading.Thread(target=_warmup_qwen, daemon=True, name="qwen-warmup").start()
 
 @app.on_event("shutdown")
 async def shutdown_event():

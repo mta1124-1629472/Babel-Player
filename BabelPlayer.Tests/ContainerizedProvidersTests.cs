@@ -433,11 +433,128 @@ public sealed class ContainerizedProvidersTests : IDisposable
         Assert.Equal("hola", transcript.Segments![0].Text);
     }
 
+    // ── QwenContainerTtsProvider ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task QwenContainerTtsProvider_GenerateSegmentTtsAsync_PostsToQwenEndpointWithReferenceAudio()
+    {
+        var outputPath = Path.Combine(_dir, "qwen-segment.mp3");
+        var referenceAudioPath = Path.Combine(_dir, "speaker-a.wav");
+        await File.WriteAllBytesAsync(referenceAudioPath, Encoding.UTF8.GetBytes("ref-audio"));
+        var audioBytes = Encoding.UTF8.GetBytes("qwen-segment-bytes");
+        string? postedModel = null;
+
+        var client = CreateClient(async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
+            {
+                postedModel = request.RequestUri.AbsolutePath;
+                var body = await request.Content!.ReadAsStringAsync(ct);
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"Qwen/Qwen3-TTS-12Hz-1.7B-Base\",\"audio_path\":\"/tmp/qwen-segment.mp3\",\"file_size_bytes\":18}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/qwen-segment.mp3")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(audioBytes)
+                };
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new QwenContainerTtsProvider(client, _log, new XttsReferenceExtractor(_log));
+
+        var result = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
+            "hello there",
+            outputPath,
+            "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            SpeakerId: null,
+            ReferenceAudioPath: referenceAudioPath,
+            Language: "en"));
+
+        Assert.True(result.Success);
+        Assert.Equal(outputPath, result.AudioPath);
+        Assert.True(File.Exists(outputPath));
+        Assert.Equal(audioBytes, await File.ReadAllBytesAsync(outputPath));
+        Assert.Equal("/tts/qwen/segment", postedModel);
+    }
+
+    [Fact]
+    public async Task QwenContainerTtsProvider_GenerateSegmentTtsAsync_ThrowsWhenNoReferenceAudio()
+    {
+        var outputPath = Path.Combine(_dir, "qwen-missing-ref.mp3");
+        var client = CreateClient((_, _) => Json(HttpStatusCode.OK, "{}"));
+        var provider = new QwenContainerTtsProvider(client, _log, new XttsReferenceExtractor(_log));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
+                "hello",
+                outputPath,
+                "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+                SpeakerId: null,
+                ReferenceAudioPath: null,
+                Language: "en")));
+    }
+
+    [Fact]
+    public async Task QwenContainerTtsProvider_GenerateTtsAsync_UsesReferenceAudioForSegments()
+    {
+        var translationPath = Path.Combine(_dir, "qwen-translation.json");
+        var referenceAudioPath = Path.Combine(_dir, "qwen-speaker.wav");
+        var outputPath = Path.Combine(_dir, "qwen-combined.mp3");
+
+        await File.WriteAllBytesAsync(referenceAudioPath, Encoding.UTF8.GetBytes("ref-audio-qwen"));
+        await File.WriteAllTextAsync(translationPath,
+            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
+
+        var audioBytes = Encoding.UTF8.GetBytes("qwen-combined-audio");
+        int qwenCallCount = 0;
+
+        var client = CreateClient(async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
+            {
+                qwenCallCount++;
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"Qwen/Qwen3-TTS-12Hz-1.7B-Base\",\"audio_path\":\"/tmp/qwen-seg.mp3\",\"file_size_bytes\":20}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/qwen-seg.mp3")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(audioBytes)
+                };
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new QwenContainerTtsProvider(client, _log, new XttsReferenceExtractor(_log));
+
+        var result = await provider.GenerateTtsAsync(new TtsRequest(
+            translationPath,
+            outputPath,
+            "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            SpeakerReferenceAudioPaths: new Dictionary<string, string>
+            {
+                [XttsReferenceKeys.SingleSpeakerDefault] = referenceAudioPath
+            }));
+
+        Assert.True(result.Success);
+        Assert.Equal(outputPath, result.AudioPath);
+        Assert.True(File.Exists(outputPath));
+        Assert.Equal(1, qwenCallCount);
+    }
+
     [Fact]
     public async Task ContainerizedTtsProvider_GenerateTtsAsync_CombinesSegmentsAndWritesOutput()
     {
-        var translationPath = Path.Combine(_dir, "translation.json");
-        var outputPath = Path.Combine(_dir, "combined.mp3");
+        var translationPath = Path.Combine(_dir, "combined-translation.json");
+        var outputPath = Path.Combine(_dir, "combined-output.mp3");
         var audioBytes = Encoding.UTF8.GetBytes("combined-audio");
 
         await File.WriteAllTextAsync(translationPath,
@@ -666,6 +783,37 @@ public sealed class ContainerizedProvidersTests : IDisposable
     }
 
     [Fact]
+    public async Task ContainerizedInferenceClient_CheckHealthAsync_ParsesProviderSpecificTtsCapabilities()
+    {
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/health/live")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"status\":\"healthy\",\"cuda_available\":true,\"cuda_version\":\"12.8\"}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true,\"detail\":\"XTTS v2 ready on cuda; reference audio required\",\"providers\":{\"qwen-tts\":false,\"xtts-container\":true},\"provider_details\":{\"qwen-tts\":\"Qwen3-TTS warmup failed: paging file too small\",\"xtts-container\":\"XTTS v2 ready on cuda; reference audio required\"}}}");
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"status\":\"not-found\"}");
+        });
+
+        var health = await client.CheckHealthAsync();
+
+        Assert.NotNull(health.Capabilities);
+        Assert.True(health.Capabilities!.TryGetTtsProviderReadiness(ProviderNames.Qwen, out var qwenReady, out var qwenDetail));
+        Assert.False(qwenReady);
+        Assert.Contains("paging file", qwenDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.True(health.Capabilities.TryGetTtsProviderReadiness(ProviderNames.XttsContainer, out var xttsReady, out var xttsDetail));
+        Assert.True(xttsReady);
+        Assert.Contains("XTTS v2 ready", xttsDetail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ContainerizedInferenceClient_CheckHealthAsync_ReturnsLiveButWarmingWhenCapabilitiesProbeFails()
     {
         var client = CreateClient((request, _) =>
@@ -722,6 +870,47 @@ public sealed class ContainerizedProvidersTests : IDisposable
 
         Assert.False(readiness.IsReady);
         Assert.Contains("live but translation capability is still warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContainerizedProviderReadiness_CheckTtsForExecutionAsync_ReturnsNotReadyWhenSelectedQwenProviderFailedWarmup()
+    {
+        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+            true,
+            true,
+            "12.8",
+            "http://localhost:8000",
+            null,
+            new ContainerCapabilitiesSnapshot(
+                TranscriptionReady: true,
+                TranscriptionDetail: null,
+                TranslationReady: true,
+                TranslationDetail: null,
+                TtsReady: true,
+                TtsDetail: "XTTS v2 ready on cuda; reference audio required",
+                TtsProviders: new Dictionary<string, bool>
+                {
+                    [ProviderNames.Qwen] = false,
+                    [ProviderNames.XttsContainer] = true,
+                },
+                TtsProviderDetails: new Dictionary<string, string>
+                {
+                    [ProviderNames.Qwen] = "Qwen3-TTS warmup failed: The paging file is too small for this operation to complete.",
+                    [ProviderNames.XttsContainer] = "XTTS v2 ready on cuda; reference audio required",
+                }))));
+
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+            ContainerizedServiceUrl = "http://localhost:8000",
+            TtsProvider = ProviderNames.Qwen,
+        };
+
+        var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains("paging file", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 

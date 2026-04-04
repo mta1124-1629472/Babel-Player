@@ -45,6 +45,7 @@ public static class InferenceRuntimeCatalog
     {
         ProviderNames.Piper => ComputeProfile.Cpu,
         ProviderNames.XttsContainer => ComputeProfile.Gpu,
+        ProviderNames.Qwen => ComputeProfile.Gpu,
         _ => ComputeProfile.Cloud,
     };
 
@@ -149,7 +150,11 @@ public static class InferenceRuntimeCatalog
         return profile switch
         {
             ComputeProfile.Cpu => ProviderNames.Piper,
-            ComputeProfile.Gpu => ProviderNames.XttsContainer,
+            ComputeProfile.Gpu => providerId switch
+            {
+                ProviderNames.Qwen => ProviderNames.Qwen,
+                _ => ProviderNames.XttsContainer,
+            },
             _ => providerId switch
             {
                 ProviderNames.ElevenLabs => ProviderNames.ElevenLabs,
@@ -249,7 +254,8 @@ public static class InferenceRuntimeCatalog
             or ProviderNames.ElevenLabs
             or ProviderNames.GoogleCloudTts
             or ProviderNames.OpenAiTts
-            or ProviderNames.XttsContainer => true,
+            or ProviderNames.XttsContainer
+            or ProviderNames.Qwen => true,
         _ => false,
     };
 }

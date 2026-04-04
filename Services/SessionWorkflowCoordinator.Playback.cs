@@ -336,6 +336,18 @@ public sealed partial class SessionWorkflowCoordinator
             _subscribedToSourceDiagnostics = false;
         }
 
+        if (_containerizedInferenceManager is IDisposable disposableInferenceManager)
+        {
+            try
+            {
+                disposableInferenceManager.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _log.Warning($"Failed to dispose containerized inference manager on shutdown: {ex.Message}");
+            }
+        }
+
         _transportManager.Dispose();
     }
 }

@@ -309,6 +309,58 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    public async Task<TtsResult> QwenSegmentAsync(
+        string text,
+        string model,
+        string? language = null,
+        string? referenceAudioPath = null,
+        string? referenceText = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            content.Add(new StringContent(text), "text");
+            content.Add(new StringContent(string.IsNullOrWhiteSpace(model) ? "Qwen/Qwen3-TTS-12Hz-1.7B-Base" : model), "model");
+            if (!string.IsNullOrWhiteSpace(language))
+                content.Add(new StringContent(language), "language");
+            if (!string.IsNullOrWhiteSpace(referenceText))
+                content.Add(new StringContent(referenceText), "reference_text");
+
+            FileStream? fs = null;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(referenceAudioPath))
+                {
+                    if (!File.Exists(referenceAudioPath))
+                        throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
+                    fs = File.OpenRead(referenceAudioPath);
+                    content.Add(new StreamContent(fs), "reference_file", Path.GetFileName(referenceAudioPath));
+                }
+
+                using var response = await _httpClient.PostAsync(
+                    $"{_inferenceServiceUrl}/tts/qwen/segment",
+                    content,
+                    cancellationToken);
+
+                var result = await DeserializeResponseAsync<TtsApiResponseDto>(response, cancellationToken);
+                if (!result.Success)
+                    throw new InvalidOperationException($"Qwen TTS segment error: {result.ErrorMessage}");
+
+                return new TtsResult(true, result.AudioPath ?? "", result.Voice ?? model, result.FileSizeBytes, null);
+            }
+            finally
+            {
+                fs?.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Qwen TTS segment synthesis failed: {ex.Message}", ex);
+            return new TtsResult(false, "", string.IsNullOrWhiteSpace(model) ? "Qwen/Qwen3-TTS-12Hz-1.7B-Base" : model, 0, ex.Message);
+        }
+    }
+
     public async Task DownloadTtsAudioAsync(
         string filename,
         string localOutputPath,
@@ -356,7 +408,9 @@ public sealed class ContainerizedInferenceClient
                     capabilitiesDto.Translation?.Ready ?? false,
                     capabilitiesDto.Translation?.Detail,
                     capabilitiesDto.Tts?.Ready ?? false,
-                    capabilitiesDto.Tts?.Detail);
+                    capabilitiesDto.Tts?.Detail,
+                    capabilitiesDto.Tts?.Providers,
+                    capabilitiesDto.Tts?.ProviderDetails);
             }
             catch (Exception ex)
             {
@@ -440,6 +494,12 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("detail")]
         public string? Detail { get; set; }
+
+        [JsonPropertyName("providers")]
+        public Dictionary<string, bool>? Providers { get; set; }
+
+        [JsonPropertyName("provider_details")]
+        public Dictionary<string, string>? ProviderDetails { get; set; }
     }
 
     private sealed class TranscriptionApiResponseDto
@@ -549,7 +609,9 @@ public sealed record ContainerCapabilitiesSnapshot(
     bool TranslationReady,
     string? TranslationDetail,
     bool TtsReady,
-    string? TtsDetail)
+    string? TtsDetail,
+    IReadOnlyDictionary<string, bool>? TtsProviders = null,
+    IReadOnlyDictionary<string, string>? TtsProviderDetails = null)
 {
     public bool IsReady(ContainerCapabilityStage stage) => stage switch
     {
@@ -566,6 +628,26 @@ public sealed record ContainerCapabilitiesSnapshot(
         ContainerCapabilityStage.Tts => TtsDetail,
         _ => null,
     };
+
+    public bool TryGetTtsProviderReadiness(string providerId, out bool ready, out string? detail)
+    {
+        ready = false;
+        detail = null;
+        if (string.IsNullOrWhiteSpace(providerId))
+            return false;
+
+        var found = false;
+        if (TtsProviders is not null && TtsProviders.TryGetValue(providerId, out var providerReady))
+        {
+            ready = providerReady;
+            found = true;
+        }
+
+        if (TtsProviderDetails is not null && TtsProviderDetails.TryGetValue(providerId, out var providerDetail))
+            detail = providerDetail;
+
+        return found || detail is not null;
+    }
 }
 
 public sealed record ContainerHealthStatus(

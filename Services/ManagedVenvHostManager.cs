@@ -156,11 +156,28 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     {
         try
         {
-            if (_hostProcess is { HasExited: false })
-                _hostProcess.Kill(entireProcessTree: true);
+            var runtimeRoot = _runtimeRootResolver();
+            var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
+            var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
+
+            RecoverStaleHostProcessesAsync(
+                    pythonPath,
+                    hostPidPath,
+                    stopTrackedProcess: true,
+                    cancellationToken: CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
         }
         catch
         {
+            try
+            {
+                if (_hostProcess is { HasExited: false })
+                    _hostProcess.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+            }
         }
     }
 

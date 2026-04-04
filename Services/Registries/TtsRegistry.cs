@@ -77,6 +77,15 @@ public sealed class TtsRegistry : ITtsRegistry
                     SupportedRuntimes: [InferenceRuntime.Containerized],
                     DefaultRuntime: InferenceRuntime.Containerized,
                     IsImplemented: true),
+                new(
+                    ProviderNames.Qwen,
+                    "Qwen3-TTS (Local GPU Host)",
+                    false,
+                    null,
+                    QwenModels,
+                    SupportedRuntimes: [InferenceRuntime.Containerized],
+                    DefaultRuntime: InferenceRuntime.Containerized,
+                    IsImplemented: true),
             ];
         }
 
@@ -118,6 +127,8 @@ public sealed class TtsRegistry : ITtsRegistry
         var normalizedProviderId = ResolveProviderId(providerId, settings, profile);
         if (profile == ComputeProfile.Gpu && string.Equals(normalizedProviderId, ProviderNames.XttsContainer, StringComparison.Ordinal))
             return ["xtts-v2"];
+        if (profile == ComputeProfile.Gpu && string.Equals(normalizedProviderId, ProviderNames.Qwen, StringComparison.Ordinal))
+            return QwenModels;
 
         return GetAvailableProviders(profile)
             .FirstOrDefault(p => p.Id == normalizedProviderId)?.SupportedModels
@@ -176,6 +187,10 @@ public sealed class TtsRegistry : ITtsRegistry
             return normalizedProviderId switch
             {
                 ProviderNames.XttsContainer => new XttsContainerTtsProvider(
+                    new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                    _log,
+                    new XttsReferenceExtractor(_log)),
+                ProviderNames.Qwen => new QwenContainerTtsProvider(
                     new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
                     _log,
                     new XttsReferenceExtractor(_log)),
@@ -238,7 +253,11 @@ public sealed class TtsRegistry : ITtsRegistry
         "fr_FR-gilles-low",
         "es_ES-mls_10246-low",
     ];
-
+    public static readonly IReadOnlyList<string> QwenModels =
+    [
+        "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+    ];
     public static readonly IReadOnlyList<string> EdgeTtsVoices =
     [
         "en-US-AriaNeural",    "en-US-GuyNeural",     "en-US-JennyNeural",   "en-US-ChristopherNeural",

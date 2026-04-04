@@ -346,7 +346,72 @@ public sealed class RegistryTests : IDisposable
         Assert.NotEmpty(TtsRegistry.PiperVoices);
     }
 
-    // ── Cross-registry checks ─────────────────────────────────────────────────
+    [Fact]
+    public void TtsRegistry_GetAvailableProviders_GpuListContainsQwen()
+    {
+        var providers = _ttsRegistry.GetAvailableProviders(ComputeProfile.Gpu);
+        Assert.Contains(providers, p => p.Id == ProviderNames.Qwen);
+    }
+
+    [Fact]
+    public void TtsRegistry_GetAvailableProviders_QwenIsImplemented()
+    {
+        var providers = _ttsRegistry.GetAvailableProviders(ComputeProfile.Gpu);
+        var qwen = providers.First(p => p.Id == ProviderNames.Qwen);
+        Assert.True(qwen.IsImplemented);
+    }
+
+    [Fact]
+    public void TtsRegistry_GetAvailableModels_QwenGpuProfile_ReturnsBothBaseModels()
+    {
+        var settings = new AppSettings { TtsProfile = ComputeProfile.Gpu, TtsProvider = ProviderNames.Qwen };
+        var models = _ttsRegistry.GetAvailableModels(ProviderNames.Qwen, ComputeProfile.Gpu, settings);
+
+        Assert.Contains("Qwen/Qwen3-TTS-12Hz-1.7B-Base", models);
+        Assert.Contains("Qwen/Qwen3-TTS-12Hz-0.6B-Base", models);
+    }
+
+    [Fact]
+    public void TtsRegistry_CreateProvider_Qwen_DoesNotThrow_WhenRuntimeIsContainerized()
+    {
+        var settings = new AppSettings { TtsRuntime = InferenceRuntime.Containerized, TtsProvider = ProviderNames.Qwen };
+        var provider = _ttsRegistry.CreateProvider(ProviderNames.Qwen, settings, null, ComputeProfile.Gpu);
+        Assert.NotNull(provider);
+        Assert.IsType<QwenContainerTtsProvider>(provider);
+    }
+
+    [Fact]
+    public void TtsRegistry_QwenModels_ContainsBothBaseModels()
+    {
+        Assert.Contains("Qwen/Qwen3-TTS-12Hz-1.7B-Base", TtsRegistry.QwenModels);
+        Assert.Contains("Qwen/Qwen3-TTS-12Hz-0.6B-Base", TtsRegistry.QwenModels);
+    }
+
+    [Fact]
+    public void InferenceRuntimeCatalog_InferTtsProfile_QwenReturnsGpu()
+    {
+        Assert.Equal(ComputeProfile.Gpu, InferenceRuntimeCatalog.InferTtsProfile(ProviderNames.Qwen));
+    }
+
+    [Fact]
+    public void InferenceRuntimeCatalog_IsKnownTtsProvider_QwenReturnsTrue()
+    {
+        Assert.True(InferenceRuntimeCatalog.IsKnownTtsProvider(ProviderNames.Qwen));
+    }
+
+    [Fact]
+    public void InferenceRuntimeCatalog_NormalizeTtsProvider_QwenOnGpu_PreservesQwenId()
+    {
+        var normalized = InferenceRuntimeCatalog.NormalizeTtsProvider(ComputeProfile.Gpu, ProviderNames.Qwen);
+        Assert.Equal(ProviderNames.Qwen, normalized);
+    }
+
+    [Fact]
+    public void InferenceRuntimeCatalog_NormalizeTtsProvider_XttsOnGpu_PreservesXttsId()
+    {
+        var normalized = InferenceRuntimeCatalog.NormalizeTtsProvider(ComputeProfile.Gpu, ProviderNames.XttsContainer);
+        Assert.Equal(ProviderNames.XttsContainer, normalized);
+    }
 
     [Fact]
     public void AllRegistries_ContainerizedService_CheckReadiness_RequiresConfiguredUrl()
@@ -415,18 +480,19 @@ public sealed class RegistryTests : IDisposable
 
         Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.Piper);
         Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.XttsContainer);
+        Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.Qwen);
         Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.GoogleCloudTts);
         Assert.Contains(providers, provider => provider.Id == ProviderNames.EdgeTts);
     }
 
     [Fact]
-    public void TtsRegistry_GetAvailableProviders_GpuShowsXttsContainer()
+    public void TtsRegistry_GetAvailableProviders_GpuShowsXttsContainerAndQwen()
     {
         var providers = _ttsRegistry.GetAvailableProviders(ComputeProfile.Gpu);
 
-        var xtts = Assert.Single(providers);
-        Assert.Equal(ProviderNames.XttsContainer, xtts.Id);
-        Assert.Contains("xtts-v2", xtts.SupportedModels);
+        Assert.Equal(2, providers.Count);
+        Assert.Contains(providers, p => p.Id == ProviderNames.XttsContainer);
+        Assert.Contains(providers, p => p.Id == ProviderNames.Qwen);
     }
 
     [Fact]
