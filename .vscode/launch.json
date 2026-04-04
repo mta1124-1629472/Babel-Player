@@ -1,0 +1,30 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Babel Player",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/bin/Debug/net10.0/BabelPlayer.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole"
+        },
+        {
+            "name": "Babel Player (Release)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/bin/Release/net10.0/BabelPlayer.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole"
+        },
+        {
+            "name": ".NET Core Attach",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ]
+}
