@@ -669,6 +669,7 @@ async def extract_speaker_references(
     file: UploadFile = File(...),
     speakers_json: str = Form(...),
     target_duration_seconds: float = Form(10.0),
+    session_id: Optional[str] = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """Extract a reference audio clip for each speaker from the source audio.
@@ -692,14 +693,20 @@ async def extract_speaker_references(
                               {start, end} diarization segments for that speaker.
                               e.g. {"SPEAKER_00": [{"start": 1.2, "end": 8.7}]}
     target_duration_seconds : max clip length to extract (default 10 s)
+    session_id              : caller-supplied session/job identifier. Pass the
+                              same value on repeated calls within the same dubbing
+                              job so that prior refs for the same speaker are
+                              evicted and temp files do not accumulate. When
+                              omitted, a new UUID is generated (no eviction will
+                              occur for prior calls that also omitted it).
     """
     if shutil.which("ffmpeg") is None:
         raise HTTPException(status_code=500, detail="ffmpeg not found on PATH — required for reference extraction")
 
-    # A unique ID for this extraction call. Stored on every registry entry so
-    # re-extractions from the same session only evict their own prior refs,
-    # never refs belonging to a concurrent session with the same speaker labels.
-    session_id = uuid4().hex
+    # Use caller-supplied session_id when provided; fall back to a fresh UUID
+    # (backwards-compatible: old callers that don't send session_id never evict
+    # each other, but also never accumulate duplicates within a single call).
+    effective_session_id = (session_id or "").strip() or uuid4().hex
 
     temp_source_path: Optional[Path] = None
     try:
@@ -719,8 +726,8 @@ async def extract_speaker_references(
         # Validate each speaker's segment list through SpeakerSegmentInput
         try:
             validated_speakers: dict[str, list[SpeakerSegmentInput]] = {
-                speaker_id: [SpeakerSegmentInput(**seg) for seg in segs]
-                for speaker_id, segs in raw.items()
+                spk: [SpeakerSegmentInput(**seg) for seg in segs]
+                for spk, segs in raw.items()
             }
         except Exception as exc:
             raise HTTPException(
@@ -775,12 +782,13 @@ async def extract_speaker_references(
                     detail=f"ffmpeg extraction failed for speaker {speaker_id}: {proc.stderr[-200:]}",
                 )
 
-            # Evict only refs that belong to the same session AND speaker — never
-            # refs from other concurrent sessions that share the same speaker label.
+            # Evict prior refs that belong to the same session AND speaker so
+            # temp files don't accumulate on repeated calls within the same job.
+            # Refs from other sessions (different job IDs) are never touched.
             existing_ref_ids = [
                 rid for rid, entry in xtts_reference_registry.items()
                 if entry.get("speaker_id") == speaker_id
-                and entry.get("session_id") == session_id
+                and entry.get("session_id") == effective_session_id
             ]
             for old_ref_id in existing_ref_ids:
                 _evict_reference(old_ref_id)
@@ -788,7 +796,7 @@ async def extract_speaker_references(
             ref_id = f"{speaker_id}_{uuid4().hex}"
             xtts_reference_registry[ref_id] = {
                 "speaker_id": speaker_id,
-                "session_id": session_id,
+                "session_id": effective_session_id,
                 "path": str(out_path),
                 "transcript": None,
             }
@@ -800,7 +808,7 @@ async def extract_speaker_references(
             ))
             logger.info(
                 f"Extracted {extract_duration:.2f}s reference for {speaker_id} "
-                f"-> ref_id={ref_id} session={session_id}"
+                f"-> ref_id={ref_id} session={effective_session_id}"
             )
 
         background_tasks.add_task(lambda p=temp_source_path: p.unlink(missing_ok=True))
