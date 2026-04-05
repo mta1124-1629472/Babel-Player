@@ -630,6 +630,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
             : CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
         await EnsureSingleSpeakerXttsReferenceClipAsync();
+        await EnsureSingleSpeakerQwenReferenceClipAsync();
         var referenceAudioPath = targetSegment is not null
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;

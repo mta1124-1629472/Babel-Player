@@ -647,6 +647,50 @@ public sealed class ContainerizedProvidersTests : IDisposable
     }
 
     [Fact]
+    public async Task QwenContainerTtsProvider_GenerateTtsAsync_DoesNotUseXttsSingleSpeakerDefaultReference()
+    {
+        var translationPath = Path.Combine(_dir, "qwen-translation-xtts-default-only.json");
+        var xttsDefaultReferencePath = Path.Combine(_dir, "xtts-default-ref.wav");
+        var outputPath = Path.Combine(_dir, "qwen-should-fail-with-xtts-default.mp3");
+
+        await File.WriteAllBytesAsync(xttsDefaultReferencePath, Encoding.UTF8.GetBytes("ref-audio-xtts"));
+        await File.WriteAllTextAsync(translationPath,
+            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
+
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"Qwen/Qwen3-TTS-12Hz-1.7B-Base\",\"audio_path\":\"/tmp/qwen-seg.mp3\",\"file_size_bytes\":20}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/qwen-seg.mp3")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(Encoding.UTF8.GetBytes("qwen-audio"))
+                });
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new QwenContainerTtsProvider(client, _log, new XttsReferenceExtractor(_log));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(new TtsRequest(
+            translationPath,
+            outputPath,
+            "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            SpeakerReferenceAudioPaths: new Dictionary<string, string>
+            {
+                [XttsReferenceKeys.SingleSpeakerDefault] = xttsDefaultReferencePath
+            })));
+
+        Assert.Contains("requires a reference clip", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ContainerizedTtsProvider_GenerateTtsAsync_CombinesSegmentsAndWritesOutput()
     {
         var translationPath = Path.Combine(_dir, "combined-translation.json");
