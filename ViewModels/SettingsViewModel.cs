@@ -47,6 +47,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         TranscriptionCpuThreads = current.TranscriptionCpuThreads;
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
 
+        // Diarization
+        DiarizationProvider         = current.DiarizationProvider;
+        DiarizationHuggingFaceToken = current.DiarizationHuggingFaceToken;
+        DiarizationMinSpeakers      = current.DiarizationMinSpeakers;
+        DiarizationMaxSpeakers      = current.DiarizationMaxSpeakers;
+
         // Theme options
         ThemeOptions = new[] { "Light", "Dark", "System" };
         
@@ -186,6 +192,30 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private int _transcriptionNumWorkers = 1;
 
+    // ── Diarization ───────────────────────────────────────────────────────────
+
+    /// <summary>Available diarization provider identifiers shown in the UI combo box.</summary>
+    public string[] DiarizationProviderOptions { get; } =
+        ["", "pyannote-local"];
+
+    [ObservableProperty]
+    private string _diarizationProvider = "";
+
+    /// <summary>
+    /// HuggingFace access token for the gated pyannote speaker-diarization model.
+    /// Stored in app-settings.json. Users should treat this as a secret.
+    /// </summary>
+    [ObservableProperty]
+    private string _diarizationHuggingFaceToken = "";
+
+    /// <summary>Optional minimum number of speakers. null = auto.</summary>
+    [ObservableProperty]
+    private int? _diarizationMinSpeakers;
+
+    /// <summary>Optional maximum number of speakers. null = auto.</summary>
+    [ObservableProperty]
+    private int? _diarizationMaxSpeakers;
+
     // ── Video hardware decode & encode ────────────────────────────────────────
 
     [ObservableProperty]
@@ -276,6 +306,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             : TranscriptionCpuComputeType;
         settings.TranscriptionCpuThreads = Math.Max(0, TranscriptionCpuThreads);
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
+
+        // Diarization
+        settings.DiarizationProvider         = DiarizationProvider ?? "";
+        settings.DiarizationHuggingFaceToken = DiarizationHuggingFaceToken?.Trim() ?? "";
+        settings.DiarizationMinSpeakers      = DiarizationMinSpeakers;
+        settings.DiarizationMaxSpeakers      = DiarizationMaxSpeakers;
+
         settings.VideoHwdec          = VideoHwdec;
         settings.VideoGpuApi         = VideoGpuApi;
         settings.VideoExportEncoder  = VideoExportEncoder;

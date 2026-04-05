@@ -42,6 +42,26 @@ public sealed class AppSettings
     /// <summary>Diarization provider identifier (e.g. "pyannote-local"). Empty string = diarization disabled.</summary>
     public string DiarizationProvider { get; set; } = "";
 
+    /// <summary>
+    /// HuggingFace user access token required to download the gated pyannote speaker
+    /// diarization model. Obtain one at https://huggingface.co/settings/tokens after
+    /// accepting the model terms at https://hf.co/pyannote/speaker-diarization-3.1.
+    /// Empty string = no token (will fail for gated models).
+    /// </summary>
+    public string DiarizationHuggingFaceToken { get; set; } = "";
+
+    /// <summary>
+    /// Optional lower bound on the number of speakers to detect.
+    /// null means no constraint (pyannote auto-detects).
+    /// </summary>
+    public int? DiarizationMinSpeakers { get; set; } = null;
+
+    /// <summary>
+    /// Optional upper bound on the number of speakers to detect.
+    /// null means no constraint (pyannote auto-detects).
+    /// </summary>
+    public int? DiarizationMaxSpeakers { get; set; } = null;
+
     /// <summary>Translation provider identifier (e.g. "google-translate-free", "openai").</summary>
     public string TranslationProvider { get; set; } = ProviderNames.GoogleTranslateFree;
 

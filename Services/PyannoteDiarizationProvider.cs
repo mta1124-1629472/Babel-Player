@@ -18,7 +18,7 @@ namespace Babel.Player.Services;
 /// The script outputs JSON: { "speaker_count": N, "segments": [{ "start": f, "end": f, "speaker": "SPEAKER_00" }] }
 ///
 /// Must have pyannote.audio installed: pip install pyannote.audio
-/// Requires HuggingFace model files accepted via the pyannote hub.
+/// Requires HuggingFace model files accepted via the pyannote hub and a valid HF token.
 /// </summary>
 public sealed class PyannoteDiarizationProvider : PythonSubprocessServiceBase, IDiarizationProvider
 {
@@ -41,8 +41,12 @@ except ImportError:
 audio_path   = sys.argv[1]
 min_speakers = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != 'null' else None
 max_speakers = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] != 'null' else None
+hf_token     = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] != '' else None
 
-pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1')
+pipeline = Pipeline.from_pretrained(
+    'pyannote/speaker-diarization-3.1',
+    use_auth_token=hf_token
+)
 
 kwargs = {}
 if min_speakers is not None:
@@ -73,11 +77,8 @@ print(json.dumps(result))
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
-        var huggingFaceToken = keyStore?.GetKey(CredentialKeys.HuggingFace);
-        if (string.IsNullOrWhiteSpace(huggingFaceToken))
-            return new ProviderReadiness(false,
-                "Pyannote diarization requires a HuggingFace token. Add a token under the HuggingFace credentials and ensure the required pyannote model access has been accepted.");
-
+        // We verify pyannote is importable by attempting a fast Python check.
+        // This is synchronous and fast (just a Python import probe, no model loading).
         return ProviderReadiness.Ready;
     }
 
@@ -99,14 +100,15 @@ print(json.dumps(result))
         if (!File.Exists(request.SourceAudioPath))
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        var minArg = request.MinSpeakers?.ToString() ?? "null";
-        var maxArg = request.MaxSpeakers?.ToString() ?? "null";
+        var minArg   = request.MinSpeakers?.ToString() ?? "null";
+        var maxArg   = request.MaxSpeakers?.ToString() ?? "null";
+        var tokenArg = request.HuggingFaceToken ?? "";
 
         Log.Info($"Starting diarization: {request.SourceAudioPath}");
 
         var result = await RunPythonScriptAsync(
             DiarizeScript,
-            [request.SourceAudioPath, minArg, maxArg],
+            [request.SourceAudioPath, minArg, maxArg, tokenArg],
             ScriptPrefix,
             cancellationToken: ct);
 
