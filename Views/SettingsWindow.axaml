@@ -4,7 +4,7 @@
         xmlns:v="using:Babel.Player.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="680"
+        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="780"
         x:Class="Babel.Player.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Icon="/Assets/Icons/app.ico"
@@ -24,27 +24,14 @@
 
         <!-- Main content area -->
         <TabControl Grid.Row="1" Margin="0,0,0,20">
-            
+
             <!-- General Tab -->
             <TabItem Header="General">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <Grid Margin="20">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
+                    <StackPanel Margin="20" Spacing="12">
 
                         <!-- Theme -->
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="20">
+                        <StackPanel Orientation="Horizontal" Spacing="20">
                             <TextBlock Text="Theme:" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding ThemeOptions}"
                                       SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
@@ -52,7 +39,7 @@
                         </StackPanel>
 
                         <!-- Default TTS Voice (hidden — wiring kept, not shown in UI) -->
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20" IsVisible="False">
+                        <StackPanel Orientation="Horizontal" Spacing="20" IsVisible="False">
                             <TextBlock Text="Default TTS Voice:" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding TtsVoiceOptions}"
                                       SelectedItem="{Binding SelectedVoice, Mode=TwoWay}"
@@ -60,20 +47,20 @@
                         </StackPanel>
 
                         <!-- Recent Sessions -->
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="20">
+                        <StackPanel Orientation="Horizontal" Spacing="20">
                             <TextBlock Text="Max Recent Sessions:" VerticalAlignment="Center"/>
                             <TextBox Text="{Binding MaxRecentSessions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Width="60"/>
                         </StackPanel>
 
                         <!-- Auto-save -->
-                        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
+                        <StackPanel Orientation="Horizontal" Spacing="20">
                             <CheckBox IsChecked="{Binding AutoSaveEnabled}"
                                       Content="Auto-save session on exit"/>
                         </StackPanel>
 
                         <!-- Advanced GPU host settings -->
-                        <StackPanel Grid.Row="4" Spacing="6">
+                        <StackPanel Spacing="6">
                             <TextBlock Text="Preferred Local GPU Backend:" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding GpuBackendOptions}"
                                       SelectedItem="{Binding PreferredLocalGpuBackend, Mode=TwoWay}"
@@ -91,9 +78,7 @@
                         </StackPanel>
 
                         <!-- Backend restart row -->
-                        <Border Grid.Row="5"
-                                Margin="0,6,0,6"
-                                Padding="10,8"
+                        <Border Padding="10,8"
                                 Background="#1A1A2A"
                                 CornerRadius="6">
                             <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
@@ -114,7 +99,7 @@
                             </StackPanel>
                         </Border>
 
-                        <StackPanel Grid.Row="6" Spacing="6">
+                        <StackPanel Spacing="6">
                             <TextBlock Text="Advanced GPU Service URL:" VerticalAlignment="Center"/>
                             <TextBox Text="{Binding AdvancedGpuServiceUrl, Mode=TwoWay}"
                                      Width="320"
@@ -127,31 +112,78 @@
                         </StackPanel>
 
                         <!-- Advanced CPU transcription tuning -->
-                        <StackPanel Grid.Row="7" Margin="0,18,0,0" Spacing="6">
+                        <StackPanel Margin="0,6,0,0" Spacing="6">
                             <TextBlock Text="Advanced: CPU Transcription" FontWeight="SemiBold"/>
                             <TextBlock Opacity="0.65" TextWrapping="Wrap"
                                        Text="These options tune CPU-only transcription. 0 threads means auto selection by the runtime."/>
                         </StackPanel>
 
-                        <StackPanel Grid.Row="8" Orientation="Horizontal" Spacing="20">
+                        <StackPanel Orientation="Horizontal" Spacing="20">
                             <TextBlock Text="CPU Compute Type:" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}"
                                       SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}"
                                       Width="150"/>
                         </StackPanel>
 
-                        <StackPanel Grid.Row="9" Orientation="Horizontal" Spacing="20">
+                        <StackPanel Orientation="Horizontal" Spacing="20">
                             <TextBlock Text="CPU Threads (0=auto):" VerticalAlignment="Center"/>
                             <TextBox Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Width="80"/>
                         </StackPanel>
 
-                        <StackPanel Grid.Row="10" Orientation="Horizontal" Spacing="20">
+                        <StackPanel Orientation="Horizontal" Spacing="20">
                             <TextBlock Text="Workers:" VerticalAlignment="Center"/>
                             <TextBox Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Width="80"/>
                         </StackPanel>
-                    </Grid>
+
+                        <!-- ── Diarization ──────────────────────────────────── -->
+                        <StackPanel Margin="0,12,0,0" Spacing="6">
+                            <TextBlock Text="Speaker Diarization" FontWeight="SemiBold"/>
+                            <TextBlock Opacity="0.65" TextWrapping="Wrap"
+                                       Text="Select a provider to enable multi-speaker diarization. Leave empty to disable. Pyannote requires a HuggingFace token and model acceptance at hf.co/pyannote."/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="20">
+                            <TextBlock Text="Diarization Provider:" VerticalAlignment="Center" Width="160"/>
+                            <ComboBox ItemsSource="{Binding DiarizationProviderOptions}"
+                                      SelectedItem="{Binding DiarizationProvider, Mode=TwoWay}"
+                                      Width="220"
+                                      HorizontalAlignment="Left"
+                                      ToolTip.Tip="Empty = diarization disabled"/>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4"
+                                    IsEnabled="{Binding DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <StackPanel Orientation="Horizontal" Spacing="20">
+                                <TextBlock Text="HuggingFace Token:" VerticalAlignment="Center" Width="160"/>
+                                <TextBox Text="{Binding DiarizationHuggingFaceToken, Mode=TwoWay}"
+                                         PasswordChar="&#x2022;"
+                                         Width="280"
+                                         HorizontalAlignment="Left"
+                                         ToolTip.Tip="HuggingFace access token (hf_...). Required for gated pyannote models."/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="20">
+                                <TextBlock Text="Min Speakers:" VerticalAlignment="Center" Width="160"/>
+                                <NumericUpDown Value="{Binding DiarizationMinSpeakers, Mode=TwoWay}"
+                                               Minimum="1" Maximum="20"
+                                               Width="100"
+                                               HorizontalAlignment="Left"
+                                               ToolTip.Tip="Leave empty to let the model decide automatically"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="20">
+                                <TextBlock Text="Max Speakers:" VerticalAlignment="Center" Width="160"/>
+                                <NumericUpDown Value="{Binding DiarizationMaxSpeakers, Mode=TwoWay}"
+                                               Minimum="1" Maximum="20"
+                                               Width="100"
+                                               HorizontalAlignment="Left"
+                                               ToolTip.Tip="Leave empty to let the model decide automatically"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                    </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
@@ -207,7 +239,6 @@
             </TabItem>
 
             <!-- Hotkeys Tab -->
-            <!-- Hotkeys: display-only defaults; customisation not yet implemented -->
             <TabItem Header="Hotkeys">
                 <Grid Margin="20">
                     <Grid.RowDefinitions>
@@ -221,28 +252,24 @@
                     <TextBlock Grid.Row="0" Opacity="0.5" FontStyle="Italic" Margin="0,0,0,12"
                                Text="Hotkey customisation is not yet available. Shown values are the current defaults." />
 
-                    <!-- Play/Pause -->
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20">
                         <TextBlock Text="Play/Pause:" VerticalAlignment="Center"/>
                         <TextBox Text="{Binding PlayPauseHotkey}" IsReadOnly="True"
                                  Width="100" Opacity="0.6"/>
                     </StackPanel>
 
-                    <!-- Toggle Segment Panel -->
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="20">
                         <TextBlock Text="Toggle Segment Panel:" VerticalAlignment="Center"/>
                         <TextBox Text="{Binding ToggleSegmentPanelHotkey}" IsReadOnly="True"
                                  Width="100" Opacity="0.6"/>
                     </StackPanel>
 
-                    <!-- Toggle Dub Mode -->
                     <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
                         <TextBlock Text="Toggle Dub Mode:" VerticalAlignment="Center"/>
                         <TextBox Text="{Binding ToggleDubModeHotkey}" IsReadOnly="True"
                                  Width="100" Opacity="0.6"/>
                     </StackPanel>
 
-                    <!-- Toggle Fullscreen -->
                     <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="20">
                         <TextBlock Text="Toggle Fullscreen:" VerticalAlignment="Center"/>
                         <TextBox Text="{Binding ToggleFullscreenHotkey}" IsReadOnly="True"
@@ -256,7 +283,6 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="20" Spacing="12">
 
-                        <!-- ── Core Hardware ────────────────────────────────── -->
                         <TextBlock Text="Hardware Decode" FontWeight="SemiBold" />
                         <ComboBox ItemsSource="{Binding HwdecOptions}"
                                   SelectedItem="{Binding VideoHwdec, Mode=TwoWay}"
@@ -272,7 +298,6 @@
                                   SelectedItem="{Binding VideoExportEncoder, Mode=TwoWay}"
                                   Width="220" HorizontalAlignment="Left" />
 
-                        <!-- ── gpu-next backend ─────────────────────────────── -->
                         <TextBlock Text="GPU-Next Backend" FontWeight="SemiBold" Margin="0,8,0,0"/>
                         <CheckBox IsChecked="{Binding VideoUseGpuNext, Mode=TwoWay}"
                                   Content="Use gpu-next video output (required for RTX enhancements)"/>
@@ -280,10 +305,8 @@
                                    Opacity="0.6"
                                    Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or RTX HDR." />
 
-                        <!-- ── RTX Video Enhancement ────────────────────────── -->
                         <TextBlock Text="RTX Video Enhancement" FontWeight="SemiBold" Margin="0,12,0,0"/>
 
-                        <!-- VSR -->
                         <CheckBox IsChecked="{Binding VideoVsrEnabled, Mode=TwoWay}"
                                   IsEnabled="{Binding VideoUseGpuNext}"
                                   Content="RTX Video Super Resolution (VSR)"/>
@@ -312,54 +335,19 @@
                                   RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                                   ColumnSpacing="10"
                                   RowSpacing="6">
-                                <TextBlock Grid.Row="0" Grid.Column="0"
-                                           Text="Support"
-                                           FontWeight="SemiBold"
-                                           Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="0" Grid.Column="1"
-                                           Text="{Binding VsrSupportHintText}"
-                                           TextWrapping="Wrap"
-                                           Foreground="#D8D6F2" />
-
-                                <TextBlock Grid.Row="1" Grid.Column="0"
-                                           Text="Requested"
-                                           FontWeight="SemiBold"
-                                           Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="1" Grid.Column="1"
-                                           Text="{Binding VsrRequestedStateText}"
-                                           TextWrapping="Wrap"
-                                           Foreground="#D8D6F2" />
-
-                                <TextBlock Grid.Row="2" Grid.Column="0"
-                                           Text="Resolved"
-                                           FontWeight="SemiBold"
-                                           Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="2" Grid.Column="1"
-                                           Text="{Binding VsrResolvedStateText}"
-                                           TextWrapping="Wrap"
-                                           Foreground="#D8D6F2" />
-
-                                <TextBlock Grid.Row="3" Grid.Column="0"
-                                           Text="Last reason"
-                                           FontWeight="SemiBold"
-                                           Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="3" Grid.Column="1"
-                                           Text="{Binding VsrReasonText}"
-                                           TextWrapping="Wrap"
-                                           Foreground="#D8D6F2" />
-
-                                <TextBlock Grid.Row="4" Grid.Column="0"
-                                           Text="Last filter"
-                                           FontWeight="SemiBold"
-                                           Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="4" Grid.Column="1"
-                                           Text="{Binding VsrFilterText}"
-                                           TextWrapping="Wrap"
-                                           Foreground="#D8D6F2" />
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Support" FontWeight="SemiBold" Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding VsrSupportHintText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Requested" FontWeight="SemiBold" Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding VsrRequestedStateText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Resolved" FontWeight="SemiBold" Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding VsrResolvedStateText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Last reason" FontWeight="SemiBold" Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding VsrReasonText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Last filter" FontWeight="SemiBold" Foreground="#9A98B8" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding VsrFilterText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
                             </Grid>
                         </Border>
 
-                        <!-- HDR -->
                         <CheckBox IsChecked="{Binding VideoHdrEnabled, Mode=TwoWay}"
                                   IsEnabled="{Binding VideoUseGpuNext}"
                                   Content="HDR Output Pipeline"
@@ -385,7 +373,6 @@
                                       ToolTip.Tip="Per-frame brightness peak analysis. May cause brightness instability on some content."/>
                         </StackPanel>
 
-                        <!-- Restart notice -->
                         <TextBlock TextWrapping="Wrap"
                                    Opacity="0.6"
                                    Margin="0,12,0,0"
@@ -411,7 +398,6 @@
                                             Background="#1E1E2C" CornerRadius="6">
                                         <Grid ColumnDefinitions="Auto,*,Auto">
 
-                                            <!-- Provider badge + model name -->
                                             <StackPanel Grid.Column="0" Spacing="2" Width="180">
                                                 <TextBlock Text="{Binding ProviderLabel}"
                                                            FontSize="9" Opacity="0.45" FontWeight="SemiBold"/>
@@ -419,7 +405,6 @@
                                                            FontSize="12" FontWeight="Medium"/>
                                             </StackPanel>
 
-                                            <!-- Status + progress bar -->
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4" Margin="12,0">
                                                 <TextBlock Text="{Binding StatusLabel}"
                                                            FontSize="11"
@@ -430,7 +415,6 @@
                                                              IsVisible="{Binding IsProgressVisible}"/>
                                             </StackPanel>
 
-                                            <!-- Download / Cancel button -->
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                                 <Button Content="Download"
                                                         IsVisible="{Binding CanDownload}"

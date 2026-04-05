@@ -191,14 +191,14 @@ public sealed class AppSettings
 
     /// <summary>
     /// Enable NVIDIA RTX Video Super Resolution via the d3d11vpp filter.
-    /// Requires gpu-next backend, RTX GPU, driver ≥ 551.23, and
+    /// Requires gpu-next backend, RTX GPU, driver >= 551.23, and
     /// "RTX Video Enhancement" enabled in NVIDIA Control Panel.
     /// Takes effect on app restart.
     /// </summary>
     public bool VideoVsrEnabled { get; set; } = false;
 
     /// <summary>
-    /// RTX Video Super Resolution quality level (1 = Performance … 4 = Quality).
+    /// RTX Video Super Resolution quality level (1 = Performance ... 4 = Quality).
     /// Only used when VideoVsrEnabled is true.
     /// Takes effect on app restart.
     /// </summary>
@@ -245,7 +245,7 @@ public sealed class AppSettings
     /// <summary>UI theme: "Light", "Dark", or "System".</summary>
     public string Theme { get; set; } = "System";
 
-    /// <summary>Maximum entries kept in the recent-sessions list (1–20).</summary>
+    /// <summary>Maximum entries kept in the recent-sessions list (1-20).</summary>
     public int MaxRecentSessions { get; set; } = 10;
 
     /// <summary>Whether to auto-save the session snapshot on app exit.</summary>

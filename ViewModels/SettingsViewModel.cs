@@ -1,10 +1,12 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -17,6 +19,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 {
     private readonly SettingsService _settingsService;
     private readonly SessionWorkflowCoordinator _coordinator;
+    private readonly ApiKeyStore? _apiKeyStore;
     private readonly Window _ownerWindow;
     private readonly IContainerizedInferenceManager _containerizedManager;
     private CancellationTokenSource? _restartCts;
@@ -26,15 +29,16 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         SessionWorkflowCoordinator coordinator,
         Window ownerWindow,
         ModelsTabViewModel modelsTab,
-        IContainerizedInferenceManager? containerizedManager = null)
+        IContainerizedInferenceManager? containerizedManager = null,
+        ApiKeyStore? apiKeyStore = null)
     {
         _settingsService       = settingsService;
         _coordinator           = coordinator;
         _ownerWindow           = ownerWindow;
         ModelsTab              = modelsTab;
         _containerizedManager  = containerizedManager ?? NullInferenceManager.Instance;
+        _apiKeyStore           = apiKeyStore;
 
-        // Load current settings from coordinator (not disk, to avoid losing side-panel changes)
         var current = _coordinator.CurrentSettings;
         SelectedVoice          = current.TtsVoice;
         SelectedTheme          = current.Theme;
@@ -55,9 +59,16 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         // Theme options
         ThemeOptions = new[] { "Light", "Dark", "System" };
-        
+
         // TTS voice options
         TtsVoiceOptions = [.. TtsRegistry.EdgeTtsVoices];
+
+        // Diarization provider options: "" (disabled) + registered providers
+        DiarizationProviderOptions = new[] { "" }
+            .Concat(new DiarizationRegistry(_coordinator.Log)
+                .GetAvailableProviders()
+                .Select(p => p.Id))
+            .ToArray();
 
         // Video hardware settings
         _videoHwdec          = current.VideoHwdec;
@@ -84,10 +95,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     // ── About ─────────────────────────────────────────────────────────────────
 
-    /// <summary>Version string read from the assembly at runtime (e.g. "Version 1.2.0").</summary>
     public string AppVersion   => $"Version {BuildInfo.Version}";
-
-    /// <summary>Build date string read from the assembly at runtime (e.g. "Build date: 2026-04-03").</summary>
     public string AppBuildDate => $"Build date: {BuildInfo.BuildDate}";
 
     // ── Backend restart ───────────────────────────────────────────────────────
@@ -111,14 +119,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         IsRestartingBackend = true;
         BackendStatusText   = "Restarting\u2026";
 
-        // Snapshot settings so the manager picks the right provider
         var settings = _coordinator.CurrentSettings;
 
         try
         {
             var result = await _containerizedManager
                 .EnsureStartedAsync(settings, ContainerizedStartupTrigger.Manual, ct)
-                .ConfigureAwait(true); // stay on UI thread after await
+                .ConfigureAwait(true);
 
             BackendStatusText = result == ContainerizedStartResult.AlreadyRunning
                 || result == ContainerizedStartResult.Started
@@ -291,7 +298,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private void Apply()
     {
         var settings = _coordinator.CurrentSettings;
-        
+
         settings.TtsVoice           = SelectedVoice ?? settings.TtsVoice;
         settings.Theme              = SelectedTheme ?? settings.Theme;
         settings.MaxRecentSessions  = MaxRecentSessions;

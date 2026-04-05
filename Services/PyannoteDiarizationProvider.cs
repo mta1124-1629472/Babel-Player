@@ -23,8 +23,8 @@ namespace Babel.Player.Services;
 /// </summary>
 public sealed class PyannoteDiarizationProvider : PythonSubprocessServiceBase, IDiarizationProvider
 {
-    // Language consistent with the rest of the codebase — no inline literals
     private const string ScriptPrefix = "diarize";
+    private readonly ApiKeyStore? _keyStore;
 
     private readonly string? _huggingFaceToken;
 
@@ -133,9 +133,6 @@ print(json.dumps(result))
         IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
-        // pyannote models are downloaded on first use by Pipeline.from_pretrained.
-        // We do not pre-download them here — the model files can be large and
-        // require HuggingFace token acceptance which cannot be automated silently.
         return Task.FromResult(true);
     }
 
@@ -172,7 +169,7 @@ print(json.dumps(result))
 
         var result = await RunPythonScriptAsync(
             DiarizeScript,
-            [request.SourceAudioPath, minArg, maxArg],
+            [request.SourceAudioPath, minArg, maxArg, tokenArg],
             ScriptPrefix,
             environmentVariables: envVars,
             cancellationToken: ct);
@@ -214,7 +211,6 @@ print(json.dumps(result))
             var speaker = seg.GetProperty("speaker").GetString()
                 ?? throw new InvalidOperationException("Segment missing 'speaker' field.");
 
-            // Normalise "SPEAKER_00" → "spk_00" to match segment ID conventions.
             var speakerId = NormaliseSpeakerId(speaker);
             segments.Add(new DiarizedSegment(start, end, speakerId));
         }
@@ -224,19 +220,16 @@ print(json.dumps(result))
 
     /// <summary>
     /// Normalises pyannote speaker labels (e.g. "SPEAKER_00", "SPEAKER_1") to the
-    /// "spk_NN" form used throughout the session model. This keeps diarization speaker
-    /// IDs consistent with any manually assigned IDs.
+    /// "spk_NN" form used throughout the session model.
     /// </summary>
     private static string NormaliseSpeakerId(string pyannoteLabel)
     {
-        // "SPEAKER_00" → "spk_00", "SPEAKER_1" → "spk_01"
         if (pyannoteLabel.StartsWith("SPEAKER_", StringComparison.OrdinalIgnoreCase))
         {
-            var suffix = pyannoteLabel[8..]; // after "SPEAKER_"
+            var suffix = pyannoteLabel[8..];
             if (int.TryParse(suffix, out var index))
                 return $"spk_{index:D2}";
         }
-        // Fall through: return lowercased label as-is to avoid null/empty
         return pyannoteLabel.ToLowerInvariant();
     }
 }

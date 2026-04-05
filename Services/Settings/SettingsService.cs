@@ -94,6 +94,8 @@ public sealed class SettingsService
         public int? TranscriptionCpuThreads { get; set; }
         public int? TranscriptionNumWorkers { get; set; }
         public string? DiarizationProvider { get; set; }
+        public int? DiarizationMinSpeakers { get; set; }
+        public int? DiarizationMaxSpeakers { get; set; }
         public string? TranslationProvider { get; set; }
         public ComputeProfile? TranslationProfile { get; set; }
         public InferenceRuntime? TranslationRuntime { get; set; }
@@ -142,6 +144,8 @@ public sealed class SettingsService
             settings.TranscriptionNumWorkers = TranscriptionNumWorkers ?? settings.TranscriptionNumWorkers;
 
             settings.DiarizationProvider = DiarizationProvider ?? settings.DiarizationProvider;
+            settings.DiarizationMinSpeakers = DiarizationMinSpeakers ?? settings.DiarizationMinSpeakers;
+            settings.DiarizationMaxSpeakers = DiarizationMaxSpeakers ?? settings.DiarizationMaxSpeakers;
 
             settings.TranslationProvider = TranslationProvider ?? settings.TranslationProvider;
             settings.TranslationProfile = ResolveProfile(
@@ -199,6 +203,8 @@ public sealed class SettingsService
             TranscriptionCpuThreads = settings.TranscriptionCpuThreads,
             TranscriptionNumWorkers = settings.TranscriptionNumWorkers,
             DiarizationProvider = settings.DiarizationProvider,
+            DiarizationMinSpeakers = settings.DiarizationMinSpeakers,
+            DiarizationMaxSpeakers = settings.DiarizationMaxSpeakers,
             TranslationProvider = settings.TranslationProvider,
             TranslationProfile = settings.TranslationProfile,
             TranslationModel = settings.TranslationModel,

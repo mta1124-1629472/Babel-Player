@@ -12,6 +12,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly SettingsService _settingsService;
     private readonly ModelDownloader _modelDownloader;
+    private readonly ApiKeyStore? _apiKeyStore;
 
     public MainWindowViewModel(
         SessionWorkflowCoordinator coordinator,
@@ -24,6 +25,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         Coordinator = coordinator;
         _settingsService = settingsService;
         _modelDownloader = modelDownloader;
+        _apiKeyStore = apiKeyStore;
 
         Playback = new EmbeddedPlaybackViewModel(coordinator, apiKeyStore, errorDialogService, logFilePath);
         Inspection = new SegmentInspectionViewModel(Playback);
@@ -48,7 +50,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             Coordinator,
             ownerWindow,
             new ModelsTabViewModel(_modelDownloader, Coordinator),
-            containerizedManager: Coordinator.ContainerizedInferenceManager);
+            containerizedManager: Coordinator.ContainerizedInferenceManager,
+            apiKeyStore: _apiKeyStore);
 
     [RelayCommand]
     private void RestoreSession(RecentSessionEntry entry) =>
