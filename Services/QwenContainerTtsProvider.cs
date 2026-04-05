@@ -108,8 +108,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
                 var referenceAudioPath = ResolveReferenceAudioForSegment(seg, request);
 
                 if (string.IsNullOrWhiteSpace(referenceAudioPath) &&
-                    !string.IsNullOrWhiteSpace(request.SourceVideoPath) &&
-                    (request.SpeakerReferenceAudioPaths?.Count ?? 0) == 0)
+                    !string.IsNullOrWhiteSpace(request.SourceVideoPath))
                 {
                     referenceAudioPath = await EnsureAutoExtractedReferenceAsync(request.SourceVideoPath, cancellationToken);
                 }
@@ -120,7 +119,8 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
 
                 _log.Info(
                     $"[QwenContainerTts] Combined synth segment start " +
-                    $"(segment={seg.Id ?? segmentIndex.ToString()}, model={resolvedModel})");
+                    $"(segment={seg.Id ?? segmentIndex.ToString()}, model={resolvedModel}, " +
+                    $"reference={referenceAudioPath})");
 
                 var result = await _client.QwenSegmentAsync(
                     seg.TranslatedText!,
