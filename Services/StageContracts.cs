@@ -90,7 +90,8 @@ public sealed record TtsResult(
 public sealed record DiarizationRequest(
     string SourceAudioPath,
     int? MinSpeakers = null,
-    int? MaxSpeakers = null);
+    int? MaxSpeakers = null,
+    string? HuggingFaceToken = null);
 
 public sealed record DiarizationResult(
     bool Success,

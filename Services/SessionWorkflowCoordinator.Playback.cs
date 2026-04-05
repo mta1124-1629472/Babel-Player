@@ -9,7 +9,7 @@ namespace Babel.Player.Services;
 
 public sealed partial class SessionWorkflowCoordinator
 {
-    // ── Diarization ───────────────────────────────────────────────────────────
+    // ── Diarization ──────────────────────────────────────────────────────
 
     private async Task RunDiarizationAsync(string audioPath, string transcriptPath, CancellationToken ct)
     {
@@ -24,8 +24,20 @@ public sealed partial class SessionWorkflowCoordinator
 
         var provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
 
-        _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={audioPath}");
-        var result = await provider.DiarizeAsync(new DiarizationRequest(audioPath), ct);
+        var request = new DiarizationRequest(
+            SourceAudioPath:  audioPath,
+            MinSpeakers:      CurrentSettings.DiarizationMinSpeakers,
+            MaxSpeakers:      CurrentSettings.DiarizationMaxSpeakers,
+            HuggingFaceToken: string.IsNullOrWhiteSpace(CurrentSettings.DiarizationHuggingFaceToken)
+                                  ? null
+                                  : CurrentSettings.DiarizationHuggingFaceToken);
+
+        _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={audioPath}, " +
+                  $"minSpeakers={CurrentSettings.DiarizationMinSpeakers?.ToString() ?? "auto"}, " +
+                  $"maxSpeakers={CurrentSettings.DiarizationMaxSpeakers?.ToString() ?? "auto"}, " +
+                  $"hasToken={!string.IsNullOrWhiteSpace(CurrentSettings.DiarizationHuggingFaceToken)}");
+
+        var result = await provider.DiarizeAsync(request, ct);
 
         if (!result.Success)
         {
