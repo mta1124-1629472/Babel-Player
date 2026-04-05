@@ -569,9 +569,9 @@ public sealed class RegistryTests : IDisposable
     public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithNoToken_ReturnsNotReady()
     {
         var keyStore = new ApiKeyStore(_dir);
-        keyStore.SetKey(CredentialKeys.HuggingFace, "hf_test_token");
         var readiness = _diarizationRegistry.CheckReadiness(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
-        Assert.True(readiness.IsReady);
+        Assert.False(readiness.IsReady);
+        Assert.Contains("HuggingFace token is required", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
