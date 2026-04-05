@@ -304,6 +304,24 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _ownerWindow.Close();
     }
 
+    [RelayCommand]
+    private void OpenKofi()
+    {
+        try
+        {
+            const string kofiUrl = "https://ko-fi.com/R5R01WOOYW";
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = kofiUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to open Ko-fi link: {ex.Message}");
+        }
+    }
+
     public void Dispose()
     {
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
