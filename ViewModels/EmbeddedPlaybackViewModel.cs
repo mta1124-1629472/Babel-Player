@@ -181,6 +181,98 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _isMultiSpeakerEnabled;
 
+    public IReadOnlyList<string> DiarizationProviderOptions { get; } =
+        BuildDiarizationProviderOptions();
+
+    private static IReadOnlyList<string> BuildDiarizationProviderOptions()
+    {
+        var options = new List<string> { string.Empty };
+
+        foreach (var providerName in GetRegisteredDiarizationProviderNames())
+        {
+            if (!string.IsNullOrWhiteSpace(providerName) &&
+                !options.Contains(providerName, StringComparer.Ordinal))
+            {
+                options.Add(providerName);
+            }
+        }
+
+        if (!options.Contains(ProviderNames.PyannoteLocal, StringComparer.Ordinal))
+        {
+            options.Add(ProviderNames.PyannoteLocal);
+        }
+
+        return options;
+    }
+
+    private static IEnumerable<string> GetRegisteredDiarizationProviderNames()
+    {
+        var registryType = typeof(DiarizationRegistry);
+        object? registryInstance = registryType
+            .GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)?
+            .GetValue(null);
+
+        foreach (var memberName in new[] { "ProviderNames", "AvailableProviderNames", "Providers" })
+        {
+            foreach (var providerName in ReadProviderNames(registryType, registryInstance, memberName))
+            {
+                yield return providerName;
+            }
+        }
+    }
+
+    private static IEnumerable<string> ReadProviderNames(
+        Type registryType,
+        object? registryInstance,
+        string memberName)
+    {
+        var bindingFlags = System.Reflection.BindingFlags.Public |
+                           System.Reflection.BindingFlags.Static |
+                           System.Reflection.BindingFlags.Instance;
+
+        var property = registryType.GetProperty(memberName, bindingFlags);
+        var value = property?.GetValue(property.GetMethod?.IsStatic == true ? null : registryInstance);
+
+        if (value is IEnumerable<string> stringValues)
+        {
+            foreach (var stringValue in stringValues)
+            {
+                yield return stringValue;
+            }
+
+            yield break;
+        }
+
+        if (value is System.Collections.IEnumerable values)
+        {
+            foreach (var item in values)
+            {
+                if (item is string stringItem)
+                {
+                    yield return stringItem;
+                    continue;
+                }
+
+                var name = item?.GetType()
+                    .GetProperty("Name", bindingFlags)?
+                    .GetValue(item) as string;
+
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    yield return name;
+                }
+            }
+        }
+    }
+    [ObservableProperty]
+    private string _diarizationProvider = string.Empty;
+
+    [ObservableProperty]
+    private decimal? _diarizationMinSpeakers;
+
+    [ObservableProperty]
+    private decimal? _diarizationMaxSpeakers;
+
     private bool _isAutoSpeakerDetectionEnabled;
 
     private string _autoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
@@ -667,9 +759,64 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     {
         if (_isSynchronizingPipelineSettings) return;
 
-        _coordinator.CurrentSettings.DiarizationProvider = value ? ProviderNames.PyannoteLocal : string.Empty;
+        DiarizationProvider = value ? ProviderNames.PyannoteLocal : string.Empty;
+    }
+
+    partial void OnDiarizationProviderChanged(string value)
+    {
+        if (_isSynchronizingPipelineSettings) return;
+
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim();
+
+        if (!DiarizationProviderOptions.Contains(normalized, StringComparer.Ordinal))
+            normalized = string.Empty;
+
+        var expectedAutoDetect = string.Equals(normalized, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
+
+        _isSynchronizingPipelineSettings = true;
+        try
+        {
+            if (!string.Equals(normalized, value, StringComparison.Ordinal))
+                DiarizationProvider = normalized;
+
+            if (IsAutoSpeakerDetectionEnabled != expectedAutoDetect)
+                IsAutoSpeakerDetectionEnabled = expectedAutoDetect;
+        }
+        finally
+        {
+            _isSynchronizingPipelineSettings = false;
+        }
+
+        _coordinator.CurrentSettings.DiarizationProvider = normalized;
         _coordinator.NotifySettingsModified();
         RefreshAutoSpeakerDetectionStatus();
+    }
+
+    partial void OnDiarizationMinSpeakersChanged(decimal? value)
+    {
+        if (_isSynchronizingPipelineSettings) return;
+
+        _coordinator.CurrentSettings.DiarizationMinSpeakers = NormalizeSpeakerCount(value);
+        _coordinator.NotifySettingsModified();
+    }
+
+    partial void OnDiarizationMaxSpeakersChanged(decimal? value)
+    {
+        if (_isSynchronizingPipelineSettings) return;
+
+        _coordinator.CurrentSettings.DiarizationMaxSpeakers = NormalizeSpeakerCount(value);
+        _coordinator.NotifySettingsModified();
+    }
+
+    private static int? NormalizeSpeakerCount(decimal? value)
+    {
+        if (!value.HasValue)
+            return null;
+
+        var rounded = (int)Math.Round(value.Value, MidpointRounding.AwayFromZero);
+        return Math.Clamp(rounded, 1, 20);
     }
 
     private async Task SeekAndPlayAsync(WorkflowSegmentState segment)
@@ -910,6 +1057,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 ?? _availableTtsOptions.FirstOrDefault();
 
             IsMultiSpeakerEnabled = _coordinator.CurrentSession.MultiSpeakerEnabled;
+            DiarizationProvider = _coordinator.CurrentSettings.DiarizationProvider;
+            DiarizationMinSpeakers = _coordinator.CurrentSettings.DiarizationMinSpeakers;
+            DiarizationMaxSpeakers = _coordinator.CurrentSettings.DiarizationMaxSpeakers;
             IsAutoSpeakerDetectionEnabled =
                 string.Equals(_coordinator.CurrentSettings.DiarizationProvider, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
 

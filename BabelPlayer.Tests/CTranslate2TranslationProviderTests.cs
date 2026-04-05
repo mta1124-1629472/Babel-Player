@@ -37,13 +37,15 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             transcriptPath,
             "{\"language\":\"es\",\"language_probability\":1.0,\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"hola\"}]}");
 
-        var provider = new TestCTranslate2TranslationProvider(_log, "nllb-200-distilled-600M");
-        provider.OnRun = (arguments, _, _) =>
+        var provider = new TestCTranslate2TranslationProvider(_log, "nllb-200-distilled-600M")
         {
-            File.WriteAllText(
-                arguments[1],
-                "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
-            return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
+            OnRun = (arguments, _, _) =>
+            {
+                File.WriteAllText(
+                    arguments[1],
+                    "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
+                return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
+            }
         };
 
         var result = await provider.TranslateAsync(new TranslationRequest(
@@ -67,14 +69,16 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             translationPath,
             "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"},{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"adios\",\"translatedText\":\"bye\"}]}");
 
-        var provider = new TestCTranslate2TranslationProvider(_log, "nllb-200-distilled-600M");
-        provider.OnRun = (arguments, _, standardInput) =>
+        var provider = new TestCTranslate2TranslationProvider(_log, "nllb-200-distilled-600M")
         {
-            Assert.Equal("hola", standardInput);
-            File.WriteAllText(
-                arguments[2],
-                "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"greetings\"},{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"adios\",\"translatedText\":\"bye\"}]}");
-            return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
+            OnRun = (arguments, _, standardInput) =>
+            {
+                Assert.Equal("hola", standardInput);
+                File.WriteAllText(
+                    arguments[2],
+                    "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"greetings\"},{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"adios\",\"translatedText\":\"bye\"}]}");
+                return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
+            }
         };
 
         var result = await provider.TranslateSingleSegmentAsync(new SingleSegmentTranslationRequest(
@@ -94,12 +98,8 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
         Assert.Equal("bye", untouched.TranslatedText);
     }
 
-    private sealed class TestCTranslate2TranslationProvider : CTranslate2TranslationProvider
+    private sealed class TestCTranslate2TranslationProvider(AppLog log, string model) : CTranslate2TranslationProvider(log, model)
     {
-        public TestCTranslate2TranslationProvider(AppLog log, string model) : base(log, model)
-        {
-        }
-
         public Func<IReadOnlyList<string>, string, string?, Task<ScriptResult>>? OnRun { get; set; }
 
         protected override Task<ScriptResult> RunCTranslate2ScriptAsync(

@@ -45,36 +45,26 @@ public sealed record ContainerComposeStartResult(
     string StandardOutput,
     string StandardError);
 
-public sealed class ContainerizedInferenceManager : IContainerizedInferenceManager
+public sealed class ContainerizedInferenceManager(
+    AppLog log,
+    ContainerizedServiceProbe? probe = null,
+    Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>>? healthCheckFunc = null,
+    Func<ContainerComposeStartRequest, CancellationToken, Task<ContainerComposeStartResult>>? startComposeFunc = null,
+    Func<string?>? dockerResolver = null,
+    Func<string?>? composeFileResolver = null) : IContainerizedInferenceManager
 {
     private const string InferenceServiceName = "inference";
     private static readonly TimeSpan PreflightHealthTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan PostStartProbeTimeout = TimeSpan.FromSeconds(10);
 
-    private readonly AppLog _log;
-    private readonly ContainerizedServiceProbe? _probe;
-    private readonly Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>> _healthCheckFunc;
-    private readonly Func<ContainerComposeStartRequest, CancellationToken, Task<ContainerComposeStartResult>> _startComposeFunc;
-    private readonly Func<string?> _dockerResolver;
-    private readonly Func<string?> _composeFileResolver;
-    private readonly object _gate = new();
+    private readonly AppLog _log = log;
+    private readonly ContainerizedServiceProbe? _probe = probe;
+    private readonly Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>> _healthCheckFunc = healthCheckFunc ?? ContainerizedInferenceClient.CheckHealthAsync;
+    private readonly Func<ContainerComposeStartRequest, CancellationToken, Task<ContainerComposeStartResult>> _startComposeFunc = startComposeFunc ?? StartComposeAsync;
+    private readonly Func<string?> _dockerResolver = dockerResolver ?? DependencyLocator.FindDocker;
+    private readonly Func<string?> _composeFileResolver = composeFileResolver ?? ResolveComposeFilePath;
+    private readonly System.Threading.Lock _gate = new();
     private Task<ContainerizedStartResult>? _inFlightStartTask;
-
-    public ContainerizedInferenceManager(
-        AppLog log,
-        ContainerizedServiceProbe? probe = null,
-        Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>>? healthCheckFunc = null,
-        Func<ContainerComposeStartRequest, CancellationToken, Task<ContainerComposeStartResult>>? startComposeFunc = null,
-        Func<string?>? dockerResolver = null,
-        Func<string?>? composeFileResolver = null)
-    {
-        _log = log;
-        _probe = probe;
-        _healthCheckFunc = healthCheckFunc ?? ContainerizedInferenceClient.CheckHealthAsync;
-        _startComposeFunc = startComposeFunc ?? StartComposeAsync;
-        _dockerResolver = dockerResolver ?? DependencyLocator.FindDocker;
-        _composeFileResolver = composeFileResolver ?? ResolveComposeFilePath;
-    }
 
     public void RequestEnsureStarted(AppSettings settings, ContainerizedStartupTrigger trigger)
     {

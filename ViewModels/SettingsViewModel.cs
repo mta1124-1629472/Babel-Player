@@ -52,7 +52,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
 
         // Theme options
-        ThemeOptions = new[] { "Light", "Dark", "System" };
+        ThemeOptions = ["Light", "Dark", "System"];
 
         // TTS voice options
         TtsVoiceOptions = [.. TtsRegistry.EdgeTtsVoices];
@@ -82,8 +82,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     // ── About ─────────────────────────────────────────────────────────────────
 
-    public string AppVersion   => $"Version {BuildInfo.Version}";
-    public string AppBuildDate => $"Build date: {BuildInfo.BuildDate}";
+    public static string AppVersion   => $"Version {BuildInfo.Version}";
+    public static string AppBuildDate => $"Build date: {BuildInfo.BuildDate}";
 
     // ── Backend restart ───────────────────────────────────────────────────────
 

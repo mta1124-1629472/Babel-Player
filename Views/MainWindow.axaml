@@ -272,33 +272,33 @@
                             <!-- Provider selector -->
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Provider" FontSize="12" Foreground="#808090" />
-                                <TextBox Text="{Binding Coordinator.CurrentSettings.DiarizationProvider, Mode=TwoWay}"
-                                         HorizontalAlignment="Stretch" FontSize="12"
-                                         Background="#1E1E2C" Foreground="#C0C0D0"
-                                         BorderBrush="#2A2A3A"
-                                         Watermark="e.g. pyannote"
-                                         ToolTip.Tip="Empty = diarization disabled" />
+                                <ComboBox ItemsSource="{Binding Playback.DiarizationProviderOptions}"
+                                          SelectedItem="{Binding Playback.DiarizationProvider, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="#1E1E2C" Foreground="#C0C0D0"
+                                          BorderBrush="#2A2A3A"
+                                          ToolTip.Tip="Select a supported diarization provider. Leave empty to disable diarization." />
                             </StackPanel>
 
                             <!-- HF token hint — visible whenever a diarization provider is configured (all current providers require a HuggingFace token) -->
                             <TextBlock Text="HuggingFace token required — set it in 🔑 API Keys above."
                                        FontSize="11" Foreground="#C0803A"
                                        TextWrapping="Wrap"
-                                       IsVisible="{Binding Coordinator.CurrentSettings.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                       IsVisible="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
                             <!-- Speaker count constraints -->
                             <StackPanel Spacing="5"
-                                        IsEnabled="{Binding Coordinator.CurrentSettings.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                        IsEnabled="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="#808090" VerticalAlignment="Center" />
                                     <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                                   Value="{Binding Playback.Coordinator.CurrentSettings.DiarizationMinSpeakers, Mode=TwoWay}"
+                                                   Value="{Binding Playback.DiarizationMinSpeakers, Mode=TwoWay}"
                                                    Minimum="1" Maximum="20"
                                                    Width="80"
                                                    ToolTip.Tip="Leave blank to let pyannote auto-detect" />
                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Max Speakers" FontSize="12" Foreground="#808090" VerticalAlignment="Center" />
                                     <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                                   Value="{Binding Playback.Coordinator.CurrentSettings.DiarizationMaxSpeakers, Mode=TwoWay}"
+                                                   Value="{Binding Playback.DiarizationMaxSpeakers, Mode=TwoWay}"
                                                    Minimum="1" Maximum="20"
                                                    Width="80"
                                                    ToolTip.Tip="Leave blank to let pyannote auto-detect" />
@@ -315,6 +315,11 @@
                                       IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
                                       Foreground="#C0C0D0" />
 
+                            <Button Content="Open auto-detection setup guide"
+                                    Click="OnAutoSpeakerSetupGuideClick"
+                                    IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
+                                    HorizontalAlignment="Left"
+                                    ToolTip.Tip="Open guidance for configuring automatic speaker detection" />
                             <TextBlock Text="{Binding Playback.AutoSpeakerDetectionStatus}"
                                        FontSize="11"
                                        Foreground="#C0803A"

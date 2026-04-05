@@ -52,7 +52,9 @@ public sealed class ContainerizedServiceProbe
         _waitRetryDelay = retryDelay ?? DefaultWaitRetryDelay;
     }
 
-    public ContainerizedProbeResult GetCurrentOrStartBackgroundProbe(string? serviceUrl)
+    public ContainerizedProbeResult GetCurrentOrStartBackgroundProbe(
+        string? serviceUrl,
+        bool forceRefresh = false)
     {
         if (string.IsNullOrWhiteSpace(serviceUrl))
         {
@@ -62,27 +64,27 @@ public sealed class ContainerizedServiceProbe
                 DateTimeOffset.UtcNow,
                 "No containerized inference service URL configured.");
         }
-
+ 
         var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
         var entry = _entries.GetOrAdd(normalizedUrl, _ => new ProbeEntry());
         var nowUtc = DateTimeOffset.UtcNow;
-
+ 
         lock (entry.Gate)
         {
-            if (entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
+            if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
             {
                 _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}");
                 return entry.CachedResult;
             }
-
+ 
             if (entry.InFlightTask is not null)
             {
                 _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
                 return Checking(normalizedUrl);
             }
-
+ 
             entry.InFlightTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout);
-            _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background");
+            _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background, forceRefresh={forceRefresh}");
             ObserveCompletion(normalizedUrl, entry, entry.InFlightTask);
             return Checking(normalizedUrl);
         }
@@ -94,104 +96,53 @@ public sealed class ContainerizedServiceProbe
         TimeSpan? waitTimeout = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(serviceUrl))
-        {
-            return new ContainerizedProbeResult(
-                string.Empty,
-                ContainerizedProbeState.Unavailable,
-                DateTimeOffset.UtcNow,
-                "No containerized inference service URL configured.");
-        }
-
-        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
-        var entry = _entries.GetOrAdd(normalizedUrl, _ => new ProbeEntry());
         var budget = waitTimeout ?? PassiveProbeTimeout;
-        var startedAt = Stopwatch.StartNew();
-        ContainerizedProbeResult? lastCompletedResult = null;
-
-        while (true)
+        var deadline = DateTimeOffset.UtcNow + budget;
+        var normalizedUrl = string.IsNullOrWhiteSpace(serviceUrl)
+            ? string.Empty
+            : ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
+ 
+        ContainerizedProbeResult? lastFailure = null;
+ 
+        while (DateTimeOffset.UtcNow < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            var nowUtc = DateTimeOffset.UtcNow;
-            if (!forceRefresh)
+ 
+            var result = GetCurrentOrStartBackgroundProbe(serviceUrl, forceRefresh);
+ 
+            if (result.State == ContainerizedProbeState.Available)
+                return result;
+ 
+            if (result.State == ContainerizedProbeState.Unavailable)
             {
-                lock (entry.Gate)
-                {
-                    if (entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
-                    {
-                        if (entry.CachedResult.State == ContainerizedProbeState.Available)
-                        {
-                            _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}, mode=wait");
-                            return entry.CachedResult;
-                        }
-
-                        _log.Info(
-                            $"Container probe cache stale-for-wait: url={normalizedUrl}, state={entry.CachedResult.State}, mode=wait; continuing retries");
-                    }
-                }
+                lastFailure = result;
+                // If we got a failure, force a refresh on the next loop iteration
+                // to bypass the negative cache and start a new probe attempt.
+                forceRefresh = true;
             }
-
-            var remaining = budget - startedAt.Elapsed;
+            else
+            {
+                // If it's Checking, we want to keep waiting for the in-flight task
+                // without forcing a new one.
+                forceRefresh = false;
+            }
+ 
+            var remaining = deadline - DateTimeOffset.UtcNow;
             if (remaining <= TimeSpan.Zero)
                 break;
-
-            Task<ContainerizedProbeResult> task;
-            lock (entry.Gate)
-            {
-                if (entry.InFlightTask is not null)
-                {
-                    _log.Info($"Container probe reuse in-flight: url={normalizedUrl}, mode=wait");
-                    task = entry.InFlightTask;
-                }
-                else
-                {
-                    task = StartProbeTask(normalizedUrl, remaining);
-                    entry.InFlightTask = task;
-                    _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={remaining.TotalMilliseconds}, mode=wait, forceRefresh={forceRefresh}");
-                    ObserveCompletion(normalizedUrl, entry, task);
-                }
-            }
-
-            // After dispatching or reusing the first probe, stop bypassing the cache
-            // so that subsequent loop iterations can short-circuit on a populated entry.
-            forceRefresh = false;
-
-            using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            attemptCts.CancelAfter(remaining);
-
-            try
-            {
-                var result = await task.WaitAsync(attemptCts.Token);
-                lastCompletedResult = result;
-                if (result.State == ContainerizedProbeState.Available)
-                    return result;
-
-                var retryDelay = budget - startedAt.Elapsed;
-                if (retryDelay <= TimeSpan.Zero)
-                    break;
-
-                var actualDelay = retryDelay < _waitRetryDelay ? retryDelay : _waitRetryDelay;
-                _log.Info(
-                    $"Container probe wait retrying: url={normalizedUrl}, state={result.State}, " +
-                    $"detail={result.ErrorDetail ?? "<none>"}, retryInMs={actualDelay.TotalMilliseconds}");
-                await Task.Delay(actualDelay, cancellationToken);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
+ 
+            var actualDelay = remaining < _waitRetryDelay ? remaining : _waitRetryDelay;
+            await Task.Delay(actualDelay, cancellationToken);
         }
-
-        if (lastCompletedResult is not null)
+ 
+        // If we timed out, return the last failure if one exists, otherwise Checking.
+        if (lastFailure != null)
         {
-            _log.Info(
-                $"Container probe wait budget exhausted: url={normalizedUrl}, " +
-                $"returning_state={lastCompletedResult.State}, detail={lastCompletedResult.ErrorDetail ?? "<none>"}");
-            return lastCompletedResult;
+            _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning last unavailable state.");
+            return lastFailure;
         }
-
-        _log.Info($"Container probe wait timed out before any probe completed: url={normalizedUrl}, timeoutMs={budget.TotalMilliseconds}");
+ 
+        _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning Checking state.");
         return Checking(normalizedUrl);
     }
 
