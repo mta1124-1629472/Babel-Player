@@ -53,12 +53,18 @@ public abstract class PythonSubprocessServiceBase
     /// Optional UTF-8 text piped to the script via stdin. Use for large or user-provided
     /// text instead of placing it on the command line.
     /// </param>
+    /// <param name="environmentVariables">
+    /// Optional extra environment variables injected into the spawned process. These are
+    /// merged into the inherited environment — prefer this over command-line arguments for
+    /// secrets (env vars are not visible in process listings).
+    /// </param>
     /// <param name="cancellationToken">Optional cancellation token.</param>
     protected async Task<ScriptResult> RunPythonScriptAsync(
         string scriptContent,
         IReadOnlyList<string>? arguments = null,
         string scriptPrefix = "script",
         string? standardInput = null,
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
         CancellationToken cancellationToken = default)
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
@@ -78,6 +84,9 @@ public abstract class PythonSubprocessServiceBase
             psi.ArgumentList.Add(scriptPath);
             foreach (var argument in arguments ?? Array.Empty<string>())
                 psi.ArgumentList.Add(argument);
+            if (environmentVariables is not null)
+                foreach (var (key, value) in environmentVariables)
+                    psi.Environment[key] = value;
 
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException($"Failed to start Python process ({scriptPrefix}).");

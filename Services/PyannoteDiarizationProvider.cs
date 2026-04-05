@@ -25,12 +25,17 @@ public sealed class PyannoteDiarizationProvider : PythonSubprocessServiceBase, I
     // Language consistent with the rest of the codebase — no inline literals
     private const string ScriptPrefix = "diarize";
 
-    public PyannoteDiarizationProvider(AppLog log) : base(log) { }
+    private readonly string? _huggingFaceToken;
+
+    public PyannoteDiarizationProvider(AppLog log, string? huggingFaceToken = null) : base(log)
+    {
+        _huggingFaceToken = string.IsNullOrWhiteSpace(huggingFaceToken) ? null : huggingFaceToken.Trim();
+    }
 
     // ── Script ────────────────────────────────────────────────────────────────
 
     private const string DiarizeScript = @"
-import sys, json
+import sys, os, json
 
 try:
     from pyannote.audio import Pipeline
@@ -41,7 +46,7 @@ except ImportError:
 audio_path   = sys.argv[1]
 min_speakers = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != 'null' else None
 max_speakers = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] != 'null' else None
-hf_token     = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] != '' else None
+hf_token     = os.environ.get('HF_TOKEN') or None
 
 pipeline = Pipeline.from_pretrained(
     'pyannote/speaker-diarization-3.1',
@@ -100,16 +105,27 @@ print(json.dumps(result))
         if (!File.Exists(request.SourceAudioPath))
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        var minArg   = request.MinSpeakers?.ToString() ?? "null";
-        var maxArg   = request.MaxSpeakers?.ToString() ?? "null";
-        var tokenArg = request.HuggingFaceToken ?? "";
+        var minArg = request.MinSpeakers?.ToString() ?? "null";
+        var maxArg = request.MaxSpeakers?.ToString() ?? "null";
+
+        // Resolve token: per-call override wins over constructor-injected value.
+        // Pass via environment variable — not argv — so the token is not visible
+        // in process listings.
+        var token = !string.IsNullOrWhiteSpace(request.HuggingFaceToken)
+            ? request.HuggingFaceToken!.Trim()
+            : _huggingFaceToken;
+
+        var envVars = string.IsNullOrWhiteSpace(token)
+            ? null
+            : new Dictionary<string, string> { ["HF_TOKEN"] = token };
 
         Log.Info($"Starting diarization: {request.SourceAudioPath}");
 
         var result = await RunPythonScriptAsync(
             DiarizeScript,
-            [request.SourceAudioPath, minArg, maxArg, tokenArg],
+            [request.SourceAudioPath, minArg, maxArg],
             ScriptPrefix,
+            environmentVariables: envVars,
             cancellationToken: ct);
 
         if (result.ExitCode != 0)

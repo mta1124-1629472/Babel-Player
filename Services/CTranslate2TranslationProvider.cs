@@ -261,7 +261,7 @@ print(f'CTranslate2 single segment translated: {seg_id}')
             arguments,
             scriptPrefix,
             standardInput,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
     private static TranslationResult BuildTranslationResult(
         TranslationArtifact translationData,
