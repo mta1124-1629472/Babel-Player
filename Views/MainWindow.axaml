@@ -264,29 +264,56 @@
                             </Grid>
                         </StackPanel>
 
-                        <!-- SPEAKER ROUTING (hidden: single-speaker GPU TTS is the active flow) -->
-                        <StackPanel Spacing="10" IsVisible="False">
-                            <TextBlock Text="SPEAKER ROUTING" FontSize="10"
+                        <!-- DIARIZATION / SPEAKERS -->
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="DIARIZATION / SPEAKERS" FontSize="10"
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
 
+                            <!-- Provider selector -->
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Provider" FontSize="12" Foreground="#808090" />
+                                <TextBox Text="{Binding Coordinator.CurrentSettings.DiarizationProvider, Mode=TwoWay}"
+                                         HorizontalAlignment="Stretch" FontSize="12"
+                                         Background="#1E1E2C" Foreground="#C0C0D0"
+                                         BorderBrush="#2A2A3A"
+                                         Watermark="e.g. pyannote"
+                                         ToolTip.Tip="Empty = diarization disabled" />
+                            </StackPanel>
+
+                            <!-- HF token hint — visible whenever a diarization provider is configured (all current providers require a HuggingFace token) -->
+                            <TextBlock Text="HuggingFace token required — set it in 🔑 API Keys above."
+                                       FontSize="11" Foreground="#C0803A"
+                                       TextWrapping="Wrap"
+                                       IsVisible="{Binding Coordinator.CurrentSettings.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                            <!-- Speaker count constraints -->
+                            <StackPanel Spacing="5"
+                                        IsEnabled="{Binding Coordinator.CurrentSettings.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="#808090" VerticalAlignment="Center" />
+                                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                                   Value="{Binding Playback.Coordinator.CurrentSettings.DiarizationMinSpeakers, Mode=TwoWay}"
+                                                   Minimum="1" Maximum="20"
+                                                   Width="80"
+                                                   ToolTip.Tip="Leave blank to let pyannote auto-detect" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Max Speakers" FontSize="12" Foreground="#808090" VerticalAlignment="Center" />
+                                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                                   Value="{Binding Playback.Coordinator.CurrentSettings.DiarizationMaxSpeakers, Mode=TwoWay}"
+                                                   Minimum="1" Maximum="20"
+                                                   Width="80"
+                                                   ToolTip.Tip="Leave blank to let pyannote auto-detect" />
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Multi-speaker toggle and auto-detection -->
                             <CheckBox Content="Enable multi-speaker routing"
                                       IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
                                       Foreground="#C0C0D0" />
 
-                            <CheckBox Content="Auto speaker detection (Advanced)"
+                            <CheckBox Content="Auto speaker detection"
                                       IsChecked="{Binding Playback.IsAutoSpeakerDetectionEnabled, Mode=TwoWay}"
+                                      IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
                                       Foreground="#C0C0D0" />
-
-                            <Button HorizontalAlignment="Left"
-                                    Padding="8,4"
-                                    FontSize="11"
-                                    Background="#2A2A3A"
-                                    Foreground="#A8A8C8"
-                                    CornerRadius="4"
-                                    Click="OnAutoSpeakerSetupGuideClick"
-                                    ToolTip.Tip="Open setup pages for pyannote model access">
-                                <TextBlock Text="Open auto-detection setup guide" />
-                            </Button>
 
                             <TextBlock Text="{Binding Playback.AutoSpeakerDetectionStatus}"
                                        FontSize="11"
@@ -294,7 +321,10 @@
                                        IsVisible="{Binding Playback.HasAutoSpeakerDetectionStatus}"
                                        TextWrapping="Wrap" />
 
-                            <StackPanel Spacing="5">
+                            <!-- Per-speaker voice / reference clip assignment -->
+                            <StackPanel Spacing="5"
+                                        IsVisible="{Binding Playback.IsMultiSpeakerEnabled}">
+
                                 <TextBlock Text="Speaker" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.SpeakerIds}"
                                           SelectedItem="{Binding Playback.SelectedSpeakerId, Mode=TwoWay}"
@@ -302,54 +332,55 @@
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="#1E1E2C" Foreground="#C0C0D0"
                                           BorderBrush="#2A2A3A" />
+
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="8">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Voice" FontSize="11" Foreground="#4A4A60" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1"
+                                               Text="{Binding Playback.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
+                                               FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="#4A4A60" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1"
+                                               Text="{Binding Playback.SelectedSpeakerReferenceAudioPath, TargetNullValue='—'}"
+                                               FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+                                    <Button Grid.Row="0" Grid.Column="0"
+                                            Command="{Binding Playback.AssignSelectedSpeakerVoiceCommand}"
+                                            IsEnabled="{Binding Playback.HasSpeakers}"
+                                            HorizontalAlignment="Stretch"
+                                            Padding="0,7" FontSize="12"
+                                            Background="#2A2A3A" Foreground="#C0C0D0"
+                                            CornerRadius="5"
+                                            Content="Assign current TTS" />
+                                    <Button Grid.Row="0" Grid.Column="1"
+                                            Command="{Binding Playback.ClearSelectedSpeakerVoiceCommand}"
+                                            IsEnabled="{Binding Playback.HasSpeakers}"
+                                            HorizontalAlignment="Stretch"
+                                            Padding="0,7" FontSize="12"
+                                            Background="#2A2A3A" Foreground="#C0C0D0"
+                                            CornerRadius="5"
+                                            Content="Clear speaker voice" />
+                                    <Button Grid.Row="1" Grid.Column="0"
+                                            IsEnabled="{Binding Playback.HasSpeakers}"
+                                            HorizontalAlignment="Stretch"
+                                            Padding="0,7" FontSize="12"
+                                            Background="#2A2A3A" Foreground="#C0C0D0"
+                                            CornerRadius="5"
+                                            Click="OnBrowseReferenceClipClick"
+                                            Content="Browse ref clip" />
+                                    <Button Grid.Row="1" Grid.Column="1"
+                                            Command="{Binding Playback.ClearSelectedSpeakerReferenceAudioCommand}"
+                                            IsEnabled="{Binding Playback.HasSpeakers}"
+                                            HorizontalAlignment="Stretch"
+                                            Padding="0,7" FontSize="12"
+                                            Background="#2A2A3A" Foreground="#C0C0D0"
+                                            CornerRadius="5"
+                                            Content="Clear speaker ref" />
+                                </Grid>
                             </StackPanel>
 
-                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="8">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Voice" FontSize="11" Foreground="#4A4A60" />
-                                <TextBlock Grid.Row="0" Grid.Column="1"
-                                           Text="{Binding Playback.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
-                                           FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="#4A4A60" />
-                                <TextBlock Grid.Row="1" Grid.Column="1"
-                                           Text="{Binding Playback.SelectedSpeakerReferenceAudioPath, TargetNullValue='—'}"
-                                           FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
-                            </Grid>
-
-                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
-                                <Button Grid.Row="0" Grid.Column="0"
-                                        Command="{Binding Playback.AssignSelectedSpeakerVoiceCommand}"
-                                        IsEnabled="{Binding Playback.HasSpeakers}"
-                                        HorizontalAlignment="Stretch"
-                                        Padding="0,7" FontSize="12"
-                                        Background="#2A2A3A" Foreground="#C0C0D0"
-                                        CornerRadius="5"
-                                        Content="Assign current TTS" />
-                                <Button Grid.Row="0" Grid.Column="1"
-                                        Command="{Binding Playback.ClearSelectedSpeakerVoiceCommand}"
-                                        IsEnabled="{Binding Playback.HasSpeakers}"
-                                        HorizontalAlignment="Stretch"
-                                        Padding="0,7" FontSize="12"
-                                        Background="#2A2A3A" Foreground="#C0C0D0"
-                                        CornerRadius="5"
-                                        Content="Clear speaker voice" />
-                                <Button Grid.Row="1" Grid.Column="0"
-                                        IsEnabled="{Binding Playback.HasSpeakers}"
-                                        HorizontalAlignment="Stretch"
-                                        Padding="0,7" FontSize="12"
-                                        Background="#2A2A3A" Foreground="#C0C0D0"
-                                        CornerRadius="5"
-                                        Click="OnBrowseReferenceClipClick"
-                                        Content="Browse ref clip" />
-                                <Button Grid.Row="1" Grid.Column="1"
-                                        Command="{Binding Playback.ClearSelectedSpeakerReferenceAudioCommand}"
-                                        IsEnabled="{Binding Playback.HasSpeakers}"
-                                        HorizontalAlignment="Stretch"
-                                        Padding="0,7" FontSize="12"
-                                        Background="#2A2A3A" Foreground="#C0C0D0"
-                                        CornerRadius="5"
-                                        Content="Clear speaker ref" />
-                            </Grid>
                         </StackPanel>
 
                         <!-- ACTIVE CONFIGURATION -->
@@ -659,11 +690,7 @@
                 </Grid>
             </Border>
 
-            <!-- Controls bar
-                 Layout: Auto | Auto | Auto
-                 Left and Right columns size to their content; center is always
-                 centred in the remaining space via HorizontalAlignment=Center.
-                 This prevents either side from stealing space from the other. -->
+            <!-- Controls bar -->
             <Border Grid.Row="3" Padding="10,7"
                     IsVisible="{Binding Playback.IsControlsVisible}">
                 <Border.Styles>
@@ -689,12 +716,6 @@
                     </Style>
                 </Border.Styles>
 
-                <!-- Use a single Grid that fills the bar width.
-                     Col 0 (Auto) = left group, aligned Left
-                     Col 1 (*) = spacer so center group truly centres
-                     Col 2 (Auto) = center group, centred
-                     Col 3 (*) = spacer
-                     Col 4 (Auto) = right group, aligned Right -->
                 <Grid ColumnDefinitions="Auto,*,Auto,*,Auto">
 
                     <!-- Left: open media + CC + dub mode toggle -->
@@ -723,7 +744,7 @@
                                 Background="Transparent" />
                     </StackPanel>
 
-                    <!-- Center: playback buttons (truly centred between left and right) -->
+                    <!-- Center: playback buttons -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2"
                                 VerticalAlignment="Center" HorizontalAlignment="Center">
                         <Button Content="&#x23EE;&#xFE0E;"
@@ -839,7 +860,6 @@
                             <TextBlock Text="Export" />
                         </Button>
 
-                        <!-- REFRESH BUTTON -->
                         <Button Grid.Column="3"
                                 Command="{Binding Playback.RefreshSegmentsCommand}"
                                 Background="Transparent" Padding="6,2"
