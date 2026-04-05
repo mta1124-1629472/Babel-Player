@@ -73,8 +73,11 @@ print(json.dumps(result))
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
-        // We verify pyannote is importable by attempting a fast Python check.
-        // This is synchronous and fast (just a Python import probe, no model loading).
+        var huggingFaceToken = keyStore?.GetKey(CredentialKeys.HuggingFace);
+        if (string.IsNullOrWhiteSpace(huggingFaceToken))
+            return new ProviderReadiness(false,
+                "Pyannote diarization requires a HuggingFace token. Add a token under the HuggingFace credentials and ensure the required pyannote model access has been accepted.");
+
         return ProviderReadiness.Ready;
     }
 
