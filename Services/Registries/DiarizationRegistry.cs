@@ -62,6 +62,7 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
         {
             ProviderNames.PyannoteLocal => new PyannoteDiarizationProvider(
                 _log,
+                keyStore,
                 ResolveHuggingFaceToken(keyStore, settings)),
             _ => throw new PipelineProviderException(
                 $"Diarization provider '{providerId}' is not implemented. " +

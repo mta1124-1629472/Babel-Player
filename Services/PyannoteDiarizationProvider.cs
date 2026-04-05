@@ -28,8 +28,9 @@ public sealed class PyannoteDiarizationProvider : PythonSubprocessServiceBase, I
 
     private readonly string? _huggingFaceToken;
 
-    public PyannoteDiarizationProvider(AppLog log, string? huggingFaceToken = null) : base(log)
+    public PyannoteDiarizationProvider(AppLog log, ApiKeyStore? keyStore = null, string? huggingFaceToken = null) : base(log)
     {
+        _keyStore = keyStore;
         _huggingFaceToken = string.IsNullOrWhiteSpace(huggingFaceToken) ? null : huggingFaceToken.Trim();
     }
 
@@ -84,7 +85,7 @@ print(json.dumps(result))
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
         var store = keyStore ?? _keyStore;
-        var token = store.GetKey(CredentialKeys.HuggingFace);
+        var token = store?.GetKey(CredentialKeys.HuggingFace);
         if (string.IsNullOrWhiteSpace(token))
             return new ProviderReadiness(false,
                 "HuggingFace token is required for pyannote diarization. " +
@@ -145,31 +146,28 @@ print(json.dumps(result))
 
         var minArg = request.MinSpeakers?.ToString() ?? "null";
         var maxArg = request.MaxSpeakers?.ToString() ?? "null";
-        var hfToken = _keyStore.GetKey(CredentialKeys.HuggingFace);
 
-        if (string.IsNullOrWhiteSpace(hfToken))
+        // Resolve token: per-call override wins, then keyStore, then constructor-injected.
+        // Pass via environment variable — not argv — so the token is not visible
+        // in process listings.
+        var token = !string.IsNullOrWhiteSpace(request.HuggingFaceToken)
+            ? request.HuggingFaceToken!.Trim()
+            : (_keyStore?.GetKey(CredentialKeys.HuggingFace)?.Trim() ?? _huggingFaceToken);
+
+        if (string.IsNullOrWhiteSpace(token))
         {
             const string msg = "HuggingFace token is not set. Configure it in Settings > API Keys > HuggingFace.";
             Log.Error(msg, new InvalidOperationException(msg));
             return new DiarizationResult(false, [], 0, msg);
         }
 
-        // Resolve token: per-call override wins over constructor-injected value.
-        // Pass via environment variable — not argv — so the token is not visible
-        // in process listings.
-        var token = !string.IsNullOrWhiteSpace(request.HuggingFaceToken)
-            ? request.HuggingFaceToken!.Trim()
-            : _huggingFaceToken;
-
-        var envVars = string.IsNullOrWhiteSpace(token)
-            ? null
-            : new Dictionary<string, string> { ["HF_TOKEN"] = token };
+        var envVars = new Dictionary<string, string> { ["HF_TOKEN"] = token };
 
         Log.Info($"Starting diarization: {request.SourceAudioPath}");
 
         var result = await RunPythonScriptAsync(
             DiarizeScript,
-            [request.SourceAudioPath, minArg, maxArg, tokenArg],
+            [request.SourceAudioPath, minArg, maxArg],
             ScriptPrefix,
             environmentVariables: envVars,
             cancellationToken: ct);
