@@ -46,6 +46,7 @@ nllb_model_key = None
 xtts_model = None
 xtts_model_key = None
 xtts_reference_registry: dict[str, dict[str, str | None]] = {}
+qwen_reference_registry: dict[str, dict[str, str | None]] = {}
 qwen_model = None
 qwen_model_key = None
 pyannote_pipeline = None
@@ -652,6 +653,29 @@ def _evict_reference(ref_id: str) -> bool:
     return True
 
 
+def _evict_qwen_reference(ref_id: str) -> bool:
+    """Remove a Qwen reference from the registry and delete its backing file."""
+    entry = qwen_reference_registry.pop(ref_id, None)
+    if entry is None:
+        return False
+    old_path = entry.get("path")
+    if old_path:
+        safe_path = _resolve_reference_path_in_temp_dir(old_path)
+        if safe_path is None:
+            logger.warning(
+                f"Skipping deletion for Qwen reference file outside TEMP_DIR: {old_path}"
+            )
+        else:
+            try:
+                if safe_path.is_file() or not safe_path.exists():
+                    safe_path.unlink(missing_ok=True)
+                else:
+                    logger.warning(f"Skipping deletion for non-file Qwen reference path: {safe_path}")
+            except Exception as exc:
+                logger.warning(f"Could not delete Qwen reference file {safe_path}: {exc}")
+    return True
+
+
 @app.delete("/speakers/references/{ref_id}")
 async def delete_speaker_reference(ref_id: str):
     """Explicitly release a speaker reference clip and free its temp file.
@@ -873,6 +897,32 @@ async def register_xtts_reference(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@app.post("/tts/qwen/references", response_model=XttsReferenceResponse)
+async def register_qwen_reference(
+    speaker_id: str = Form(...),
+    file: UploadFile = File(...),
+    transcript: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    temp_path = None
+    try:
+        safe_filename = Path(file.filename or "").name or "ref_audio"
+        temp_path = TEMP_DIR / f"qwenref_{uuid4().hex}_{safe_filename}"
+        temp_path.write_bytes(await file.read())
+        ref_id = f"{speaker_id}_{uuid4().hex}"
+        qwen_reference_registry[ref_id] = {
+            "speaker_id": speaker_id,
+            "session_id": None,
+            "path": str(temp_path),
+            "transcript": transcript,
+        }
+        return XttsReferenceResponse(success=True, reference_id=ref_id)
+    except Exception as exc:
+        if temp_path:
+            background_tasks.add_task(lambda p=temp_path: p.unlink(missing_ok=True))
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @app.post("/tts/xtts/segment", response_model=TtsResponse)
 async def xtts_segment(
     text: str = Form(...),
@@ -969,6 +1019,7 @@ async def qwen_segment(
     model: str = Form("Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
     language: Optional[str] = Form(None),
     reference_text: Optional[str] = Form(None),
+    reference_id: Optional[str] = Form(None),
     reference_file: Optional[UploadFile] = File(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
@@ -994,13 +1045,15 @@ async def qwen_segment(
             temp_ref_path = TEMP_DIR / f"qwenref_{uuid4().hex}_{safe_reference_name}"
             temp_ref_path.write_bytes(await reference_file.read())
             ref_audio_path = str(temp_ref_path)
+        elif reference_id and reference_id in qwen_reference_registry:
+            ref_audio_path = qwen_reference_registry[reference_id]["path"]
 
         lang = (language or "english").strip().lower()
 
         if ref_audio_path is None:
             raise HTTPException(
                 status_code=400,
-                detail="Qwen3-TTS Base model requires reference audio (reference_file)")
+                detail="Qwen3-TTS requires reference audio: provide reference_file or a valid reference_id")
 
         def _synth_and_write() -> None:
             import soundfile as sf

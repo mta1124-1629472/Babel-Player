@@ -245,7 +245,13 @@ public partial class MainWindow : Window
     {
         try
         {
-            // Open both model gate pages the user needs to accept.
+            // Open HF token settings and both model gate pages the user needs to accept.
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://huggingface.co/settings/tokens",
+                UseShellExecute = true,
+            });
+
             Process.Start(new ProcessStartInfo
             {
                 FileName = "https://huggingface.co/pyannote/speaker-diarization-3.1",

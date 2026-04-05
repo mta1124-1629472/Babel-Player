@@ -24,6 +24,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     private readonly Func<IReadOnlyList<string>, string, CancellationToken, Task> _combineAudioFunc;
 
     private string? _autoExtractedReferencePath;
+    private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
     private bool _disposed;
 
     public QwenContainerTtsProvider(
@@ -61,11 +62,10 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         var language = ResolveLanguage(request.Language);
         var model = ResolveModel(request.VoiceName);
 
-        var result = await _client.QwenSegmentAsync(
-            request.Text,
-            model,
-            language,
+        var result = await QwenSegmentWithRetryAsync(
+            request.Text, model, language,
             referenceAudioPath,
+            request.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault,
             request.ReferenceTranscriptText,
             cancellationToken);
 
@@ -122,12 +122,11 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
                     $"(segment={seg.Id ?? segmentIndex.ToString()}, model={resolvedModel}, " +
                     $"reference={Path.GetFileName(referenceAudioPath)})");
 
-                var result = await _client.QwenSegmentAsync(
-                    seg.TranslatedText!,
-                    resolvedModel,
-                    language,
+                var result = await QwenSegmentWithRetryAsync(
+                    seg.TranslatedText!, resolvedModel, language,
                     referenceAudioPath,
-                    seg.Text,   // source transcript as reference text hint
+                    seg.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault,
+                    seg.Text,
                     cancellationToken);
 
                 if (!result.Success)
@@ -178,6 +177,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     public async Task ResetSessionAsync()
     {
         _log.Info("[QwenContainerTts] Resetting session state");
+        _referenceIdCache.Clear();
         if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
         {
             await _extractor.DeleteAsync();
@@ -197,6 +197,56 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    private async Task<string?> EnsureReferenceRegisteredAsync(
+        string referenceAudioPath,
+        string speakerId,
+        CancellationToken ct)
+    {
+        var cacheKey = $"{speakerId}|{referenceAudioPath}";
+        if (_referenceIdCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
+        var refId = await _client.RegisterQwenReferenceAsync(speakerId, referenceAudioPath, ct);
+        _referenceIdCache[cacheKey] = refId;
+        _log.Info($"[QwenContainerTts] Registered reference for speaker '{speakerId}': {refId}");
+        return refId;
+    }
+
+    /// <summary>
+    /// Synthesizes one segment using a registered reference ID. If the server returns an
+    /// error consistent with a stale/evicted reference (e.g. after a server restart),
+    /// evicts the cache entry, re-registers once, and retries.
+    /// </summary>
+    private async Task<TtsResult> QwenSegmentWithRetryAsync(
+        string text,
+        string model,
+        string language,
+        string referenceAudioPath,
+        string speakerId,
+        string? referenceText,
+        CancellationToken ct)
+    {
+        var refId = await EnsureReferenceRegisteredAsync(referenceAudioPath, speakerId, ct);
+        var result = await _client.QwenSegmentAsync(
+            text, model, language, referenceId: refId, referenceText: referenceText, cancellationToken: ct);
+
+        if (!result.Success && IsLikelyStaleReferenceError(result.ErrorMessage))
+        {
+            _log.Warning($"[QwenContainerTts] Stale reference_id for speaker '{speakerId}', re-registering.");
+            _referenceIdCache.Remove($"{speakerId}|{referenceAudioPath}");
+            refId = await EnsureReferenceRegisteredAsync(referenceAudioPath, speakerId, ct);
+            result = await _client.QwenSegmentAsync(
+                text, model, language, referenceId: refId, referenceText: referenceText, cancellationToken: ct);
+        }
+
+        return result;
+    }
+
+    private static bool IsLikelyStaleReferenceError(string? errorMessage) =>
+        errorMessage is not null && (
+            errorMessage.Contains("reference_id", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("not found", StringComparison.OrdinalIgnoreCase));
 
     private async Task<string?> EnsureAutoExtractedReferenceAsync(string sourceVideoPath, CancellationToken ct)
     {

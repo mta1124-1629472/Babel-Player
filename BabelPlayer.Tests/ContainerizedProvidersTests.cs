@@ -542,6 +542,12 @@ public sealed class ContainerizedProvidersTests : IDisposable
 
         var client = CreateClient(async (request, ct) =>
         {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/references")
+            {
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"reference_id\":\"spk_default_stub123\"}");
+            }
+
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
             {
                 postedModel = request.RequestUri.AbsolutePath;
@@ -611,6 +617,12 @@ public sealed class ContainerizedProvidersTests : IDisposable
 
         var client = CreateClient(async (request, ct) =>
         {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/references")
+            {
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"reference_id\":\"spk_default_stub456\"}");
+            }
+
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
             {
                 qwenCallCount++;
@@ -644,6 +656,85 @@ public sealed class ContainerizedProvidersTests : IDisposable
         Assert.Equal(outputPath, result.AudioPath);
         Assert.True(File.Exists(outputPath));
         Assert.Equal(1, qwenCallCount);
+    }
+
+    [Fact]
+    public async Task QwenContainerTtsProvider_GenerateTtsAsync_RegistersEachSpeakerReferenceOnlyOnce()
+    {
+        // Three segments — two for spk_00, one for spk_01 — only 2 registrations should occur.
+        var translationPath = Path.Combine(_dir, "qwen-multi-reg.json");
+        var spk00Ref = Path.Combine(_dir, "spk00.wav");
+        var spk01Ref = Path.Combine(_dir, "spk01.wav");
+        var outputPath = Path.Combine(_dir, "qwen-multi-reg.mp3");
+
+        await File.WriteAllBytesAsync(spk00Ref, Encoding.UTF8.GetBytes("ref-spk00"));
+        await File.WriteAllBytesAsync(spk01Ref, Encoding.UTF8.GetBytes("ref-spk01"));
+        await File.WriteAllTextAsync(translationPath,
+            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":["
+            + "{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"a\",\"translatedText\":\"hello\",\"speakerId\":\"spk_00\"},"
+            + "{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"b\",\"translatedText\":\"world\",\"speakerId\":\"spk_01\"},"
+            + "{\"id\":\"segment_2.0\",\"start\":2.0,\"end\":3.0,\"text\":\"c\",\"translatedText\":\"again\",\"speakerId\":\"spk_00\"}"
+            + "]}");
+
+        var registrationCount = 0;
+        var segmentCount = 0;
+        var audioBytes = Encoding.UTF8.GetBytes("x");
+
+        var client = CreateClient(async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/references")
+            {
+                registrationCount++;
+                var body = await request.Content!.ReadAsStringAsync(ct);
+                var refId = body.Contains("spk_00", StringComparison.Ordinal) ? "reg-spk00" : "reg-spk01";
+                return await Json(HttpStatusCode.OK, $"{{\"success\":true,\"reference_id\":\"{refId}\"}}");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
+            {
+                segmentCount++;
+                return await Json(HttpStatusCode.OK,
+                    $"{{\"success\":true,\"voice\":\"Qwen/Qwen3-TTS-12Hz-1.7B-Base\",\"audio_path\":\"/tmp/q{segmentCount}.mp3\",\"file_size_bytes\":1}}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.StartsWith("/tts/audio/", StringComparison.Ordinal) == true)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(audioBytes) };
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new QwenContainerTtsProvider(
+            client,
+            _log,
+            new XttsReferenceExtractor(_log),
+            async (segmentPaths, dest, _) =>
+            {
+                var combined = new List<byte>();
+                foreach (var p in segmentPaths)
+                    combined.AddRange(await File.ReadAllBytesAsync(p));
+                await File.WriteAllBytesAsync(dest, combined.ToArray());
+            });
+
+        var result = await provider.GenerateTtsAsync(new TtsRequest(
+            translationPath,
+            outputPath,
+            "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            SpeakerVoiceAssignments: new Dictionary<string, string>
+            {
+                ["spk_00"] = "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+                ["spk_01"] = "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            },
+            SpeakerReferenceAudioPaths: new Dictionary<string, string>
+            {
+                ["spk_00"] = spk00Ref,
+                ["spk_01"] = spk01Ref,
+            }));
+
+        Assert.True(result.Success);
+        Assert.Equal(2, registrationCount);  // one registration per speaker, not per segment
+        Assert.Equal(3, segmentCount);       // three synthesis calls total
     }
 
     [Fact]

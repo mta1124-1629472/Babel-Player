@@ -222,6 +222,32 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    public async Task<string> RegisterQwenReferenceAsync(
+        string speakerId,
+        string referenceAudioPath,
+        CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(referenceAudioPath))
+            throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
+
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(speakerId), "speaker_id");
+
+        await using var fs = File.OpenRead(referenceAudioPath);
+        content.Add(new StreamContent(fs), "file", Path.GetFileName(referenceAudioPath));
+
+        using var response = await _httpClient.PostAsync(
+            $"{_inferenceServiceUrl}/tts/qwen/references",
+            content,
+            cancellationToken);
+
+        var result = await DeserializeResponseAsync<XttsReferenceResponseDto>(response, cancellationToken);
+        if (!result.Success || string.IsNullOrWhiteSpace(result.ReferenceId))
+            throw new InvalidOperationException($"Qwen reference registration failed: {result.ErrorMessage}");
+
+        return result.ReferenceId;
+    }
+
     public async Task<string> RegisterXttsReferenceAsync(
         string speakerId,
         string referenceAudioPath,
@@ -315,6 +341,7 @@ public sealed class ContainerizedInferenceClient
         string? language = null,
         string? referenceAudioPath = null,
         string? referenceText = null,
+        string? referenceId = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -326,11 +353,13 @@ public sealed class ContainerizedInferenceClient
                 content.Add(new StringContent(language), "language");
             if (!string.IsNullOrWhiteSpace(referenceText))
                 content.Add(new StringContent(referenceText), "reference_text");
+            if (!string.IsNullOrWhiteSpace(referenceId))
+                content.Add(new StringContent(referenceId), "reference_id");
 
             FileStream? fs = null;
             try
             {
-                if (!string.IsNullOrWhiteSpace(referenceAudioPath))
+                if (string.IsNullOrWhiteSpace(referenceId) && !string.IsNullOrWhiteSpace(referenceAudioPath))
                 {
                     if (!File.Exists(referenceAudioPath))
                         throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");

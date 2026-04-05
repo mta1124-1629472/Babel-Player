@@ -307,11 +307,11 @@
                             </StackPanel>
 
                             <!-- Setup guide + status — only enabled when auto-detection is on -->
-                            <Button Content="Open auto-detection setup guide"
+                            <Button Content="Get HF access (token + models)"
                                     Click="OnAutoSpeakerSetupGuideClick"
                                     IsEnabled="{Binding Playback.IsAutoSpeakerDetectionEnabled}"
                                     HorizontalAlignment="Left"
-                                    ToolTip.Tip="Open guidance for configuring automatic speaker detection" />
+                                    ToolTip.Tip="Opens HuggingFace token settings and the two pyannote model pages you must accept" />
                             <TextBlock Text="{Binding Playback.AutoSpeakerDetectionStatus}"
                                        FontSize="11"
                                        Foreground="#C0803A"
