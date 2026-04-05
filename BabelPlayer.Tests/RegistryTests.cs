@@ -568,7 +568,9 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void DiarizationRegistry_PyannoteLocal_CheckReadiness_ReturnsReady()
     {
-        var readiness = _diarizationRegistry.CheckReadiness(ProviderNames.PyannoteLocal, new AppSettings(), null);
+        var keyStore = new ApiKeyStore(_dir);
+        keyStore.SetKey(CredentialKeys.HuggingFace, "hf_test_token");
+        var readiness = _diarizationRegistry.CheckReadiness(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
         Assert.True(readiness.IsReady);
     }
 

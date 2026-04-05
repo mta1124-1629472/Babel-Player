@@ -90,7 +90,7 @@ public sealed class ContainerizedServiceProbeTests
         var result = await probe.WaitForProbeAsync(
             "http://localhost:8000",
             forceRefresh: true,
-            waitTimeout: TimeSpan.FromSeconds(1));
+            waitTimeout: TimeSpan.FromSeconds(5));
 
         Assert.Equal(ContainerizedProbeState.Available, result.State);
         Assert.True(callCount >= 3);

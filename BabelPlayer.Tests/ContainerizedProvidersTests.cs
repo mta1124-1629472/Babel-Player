@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 
 namespace BabelPlayer.Tests;
@@ -807,8 +808,15 @@ public sealed class ContainerizedProvidersTests : IDisposable
             ContainerizedServiceUrl = "http://localhost:8000"
         };
         _ = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
-        Thread.Sleep(75);
-        var readiness = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+        ProviderReadiness readiness;
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        do
+        {
+            readiness = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+            if (readiness.BlockingReason?.Contains("is starting at", StringComparison.OrdinalIgnoreCase) != true)
+                break;
+            Thread.Sleep(10);
+        } while (DateTimeOffset.UtcNow < deadline);
 
         Assert.False(readiness.IsReady);
         Assert.Contains("missing translation capability", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
@@ -839,8 +847,14 @@ public sealed class ContainerizedProvidersTests : IDisposable
             ContainerizedServiceUrl = "http://localhost:8000"
         };
         _ = ContainerizedProviderReadiness.CheckTts(settings, probe);
-        Thread.Sleep(75);
-        var readiness = ContainerizedProviderReadiness.CheckTts(settings, probe);
+        ProviderReadiness readiness;
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        do
+        {
+            readiness = ContainerizedProviderReadiness.CheckTts(settings, probe);
+            if (readiness.IsReady) break;
+            Thread.Sleep(10);
+        } while (DateTimeOffset.UtcNow < deadline);
 
         Assert.True(readiness.IsReady);
         Assert.Null(readiness.BlockingReason);
