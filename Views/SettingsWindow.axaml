@@ -208,7 +208,7 @@
                                  PasswordChar="&#x25CF;"
                                  Width="380"
                                  HorizontalAlignment="Left"
-                                 Watermark="hf_xxxxxxxxxxxxxxxxxxxx"
+                                 PlaceholderText="hf_xxxxxxxxxxxxxxxxxxxx"
                                  ToolTip.Tip="Required to download the gated pyannote/speaker-diarization-3.1 model. Get a token at https://huggingface.co/settings/tokens"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="11"
                                    Text="Required for pyannote-local. Accept model terms at hf.co/pyannote/speaker-diarization-3.1, then generate a token at huggingface.co/settings/tokens."/>
@@ -222,7 +222,7 @@
                             <TextBlock Text="Min speakers:" VerticalAlignment="Center" Width="100"/>
                             <TextBox Text="{Binding DiarizationMinSpeakers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Width="60"
-                                     Watermark="auto"
+                                     PlaceholderText="auto"
                                      ToolTip.Tip="Minimum number of speakers. Leave blank for auto-detection."/>
                         </StackPanel>
 
@@ -230,7 +230,7 @@
                             <TextBlock Text="Max speakers:" VerticalAlignment="Center" Width="100"/>
                             <TextBox Text="{Binding DiarizationMaxSpeakers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Width="60"
-                                     Watermark="auto"
+                                     PlaceholderText="auto"
                                      ToolTip.Tip="Maximum number of speakers. Leave blank for auto-detection."/>
                         </StackPanel>
 
