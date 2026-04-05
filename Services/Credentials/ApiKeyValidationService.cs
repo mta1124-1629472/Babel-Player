@@ -7,19 +7,28 @@ using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services;
 using Babel.Player.Services.Registries;
 
 namespace Babel.Player.Services.Credentials;
 
-public sealed class ApiKeyValidationService
+public sealed class ApiKeyValidationService(
+    ITranscriptionRegistry transcriptionRegistry,
+    ITranslationRegistry translationRegistry,
+    ITtsRegistry ttsRegistry,
+    Func<string, OpenAiApiClient>? openAiClientFactory = null,
+    Func<string, DeepLApiClient>? deepLClientFactory = null,
+    Func<string, ElevenLabsApiClient>? elevenLabsClientFactory = null,
+    Func<string, GoogleApiClient>? googleClientFactory = null,
+    HttpClient? hfHttpClient = null)
 {
-    private readonly ITranscriptionRegistry _transcriptionRegistry;
-    private readonly ITranslationRegistry _translationRegistry;
-    private readonly ITtsRegistry _ttsRegistry;
-    private readonly Func<string, OpenAiApiClient> _openAiClientFactory;
-    private readonly Func<string, DeepLApiClient> _deepLClientFactory;
-    private readonly Func<string, ElevenLabsApiClient> _elevenLabsClientFactory;
-    private readonly Func<string, GoogleApiClient> _googleClientFactory;
+    private readonly ITranscriptionRegistry _transcriptionRegistry = transcriptionRegistry;
+    private readonly ITranslationRegistry _translationRegistry = translationRegistry;
+    private readonly ITtsRegistry _ttsRegistry = ttsRegistry;
+    private readonly Func<string, OpenAiApiClient> _openAiClientFactory = openAiClientFactory ?? (apiKey => new OpenAiApiClient(apiKey));
+    private readonly Func<string, DeepLApiClient> _deepLClientFactory = deepLClientFactory ?? (apiKey => new DeepLApiClient(apiKey));
+    private readonly Func<string, ElevenLabsApiClient> _elevenLabsClientFactory = elevenLabsClientFactory ?? (apiKey => new ElevenLabsApiClient(apiKey));
+    private readonly Func<string, GoogleApiClient> _googleClientFactory = googleClientFactory ?? (apiKey => new GoogleApiClient(apiKey));
 
     // Shared fallback HttpClient for HF probes — no auth header baked in so each
     // call uses a new request with its own Authorization header.
@@ -29,30 +38,10 @@ public sealed class ApiKeyValidationService
     };
 
     // Instance field allows tests to inject a stub client via the constructor.
-    private readonly HttpClient _hfHttpClient;
+    private readonly HttpClient _hfHttpClient = hfHttpClient ?? _defaultHfHttpClient;
 
     private const string HfWhoAmIUrl        = "https://huggingface.co/api/whoami-v2";
     private const string HfPyannoteRepoId   = "pyannote/speaker-diarization-3.1";
-
-    public ApiKeyValidationService(
-        ITranscriptionRegistry transcriptionRegistry,
-        ITranslationRegistry translationRegistry,
-        ITtsRegistry ttsRegistry,
-        Func<string, OpenAiApiClient>? openAiClientFactory = null,
-        Func<string, DeepLApiClient>? deepLClientFactory = null,
-        Func<string, ElevenLabsApiClient>? elevenLabsClientFactory = null,
-        Func<string, GoogleApiClient>? googleClientFactory = null,
-        HttpClient? hfHttpClient = null)
-    {
-        _transcriptionRegistry = transcriptionRegistry;
-        _translationRegistry = translationRegistry;
-        _ttsRegistry = ttsRegistry;
-        _openAiClientFactory = openAiClientFactory ?? (apiKey => new OpenAiApiClient(apiKey));
-        _deepLClientFactory = deepLClientFactory ?? (apiKey => new DeepLApiClient(apiKey));
-        _elevenLabsClientFactory = elevenLabsClientFactory ?? (apiKey => new ElevenLabsApiClient(apiKey));
-        _googleClientFactory = googleClientFactory ?? (apiKey => new GoogleApiClient(apiKey));
-        _hfHttpClient = hfHttpClient ?? _defaultHfHttpClient;
-    }
 
     public string? GetAvailabilityMessage(string credentialKey)
     {

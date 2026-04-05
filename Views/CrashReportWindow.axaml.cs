@@ -26,14 +26,22 @@ public partial class CrashReportWindow : Window
     /// </summary>
     public void Configure(string errorText, string? logFilePath)
     {
-        ErrorTextBox.Text = errorText;
+        var errorTextBox = this.FindControl<TextBox>("ErrorTextBox");
+        if (errorTextBox is not null) errorTextBox.Text = errorText;
+
         _logFilePath = logFilePath;
 
         if (!string.IsNullOrWhiteSpace(logFilePath))
         {
-            LogPathText.Text = $"Log file: {logFilePath}";
-            LogPathText.IsVisible = true;
-            OpenLogFolderButton.IsVisible = true;
+            var logPathText = this.FindControl<TextBlock>("LogPathText");
+            if (logPathText is not null)
+            {
+                logPathText.Text = $"Log file: {logFilePath}";
+                logPathText.IsVisible = true;
+            }
+
+            var openLogFolderButton = this.FindControl<Button>("OpenLogFolderButton");
+            if (openLogFolderButton is not null) openLogFolderButton.IsVisible = true;
         }
     }
 
@@ -43,11 +51,15 @@ public partial class CrashReportWindow : Window
         {
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
             if (clipboard is not null)
+            {
+                var errorTextBox = this.FindControl<TextBox>("ErrorTextBox");
                 await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(
                     clipboard,
-                    ErrorTextBox.Text ?? string.Empty);
+                    errorTextBox?.Text ?? string.Empty);
+            }
 
-            CopyButton.Content = "Copied!";
+            var copyButton = this.FindControl<Button>("CopyButton");
+            if (copyButton is not null) copyButton.Content = "Copied!";
         }
         catch
         {

@@ -277,14 +277,14 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
         Func<string, GoogleApiClient>? googleClientFactory = null,
         HttpClient? hfHttpClient = null) =>
         new(
-            new TranscriptionRegistry(_log),
-            new TranslationRegistry(_log),
-            new TtsRegistry(_log),
-            openAiClientFactory,
-            deepLClientFactory,
-            elevenLabsClientFactory,
-            googleClientFactory,
-            hfHttpClient);
+            transcriptionRegistry: new TranscriptionRegistry(_log),
+            translationRegistry: new TranslationRegistry(_log),
+            ttsRegistry: new TtsRegistry(_log),
+            openAiClientFactory: openAiClientFactory,
+            deepLClientFactory: deepLClientFactory,
+            elevenLabsClientFactory: elevenLabsClientFactory,
+            googleClientFactory: googleClientFactory,
+            hfHttpClient: hfHttpClient);
 
     // ── HuggingFace helpers ───────────────────────────────────────────────────
 
@@ -304,9 +304,9 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
                 ?? new HttpResponseMessage(HttpStatusCode.OK));
         });
         return new ApiKeyValidationService(
-            new TranscriptionRegistry(_log),
-            new TranslationRegistry(_log),
-            new TtsRegistry(_log),
+            transcriptionRegistry: new TranscriptionRegistry(_log),
+            translationRegistry: new TranslationRegistry(_log),
+            ttsRegistry: new TtsRegistry(_log),
             hfHttpClient: new HttpClient(handler));
     }
 
@@ -369,9 +369,9 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
         var handler = new StubHttpMessageHandler(_ =>
             Task.FromException<HttpResponseMessage>(new HttpRequestException("connection refused")));
         var service = new ApiKeyValidationService(
-            new TranscriptionRegistry(_log),
-            new TranslationRegistry(_log),
-            new TtsRegistry(_log),
+            transcriptionRegistry: new TranscriptionRegistry(_log),
+            translationRegistry: new TranslationRegistry(_log),
+            ttsRegistry: new TtsRegistry(_log),
             hfHttpClient: new HttpClient(handler));
 
         var result = await service.ValidateAsync(CredentialKeys.HuggingFace, ValidHfTokenShape);
@@ -449,9 +449,9 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
         var handler = new StubHttpMessageHandler(_ =>
             Task.FromException<HttpResponseMessage>(new OperationCanceledException(cts.Token)));
         var service = new ApiKeyValidationService(
-            new TranscriptionRegistry(_log),
-            new TranslationRegistry(_log),
-            new TtsRegistry(_log),
+            transcriptionRegistry: new TranscriptionRegistry(_log),
+            translationRegistry: new TranslationRegistry(_log),
+            ttsRegistry: new TtsRegistry(_log),
             hfHttpClient: new HttpClient(handler));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -470,14 +470,9 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
         Assert.Null(message);
     }
 
-    private sealed class StubHttpMessageHandler : HttpMessageHandler
+    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler) : HttpMessageHandler
     {
-        private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _handler;
-
-        public StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler)
-        {
-            _handler = handler;
-        }
+        private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _handler = handler;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             _handler(request);
