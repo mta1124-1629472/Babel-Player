@@ -474,7 +474,10 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
     {
         private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _handler = handler;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            _handler(request);
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return _handler(request);
+        }
     }
 }

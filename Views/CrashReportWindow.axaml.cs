@@ -56,10 +56,10 @@ public partial class CrashReportWindow : Window
                 await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(
                     clipboard,
                     errorTextBox?.Text ?? string.Empty);
-            }
 
-            var copyButton = this.FindControl<Button>("CopyButton");
-            if (copyButton is not null) copyButton.Content = "Copied!";
+                var copyButton = this.FindControl<Button>("CopyButton");
+                if (copyButton is not null) copyButton.Content = "Copied!";
+            }
         }
         catch
         {
