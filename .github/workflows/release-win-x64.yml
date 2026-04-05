@@ -48,10 +48,12 @@ jobs:
           --configuration Release
           --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation"
 
-      - name: Download FFmpeg for Windows x64
+      - name: Download external dependencies (FFmpeg, uv)
         shell: pwsh
         run: |
-          # Download from GyanD GitHub mirror - stable zip format, pinned version.
+          New-Item -ItemType Directory -Path "tools/win-x64" -Force | Out-Null
+
+          # Download FFmpeg from GyanD GitHub mirror - stable zip format, pinned version.
           # Release page: https://github.com/GyanD/codexffmpeg/releases/tag/${{ env.FFMPEG_VERSION }}
           $version = "${{ env.FFMPEG_VERSION }}"
           $ffmpegUrl = "https://github.com/GyanD/codexffmpeg/releases/download/$version/ffmpeg-$version-essentials_build.zip"
@@ -61,10 +63,21 @@ jobs:
           Expand-Archive -Path $ffmpegZip -DestinationPath "ffmpeg_temp"
           $ffmpegExe = Get-ChildItem -Path "ffmpeg_temp" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
           if (-not $ffmpegExe) { throw "Could not find ffmpeg.exe in downloaded archive" }
-          New-Item -ItemType Directory -Path "tools/win-x64" -Force | Out-Null
           Move-Item -Path $ffmpegExe.FullName -Destination "tools/win-x64/ffmpeg.exe" -Force
           Remove-Item -Path $ffmpegZip -Force
           Remove-Item -Path "ffmpeg_temp" -Recurse -Force
+
+          # Download uv (Python package manager used by inference bootstrap).
+          # Source: https://github.com/astral-sh/uv/releases
+          $uvUrl = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
+          Write-Host "Downloading uv from $uvUrl"
+          Invoke-WebRequest -Uri $uvUrl -OutFile "uv.zip"
+          Expand-Archive -Path "uv.zip" -DestinationPath "uv_temp"
+          $uvExe = Get-ChildItem -Path "uv_temp" -Filter "uv.exe" -Recurse | Select-Object -First 1
+          if (-not $uvExe) { throw "Could not find uv.exe in downloaded archive" }
+          Move-Item -Path $uvExe.FullName -Destination "tools/win-x64/uv.exe" -Force
+          Remove-Item -Path "uv.zip" -Force
+          Remove-Item -Path "uv_temp" -Recurse -Force
 
       - name: Publish self-contained build
         shell: pwsh
@@ -93,6 +106,12 @@ jobs:
             -p:InformationalVersion=$version `
             -p:BuildDate=$buildDate `
             -o ./publish
+
+          # Copy external binaries into publish root so the release bundle is self-contained.
+          # libmpv-2.dll ships with the repo; ffmpeg.exe and uv.exe are downloaded above.
+          Copy-Item -Path "native/win-x64/libmpv-2.dll" -Destination "./publish/" -Force
+          Copy-Item -Path "tools/win-x64/ffmpeg.exe"    -Destination "./publish/" -Force
+          Copy-Item -Path "tools/win-x64/uv.exe"        -Destination "./publish/" -Force
 
       - name: Verify publish output
         shell: pwsh
