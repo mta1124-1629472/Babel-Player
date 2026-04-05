@@ -812,7 +812,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
 
     private async Task<string> ReadLogAsync()
     {
-        await Task.Delay(150);
+        await _log.FlushAsync();
         return File.Exists(_log.LogFilePath)
             ? await File.ReadAllTextAsync(_log.LogFilePath)
             : string.Empty;

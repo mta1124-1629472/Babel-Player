@@ -12,7 +12,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
     private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
     private const int MaxArchivedFiles = 4; // keep 4 archives + 1 current = 5 total
 
-    private readonly Channel<string> _channel = Channel.CreateUnbounded<string>(
+    private readonly Channel<object> _channel = Channel.CreateUnbounded<object>(
         new UnboundedChannelOptions { SingleReader = true, AllowSynchronousContinuations = false });
     private readonly Task _writerTask;
     private readonly CancellationTokenSource _cts = new();
@@ -41,15 +41,34 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         _channel.Writer.TryWrite(line);
     }
 
+    /// <summary>
+    /// Waits until all log lines enqueued before this call have been written to disk.
+    /// Safe to call after <see cref="Dispose"/>; returns immediately if the channel is closed.
+    /// </summary>
+    public async Task FlushAsync()
+    {
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_channel.Writer.TryWrite(tcs))
+            return; // channel already closed — nothing left to flush
+        await tcs.Task.ConfigureAwait(false);
+    }
+
     private async Task BackgroundWriterAsync()
     {
         var reader = _channel.Reader;
         try
         {
-            await foreach (var line in reader.ReadAllAsync(_cts.Token))
+            await foreach (var item in reader.ReadAllAsync(_cts.Token))
             {
-                try { await File.AppendAllTextAsync(LogFilePath, line); }
-                catch { /* best-effort: log writes are never fatal */ }
+                if (item is string line)
+                {
+                    try { await File.AppendAllTextAsync(LogFilePath, line); }
+                    catch { /* best-effort: log writes are never fatal */ }
+                }
+                else if (item is TaskCompletionSource<bool> tcs)
+                {
+                    tcs.TrySetResult(true);
+                }
             }
         }
         catch (OperationCanceledException) { }
@@ -57,8 +76,15 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         // Drain remaining entries after cancellation.
         while (reader.TryRead(out var remaining))
         {
-            try { File.AppendAllText(LogFilePath, remaining); }
-            catch { }
+            if (remaining is string line)
+            {
+                try { File.AppendAllText(LogFilePath, line); }
+                catch { }
+            }
+            else if (remaining is TaskCompletionSource<bool> tcs)
+            {
+                tcs.TrySetResult(true);
+            }
         }
     }
 
