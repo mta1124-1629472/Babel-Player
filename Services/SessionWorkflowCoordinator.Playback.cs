@@ -208,7 +208,11 @@ public sealed partial class SessionWorkflowCoordinator
                 : null;
         }
 
-        return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(XttsReferenceKeys.SingleSpeakerDefault, out var defaultPath) &&
+            var defaultReferenceKey = string.Equals(CurrentSettings.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal)
+                ? XttsReferenceKeys.QwenSingleSpeakerDefault
+                : XttsReferenceKeys.SingleSpeakerDefault;
+
+            return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(defaultReferenceKey, out var defaultPath) &&
                !string.IsNullOrWhiteSpace(defaultPath)
             ? defaultPath
             : null;

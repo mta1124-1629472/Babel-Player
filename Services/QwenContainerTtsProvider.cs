@@ -108,7 +108,8 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
                 var referenceAudioPath = ResolveReferenceAudioForSegment(seg, request);
 
                 if (string.IsNullOrWhiteSpace(referenceAudioPath) &&
-                    !string.IsNullOrWhiteSpace(request.SourceVideoPath))
+                    !string.IsNullOrWhiteSpace(request.SourceVideoPath) &&
+                    (request.SpeakerReferenceAudioPaths?.Count ?? 0) == 0)
                 {
                     referenceAudioPath = await EnsureAutoExtractedReferenceAsync(request.SourceVideoPath, cancellationToken);
                 }
@@ -248,7 +249,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
             return referencePath;
         }
 
-        return request.SpeakerReferenceAudioPaths.TryGetValue(XttsReferenceKeys.SingleSpeakerDefault, out var defaultReferencePath)
+        return request.SpeakerReferenceAudioPaths.TryGetValue(XttsReferenceKeys.QwenSingleSpeakerDefault, out var defaultReferencePath)
                && !string.IsNullOrWhiteSpace(defaultReferencePath)
             ? defaultReferencePath
             : null;

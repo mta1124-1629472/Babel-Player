@@ -101,7 +101,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         var references = CurrentSession.SpeakerReferenceAudioPaths;
         if (references is not null
-            && references.TryGetValue(XttsReferenceKeys.SingleSpeakerDefault, out var existingPath)
+            && references.TryGetValue(XttsReferenceKeys.QwenSingleSpeakerDefault, out var existingPath)
             && !string.IsNullOrWhiteSpace(existingPath)
             && File.Exists(existingPath))
         {
@@ -157,7 +157,7 @@ public sealed partial class SessionWorkflowCoordinator
         var updatedRefs = references is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : new Dictionary<string, string>(references, StringComparer.Ordinal);
-        updatedRefs[XttsReferenceKeys.SingleSpeakerDefault] = outputPath;
+        updatedRefs[XttsReferenceKeys.QwenSingleSpeakerDefault] = outputPath;
 
         CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updatedRefs };
         SaveCurrentSession();
