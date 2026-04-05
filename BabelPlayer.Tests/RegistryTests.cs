@@ -566,7 +566,7 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void DiarizationRegistry_PyannoteLocal_CheckReadiness_ReturnsReady()
+    public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithNoToken_ReturnsNotReady()
     {
         var keyStore = new ApiKeyStore(_dir);
         keyStore.SetKey(CredentialKeys.HuggingFace, "hf_test_token");
@@ -577,7 +577,8 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void DiarizationRegistry_PyannoteLocal_CreateProvider_DoesNotThrow()
     {
-        var provider = _diarizationRegistry.CreateProvider(ProviderNames.PyannoteLocal, new AppSettings(), null);
+        var keyStore = new ApiKeyStore(Path.Combine(_dir, "empty-keys.json"));
+        var provider = _diarizationRegistry.CreateProvider(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
         Assert.NotNull(provider);
     }
 

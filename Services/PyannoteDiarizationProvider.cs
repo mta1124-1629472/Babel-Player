@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
@@ -82,8 +83,48 @@ print(json.dumps(result))
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
-        // We verify pyannote is importable by attempting a fast Python check.
-        // This is synchronous and fast (just a Python import probe, no model loading).
+        var store = keyStore ?? _keyStore;
+        var token = store.GetKey(CredentialKeys.HuggingFace);
+        if (string.IsNullOrWhiteSpace(token))
+            return new ProviderReadiness(false,
+                "HuggingFace token is required for pyannote diarization. " +
+                "Set it in Settings > API Keys > HuggingFace.");
+
+        // Fast import probe — verifies pyannote.audio is installed without loading any model.
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName              = PythonPath,
+                RedirectStandardError = true,
+                UseShellExecute       = false,
+                CreateNoWindow        = true,
+            };
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add("import pyannote.audio");
+            using var proc = Process.Start(psi);
+            if (proc == null)
+                return new ProviderReadiness(false,
+                    "Python probe failed. Ensure Python and pyannote.audio are installed.");
+
+            bool exited = proc.WaitForExit(5_000);
+            if (!exited)
+            {
+                proc.Kill();
+                return new ProviderReadiness(false,
+                    "Python probe timed out. Ensure Python and pyannote.audio are installed.");
+            }
+
+            if (proc.ExitCode != 0)
+                return new ProviderReadiness(false,
+                    "pyannote.audio is not installed. Run: pip install pyannote.audio");
+        }
+        catch
+        {
+            return new ProviderReadiness(false,
+                "Python probe failed. Ensure Python and pyannote.audio are installed.");
+        }
+
         return ProviderReadiness.Ready;
     }
 
@@ -107,6 +148,14 @@ print(json.dumps(result))
 
         var minArg = request.MinSpeakers?.ToString() ?? "null";
         var maxArg = request.MaxSpeakers?.ToString() ?? "null";
+        var hfToken = _keyStore.GetKey(CredentialKeys.HuggingFace);
+
+        if (string.IsNullOrWhiteSpace(hfToken))
+        {
+            const string msg = "HuggingFace token is not set. Configure it in Settings > API Keys > HuggingFace.";
+            Log.Error(msg, new InvalidOperationException(msg));
+            return new DiarizationResult(false, [], 0, msg);
+        }
 
         // Resolve token: per-call override wins over constructor-injected value.
         // Pass via environment variable — not argv — so the token is not visible
