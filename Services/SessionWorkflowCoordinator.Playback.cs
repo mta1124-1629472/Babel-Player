@@ -168,6 +168,16 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
     }
 
+    public void SetDefaultTtsVoiceFallback(string? voice)
+    {
+        var normalized = string.IsNullOrWhiteSpace(voice) ? null : voice.Trim();
+        if (string.Equals(CurrentSession.DefaultTtsVoiceFallback, normalized, StringComparison.Ordinal))
+            return;
+
+        CurrentSession = CurrentSession with { DefaultTtsVoiceFallback = normalized };
+        SaveCurrentSession();
+    }
+
     private string ResolveVoiceForSegment(TranslationSegmentArtifact segment, string defaultVoice)
     {
         if (!CurrentSession.MultiSpeakerEnabled)

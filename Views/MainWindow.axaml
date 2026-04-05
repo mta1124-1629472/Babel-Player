@@ -269,26 +269,27 @@
                             <TextBlock Text="DIARIZATION / SPEAKERS" FontSize="10"
                                        Foreground="#4A4A60" FontWeight="SemiBold" />
 
-                            <!-- Provider selector -->
-                            <StackPanel Spacing="5">
-                                <TextBlock Text="Provider" FontSize="12" Foreground="#808090" />
-                                <ComboBox ItemsSource="{Binding Playback.DiarizationProviderOptions}"
-                                          SelectedItem="{Binding Playback.DiarizationProvider, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
-                                          Background="#1E1E2C" Foreground="#C0C0D0"
-                                          BorderBrush="#2A2A3A"
-                                          ToolTip.Tip="Select a supported diarization provider. Leave empty to disable diarization." />
-                            </StackPanel>
+                            <!-- Multi-speaker toggle -->
+                            <CheckBox Content="Enable multi-speaker routing"
+                                      IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
+                                      Foreground="#C0C0D0" />
 
-                            <!-- HF token hint — visible whenever a diarization provider is configured (all current providers require a HuggingFace token) -->
+                            <!-- Auto speaker detection (pyannote) — only meaningful when multi-speaker is on -->
+                            <CheckBox Content="Auto speaker detection"
+                                      IsChecked="{Binding Playback.IsAutoSpeakerDetectionEnabled, Mode=TwoWay}"
+                                      IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
+                                      Foreground="#C0C0D0" />
+
+                            <!-- Controls that only apply when auto-detection is enabled -->
+                            <!-- HF token hint -->
                             <TextBlock Text="HuggingFace token required — set it in 🔑 API Keys above."
                                        FontSize="11" Foreground="#C0803A"
                                        TextWrapping="Wrap"
-                                       IsVisible="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                       IsVisible="{Binding Playback.IsAutoSpeakerDetectionEnabled}" />
 
-                            <!-- Speaker count constraints -->
+                            <!-- Speaker count constraints — only visible when auto-detection is on -->
                             <StackPanel Spacing="5"
-                                        IsEnabled="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                        IsVisible="{Binding Playback.IsAutoSpeakerDetectionEnabled}">
                                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="#808090" VerticalAlignment="Center" />
                                     <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -305,19 +306,10 @@
                                 </Grid>
                             </StackPanel>
 
-                            <!-- Multi-speaker toggle and auto-detection -->
-                            <CheckBox Content="Enable multi-speaker routing"
-                                      IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
-                                      Foreground="#C0C0D0" />
-
-                            <CheckBox Content="Auto speaker detection"
-                                      IsChecked="{Binding Playback.IsAutoSpeakerDetectionEnabled, Mode=TwoWay}"
-                                      IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
-                                      Foreground="#C0C0D0" />
-
+                            <!-- Setup guide + status — only enabled when auto-detection is on -->
                             <Button Content="Open auto-detection setup guide"
                                     Click="OnAutoSpeakerSetupGuideClick"
-                                    IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
+                                    IsEnabled="{Binding Playback.IsAutoSpeakerDetectionEnabled}"
                                     HorizontalAlignment="Left"
                                     ToolTip.Tip="Open guidance for configuring automatic speaker detection" />
                             <TextBlock Text="{Binding Playback.AutoSpeakerDetectionStatus}"
@@ -329,6 +321,11 @@
                             <!-- Per-speaker voice / reference clip assignment -->
                             <StackPanel Spacing="5"
                                         IsVisible="{Binding Playback.IsMultiSpeakerEnabled}">
+
+                                <!-- Hint shown when multi-speaker is on but no speaker IDs have been detected yet -->
+                                <TextBlock Text="Transcribe with auto-detection enabled to assign speaker IDs."
+                                           FontSize="11" Foreground="#C0803A" TextWrapping="Wrap"
+                                           IsVisible="{Binding Playback.IsMultiSpeakerNoSpeakersYet}" />
 
                                 <TextBlock Text="Speaker" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.SpeakerIds}"
@@ -344,10 +341,13 @@
                                                Text="{Binding Playback.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
                                                FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
 
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="#4A4A60" />
+                                    <!-- Ref audio row — only meaningful for voice-cloning providers (XTTS, Qwen) -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="#4A4A60"
+                                               IsVisible="{Binding Playback.IsTtsCloningProvider}" />
                                     <TextBlock Grid.Row="1" Grid.Column="1"
                                                Text="{Binding Playback.SelectedSpeakerReferenceAudioPath, TargetNullValue='—'}"
-                                               FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
+                                               FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap"
+                                               IsVisible="{Binding Playback.IsTtsCloningProvider}" />
                                 </Grid>
 
                                 <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
@@ -358,7 +358,7 @@
                                             Padding="0,7" FontSize="12"
                                             Background="#2A2A3A" Foreground="#C0C0D0"
                                             CornerRadius="5"
-                                            Content="Assign current TTS" />
+                                            Content="Use current voice" />
                                     <Button Grid.Row="0" Grid.Column="1"
                                             Command="{Binding Playback.ClearSelectedSpeakerVoiceCommand}"
                                             IsEnabled="{Binding Playback.HasSpeakers}"
@@ -367,8 +367,10 @@
                                             Background="#2A2A3A" Foreground="#C0C0D0"
                                             CornerRadius="5"
                                             Content="Clear speaker voice" />
+                                    <!-- Ref clip buttons — only for voice-cloning providers -->
                                     <Button Grid.Row="1" Grid.Column="0"
                                             IsEnabled="{Binding Playback.HasSpeakers}"
+                                            IsVisible="{Binding Playback.IsTtsCloningProvider}"
                                             HorizontalAlignment="Stretch"
                                             Padding="0,7" FontSize="12"
                                             Background="#2A2A3A" Foreground="#C0C0D0"
@@ -378,12 +380,23 @@
                                     <Button Grid.Row="1" Grid.Column="1"
                                             Command="{Binding Playback.ClearSelectedSpeakerReferenceAudioCommand}"
                                             IsEnabled="{Binding Playback.HasSpeakers}"
+                                            IsVisible="{Binding Playback.IsTtsCloningProvider}"
                                             HorizontalAlignment="Stretch"
                                             Padding="0,7" FontSize="12"
                                             Background="#2A2A3A" Foreground="#C0C0D0"
                                             CornerRadius="5"
                                             Content="Clear speaker ref" />
                                 </Grid>
+
+                                <!-- Fallback voice used when a speaker has no explicit assignment -->
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Fallback voice" FontSize="12" Foreground="#808090"
+                                               ToolTip.Tip="Voice/model used for any speaker that has no explicit assignment. Leave blank to use the active TTS voice." />
+                                    <TextBox Text="{Binding Playback.DefaultTtsVoiceFallback, Mode=TwoWay}"
+                                             PlaceholderText="same as active TTS voice"
+                                             FontSize="12" Background="#1E1E2C" Foreground="#C0C0D0" BorderBrush="#2A2A3A" />
+                                </StackPanel>
+
                             </StackPanel>
 
                         </StackPanel>

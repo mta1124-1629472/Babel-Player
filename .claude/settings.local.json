@@ -43,7 +43,8 @@
       "Bash(cmd /c \"taskkill /PID 31268 /F && echo killed || echo failed\")",
       "Bash(powershell -Command \"Stop-Process -Id 31268 -Force; Write-Host ''done''\")",
       "Skill(commit-commands:commit-push-pr)",
-      "Skill(commit-commands:commit-push-pr:*)"
+      "Skill(commit-commands:commit-push-pr:*)",
+      "Bash(assign speaker IDs.\" so the empty speaker dropdown is not silent.:*)"
     ]
   }
 }

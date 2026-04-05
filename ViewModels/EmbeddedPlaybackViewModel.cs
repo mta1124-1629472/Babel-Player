@@ -170,6 +170,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(AvailableTtsOptions))]
     [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
+    [NotifyPropertyChangedFor(nameof(IsTtsCloningProvider))]
     private string _ttsProvider = ProviderNames.EdgeTts;
 
     [ObservableProperty]
@@ -179,6 +180,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     // ── Multi-speaker routing controls ───────────────────────────────────────
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
     private bool _isMultiSpeakerEnabled;
 
     public IReadOnlyList<string> DiarizationProviderOptions { get; } =
@@ -303,6 +305,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSpeakers))]
+    [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
     private ObservableCollection<string> _speakerIds = [];
 
     [ObservableProperty]
@@ -428,6 +431,17 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     public string SelectedSegmentReferenceStatus => SelectedSegment?.HasReferenceAudio == true ? "Yes" : "No";
     public bool HasSpeakers => SpeakerIds.Count > 0;
     public bool HasAutoSpeakerDetectionStatus => !string.IsNullOrWhiteSpace(AutoSpeakerDetectionStatus);
+
+    /// <summary>True when multi-speaker mode is on but no speaker IDs have been detected yet.</summary>
+    public bool IsMultiSpeakerNoSpeakersYet => IsMultiSpeakerEnabled && !HasSpeakers;
+
+    /// <summary>True when the active TTS provider uses voice cloning from reference audio (XTTS, Qwen).</summary>
+    public bool IsTtsCloningProvider =>
+        string.Equals(TtsProvider, ProviderNames.XttsContainer, StringComparison.Ordinal) ||
+        string.Equals(TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal);
+
+    [ObservableProperty]
+    private string _defaultTtsVoiceFallback = string.Empty;
 
     // ── Provider / model option lists ──────────────────────────────────────────
     public IReadOnlyList<string> TranscriptionProviders => GetTranscriptionProviderIds(TranscriptionRuntime);
@@ -810,6 +824,29 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         _coordinator.NotifySettingsModified();
     }
 
+    partial void OnDefaultTtsVoiceFallbackChanged(string value)
+    {
+        if (_isSynchronizingPipelineSettings) return;
+
+        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        var normalizedDisplayValue = normalized ?? string.Empty;
+
+        if (!string.Equals(value, normalizedDisplayValue, StringComparison.Ordinal))
+        {
+            _isSynchronizingPipelineSettings = true;
+            try
+            {
+            DefaultTtsVoiceFallback = normalizedDisplayValue;
+            }
+            finally
+            {
+            _isSynchronizingPipelineSettings = false;
+            }
+        }
+
+        _coordinator.SetDefaultTtsVoiceFallback(normalized);
+    }
+
     private static int? NormalizeSpeakerCount(decimal? value)
     {
         if (!value.HasValue)
@@ -1062,6 +1099,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             DiarizationMaxSpeakers = _coordinator.CurrentSettings.DiarizationMaxSpeakers;
             IsAutoSpeakerDetectionEnabled =
                 string.Equals(_coordinator.CurrentSettings.DiarizationProvider, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
+            DefaultTtsVoiceFallback = _coordinator.CurrentSession.DefaultTtsVoiceFallback ?? string.Empty;
 
             // Notify after RebuildAllModelOptions() so bindings read the rebuilt backing fields.
             OnPropertyChanged(nameof(AvailableTranscriptionModels));
