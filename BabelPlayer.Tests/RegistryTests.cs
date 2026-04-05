@@ -575,6 +575,25 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
+    public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithValidToken_DoesNotBlockOnToken()
+    {
+        var keyStore = new ApiKeyStore(_dir);
+        keyStore.SetKey(CredentialKeys.HuggingFace, "hf_test_token");
+
+        // Note: CheckReadiness will still run the pyannote.audio import probe,
+        // which may return NotReady in CI if pyannote isn't installed —
+        // but the blocking reason will NOT mention HuggingFace.
+        var readiness = _diarizationRegistry.CheckReadiness(
+            ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
+
+        if (!readiness.IsReady)
+        {
+            Assert.DoesNotContain("HuggingFace", readiness.BlockingReason ?? "",
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void DiarizationRegistry_PyannoteLocal_CreateProvider_DoesNotThrow()
     {
         var keyStore = new ApiKeyStore(Path.Combine(_dir, "empty-keys.json"));
