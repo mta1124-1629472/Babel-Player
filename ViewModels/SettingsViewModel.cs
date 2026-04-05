@@ -322,6 +322,24 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         }
     }
 
+    [RelayCommand]
+    private void OpenGitHubSponsors()
+    {
+        try
+        {
+            const string sponsorsUrl = "https://github.com/sponsors/mta1124-1629472";
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = sponsorsUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to open GitHub Sponsors link: {ex.Message}");
+        }
+    }
+
     public void Dispose()
     {
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;

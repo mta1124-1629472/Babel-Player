@@ -357,10 +357,59 @@
                     
                     <StackPanel Grid.Row="4" Margin="0,20,0,0">
                         <TextBlock Text="Support the project:" Opacity="0.7" Margin="0,0,0,8"/>
-                        <Button Padding="12,6" HorizontalAlignment="Left"
-                                Command="{Binding OpenKofiCommand}"
-                                ToolTip.Tip="Support this project on Ko-fi"
-                                Content="☕ Support on Ko-fi"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Background="#EAE7E3"
+                                    BorderBrush="#1D2027"
+                                    BorderThickness="3"
+                                    CornerRadius="22"
+                                    Padding="8,6"
+                                    Margin="0,0,10,0"
+                                    HorizontalAlignment="Left">
+                                <Button Command="{Binding OpenKofiCommand}"
+                                        ToolTip.Tip="Support this project on Ko-fi"
+                                        Background="Transparent"
+                                        BorderBrush="Transparent"
+                                        HorizontalAlignment="Left"
+                                        Padding="12,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="☕"
+                                                   FontSize="20"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="Support me on Ko-fi"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#151820"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </Border>
+
+                            <Border Background="#F6F8FA"
+                                    BorderBrush="#1F2328"
+                                    BorderThickness="3"
+                                    CornerRadius="22"
+                                    Padding="8,6"
+                                    HorizontalAlignment="Left">
+                                <Button Command="{Binding OpenGitHubSponsorsCommand}"
+                                        ToolTip.Tip="Support this project on GitHub Sponsors"
+                                        Background="Transparent"
+                                        BorderBrush="Transparent"
+                                        HorizontalAlignment="Left"
+                                        Padding="12,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="❤"
+                                                   FontSize="18"
+                                                   Foreground="#BF3989"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="Sponsor on GitHub"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#1F2328"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </Border>
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
             </TabItem>
