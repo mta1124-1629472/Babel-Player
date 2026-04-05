@@ -120,7 +120,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
                 _log.Info(
                     $"[QwenContainerTts] Combined synth segment start " +
                     $"(segment={seg.Id ?? segmentIndex.ToString()}, model={resolvedModel}, " +
-                    $"reference={referenceAudioPath})");
+                    $"reference={Path.GetFileName(referenceAudioPath)})");
 
                 var result = await _client.QwenSegmentAsync(
                     seg.TranslatedText!,
