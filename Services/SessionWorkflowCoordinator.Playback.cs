@@ -88,14 +88,14 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (transcript.Segments is null || translation.Segments is null) return;
 
-        var speakerById = transcript.Segments
-            .Where(s => s.Id != null && s.SpeakerId != null)
-            .ToDictionary(s => s.Id!, s => s.SpeakerId!);
+        var speakerByStart = transcript.Segments
+            .Where(s => s.SpeakerId != null)
+            .ToDictionary(s => s.Start, s => s.SpeakerId!);
 
         var anyChanged = false;
         foreach (var seg in translation.Segments)
         {
-            if (seg.Id is null || !speakerById.TryGetValue(seg.Id, out var speakerId)) continue;
+            if (!speakerByStart.TryGetValue(seg.Start, out var speakerId)) continue;
             if (seg.SpeakerId == speakerId) continue;
             seg.SpeakerId = speakerId;
             anyChanged = true;
