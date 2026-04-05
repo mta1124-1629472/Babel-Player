@@ -637,7 +637,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
             SpeakerReferenceAudioPaths: new Dictionary<string, string>
             {
-                [XttsReferenceKeys.SingleSpeakerDefault] = referenceAudioPath
+                [QwenReferenceKeys.SingleSpeakerDefault] = referenceAudioPath
             }));
 
         Assert.True(result.Success);

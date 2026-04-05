@@ -309,6 +309,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         _ttsService ??= CreateTtsService();
         await EnsureSingleSpeakerXttsReferenceClipAsync(cancellationToken);
+        await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
 
         ReportStage(
             stageContext,
@@ -342,6 +343,7 @@ public sealed partial class SessionWorkflowCoordinator
                 CurrentSession.SpeakerReferenceAudioPaths,
                 CurrentSession.DefaultTtsVoiceFallback,
                 ttsLanguage,
+                SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath,
                 SegmentProgress: combinedProgress),
             cancellationToken);
 
