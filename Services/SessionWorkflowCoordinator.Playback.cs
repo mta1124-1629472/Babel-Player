@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -47,6 +48,10 @@ public sealed partial class SessionWorkflowCoordinator
 
         await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
 
+        if (!string.IsNullOrWhiteSpace(CurrentSession.TranslationPath) &&
+            File.Exists(CurrentSession.TranslationPath))
+            await MergeSpeakerIdsIntoTranslationAsync(transcriptPath, CurrentSession.TranslationPath, ct);
+
         CurrentSession = CurrentSession with
         {
             DiarizationProvider = CurrentSettings.DiarizationProvider,
@@ -71,6 +76,35 @@ public sealed partial class SessionWorkflowCoordinator
 
         var json = ArtifactJson.SerializeTranscript(artifact);
         await File.WriteAllTextAsync(transcriptPath, json, ct);
+    }
+
+    private static async Task MergeSpeakerIdsIntoTranslationAsync(
+        string transcriptPath,
+        string translationPath,
+        CancellationToken ct)
+    {
+        var transcript = await ArtifactJson.LoadTranscriptAsync(transcriptPath, ct);
+        var translation = await ArtifactJson.LoadTranslationAsync(translationPath, ct);
+
+        if (transcript.Segments is null || translation.Segments is null) return;
+
+        var speakerById = transcript.Segments
+            .Where(s => s.Id != null && s.SpeakerId != null)
+            .ToDictionary(s => s.Id!, s => s.SpeakerId!);
+
+        var anyChanged = false;
+        foreach (var seg in translation.Segments)
+        {
+            if (seg.Id is null || !speakerById.TryGetValue(seg.Id, out var speakerId)) continue;
+            if (seg.SpeakerId == speakerId) continue;
+            seg.SpeakerId = speakerId;
+            anyChanged = true;
+        }
+
+        if (!anyChanged) return;
+
+        var json = ArtifactJson.SerializeTranslation(translation);
+        await File.WriteAllTextAsync(translationPath, json, ct);
     }
 
     private static string FindBestSpeakerFor(double start, double end, IReadOnlyList<DiarizedSegment> diarizedSegments)

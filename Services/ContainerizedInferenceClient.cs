@@ -168,7 +168,8 @@ public sealed class ContainerizedInferenceClient
                     seg.Start,
                     seg.End,
                     seg.Text ?? string.Empty,
-                    seg.TranslatedText ?? string.Empty));
+                    seg.TranslatedText ?? string.Empty,
+                    SpeakerId: string.IsNullOrWhiteSpace(seg.SpeakerId) ? null : seg.SpeakerId));
             }
 
             _log.Info($"Translation complete: {translatedSegments.Count} segments");
@@ -592,6 +593,9 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("translated_text")]
         public string? TranslatedText { get; set; }
+
+        [JsonPropertyName("speaker_id")]
+        public string? SpeakerId { get; set; }
     }
 
     private sealed class TtsApiResponseDto

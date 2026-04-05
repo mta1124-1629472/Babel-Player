@@ -187,6 +187,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
                     End = s.EndSeconds,
                     Text = s.Text,
                     TranslatedText = s.TranslatedText,
+                    SpeakerId = s.SpeakerId,
                 })
             ],
         };

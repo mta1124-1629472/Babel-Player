@@ -179,6 +179,7 @@ class TranslatedSegmentResponse(BaseModel):
     end: float
     text: str
     translated_text: str
+    speaker_id: Optional[str] = None
 
 
 class TranslationResponse(BaseModel):
@@ -484,6 +485,7 @@ async def translate(
                 end=seg.get("end", 0.0),
                 text=text,
                 translated_text=t_text,
+                speaker_id=seg.get("speaker_id") or None,
             ))
         return TranslationResponse(
             success=True,
