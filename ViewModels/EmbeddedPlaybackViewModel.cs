@@ -321,7 +321,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private double _preDuckTransportVolume = 1.0;
     private bool _isDucked;
     private bool _preFullscreenSegmentPaneVisible = true;
-    private bool _preSubtitlePaneState = true;
     private string? _activeSrtPath;
     private IReadOnlyList<ModelOptionViewModel> _availableTranscriptionModels = [];
     private IReadOnlyList<ModelOptionViewModel> _availableTranslationModels = [];
@@ -1428,8 +1427,7 @@ partial void OnSourcePositionMsChanged(double value)
         }
         else
         {
-            // Don't restore pane if subtitle mode is active — pane stays closed
-            IsSegmentPaneVisible = _preFullscreenSegmentPaneVisible && !IsSubtitleModeOn;
+            IsSegmentPaneVisible = _preFullscreenSegmentPaneVisible;
             _controlsHideTimer.Stop();
             IsControlsVisible = true;   // always visible outside fullscreen
         }
@@ -1437,17 +1435,7 @@ partial void OnSourcePositionMsChanged(double value)
 
     partial void OnIsSubtitleModeOnChanged(bool value)
     {
-        if (value)
-        {
-            _preSubtitlePaneState = IsSegmentPaneVisible;
-            IsSegmentPaneVisible = false;
-            ApplySubtitleState();
-        }
-        else
-        {
-            ApplySubtitleState();                           // hide subs before restoring pane
-            IsSegmentPaneVisible = _preSubtitlePaneState;
-        }
+        ApplySubtitleState();
     }
 
     partial void OnIsSourcePausedChanged(bool value)
@@ -1770,15 +1758,7 @@ partial void OnSourcePositionMsChanged(double value)
     [RelayCommand]
     private void ToggleSegmentPane()
     {
-        if (IsSubtitleModeOn)
-        {
-            // Pull tab while subtitles active → exit subtitle mode; hook restores pane
-            IsSubtitleModeOn = false;
-        }
-        else
-        {
-            IsSegmentPaneVisible = !IsSegmentPaneVisible;
-        }
+        IsSegmentPaneVisible = !IsSegmentPaneVisible;
     }
 
     [RelayCommand]
