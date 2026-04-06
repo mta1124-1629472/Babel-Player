@@ -93,6 +93,8 @@ Services/
  AppLog.cs
  AvaloniaErrorDialogService.cs
  BackgroundTaskObserver.cs
+ BenchmarkResultWriter.cs
+ BenchmarkRunHarness.cs
  BootstrapDiagnostics.cs
  CompositeInferenceHostManager.cs
  ContainerizedInferenceClient.cs
@@ -180,6 +182,7 @@ Services/
  StageContracts.cs
  VideoEnhancementDiagnostics.cs
  VideoExportPlanner.cs
+ WerComputer.cs
  XttsContainerTtsProvider.cs
  XttsReferenceExtractor.cs
  XttsReferenceKeys.cs

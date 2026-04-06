@@ -62,6 +62,7 @@ ApiKeyValidationServiceTests.cs
 AppLogTests.cs
 AppSettingsTests.cs
 ArtifactContractTests.cs
+BenchmarkResultWriterTests.cs
 BootstrapDiagnosticsTests.cs
 Collections.cs
 ComputeDowngradeEventTests.cs
@@ -100,6 +101,7 @@ SrtGeneratorTests.cs
 StageContractsTests.cs
 VideoExportPlannerTests.cs
 VsrDiagnosticsTests.cs
+WerComputerTests.cs
 
 [metadataReferences]
 ../obj/Debug/net10.0/ref/BabelPlayer.dll
