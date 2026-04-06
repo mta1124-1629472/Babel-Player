@@ -74,7 +74,8 @@ Translated dialogue spoken back in a compelling voice-driven form.
 | ElevenLabs | Cloud | ✅ Implemented |
 | Google Cloud TTS | Cloud | ✅ Implemented |
 | OpenAI TTS | Cloud | ✅ Implemented |
-| XTTS (containerized) | Containerized | ✅ Implemented |
+| Qwen3-TTS | Local (GPU) | ✅ Implemented (voice cloning, RTX validated) |
+| XTTS v2 | Local (GPU) | ✅ Implemented (voice cloning, containerized) |
 
 ### Diarization
 | Provider | Runtime | Status |
@@ -228,25 +229,35 @@ Gate: local capability is real and selectable. Unsupported paths remain clearly 
 
 ---
 
-### 12. Runtime Optimization and Hardware Routing 🔲 NEXT
+### 12. Runtime Optimization and Hardware Routing ⏳ IN PROGRESS
 Richer runtime selection, hardware readiness checks, and optimized execution paths.
 
 This is a scaling and reliability milestone, not a foundation milestone. The local and cloud paths both work; this milestone is about making them trustworthy across machine configurations.
 
 Scope:
-- GPU acceleration validation for FasterWhisper (CUDA, NVIDIA runtime detection)
-- NVDEC / D3D11VA hardware decode path verification in libmpv transport
-- Container health probe integration in settings UI (show live container status)
-- WSL-hosted Python inference path tested and documented
-- Runtime routing diagnostics — surface in UI when a selected runtime is degraded
-- `HardwareSnapshot` surface in a diagnostics panel
-- Benchmark suite in `benchmarks/` for regression tracking
+- ✅ GPU acceleration validation for FasterWhisper (CUDA, NVIDIA runtime detection) — RTX path validated on real hardware
+- ✅ Compute profiles (CPU/GPU/Cloud) fully implemented with hardware-aware type selection (`float8` for Blackwell, `float16` for older GPUs)
+- ✅ Multi-speaker diarization fully implemented and surfaced in UI (Pyannote with speaker boundary detection)
+- ✅ GPU TTS validation (XTTS v2, Qwen3-TTS) — wired end-to-end, RTX path validated; Blackwell validation pending
+- ⏳ Container health probe integration in settings UI (show live container status) — partially complete
+- 🔲 NVDEC / D3D11VA hardware decode path verification in libmpv transport — not yet verified on real hardware
+- 🔲 WSL-hosted Python inference path tested and documented — designed but not yet validated
+- ⏳ Runtime routing diagnostics — surface in UI when a selected runtime is degraded — diagnostics layer implemented, UI integration in progress
+- ✅ `HardwareSnapshot` implemented and available in diagnostics
+- ✅ UI elegance cleanup and controls refinement — section headers clarified, contrast improved, transport controls unified
+- 🔲 Benchmark suite in `benchmarks/` for regression tracking — basic structure present, comprehensive suite not yet built
+
+Completed work:
+- Word-level timestamps in transcription output
+- Speaker-boundary splitting in diarization
+- Per-speaker voice assignment with fallback routing
+- Voice cloning support for Qwen3-TTS and XTTS v2
 
 Gate:
-- Runtime routing is truthful and visible in the UI
-- Diagnostics are useful, not just logged
-- Optimized paths pass smoke tests on real hardware (RTX GPU path for Whisper confirmed)
-- App never claims a target is ready unless it has been actually verified
+- Runtime routing is truthful and visible in the UI (partial — diagnostics exist, UI integration in progress)
+- Diagnostics are useful, not just logged (✅)
+- Optimized paths pass smoke tests on real hardware (✅ RTX; Blackwell pending)
+- App never claims a target is ready unless it has been actually verified (✅)
 
 ---
 
@@ -254,12 +265,14 @@ Gate:
 Package the app, harden startup/recovery, improve crash logging and support artifacts, validate on clean machines.
 
 Scope:
-- Packaged Windows build (NUKE publish pipeline)
-- Clean-machine validation: core workflow completes without dev assumptions
-- Crash/support log artifacts usable by a non-developer
-- Startup and shutdown dependable across unexpected exits
-- SRT export, session restore, and API key setup verified on packaged build
-- README and CONTRIBUTING accurate for the packaged workflow
+- ✅ Portable and installer builds available from releases
+- ✅ SRT export, session restore, and API key setup working on packaged build
+- ✅ README updated with current architecture and features
+- 🔲 Packaged Windows build — further hardening and clean-machine validation
+- 🔲 Clean-machine validation: core workflow completes without dev assumptions
+- 🔲 Crash/support log artifacts usable by a non-developer
+- 🔲 Startup and shutdown hardening across unexpected exits
+- 🔲 CONTRIBUTING guide updated for packaged workflow
 
 Gate:
 - Packaged builds complete the core workflow on a clean machine
