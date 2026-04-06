@@ -94,6 +94,7 @@ test.log
 dist/
 publish/
 
+
 # Generated benchmark outputs
 benchmarks/
 
@@ -101,6 +102,11 @@ benchmarks/
 .kilo/node_modules/
 .ruff_cache/
 .codex/config.toml
+.kilo/
+.windsurf/
+.Benchmarks/
+
+
 
 # External binaries
 ffmpeg.exe
