@@ -44,7 +44,8 @@
       "Bash(powershell -Command \"Stop-Process -Id 31268 -Force; Write-Host ''done''\")",
       "Skill(commit-commands:commit-push-pr)",
       "Skill(commit-commands:commit-push-pr:*)",
-      "Bash(assign speaker IDs.\" so the empty speaker dropdown is not silent.:*)"
+      "Bash(assign speaker IDs.\" so the empty speaker dropdown is not silent.:*)",
+      "Bash(cat C:/Users/ander/AppData/Local/BabelPlayer/runtime/managed-gpu/.venv/Lib/site-packages/ctranslate2-*.dist-info/METADATA)"
     ]
   }
 }
