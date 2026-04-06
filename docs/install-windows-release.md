@@ -27,14 +27,13 @@ Compare against the matching `.sha256` file.
 ## System Requirements
 
 - Windows 10 or 11, 64-bit
-- Python 3.10 or newer on `PATH` (required for AI providers)
 - GPU optional but recommended for transcription/TTS
 
 ---
 
 ## AI Provider Prerequisites
 
-The app manages a local Python venv automatically, but you are responsible for any model downloads the first time you use a provider.
+The app manages Python and a local venv automatically (no separate installation needed). You are only responsible for any model downloads the first time you use a provider.
 
 | Provider | What gets downloaded on first use |
 |---|---|
@@ -71,5 +70,4 @@ The app manages a local Python venv automatically, but you are responsible for a
 ## Known Limitations
 
 - Windows only (Linux/macOS not yet supported)
-- Python must be installed separately — it is not bundled
 - Export pipeline not yet available
