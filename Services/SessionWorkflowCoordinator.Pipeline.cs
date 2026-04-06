@@ -416,7 +416,8 @@ public sealed partial class SessionWorkflowCoordinator
                                 resolvedVoice,
                                 seg.SpeakerId,
                                 referenceAudioPath,
-                                Language: ttsLanguage),
+                                Language: ttsLanguage,
+                                SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
                             ct);
 
                         if (segResult.Success && File.Exists(segmentAudioPath))

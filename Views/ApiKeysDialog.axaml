@@ -120,10 +120,14 @@
                 BorderBrush="#252530" BorderThickness="0,1,0,0"
                 Background="#12121A">
             <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0"
-                           Text="Keys are encrypted to your Windows user account and never leave this machine."
-                           FontSize="10" Foreground="#3A3A50"
-                           VerticalAlignment="Center" TextWrapping="Wrap" />
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Storage Security:"
+                               FontSize="10" Foreground="#3A3A50"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding StorageProviderName}"
+                               FontSize="11" Foreground="#5A5A75"
+                               TextWrapping="Wrap" />
+                </StackPanel>
                 <Button Grid.Column="1"
                         Click="OnCloseClick"
                         Content="Close"

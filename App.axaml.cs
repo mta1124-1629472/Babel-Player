@@ -61,7 +61,12 @@ public partial class App : Application
             var recentStore = new RecentSessionsStore(
                 Path.Combine(appDataRoot, "state", "recent-sessions.json"), appLog);
 
-            _apiKeyStore = new ApiKeyStore(Path.Combine(appDataRoot, "state", "api-keys.json"));
+            var legacyKeyPath = Path.Combine(appDataRoot, "state", "api-keys.json");
+            ISecureCredentialProvider keyProvider = OperatingSystem.IsWindows()
+                ? new WindowsCredentialProvider()
+                : new FileSystemCredentialProvider(legacyKeyPath);
+
+            _apiKeyStore = new ApiKeyStore(keyProvider, legacyKeyPath);
             var modelDownloader = new ModelDownloader(appLog);
             var transportManager = new MediaTransportManager(
                 videoOptions: new VideoPlaybackOptions(

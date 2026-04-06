@@ -243,12 +243,19 @@ public sealed partial class SessionWorkflowCoordinator
         if (CurrentSession.MultiSpeakerEnabled)
         {
             var speakerId = segment.SpeakerId;
-            if (string.IsNullOrWhiteSpace(speakerId))
-                return null;
+            if (!string.IsNullOrWhiteSpace(speakerId) &&
+                CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var speakerPath) &&
+                !string.IsNullOrWhiteSpace(speakerPath))
+                return speakerPath;
 
-            return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var speakerPath) &&
-                   !string.IsNullOrWhiteSpace(speakerPath)
-                ? speakerPath
+            // No per-speaker reference — fall back to the provider's default key so the
+            // provider's auto-extract fallback (or a manually placed default) can still fire.
+            var fallbackKey = string.Equals(CurrentSettings.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal)
+                ? QwenReferenceKeys.SingleSpeakerDefault
+                : XttsReferenceKeys.SingleSpeakerDefault;
+            return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(fallbackKey, out var fallbackPath) &&
+                   !string.IsNullOrWhiteSpace(fallbackPath)
+                ? fallbackPath
                 : null;
         }
 

@@ -1,24 +1,24 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
-using System.Text.Json;
 using Babel.Player.Models;
 
 namespace Babel.Player.Services.Credentials;
 
 /// <summary>
-/// Persists API keys for external providers to an encrypted local file.
-/// On Windows, values are protected with DPAPI (current-user scope).
-/// On other platforms, values are stored as base64 (obfuscated only — not cryptographically secure).
+/// Orchestrates API key storage via an <see cref="ISecureCredentialProvider"/>.
+/// Handles automatic migration from legacy file-based storage to hardware-backed stores.
 /// Keys are never written to logs.
 /// </summary>
 public sealed class ApiKeyStore
 {
-    private const string DefaultFileName = "api-keys.json";
-    private readonly string _filePath;
+    private readonly ISecureCredentialProvider _provider;
+
+    /// <summary>Returns the name of the underlying storage provider.</summary>
+    public string StorageProviderName => _provider.StorageProviderName;
 
     /// <summary>Canonical provider IDs managed by this store (in display order).</summary>
+
     public static IReadOnlyList<string> KnownProviders { get; } =
         [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl, CredentialKeys.HuggingFace];
 
@@ -33,132 +33,62 @@ public sealed class ApiKeyStore
         _                           => providerKey,
     };
 
-    public ApiKeyStore(string filePath)
+    /// <summary>
+    /// Initializes the store with a provider and optionally migrates from a legacy path.
+    /// </summary>
+    public ApiKeyStore(ISecureCredentialProvider provider, string? legacyFilePath = null)
     {
-        _filePath = ResolveFilePath(filePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
+        _provider = provider ?? throw new ArgumentNullException(nameof(provider));
+
+        if (!string.IsNullOrEmpty(legacyFilePath))
+        {
+            PerformMigrationIfRequired(legacyFilePath);
+        }
     }
 
-    private static string ResolveFilePath(string path)
+    private void PerformMigrationIfRequired(string legacyPath)
     {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("API key store path cannot be empty.", nameof(path));
+        if (!File.Exists(legacyPath)) return;
 
-        var normalized = path.Trim();
+        try
+        {
+            var legacyProvider = new FileSystemCredentialProvider(legacyPath);
+            var migratedCount = 0;
 
-        // Backward-compatible safety: if caller supplies a directory path,
-        // persist to <dir>/state/api-keys.json.
-        if (Directory.Exists(normalized) || !Path.HasExtension(normalized))
-            return Path.Combine(normalized, "state", DefaultFileName);
+            foreach (var providerId in KnownProviders)
+            {
+                var key = legacyProvider.GetKey(providerId);
+                if (!string.IsNullOrEmpty(key))
+                {
+                    // Only migrate if the new provider doesn't already have a key
+                    if (!_provider.HasKey(providerId))
+                    {
+                        _provider.SetKey(providerId, key);
+                        migratedCount++;
+                    }
+                }
+            }
 
-        return normalized;
+            if (migratedCount > 0)
+            {
+                // Logic for "shredding" or just deleting the old file.
+                // For now, simple delete is safer than leaving encrypted keys in a known location.
+                File.Delete(legacyPath);
+            }
+        }
+        catch
+        {
+            // Migration is best-effort. If it fails, we don't crash.
+        }
     }
 
     // ── Public API ───────────────────────────────────────────────────────
 
-    public bool HasKey(string provider)
-    {
-        var keys = LoadRaw();
-        return keys.TryGetValue(provider, out var val) && !string.IsNullOrEmpty(val);
-    }
+    public bool HasKey(string provider) => _provider.HasKey(provider);
 
-    /// <summary>
-    /// Saves an API key. The value is encrypted before writing.
-    /// Passing an empty string removes the key (same as ClearKey).
-    /// </summary>
-    public void SetKey(string provider, string key)
-    {
-        if (string.IsNullOrEmpty(key))
-        {
-            ClearKey(provider);
-            return;
-        }
-        var keys = LoadRaw();
-        keys[provider] = Protect(key);
-        SaveRaw(keys);
-    }
+    public void SetKey(string provider, string key) => _provider.SetKey(provider, key);
 
-    /// <summary>
-    /// Returns the plaintext key, or an empty string if not set or decryption fails.
-    /// Callers should avoid holding the return value longer than necessary.
-    /// </summary>
-    public string GetKey(string provider)
-    {
-        var keys = LoadRaw();
-        if (!keys.TryGetValue(provider, out var encrypted) || string.IsNullOrEmpty(encrypted))
-            return "";
-        return Unprotect(encrypted);
-    }
+    public string GetKey(string provider) => _provider.GetKey(provider);
 
-    public void ClearKey(string provider)
-    {
-        var keys = LoadRaw();
-        if (keys.Remove(provider))
-            SaveRaw(keys);
-    }
-
-    // ── Storage helpers ─────────────────────────────────────────────
-
-    private Dictionary<string, string> LoadRaw()
-    {
-        if (!File.Exists(_filePath))
-            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            var json = File.ReadAllText(_filePath, Encoding.UTF8);
-            return JsonSerializer.Deserialize<Dictionary<string, string>>(json)
-                   ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        }
-    }
-
-    private void SaveRaw(Dictionary<string, string> keys)
-    {
-        try
-        {
-            var json = JsonSerializer.Serialize(keys, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_filePath, json, Encoding.UTF8);
-        }
-        catch
-        {
-            // Best-effort — don't crash the app if save fails
-        }
-    }
-
-    // ── Encryption helpers ─────────────────────────────────────────────
-
-    private static string Protect(string plaintext)
-    {
-        var data = Encoding.UTF8.GetBytes(plaintext);
-        if (OperatingSystem.IsWindows())
-        {
-            var encrypted = System.Security.Cryptography.ProtectedData.Protect(
-                data, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-            return Convert.ToBase64String(encrypted);
-        }
-        // Non-Windows: base64 obfuscation only (not cryptographically secure)
-        return Convert.ToBase64String(data);
-    }
-
-    private static string Unprotect(string stored)
-    {
-        try
-        {
-            var bytes = Convert.FromBase64String(stored);
-            if (OperatingSystem.IsWindows())
-            {
-                var decrypted = System.Security.Cryptography.ProtectedData.Unprotect(
-                    bytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-                return Encoding.UTF8.GetString(decrypted);
-            }
-            return Encoding.UTF8.GetString(bytes);
-        }
-        catch
-        {
-            return "";
-        }
-    }
+    public void ClearKey(string provider) => _provider.ClearKey(provider);
 }

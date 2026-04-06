@@ -8,27 +8,23 @@ using CommunityToolkit.Mvvm.Input;
 namespace Babel.Player.ViewModels;
 
 /// <summary>ViewModel for the API Keys dialog, containing one entry per known provider.</summary>
-public sealed class ApiKeysViewModel : ViewModelBase
+public sealed class ApiKeysViewModel(ApiKeyStore store, ApiKeyValidationService? validationService = null) : ViewModelBase
 {
-    public IReadOnlyList<ApiKeyEntryViewModel> Entries { get; }
+    public IReadOnlyList<ApiKeyEntryViewModel> Entries { get; } = [.. ApiKeyStore.KnownProviders
+            .Select(key => new ApiKeyEntryViewModel(key, store, validationService))];
 
-    public ApiKeysViewModel(ApiKeyStore store, ApiKeyValidationService? validationService = null)
-    {
-        Entries = ApiKeyStore.KnownProviders
-            .Select(key => new ApiKeyEntryViewModel(key, store, validationService))
-            .ToList();
-    }
+    public string StorageProviderName { get; } = store.StorageProviderName;
 }
 
-/// <summary>ViewModel for a single provider row in the API Keys dialog.</summary>
-public sealed partial class ApiKeyEntryViewModel : ViewModelBase
-{
-    private readonly ApiKeyStore _store;
-    private readonly ApiKeyValidationService? _validationService;
-    private readonly string _validationAvailabilityText;
 
-    public string ProviderKey         { get; }
-    public string ProviderDisplayName { get; }
+/// <summary>ViewModel for a single provider row in the API Keys dialog.</summary>
+public sealed partial class ApiKeyEntryViewModel(string providerKey, ApiKeyStore store, ApiKeyValidationService? validationService = null) : ViewModelBase
+{
+    private readonly string _validationAvailabilityText = validationService?.GetAvailabilityMessage(providerKey) ?? string.Empty;
+
+    public string ProviderKey { get; } = providerKey;
+    public string ProviderDisplayName { get; } = ApiKeyStore.GetDisplayName(providerKey);
+
 
     [ObservableProperty]
     private string _keyValue = "";
@@ -43,7 +39,8 @@ public sealed partial class ApiKeyEntryViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(StatusDotColor))]
     [NotifyPropertyChangedFor(nameof(StatusTextColor))]
     [NotifyPropertyChangedFor(nameof(PlaceholderText))]
-    private bool _isKeySet;
+    private bool _isKeySet = store.HasKey(providerKey);
+
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ValidateButtonText))]
@@ -82,21 +79,13 @@ public sealed partial class ApiKeyEntryViewModel : ViewModelBase
         ? (IsValidationSuccess ? "#22C55E" : "#F59E0B")
         : "#686878";
 
-    public ApiKeyEntryViewModel(string providerKey, ApiKeyStore store, ApiKeyValidationService? validationService = null)
-    {
-        _store = store;
-        _validationService = validationService;
-        ProviderKey = providerKey;
-        ProviderDisplayName = ApiKeyStore.GetDisplayName(providerKey);
-        _isKeySet = store.HasKey(providerKey);
-        _validationAvailabilityText = validationService?.GetAvailabilityMessage(providerKey) ?? string.Empty;
-    }
+
 
     [RelayCommand]
     private void SaveKey()
     {
         if (string.IsNullOrWhiteSpace(KeyValue)) return;
-        _store.SetKey(ProviderKey, KeyValue.Trim());
+        store.SetKey(ProviderKey, KeyValue.Trim());
         KeyValue  = "";      // clear field — don't keep plaintext in memory
         IsKeySet  = true;
         IsRevealed = false;
@@ -107,7 +96,7 @@ public sealed partial class ApiKeyEntryViewModel : ViewModelBase
     [RelayCommand]
     private void ClearKey()
     {
-        _store.ClearKey(ProviderKey);
+        store.ClearKey(ProviderKey);
         KeyValue  = "";
         IsKeySet  = false;
         IsRevealed = false;
@@ -115,13 +104,14 @@ public sealed partial class ApiKeyEntryViewModel : ViewModelBase
         IsValidationSuccess = false;
     }
 
+
     [RelayCommand]
     private void ToggleReveal() => IsRevealed = !IsRevealed;
 
     [RelayCommand]
     private async System.Threading.Tasks.Task ValidateKeyAsync()
     {
-        if (_validationService is null)
+        if (validationService is null)
         {
             ValidationResultText = "Live validation service unavailable.";
             IsValidationSuccess = false;
@@ -130,12 +120,12 @@ public sealed partial class ApiKeyEntryViewModel : ViewModelBase
 
         var candidateKey = !string.IsNullOrWhiteSpace(KeyValue)
             ? KeyValue.Trim()
-            : _store.GetKey(ProviderKey);
+            : store.GetKey(ProviderKey);
 
         IsValidating = true;
         try
         {
-            var result = await _validationService.ValidateAsync(ProviderKey, candidateKey);
+            var result = await validationService.ValidateAsync(ProviderKey, candidateKey);
             ValidationResultText = result.Message;
             IsValidationSuccess = result.IsValid;
         }
@@ -144,4 +134,5 @@ public sealed partial class ApiKeyEntryViewModel : ViewModelBase
             IsValidating = false;
         }
     }
+
 }
