@@ -774,4 +774,38 @@ public sealed class SegmentInspectionTests
         Assert.Equal(ProviderNames.EdgeTts, playback.Coordinator.CurrentSettings.TtsProvider);
         Assert.Equal("en-US-AriaNeural", playback.Coordinator.CurrentSettings.TtsVoice);
     }
+
+    // Regression guard: RefreshSegmentsAsync uses _isUpdatingActiveSegment to prevent
+    // Avalonia's TwoWay ListBox binding from re-selecting a segment (and triggering
+    // SeekAndPlayAsync) when the Segments collection is replaced.
+    [Fact]
+    public async Task RefreshSegments_WhileSegmentIsSelected_DoesNotTriggerSourcePlayback()
+    {
+        var (playback, _, sourcePlayer) = CreatePlaybackVmWithFakePlayers();
+
+        // Pre-select a segment while IsSourceMediaLoaded is false so OnSelectedSegmentChanged
+        // exits early without calling SeekAndPlayAsync.
+        var seg = new WorkflowSegmentState("segment_2.0", 2.0, 4.0, "test", false, null, false);
+        playback.SelectedSegment = seg;
+
+        // Mark media as loaded — from this point any non-guarded SelectedSegment change
+        // with a non-null value would call SeekAndPlayAsync on the source player.
+        playback.IsSourceMediaLoaded = true;
+
+        // Baseline: nothing is playing yet.
+        Assert.False(sourcePlayer.IsPlaying);
+        Assert.Equal(0, sourcePlayer.LastSeekPosition);
+
+        // Trigger a segment refresh. Without the _isUpdatingActiveSegment guard the Avalonia
+        // TwoWay binding would re-select the matching segment from the new collection, calling
+        // SeekAndPlayAsync. The guard must prevent any selection side-effect from causing
+        // source playback.
+        await ((CommunityToolkit.Mvvm.Input.IAsyncRelayCommand)playback.RefreshSegmentsCommand)
+            .ExecuteAsync(null);
+
+        Assert.False(sourcePlayer.IsPlaying);
+        Assert.Equal(0, sourcePlayer.LastSeekPosition);
+        // SelectedSegment is cleared by the refresh (no segments in coordinator without a transcript)
+        Assert.Null(playback.SelectedSegment);
+    }
 }

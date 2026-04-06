@@ -737,11 +737,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         if (_isUpdatingPositionFromTimer) return;
         _coordinator.SourceMediaPlayer?.Seek((long)value);
         if (IsDubModeOn)
-        {
-            RestoreDucking();
-            _coordinator.StopTtsPlayback();
-            _lastDubbedSegment = null;
-        }
+            ApplyDubForSegment(null);
     }
 
     partial void OnSelectedSegmentChanged(WorkflowSegmentState? value)
@@ -886,16 +882,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
         // Immediately sync dub mode to the new segment without waiting for the next timer tick
         if (IsDubModeOn)
-        {
-            RestoreDucking();
-            _coordinator.StopTtsPlayback();
-            _lastDubbedSegment = segment;
-            if (segment.HasTtsAudio)
-            {
-                ApplyDucking();
-                _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId);
-            }
-        }
+            ApplyDubForSegment(segment);
     }
 
     partial void OnSourceVolumeChanged(double value)
@@ -1420,10 +1407,14 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     {
         if (!value)
         {
-            RestoreDucking();
-            _coordinator.StopTtsPlayback();
-            _lastDubbedSegment = null;
+            ApplyDubForSegment(null);
         }
+        else if (!IsSourcePaused)
+        {
+            // Video is currently playing — seek to segment start and start TTS immediately.
+            SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
+        }
+        // If paused: no auto-play; the Play button applies the dub-aware path on next press.
     }
 
     partial void OnIsFullscreenChanged(bool value)
@@ -1603,19 +1594,37 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         return candidate >= 0 ? arr[candidate] : null;
     }
 
+    // Core dub-sync helper. Restores ducking, stops any in-flight TTS, updates
+    // _lastDubbedSegment, and — when seg is non-null and seekVideoToSegmentStart is true —
+    // seeks the video to seg's start. When seg has audio, applies ducking and starts TTS.
+    // Pass null for seg to stop and clear only (on pause, manual scrub, or dub-mode-off).
+    private void ApplyDubForSegment(WorkflowSegmentState? seg, bool seekVideoToSegmentStart = false)
+    {
+        RestoreDucking();
+        _coordinator.StopTtsPlayback();
+        _lastDubbedSegment = seg;
+        if (seg == null) return;
+        if (seekVideoToSegmentStart)
+            _coordinator.SourceMediaPlayer?.Seek((long)(seg.StartSeconds * 1000));
+        if (seg.HasTtsAudio)
+        {
+            ApplyDucking();
+            _ = _coordinator.PlayTtsForSegmentAsync(seg.SegmentId);
+        }
+    }
+
     private void UpdateDubMode()
     {
         var currentSeg = FindSegmentAt(SourcePositionMs / 1000.0);
         if (currentSeg?.SegmentId == _lastDubbedSegment?.SegmentId) return;
-        _lastDubbedSegment = currentSeg;
-        RestoreDucking();
-        _coordinator.StopTtsPlayback();
-        if (currentSeg?.HasTtsAudio == true)
-        {
-            ApplyDucking();
-            _ = _coordinator.PlayTtsForSegmentAsync(currentSeg.SegmentId);
-        }
+        ApplyDubForSegment(currentSeg);
     }
+
+    // Finds the segment at the current playback position and delegates to ApplyDubForSegment.
+    // Pass seekVideoToSegmentStart: true when resuming play (seek to segment start for clean A/V
+    // alignment); false when the video position is already correct (e.g., timer-driven update).
+    private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart)
+        => ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -1694,6 +1703,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         {
             try
             {
+                if (IsDubModeOn)
+                    SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
+
                 await Task.Run(() => player.Play());
                 IsSourcePaused = false;
                 ClearStatusErrorDetail();
@@ -1708,6 +1720,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         {
             player.Pause();
             IsSourcePaused = true;
+            if (IsDubModeOn)
+                ApplyDubForSegment(null);
         }
     }
 
@@ -1829,13 +1843,27 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         try
         {
             var list = await _coordinator.GetSegmentWorkflowListAsync();
-            Segments = new ObservableCollection<WorkflowSegmentState>(list);
-            HasSegments = Segments.Count > 0;
-            StatusText = HasSegments
-                ? $"{Segments.Count} segments loaded."
-                : "No segments available. Run the workflow first.";
-            ClearStatusErrorDetail();
-            if (IsSubtitleModeOn) ApplySubtitleState();
+            // Guard: replacing the Segments collection can cause Avalonia's ListBox TwoWay binding
+            // to update SelectedSegment (e.g., by re-confirming a structurally-equal item in the
+            // new collection). Without this guard, OnSelectedSegmentChanged would call
+            // SeekAndPlayAsync unexpectedly. Nulling SelectedSegment first ensures the ListBox
+            // has no prior selection to re-confirm when ItemsSource changes.
+            _isUpdatingActiveSegment = true;
+            try
+            {
+                SelectedSegment = null;
+                Segments = new ObservableCollection<WorkflowSegmentState>(list);
+                HasSegments = Segments.Count > 0;
+                StatusText = HasSegments
+                    ? $"{Segments.Count} segments loaded."
+                    : "No segments available. Run the workflow first.";
+                ClearStatusErrorDetail();
+                if (IsSubtitleModeOn) ApplySubtitleState();
+            }
+            finally
+            {
+                _isUpdatingActiveSegment = false;
+            }
         }
         catch (Exception ex)
         {
