@@ -737,7 +737,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         if (_isUpdatingPositionFromTimer) return;
         _coordinator.SourceMediaPlayer?.Seek((long)value);
         if (IsDubModeOn)
-            ApplyDubForSegment(null);
+            SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
     }
 
     partial void OnSelectedSegmentChanged(WorkflowSegmentState? value)
