@@ -68,10 +68,14 @@ public abstract class PythonSubprocessServiceBase
         CancellationToken cancellationToken = default)
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
-        await File.WriteAllTextAsync(scriptPath, scriptContent, cancellationToken);
+
+        // Check for cancellation before doing any work
+        cancellationToken.ThrowIfCancellationRequested();
 
         try
         {
+            await File.WriteAllTextAsync(scriptPath, scriptContent, cancellationToken);
+
             var psi = new ProcessStartInfo
             {
                 FileName              = PythonPath,
@@ -94,8 +98,59 @@ public abstract class PythonSubprocessServiceBase
             var stdinTask = WriteStandardInputAsync(proc, standardInput, cancellationToken);
             var stdoutTask = proc.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
-            await Task.WhenAll(stdoutTask, stderrTask, stdinTask);
-            await proc.WaitForExitAsync(cancellationToken);
+            
+            try
+            {
+                await Task.WhenAll(stdoutTask, stderrTask, stdinTask);
+                await proc.WaitForExitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancellation requested - kill the process to prevent zombie
+                try 
+                { 
+                    proc.Kill(entireProcessTree: true); 
+                    
+                    // Give the process multiple opportunities to terminate
+                    var terminated = false;
+                    for (int attempt = 0; attempt < 3 && !terminated; attempt++)
+                    {
+                        try
+                        {
+                            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                            await proc.WaitForExitAsync(cts.Token);
+                            terminated = true;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // Process didn't terminate within timeout, try again
+                            if (attempt < 2)
+                            {
+                                proc.Kill(entireProcessTree: true); // Try killing again
+                            }
+                        }
+                    }
+                    
+                    if (!terminated)
+                    {
+                        // Last resort - try to force terminate without waiting
+                        try
+                        {
+                            proc.Kill(entireProcessTree: true);
+                        }
+                        catch
+                        {
+                            // Process is likely already dead or inaccessible
+                        }
+                    }
+                }
+                catch 
+                { 
+                    // Best effort - process might already be dead or inaccessible
+                }
+                throw;
+            }
+            
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
 
@@ -116,9 +171,27 @@ public abstract class PythonSubprocessServiceBase
         if (standardInput is null)
             return;
 
-        await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken);
-        await process.StandardInput.FlushAsync();
-        process.StandardInput.Close();
+        try
+        {
+            await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken);
+            await process.StandardInput.FlushAsync();
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            // Process likely died or closed stdin - this is expected in some scenarios
+            // Don't rethrow - let the main process handling logic detect the failure
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation requested - let this propagate
+            throw;
+        }
+        catch (ObjectDisposedException)
+        {
+            // Process was disposed - expected during cancellation
+            // Don't rethrow
+        }
     }
 
     /// <summary>

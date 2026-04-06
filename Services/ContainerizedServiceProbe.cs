@@ -20,9 +20,11 @@ public sealed record ContainerizedProbeResult(
     string? ErrorDetail = null,
     bool CudaAvailable = false,
     string? CudaVersion = null,
-    ContainerCapabilitiesSnapshot? Capabilities = null);
+    ContainerCapabilitiesSnapshot? Capabilities = null,
+    TimeSpan? Duration = null,
+    bool WasCacheHit = false);
 
-public sealed class ContainerizedServiceProbe
+public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
 {
     private static readonly TimeSpan PassiveProbeTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan AvailableTtl = TimeSpan.FromSeconds(10);
@@ -33,6 +35,7 @@ public sealed class ContainerizedServiceProbe
         new(StringComparer.OrdinalIgnoreCase);
     private readonly AppLog _log;
     private readonly Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>> _probeFunc;
+    private readonly ContainerizedProbeMetrics _metrics;
 
     // Configurable for testing: controls the pause between successive probe retries
     // inside WaitForProbeAsync. Defaults to 250 ms in production.
@@ -41,7 +44,8 @@ public sealed class ContainerizedServiceProbe
     public ContainerizedServiceProbe(
         AppLog log,
         Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>>? probeFunc = null,
-        TimeSpan? retryDelay = null)
+        TimeSpan? retryDelay = null,
+        ContainerizedProbeMetrics? metrics = null)
     {
         if (retryDelay.HasValue && retryDelay.Value <= TimeSpan.Zero)
         {
@@ -50,6 +54,7 @@ public sealed class ContainerizedServiceProbe
         _log = log;
         _probeFunc = probeFunc ?? ContainerizedInferenceClient.CheckHealthAsync;
         _waitRetryDelay = retryDelay ?? DefaultWaitRetryDelay;
+        _metrics = metrics ?? new ContainerizedProbeMetrics();
     }
 
     public ContainerizedProbeResult GetCurrentOrStartBackgroundProbe(
@@ -67,17 +72,21 @@ public sealed class ContainerizedServiceProbe
  
         var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
         var entry = _entries.GetOrAdd(normalizedUrl, _ => new ProbeEntry());
-        var nowUtc = DateTimeOffset.UtcNow;
  
         lock (entry.Gate)
         {
+            var nowUtc = DateTimeOffset.UtcNow;
+            
+            // Check cache first to prevent race condition with in-flight task completion
             if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
             {
                 _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}");
-                return entry.CachedResult;
+                ReportCacheAccess(normalizedUrl, true);
+                // Return cached result with WasCacheHit flag set
+                return entry.CachedResult with { WasCacheHit = true };
             }
- 
-            if (entry.InFlightTask is not null)
+
+            if (entry.InFlightTask is not null && !forceRefresh)
             {
                 // Double-check cache: the task may have completed between our first check and now
                 if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
@@ -88,10 +97,23 @@ public sealed class ContainerizedServiceProbe
                 _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
                 return Checking(normalizedUrl);
             }
- 
-            entry.InFlightTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout);
+
+            // If forceRefresh and there's an in-flight task, clear cache before starting new one.
+            // We do NOT cancel the previous in-flight task here to allow rapid force refreshes
+            // without killing newly started tasks that haven't hit the scheduler yet.
+            if (forceRefresh && entry.InFlightTask is not null)
+            {
+                _log.Info($"Container probe force refresh: url={normalizedUrl}, clearing cache for new probe");
+                entry.CachedResult = null;
+            }
+
+
+            entry.Cts = new CancellationTokenSource();
+            entry.InFlightTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout, entry.Cts.Token);
             _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background, forceRefresh={forceRefresh}");
-            ObserveCompletion(normalizedUrl, entry, entry.InFlightTask);
+            
+            // Fire-and-forget with proper exception handling to prevent resource leaks
+            ObserveCompletionWithFaultHandling(normalizedUrl, entry, entry.InFlightTask);
             return Checking(normalizedUrl);
         }
     }
@@ -152,7 +174,23 @@ public sealed class ContainerizedServiceProbe
         return Checking(normalizedUrl);
     }
 
-    private async void ObserveCompletion(
+    private async void ObserveCompletionWithFaultHandling(
+        string normalizedUrl,
+        ProbeEntry entry,
+        Task<ContainerizedProbeResult> task)
+    {
+        try
+        {
+            await ObserveCompletionAsync(normalizedUrl, entry, task).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // This prevents unobserved task exceptions and ensures logging
+            _log.Error($"Container probe observer fault: url={normalizedUrl}, error={ex.Message}", ex);
+        }
+    }
+
+    private async Task ObserveCompletionAsync(
         string normalizedUrl,
         ProbeEntry entry,
         Task<ContainerizedProbeResult> task)
@@ -161,6 +199,21 @@ public sealed class ContainerizedServiceProbe
         try
         {
             result = await task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _log.Info($"Container probe cancelled: url={normalizedUrl}");
+            ReportProbeResult(normalizedUrl, ProbeResult.Cancellation, duration: null, wasCacheHit: false, errorDetail: null);
+            lock (entry.Gate)
+            {
+                if (ReferenceEquals(entry.InFlightTask, task))
+                {
+                    entry.InFlightTask = null;
+                    entry.Cts?.Dispose();
+                    entry.Cts = null;
+                }
+            }
+            return;
         }
         catch (Exception ex)
         {
@@ -179,31 +232,53 @@ public sealed class ContainerizedServiceProbe
             _ => TimeSpan.Zero,
         };
 
-        lock (entry.Gate)
+        try
         {
-            if (ReferenceEquals(entry.InFlightTask, task))
-                entry.InFlightTask = null;
-
-            if (ttl > TimeSpan.Zero)
+            lock (entry.Gate)
             {
-                entry.CachedResult = result;
-                entry.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
-            }
-        }
+                if (ReferenceEquals(entry.InFlightTask, task))
+                {
+                    entry.InFlightTask = null;
+                    entry.Cts?.Dispose();
+                    entry.Cts = null;
 
-        _log.Info(
-            $"Container probe complete: url={normalizedUrl}, state={result.State}, " +
-            $"detail={result.ErrorDetail ?? "<none>"}");
+                    if (ttl > TimeSpan.Zero)
+                    {
+                        entry.CachedResult = result;
+                        entry.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+                    }
+                }
+            }
+
+            // Report metrics for the completed probe (outside lock)
+            var probeResult = result.State switch
+            {
+                ContainerizedProbeState.Available => ProbeResult.Success,
+                ContainerizedProbeState.Unavailable => ProbeResult.Failure,
+                _ => ProbeResult.Failure
+            };
+            
+            ReportProbeResult(normalizedUrl, probeResult, result.Duration, result.WasCacheHit, result.ErrorDetail);
+
+            _log.Info(
+                $"Container probe complete: url={normalizedUrl}, state={result.State}, " +
+                $"detail={result.ErrorDetail ?? "<none>"}");
+        }
+        catch (Exception ex)
+        {
+            // Catch any exceptions in the logging section to prevent process crash
+            _log.Error($"Container probe observer failed during completion: url={normalizedUrl}, error={ex.Message}", ex);
+        }
     }
 
-    private Task<ContainerizedProbeResult> StartProbeTask(string normalizedUrl, TimeSpan timeout)
+    private Task<ContainerizedProbeResult> StartProbeTask(string normalizedUrl, TimeSpan timeout, CancellationToken cancellationToken)
     {
         return Task.Run(async () =>
         {
             var stopwatch = Stopwatch.StartNew();
             try
             {
-                var health = await _probeFunc(normalizedUrl, timeout, CancellationToken.None);
+                var health = await _probeFunc(normalizedUrl, timeout, cancellationToken);
                 stopwatch.Stop();
 
                 return new ContainerizedProbeResult(
@@ -213,7 +288,14 @@ public sealed class ContainerizedServiceProbe
                     health.ErrorMessage,
                     health.CudaAvailable,
                     health.CudaVersion,
-                    health.Capabilities);
+                    health.Capabilities,
+                    stopwatch.Elapsed,
+                    WasCacheHit: false);
+            }
+            catch (OperationCanceledException)
+            {
+                stopwatch.Stop();
+                throw;
             }
             catch (Exception ex)
             {
@@ -222,21 +304,73 @@ public sealed class ContainerizedServiceProbe
                     normalizedUrl,
                     ContainerizedProbeState.Unavailable,
                     DateTimeOffset.UtcNow,
-                    ex.Message);
+                    ex.Message,
+                    false,
+                    null,
+                    null,
+                    stopwatch.Elapsed,
+                    WasCacheHit: false);
             }
-        });
+        }, cancellationToken);
     }
 
     private static ContainerizedProbeResult Checking(string normalizedUrl) =>
         new(
             normalizedUrl,
             ContainerizedProbeState.Checking,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            WasCacheHit: false);
+
+    // IProbeMetricsReporter implementation
+    public void ReportProbeResult(string serviceUrl, ProbeResult result, TimeSpan? duration = null, bool wasCacheHit = false, string? errorDetail = null)
+    {
+        var metrics = _metrics.GetOrCreateMetrics(serviceUrl);
+        
+        switch (result)
+        {
+            case ProbeResult.Success:
+                metrics.RecordSuccess(duration ?? TimeSpan.Zero, wasCacheHit);
+                break;
+            case ProbeResult.Failure:
+                metrics.RecordFailure(errorDetail, wasCacheHit);
+                break;
+            case ProbeResult.Cancellation:
+                metrics.RecordCancellation();
+                break;
+        }
+    }
+
+    public void ReportCacheAccess(string serviceUrl, bool wasHit)
+    {
+        var metrics = _metrics.GetOrCreateMetrics(serviceUrl);
+        metrics.RecordCacheAccess(wasHit);
+    }
+
+    public ServiceMetrics[] GetAllMetrics()
+    {
+        return _metrics.GetAllMetrics();
+    }
+
+    public ServiceMetrics? GetMetrics(string serviceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(serviceUrl))
+            return null;
+            
+        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
+        var allMetrics = _metrics.GetAllMetrics();
+        foreach (var metric in allMetrics)
+        {
+            if (string.Equals(metric.ServiceUrl, normalizedUrl, StringComparison.OrdinalIgnoreCase))
+                return metric;
+        }
+        return null;
+    }
 
     private sealed class ProbeEntry
     {
         public object Gate { get; } = new();
         public Task<ContainerizedProbeResult>? InFlightTask { get; set; }
+        public CancellationTokenSource? Cts { get; set; }
         public ContainerizedProbeResult? CachedResult { get; set; }
         public DateTimeOffset ExpiresAtUtc { get; set; }
     }
