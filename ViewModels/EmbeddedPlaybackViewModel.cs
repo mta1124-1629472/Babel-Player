@@ -732,13 +732,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         _isUpdatingActiveSegment = false;
     }
 
-    partial void OnSourcePositionMsChanged(double value)
-    {
-        if (_isUpdatingPositionFromTimer) return;
-        _coordinator.SourceMediaPlayer?.Seek((long)value);
-        if (IsDubModeOn)
-            SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
-    }
+partial void OnSourcePositionMsChanged(double value)
+{
+    if (_isUpdatingPositionFromTimer) return;
+    _coordinator.SourceMediaPlayer?.Seek((long)value);
+    if (IsDubModeOn && !IsSourcePaused)
+        SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
+}
 
     partial void OnSelectedSegmentChanged(WorkflowSegmentState? value)
     {
@@ -881,7 +881,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         }
 
         // Immediately sync dub mode to the new segment without waiting for the next timer tick
-        if (IsDubModeOn)
+        // Only apply dub when source is not paused to prevent TTS playing while video is paused
+        if (IsDubModeOn && !IsSourcePaused)
             ApplyDubForSegment(segment);
     }
 
