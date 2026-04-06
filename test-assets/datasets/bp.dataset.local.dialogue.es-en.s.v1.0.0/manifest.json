@@ -1,0 +1,41 @@
+{
+  "dataset_id": "bp.dataset.local.dialogue.es-en.s.v1.0.0",
+  "description": "Short Spanish-English bilingual dialogue clips for local benchmark runs.",
+  "version": "1.0.0",
+  "language": "es",
+  "total_clips": 3,
+  "clips": [
+    {
+      "id": "clip_001",
+      "audio_file": "clip_001.wav",
+      "duration_seconds": 5.2,
+      "sample_rate_hz": 16000,
+      "reference_transcript": "Hola, ¿cómo estás?",
+      "reference_translation_en": "Hello, how are you?",
+      "notes": "Clean studio recording, single speaker."
+    },
+    {
+      "id": "clip_002",
+      "audio_file": "clip_002.wav",
+      "duration_seconds": 8.7,
+      "sample_rate_hz": 16000,
+      "reference_transcript": "El tiempo está muy bueno hoy.",
+      "reference_translation_en": "The weather is very nice today.",
+      "notes": "Light background noise, single speaker."
+    },
+    {
+      "id": "clip_003",
+      "audio_file": "clip_003.wav",
+      "duration_seconds": 12.1,
+      "sample_rate_hz": 16000,
+      "reference_transcript": "Me gustaría una taza de café, por favor.",
+      "reference_translation_en": "I would like a cup of coffee, please.",
+      "notes": "Moderate pace, clear pronunciation."
+    }
+  ],
+  "notes": [
+    "Audio files are placeholder stubs — replace with real recordings before running quality benchmarks.",
+    "WAV files must be 16 kHz mono PCM-16 to match FasterWhisper expected input format.",
+    "Reference transcripts follow verbatim convention: no punctuation normalisation."
+  ]
+}
