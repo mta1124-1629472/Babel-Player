@@ -717,7 +717,7 @@
             </Border>
 
             <!-- Controls bar -->
-            <Border Grid.Row="3" Padding="10,7"
+            <Border Grid.Row="3" Padding="12,9"
                     IsVisible="{Binding Playback.IsControlsVisible}">
                 <Border.Styles>
                     <Style Selector="Button.control-pill">
@@ -726,6 +726,9 @@
                         <Setter Property="BorderBrush" Value="Transparent" />
                         <Setter Property="BorderThickness" Value="1" />
                         <Setter Property="CornerRadius" Value="6" />
+                    </Style>
+                    <Style Selector="Button.control-pill /template/ ContentPresenter">
+                        <Setter Property="Background" Value="Transparent" />
                     </Style>
                     <Style Selector="Button.control-pill:pointerover /template/ ContentPresenter">
                         <Setter Property="Background" Value="#1D1D2A" />
@@ -770,82 +773,81 @@
                                 Background="Transparent" />
                     </StackPanel>
 
-                    <!-- Center: playback buttons -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2"
-                                VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <Button Content="&#x23EE;&#xFE0E;"
-                                Command="{Binding Playback.SkipBackwardCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}"
-                                Padding="8,6" FontSize="16"
-                                Background="Transparent"
-                                ToolTip.Tip="Skip to previous segment" />
-                        <Button Content="&#x23EA;&#xFE0E;"
-                                Command="{Binding Playback.SkipBackwardCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}"
-                                Padding="8,6" FontSize="16"
-                                Background="Transparent" />
-                        <Button Command="{Binding Playback.PlayPauseSourceCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
-                                Width="38" Height="38" Padding="0"
-                                CornerRadius="19" Background="#282838">
-                            <TextBlock Text="{Binding Playback.PlayPauseSourceLabel}"
-                                       FontSize="14"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center" />
-                        </Button>
-                        <Button Content="&#x23E9;&#xFE0E;"
-                                Command="{Binding Playback.SkipForwardCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}"
-                                Padding="8,6" FontSize="16"
-                                Background="Transparent" />
-                        <Button Content="&#x23ED;&#xFE0E;"
-                                Command="{Binding Playback.SkipForwardCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}"
-                                Padding="8,6" FontSize="16"
-                                Background="Transparent"
-                                ToolTip.Tip="Skip to next segment" />
-                    </StackPanel>
+                    <!-- Center: playback buttons in a unified transport capsule -->
+                    <Border Grid.Column="2" Background="#18182A" CornerRadius="12" Padding="4,3"
+                            VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="1">
+                            <Button Classes="control-pill" Content="&#x23EE;&#xFE0E;"
+                                    Command="{Binding Playback.SkipBackwardCommand}"
+                                    IsEnabled="{Binding Playback.HasSegments}"
+                                    Padding="8,6" FontSize="15"
+                                    ToolTip.Tip="Skip to previous segment" />
+                            <Button Classes="control-pill" Content="&#x23EA;&#xFE0E;"
+                                    Command="{Binding Playback.SkipBackwardCommand}"
+                                    IsEnabled="{Binding Playback.HasSegments}"
+                                    Padding="8,6" FontSize="15" />
+                            <Button Command="{Binding Playback.PlayPauseSourceCommand}"
+                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                    Width="42" Height="42" Padding="0" Margin="3,0"
+                                    CornerRadius="21" Background="#30304A">
+                                <Button.Styles>
+                                    <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                        <Setter Property="Background" Value="#3C3C5C" />
+                                    </Style>
+                                    <Style Selector="Button:pressed /template/ ContentPresenter">
+                                        <Setter Property="Background" Value="#252545" />
+                                    </Style>
+                                </Button.Styles>
+                                <TextBlock Text="{Binding Playback.PlayPauseSourceLabel}"
+                                           FontSize="15"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Button>
+                            <Button Classes="control-pill" Content="&#x23E9;&#xFE0E;"
+                                    Command="{Binding Playback.SkipForwardCommand}"
+                                    IsEnabled="{Binding Playback.HasSegments}"
+                                    Padding="8,6" FontSize="15" />
+                            <Button Classes="control-pill" Content="&#x23ED;&#xFE0E;"
+                                    Command="{Binding Playback.SkipForwardCommand}"
+                                    IsEnabled="{Binding Playback.HasSegments}"
+                                    Padding="8,6" FontSize="15"
+                                    ToolTip.Tip="Skip to next segment" />
+                        </StackPanel>
+                    </Border>
 
                     <!-- Right: volume + fullscreen + settings -->
-                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6"
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2"
                                 VerticalAlignment="Center" HorizontalAlignment="Right">
-                        <Button x:Name="MuteButton"
-                                Width="32"
+                        <Button Classes="control-pill" x:Name="MuteButton"
                                 Content="{Binding Playback.VolumeIconLabel}"
                                 Command="{Binding Playback.ToggleMuteCommand}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
-                                Padding="4,5" FontSize="14"
-                                Background="Transparent"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
+                                Padding="6,5" FontSize="14"
                                 ToolTip.Tip="Mute / Unmute" />
                         <Slider x:Name="VolumeSlider"
-                                Width="90"
+                                Width="80"
                                 Orientation="Horizontal"
                                 Minimum="0"
                                 Maximum="1"
                                 Value="{Binding Playback.SourceVolume, Mode=TwoWay}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                 VerticalAlignment="Center"
+                                Margin="2,0,8,0"
                                 ToolTip.Tip="Volume" />
 
-                        <Button Content="&#x25EB;&#xFE0E;"
-                                Classes="control-pill"
+                        <Button Classes="control-pill" Content="&#x25EB;&#xFE0E;"
                                 Command="{Binding Playback.ToggleSegmentPaneCommand}"
                                 Padding="8,6" FontSize="14"
                                 ToolTip.Tip="Toggle side panes" />
 
-                        <Button Content="&#x26F6;"
+                        <Button Classes="control-pill" Content="&#x26F6;"
                                 Command="{Binding Playback.ToggleFullscreenCommand}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
-                                Padding="6,5" FontSize="14"
-                                Background="Transparent" />
+                                Padding="6,5" FontSize="14" />
 
-                        <Button Content="&#x2699;"
+                        <Button Classes="control-pill" Content="&#x2699;"
                                 Click="OnSettingsClick"
                                 Padding="6,5" FontSize="14"
-                                Background="Transparent"
-                                Foreground="#C0C0D0"
                                 ToolTip.Tip="Settings" />
                     </StackPanel>
 
