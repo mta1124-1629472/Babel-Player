@@ -28,4 +28,12 @@ public sealed class TranscriptSegmentArtifact
 
     [JsonPropertyName("speakerId")]
     public string? SpeakerId { get; set; }
+
+    [JsonPropertyName("words")]
+    public List<WordTimestamp>? Words { get; set; }
 }
+
+public sealed record WordTimestamp(
+    [property: JsonPropertyName("text")]  string Text,
+    [property: JsonPropertyName("start")] double Start,
+    [property: JsonPropertyName("end")]   double End);

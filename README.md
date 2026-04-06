@@ -163,7 +163,7 @@ Babel Player bundles `uv.exe` and manages all Python runtimes automatically — 
 | GPU inference | ~5 GB (torch+CUDA, faster-whisper) | First GPU transcription/TTS use |
 | CPU inference | ~800 MB (torch CPU, faster-whisper) | First CPU transcription/TTS use |
 
-Downloads are cached in `%LOCALAPPDATA%\BabelPlayer\runtime\`. A confirmation prompt appears before each large first-time download. Progress is shown live in the status bar during install.
+Downloads are cached in `%LOCALAPPDATA%\BabelPlayer\runtime\`. The CPU runtime bootstraps automatically in the background on first launch; progress is shown live in the status bar during install.
 
 ---
 

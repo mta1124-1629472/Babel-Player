@@ -81,11 +81,13 @@ public partial class App : Application
                     HdrComputePeak: appSettings.VideoHdrComputePeak),
                 log: appLog);
 
+            ManagedVenvHostManager? primaryGpuManager = null;
             try
             {
                 appLog.Info("App startup: initializing session coordinator.");
                 var containerizedProbe = new ContainerizedServiceProbe(appLog);
                 var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+                primaryGpuManager = managedHostManager;
                 var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
                 var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
                 var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
@@ -105,6 +107,7 @@ public partial class App : Application
                 {
                     var containerizedProbe = new ContainerizedServiceProbe(appLog);
                     var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+                    primaryGpuManager = managedHostManager;
                     var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
                     var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
                     var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
@@ -123,16 +126,27 @@ public partial class App : Application
 
             var errorDialogService = new AvaloniaErrorDialogService(appLog);
 
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = new MainWindowViewModel(
-                    _sessionWorkflowCoordinator,
-                    _settingsService,
-                    modelDownloader,
-                    _apiKeyStore,
-                    errorDialogService,
-                    logFilePath: _logFilePath),
-            };
+            var mainVm = new MainWindowViewModel(
+                _sessionWorkflowCoordinator,
+                _settingsService,
+                modelDownloader,
+                _apiKeyStore,
+                errorDialogService,
+                logFilePath: _logFilePath);
+
+            desktop.MainWindow = new MainWindow { DataContext = mainVm };
+
+            // Wire live bootstrap progress into the status bar.
+            void PostStatus(string line) =>
+                Dispatcher.UIThread.Post(() => mainVm.Playback.StatusText = $"Setup: {line}");
+
+            // GPU venv — surface install progress (first-time and rebuilds).
+            if (primaryGpuManager is not null)
+                primaryGpuManager.BootstrapProgressCallback = PostStatus;
+
+            // CPU venv — bootstrap silently on startup; surface progress if an install runs.
+            var cpuManager = new ManagedCpuRuntimeManager(appLog);
+            cpuManager.RequestEnsureInstalled(line => PostStatus(line));
 
             // Run heavy startup probes in background and publish results on UI thread.
             var coordinator = _sessionWorkflowCoordinator;
