@@ -1615,6 +1615,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     private void UpdateDubMode()
     {
+        if (IsSourcePaused) return;
         var currentSeg = FindSegmentAt(SourcePositionMs / 1000.0);
         if (currentSeg?.SegmentId == _lastDubbedSegment?.SegmentId) return;
         ApplyDubForSegment(currentSeg);
