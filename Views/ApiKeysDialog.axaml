@@ -108,7 +108,7 @@
                 <Border Background="#1A1A28" CornerRadius="6"
                         Padding="14,10" BorderBrush="#202030" BorderThickness="1">
                     <TextBlock Text="More providers can be added in future updates."
-                               FontSize="11" Foreground="#383848"
+                               FontSize="11" Foreground="#4A4A62"
                                HorizontalAlignment="Center" />
                 </Border>
 
@@ -122,10 +122,10 @@
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBlock Text="Storage Security:"
-                               FontSize="10" Foreground="#3A3A50"
+                               FontSize="10" Foreground="#545470"
                                FontWeight="SemiBold" />
                     <TextBlock Text="{Binding SecurityStatusDetail}"
-                               FontSize="11" Foreground="#5A5A75"
+                               FontSize="11" Foreground="#686885"
                                TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1"

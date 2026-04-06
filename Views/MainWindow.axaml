@@ -54,7 +54,7 @@
                         <!-- TRANSCRIPTION -->
                         <StackPanel Spacing="10">
                             <TextBlock Text="TRANSCRIPTION" FontSize="10"
-                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+                                       Foreground="#565672" FontWeight="SemiBold" />
 
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Compute" FontSize="12" Foreground="#808090" />
@@ -107,8 +107,10 @@
 
                         <!-- TRANSLATION -->
                         <StackPanel Spacing="10">
-                            <TextBlock Text="TRANSLATION" FontSize="10"
-                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+                            <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="TRANSLATION" FontSize="10"
+                                           Foreground="#565672" FontWeight="SemiBold" />
+                            </Border>
 
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Compute" FontSize="12" Foreground="#808090" />
@@ -161,8 +163,10 @@
 
                         <!-- TTS -->
                         <StackPanel Spacing="10">
-                            <TextBlock Text="TEXT TO SPEECH" FontSize="10"
-                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+                            <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="TEXT TO SPEECH" FontSize="10"
+                                           Foreground="#565672" FontWeight="SemiBold" />
+                            </Border>
 
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Compute" FontSize="12" Foreground="#808090" />
@@ -215,8 +219,10 @@
 
                         <!-- API KEYS -->
                         <StackPanel Spacing="8">
-                            <TextBlock Text="API KEYS" FontSize="10"
-                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+                            <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="API KEYS" FontSize="10"
+                                           Foreground="#565672" FontWeight="SemiBold" />
+                            </Border>
 
                             <TextBlock Text="Configure credentials for the providers selected above."
                                        FontSize="11"
@@ -240,8 +246,10 @@
 
                         <!-- LANGUAGE ROUTING -->
                         <StackPanel Spacing="10">
-                            <TextBlock Text="LANGUAGE ROUTING" FontSize="10"
-                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+                            <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="LANGUAGE ROUTING" FontSize="10"
+                                           Foreground="#565672" FontWeight="SemiBold" />
+                            </Border>
 
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Text="Source Audio" FontSize="12"
@@ -266,8 +274,10 @@
 
                         <!-- DIARIZATION / SPEAKERS -->
                         <StackPanel Spacing="10">
-                            <TextBlock Text="DIARIZATION / SPEAKERS" FontSize="10"
-                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+                            <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="DIARIZATION / SPEAKERS" FontSize="10"
+                                           Foreground="#565672" FontWeight="SemiBold" />
+                            </Border>
 
                             <!-- Multi-speaker toggle -->
                             <CheckBox Content="Enable multi-speaker routing"
@@ -336,13 +346,13 @@
                                           BorderBrush="#2A2A3A" />
 
                                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="8">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Voice" FontSize="11" Foreground="#4A4A60" />
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Voice" FontSize="11" Foreground="#565672" />
                                     <TextBlock Grid.Row="0" Grid.Column="1"
                                                Text="{Binding Playback.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
                                                FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
 
                                     <!-- Ref audio row — only meaningful for voice-cloning providers (XTTS, Qwen) -->
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="#4A4A60"
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="#565672"
                                                IsVisible="{Binding Playback.IsTtsCloningProvider}" />
                                     <TextBlock Grid.Row="1" Grid.Column="1"
                                                Text="{Binding Playback.SelectedSpeakerReferenceAudioPath, TargetNullValue='—'}"
@@ -403,30 +413,32 @@
 
                         <!-- ACTIVE CONFIGURATION -->
                         <StackPanel Spacing="8">
-                            <TextBlock Text="ACTIVE CONFIG" FontSize="10"
-                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+                            <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="ACTIVE CONFIG" FontSize="10"
+                                           Foreground="#565672" FontWeight="SemiBold" />
+                            </Border>
 
                             <Grid ColumnDefinitions="56,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="ASR"
-                                           FontSize="11" Foreground="#4A4A60" />
+                                           FontSize="11" Foreground="#565672" />
                                 <TextBlock Grid.Row="0" Grid.Column="1"
                                            Text="{Binding Playback.ActiveTranscriptionConfigLine}"
                                            FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="CPU"
-                                           FontSize="11" Foreground="#4A4A60" />
+                                           FontSize="11" Foreground="#565672" />
                                 <TextBlock Grid.Row="1" Grid.Column="1"
                                            Text="{Binding Playback.ActiveCpuTuningLine}"
                                            FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="NMT"
-                                           FontSize="11" Foreground="#4A4A60" />
+                                           FontSize="11" Foreground="#565672" />
                                 <TextBlock Grid.Row="2" Grid.Column="1"
                                            Text="{Binding Playback.ActiveTranslationConfigLine}"
                                            FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="TTS"
-                                           FontSize="11" Foreground="#4A4A60" />
+                                           FontSize="11" Foreground="#565672" />
                                 <TextBlock Grid.Row="3" Grid.Column="1"
                                            Text="{Binding Playback.ActiveTtsConfigLine}"
                                            FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
@@ -435,8 +447,10 @@
 
                         <!-- DUB CONFIGURATION -->
                         <StackPanel Spacing="10">
-                            <TextBlock Text="DUB CONFIGURATION" FontSize="10"
-                                       Foreground="#4A4A60" FontWeight="SemiBold" />
+                            <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="DUB CONFIGURATION" FontSize="10"
+                                           Foreground="#565672" FontWeight="SemiBold" />
+                            </Border>
 
                             <StackPanel Spacing="4">
                                 <Grid ColumnDefinitions="*,Auto">
@@ -470,13 +484,13 @@
                             <Border BorderBrush="#252530" BorderThickness="0,1,0,0"
                                     Padding="0,12,0,0">
                                 <TextBlock Text="HARDWARE" FontSize="10"
-                                           Foreground="#4A4A60" FontWeight="SemiBold" />
+                                           Foreground="#565672" FontWeight="SemiBold" />
                             </Border>
 
                             <Grid ColumnDefinitions="32,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                                   RowSpacing="4">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="CPU"
-                                           FontSize="11" Foreground="#4A4A60"
+                                           FontSize="11" Foreground="#565672"
                                            VerticalAlignment="Top" />
                                 <TextBlock Grid.Row="0" Grid.Column="1"
                                            Text="{Binding Playback.HwCpuLine}"
@@ -484,7 +498,7 @@
                                            TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU"
-                                           FontSize="11" Foreground="#4A4A60"
+                                           FontSize="11" Foreground="#565672"
                                            VerticalAlignment="Top" />
                                 <TextBlock Grid.Row="1" Grid.Column="1"
                                            Text="{Binding Playback.HwGpuLine}"
@@ -492,19 +506,19 @@
                                            TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="RAM"
-                                           FontSize="11" Foreground="#4A4A60" />
+                                           FontSize="11" Foreground="#565672" />
                                 <TextBlock Grid.Row="2" Grid.Column="1"
                                            Text="{Binding Playback.HwRamLine}"
                                            FontSize="11" Foreground="#686878" />
 
                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="NPU"
-                                           FontSize="11" Foreground="#4A4A60" />
+                                           FontSize="11" Foreground="#565672" />
                                 <TextBlock Grid.Row="3" Grid.Column="1"
                                            Text="{Binding Playback.HwNpuLine}"
                                            FontSize="11" Foreground="#686878" />
 
                                 <TextBlock Grid.Row="4" Grid.Column="0" Text="Libs"
-                                           FontSize="11" Foreground="#4A4A60" />
+                                           FontSize="11" Foreground="#565672" />
                                 <TextBlock Grid.Row="4" Grid.Column="1"
                                            Text="{Binding Playback.HwLibsLine}"
                                            FontSize="11" Foreground="#686878" />
@@ -604,7 +618,7 @@
                                 VerticalContentAlignment="Center"
                                 Padding="0,10"
                                 FontSize="13" FontWeight="SemiBold"
-                                Background="#D32F2F" Foreground="White"
+                                Background="#6B2525" Foreground="White"
                                 CornerRadius="6"
                                 Command="{Binding Playback.CancelPipelineCommand}"
                                 IsVisible="{Binding Playback.IsBusy}">
@@ -615,18 +629,12 @@
                         </Button>
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                             <TextBlock Grid.Column="0"
+                                       Text="{Binding Playback.StatusText}"
                                        FontSize="11"
-                                       Foreground="#3A3A50"
+                                       Foreground="#686880"
                                        HorizontalAlignment="Center"
                                        TextWrapping="Wrap"
-                                       MaxHeight="52">
-                                <TextBlock.Text>
-                                    <MultiBinding StringFormat="● Stage: {1} · {0}">
-                                        <Binding Path="Playback.StatusText" />
-                                        <Binding Path="Coordinator.CurrentSession.Stage" />
-                                    </MultiBinding>
-                                </TextBlock.Text>
-                            </TextBlock>
+                                       MaxHeight="52" />
 
                             <Button Grid.Column="1"
                                     Command="{Binding Playback.ShowStatusErrorDetailsCommand}"
@@ -741,8 +749,8 @@
                                 VerticalAlignment="Center">
                         <Button Classes="control-pill"
                                 Content="📁"
-                                Padding="6,5"
-                                FontSize="14"
+                                Padding="9,7"
+                                FontSize="16"
                                 Background="Transparent"
                                 Click="OnOpenMediaClick"
                                 ToolTip.Tip="Open media" />
@@ -821,12 +829,10 @@
                                 VerticalAlignment="Center"
                                 ToolTip.Tip="Volume" />
 
-                        <Button Content="Panes"
+                        <Button Content="&#x25EB;&#xFE0E;"
+                                Classes="control-pill"
                                 Command="{Binding Playback.ToggleSegmentPaneCommand}"
-                                Padding="7,4" FontSize="11"
-                                Background="#2A2A3A"
-                                Foreground="#C0C0D0"
-                                CornerRadius="4"
+                                Padding="8,6" FontSize="14"
                                 ToolTip.Tip="Toggle side panes" />
 
                         <Button Content="&#x26F6;"
@@ -863,7 +869,7 @@
                         <TextBlock Grid.Column="0" Text="Segments" FontSize="14"
                                    FontWeight="SemiBold" Foreground="#F0F0F8"
                                    VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" FontSize="11" Foreground="#4A4A60"
+                        <TextBlock Grid.Column="1" FontSize="11" Foreground="#565672"
                                     VerticalAlignment="Center" Margin="0,0,10,0"
                                     Text="{Binding Playback.Segments.Count, StringFormat='{}{0} Items'}" />
 
@@ -871,7 +877,7 @@
                                 Click="OnExportCaptionsClick"
                                 Padding="7,3"
                                 FontSize="11"
-                                Background="#252530"
+                                Background="#2A2A3C"
                                 Foreground="#C0C0D0"
                                 CornerRadius="4"
                                 ToolTip.Tip="Export captions as SRT">
@@ -920,7 +926,7 @@
 
                                     <StackPanel Grid.Column="0" Spacing="3">
                                         <!-- Time range -->
-                                        <TextBlock FontSize="11" Foreground="#505060">
+                                        <TextBlock FontSize="11" Foreground="#6A6A82">
                                             <TextBlock.Text>
                                                 <MultiBinding StringFormat="{}{0:F1}s  —  {1:F1}s">
                                                     <Binding Path="StartSeconds" />
