@@ -5,14 +5,15 @@ namespace Babel.Player.Services;
 
 public static class ManagedRuntimeLayout
 {
-    private const string ManagedGpuRuntimeFolderName = "managed-gpu";
-
-    public static string GetRuntimeRoot() =>
+    private static string RuntimeBase =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "BabelPlayer",
-            "runtime",
-            ManagedGpuRuntimeFolderName);
+            "runtime");
+
+    // ── GPU (managed venv + host process) ─────────────────────────────────
+
+    public static string GetRuntimeRoot() => Path.Combine(RuntimeBase, "managed-gpu");
 
     public static string GetVenvDirectory() => Path.Combine(GetRuntimeRoot(), ".venv");
 
@@ -24,4 +25,16 @@ public static class ManagedRuntimeLayout
 
     public static string GetHostPidPath() =>
         Path.Combine(GetRuntimeRoot(), "managed-host.pid");
+
+    // ── CPU (managed venv, no host process) ───────────────────────────────
+
+    public static string GetCpuRuntimeRoot() => Path.Combine(RuntimeBase, "managed-cpu");
+
+    public static string GetCpuVenvDirectory() => Path.Combine(GetCpuRuntimeRoot(), ".venv");
+
+    public static string GetCpuPythonPath() =>
+        Path.Combine(GetCpuVenvDirectory(), "Scripts", "python.exe");
+
+    public static string GetCpuBootstrapMarkerPath() =>
+        Path.Combine(GetCpuRuntimeRoot(), ".cpu-bootstrap-version");
 }

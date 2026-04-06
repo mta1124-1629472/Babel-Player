@@ -23,6 +23,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly SessionSwitchService _sessionSwitchService;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
     private readonly IContainerizedInferenceManager? _containerizedInferenceManager;
+    private readonly ManagedCpuRuntimeManager _cpuRuntimeManager;
     public ITranscriptionRegistry TranscriptionRegistry { get; }
     public ITranslationRegistry TranslationRegistry { get; }
     public ITtsRegistry TtsRegistry { get; }
@@ -144,6 +145,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _sessionSwitchService = sessionSwitchService ?? new SessionSwitchService(perSessionStore, recentStore, log);
         _containerizedProbe = containerizedProbe;
         _containerizedInferenceManager = containerizedInferenceManager;
+        _cpuRuntimeManager = new ManagedCpuRuntimeManager(log);
         TranscriptionRegistry = transcriptionRegistry;
         TranslationRegistry = translationRegistry;
         TtsRegistry = ttsRegistry;
@@ -184,6 +186,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         get => _videoEnhancementDiagnostics;
         private set => SetProperty(ref _videoEnhancementDiagnostics, value);
     }
+
+    public ManagedCpuRuntimeManager CpuRuntimeManager => _cpuRuntimeManager;
 
     public void Initialize()
     {

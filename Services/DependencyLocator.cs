@@ -18,9 +18,15 @@ public static class DependencyLocator
     public static string? FindPython()
     {
         var appDir = AppContext.BaseDirectory;
-        var managedPython = ManagedRuntimeLayout.GetManagedPythonPath();
-        if (ProbePythonCandidate(managedPython, requirePip: true))
-            return managedPython;
+
+        // Prefer managed venvs — GPU first (has more packages), then CPU.
+        var managedGpuPython = ManagedRuntimeLayout.GetManagedPythonPath();
+        if (ProbePythonCandidate(managedGpuPython, requirePip: true))
+            return managedGpuPython;
+
+        var managedCpuPython = ManagedRuntimeLayout.GetCpuPythonPath();
+        if (ProbePythonCandidate(managedCpuPython, requirePip: true))
+            return managedCpuPython;
 
         var candidates = new[]
         {

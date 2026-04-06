@@ -154,6 +154,17 @@ The GPU path bootstraps a managed local venv automatically using the bundled `uv
 | Cloud providers | The relevant API key entered in Settings |
 | Source build | [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) |
 
+## First-run setup
+
+Babel Player bundles `uv.exe` and manages all Python runtimes automatically — no manual Python installation required.
+
+| Path | One-time download | Triggered by |
+|------|-------------------|--------------|
+| GPU inference | ~5 GB (torch+CUDA, faster-whisper) | First GPU transcription/TTS use |
+| CPU inference | ~800 MB (torch CPU, faster-whisper) | First CPU transcription/TTS use |
+
+Downloads are cached in `%LOCALAPPDATA%\BabelPlayer\runtime\`. A confirmation prompt appears before each large first-time download. Progress is shown live in the status bar during install.
+
 ---
 
 ## Installation

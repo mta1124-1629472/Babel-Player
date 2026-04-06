@@ -82,6 +82,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
     public string? FailureReason { get; private set; }
 
+    /// <summary>
+    /// The most recent status line from the bootstrap process (e.g., "Downloading torch (2.4 GB)").
+    /// Updated live during installation.
+    /// </summary>
+    public string BootstrapStatusLine { get; private set; } = string.Empty;
+
     public void RequestEnsureStarted(AppSettings settings, ContainerizedStartupTrigger trigger)
     {
         BackgroundTaskObserver.Observe(
@@ -274,12 +280,69 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
         if (!runtimeValidation.CudaAvailable)
         {
-            return Fail(
-                $"Managed local GPU runtime validation failed: {runtimeValidation.Message}");
-        }
+            var isMissingTorch = runtimeValidation.Message.Contains("missing PyTorch", StringComparison.OrdinalIgnoreCase);
+            if (isMissingTorch)
+            {
+                _log.Warning($"Managed GPU runtime validation detected missing PyTorch; attempting auto-rebuild.");
+                var rebuildMarkerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
+                try
+                {
+                    if (File.Exists(rebuildMarkerPath))
+                    {
+                        File.Delete(rebuildMarkerPath);
+                        _log.Info($"Cleared bootstrap marker at {rebuildMarkerPath} to trigger rebuild.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning($"Failed to clear bootstrap marker: {ex.Message}");
+                }
 
-        _log.Info(
-            $"Managed GPU runtime validation passed: {runtimeValidation.Message}");
+                await RecoverStaleHostProcessesAsync(
+                    pythonPath,
+                    hostPidPath,
+                    stopTrackedProcess: true,
+                    cancellationToken);
+
+                State = ManagedHostState.Installing;
+                _log.Info($"Auto-rebuilding managed GPU runtime at {venvDir} due to missing PyTorch.");
+                try
+                {
+                    await _bootstrapRunner(
+                        uvPath,
+                        venvDir,
+                        pythonPath,
+                        requirementsPath,
+                        constraintsPath,
+                        cancellationToken);
+                    await File.WriteAllTextAsync(rebuildMarkerPath, bootstrapVersion, cancellationToken);
+                    _log.Info($"Auto-rebuild completed at {venvDir}.");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Fail(DescribeBootstrapFailure(ex, venvDir));
+                }
+
+                _log.Info($"Re-validating managed GPU runtime after auto-rebuild.");
+                runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+                if (!runtimeValidation.CudaAvailable)
+                {
+                    return Fail(
+                        $"Managed local GPU runtime validation failed after auto-rebuild: {runtimeValidation.Message}");
+                }
+                _log.Info($"Managed GPU runtime validation passed after auto-rebuild: {runtimeValidation.Message}");
+            }
+            else
+            {
+                return Fail(
+                    $"Managed local GPU runtime validation failed: {runtimeValidation.Message}");
+            }
+        }
+        else
+        {
+            _log.Info(
+                $"Managed GPU runtime validation passed: {runtimeValidation.Message}");
+        }
 
         var stoppedStaleHost = await RecoverStaleHostProcessesAsync(
             pythonPath,
@@ -371,6 +434,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
+    /// <summary>
+    /// Optional callback invoked with each live output line during uv bootstrap.
+    /// Set before calling <see cref="RequestEnsureStarted"/> to receive progress.
+    /// </summary>
+    public Action<string>? BootstrapProgressCallback { get; set; }
+
     private async Task RunUvBootstrapAsync(
         string uvPath,
         string venvDir,
@@ -385,6 +454,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             uvPath,
             Path.GetDirectoryName(venvDir) ?? AppContext.BaseDirectory,
             cancellationToken,
+            null,
             "venv",
             "--clear",
             "--python",
@@ -395,6 +465,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             uvPath,
             AppContext.BaseDirectory,
             cancellationToken,
+            line =>
+            {
+                BootstrapStatusLine = line;
+                BootstrapProgressCallback?.Invoke(line);
+            },
             "pip",
             "install",
             "--index-strategy",
@@ -759,9 +834,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         if (process.ExitCode != 0)
         {
-            return new ManagedGpuRuntimeValidationResult(
-                false,
-                $"Managed Python runtime could not validate torch/CUDA availability: {stderr}".Trim());
+            var stderrLower = stderr.ToLowerInvariant();
+            var message = stderrLower.Contains("no module named 'torch'")
+                ? "The managed Python runtime is missing PyTorch. The virtual environment may be incomplete or corrupted. " +
+                  "Delete the .venv folder in the runtime directory and restart the app to trigger a fresh bootstrap."
+                : $"Managed Python runtime could not validate torch/CUDA availability: {stderr}".Trim();
+            return new ManagedGpuRuntimeValidationResult(false, message);
         }
 
         try
@@ -802,6 +880,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string fileName,
         string workingDirectory,
         CancellationToken cancellationToken,
+        Action<string>? onStatusLine,
         params string[] arguments)
     {
         var psi = new ProcessStartInfo
@@ -823,21 +902,30 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        // Stream stdout line-by-line for live progress, accumulate stderr for error reporting.
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        var stdoutLines = new System.Text.StringBuilder();
+        while (await process.StandardOutput.ReadLineAsync(cancellationToken) is { } line)
+        {
+            _log.Info(line);
+            onStatusLine?.Invoke(line);
+            if (!string.IsNullOrWhiteSpace(line))
+                stdoutLines.AppendLine(line);
+        }
+
         await process.WaitForExitAsync(cancellationToken);
-        var stdout = await stdoutTask;
         var stderr = await stderrTask;
 
         _log.Info(
             $"Managed GPU process exited: file={fileName}, exit_code={process.ExitCode}");
 
         if (process.ExitCode != 0)
+        {
+            var stdoutSnippet = stdoutLines.Length > 0 ? $"\nstdout: {stdoutLines}" : string.Empty;
             throw new InvalidOperationException(
-                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}");
+                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
+        }
 
-        if (!string.IsNullOrWhiteSpace(stdout))
-            _log.Info(stdout.Trim());
         if (!string.IsNullOrWhiteSpace(stderr))
             _log.Info(stderr.Trim());
     }

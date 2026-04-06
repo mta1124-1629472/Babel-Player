@@ -53,5 +53,8 @@
             "problemMatcher": "$msCompile",
             "detail": "Clean project"
         }
+    ],
+    "csharp-dev-tools.roslyn.projectOrSolutionFiles": [
+        "Babel-Player.sln"
     ]
 }
