@@ -124,7 +124,7 @@
                     <TextBlock Text="Storage Security:"
                                FontSize="10" Foreground="#3A3A50"
                                FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding StorageProviderName}"
+                    <TextBlock Text="{Binding SecurityStatusDetail}"
                                FontSize="11" Foreground="#5A5A75"
                                TextWrapping="Wrap" />
                 </StackPanel>

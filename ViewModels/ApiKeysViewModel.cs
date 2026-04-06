@@ -14,7 +14,10 @@ public sealed class ApiKeysViewModel(ApiKeyStore store, ApiKeyValidationService?
             .Select(key => new ApiKeyEntryViewModel(key, store, validationService))];
 
     public string StorageProviderName { get; } = store.StorageProviderName;
+
+    public string SecurityStatusDetail => $"{StorageProviderName}. Your keys are stored locally and never leave this machine.";
 }
+
 
 
 /// <summary>ViewModel for a single provider row in the API Keys dialog.</summary>
