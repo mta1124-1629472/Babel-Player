@@ -187,8 +187,9 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void TranslationRegistry_CreateProvider_DeepL_DoesNotThrow()
     {
-        var keyStore = new ApiKeyStore(_dir);
+        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "api-keys.json")));
         keyStore.SetKey(CredentialKeys.Deepl, "test-deepl-key");
+
 
         var provider = _translationRegistry.CreateProvider(ProviderNames.Deepl, new AppSettings(), keyStore);
         Assert.NotNull(provider);
@@ -568,8 +569,9 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithNoToken_ReturnsNotReady()
     {
-        var keyStore = new ApiKeyStore(_dir);
+        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "api-keys.json")));
         var readiness = _diarizationRegistry.CheckReadiness(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
+
         Assert.False(readiness.IsReady);
         Assert.Contains("HuggingFace token is required", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
@@ -577,8 +579,9 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithValidToken_DoesNotBlockOnToken()
     {
-        var keyStore = new ApiKeyStore(_dir);
+        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "api-keys.json")));
         keyStore.SetKey(CredentialKeys.HuggingFace, "hf_test_token");
+
 
         // Note: CheckReadiness will still run the pyannote.audio import probe,
         // which may return NotReady in CI if pyannote isn't installed —
@@ -596,8 +599,9 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void DiarizationRegistry_PyannoteLocal_CreateProvider_DoesNotThrow()
     {
-        var keyStore = new ApiKeyStore(Path.Combine(_dir, "empty-keys.json"));
+        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "empty-keys.json")));
         var provider = _diarizationRegistry.CreateProvider(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
+
         Assert.NotNull(provider);
     }
 

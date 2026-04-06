@@ -68,14 +68,66 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken ct)
     {
         var artifact = await ArtifactJson.LoadTranscriptAsync(transcriptPath, ct);
-
         if (artifact.Segments is null) return;
 
-        foreach (var segment in artifact.Segments)
-            segment.SpeakerId = FindBestSpeakerFor(segment.Start, segment.End, diarizedSegments);
+        var result = new List<TranscriptSegmentArtifact>();
+        foreach (var seg in artifact.Segments)
+            result.AddRange(SplitSegmentAtSpeakerBoundaries(seg, diarizedSegments));
+
+        artifact.Segments.Clear();
+        artifact.Segments.AddRange(result);
 
         var json = ArtifactJson.SerializeTranscript(artifact);
         await File.WriteAllTextAsync(transcriptPath, json, ct);
+    }
+
+    private static IReadOnlyList<TranscriptSegmentArtifact> SplitSegmentAtSpeakerBoundaries(
+        TranscriptSegmentArtifact segment,
+        IReadOnlyList<DiarizedSegment> diarized)
+    {
+        var overlapping = diarized
+            .Where(d => d.EndSeconds > segment.Start && d.StartSeconds < segment.End)
+            .OrderBy(d => d.StartSeconds)
+            .ToList();
+
+        // Single speaker or no word timestamps → assign best speaker, return as-is
+        if (overlapping.Count <= 1 || segment.Words is null || segment.Words.Count == 0)
+        {
+            segment.SpeakerId = FindBestSpeakerFor(segment.Start, segment.End, diarized);
+            return [segment];
+        }
+
+        // Group consecutive words by which diarized speaker turn they fall in
+        var groups = new List<(string SpeakerId, List<WordTimestamp> Words)>();
+        foreach (var word in segment.Words)
+        {
+            var wordMid = (word.Start + word.End) / 2.0;
+            var speaker = overlapping
+                .FirstOrDefault(d => d.StartSeconds <= wordMid && d.EndSeconds > wordMid)
+                ?.SpeakerId
+                ?? FindBestSpeakerFor(word.Start, word.End, diarized);
+
+            if (groups.Count == 0 || groups[^1].SpeakerId != speaker)
+                groups.Add((speaker, []));
+            groups[^1].Words.Add(word);
+        }
+
+        // All words landed on one speaker after word-level assignment → no split needed
+        if (groups.Count == 1)
+        {
+            segment.SpeakerId = groups[0].SpeakerId;
+            return [segment];
+        }
+
+        return groups.Select(g => new TranscriptSegmentArtifact
+        {
+            Start         = g.Words[0].Start,
+            End           = g.Words[^1].End,
+            Text          = string.Join("", g.Words.Select(w => w.Text)).Trim(),
+            SpeakerId     = g.SpeakerId,
+            Words         = g.Words,
+            OriginalStart = segment.Start,
+        }).ToList<TranscriptSegmentArtifact>();
     }
 
     private static async Task MergeSpeakerIdsIntoTranslationAsync(
@@ -88,9 +140,16 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (transcript.Segments is null || translation.Segments is null) return;
 
-        var speakerByStart = transcript.Segments
-            .Where(s => s.SpeakerId != null)
-            .ToDictionary(s => s.Start, s => s.SpeakerId!);
+        // Build lookup keyed by OriginalStart (set on split segments) or Start.
+        // For split segments that share the same OriginalStart, the first entry wins
+        // so the translation segment (which uses the pre-split start time) is matched.
+        var speakerByStart = new Dictionary<double, string>();
+        foreach (var s in transcript.Segments)
+        {
+            if (s.SpeakerId is null) continue;
+            var key = s.OriginalStart ?? s.Start;
+            speakerByStart.TryAdd(key, s.SpeakerId);
+        }
 
         var anyChanged = false;
         foreach (var seg in translation.Segments)

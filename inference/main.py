@@ -20,7 +20,7 @@ from uuid import uuid4
 import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Configure logging
 logging.basicConfig(
@@ -160,10 +160,17 @@ class CapabilitiesResponse(BaseModel):
     diarization: StageCapability
 
 
+class WordTimestampResponse(BaseModel):
+    text: str
+    start: float
+    end: float
+
+
 class TranscriptSegmentResponse(BaseModel):
     start: float
     end: float
     text: str
+    words: list[WordTimestampResponse] = Field(default_factory=list)
 
 
 class TranscriptionResponse(BaseModel):
@@ -384,9 +391,13 @@ async def transcribe(
         contents = await file.read()
         temp_audio_path.write_bytes(contents)
         whisper = load_whisper_model(model, cpu_compute_type=cpu_compute_type, cpu_threads=cpu_threads, num_workers=num_workers)
-        segments_gen, info = whisper.transcribe(str(temp_audio_path), language=language or None)
+        segments_gen, info = whisper.transcribe(
+            str(temp_audio_path), language=language or None, word_timestamps=True)
         segments = [
-            TranscriptSegmentResponse(start=s.start, end=s.end, text=s.text.strip())
+            TranscriptSegmentResponse(
+                start=s.start, end=s.end, text=s.text.strip(),
+                words=[WordTimestampResponse(text=w.word, start=w.start, end=w.end)
+                       for w in (s.words or [])])
             for s in segments_gen if s.text.strip()
         ]
         background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
