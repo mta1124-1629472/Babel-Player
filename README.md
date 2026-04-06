@@ -289,7 +289,7 @@ The architecture linter (`scripts/check-architecture.py`) enforces structural ru
 ### Cloud APIs (optional, key required)
 
 - [OpenAI](https://platform.openai.com/) — Whisper transcription, GPT translation, TTS
-- [ElevenLabs](https://elevenlabs.io/) — High-quality TTS with voice cloning
+- [ElevenLabs](https://elevenlabs.io/) — High-quality TTS (no voice cloning yet; future work)
 - [Google Cloud](https://cloud.google.com/) — Speech-to-Text, Cloud TTS
 - [Google Gemini](https://ai.google.dev/) — Transcription and translation
 - [DeepL](https://www.deepl.com/pro-api) — Translation
