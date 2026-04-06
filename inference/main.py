@@ -996,7 +996,7 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
         logger.info(f"Loading Qwen3-TTS '{model_name}' on {HOST_DEVICE}")
         qwen_model = Qwen3TTSModel.from_pretrained(
             model_name,
-            device_map="auto" if HOST_DEVICE == "cuda" else HOST_DEVICE,
+            device_map={"": "cuda:0"} if HOST_DEVICE == "cuda" else HOST_DEVICE,
             dtype=torch.bfloat16 if HOST_DEVICE == "cuda" else torch.float32,
             attn_implementation="sdpa"
         )
