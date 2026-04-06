@@ -30,6 +30,16 @@ public static class ManagedRuntimeLayout
     public static string GetHostPidPath() =>
         Path.Combine(GetRuntimeRoot(), "managed-host.pid");
 
+    // Model cache — shared across GPU and CPU runtimes, isolated from the global HF hub cache.
+    // Storing models here avoids the symlink/hard-link issues that occur on Windows when
+    // huggingface_hub is upgraded between releases and tries to re-verify an existing cache
+    // created by an older version.
+    public static string GetModelCacheDir() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BabelPlayer",
+            "models");
+
     // CPU runtime
     public static string GetCpuRuntimeRoot() =>
         Path.Combine(RuntimeBase, ManagedCpuRuntimeFolderName);

@@ -351,6 +351,32 @@ async def get_stage_capabilities():
 # Transcription
 # ============================================================================
 
+def _clear_whisper_model_cache(model_name: str) -> None:
+    """Delete the HF hub cache entry for a faster-whisper model.
+
+    Called when the model load fails with a file-open error, which indicates a
+    broken or incomplete cache left by a prior interrupted download or a
+    huggingface_hub version upgrade that invalidated the cached layout.
+    Removing the cache dir forces a clean re-download on the next load attempt.
+    """
+    hub_cache = os.environ.get("HUGGINGFACE_HUB_CACHE") or os.path.join(
+        os.path.expanduser("~"), ".cache", "huggingface", "hub"
+    )
+    # Standard faster-whisper model names ("base", "small", …) resolve to the
+    # Systran org on HuggingFace Hub.
+    if "/" not in model_name:
+        repo_id = f"Systran/faster-whisper-{model_name}"
+    else:
+        repo_id = model_name
+    cache_dir_name = "models--" + repo_id.replace("/", "--")
+    model_cache_path = os.path.join(hub_cache, cache_dir_name)
+    if os.path.isdir(model_cache_path):
+        logger.warning(f"Clearing stale model cache at {model_cache_path}")
+        shutil.rmtree(model_cache_path, ignore_errors=True)
+    else:
+        logger.warning(f"Model cache dir not found for clearing: {model_cache_path}")
+
+
 def load_whisper_model(
     model_name: str,
     cpu_compute_type: str = "int8",
@@ -362,14 +388,32 @@ def load_whisper_model(
     cache_key = f"{model_name}:{effective_compute}:{cpu_threads}:{num_workers}"
     if whisper_model is None or whisper_model_key != cache_key:
         from faster_whisper import WhisperModel
+
+        def _do_load():
+            return WhisperModel(
+                model_name,
+                device=HOST_DEVICE,
+                compute_type=effective_compute,
+                cpu_threads=cpu_threads,
+                num_workers=num_workers,
+            )
+
         logger.info(f"Loading Whisper '{model_name}' on {HOST_DEVICE} ({effective_compute})")
-        whisper_model = WhisperModel(
-            model_name,
-            device=HOST_DEVICE,
-            compute_type=effective_compute,
-            cpu_threads=cpu_threads,
-            num_workers=num_workers,
-        )
+        try:
+            whisper_model = _do_load()
+        except Exception as first_err:
+            err_str = str(first_err)
+            if "model.bin" in err_str or "Unable to open file" in err_str or "No such file" in err_str:
+                # Stale or incomplete HF hub cache — clear it and retry once.
+                logger.warning(
+                    f"Whisper model load failed ({first_err}); "
+                    "clearing stale cache and retrying…"
+                )
+                _clear_whisper_model_cache(model_name)
+                whisper_model = _do_load()
+            else:
+                raise
+
         whisper_model_key = cache_key
         logger.info("Whisper loaded")
     return whisper_model

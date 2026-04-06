@@ -803,6 +803,14 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         // actual failing op rather than a random later API call.
         psi.Environment["CUDA_LAUNCH_BLOCKING"] = "1";
 
+        // Redirect the HuggingFace hub model cache into the app data directory.
+        // This isolates our models from the user's global HF cache and prevents
+        // the "Unable to open file 'model.bin'" failure that occurs on Windows when
+        // huggingface_hub is upgraded between releases and fails to re-validate
+        // cache files created by a prior version.
+        psi.Environment["HUGGINGFACE_HUB_CACHE"] = ManagedRuntimeLayout.GetModelCacheDir();
+        psi.Environment["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1";
+
         return psi;
     }
 
