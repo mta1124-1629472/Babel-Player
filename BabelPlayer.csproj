@@ -14,6 +14,17 @@
     <BuildDate Condition="'$(BuildDate)' == ''">0000-00-00</BuildDate>
   </PropertyGroup>
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       Dev configuration — build with: dotnet run -c Dev
+       Defines BABEL_DEV, disables optimisations, keeps full debug info.
+       ═══════════════════════════════════════════════════════════════ -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Dev'">
+    <DefineConstants>DEBUG;TRACE;BABEL_DEV</DefineConstants>
+    <Optimize>false</Optimize>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
   <ItemGroup>
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />

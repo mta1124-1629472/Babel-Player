@@ -4,8 +4,8 @@ using System.Reflection;
 namespace Babel.Player;
 
 /// <summary>
-/// Exposes build-time metadata (version, build date) baked into the assembly
-/// by the release workflow via MSBuild properties.
+/// Exposes build-time metadata (version, build date, configuration) baked into
+/// the assembly by the release workflow via MSBuild properties.
 /// </summary>
 public static class BuildInfo
 {
@@ -30,4 +30,27 @@ public static class BuildInfo
             .FirstOrDefault(a => a.Key == "BuildDate")
             ?.Value
         ?? "unknown";
+
+    /// <summary>
+    /// True when the app was compiled with the BABEL_DEV symbol (i.e. dotnet run/build -c Dev).
+    /// Use this to gate dev-only behaviour at runtime in addition to #if BABEL_DEV guards.
+    /// </summary>
+    public static bool IsDevBuild =>
+#if BABEL_DEV
+        true;
+#else
+        false;
+#endif
+
+    /// <summary>
+    /// Human-readable configuration name, e.g. "Dev", "Debug", or "Release".
+    /// </summary>
+    public static string Configuration =>
+#if BABEL_DEV
+        "Dev";
+#elif DEBUG
+        "Debug";
+#else
+        "Release";
+#endif
 }

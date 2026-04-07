@@ -9,7 +9,6 @@
         x:Class="Babel.Player.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/Icons/app.ico"
-        Title="Babel Player"
         Width="1280" Height="700"
         MinWidth="960" MinHeight="520"
         RequestedThemeVariant="Dark"
@@ -738,6 +737,24 @@
                     <Style Selector="Button.control-pill.active /template/ ContentPresenter">
                         <Setter Property="Background" Value="#312350" />
                     </Style>
+
+                    <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
+                    <Style Selector="Button.dev-pill">
+                        <Setter Property="Foreground" Value="#D4A017" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderBrush" Value="#3A3010" />
+                        <Setter Property="BorderThickness" Value="1" />
+                        <Setter Property="CornerRadius" Value="6" />
+                    </Style>
+                    <Style Selector="Button.dev-pill /template/ ContentPresenter">
+                        <Setter Property="Background" Value="Transparent" />
+                    </Style>
+                    <Style Selector="Button.dev-pill:pointerover /template/ ContentPresenter">
+                        <Setter Property="Background" Value="#2A2010" />
+                    </Style>
+                    <Style Selector="Button.dev-pill:pressed /template/ ContentPresenter">
+                        <Setter Property="Background" Value="#38280A" />
+                    </Style>
                 </Border.Styles>
 
                 <Grid ColumnDefinitions="Auto,*,Auto,*,Auto">
@@ -810,7 +827,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Right: volume + fullscreen + settings -->
+                    <!-- Right: volume + fullscreen + settings [+ dev toolbar] -->
                     <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2"
                                 VerticalAlignment="Center" HorizontalAlignment="Right">
                         <Button Classes="control-pill" x:Name="MuteButton"
@@ -844,6 +861,37 @@
                                 Click="OnSettingsClick"
                                 Padding="6,5" FontSize="14"
                                 ToolTip.Tip="Settings" />
+
+                        <!--
+                            ╔══════════════════════════════╗
+                            ║  DEV BUILD TOOLBAR           ║
+                            ║  Visible only in Dev builds. ║
+                            ╚══════════════════════════════╝
+                            AXAML has no #if support, so we gate visibility at runtime via
+                            the BuildInfo.IsDevBuild static.  The Click handlers in
+                            MainWindow.axaml.cs are wrapped in #if BABEL_DEV so they
+                            are compiled away in Release — the buttons just won't exist.
+                        -->
+                        <Border Margin="6,0,0,0"
+                                BorderBrush="#3A3010"
+                                BorderThickness="1,0,0,0"
+                                Padding="6,0,0,0"
+                                IsVisible="{x:Static local:BuildInfo.IsDevBuild}"
+                                xmlns:local="using:Babel.Player">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <Button Classes="dev-pill"
+                                        Content="📋 Dev Log"
+                                        Click="OnDevLogClick"
+                                        Padding="6,5" FontSize="12"
+                                        ToolTip.Tip="Open in-app dev log viewer" />
+                                <Button Classes="dev-pill"
+                                        Content="🔄 Fresh Start"
+                                        Click="OnFreshStartClick"
+                                        Padding="6,5" FontSize="12"
+                                        ToolTip.Tip="Cancel pipeline, wipe session temp files, reset UI" />
+                            </StackPanel>
+                        </Border>
+
                     </StackPanel>
 
                 </Grid>

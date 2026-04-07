@@ -1,0 +1,3 @@
+@echo off
+echo Starting Babel-Player [DEV]...
+dotnet run -c Dev

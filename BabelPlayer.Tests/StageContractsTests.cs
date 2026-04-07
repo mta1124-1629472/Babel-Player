@@ -86,6 +86,30 @@ public sealed class StageContractsTests
         Assert.Equal("Processing failed", result.ErrorMessage);
     }
 
+    [Fact]
+    public void TranscriptionResult_MetricFields_DefaultToSentinelValues()
+    {
+        var result = new TranscriptionResult(true, [], "en", 0.99, null);
+
+        Assert.Equal(0L, result.ElapsedMs);
+        Assert.Equal(-1.0, result.PeakVramMb);
+        Assert.Equal(-1.0, result.PeakRamMb);
+    }
+
+    [Fact]
+    public void TranscriptionResult_MetricFields_StoreSuppliedValues()
+    {
+        var result = new TranscriptionResult(
+            true, [], "en", 0.99, null,
+            ElapsedMs: 1234L,
+            PeakVramMb: 512.5,
+            PeakRamMb: 1024.0);
+
+        Assert.Equal(1234L, result.ElapsedMs);
+        Assert.Equal(512.5, result.PeakVramMb);
+        Assert.Equal(1024.0, result.PeakRamMb);
+    }
+
     // ?? TranscriptSegment ??????????????????????????????????????????????????????
 
     [Fact]
@@ -157,7 +181,7 @@ public sealed class StageContractsTests
         var segments = new List<TranslatedSegment>
         {
             new(0.0, 2.5, "Hola mundo", "Hello world"),
-            new(2.5, 5.0, "¿Cómo estás?", "How are you?")
+            new(2.5, 5.0, "ï¿½Cï¿½mo estï¿½s?", "How are you?")
         };
 
         var result = new TranslationResult(

@@ -19,7 +19,6 @@ public partial class MainWindow : Window
 {
     private LibMpvEmbeddedTransport? _embeddedTransport;
 
-    // Cached handler refs so we can unsubscribe in OnClosed.
     private PropertyChangedEventHandler? _playbackPropertyChangedHandler;
     private PropertyChangedEventHandler? _coordinatorPropertyChangedHandler;
     private EventHandler<PointerEventArgs>? _videoOverlayPointerMovedHandler;
@@ -29,6 +28,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Keep the title in sync with the build configuration.
+        Title = AppIdentity.AppName;
 
         var videoView = this.FindControl<MpvVideoView>("VideoView");
         if (videoView is not null)
@@ -51,9 +53,6 @@ public partial class MainWindow : Window
             _coordinatorPropertyChangedHandler = OnCoordinatorPropertyChanged;
             vm.Coordinator.PropertyChanged += _coordinatorPropertyChangedHandler;
 
-            // Subscribe to PointerMoved on the transparent overlay Panel that sits above the
-            // NativeControlHost (MpvVideoView). The native Win32 HWND does not bubble Avalonia
-            // pointer events to parent controls, so we capture on the managed overlay instead.
             var overlay = this.FindControl<Panel>("VideoOverlayPanel");
             if (overlay is not null)
             {
@@ -67,8 +66,6 @@ public partial class MainWindow : Window
     {
         base.OnClosed(e);
 
-        // Unsubscribe event handlers so the window is not kept alive by
-        // rooted objects (ViewModel, overlay panel) after it has closed.
         if (DataContext is MainWindowViewModel vm)
         {
             if (_playbackPropertyChangedHandler is not null)
@@ -245,24 +242,9 @@ public partial class MainWindow : Window
     {
         try
         {
-            // Open HF token settings and both model gate pages the user needs to accept.
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "https://huggingface.co/settings/tokens",
-                UseShellExecute = true,
-            });
-
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "https://huggingface.co/pyannote/speaker-diarization-3.1",
-                UseShellExecute = true,
-            });
-
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "https://huggingface.co/pyannote/segmentation-3.0",
-                UseShellExecute = true,
-            });
+            Process.Start(new ProcessStartInfo { FileName = "https://huggingface.co/settings/tokens", UseShellExecute = true });
+            Process.Start(new ProcessStartInfo { FileName = "https://huggingface.co/pyannote/speaker-diarization-3.1", UseShellExecute = true });
+            Process.Start(new ProcessStartInfo { FileName = "https://huggingface.co/pyannote/segmentation-3.0", UseShellExecute = true });
         }
         catch (Exception ex)
         {
@@ -309,7 +291,6 @@ public partial class MainWindow : Window
             await using var writer = new StreamWriter(stream, Encoding.UTF8);
             await writer.WriteAsync(srt);
             await writer.FlushAsync();
-
             vm.Playback.StatusText = $"Exported captions to {file.Name}.";
         }
         catch (Exception ex)
@@ -339,13 +320,28 @@ public partial class MainWindow : Window
         _ = win.ShowDialog(this);
     }
 
+#if BABEL_DEV
+    public void OnDevLogClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+        var win = new Dev.DevLogWindow { DataContext = new ViewModels.Dev.DevLogViewModel(vm.Coordinator.DevLog) };
+        win.Show();
+    }
+
+    public void OnFreshStartClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+        _ = vm.Coordinator.FreshStartAsync();
+    }
+#endif
+
     public void OnRecentSessionSelected(object? sender, SelectionChangedEventArgs e)
     {
         if (sender is ComboBox cb && cb.SelectedItem is RecentSessionEntry entry
             && DataContext is MainWindowViewModel vm)
         {
             vm.Coordinator.RestoreSession(entry.SessionId);
-            cb.SelectedItem = null;   // act as a menu, not a persistent selection
+            cb.SelectedItem = null;
         }
     }
 
