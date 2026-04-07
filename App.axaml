@@ -8,6 +8,8 @@
 
       <Application.Resources>
           <ResourceDictionary>
+              <converters:ComputeProfileDisplayConverter x:Key="ComputeProfileDisplayConverter"/>
+              <converters:GpuHostBackendDisplayConverter x:Key="GpuHostBackendDisplayConverter"/>
               <ResourceDictionary.ThemeDictionaries>
                   <ResourceDictionary x:Key="Light">
                       <!-- Light theme colors -->
