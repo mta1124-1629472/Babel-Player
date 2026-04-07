@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Styling;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -54,6 +55,17 @@ public partial class App : Application
             {
                 appLog.Info(
                     $"Environment override active: {AppSettings.InferenceServiceUrlEnvVar}={appSettings.EffectiveContainerizedServiceUrl}");
+            }
+
+            // Apply saved theme preference
+            if (!string.IsNullOrEmpty(appSettings.Theme) && Application.Current is { } app)
+            {
+                app.RequestedThemeVariant = appSettings.Theme switch
+                {
+                    "Dark" => ThemeVariant.Dark,
+                    "Light" => ThemeVariant.Light,
+                    _ => ThemeVariant.Default // System
+                };
             }
 
             var perSessionStore = new PerSessionSnapshotStore(

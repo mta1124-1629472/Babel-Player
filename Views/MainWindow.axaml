@@ -375,37 +375,37 @@
                                         Text="{Binding Playback.ActiveCpuTuningLine}"
                                         FontSize="11" Foreground="{DynamicResource ControlBackgroundBrush}" TextWrapping="Wrap" />
 
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="NMT"
-                                           FontSize="11" Foreground="#565672" />
+                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="NMT"
+                                            FontSize="11" Foreground="{DynamicResource ControlBackgroundBrush}" />
 <TextBlock Grid.Row="2" Grid.Column="1"
                                         Text="{Binding Playback.ActiveTranslationConfigLine}"
                                         FontSize="11" Foreground="{DynamicResource ControlBackgroundBrush}" TextWrapping="Wrap" />
 
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="TTS"
-                                           FontSize="11" Foreground="#565672" />
+                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="TTS"
+                                            FontSize="11" Foreground="{DynamicResource ControlBackgroundBrush}" />
 <TextBlock Grid.Row="3" Grid.Column="1"
                                         Text="{Binding Playback.HwNpuLine}"
                                         FontSize="11" Foreground="{DynamicResource StatusTextBrush}"
                                         TextWrapping="Wrap" />
 
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU"
-                                           FontSize="11" Foreground="#565672"
-                                           VerticalAlignment="Top" />
+                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU"
+                                            FontSize="11" Foreground="{DynamicResource ControlBackgroundBrush}"
+                                            VerticalAlignment="Top" />
 <TextBlock Grid.Row="1" Grid.Column="1"
                                         Text="{Binding Playback.HwGpuLine}"
                                         FontSize="11" Foreground="{DynamicResource StatusTextBrush}"
                                         TextWrapping="Wrap" />
 
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="RAM"
-                                           FontSize="11" Foreground="#565672" />
+                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="RAM"
+                                            FontSize="11" Foreground="{DynamicResource ControlBackgroundBrush}" />
 <TextBlock Grid.Row="2" Grid.Column="1"
                                         Text="{Binding Playback.HwRamLine}"
                                         FontSize="11" Foreground="{DynamicResource StatusTextBrush}"
                                         TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding Playback.PipelineStageDetail}"
-                                           FontSize="11"
-                                           Foreground="#C0C0D0"
-                                           TextWrapping="Wrap" />
+                                        FontSize="11"
+                                        Foreground="{DynamicResource ControlBackgroundBrush}"
+                                        TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding Playback.PipelineProgressStatusLine}"
                                            FontSize="10"
                                            Foreground="#8A88A8"

@@ -3,7 +3,9 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Styling;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
@@ -137,6 +139,20 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private string _selectedTheme = "Light";
+
+    partial void OnSelectedThemeChanged(string value)
+    {
+        // Apply theme change immediately when user selects from dropdown
+        if (Application.Current is { } app)
+        {
+            app.RequestedThemeVariant = value switch
+            {
+                "Dark" => ThemeVariant.Dark,
+                "Light" => ThemeVariant.Light,
+                _ => ThemeVariant.Default // System
+            };
+        }
+    }
 
     public string[] ThemeOptions { get; }
 
@@ -291,18 +307,29 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.TranscriptionCpuThreads = Math.Max(0, TranscriptionCpuThreads);
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
 
-        settings.VideoHwdec          = VideoHwdec;
-        settings.VideoGpuApi         = VideoGpuApi;
-        settings.VideoExportEncoder  = VideoExportEncoder;
-        settings.VideoUseGpuNext     = VideoUseGpuNext;
-        settings.VideoVsrEnabled     = VideoVsrEnabled;
-        settings.VideoVsrQuality     = VideoVsrQuality;
-        settings.VideoHdrEnabled     = VideoHdrEnabled;
-        settings.VideoToneMapping    = VideoToneMapping;
-        settings.VideoTargetPeak     = VideoTargetPeak;
-        settings.VideoHdrComputePeak = VideoHdrComputePeak;
+            settings.VideoHwdec          = VideoHwdec;
+            settings.VideoGpuApi         = VideoGpuApi;
+            settings.VideoExportEncoder  = VideoExportEncoder;
+            settings.VideoUseGpuNext     = VideoUseGpuNext;
+            settings.VideoVsrEnabled     = VideoVsrEnabled;
+            settings.VideoVsrQuality     = VideoVsrQuality;
+            settings.VideoHdrEnabled     = VideoHdrEnabled;
+            settings.VideoToneMapping    = VideoToneMapping;
+            settings.VideoTargetPeak     = VideoTargetPeak;
+            settings.VideoHdrComputePeak = VideoHdrComputePeak;
 
-        _coordinator.NotifySettingsModified();
+            // Apply theme change immediately when Save & Close is pressed
+            if (Application.Current is { } app)
+            {
+                app.RequestedThemeVariant = SelectedTheme switch
+                {
+                    "Dark" => ThemeVariant.Dark,
+                    "Light" => ThemeVariant.Light,
+                    _ => ThemeVariant.Default // System
+                };
+            }
+
+            _coordinator.NotifySettingsModified();
     }
 
     [RelayCommand]

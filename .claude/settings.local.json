@@ -46,7 +46,9 @@
       "Skill(commit-commands:commit-push-pr:*)",
       "Bash(assign speaker IDs.\" so the empty speaker dropdown is not silent.:*)",
       "Bash(cat C:/Users/ander/AppData/Local/BabelPlayer/runtime/managed-gpu/.venv/Lib/site-packages/ctranslate2-*.dist-info/METADATA)",
-      "Bash(grep -rn \"private.*ResolveVoiceForSegment\\\\|private.*ResolveReferenceAudioForSegment\\\\|RunDiarizationAsync\" /d/Dev/Babel-Player/Services/*.cs)"
+      "Bash(grep -rn \"private.*ResolveVoiceForSegment\\\\|private.*ResolveReferenceAudioForSegment\\\\|RunDiarizationAsync\" /d/Dev/Babel-Player/Services/*.cs)",
+      "Bash(coderabbit --version)",
+      "Bash(coderabbit auth:*)"
     ]
   }
 }

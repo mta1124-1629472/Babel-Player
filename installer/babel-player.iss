@@ -17,7 +17,7 @@ AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}/issues
 AppUpdatesURL={#AppURL}/releases
-DefaultDirName={autopf}\BabelPlayer
+DefaultDirName={commonpf}\Babel Player
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
 LicenseFile={#AppLicense}
@@ -27,7 +27,7 @@ SetupIconFile=..\Assets\Icons\app.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 WizardStyle=modern
 ; Constrain wizard to standard width — prevents the license page from

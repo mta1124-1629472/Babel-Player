@@ -1,33 +1,49 @@
 <Application xmlns="https://github.com/avaloniaui"
-               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-               x:Class="Babel.Player.App"
-               xmlns:local="using:Babel.Player"
-               xmlns:converters="using:Babel.Player.Converters"
-               RequestedThemeVariant="Default">
-              <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                x:Class="Babel.Player.App"
+                xmlns:local="using:Babel.Player"
+                xmlns:converters="using:Babel.Player.Converters"
+                RequestedThemeVariant="Default">
+               <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
-     <Application.Resources>
-         <converters:ComputeProfileDisplayConverter x:Key="ComputeProfileDisplayConverter" />
-         <converters:GpuHostBackendDisplayConverter x:Key="GpuHostBackendDisplayConverter" />
-         
-         <!-- Theme-specific colors -->
-         <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#12121A" />
-         <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#16161E" />
-         <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#1E1E2C" />
-         <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#2A2A3A" />
-         <SolidColorBrush x:Key="BorderBrushBrush" Color="#252530" />
-         <SolidColorBrush x:Key="ProgressBackgroundBrush" Color="#2A2A3A" />
-         <SolidColorBrush x:Key="PipelineProgressBorderBrush" Color="#151522" />
-         <SolidColorBrush x:Key="SegmentSelectedBrush" Color="#20203A" />
-         <SolidColorBrush x:Key="SegmentPointerOverBrush" Color="#1C1C2C" />
-         <SolidColorBrush x:Key="StatusTextBrush" Color="#686880" />
-     </Application.Resources>
+      <Application.Resources>
+          <ResourceDictionary>
+              <ResourceDictionary.ThemeDictionaries>
+                  <ResourceDictionary x:Key="Light">
+                      <!-- Light theme colors -->
+                      <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FFFFFF" />
+                      <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#F5F5F5" />
+                      <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#EBEBEB" />
+                      <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#E0E0E0" />
+                      <SolidColorBrush x:Key="BorderBrushBrush" Color="#D0D0D0" />
+                      <SolidColorBrush x:Key="ProgressBackgroundBrush" Color="#E0E0E0" />
+                      <SolidColorBrush x:Key="PipelineProgressBorderBrush" Color="#D5D5D5" />
+                      <SolidColorBrush x:Key="SegmentSelectedBrush" Color="#E0E0F0" />
+                      <SolidColorBrush x:Key="SegmentPointerOverBrush" Color="#E8E8F8" />
+                      <SolidColorBrush x:Key="StatusTextBrush" Color="#666666" />
+                  </ResourceDictionary>
+                  <ResourceDictionary x:Key="Dark">
+                      <!-- Dark theme colors -->
+                      <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#12121A" />
+                      <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#16161E" />
+                      <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#1E1E2C" />
+                      <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#2A2A3A" />
+                      <SolidColorBrush x:Key="BorderBrushBrush" Color="#252530" />
+                      <SolidColorBrush x:Key="ProgressBackgroundBrush" Color="#2A2A3A" />
+                      <SolidColorBrush x:Key="PipelineProgressBorderBrush" Color="#151522" />
+                      <SolidColorBrush x:Key="SegmentSelectedBrush" Color="#20203A" />
+                      <SolidColorBrush x:Key="SegmentPointerOverBrush" Color="#1C1C2C" />
+                      <SolidColorBrush x:Key="StatusTextBrush" Color="#686880" />
+                  </ResourceDictionary>
+              </ResourceDictionary.ThemeDictionaries>
+          </ResourceDictionary>
+      </Application.Resources>
 
-     <Application.DataTemplates>
-         <local:ViewLocator/>
-     </Application.DataTemplates>
-   
-     <Application.Styles>
-         <FluentTheme />
-     </Application.Styles>
+      <Application.DataTemplates>
+          <local:ViewLocator/>
+      </Application.DataTemplates>
+    
+      <Application.Styles>
+          <FluentTheme />
+      </Application.Styles>
 </Application>
