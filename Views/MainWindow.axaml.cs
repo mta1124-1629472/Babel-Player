@@ -32,6 +32,15 @@ public partial class MainWindow : Window
         // Keep the title in sync with the build configuration.
         Title = AppIdentity.AppName;
 
+#if BABEL_DEV
+        var devLogButton = this.FindControl<Button>("DevLogButton");
+        if (devLogButton is not null)
+            devLogButton.Click += OnDevLogClick;
+        var freshStartButton = this.FindControl<Button>("FreshStartButton");
+        if (freshStartButton is not null)
+            freshStartButton.Click += OnFreshStartClick;
+#endif
+
         var videoView = this.FindControl<MpvVideoView>("VideoView");
         if (videoView is not null)
         {

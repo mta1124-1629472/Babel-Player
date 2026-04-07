@@ -880,13 +880,13 @@
                                 IsVisible="{x:Static bp:BuildInfo.IsDevBuild}">
                             <StackPanel Orientation="Horizontal" Spacing="2">
                                 <Button Classes="dev-pill"
+                                        x:Name="DevLogButton"
                                         Content="📋 Dev Log"
-                                        Click="OnDevLogClick"
                                         Padding="6,5" FontSize="12"
                                         ToolTip.Tip="Open in-app dev log viewer" />
                                 <Button Classes="dev-pill"
+                                        x:Name="FreshStartButton"
                                         Content="🔄 Fresh Start"
-                                        Click="OnFreshStartClick"
                                         Padding="6,5" FontSize="12"
                                         ToolTip.Tip="Cancel pipeline, wipe session temp files, reset UI" />
                             </StackPanel>

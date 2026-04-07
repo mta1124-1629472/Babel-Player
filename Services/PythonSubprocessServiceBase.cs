@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,6 +22,9 @@ namespace Babel.Player.Services;
 /// </summary>
 public abstract class PythonSubprocessServiceBase
 {
+    private const int ProcessTerminationRetryAttempts = 3;
+    private static readonly TimeSpan ProcessTerminationTimeout = TimeSpan.FromSeconds(2);
+
     protected readonly AppLog Log;
     protected readonly string PythonPath;
 
@@ -76,6 +80,12 @@ public abstract class PythonSubprocessServiceBase
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         CancellationToken cancellationToken = default)
     {
+        // Guard against path traversal via scriptPrefix
+        if (!IsValidScriptPrefix(scriptPrefix))
+            throw new ArgumentException(
+                $"scriptPrefix must contain only alphanumeric characters, hyphens, and underscores. Got: {scriptPrefix}",
+                nameof(scriptPrefix));
+
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
 
         // Check for cancellation before doing any work
@@ -124,18 +134,18 @@ public abstract class PythonSubprocessServiceBase
 
                     // Give the process multiple opportunities to terminate
                     var terminated = false;
-                    for (int attempt = 0; attempt < 3 && !terminated; attempt++)
+                    for (int attempt = 0; attempt < ProcessTerminationRetryAttempts && !terminated; attempt++)
                     {
                         try
                         {
-                            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                            using var cts = new CancellationTokenSource(ProcessTerminationTimeout);
                             await proc.WaitForExitAsync(cts.Token);
                             terminated = true;
                         }
                         catch (OperationCanceledException)
                         {
                             // Process didn't terminate within timeout, try again
-                            if (attempt < 2)
+                            if (attempt < ProcessTerminationRetryAttempts - 1)
                                 proc.Kill(entireProcessTree: true);
                         }
                     }
@@ -168,6 +178,10 @@ public abstract class PythonSubprocessServiceBase
                 File.Delete(scriptPath);
         }
     }
+
+    private static bool IsValidScriptPrefix(string prefix) =>
+        !string.IsNullOrEmpty(prefix) &&
+        prefix.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_');
 
     private static async Task WriteStandardInputAsync(
         Process process,

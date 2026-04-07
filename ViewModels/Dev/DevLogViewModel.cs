@@ -1,4 +1,3 @@
-#if BABEL_DEV
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -77,4 +76,3 @@ public partial class DevLogViewModel : ObservableObject, IDisposable
 
     public void Dispose() { }
 }
-#endif

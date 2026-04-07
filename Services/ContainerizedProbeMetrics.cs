@@ -121,12 +121,15 @@ public sealed class ServiceMetrics
     /// <summary>
     /// Cache hit rate as a percentage (0-100). Returns 0 if no cache accesses.
     /// </summary>
-    public double CacheHitRate 
-    { 
+    public double CacheHitRate
+    {
         get
         {
-            var totalAccesses = CacheHits + CacheMisses;
-            return totalAccesses > 0 ? (double)CacheHits / totalAccesses * 100 : 0;
+            lock (_gate)
+            {
+                var totalAccesses = CacheHits + CacheMisses;
+                return totalAccesses > 0 ? (double)CacheHits / totalAccesses * 100 : 0;
+            }
         }
     }
     
