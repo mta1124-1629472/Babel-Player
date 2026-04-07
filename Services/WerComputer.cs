@@ -56,8 +56,17 @@ public static class WerComputer
     private static string[] Tokenize(string text)
         => Normalize(text).Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
+    /// <summary>
+    /// Normalises text for comparison:
+    ///   1. Lowercase
+    ///   2. Strip punctuation (including ¿ ¡ , . ! ? etc.) so Spanish clips don't
+    ///      accumulate false edit-distance hits against punctuation-free hypotheses
+    ///   3. Collapse whitespace
+    /// </summary>
     private static string Normalize(string text)
-        => Regex.Replace(text.ToLowerInvariant().Trim(), @"\s+", " ");
+        => Regex.Replace(
+            Regex.Replace(text.ToLowerInvariant().Trim(), @"[^\w\s]", ""),
+            @"\s+", " ");
 
     /// <summary>Standard Levenshtein distance over string arrays (word tokens).</summary>
     private static int EditDistance(string[] a, string[] b)

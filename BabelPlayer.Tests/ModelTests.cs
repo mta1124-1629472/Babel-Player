@@ -428,4 +428,50 @@ public sealed class ModelTests
         var provider = InferenceRuntimeCatalog.NormalizeTtsProvider(InferenceRuntime.Containerized, "");
         Assert.Equal(ProviderNames.XttsContainer, provider);
     }
+
+    // ── TranscriptArtifact ────────────────────────────────────────────────────
+
+    [Fact]
+    public void TranscriptArtifact_Deserializes_PeakVramMb_And_PeakRamMb()
+    {
+        const string json = """
+            {
+                "language": "es",
+                "language_probability": 0.98,
+                "peak_vram_mb": 512.5,
+                "peak_ram_mb": 1024.0,
+                "segments": []
+            }
+            """;
+
+        var artifact = System.Text.Json.JsonSerializer.Deserialize<TranscriptArtifact>(
+            json,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        Assert.NotNull(artifact);
+        Assert.Equal("es", artifact.Language);
+        Assert.Equal(0.98, artifact.LanguageProbability, precision: 10);
+        Assert.Equal(512.5, artifact.PeakVramMb);
+        Assert.Equal(1024.0, artifact.PeakRamMb);
+    }
+
+    [Fact]
+    public void TranscriptArtifact_PeakFields_DefaultToSentinel_WhenAbsent()
+    {
+        const string json = """
+            {
+                "language": "en",
+                "language_probability": 0.99,
+                "segments": []
+            }
+            """;
+
+        var artifact = System.Text.Json.JsonSerializer.Deserialize<TranscriptArtifact>(
+            json,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        Assert.NotNull(artifact);
+        Assert.Equal(-1.0, artifact.PeakVramMb);
+        Assert.Equal(-1.0, artifact.PeakRamMb);
+    }
 }

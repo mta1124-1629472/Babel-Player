@@ -100,6 +100,24 @@ public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessService
             var script = $@"
 import sys, json
 
+# ── Memory sampling helpers (Step 3: VRAM/RAM instrumentation) ──────────────
+def _sample_ram_mb():
+    try:
+        import psutil, os
+        return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+    except Exception:
+        return -1
+
+def _sample_vram_mb():
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        info   = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        return info.used / (1024 * 1024)
+    except Exception:
+        return -1
+
 try:
     from faster_whisper import WhisperModel
 except ImportError:
@@ -112,11 +130,24 @@ model_name = '{modelNameLiteral}'
 print('CPU transcription runtime: compute_type={cpuComputeTypeLiteral}, cpu_threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, num_workers={numWorkers}')
 model = WhisperModel({whisperCtorArgs})
 
+# Sample baseline memory after model load, before inference
+ram_before = _sample_ram_mb()
+vram_before = _sample_vram_mb()
+
 segments, info = model.transcribe(sys.argv[1])
+
+# Sample peak memory immediately after inference completes
+ram_after  = _sample_ram_mb()
+vram_after = _sample_vram_mb()
+
+peak_ram_mb  = max(ram_before, ram_after)
+peak_vram_mb = max(vram_before, vram_after)
 
 result = {{
     'language': info.language,
     'language_probability': info.language_probability,
+    'peak_ram_mb': peak_ram_mb,
+    'peak_vram_mb': peak_vram_mb,
     'segments': []
 }}
 
@@ -158,7 +189,10 @@ print('Transcription complete')
                 segments,
                 transcriptionData.Language ?? "unknown",
                 transcriptionData.LanguageProbability,
-                null);
+                null,
+                ElapsedMs:   result.ElapsedMs,
+                PeakVramMb:  transcriptionData.PeakVramMb,
+                PeakRamMb:   transcriptionData.PeakRamMb);
         }
         finally
         {

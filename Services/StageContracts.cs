@@ -18,7 +18,10 @@ public sealed record TranscriptionResult(
     IReadOnlyList<TranscriptSegment> Segments,
     string Language,
     double LanguageProbability,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    long ElapsedMs = 0,
+    double PeakVramMb = -1,
+    double PeakRamMb = -1);
 
 public sealed record TranscriptSegment(
     double StartSeconds,
