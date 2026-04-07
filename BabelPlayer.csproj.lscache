@@ -59,6 +59,7 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 
 [sourceFiles]
 App.axaml.cs
+AppIdentity.cs
 BuildInfo.cs
 Converters/EnumDisplayConverters.cs
 Models/Artifacts/
@@ -81,6 +82,7 @@ Models/
  ProviderNames.cs
  RecentSessionEntry.cs
  SessionWorkflowStage.cs
+ TranscriptionResult.cs
  VideoPlaybackOptions.cs
  WorkflowSegmentState.cs
  WorkflowSessionSnapshot.cs
@@ -93,6 +95,7 @@ Services/
  AppLog.cs
  AvaloniaErrorDialogService.cs
  BackgroundTaskObserver.cs
+ BenchmarkOrchestrator.cs
  BenchmarkResultWriter.cs
  BenchmarkRunHarness.cs
  BootstrapDiagnostics.cs
@@ -111,6 +114,7 @@ Services/
   FileSystemCredentialProvider.cs
   ISecureCredentialProvider.cs
   WindowsCredentialProvider.cs
+ CTranslate2FallbackTranslationProvider.cs
  CTranslate2TranslationProvider.cs
  DeepLApiClient.cs
  DeepLTranslationProvider.cs
@@ -169,6 +173,7 @@ Services/
  SessionSwitchService.cs
  SessionWorkflowCoordinator.Containerized.cs
  SessionWorkflowCoordinator.cs
+ SessionWorkflowCoordinator.DevTools.cs
  SessionWorkflowCoordinator.Pipeline.cs
  SessionWorkflowCoordinator.Playback.cs
  SessionWorkflowCoordinator.Progress.cs
@@ -189,6 +194,7 @@ Services/
 ViewLocator.cs
 ViewModels/
  ApiKeysViewModel.cs
+ Dev/DevLogViewModel.cs
  EmbeddedPlaybackViewModel.cs
  MainWindowViewModel.cs
  ModelDownloadEntry.cs
@@ -199,6 +205,7 @@ ViewModels/
 Views/
  ApiKeysDialog.axaml.cs
  CrashReportWindow.axaml.cs
+ Dev/DevLogWindow.axaml.cs
  MainWindow.axaml.cs
  MpvVideoView.cs
  SettingsWindow.axaml.cs
@@ -440,5 +447,6 @@ App.axaml
 Views/
  ApiKeysDialog.axaml
  CrashReportWindow.axaml
+ Dev/DevLogWindow.axaml
  MainWindow.axaml
  SettingsWindow.axaml
