@@ -30,6 +30,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 WizardStyle=modern
+; Constrain wizard to standard width — prevents the license page from
+; appearing awkwardly wide on high-DPI displays or large monitors.
+WizardSizePercent=100
 UninstallDisplayIcon={app}\{#AppExeName}
 
 [Languages]
