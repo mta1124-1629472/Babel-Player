@@ -28,7 +28,7 @@
   </ItemGroup>
 
   <!-- Copy test media to output directory (optional — file may not be committed) -->
-  <ItemGroup Condition="Exists('..\test-assets\video\sample.mp4')">
-    <None Include="..\test-assets\video\sample.mp4" Link="test-assets\video\sample.mp4" CopyToOutputDirectory="PreserveNewest" />
+  <ItemGroup Condition="Exists('Assets\test-assets\video\sample.mp4')">
+    <None Include="Assets\test-assets\video\sample.mp4" Link="Assets\test-assets\video\sample.mp4" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

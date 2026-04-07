@@ -105,7 +105,36 @@ public sealed class WerComputerTests
         Assert.True(wer > 0.0, "diacritic mismatch should produce WER > 0");
     }
 
-    // ── CER — basic cases ──────────────────────────────────────────────────────
+    // ── WER — punctuation stripping ────────────────────────────────────────────
+
+    [Fact]
+    public void ComputeWer_PunctuationInReference_MatchesPunctuationFreeHypothesis()
+    {
+        // Reference has punctuation; model output typically does not.
+        // Normalization should strip punctuation so they compare as equal.
+        Assert.Equal(0.0, WerComputer.ComputeWer("¿cómo estás?", "cómo estás"));
+    }
+
+    [Fact]
+    public void ComputeWer_PunctuationBetweenWords_DoesNotMergeTokens()
+    {
+        // "hola,mundo" after stripping the comma must yield two tokens ("hola" and
+        // "mundo"), not one merged token "holamundo".
+        // If the comma were removed with empty-string replacement the hypothesis
+        // "hola mundo" (two tokens) would be compared against "holamundo" (one
+        // merged token) producing WER > 0.  With space-replacement both sides
+        // tokenise to ["hola", "mundo"] and WER must be 0.
+        Assert.Equal(0.0, WerComputer.ComputeWer("hola,mundo", "hola mundo"));
+    }
+
+    [Fact]
+    public void ComputeCer_PunctuationInReference_MatchesPunctuationFreeHypothesis()
+    {
+        // Same guarantee at the character level.
+        Assert.Equal(0.0, WerComputer.ComputeCer("hello, world!", "hello world"));
+    }
+
+
 
     [Fact]
     public void ComputeCer_IdenticalStrings_ReturnsZero()

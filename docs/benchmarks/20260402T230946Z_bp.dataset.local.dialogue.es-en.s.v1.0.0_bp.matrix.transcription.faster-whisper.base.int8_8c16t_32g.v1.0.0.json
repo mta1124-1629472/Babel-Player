@@ -1,0 +1,67 @@
+{
+  "environment_snapshot": {
+    "MachineId": "elite-ax",
+    "OS": "Microsoft Windows 11 Pro",
+    "OSVersion": "10.0.26200",
+    "CPU": "AMD Ryzen 7 5700X3D 8-Core Processor",
+    "PhysicalCores": 8,
+    "LogicalThreads": 16,
+    "RAM_GB": 31.9,
+    "AvailableRAM_GB": 11.4,
+    "GPU": "NVIDIA GeForce RTX 5070",
+    "GPU_RAM_GB": "11.9",
+    "DiskPath": "D:\\Dev\\Babel-Player",
+    "DotNet": "10.0.201",
+    "Python": "3.10.11",
+    "ProviderRuntimes": {
+      "faster-whisper": "1.2.1",
+      "googletrans": "4.0.2",
+      "edge-tts": "7.2.8",
+      "torch": "2.11.0+cu128"
+    }
+  },
+  "normalized_inputs": {
+    "provider": "faster-whisper",
+    "model": "base",
+    "dataset_id": "bp.dataset.local.dialogue.es-en.s.v1.0.0",
+    "matrix_id": "bp.matrix.transcription.faster-whisper.base.int8_8c16t_32g.v1.0.0",
+    "run_batch_id": "bp.run.20260402T230946Z.bp.dataset.local.dialogue.es-en.s.v1.0.0.bp.matrix.transcription.faster-whisper.base.int8_8c16t_32g.v1.0.0.r3",
+    "cache_modes": [
+      "warm"
+    ],
+    "variants": [
+      "cpu-auto"
+    ],
+    "warmup_runs": 1,
+    "measured_runs": 3,
+    "source": "D:\\Dev\\Babel-Player\\test-assets\\video\\sample.mp4"
+  },
+  "results": [
+    {
+      "variant": {
+        "label": "cpu-auto",
+        "compute_type": "int8",
+        "threads": 0,
+        "workers": 1
+      },
+      "cache_mode": "warm",
+      "measured_runs": 3,
+      "warmup_runs": 1,
+      "timings_seconds": [
+        1.6996758999998747,
+        1.7058541000001242,
+        1.6844695999998294
+      ],
+      "p50_seconds": 1.6996758999998747,
+      "p95_seconds": 1.7052362800000993,
+      "mean_seconds": 1.696666533333276,
+      "segment_count": 1,
+      "language": "es",
+      "language_probability": 0.9895578026771545,
+      "notes": [
+        "Warm mode reuses OS/process state only; app-local provider still loads a new model per run in production path."
+      ]
+    }
+  ],
+  "limitations": []
+}

@@ -24,7 +24,7 @@ public sealed class SessionWorkflowTemplateFixture : IAsyncDisposable
         Directory.CreateDirectory(_templateRootDir);
         Directory.CreateDirectory(_logRootDir);
 
-        _testMediaPath = Path.Combine(AppContext.BaseDirectory, "test-assets", "video", "sample.mp4");
+        _testMediaPath = Path.Combine(AppContext.BaseDirectory, "Assets", "test-assets", "video", "sample.mp4");
     }
 
     public string TestMediaPath => _testMediaPath;

@@ -348,14 +348,16 @@ Babel-Player/
 ├── BabelPlayer.Tests/       # xUnit integration tests (~650 tests)
 ├── inference/               # Python inference server (FastAPI + Faster-Whisper + TTS + diarization)
 ├── scripts/                 # Architecture linter and development tooling
-├── benchmarks/              # Stage benchmark run artifacts for performance tracking
-├── tools/                   # Bundled tooling (uv.exe, ffmpeg placed at publish time)
-├── native/win-x64/          # libmpv-2.dll (native video playback)
-├── docs/
-│   ├── architecture.md      # Structural boundaries and state ownership
-│   ├── smoke/               # Milestone verification notes
-│   └── containers.md        # Docker/WSL deployment reference
-└── test-assets/             # Sample media for integration tests
+│   ├── docs/                 # User & Dev Documentation (contains benchmarks)
+│   ├── inference/            # Python inference server (FastAPI + Faster-Whisper + TTS + diarization)
+│   ├── scripts/              # Architecture linter and development tooling
+│   ├── tools/                # Bundled tooling (uv.exe, ffmpeg placed at publish time)
+│   ├── native/win-x64/       # libmpv-2.dll (native video playback)
+│   └── BabelPlayer.Tests/    # xUnit integration tests (contains test assets)
+└── [Metadata]
+    ├── AGENTS.md / README.md
+    ├── .gitignore / PLAN.md
+    └── LICENSE
 ```
 
 Key files:

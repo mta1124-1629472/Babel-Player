@@ -115,6 +115,7 @@ public sealed class BenchmarkResultWriter
         BenchmarkEnvironmentSnapshot environmentSnapshot,
         BenchmarkInputs inputs,
         IReadOnlyList<BenchmarkRunEntry> entries,
+        IReadOnlyList<string>? limitations = null,
         CancellationToken cancellationToken = default)
     {
         var measured = new List<BenchmarkRunEntry>();
@@ -145,7 +146,7 @@ public sealed class BenchmarkResultWriter
             NormalizedInputs:    inputs,
             Results:             resultEntries,
             Aggregates:          aggregates,
-            Limitations:         []);
+            Limitations:         limitations != null ? new List<string>(limitations) : []);
 
         var json = JsonSerializer.Serialize(file, new JsonSerializerOptions
         {

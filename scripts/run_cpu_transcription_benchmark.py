@@ -94,7 +94,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--measured-runs", type=int, default=5)
     parser.add_argument("--cache-mode", action="append", dest="cache_modes", choices=["cold", "warm"], help="Repeatable cache mode selector.")
     parser.add_argument("--container-url", default="http://localhost:8000")
-    parser.add_argument("--output-dir", default=str(REPO_ROOT / "benchmarks"))
+    parser.add_argument("--output-dir", default=str(REPO_ROOT / "docs" / "benchmarks"))
     parser.add_argument("--machine-id", help="Override machine identifier used in environment snapshot.")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs and write a plan JSON without executing benchmarks.")
     return parser.parse_args()

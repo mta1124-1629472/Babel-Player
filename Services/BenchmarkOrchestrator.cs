@@ -115,7 +115,27 @@ public sealed class BenchmarkOrchestrator
             var audioPath = Path.Combine(datasetDir, clip.AudioFile);
             if (!File.Exists(audioPath))
             {
-                _log.Warning($"BenchmarkOrchestrator: audio file not found — skipping clip '{clip.Id}': {audioPath}");
+                _log.Warning($"BenchmarkOrchestrator: audio file not found — emitting placeholder result for clip '{clip.Id}': {audioPath}");
+
+                var placeholderInputs = new BenchmarkResultWriter.BenchmarkInputs(
+                    DatasetId:           manifest.DatasetId,
+                    MatrixId:            matrixId,
+                    AudioDurationSeconds: clip.DurationSeconds,
+                    SampleRateHz:        clip.SampleRateHz,
+                    Provider:            provider.GetType().Name,
+                    Model:               settings.TranscriptionModel,
+                    ComputeDevice:       settings.TranscriptionProfile.ToString().ToLowerInvariant());
+
+                var placeholderPath = Path.Combine(outputDir, $"{clip.Id}_{matrixId}.json");
+                await writer.WriteAsync(
+                    outputPath:          placeholderPath,
+                    environmentSnapshot: environmentSnapshot,
+                    inputs:              placeholderInputs,
+                    entries:             [],
+                    limitations:         [$"audio_stub: file not found — {clip.AudioFile}"],
+                    cancellationToken:   cancellationToken);
+
+                _log.Info($"BenchmarkOrchestrator: placeholder result written → {placeholderPath}");
                 continue;
             }
 
@@ -168,7 +188,7 @@ public sealed class BenchmarkOrchestrator
                     SampleRateHz:        clip.SampleRateHz,
                     Provider:            provider.GetType().Name,
                     Model:               settings.TranscriptionModel,
-                    ComputeDevice:       "cpu");
+                    ComputeDevice:       settings.TranscriptionProfile.ToString().ToLowerInvariant());
 
                 var resultPath = Path.Combine(outputDir, $"{clip.Id}_{matrixId}.json");
                 await writer.WriteAsync(
@@ -213,7 +233,7 @@ public sealed class BenchmarkOrchestrator
 
         // Flatten all segment text into a single hypothesis string for WER
         var hypothesis = result.Segments != null
-            ? string.Join(" ", System.Linq.Enumerable.Select(result.Segments, s => s.Text?.Trim() ?? ""))
+            ? string.Join(" ", System.Linq.Enumerable.Select(result.Segments, s => s.Text?.Trim()))
             : string.Empty;
 
         return new TranscribeRunResult(

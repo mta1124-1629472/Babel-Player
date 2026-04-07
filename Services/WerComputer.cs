@@ -65,8 +65,8 @@ public static class WerComputer
     /// </summary>
     private static string Normalize(string text)
         => Regex.Replace(
-            Regex.Replace(text.ToLowerInvariant().Trim(), @"[^\w\s]", ""),
-            @"\s+", " ");
+            Regex.Replace(text.ToLowerInvariant().Trim(), @"[^\w\s]", " "),
+            @"\s+", " ").Trim();
 
     /// <summary>Standard Levenshtein distance over string arrays (word tokens).</summary>
     private static int EditDistance(string[] a, string[] b)

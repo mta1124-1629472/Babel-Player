@@ -29,7 +29,7 @@ Current runner behavior:
 
 - generates naming-compliant dataset, matrix, and run batch IDs
 - captures an environment snapshot automatically
-- writes structured JSON output under `benchmarks/`
+- writes structured JSON output under `docs/benchmarks/`
 - supports executable local CPU benchmarking for `faster-whisper`
 - supports executable warm-path benchmarking for `containerized-service`
 - rejects containerized cold-cache execution until service restart automation exists

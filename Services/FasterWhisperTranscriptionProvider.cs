@@ -112,9 +112,12 @@ def _sample_vram_mb():
     try:
         import pynvml
         pynvml.nvmlInit()
-        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        info   = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        return info.used / (1024 * 1024)
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            info   = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            return info.used / (1024 * 1024)
+        finally:
+            pynvml.nvmlShutdown()
     except Exception:
         return -1
 

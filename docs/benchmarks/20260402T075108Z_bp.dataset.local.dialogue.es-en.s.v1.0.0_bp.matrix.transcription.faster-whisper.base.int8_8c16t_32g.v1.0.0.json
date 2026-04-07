@@ -1,0 +1,42 @@
+{
+  "environment_snapshot": {
+    "MachineId": "elite-ax",
+    "OS": "Microsoft Windows 11 Pro",
+    "OSVersion": "10.0.26200",
+    "CPU": "AMD Ryzen 7 5700X3D 8-Core Processor",
+    "PhysicalCores": 8,
+    "LogicalThreads": 16,
+    "RAM_GB": 31.9,
+    "AvailableRAM_GB": 17.6,
+    "GPU": "NVIDIA GeForce RTX 5070",
+    "GPU_RAM_GB": "11.9",
+    "DiskPath": "D:\\Dev\\Babel-Player",
+    "DotNet": "10.0.201",
+    "Python": "3.10.11",
+    "ProviderRuntimes": {
+      "faster-whisper": "1.2.1",
+      "googletrans": "4.0.2",
+      "edge-tts": "7.2.8",
+      "torch": "2.11.0+cu128"
+    }
+  },
+  "normalized_inputs": {
+    "provider": "faster-whisper",
+    "model": "base",
+    "dataset_id": "bp.dataset.local.dialogue.es-en.s.v1.0.0",
+    "matrix_id": "bp.matrix.transcription.faster-whisper.base.int8_8c16t_32g.v1.0.0",
+    "run_batch_id": "bp.run.20260402T075108Z.bp.dataset.local.dialogue.es-en.s.v1.0.0.bp.matrix.transcription.faster-whisper.base.int8_8c16t_32g.v1.0.0.r5",
+    "cache_modes": [
+      "cold",
+      "warm"
+    ],
+    "variants": [
+      "cpu-auto"
+    ],
+    "warmup_runs": 1,
+    "measured_runs": 5,
+    "source": "D:\\Dev\\Babel-Player\\test-assets\\video\\sample.mp4"
+  },
+  "results": [],
+  "limitations": []
+}
