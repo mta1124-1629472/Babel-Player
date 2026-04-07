@@ -94,6 +94,32 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     _log.Info($"Container probe cache hit (after race): url={normalizedUrl}, state={entry.CachedResult.State}");
                     return entry.CachedResult;
                 }
+
+                // If the in-flight task completed but the observer hasn't cached the result yet,
+                // extract the result directly to prevent a spurious Checking state.
+                if (entry.InFlightTask.IsCompletedSuccessfully)
+                {
+                    var completedResult = entry.InFlightTask.Result;
+                    var ttl = completedResult.State switch
+                    {
+                        ContainerizedProbeState.Available => AvailableTtl,
+                        ContainerizedProbeState.Unavailable => UnavailableTtl,
+                        _ => TimeSpan.Zero,
+                    };
+                    // Clear the in-flight task so the observer skips its cache update
+                    // (ObserveCompletionAsync checks ReferenceEquals before writing).
+                    entry.InFlightTask = null;
+                    entry.Cts?.Dispose();
+                    entry.Cts = null;
+                    if (ttl > TimeSpan.Zero)
+                    {
+                        entry.CachedResult = completedResult;
+                        entry.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+                    }
+                    _log.Info($"Container probe completed (observer not yet run): url={normalizedUrl}, state={completedResult.State}");
+                    return completedResult;
+                }
+
                 _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
                 return Checking(normalizedUrl);
             }
