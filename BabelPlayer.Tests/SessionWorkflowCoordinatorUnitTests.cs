@@ -208,7 +208,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     }
 
     [Fact]
-    public void LoadMedia_ValidFile_QueuesAutoPlayMediaReloadRequest()
+    public void LoadMedia_ValidFile_QueuesNonAutoPlayMediaReloadRequest()
     {
         if (!File.Exists(_mediaPath)) return;
 
@@ -218,7 +218,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
 
         var request = coord.ConsumePendingMediaReloadRequest();
         Assert.NotNull(request);
-        Assert.True(request!.AutoPlay);
+        Assert.False(request!.AutoPlay);
         Assert.Equal(coord.CurrentSession.IngestedMediaPath, request.IngestedMediaPath);
     }
 

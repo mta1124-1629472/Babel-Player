@@ -404,7 +404,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             };
         }
 
-        QueueMediaReloadRequest(autoPlay: true, "media-switch");
+        QueueMediaReloadRequest(autoPlay: false, "media-switch");
         SaveCurrentSession();
     }
 

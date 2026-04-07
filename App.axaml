@@ -12,20 +12,21 @@
               <converters:GpuHostBackendDisplayConverter x:Key="GpuHostBackendDisplayConverter"/>
               <ResourceDictionary.ThemeDictionaries>
                   <ResourceDictionary x:Key="Light">
-                      <!-- Light theme colors -->
-                      <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FFFFFF" />
-                      <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#F5F5F5" />
-                      <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#EBEBEB" />
-                      <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#E0E0E0" />
-                      <SolidColorBrush x:Key="BorderBrushBrush" Color="#D0D0D0" />
-                      <SolidColorBrush x:Key="ProgressBackgroundBrush" Color="#E0E0E0" />
+                      <!-- Correct semantic light-theme values. The left panel overrides
+                           these locally via Border.Resources so it stays dark in both modes. -->
+                      <SolidColorBrush x:Key="WindowBackgroundBrush"       Color="#FFFFFF" />
+                      <SolidColorBrush x:Key="PanelBackgroundBrush"        Color="#1A1A28" />
+                      <SolidColorBrush x:Key="ControlBackgroundBrush"      Color="#EBEBEB" />
+                      <SolidColorBrush x:Key="ButtonBackgroundBrush"       Color="#E0E0E0" />
+                      <SolidColorBrush x:Key="BorderBrushBrush"            Color="#CCCCCC" />
+                      <SolidColorBrush x:Key="ProgressBackgroundBrush"     Color="#D0D0D0" />
                       <SolidColorBrush x:Key="PipelineProgressBorderBrush" Color="#D5D5D5" />
-                      <SolidColorBrush x:Key="SegmentSelectedBrush" Color="#E0E0F0" />
-                      <SolidColorBrush x:Key="SegmentPointerOverBrush" Color="#E8E8F8" />
-                      <SolidColorBrush x:Key="StatusTextBrush" Color="#666666" />
-                      <SolidColorBrush x:Key="PrimaryTextBrush" Color="#1C1C2C" />
-                      <SolidColorBrush x:Key="VideoOverlayTextBrush" Color="#C0C0D0" />
-                      <SolidColorBrush x:Key="VideoOverlaySubtextBrush" Color="#A8A8BC" />
+                      <SolidColorBrush x:Key="SegmentSelectedBrush"        Color="#E0E0F0" />
+                      <SolidColorBrush x:Key="SegmentPointerOverBrush"     Color="#E8E8F8" />
+                      <SolidColorBrush x:Key="StatusTextBrush"             Color="#555555" />
+                      <SolidColorBrush x:Key="PrimaryTextBrush"            Color="#1C1C2C" />
+                      <SolidColorBrush x:Key="VideoOverlayTextBrush"       Color="#C8C8D8" />
+                      <SolidColorBrush x:Key="VideoOverlaySubtextBrush"    Color="#A0A0B8" />
                   </ResourceDictionary>
                   <ResourceDictionary x:Key="Dark">
                       <!-- Dark theme colors -->
