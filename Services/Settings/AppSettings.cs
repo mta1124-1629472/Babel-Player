@@ -18,14 +18,14 @@ public sealed class AppSettings
     /// <summary>Public compute profile used for transcription: CPU, GPU, or cloud.</summary>
     public ComputeProfile TranscriptionProfile { get; set; } = ComputeProfile.Cpu;
 
-    /// <summary>Transcription model name within the selected provider (e.g. "base", "large-v3").</summary>
-    public string TranscriptionModel { get; set; } = "base";
+    /// <summary>Transcription model name within the selected provider (e.g. "tiny", "base", "large-v3").</summary>
+    public string TranscriptionModel { get; set; } = "tiny";
 
     /// <summary>
     /// CPU compute type used by transcription providers when running on CPU.
-    /// Default "int8" matches current faster-whisper CPU behavior.
+    /// "auto" selects int8_float16 on AVX2-capable CPUs, int8 otherwise.
     /// </summary>
-    public string TranscriptionCpuComputeType { get; set; } = "int8";
+    public string TranscriptionCpuComputeType { get; set; } = "auto";
 
     /// <summary>
     /// CPU thread count hint for transcription providers.
@@ -62,26 +62,26 @@ public sealed class AppSettings
     /// </summary>
     public int? DiarizationMaxSpeakers { get; set; } = null;
 
-    /// <summary>Translation provider identifier (e.g. "google-translate-free", "openai").</summary>
-    public string TranslationProvider { get; set; } = ProviderNames.GoogleTranslateFree;
+    /// <summary>Translation provider identifier (e.g. "ctranslate2", "openai").</summary>
+    public string TranslationProvider { get; set; } = ProviderNames.CTranslate2;
 
     /// <summary>Public compute profile used for translation: CPU, GPU, or cloud.</summary>
-    public ComputeProfile TranslationProfile { get; set; } = ComputeProfile.Cloud;
+    public ComputeProfile TranslationProfile { get; set; } = ComputeProfile.Cpu;
 
-    /// <summary>Translation model name within the selected provider (e.g. "default", "gpt-4o").</summary>
-    public string TranslationModel { get; set; } = "default";
+    /// <summary>Translation model name within the selected provider.</summary>
+    public string TranslationModel { get; set; } = "nllb-200-distilled-600M";
 
-    /// <summary>TTS provider identifier (e.g. "edge-tts", "elevenlabs").</summary>
-    public string TtsProvider { get; set; } = ProviderNames.EdgeTts;
+    /// <summary>TTS provider identifier (e.g. "piper", "edge-tts", "elevenlabs").</summary>
+    public string TtsProvider { get; set; } = ProviderNames.Piper;
 
     /// <summary>Public compute profile used for TTS: CPU, GPU, or cloud.</summary>
-    public ComputeProfile TtsProfile { get; set; } = ComputeProfile.Cloud;
+    public ComputeProfile TtsProfile { get; set; } = ComputeProfile.Cpu;
 
     /// <summary>
-     /// TTS voice or model selection. For edge-tts this is an Edge-TTS voice name;
-     /// for other providers it is the synthesis model name.
-     /// </summary>
-    public string TtsVoice { get; set; } = "en-US-AriaNeural";
+    /// TTS voice or model selection. For Piper this is a voice model filename (e.g. en_US-lessac-medium);
+    /// for cloud providers it is the voice name.
+    /// </summary>
+    public string TtsVoice { get; set; } = "en_US-lessac-medium";
 
     /// <summary>BCP-47 language code for the translation target.</summary>
     public string TargetLanguage { get; set; } = "en";
@@ -102,7 +102,7 @@ public sealed class AppSettings
     /// When true, the app will attempt to start the selected local GPU host
     /// during app startup even if no stage is currently set to the GPU profile.
     /// </summary>
-    public bool AlwaysStartLocalGpuRuntimeAtAppStart { get; set; } = false;
+    public bool AlwaysStartLocalGpuRuntimeAtAppStart { get; set; } = true;
 
     /// <summary>
     /// Base URL of the advanced Docker-hosted inference service used when
@@ -185,9 +185,9 @@ public sealed class AppSettings
     /// <summary>
     /// Use the gpu-next video output backend instead of the legacy gpu backend.
     /// Required for RTX Video Super Resolution and RTX HDR.
-    /// Takes effect on app restart. Default false (opt-in).
+    /// Takes effect on app restart. Default true (modern Windows + GPU drivers handle this well).
     /// </summary>
-    public bool VideoUseGpuNext { get; set; } = false;
+    public bool VideoUseGpuNext { get; set; } = true;
 
     /// <summary>
     /// Enable NVIDIA RTX Video Super Resolution via the d3d11vpp filter.

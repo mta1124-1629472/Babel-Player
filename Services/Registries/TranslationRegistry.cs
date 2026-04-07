@@ -59,25 +59,20 @@ public sealed class TranslationRegistry : ITranslationRegistry
 
         if (profile == ComputeProfile.Cpu)
         {
+            // Only CTranslate2 is exposed in the CPU picker. NLLB (PyTorch) is kept in the
+            // registry so the coordinator can use it as a silent fallback if CTranslate2 fails
+            // to initialise, but users never need to select it manually.
             return
             [
                 new(
-                    ProviderNames.Nllb200,
-                    "NLLB-200 (Local CPU)",
-                    false,
-                    null,
-                    GetCpuNllbModels(),
-                    SupportedRuntimes: [InferenceRuntime.Local],
-                    DefaultRuntime: InferenceRuntime.Local),
-                new(
                     ProviderNames.CTranslate2,
-                    "CTranslate2 (Local Lightweight, recommended)",
+                    "CTranslate2",
                     false,
                     null,
                     GetCTranslate2Models(),
                     SupportedRuntimes: [InferenceRuntime.Local],
                     DefaultRuntime: InferenceRuntime.Local,
-                    Notes: "Recommended lightweight local translation option."),
+                    Notes: "int8-quantized NLLB-200 via the CTranslate2 runtime. Same engine as faster-whisper — fast and memory-efficient."),
             ];
         }
 

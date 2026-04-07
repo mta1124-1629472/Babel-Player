@@ -25,7 +25,7 @@ public sealed record WorkflowSessionSnapshot(
     Dictionary<string, string>? TtsSegmentAudioPaths = null,
     Dictionary<string, string>? SpeakerVoiceAssignments = null,
     Dictionary<string, string>? SpeakerReferenceAudioPaths = null,
-    bool MultiSpeakerEnabled = false,
+    bool MultiSpeakerEnabled = true,
     string? DefaultTtsVoiceFallback = null,
     string? DiarizationProvider = null,
     DateTimeOffset? SpeakersDetectedAtUtc = null,

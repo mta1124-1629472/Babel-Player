@@ -281,7 +281,7 @@ public sealed class ModelTests
     public void AppSettings_TranscriptionCpuDefaults_AreSafe()
     {
         var settings = new Babel.Player.Services.Settings.AppSettings();
-        Assert.Equal("int8", settings.TranscriptionCpuComputeType);
+        Assert.Equal("auto", settings.TranscriptionCpuComputeType);
         Assert.Equal(0, settings.TranscriptionCpuThreads);
         Assert.Equal(1, settings.TranscriptionNumWorkers);
     }

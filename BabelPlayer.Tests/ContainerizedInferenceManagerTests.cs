@@ -42,7 +42,9 @@ public sealed class ContainerizedInferenceManagerTests : IDisposable
                 return Task.FromResult(new ContainerComposeStartResult(true, "started", string.Empty));
             });
 
-        var result = await manager.EnsureStartedAsync(new AppSettings(), ContainerizedStartupTrigger.AppStartup);
+        var result = await manager.EnsureStartedAsync(
+            new AppSettings { AlwaysStartLocalGpuRuntimeAtAppStart = false },
+            ContainerizedStartupTrigger.AppStartup);
 
         Assert.False(result.Attempted);
         Assert.Equal(0, startCalls);

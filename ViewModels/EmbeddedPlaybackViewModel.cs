@@ -412,6 +412,39 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     public bool HasVsrPlaybackStatus => _coordinator.VideoEnhancementDiagnostics.HasPlaybackStatus;
     public string VsrPlaybackStatusText => _coordinator.VideoEnhancementDiagnostics.PlaybackStatusText;
     public string VoiceModelLabel => _coordinator.CurrentSession.TtsVoice ?? _coordinator.CurrentSettings.TtsVoice;
+    // ── Language routing ──────────────────────────────────────────────────────
+
+    /// <summary>Supported target languages. Expand as TTS voice coverage grows.</summary>
+    public static IReadOnlyList<(string Code, string Label)> SupportedTargetLanguages { get; } =
+    [
+        ("en", "English"),
+    ];
+
+    public IReadOnlyList<string> TargetLanguageLabels { get; } =
+        [.. SupportedTargetLanguages.Select(l => l.Label)];
+
+    [ObservableProperty]
+    private string _selectedTargetLanguage = "English";
+
+    partial void OnSelectedTargetLanguageChanged(string value)
+    {
+        if (_isSynchronizingPipelineSettings) return;
+        var entry = SupportedTargetLanguages.FirstOrDefault(l => l.Label == value);
+        var code = string.IsNullOrEmpty(entry.Code) ? "en" : entry.Code;
+        if (_coordinator.CurrentSettings.TargetLanguage != code)
+        {
+            _coordinator.CurrentSettings.TargetLanguage = code;
+            _coordinator.NotifySettingsModified();
+            NotifyActiveConfigChanged();
+        }
+    }
+
+    /// <summary>Source language display: "auto-detect" before transcription has run.</summary>
+    public string SourceLanguageDisplay =>
+        string.IsNullOrEmpty(_coordinator.CurrentSession.SourceLanguage)
+            ? "auto-detect"
+            : _coordinator.CurrentSession.SourceLanguage;
+
     public string ActiveTranscriptionConfigLine => $"{TranscriptionRuntime} / {TranscriptionProvider} / {TranscriptionModel}";
     public string ActiveCpuTuningLine
     {
@@ -422,8 +455,17 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             return $"{s.TranscriptionCpuComputeType} · threads {threads} · workers {Math.Max(1, s.TranscriptionNumWorkers)}";
         }
     }
-    public string ActiveTranslationConfigLine =>
-        $"{TranslationRuntime} / {TranslationProvider} / {TranslationModel} · target {_coordinator.CurrentSettings.TargetLanguage}";
+    public string ActiveTranslationConfigLine
+    {
+        get
+        {
+            var fallback = _coordinator.TranslationFallbackNote;
+            var target = _coordinator.CurrentSettings.TargetLanguage;
+            if (fallback is not null)
+                return $"{TranslationRuntime} / ⚠ {fallback} · target {target}";
+            return $"{TranslationRuntime} / {TranslationProvider} / {TranslationModel} · target {target}";
+        }
+    }
     public string ActiveTtsConfigLine => $"{TtsRuntime} / {TtsProvider} / {TtsModelOrVoice}";
     public string SelectedSegmentSpeakerId => SelectedSegment?.SpeakerId ?? "—";
     public string SelectedSegmentAssignedVoice => SelectedSegment?.AssignedVoice ?? "—";
@@ -890,6 +932,9 @@ partial void OnSourcePositionMsChanged(double value)
         if (IsMuted && value > 0) IsMuted = false;
         var player = _coordinator.SourceMediaPlayer;
         if (player != null) player.Volume = value;
+        // Master volume also applies to TTS segment audio.
+        var segment = _coordinator.SegmentPlayer;
+        if (segment != null) segment.Volume = value;
     }
 
     partial void OnSelectedPlaybackRateChanged(string value)
@@ -1080,7 +1125,16 @@ partial void OnSourcePositionMsChanged(double value)
                 _availableTtsOptions.FirstOrDefault(m => m.ModelId == TtsModelOrVoice)
                 ?? _availableTtsOptions.FirstOrDefault();
 
-            IsMultiSpeakerEnabled = _coordinator.CurrentSession.MultiSpeakerEnabled;
+            // Multi-speaker routing is always on; migrate old sessions that had it off.
+            if (!_coordinator.CurrentSession.MultiSpeakerEnabled)
+                _coordinator.SetMultiSpeakerEnabled(true);
+            IsMultiSpeakerEnabled = true;
+
+            // Target language dropdown
+            var targetCode = _coordinator.CurrentSettings.TargetLanguage;
+            var targetEntry = SupportedTargetLanguages.FirstOrDefault(l => l.Code == targetCode);
+            SelectedTargetLanguage = string.IsNullOrEmpty(targetEntry.Label) ? "English" : targetEntry.Label;
+
             DiarizationProvider = _coordinator.CurrentSettings.DiarizationProvider;
             DiarizationMinSpeakers = _coordinator.CurrentSettings.DiarizationMinSpeakers;
             DiarizationMaxSpeakers = _coordinator.CurrentSettings.DiarizationMaxSpeakers;
@@ -1642,8 +1696,12 @@ partial void OnSourcePositionMsChanged(double value)
                 OnPropertyChanged(nameof(HasVsrPlaybackStatus));
                 OnPropertyChanged(nameof(VsrPlaybackStatusText));
                 break;
+            case nameof(SessionWorkflowCoordinator.TranslationFallbackNote):
+                NotifyActiveConfigChanged();
+                break;
             case nameof(SessionWorkflowCoordinator.CurrentSession):
                 OnPropertyChanged(nameof(VoiceModelLabel));
+                OnPropertyChanged(nameof(SourceLanguageDisplay));
                 var oldPath = _lastKnownSourceMediaPath;
                 var newPath = _coordinator.CurrentSession.SourceMediaPath;
                 IsSourceMediaLoaded = !string.IsNullOrEmpty(_coordinator.CurrentSession.IngestedMediaPath);

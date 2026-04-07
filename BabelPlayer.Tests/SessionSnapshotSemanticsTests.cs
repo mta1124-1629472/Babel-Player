@@ -322,9 +322,11 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
             TranslationProvider = ProviderNames.GoogleTranslateFree,
+            TranslationProfile = ComputeProfile.Cloud,
             TranslationModel = "default",
             TargetLanguage = "en",
             TtsProvider = ProviderNames.EdgeTts,
+            TtsProfile = ComputeProfile.Cloud,
             TtsVoice = "en-US-AriaNeural", // changed voice
         };
         Assert.Equal(PipelineInvalidation.Tts, SessionSnapshotSemantics.ComputeInvalidation(snap, settings));

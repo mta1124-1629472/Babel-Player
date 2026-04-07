@@ -48,9 +48,12 @@
 
                         <!-- Recent Sessions -->
                         <StackPanel Orientation="Horizontal" Spacing="20">
-                            <TextBlock Text="Max Recent Sessions:" VerticalAlignment="Center"/>
+                            <TextBlock Text="Recent session history limit:"
+                                       VerticalAlignment="Center"
+                                       ToolTip.Tip="Maximum number of recent sessions kept in the file menu (1–20)."/>
                             <TextBox Text="{Binding MaxRecentSessions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="60"/>
+                                     Width="60"
+                                     ToolTip.Tip="Maximum number of recent sessions kept in the file menu (1–20)."/>
                         </StackPanel>
 
                         <!-- Auto-save -->
@@ -102,40 +105,41 @@
                         <StackPanel Spacing="6">
                             <TextBlock Text="Advanced GPU Service URL:" VerticalAlignment="Center"/>
                             <TextBox Text="{Binding AdvancedGpuServiceUrl, Mode=TwoWay}"
+                                     IsEnabled="{Binding IsDockerBackend}"
                                      Width="320"
                                      HorizontalAlignment="Left"/>
                             <TextBlock Opacity="0.65"
                                        TextWrapping="Wrap"
-                                       Text="Used only when the Docker GPU backend is selected. Automatic Docker startup only runs for loopback URLs such as http://localhost:8000."/>
+                                       Text="Only editable when the Docker GPU backend is selected. Automatic Docker startup only runs for loopback URLs such as http://localhost:8000."/>
                             <CheckBox IsChecked="{Binding AlwaysStartLocalGpuRuntimeAtAppStart}"
                                       Content="Always start local GPU runtime at app start"/>
                         </StackPanel>
 
-                        <!-- Advanced CPU transcription tuning -->
-                        <StackPanel Margin="0,6,0,0" Spacing="6">
-                            <TextBlock Text="Advanced: CPU Transcription" FontWeight="SemiBold"/>
-                            <TextBlock Opacity="0.65" TextWrapping="Wrap"
-                                       Text="These options tune CPU-only transcription. 0 threads means auto selection by the runtime."/>
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal" Spacing="20">
-                            <TextBlock Text="CPU Compute Type:" VerticalAlignment="Center"/>
-                            <ComboBox ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}"
-                                      SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}"
-                                      Width="150"/>
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal" Spacing="20">
-                            <TextBlock Text="CPU Threads (0=auto):" VerticalAlignment="Center"/>
-                            <TextBox Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="80"/>
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal" Spacing="20">
-                            <TextBlock Text="Workers:" VerticalAlignment="Center"/>
-                            <TextBox Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="80"/>
-                        </StackPanel>
+                        <!-- Advanced CPU transcription tuning (collapsed by default) -->
+                        <Expander Header="Advanced: CPU Transcription"
+                                  IsExpanded="False"
+                                  Margin="0,6,0,0">
+                            <StackPanel Spacing="8" Margin="0,8,0,0">
+                                <TextBlock Opacity="0.65" TextWrapping="Wrap"
+                                           Text="These options tune CPU-only transcription. 0 threads means auto selection by the runtime. 'auto' compute type selects int8_float16 on AVX2-capable CPUs, int8 otherwise."/>
+                                <StackPanel Orientation="Horizontal" Spacing="20">
+                                    <TextBlock Text="CPU Compute Type:" VerticalAlignment="Center"/>
+                                    <ComboBox ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}"
+                                              SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}"
+                                              Width="150"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="20">
+                                    <TextBlock Text="CPU Threads (0=auto):" VerticalAlignment="Center"/>
+                                    <TextBox Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             Width="80"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="20">
+                                    <TextBlock Text="Workers:" VerticalAlignment="Center"/>
+                                    <TextBox Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             Width="80"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Expander>
 
                     </StackPanel>
                 </ScrollViewer>
@@ -252,7 +256,7 @@
                         </Border>
 
                         <CheckBox IsChecked="{Binding VideoHdrEnabled, Mode=TwoWay}"
-                                  IsEnabled="{Binding VideoUseGpuNext}"
+                                  IsEnabled="{Binding HdrSettingsAvailable}"
                                   Content="HDR Output Pipeline"
                                   Margin="0,8,0,0"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
@@ -374,6 +378,7 @@
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <TextBlock Text="☕"
                                                    FontSize="20"
+                                                   Foreground="#1A1A2A"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock Text="Support me on Ko-fi"
                                                    FontSize="16"
@@ -418,8 +423,7 @@
         <!-- Footer buttons -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
             <Button Content="Cancel" Click="OnCancelClick"/>
-            <Button Content="Apply" Click="OnApplyClick"/>
-            <Button Content="OK" Click="OnOKClick"/>
+            <Button Content="Save &amp; Close" Click="OnOKClick"/>
         </StackPanel>
     </Grid>
 </Window>

@@ -78,6 +78,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private double _ttsPlaybackRate = 1.0;
 
+    /// <summary>
+    /// Set when the CTranslate2 translation provider fails and the pipeline
+    /// automatically falls back to the NLLB PyTorch provider.
+    /// Null when no fallback has occurred. Exposed so the UI can show a note
+    /// in the Active Config panel (e.g. "NMT: CTranslate2 → NLLB fallback").
+    /// </summary>
+    [ObservableProperty]
+    private string? _translationFallbackNote;
+
     public bool HasRecentSessions => RecentSessions.Count > 0;
 
     public AppSettings CurrentSettings { get; private set; }

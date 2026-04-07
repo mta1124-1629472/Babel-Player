@@ -699,16 +699,18 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
+        // Switch to Cloud first so we can test switching back to CPU.
+        playback.TranslationRuntime = ComputeProfile.Cloud;
         playback.TranslationProvider = ProviderNames.OpenAi;
         playback.TranslationModel = "gpt-4o-mini";
 
         playback.TranslationRuntime = ComputeProfile.Cpu;
 
         Assert.Equal(ComputeProfile.Cpu, playback.TranslationRuntime);
-        Assert.Equal(ProviderNames.Nllb200, playback.TranslationProvider);
+        Assert.Equal(ProviderNames.CTranslate2, playback.TranslationProvider);
         Assert.Equal("nllb-200-distilled-600M", playback.TranslationModel);
         Assert.Equal(ComputeProfile.Cpu, playback.Coordinator.CurrentSettings.TranslationProfile);
-        Assert.Equal(ProviderNames.Nllb200, playback.Coordinator.CurrentSettings.TranslationProvider);
+        Assert.Equal(ProviderNames.CTranslate2, playback.Coordinator.CurrentSettings.TranslationProvider);
         Assert.Equal("nllb-200-distilled-600M", playback.Coordinator.CurrentSettings.TranslationModel);
     }
 
@@ -717,6 +719,8 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
+        // Switch to Cloud first so we can test switching back to CPU.
+        playback.TtsRuntime = ComputeProfile.Cloud;
         playback.TtsModelOrVoice = "eleven_multilingual_v2";
         playback.TtsRuntime = ComputeProfile.Cpu;
 
@@ -737,10 +741,10 @@ public sealed class SegmentInspectionTests
 
         Assert.Equal(ComputeProfile.Gpu, playback.TranscriptionRuntime);
         Assert.Equal(ProviderNames.FasterWhisper, playback.TranscriptionProvider);
-        Assert.Equal("base", playback.TranscriptionModel);
+        Assert.Equal("tiny", playback.TranscriptionModel);
         Assert.Equal(ComputeProfile.Gpu, playback.Coordinator.CurrentSettings.TranscriptionProfile);
         Assert.Equal(ProviderNames.FasterWhisper, playback.Coordinator.CurrentSettings.TranscriptionProvider);
-        Assert.Equal("base", playback.Coordinator.CurrentSettings.TranscriptionModel);
+        Assert.Equal("tiny", playback.Coordinator.CurrentSettings.TranscriptionModel);
     }
 
     [Fact]
@@ -748,6 +752,8 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
+        // Switch to Cloud first so Cloud providers are available.
+        playback.TranslationRuntime = ComputeProfile.Cloud;
         playback.TranslationProvider = ProviderNames.OpenAi;
         playback.TranslationModel = "gpt-4o-mini";
 
@@ -764,6 +770,8 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
+        // Switch to Cloud first so Cloud providers are available.
+        playback.TtsRuntime = ComputeProfile.Cloud;
         playback.TtsProvider = ProviderNames.ElevenLabs;
         playback.TtsModelOrVoice = "eleven_multilingual_v2";
 

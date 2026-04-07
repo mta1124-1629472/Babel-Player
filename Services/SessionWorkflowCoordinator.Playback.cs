@@ -441,6 +441,9 @@ public sealed partial class SessionWorkflowCoordinator
 
     public IMediaTransport? SourceMediaPlayer => _transportManager.SourceMediaPlayer;
 
+    /// <summary>The TTS segment player, if it has been created. Null until first TTS playback.</summary>
+    public IMediaTransport? SegmentPlayer => _transportManager.SegmentPlayer;
+
     public void Dispose()
     {
         FlushPendingSave();

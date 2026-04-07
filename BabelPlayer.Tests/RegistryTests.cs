@@ -199,7 +199,9 @@ public sealed class RegistryTests : IDisposable
     public void TranslationRegistry_CheckReadiness_OpenAiWithoutKey_ReturnsMissingKey()
     {
         var readiness = _translationRegistry.CheckReadiness(
-            ProviderNames.OpenAi, "gpt-4o-mini", new AppSettings { TranslationProvider = ProviderNames.OpenAi, TranslationModel = "gpt-4o-mini" }, null);
+            ProviderNames.OpenAi, "gpt-4o-mini",
+            new AppSettings { TranslationProvider = ProviderNames.OpenAi, TranslationModel = "gpt-4o-mini", TranslationProfile = ComputeProfile.Cloud },
+            null);
 
         Assert.False(readiness.IsReady);
         Assert.Contains("API key missing", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
@@ -470,7 +472,7 @@ public sealed class RegistryTests : IDisposable
     {
         var providers = _translationRegistry.GetAvailableProviders(ComputeProfile.Cpu);
 
-        Assert.Contains(providers, provider => provider.Id == ProviderNames.Nllb200);
+        Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.Nllb200);
         Assert.Contains(providers, provider => provider.Id == ProviderNames.CTranslate2);
     }
 

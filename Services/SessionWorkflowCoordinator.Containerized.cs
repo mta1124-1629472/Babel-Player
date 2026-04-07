@@ -15,12 +15,28 @@ public sealed partial class SessionWorkflowCoordinator
             KeyStore,
             CurrentSettings.TranscriptionProfile);
 
-    private ITranslationProvider CreateTranslationService() =>
-        TranslationRegistry.CreateProvider(
+    private ITranslationProvider CreateTranslationService()
+    {
+        var provider = TranslationRegistry.CreateProvider(
             CurrentSettings.TranslationProvider,
             CurrentSettings,
             KeyStore,
             CurrentSettings.TranslationProfile);
+        // Wrap CTranslate2 CPU provider so that if it fails at inference time the
+        // pipeline automatically falls back to NLLB (PyTorch) and records a note.
+        if (CurrentSettings.TranslationProvider == ProviderNames.CTranslate2
+            && CurrentSettings.TranslationProfile == ComputeProfile.Cpu)
+        {
+            var fallback = TranslationRegistry.CreateProvider(
+                ProviderNames.Nllb200,
+                CurrentSettings,
+                KeyStore,
+                ComputeProfile.Cpu);
+            return new CTranslate2FallbackTranslationProvider(provider, fallback, _log,
+                note => TranslationFallbackNote = note);
+        }
+        return provider;
+    }
 
     private ITtsProvider CreateTtsService() =>
         TtsRegistry.CreateProvider(

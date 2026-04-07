@@ -148,7 +148,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public string[] TtsVoiceOptions { get; }
 
     public string[] TranscriptionCpuComputeTypeOptions { get; } =
-        ["int8", "int8_float16", "float32"];
+        ["auto", "int8", "int8_float16", "float32"];
 
     // ── Models tab ────────────────────────────────────────────────────────────
 
@@ -167,7 +167,11 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     // ── Containerized local inference ─────────────────────────────────────────
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDockerBackend))]
     private GpuHostBackend _preferredLocalGpuBackend = GpuHostBackend.ManagedVenv;
+
+    /// <summary>True when the Docker GPU backend is selected; controls whether the service URL field is editable.</summary>
+    public bool IsDockerBackend => PreferredLocalGpuBackend == GpuHostBackend.DockerHost;
 
     [ObservableProperty]
     private string _advancedGpuServiceUrl = "http://127.0.0.1:8000";
@@ -198,6 +202,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private string _videoExportEncoder = "auto";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HdrSettingsAvailable))]
     private bool _videoUseGpuNext;
 
     public string[] HwdecOptions { get; } =
@@ -240,6 +245,15 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public string VsrResolvedStateText => _coordinator.VideoEnhancementDiagnostics.ResolvedStateText;
     public string VsrReasonText => _coordinator.VideoEnhancementDiagnostics.LastReasonText;
     public string VsrFilterText => _coordinator.VideoEnhancementDiagnostics.LastFilterText;
+
+    /// <summary>True when the current display is detected as HDR-capable.</summary>
+    public bool IsHdrCapable => _coordinator.HardwareSnapshot.IsHdrDisplayAvailable;
+
+    /// <summary>
+    /// HDR Output Pipeline settings are only meaningful when gpu-next is enabled
+    /// AND an HDR-capable display is detected.
+    /// </summary>
+    public bool HdrSettingsAvailable => VideoUseGpuNext && IsHdrCapable;
 
     // ── Hotkeys ───────────────────────────────────────────────────────────────
 
