@@ -23,6 +23,9 @@
                       <SolidColorBrush x:Key="SegmentSelectedBrush" Color="#E0E0F0" />
                       <SolidColorBrush x:Key="SegmentPointerOverBrush" Color="#E8E8F8" />
                       <SolidColorBrush x:Key="StatusTextBrush" Color="#666666" />
+                      <SolidColorBrush x:Key="PrimaryTextBrush" Color="#1C1C2C" />
+                      <SolidColorBrush x:Key="VideoOverlayTextBrush" Color="#C0C0D0" />
+                      <SolidColorBrush x:Key="VideoOverlaySubtextBrush" Color="#A8A8BC" />
                   </ResourceDictionary>
                   <ResourceDictionary x:Key="Dark">
                       <!-- Dark theme colors -->
@@ -36,6 +39,9 @@
                       <SolidColorBrush x:Key="SegmentSelectedBrush" Color="#20203A" />
                       <SolidColorBrush x:Key="SegmentPointerOverBrush" Color="#1C1C2C" />
                       <SolidColorBrush x:Key="StatusTextBrush" Color="#686880" />
+                      <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E0DEFF" />
+                      <SolidColorBrush x:Key="VideoOverlayTextBrush" Color="#C8C8D8" />
+                      <SolidColorBrush x:Key="VideoOverlaySubtextBrush" Color="#A0A0B8" />
                   </ResourceDictionary>
               </ResourceDictionary.ThemeDictionaries>
           </ResourceDictionary>
