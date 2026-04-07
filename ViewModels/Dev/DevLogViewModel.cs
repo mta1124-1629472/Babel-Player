@@ -3,7 +3,9 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Input;
+using Avalonia.Input.Platform;
 using Babel.Player.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -17,13 +19,15 @@ namespace Babel.Player.ViewModels.Dev;
 public partial class DevLogViewModel : ObservableObject, IDisposable
 {
     private readonly AppLog _log;
+    private readonly IClipboard? _clipboard;
 
     [ObservableProperty] private string _filterText = string.Empty;
     [ObservableProperty] private string _rawContent = string.Empty;
 
-    public DevLogViewModel(AppLog log)
+    public DevLogViewModel(AppLog log, IClipboard? clipboard)
     {
         _log = log;
+        _clipboard = clipboard;
     }
 
     public ObservableCollection<string> Lines { get; } = [];
@@ -51,9 +55,10 @@ public partial class DevLogViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void CopyAll()
+    private async Task CopyAll()
     {
-        Avalonia.Application.Current?.Clipboard?.SetTextAsync(RawContent);
+        if (_clipboard is not null)
+            await ClipboardExtensions.SetTextAsync(_clipboard, RawContent);
     }
 
     [RelayCommand]

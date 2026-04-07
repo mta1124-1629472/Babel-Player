@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Babel.Player.ViewModels"
         xmlns:v="using:Babel.Player.Views"
+        xmlns:bp="using:Babel.Player"
         xmlns:models="using:Babel.Player.Models"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -876,8 +877,7 @@
                                 BorderBrush="#3A3010"
                                 BorderThickness="1,0,0,0"
                                 Padding="6,0,0,0"
-                                IsVisible="{x:Static local:BuildInfo.IsDevBuild}"
-                                xmlns:local="using:Babel.Player">
+                                IsVisible="{x:Static bp:BuildInfo.IsDevBuild}">
                             <StackPanel Orientation="Horizontal" Spacing="2">
                                 <Button Classes="dev-pill"
                                         Content="📋 Dev Log"

@@ -15,7 +15,7 @@
       <Button Content="Copy All" Command="{Binding CopyAllCommand}" />
       <Button Content="Open Logs Folder" Command="{Binding OpenLogsFolderCommand}" />
       <TextBlock Text="Filter:" VerticalAlignment="Center" />
-      <TextBox Text="{Binding FilterText}" Width="200" Watermark="keyword..." />
+      <TextBox Text="{Binding FilterText}" Width="200" PlaceholderText="keyword..." />
     </StackPanel>
 
     <!-- Log lines -->

@@ -324,7 +324,10 @@ public partial class MainWindow : Window
     public void OnDevLogClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;
-        var win = new Dev.DevLogWindow { DataContext = new ViewModels.Dev.DevLogViewModel(vm.Coordinator.DevLog) };
+        var win = new Dev.DevLogWindow 
+        { 
+            DataContext = new ViewModels.Dev.DevLogViewModel(vm.Coordinator.DevLog, this.Clipboard) 
+        };
         win.Show();
     }
 

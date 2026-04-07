@@ -2,7 +2,9 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 using Babel.Player.Services;
 
 namespace Babel.Player.Services;
@@ -13,10 +15,12 @@ namespace Babel.Player.Services;
 /// </summary>
 public partial class SessionWorkflowCoordinator
 {
+    private CancellationTokenSource? _devToolsCts;
+
     /// <summary>
     /// Exposes the application log so the in-process DevLog panel can read it.
     /// </summary>
-    public AppLog DevLog => _appLog;
+    public AppLog DevLog => _log;
 
     /// <summary>
     /// Cancels any in-flight pipeline, clears all unsaved session snapshots and temp
@@ -25,14 +29,20 @@ public partial class SessionWorkflowCoordinator
     /// </summary>
     public async Task FreshStartAsync()
     {
-        // 1. Abort any running pipeline job.
-        CancelPipeline();
+        // 1. Cancel any running pipeline.
+        if (_devToolsCts is { } existingCts)
+        {
+            existingCts.Cancel();
+            existingCts.Dispose();
+        }
+        _devToolsCts = new CancellationTokenSource();
+        var ct = _devToolsCts.Token;
 
-        // 2. Give the pipeline a moment to wind down.
+        // 2. Give any pipeline a moment to wind down.
         await Task.Delay(TimeSpan.FromMilliseconds(200));
 
         // 3. Wipe per-session snapshot files for the current session only.
-        var sessionDir = CurrentSession.SessionDirectory;
+        var sessionDir = GetSessionDirectory();
         if (!string.IsNullOrWhiteSpace(sessionDir) && Directory.Exists(sessionDir))
         {
             foreach (var file in Directory.EnumerateFiles(sessionDir, "*.json")
@@ -43,10 +53,10 @@ public partial class SessionWorkflowCoordinator
             }
         }
 
-        // 4. Reset VM state visible in the UI.
-        ResetSessionState();
+        // 4. Reset VM state visible in the UI to foundation.
+        CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
 
-        _appLog?.Info("[DevTools] FreshStartAsync completed.");
+        _log?.Info("[DevTools] FreshStartAsync completed.");
     }
 }
 #endif
