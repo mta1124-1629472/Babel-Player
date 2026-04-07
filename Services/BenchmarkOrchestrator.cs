@@ -122,7 +122,7 @@ public sealed class BenchmarkOrchestrator
                     MatrixId:            matrixId,
                     AudioDurationSeconds: clip.DurationSeconds,
                     SampleRateHz:        clip.SampleRateHz,
-                    Provider:            provider.GetType().Name,
+                    Provider:            (provider as IBenchmarkableProvider)?.ProviderId ?? provider.GetType().Name,
                     Model:               settings.TranscriptionModel,
                     ComputeDevice:       settings.TranscriptionProfile.ToString().ToLowerInvariant());
 
@@ -186,7 +186,7 @@ public sealed class BenchmarkOrchestrator
                     MatrixId:            matrixId,
                     AudioDurationSeconds: clip.DurationSeconds,
                     SampleRateHz:        clip.SampleRateHz,
-                    Provider:            provider.GetType().Name,
+                    Provider:            (provider as IBenchmarkableProvider)?.ProviderId ?? provider.GetType().Name,
                     Model:               settings.TranscriptionModel,
                     ComputeDevice:       settings.TranscriptionProfile.ToString().ToLowerInvariant());
 

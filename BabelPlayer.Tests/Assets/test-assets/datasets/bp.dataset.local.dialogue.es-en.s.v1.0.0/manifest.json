@@ -1,4 +1,5 @@
 {
+  "manifest_version": "1.0",
   "dataset_id": "bp.dataset.local.dialogue.es-en.s.v1.0.0",
   "description": "Short Spanish-English bilingual dialogue clips for local benchmark runs.",
   "version": "1.0.0",

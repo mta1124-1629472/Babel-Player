@@ -134,8 +134,16 @@ public sealed record HardwareSnapshot(
     /// Probes the machine and returns a fully populated snapshot.
     /// Blocking — call from a background thread.
     /// </summary>
-    public static HardwareSnapshot Run()
+    /// <param name="findPython">
+    /// Optional delegate that returns the path to a Python executable.
+    /// Used for GPU compute capability and OpenVINO detection.
+    /// Pass <c>null</c> to skip those two probes (useful when running outside Babel Player).
+    /// Defaults to <c>DependencyLocator.FindPython</c> when not specified.
+    /// </param>
+    public static HardwareSnapshot Run(Func<string?>? findPython = null)
     {
+        findPython ??= DependencyLocator.FindPython;
+
         var cpuName   = DetectCpuName();
         var cpuCores  = Environment.ProcessorCount;
         var hasAvx    = TryAvx();
@@ -145,12 +153,12 @@ public sealed record HardwareSnapshot(
 
         var (gpuName, gpuVramMb)          = DetectGpu();
         var (hasCuda, cudaVer)            = DetectCuda();
-        var (hasOv, ovVer)                = DetectOpenVino();
+        var (hasOv, ovVer)                = DetectOpenVino(findPython);
         var npuLabel                      = InferNpu(cpuName);
         var (driverVer, isVsrSufficient)  = DetectNvidiaDriver();
         var isRtx                         = IsRtxGpu(gpuName);
         var isHdr                         = DetectHdrDisplay();
-        var gpuComputeCapability          = DetectGpuComputeCapability();
+        var gpuComputeCapability          = DetectGpuComputeCapability(hasCuda, findPython);
 
         return new HardwareSnapshot(
             IsDetecting: false,
@@ -264,11 +272,11 @@ public sealed record HardwareSnapshot(
 
     // ── GPU compute capability (via Python torch) ─────────────────────────────
 
-    private static string? DetectGpuComputeCapability()
+    private static string? DetectGpuComputeCapability(bool hasCuda, Func<string?> findPython)
     {
-        if (!DetectCuda().Item1) return null; // No CUDA available
+        if (!hasCuda) return null; // No CUDA available
 
-        var python = DependencyLocator.FindPython();
+        var python = findPython();
         if (python == null) return null;
 
         // Use Python to probe torch.cuda.get_device_capability(0)
@@ -352,9 +360,9 @@ public sealed record HardwareSnapshot(
 
     // ── OpenVINO (via Python import probe) ────────────────────────────────────
 
-    private static (bool hasOv, string? version) DetectOpenVino()
+    private static (bool hasOv, string? version) DetectOpenVino(Func<string?> findPython)
     {
-        var python = DependencyLocator.FindPython();
+        var python = findPython();
         if (python == null) return (false, null);
 
         var output = RunAndCapture(python,

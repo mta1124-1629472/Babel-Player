@@ -67,7 +67,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         _log = log;
         _probe = probe;
         _healthCheckFunc = healthCheckFunc ?? ContainerizedInferenceClient.CheckHealthAsync;
-        _hardwareSnapshotProvider = hardwareSnapshotProvider ?? HardwareSnapshot.Run;
+        _hardwareSnapshotProvider = hardwareSnapshotProvider ?? (() => HardwareSnapshot.Run());
         _uvResolver = uvResolver ?? DependencyLocator.FindUv;
         _runtimeRootResolver = runtimeRootResolver ?? ManagedRuntimeLayout.GetRuntimeRoot;
         _inferenceScriptResolver = inferenceScriptResolver ?? ResolveInferenceScriptPath;

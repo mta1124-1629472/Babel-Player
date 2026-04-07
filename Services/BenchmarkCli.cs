@@ -47,16 +47,17 @@ public static class BenchmarkCli
         }
 
         string? manifest = GetArg(args, "--manifest");
-        string output   = GetArg(args, "--output")   ?? DefaultOutput;
-        string model    = GetArg(args, "--model")     ?? DefaultModel;
-        string matrix   = GetArg(args, "--matrix")   ?? $"fw-{model}-cpu-int8";
-        int    warmup   = GetArgInt(args, "--warmup") ?? DefaultWarmup;
-        int    runs     = GetArgInt(args, "--runs")   ?? DefaultRuns;
+        string output    = GetArg(args, "--output")    ?? DefaultOutput;
+        string provider  = GetArg(args, "--provider")  ?? "faster-whisper";
+        string model     = GetArg(args, "--model")     ?? DefaultModel;
+        string matrix    = GetArg(args, "--matrix")    ?? $"{provider}-{model}-cpu-int8";
+        int    warmup    = GetArgInt(args, "--warmup")  ?? DefaultWarmup;
+        int    runs      = GetArgInt(args, "--runs")    ?? DefaultRuns;
 
         // Check for unrecognised flags while respecting flags that consume a value.
-        var known = new[] { "--benchmark", "--manifest", "--output", "--model",
+        var known = new[] { "--benchmark", "--manifest", "--output", "--provider", "--model",
                             "--matrix", "--warmup", "--runs", "--help", "-h" };
-        var knownValueFlags = new[] { "--manifest", "--output", "--model",
+        var knownValueFlags = new[] { "--manifest", "--output", "--provider", "--model",
                                       "--matrix", "--warmup", "--runs" };
         var unknown = new System.Collections.Generic.List<string>();
 
@@ -113,6 +114,7 @@ public static class BenchmarkCli
         Console.WriteLine("├──────────────────────────────────────┤");
         Console.WriteLine($"│  manifest : {manifest,-25} │");
         Console.WriteLine($"│  output   : {output,-25} │");
+        Console.WriteLine($"│  provider : {provider,-25} │");
         Console.WriteLine($"│  model    : {model,-25} │");
         Console.WriteLine($"│  matrix   : {matrix,-25} │");
         Console.WriteLine($"│  warmup   : {warmup,-25} │");
@@ -126,7 +128,7 @@ public static class BenchmarkCli
         try
         {
             Console.Write("[benchmark] Detecting hardware… ");
-            hardware = await Task.Run(HardwareSnapshot.Run, cancellationToken);
+            hardware = await Task.Run(() => HardwareSnapshot.Run(), cancellationToken);
             Console.WriteLine("done.");
             Console.WriteLine($"[benchmark] CPU : {hardware.CpuLine}");
             Console.WriteLine($"[benchmark] GPU : {hardware.GpuLine}");
@@ -161,8 +163,21 @@ public static class BenchmarkCli
         var logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "BabelPlayer", "logs", "benchmark.log");
-        var log          = new AppLog(logPath);
-        var provider     = new FasterWhisperTranscriptionProvider(log);
+        var log = new AppLog(logPath);
+
+        ITranscriptionProvider transcriptionProvider = provider switch
+        {
+            "faster-whisper" => new FasterWhisperTranscriptionProvider(log),
+            _ => null!
+        };
+
+        if (transcriptionProvider is null)
+        {
+            Console.Error.WriteLine($"[benchmark] Unknown provider: \"{provider}\"");
+            Console.Error.WriteLine("  Supported: faster-whisper");
+            return 1;
+        }
+
         var orchestrator = new BenchmarkOrchestrator(log, hardware);
 
         var outputDir = Path.Combine(output, $"{matrix}_{DateTime.UtcNow:yyyyMMdd_HHmmss}");
@@ -175,7 +190,7 @@ public static class BenchmarkCli
             await orchestrator.RunAsync(
                 manifestPath:      manifest,
                 outputDir:         outputDir,
-                provider:          provider,
+                provider:          transcriptionProvider,
                 settings:          settings,
                 matrixId:          matrix,
                 warmupRuns:        warmup,
@@ -235,7 +250,8 @@ public static class BenchmarkCli
         Console.WriteLine("Options:");
         Console.WriteLine($"  --manifest <path>   Dataset manifest.json  (required)");
         Console.WriteLine($"  --output   <dir>    Results output dir      (default: {DefaultOutput})");
-        Console.WriteLine($"  --model    <name>   faster-whisper model    (default: {DefaultModel})");
+        Console.WriteLine($"  --provider <name>   Transcription provider  (default: faster-whisper)");
+        Console.WriteLine($"  --model    <name>   Model name              (default: {DefaultModel})");
         Console.WriteLine($"  --matrix   <id>     Benchmark matrix ID     (default: auto from model)");
         Console.WriteLine($"  --warmup   <n>      Warmup run count        (default: {DefaultWarmup})");
         Console.WriteLine($"  --runs     <n>      Measured run count      (default: {DefaultRuns})");

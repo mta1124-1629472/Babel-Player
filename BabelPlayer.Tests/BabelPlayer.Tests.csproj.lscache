@@ -62,6 +62,8 @@ ApiKeyValidationServiceTests.cs
 AppLogTests.cs
 AppSettingsTests.cs
 ArtifactContractTests.cs
+BenchmarkCliTests.cs
+BenchmarkOrchestratorTests.cs
 BenchmarkResultWriterTests.cs
 BootstrapDiagnosticsTests.cs
 Collections.cs

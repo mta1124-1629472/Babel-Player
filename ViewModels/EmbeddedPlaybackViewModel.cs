@@ -909,7 +909,8 @@ partial void OnSourcePositionMsChanged(double value)
 
         player.Seek((long)(segment.StartSeconds * 1000));
 
-        if (IsSourcePaused)
+        // Also resume when the player reached EOF naturally — IsSourcePaused is not set in that case.
+        if (IsSourcePaused || player.HasEnded)
         {
             try
             {

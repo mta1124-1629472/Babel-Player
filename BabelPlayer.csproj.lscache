@@ -95,6 +95,7 @@ Services/
  AppLog.cs
  AvaloniaErrorDialogService.cs
  BackgroundTaskObserver.cs
+ BenchmarkCli.cs
  BenchmarkOrchestrator.cs
  BenchmarkResultWriter.cs
  BenchmarkRunHarness.cs
@@ -132,6 +133,7 @@ Services/
  GoogleTranslationProvider.cs
  HardwareEncoderHelper.cs
  HardwareSnapshot.cs
+ IBenchmarkableProvider.cs
  IErrorDialogService.cs
  IMediaTransport.cs
  IMediaTransportManager.cs

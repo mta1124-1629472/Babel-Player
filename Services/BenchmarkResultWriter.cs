@@ -54,6 +54,7 @@ public sealed class BenchmarkResultWriter
     /// section is a C#-side addition and is not present in Python-emitted files.
     /// </summary>
     public sealed record BenchmarkResultFile(
+        [property: JsonPropertyName("schema_version")]       string SchemaVersion,
         [property: JsonPropertyName("run_batch_id")]         string RunBatchId,
         [property: JsonPropertyName("created_at")]           string CreatedAt,
         [property: JsonPropertyName("environment_snapshot")] BenchmarkEnvironmentSnapshot EnvironmentSnapshot,
@@ -140,6 +141,7 @@ public sealed class BenchmarkResultWriter
         var aggregates = ComputeAggregates(measured, inputs.AudioDurationSeconds);
 
         var file = new BenchmarkResultFile(
+            SchemaVersion:       "1.0",
             RunBatchId:          Guid.NewGuid().ToString("N"),
             CreatedAt:           DateTimeOffset.UtcNow.ToString("o"),
             EnvironmentSnapshot: environmentSnapshot,

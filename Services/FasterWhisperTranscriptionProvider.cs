@@ -13,8 +13,10 @@ using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
-public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessServiceBase, ITranscriptionProvider
+public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessServiceBase, ITranscriptionProvider, IBenchmarkableProvider
 {
+    public string ProviderId => "faster-whisper";
+
     public FasterWhisperTranscriptionProvider(AppLog log) : base(log) { }
 
     private async Task<string> ExtractAudioAsync(string videoPath, CancellationToken cancellationToken = default)
