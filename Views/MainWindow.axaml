@@ -4,6 +4,7 @@
         xmlns:v="using:Babel.Player.Views"
         xmlns:bp="using:Babel.Player"
         xmlns:models="using:Babel.Player.Models"
+        xmlns:local="using:Babel.Player"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="700"
@@ -256,7 +257,7 @@
                                            Foreground="#808090" VerticalAlignment="Center" />
                                 <Border Grid.Column="1" Background="#1E1E2C" CornerRadius="4"
                                         Padding="8,4">
-                                    <TextBlock Text="{Binding Playback.SourceLanguageDisplay}"
+                                    <TextBlock Text="{Binding Coordinator.CurrentSession.SourceLanguage, TargetNullValue='—'}"
                                                FontSize="12" Foreground="#C0C0D0" />
                                 </Border>
                             </Grid>
@@ -264,12 +265,11 @@
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Text="Target Sub/Dub" FontSize="12"
                                            Foreground="#808090" VerticalAlignment="Center" />
-                                <ComboBox Grid.Column="1"
-                                          ItemsSource="{Binding Playback.TargetLanguageLabels}"
-                                          SelectedItem="{Binding Playback.SelectedTargetLanguage, Mode=TwoWay}"
-                                          FontSize="12" MinWidth="90"
-                                          Background="#1E1E2C" Foreground="#C0C0D0"
-                                          BorderBrush="#2A2A3A" />
+                                <Border Grid.Column="1" Background="#1E1E2C" CornerRadius="4"
+                                        Padding="8,4">
+                                    <TextBlock Text="{Binding Coordinator.CurrentSession.TargetLanguage, TargetNullValue='—'}"
+                                               FontSize="12" Foreground="#C0C0D0" />
+                                </Border>
                             </Grid>
                         </StackPanel>
 
@@ -280,9 +280,15 @@
                                            Foreground="#565672" FontWeight="SemiBold" />
                             </Border>
 
-                            <!-- Auto speaker detection (pyannote) -->
+                            <!-- Multi-speaker toggle -->
+                            <CheckBox Content="Enable multi-speaker routing"
+                                      IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
+                                      Foreground="#C0C0D0" />
+
+                            <!-- Auto speaker detection (pyannote) — only meaningful when multi-speaker is on -->
                             <CheckBox Content="Auto speaker detection"
                                       IsChecked="{Binding Playback.IsAutoSpeakerDetectionEnabled, Mode=TwoWay}"
+                                      IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
                                       Foreground="#C0C0D0" />
 
                             <!-- Controls that only apply when auto-detection is enabled -->
@@ -406,40 +412,6 @@
 
                         </StackPanel>
 
-                        <!-- DUB CONFIGURATION -->
-                        <StackPanel Spacing="10">
-                            <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                <TextBlock Text="DUB CONFIGURATION" FontSize="10"
-                                           Foreground="#565672" FontWeight="SemiBold" />
-                            </Border>
-
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0" Text="Speech Rate" FontSize="12"
-                                               Foreground="#808090" />
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Playback.SpeechRateLabel}"
-                                               FontSize="12" Foreground="#A0A0B8" />
-                                </Grid>
-                                <Slider Minimum="0.5" Maximum="2.0"
-                                        Value="{Binding Playback.SpeechRate, Mode=TwoWay}"
-                                        VerticalAlignment="Center" />
-                            </StackPanel>
-
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0" Text="Audio Ducking" FontSize="12"
-                                               Foreground="#808090" />
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Playback.AudioDuckingLabel}"
-                                               FontSize="12" Foreground="#A0A0B8" />
-                                </Grid>
-                                <Slider Minimum="-30" Maximum="0"
-                                        Value="{Binding Playback.AudioDuckingDb, Mode=TwoWay}"
-                                        VerticalAlignment="Center" />
-                            </StackPanel>
-                        </StackPanel>
-
                         <!-- ACTIVE CONFIGURATION -->
                         <StackPanel Spacing="8">
                             <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
@@ -472,6 +444,40 @@
                                            Text="{Binding Playback.ActiveTtsConfigLine}"
                                            FontSize="11" Foreground="#A0A0B8" TextWrapping="Wrap" />
                             </Grid>
+                        </StackPanel>
+
+                        <!-- DUB CONFIGURATION -->
+                        <StackPanel Spacing="10">
+                            <Border BorderBrush="#252530" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="DUB CONFIGURATION" FontSize="10"
+                                           Foreground="#565672" FontWeight="SemiBold" />
+                            </Border>
+
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Speech Rate" FontSize="12"
+                                               Foreground="#808090" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Playback.SpeechRateLabel}"
+                                               FontSize="12" Foreground="#A0A0B8" />
+                                </Grid>
+                                <Slider Minimum="0.5" Maximum="2.0"
+                                        Value="{Binding Playback.SpeechRate, Mode=TwoWay}"
+                                        VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Audio Ducking" FontSize="12"
+                                               Foreground="#808090" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Playback.AudioDuckingLabel}"
+                                               FontSize="12" Foreground="#A0A0B8" />
+                                </Grid>
+                                <Slider Minimum="-30" Maximum="0"
+                                        Value="{Binding Playback.AudioDuckingDb, Mode=TwoWay}"
+                                        VerticalAlignment="Center" />
+                            </StackPanel>
                         </StackPanel>
 
                         <!-- HARDWARE -->

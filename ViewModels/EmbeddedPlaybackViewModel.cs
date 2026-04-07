@@ -802,6 +802,10 @@ partial void OnSourcePositionMsChanged(double value)
     partial void OnIsMultiSpeakerEnabledChanged(bool value)
     {
         if (_isSynchronizingPipelineSettings) return;
+
+        if (!value)
+            IsAutoSpeakerDetectionEnabled = false;
+
         _coordinator.SetMultiSpeakerEnabled(value);
         _ = RefreshSegmentsAsync();
     }
