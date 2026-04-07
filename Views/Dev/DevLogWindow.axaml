@@ -1,0 +1,35 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Babel.Player.ViewModels.Dev"
+        x:Class="Babel.Player.Views.Dev.DevLogWindow"
+        x:DataType="vm:DevLogViewModel"
+        Title="Dev Log"
+        Width="900" Height="600"
+        WindowStartupLocation="CenterScreen">
+
+  <DockPanel Margin="8">
+
+    <!-- Toolbar -->
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0 0 0 6">
+      <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+      <Button Content="Copy All" Command="{Binding CopyAllCommand}" />
+      <Button Content="Open Logs Folder" Command="{Binding OpenLogsFolderCommand}" />
+      <TextBlock Text="Filter:" VerticalAlignment="Center" />
+      <TextBox Text="{Binding FilterText}" Width="200" Watermark="keyword..." />
+    </StackPanel>
+
+    <!-- Log lines -->
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Lines}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <TextBlock Text="{Binding}" FontFamily="Consolas,Menlo,monospace" FontSize="11"
+                       TextWrapping="Wrap" Margin="0 1" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+
+</Window>
