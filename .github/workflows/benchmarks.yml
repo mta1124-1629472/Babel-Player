@@ -1,0 +1,42 @@
+name: Benchmark Leaderboard
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/benchmarks/*.json"
+
+jobs:
+  aggregate:
+    name: Aggregate & Publish Leaderboard
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Need write access to commit the updated leaderboard
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run aggregator
+        run: python scripts/aggregate_leaderboard.py
+
+      - name: Commit updated leaderboard
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/benchmarks/LEADERBOARD.md
+          if git diff --cached --quiet; then
+            echo "Leaderboard unchanged — nothing to commit."
+          else
+            git commit -m "bench: update leaderboard [skip ci]"
+            git push
+          fi

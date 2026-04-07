@@ -12,8 +12,7 @@
         Icon="/Assets/Icons/app.ico"
         Width="1280" Height="700"
         MinWidth="960" MinHeight="520"
-        RequestedThemeVariant="Dark"
-        Background="#12121A">
+        RequestedThemeVariant="Default">
 
     <Grid ColumnDefinitions="Auto,*,Auto">
 
