@@ -15,7 +15,7 @@ namespace Babel.Player.Services;
 
 public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessServiceBase, ITranscriptionProvider, IBenchmarkableProvider
 {
-    public string ProviderId => "faster-whisper";
+    public string ProviderId => ProviderNames.FasterWhisper;
 
     public FasterWhisperTranscriptionProvider(AppLog log) : base(log) { }
 

@@ -116,7 +116,7 @@ internal sealed record VideoEnhancementDiagnostics(
             ? "Requested state: gpu-next is disabled, so the d3d11vpp VSR path cannot be attempted."
             : !VsrRequested
                 ? "Requested state: gpu-next is enabled, but RTX VSR itself is turned off."
-                : $"Requested state: gpu-next is enabled and RTX VSR is requested at quality {VsrQuality}.";
+                : $"Requested state: gpu-next is enabled and RTX VSR is requested (quality setting is not applied to the current mpv filter).";
 
     public string ResolvedStateText =>
         LatestVsrSnapshot is null

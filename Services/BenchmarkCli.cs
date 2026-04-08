@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
@@ -48,7 +49,7 @@ public static class BenchmarkCli
 
         string? manifest = GetArg(args, "--manifest");
         string output    = GetArg(args, "--output")    ?? DefaultOutput;
-        string provider  = GetArg(args, "--provider")  ?? "faster-whisper";
+        string provider  = GetArg(args, "--provider")  ?? ProviderNames.FasterWhisper;
         string model     = GetArg(args, "--model")     ?? DefaultModel;
         string matrix    = GetArg(args, "--matrix")    ?? $"{provider}-{model}-cpu-int8";
         int    warmup    = GetArgInt(args, "--warmup")  ?? DefaultWarmup;
@@ -167,7 +168,7 @@ public static class BenchmarkCli
 
         ITranscriptionProvider transcriptionProvider = provider switch
         {
-            "faster-whisper" => new FasterWhisperTranscriptionProvider(log),
+            ProviderNames.FasterWhisper => new FasterWhisperTranscriptionProvider(log),
             _ => null!
         };
 

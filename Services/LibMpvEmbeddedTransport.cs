@@ -531,8 +531,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             videoH,
             _displayWidth,
             _displayHeight,
-            hwFmt,
-            _options.VsrQuality);
+            hwFmt);
 
         if (!plan.ShouldApply || string.IsNullOrWhiteSpace(plan.FilterChain))
         {
@@ -582,8 +581,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         int videoHeight,
         int displayWidth,
         int displayHeight,
-        string hwPixelFormat,
-        int vsrQuality)
+        string hwPixelFormat)
     {
         if (videoWidth <= 0 || videoHeight <= 0)
             return VsrFilterPlan.Skip("video-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat);
@@ -602,10 +600,10 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             hwPixelFormat != "nv12" &&
             hwPixelFormat != "yuv420p";
 
-        int quality = Math.Clamp(vsrQuality, 1, 4);
+        string scaleStr = scale.ToString("F1", CultureInfo.InvariantCulture);
         string filterChain = needsFormatConversion
-            ? $"@vsr:lavfi=[format=nv12],d3d11vpp:scaling-mode=nvidia:scale={scale:F1}:scaling-quality={quality}"
-            : $"@vsr:d3d11vpp:scaling-mode=nvidia:scale={scale:F1}:scaling-quality={quality}";
+            ? $"@vsr:lavfi=[format=nv12],d3d11vpp=scaling-mode=nvidia:scale={scaleStr}"
+            : $"@vsr:d3d11vpp=scaling-mode=nvidia:scale={scaleStr}";
 
         return VsrFilterPlan.Apply(filterChain, scale, videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat);
     }
