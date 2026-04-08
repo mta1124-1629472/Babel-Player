@@ -39,9 +39,11 @@ public sealed partial class WindowsCredentialProvider : ISecureCredentialProvide
             Persist = 2 // CRED_PERSIST_LOCAL_MACHINE (survives reboot)
         };
 
+        var ptr = Marshal.AllocCoTaskMem(Marshal.SizeOf(credential));
         try
         {
-            if (!NativeMethods.CredWrite(ref credential, 0))
+            Marshal.StructureToPtr(credential, ptr, false);
+            if (!NativeMethods.CredWrite(ptr, 0))
             {
                 var error = Marshal.GetLastWin32Error();
                 throw new InvalidOperationException($"Failed to write credential to Windows Vault (Error: {error})");
@@ -51,6 +53,9 @@ public sealed partial class WindowsCredentialProvider : ISecureCredentialProvide
         {
             if (credential.CredentialBlob != IntPtr.Zero)
                 Marshal.FreeCoTaskMem(credential.CredentialBlob);
+
+            Marshal.DestroyStructure<NativeMethods.CREDENTIAL>(ptr);
+            Marshal.FreeCoTaskMem(ptr);
         }
     }
 
@@ -107,13 +112,16 @@ public sealed partial class WindowsCredentialProvider : ISecureCredentialProvide
             public string UserName;
         }
 
-        [LibraryImport("advapi32.dll", EntryPoint = "CredWriteW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-        public static partial bool CredWrite([In] ref CREDENTIAL credential, uint flags);
+        [LibraryImport("advapi32.dll", EntryPoint = "CredWriteW", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool CredWrite(IntPtr credential, uint flags);
 
         [LibraryImport("advapi32.dll", EntryPoint = "CredReadW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         public static partial bool CredRead(string target, uint type, uint reserved, out IntPtr credential);
 
         [LibraryImport("advapi32.dll", EntryPoint = "CredDeleteW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         public static partial bool CredDelete(string target, uint type, uint flags);
 
         [LibraryImport("advapi32.dll", EntryPoint = "CredFree", SetLastError = true)]
