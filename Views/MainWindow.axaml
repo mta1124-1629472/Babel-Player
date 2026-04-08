@@ -27,7 +27,7 @@
              These values apply in both Light and Dark mode — the panel is always dark. -->
         <SolidColorBrush x:Key="PrimaryTextBrush"        Color="#E0DEFF" />
         <SolidColorBrush x:Key="StatusTextBrush"         Color="#8A88A8" />
-        <SolidColorBrush x:Key="ControlBackgroundBrush"  Color="#EBEBEB" />
+        <SolidColorBrush x:Key="ControlBackgroundBrush"  Color="#1E1E2E" />
         <SolidColorBrush x:Key="ButtonBackgroundBrush"   Color="#2A2A3A" />
         <SolidColorBrush x:Key="BorderBrush"        Color="#2E2E44" />
         <SolidColorBrush x:Key="ProgressBackgroundBrush" Color="#2A2A3A" />
