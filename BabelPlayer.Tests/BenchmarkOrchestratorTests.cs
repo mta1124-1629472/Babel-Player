@@ -40,8 +40,19 @@ public sealed class BenchmarkOrchestratorTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_tempDir))
-            Directory.Delete(_tempDir, recursive: true);
+        try
+        {
+            if (Directory.Exists(_tempDir))
+                Directory.Delete(_tempDir, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Ignore transient cleanup failures in test teardown.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Ignore transient cleanup failures in test teardown.
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

@@ -32,7 +32,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private static readonly TimeSpan PostStartProbeTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan VenvUnlockTimeout = TimeSpan.FromSeconds(5);
-    private const string PythonVersion = "3.11.6";
+    // Pin the full Python patch version so uv resolves a reproducible interpreter build.
+    // Python 3.12 is required for the managed GPU runtime compatibility path.
+    private const string PythonVersion = "3.12.7";
 
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _probe;

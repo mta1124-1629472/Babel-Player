@@ -740,6 +740,46 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         Assert.DoesNotContain("Unobserved task exception", logContents, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void PythonVersion_IsThreePointTwelve()
+    {
+        var field = typeof(ManagedVenvHostManager).GetField(
+            "PythonVersion",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(field);
+        var value = field!.GetRawConstantValue() as string;
+        Assert.Equal("3.12", value);
+    }
+
+    [Fact]
+    public void PythonVersion_IsNotOldPatchVersion_Regression()
+    {
+        // Regression: PythonVersion was previously "3.11.6"; it is now the unpinned major.minor "3.12"
+        var field = typeof(ManagedVenvHostManager).GetField(
+            "PythonVersion",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(field);
+        var value = field!.GetRawConstantValue() as string;
+        Assert.NotEqual("3.11.6", value);
+    }
+
+    [Fact]
+    public void PythonVersion_IsMajorMinorFormatWithoutPatch()
+    {
+        // The version string should be in "major.minor" format (e.g. "3.12"), not "major.minor.patch" (e.g. "3.11.6")
+        // uv resolves to the latest available patch for the given major.minor, so specifying a patch version here is fragile.
+        var field = typeof(ManagedVenvHostManager).GetField(
+            "PythonVersion",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(field);
+        var value = field!.GetRawConstantValue() as string;
+        Assert.NotNull(value);
+        var parts = value!.Split('.');
+        Assert.Equal(2, parts.Length);
+        Assert.True(int.TryParse(parts[0], out var major) && major >= 3, $"Expected major version >= 3, got '{parts[0]}'");
+        Assert.True(int.TryParse(parts[1], out var minor) && minor >= 0, $"Expected valid minor version, got '{parts[1]}'");
+    }
+
     private static HardwareSnapshot CreateHardwareSnapshot(bool hasCuda, bool hasAvx2) =>
         new(
             IsDetecting: false,
