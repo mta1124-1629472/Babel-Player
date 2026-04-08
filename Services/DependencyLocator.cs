@@ -3,6 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Babel.Player.Models;
+using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
+using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
@@ -162,6 +165,11 @@ public static class DependencyLocator
         }
     }
 
+    /// <summary>
+    /// Resolves a candidate executable name or path to an existing filesystem path.
+    /// </summary>
+    /// <param name="candidate">An executable file path or command name; if it contains directory separators or is rooted it is treated as an explicit path, otherwise it is looked up on the system PATH (and PATHEXT on Windows).</param>
+    /// <returns>The full path to an existing executable if found, or <c>null</c> if the candidate is empty or no matching file exists.</returns>
     private static string? ResolveExecutable(string candidate)
     {
         if (string.IsNullOrWhiteSpace(candidate))
@@ -200,6 +208,13 @@ public static class DependencyLocator
         return null;
     }
 
+    /// <summary>
+    /// Get the file extensions to try when resolving an executable name on the current platform.
+    /// </summary>
+    /// <summary>
+    /// Get the list of filename extensions to try when resolving an executable name on the current platform.
+    /// </summary>
+    /// <returns>An array of extensions to append when searching for executables. On Windows the list is parsed from the PATHEXT environment variable (entries start with a dot and an empty string is included); if PATHEXT is missing returns { ".exe", ".cmd", ".bat", "" }. On non-Windows returns an array containing only the empty string.</returns>
     private static string[] GetExecutableExtensions()
     {
         if (!OperatingSystem.IsWindows())
@@ -219,5 +234,89 @@ public static class DependencyLocator
             parsed.Add(string.Empty);
 
         return [.. parsed];
+    }
+
+    /// <summary>
+    /// Bootstraps and returns a SessionWorkflowCoordinator by constructing and wiring host managers, registries, and a session snapshot store, and by requesting containerized services to start.
+    /// Handles fallback creation if the primary initialization fails (e.g., due to corrupt state files).
+    /// </summary>
+    /// <param name="appDataRoot">Filesystem root used to locate the session snapshot at '{appDataRoot}/state/current-session.json'.</param>
+    /// <param name="startupLog">Optional logger that receives startup errors if primary initialization fails.</param>
+    /// <param name="primaryGpuManager">Outputs the ManagedVenvHostManager instance chosen as the primary GPU-capable host manager.</param>
+    /// <summary>
+    /// Constructs and initializes a SessionWorkflowCoordinator wired with host managers, registries, stores, and containerized probes; if primary initialization fails, performs a fallback initialization and continues with an empty session state.
+    /// </summary>
+    /// <param name="appDataRoot">Root application data directory where the session snapshot is stored (the snapshot file is placed at {appDataRoot}/state/current-session.json).</param>
+    /// <param name="startupLog">Optional logger used to record initialization failures encountered during the primary initialization path.</param>
+    /// <param name="primaryGpuManager">Outputs the ManagedVenvHostManager selected as the primary GPU-capable host manager (may be null if initialization fails before manager creation).</param>
+    /// <returns>The initialized SessionWorkflowCoordinator.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if both primary and fallback initialization paths fail to produce a coordinator.</exception>
+    public static SessionWorkflowCoordinator CreateSessionCoordinator(
+        AppLog appLog,
+        AppSettings appSettings,
+        PerSessionSnapshotStore perSessionStore,
+        RecentSessionsStore recentStore,
+        ApiKeyStore apiKeyStore,
+        IMediaTransportManager transportManager,
+        string appDataRoot,
+        AppLog? startupLog,
+        out ManagedVenvHostManager? primaryGpuManager)
+    {
+        SessionWorkflowCoordinator? coordinator = null;
+        primaryGpuManager = null;
+
+        try
+        {
+            appLog.Info("App startup: initializing session coordinator.");
+            var containerizedProbe = new ContainerizedServiceProbe(appLog);
+            var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+            primaryGpuManager = managedHostManager;
+            var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
+            var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
+            
+            var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
+            var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
+            var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
+            
+            var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
+            
+            coordinator = new SessionWorkflowCoordinator(
+                store, appLog, appSettings, perSessionStore, recentStore, 
+                transcriptionRegistry, translationRegistry, ttsRegistry, 
+                transportManager: transportManager, keyStore: apiKeyStore, 
+                containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
+            
+            coordinator.Initialize();
+            containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
+            appLog.Info("App startup: session coordinator ready.");
+        }
+        catch (Exception ex)
+        {
+            startupLog?.Error("App startup: session initialization failed. Continuing with empty session.", ex);
+            
+            // Fallback initialization
+            var containerizedProbe = new ContainerizedServiceProbe(appLog);
+            var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+            primaryGpuManager = managedHostManager;
+            var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
+            var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
+            
+            var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
+            var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
+            var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
+            
+            var fallbackStore = new SessionSnapshotStore(
+                Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
+            
+            coordinator = new SessionWorkflowCoordinator(
+                fallbackStore, appLog, appSettings, perSessionStore, recentStore, 
+                transcriptionRegistry, translationRegistry, ttsRegistry, 
+                transportManager: transportManager, keyStore: apiKeyStore, 
+                containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
+            
+            containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
+        }
+
+        return coordinator ?? throw new InvalidOperationException("Failed to initialize session coordinator after both primary and fallback initialization paths.");
     }
 }

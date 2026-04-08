@@ -335,7 +335,7 @@ public sealed partial class SessionWorkflowCoordinator
                 progress01: update.Total > 0 ? (double)update.Completed / update.Total : 0,
                 isIndeterminate: false));
 
-        var result = await _ttsService.GenerateTtsAsync(
+        var ttsTask = _ttsService.GenerateTtsAsync(
             new TtsRequest(
                 CurrentSession.TranslationPath,
                 ttsPath,
@@ -347,6 +347,8 @@ public sealed partial class SessionWorkflowCoordinator
                 SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath,
                 SegmentProgress: combinedProgress),
             cancellationToken);
+        _pendingTtsTasks.Add(ttsTask);
+        var result = await ttsTask;
 
         if (!result.Success)
         {
@@ -409,7 +411,7 @@ public sealed partial class SessionWorkflowCoordinator
 
                     try
                     {
-                        var segResult = await _ttsService.GenerateSegmentTtsAsync(
+                        var segTask = _ttsService.GenerateSegmentTtsAsync(
                             new SingleSegmentTtsRequest(
                                 text,
                                 segmentAudioPath,
@@ -419,6 +421,8 @@ public sealed partial class SessionWorkflowCoordinator
                                 Language: ttsLanguage,
                                 SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
                             ct);
+                        _pendingTtsTasks.Add(segTask);
+                        var segResult = await segTask;
 
                         if (segResult.Success && File.Exists(segmentAudioPath))
                         {

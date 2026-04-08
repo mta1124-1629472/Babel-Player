@@ -27,11 +27,32 @@ public partial class App : Application
     // touching the AppLog instance (which may itself be in a bad state).
     private string? _logFilePath;
 
+    /// <summary>
+    /// Loads the Avalonia XAML resources for the application.
+    /// </summary>
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
     }
 
+    /// <summary>
+    /// Performs global application initialization: configures logging, settings, secure credential storage, media/transport components, the session workflow coordinator, the main window and UI theme, global crash handlers, and background startup probes.
+    /// </summary>
+    /// <remarks>
+    /// Side effects:
+    /// - Subscribes to AppDomain.CurrentDomain.UnhandledException and TaskScheduler.UnobservedTaskException.
+    /// - Initializes application data directories, log file, and SettingsService.
+    /// - Chooses and configures an ISecureCredentialProvider and creates the ApiKeyStore.
+    /// - Creates media/transport components and the session workflow coordinator via DependencyLocator.
+    /// - Creates and shows the main window with its view model and sets application shutdown behavior.
+    /// - Wires GPU bootstrap progress into the UI status bar (debounced) when a primary GPU manager is available.
+    /// - Starts background tasks to gather bootstrap warmup data and detect hardware, posting results to the UI thread.
+    /// <summary>
+    /// Performs application startup: sets up global exception handlers and logging, loads settings and persistence stores, initializes credential and media subsystems, constructs the session coordinator and main window view model, wires desktop lifecycle handlers and UI status updates, and starts background warmup and hardware-detection probes.
+    /// </summary>
+    /// <remarks>
+    /// Executed after the Avalonia framework has initialized. Initialization is performed only for a classic desktop lifetime; otherwise control falls through to the base implementation. This method also forces the app theme to dark and registers an exit handler to flush and dispose session resources on shutdown.
+    /// </remarks>
     public override void OnFrameworkInitializationCompleted()
     {
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
@@ -87,46 +108,10 @@ public partial class App : Application
                     TargetPeak:     appSettings.VideoTargetPeak,
                     HdrComputePeak: appSettings.VideoHdrComputePeak),
                 log: appLog);
+            _sessionWorkflowCoordinator = DependencyLocator.CreateSessionCoordinator(
+                appLog, appSettings, perSessionStore, recentStore, _apiKeyStore, transportManager, 
+                appDataRoot, _startupLog, out var primaryGpuManager);
 
-            ManagedVenvHostManager? primaryGpuManager = null;
-            try
-            {
-                appLog.Info("App startup: initializing session coordinator.");
-                var containerizedProbe = new ContainerizedServiceProbe(appLog);
-                var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
-                primaryGpuManager = managedHostManager;
-                var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
-                var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
-                var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
-                var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
-                var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
-                var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
-                _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                    store, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore, containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
-                _sessionWorkflowCoordinator.Initialize();
-                containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
-                appLog.Info("App startup: session coordinator ready.");
-            }
-            catch (Exception ex)
-            {
-                _startupLog?.Error("App startup: session initialization failed. Continuing with empty session.", ex);
-                if (_sessionWorkflowCoordinator is null)
-                {
-                    var containerizedProbe = new ContainerizedServiceProbe(appLog);
-                    var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
-                    primaryGpuManager = managedHostManager;
-                    var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
-                    var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
-                    var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
-                    var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
-                    var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
-                    var fallbackStore = new SessionSnapshotStore(
-                        Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
-                    _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                        fallbackStore, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore, containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
-                    containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
-                }
-            }
 
             desktop.Exit += OnDesktopExit;
             desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose;

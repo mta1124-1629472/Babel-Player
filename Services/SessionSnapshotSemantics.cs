@@ -17,6 +17,16 @@ public static class SessionSnapshotSemantics
         SessionWorkflowStage OriginalStage,
         IReadOnlyList<string> ClearedArtifacts);
 
+    /// <summary>
+    /// Validates that the artifact files referenced by a session snapshot exist and, if not, downgrades the snapshot's stage and clears downstream artifacts.
+    /// </summary>
+    /// <param name="snapshot">The session snapshot to validate; its runtime/provider provenance will be normalized as part of validation.</param>
+    /// <returns>
+    /// A ValidationResult containing:
+    /// - the snapshot with normalized provenance and an updated Stage (downgraded if artifacts were missing),
+    /// - the original stage prior to any downgrades,
+    /// - a list of artifact keys that were cleared due to missing files (for example: "tts", "translation", "transcription", "media").
+    /// </returns>
     public static ValidationResult ValidateArtifacts(WorkflowSessionSnapshot snapshot)
     {
         snapshot = NormalizeRuntimeProvenance(snapshot);
@@ -51,6 +61,7 @@ public static class SessionSnapshotSemantics
         if (stage >= SessionWorkflowStage.MediaLoaded
             && (string.IsNullOrEmpty(snapshot.IngestedMediaPath) || !File.Exists(snapshot.IngestedMediaPath)))
         {
+            // Ingested media is missing - downgrade to Foundation stage
             stage = SessionWorkflowStage.Foundation;
             snapshot = ClearMediaLoadedOutputs(snapshot);
             cleared.Add("media");

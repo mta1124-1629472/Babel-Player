@@ -145,9 +145,9 @@ public sealed class PipelineStageProgressTests : IDisposable
         coordinator.Initialize();
         var playback = new EmbeddedPlaybackViewModel(coordinator);
 
-        Assert.Equal("🎙 Dub", playback.DubModeLabel);
+        Assert.Equal("🎙 Dub", EmbeddedPlaybackViewModel.DubModeLabel);
         playback.IsDubModeOn = true;
-        Assert.Equal("🎙 Dub", playback.DubModeLabel);
+        Assert.Equal("🎙 Dub", EmbeddedPlaybackViewModel.DubModeLabel);
 
         playback.ApplyPipelineStageUpdate(
             new SessionWorkflowCoordinator.PipelineStageUpdate(

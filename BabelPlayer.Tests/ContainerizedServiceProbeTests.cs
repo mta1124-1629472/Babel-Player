@@ -31,11 +31,19 @@ public sealed class ContainerizedServiceProbeTests
         var first = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
         Assert.Equal(ContainerizedProbeState.Checking, first.State);
 
-        await Task.Delay(100);
+        // Wait for probe to complete with polling instead of fixed delay
+        for (int i = 0; i < 20; i++)
+        {
+            await Task.Delay(25);
+            var second = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
+            if (second.State == ContainerizedProbeState.Available)
+            {
+                Assert.Equal(1, callCount);
+                return;
+            }
+        }
 
-        var second = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
-        Assert.Equal(ContainerizedProbeState.Available, second.State);
-        Assert.Equal(1, callCount);
+        throw new Xunit.Sdk.XunitException("Probe did not complete within expected time.");
     }
 
     [Fact]
@@ -503,12 +511,19 @@ public sealed class ContainerizedServiceProbeTests
 
         // Wait for probe to complete
         await probeCompleted.Task;
-        await Task.Delay(50);
 
-        // Third call should hit the cache
-        var third = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
-        Assert.Equal(ContainerizedProbeState.Available, third.State);
+        // Wait for cache to be populated with polling instead of fixed delay
+        for (int i = 0; i < 20; i++)
+        {
+            await Task.Delay(25);
+            var third = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
+            if (third.State == ContainerizedProbeState.Available)
+            {
+                Assert.Equal(1, callCount);
+                return;
+            }
+        }
 
-        Assert.Equal(1, callCount);
+        throw new Xunit.Sdk.XunitException("Probe cache was not populated within expected time.");
     }
 }

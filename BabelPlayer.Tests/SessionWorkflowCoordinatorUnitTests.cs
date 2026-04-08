@@ -1184,11 +1184,88 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     {
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.SaveCurrentSession();
+        coord.FlushPendingSave();
 
         var coord2 = CreateCoordinator();
         coord2.Initialize();
         Assert.Equal(coord.CurrentSession.SessionId, coord2.CurrentSession.SessionId);
+    }
+
+    // ── FlushPendingSave ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void FlushPendingSave_UpdatesLastUpdatedAtUtcAndPersistenceStatus()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        var before = coord.CurrentSession.LastUpdatedAtUtc;
+        coord.FlushPendingSave();
+
+        Assert.False(string.IsNullOrWhiteSpace(coord.PersistenceStatus));
+        Assert.True(coord.CurrentSession.LastUpdatedAtUtc >= before);
+    }
+
+    [Fact]
+    public void FlushPendingSave_PersistedSnapshotMatchesCurrentSession()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.FlushPendingSave();
+
+        // Reloading in a new coordinator should restore the same session
+        var coord2 = CreateCoordinator();
+        coord2.Initialize();
+        Assert.Equal(coord.CurrentSession.SessionId, coord2.CurrentSession.SessionId);
+    }
+
+    [Fact]
+    public void FlushPendingSave_CalledMultipleTimes_DoesNotThrow()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        var ex = Record.Exception(() =>
+        {
+            coord.FlushPendingSave();
+            coord.FlushPendingSave();
+            coord.FlushPendingSave();
+        });
+
+        Assert.Null(ex);
+    }
+
+    // ── RegenerateSegmentTranslationAsync ────────────────────────────────────
+
+    [Fact]
+    public async Task RegenerateSegmentTranslationAsync_NoTranslationPath_ThrowsInvalidOperationException()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        // TranslationPath is null by default in a Foundation session
+        Assert.Null(coord.CurrentSession.TranslationPath);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coord.RegenerateSegmentTranslationAsync("segment_0.0"));
+
+        Assert.Contains("translate", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RegenerateSegmentTranslationAsync_TranslationFileNotFound_ThrowsFileNotFoundException()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        // Set TranslationPath to a non-existent file
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            TranslationPath = Path.Combine(_dir, "missing-translation.json")
+        };
+
+        await Assert.ThrowsAsync<FileNotFoundException>(
+            () => coord.RegenerateSegmentTranslationAsync("segment_0.0"));
     }
 
     // ── StateFilePath / LogFilePath ───────────────────────────────────────────

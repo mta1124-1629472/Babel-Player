@@ -20,7 +20,7 @@ namespace Babel.Player.Services;
 /// <see cref="DefaultVoiceId"/> (Rachel) — a pre-made ElevenLabs voice available
 /// on all subscription tiers. Future work can expose per-user voice ID selection.
 /// </summary>
-public sealed class ElevenLabsTtsProvider : ITtsProvider
+public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
 {
     /// <summary>
     /// ElevenLabs pre-made "Rachel" voice — available on all subscription tiers.
@@ -30,8 +30,19 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
 
     private readonly AppLog _log;
     private readonly string _apiKey;
-    private readonly Func<ElevenLabsApiClient> _clientFactory;
+    private readonly Lazy<ElevenLabsApiClient> _clientLazy;
 
+    /// <summary>
+    /// Creates a new ElevenLabsTtsProvider and configures a lazily initialized ElevenLabsApiClient.
+    /// </summary>
+    /// <param name="log">Application logger used for provider diagnostics.</param>
+    /// <param name="apiKey">ElevenLabs API key used to authenticate requests.</param>
+    /// <summary>
+    /// Initializes a new instance of <see cref="ElevenLabsTtsProvider"/>.
+    /// </summary>
+    /// <param name="log">Application logger used for informational and error messages.</param>
+    /// <param name="apiKey">ElevenLabs API key used to create the API client when a default factory is used.</param>
+    /// <param name="clientFactory">Optional factory to create an <see cref="ElevenLabsApiClient"/>; if null, a default factory that uses <paramref name="apiKey"/> will be used and the client instance will be created on first use.</param>
     public ElevenLabsTtsProvider(
         AppLog log,
         string apiKey,
@@ -39,9 +50,22 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
     {
         _log = log;
         _apiKey = apiKey;
-        _clientFactory = clientFactory ?? (() => new ElevenLabsApiClient(_apiKey));
+        _clientLazy = new Lazy<ElevenLabsApiClient>(clientFactory ?? (() => new ElevenLabsApiClient(_apiKey)), LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
+    /// <summary>
+    /// Determines whether the ElevenLabs TTS provider is configured and ready to use.
+    /// </summary>
+    /// <returns>
+    /// `ProviderReadiness.Ready` if an ElevenLabs API key is configured; otherwise a `ProviderReadiness` with `Success = false` and an explanatory message.
+    /// <summary>
+    /// Determines whether the ElevenLabs TTS provider is configured to operate.
+    /// </summary>
+    /// <param name="settings">Application settings (not used by this provider).</param>
+    /// <param name="keyStore">Optional API key store (not used by this provider).</param>
+    /// <returns>
+    /// A <see cref="ProviderReadiness"/> that is ready when an ElevenLabs API key is present; otherwise indicates not ready with the message "ElevenLabs API key is not set.".
+    /// </returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
@@ -54,7 +78,20 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
     /// Generates speech for all translated segments combined into one audio file.
     /// <paramref name="request.VoiceName"/> maps to the ElevenLabs model ID
     /// (quality tier); <see cref="DefaultVoiceId"/> is used for character voice.
+    /// <summary>
+    /// Generate a single combined audio file by synthesizing all non-empty translated segments from the translation artifact.
     /// </summary>
+    /// <param name="request">Request containing the path to the translation JSON (TranslationJsonPath), desired output audio path (OutputAudioPath), and VoiceName to select the ElevenLabs model.</param>
+    /// <returns>A TtsResult describing the output path, selected voice name, byte length, and success state.</returns>
+    /// <exception cref="FileNotFoundException">Thrown when the translation JSON file at <c>request.TranslationJsonPath</c> does not exist.</exception>
+    /// <summary>
+    /// Generates a single combined audio file from all non-empty translated segments in a translation artifact and writes it to the specified output path.
+    /// </summary>
+    /// <param name="request">TTS request containing at least TranslationJsonPath, OutputAudioPath, and VoiceName.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A <see cref="TtsResult"/> describing the generated audio file and its metadata.</returns>
+    /// <exception cref="FileNotFoundException">Thrown when the translation file at <paramref name="request"/>.TranslationJsonPath does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the translation artifact contains no non-empty translated text segments.</exception>
     public async Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)
@@ -76,7 +113,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
 
         _log.Info($"[ElevenLabsTTS] Generating combined audio: {texts.Count} segments, model={modelId}");
 
-        using var client = _clientFactory();
+        var client = _clientLazy.Value;
         var audioBytes = await client.TextToSpeechAsync(combinedText, DefaultVoiceId, modelId, cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
@@ -94,7 +131,19 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
     /// Generates speech for a single translated text segment.
     /// <paramref name="request.VoiceName"/> maps to the ElevenLabs model ID;
     /// <see cref="DefaultVoiceId"/> is used for character voice.
+    /// <summary>
+    /// Generates speech audio for a single translated segment and writes the resulting audio file to the request's output path.
     /// </summary>
+    /// <param name="request">Single-segment TTS request. `request.Text` must be non-empty; `request.OutputAudioPath` is the file path to write; `request.VoiceName` selects the synthesis model.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>A TtsResult describing the operation: success flag, output path, voice name, byte length of the written audio, and any error (null on success).</returns>
+    /// <summary>
+    /// Generates speech audio for a single translated segment and writes the resulting audio file to the specified output path.
+    /// </summary>
+    /// <param name="request">The segment request containing the text to synthesize, the desired voice name, and the output audio path. <c>Text</c> must not be empty or whitespace.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A <see cref="TtsResult"/> with Success set to <c>true</c>, the output path, the voice name used, and AudioLength equal to the number of bytes written.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="request"/> has an empty or whitespace <c>Text</c> value.</exception>
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default)
@@ -106,7 +155,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
 
         _log.Info($"[ElevenLabsTTS] Generating segment audio: {request.Text[..Math.Min(30, request.Text.Length)]}... model={modelId}");
 
-        using var client = _clientFactory();
+        var client = _clientLazy.Value;
         var audioBytes = await client.TextToSpeechAsync(request.Text, DefaultVoiceId, modelId, cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
@@ -122,7 +171,11 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
 
     // Map the VoiceName field (which holds the selected model/quality tier in Babel Player's
     // ElevenLabs configuration) to a valid ElevenLabs model ID. Falls back to the
-    // highest-quality multilingual model if the value is unrecognised or empty.
+    /// <summary>
+        /// Map a provided voice name to the corresponding ElevenLabs model identifier.
+        /// </summary>
+        /// <param name="voiceName">The requested voice name or model hint.</param>
+        /// <returns>The normalized model id: "eleven_multilingual_v2", "eleven_turbo_v2_5", or "eleven_flash_v2_5"; defaults to "eleven_multilingual_v2" for unrecognized or empty values.</returns>
     private static string NormalizeModelId(string voiceName) =>
         voiceName switch
         {
@@ -131,4 +184,16 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
             "eleven_flash_v2_5"       => "eleven_flash_v2_5",
             _                         => "eleven_multilingual_v2",
         };
+
+    /// <summary>
+    /// Disposes the underlying ElevenLabs API client if it has been created.
+    /// </summary>
+    /// <remarks>
+    /// If the lazy client has not been instantiated, this method performs no action.
+    /// </remarks>
+    public void Dispose()
+    {
+        if (_clientLazy.IsValueCreated)
+            _clientLazy.Value.Dispose();
+    }
 }
