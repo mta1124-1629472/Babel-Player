@@ -44,7 +44,6 @@ public static class InferenceRuntimeCatalog
     public static ComputeProfile InferTtsProfile(string? providerId) => providerId switch
     {
         ProviderNames.Piper => ComputeProfile.Cpu,
-        ProviderNames.XttsContainer => ComputeProfile.Gpu,
         ProviderNames.Qwen => ComputeProfile.Gpu,
         _ => ComputeProfile.Cloud,
     };
@@ -64,7 +63,7 @@ public static class InferenceRuntimeCatalog
     public static string DefaultTtsProvider(ComputeProfile profile) => profile switch
     {
         ComputeProfile.Cpu => ProviderNames.Piper,
-        ComputeProfile.Gpu => ProviderNames.XttsContainer,
+        ComputeProfile.Gpu => ProviderNames.Qwen,
         _ => ProviderNames.EdgeTts,
     };
 
@@ -150,11 +149,7 @@ public static class InferenceRuntimeCatalog
         return profile switch
         {
             ComputeProfile.Cpu => ProviderNames.Piper,
-            ComputeProfile.Gpu => providerId switch
-            {
-                ProviderNames.Qwen => ProviderNames.Qwen,
-                _ => ProviderNames.XttsContainer,
-            },
+            ComputeProfile.Gpu => ProviderNames.Qwen,
             _ => providerId switch
             {
                 ProviderNames.ElevenLabs => ProviderNames.ElevenLabs,
@@ -254,7 +249,6 @@ public static class InferenceRuntimeCatalog
             or ProviderNames.ElevenLabs
             or ProviderNames.GoogleCloudTts
             or ProviderNames.OpenAiTts
-            or ProviderNames.XttsContainer
             or ProviderNames.Qwen => true,
         _ => false,
     };

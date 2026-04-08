@@ -20,7 +20,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
 {
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
-    private readonly XttsReferenceExtractor _extractor;
+    private readonly TtsReferenceExtractor _extractor;
     private readonly Func<IReadOnlyList<string>, string, CancellationToken, Task> _combineAudioFunc;
 
     private string? _autoExtractedReferencePath;
@@ -30,7 +30,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     public QwenContainerTtsProvider(
         ContainerizedInferenceClient client,
         AppLog log,
-        XttsReferenceExtractor extractor,
+        TtsReferenceExtractor extractor,
         Func<IReadOnlyList<string>, string, CancellationToken, Task>? combineAudioFunc = null)
     {
         _client = client;

@@ -43,9 +43,6 @@ whisper_model_key = None
 nllb_tokenizer = None
 nllb_model = None
 nllb_model_key = None
-xtts_model = None
-xtts_model_key = None
-xtts_reference_registry: dict[str, dict[str, str | None]] = {}
 qwen_reference_registry: dict[str, dict[str, str | None]] = {}
 qwen_model = None
 qwen_model_key = None
@@ -54,7 +51,6 @@ pyannote_pipeline_key: str | None = None
 
 # Warmup state: None = not started, "warming" = in progress,
 # "ready" = model loaded, "failed: <reason>" = terminal failure
-_xtts_warmup_status: str | None = None
 _qwen_warmup_status: str | None = None
 # Pyannote is loaded lazily on first /diarize (requires HF token);
 # this lock prevents concurrent load races. It must be created from an
@@ -72,7 +68,6 @@ HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
 EFFECTIVE_HOST_COMPUTE_TYPE = HOST_COMPUTE_TYPE
 # Tracks downgrade reasons per stage for UI/logging projection
 COMPUTE_DOWNGRADE_REASONS: dict[str, str] = {}
-XTTS_MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -205,10 +200,12 @@ class TtsResponse(BaseModel):
     error_message: Optional[str] = None
 
 
-class XttsReferenceResponse(BaseModel):
+class QwenReferenceResponse(BaseModel):
     success: bool
     reference_id: Optional[str] = None
     error_message: Optional[str] = None
+
+
 
 
 # ============================================================================
@@ -266,14 +263,6 @@ def _probe_nllb_available() -> tuple[bool, str]:
         return False, str(exc)
 
 
-def _probe_xtts_available() -> tuple[bool, str]:
-    status = _xtts_warmup_status
-    if status is None or status == "warming":
-        return False, "XTTS model warming up"
-    if status == "ready":
-        return True, f"XTTS model loaded on {HOST_DEVICE}"
-    # status starts with "failed: ..."
-    return False, f"XTTS warmup {status}"
 
 
 def _probe_qwen_available() -> tuple[bool, str]:
@@ -318,13 +307,12 @@ async def get_stage_capabilities():
     tx_ready, tx_detail = _probe_whisper_available()
     tl_ready, tl_detail = _probe_nllb_available()
 
-    xtts_ready, xtts_detail = _probe_xtts_available()
     qwen_ready, qwen_detail = _probe_qwen_available()
-    tts_ready = xtts_ready or qwen_ready
+    tts_ready = qwen_ready
     if tts_ready:
         tts_detail = "TTS available"
     else:
-        tts_detail = f"xtts: {xtts_detail}; qwen: {qwen_detail}"
+        tts_detail = f"qwen: {qwen_detail}"
 
     diar_ready, diar_detail = _probe_pyannote_available()
 
@@ -335,11 +323,9 @@ async def get_stage_capabilities():
             ready=tts_ready,
             detail=tts_detail,
             providers={
-                "xtts-container": xtts_ready,
                 "qwen-tts": qwen_ready,
             },
             provider_details={
-                "xtts-container": xtts_detail,
                 "qwen-tts": qwen_detail,
             },
         ),
@@ -684,30 +670,6 @@ def _resolve_reference_path_in_temp_dir(path_value: str) -> Optional[Path]:
         return None
 
 
-def _evict_reference(ref_id: str) -> bool:
-    """Remove a reference from the registry and delete its backing file.
-
-    Returns True if an entry was found and removed, False if no entry existed.
-    """
-    entry = xtts_reference_registry.pop(ref_id, None)
-    if entry is None:
-        return False
-    old_path = entry.get("path")
-    if old_path:
-        safe_path = _resolve_reference_path_in_temp_dir(old_path)
-        if safe_path is None:
-            logger.warning(
-                f"Skipping deletion for reference file outside TEMP_DIR or with invalid path: {old_path}"
-            )
-        else:
-            try:
-                if safe_path.is_file() or not safe_path.exists():
-                    safe_path.unlink(missing_ok=True)
-                else:
-                    logger.warning(f"Skipping deletion for non-file reference path: {safe_path}")
-            except Exception as exc:
-                logger.warning(f"Could not delete reference file {safe_path}: {exc}")
-    return True
 
 
 def _evict_qwen_reference(ref_id: str) -> bool:
@@ -740,7 +702,7 @@ async def delete_speaker_reference(ref_id: str):
     The C# coordinator should call this when a dubbing session ends so that
     extracted reference WAVs do not accumulate in TEMP_DIR.
     """
-    if not _evict_reference(ref_id):
+    if not _evict_qwen_reference(ref_id):
         raise HTTPException(status_code=404, detail=f"reference_id '{ref_id}' not found")
     return {"success": True, "deleted": ref_id}
 
@@ -760,7 +722,7 @@ async def extract_speaker_references(
       2. Finds the single longest segment for that speaker.
       3. Trims it to `target_duration_seconds` if it is longer.
       4. Extracts the clip via ffmpeg (frame-accurate seek).
-      5. Registers it in the XTTS reference registry so subsequent TTS calls
+      5. Registers it in the Qwen reference registry so subsequent TTS calls
          can pass `reference_id` instead of re-uploading the file.
       6. Evicts any pre-existing registry entry for the same speaker_id AND
          session_id so temp files do not accumulate across repeated calls from
@@ -863,19 +825,8 @@ async def extract_speaker_references(
                     detail=f"ffmpeg extraction failed for speaker {speaker_id}: {proc.stderr[-200:]}",
                 )
 
-            # Evict prior refs that belong to the same session AND speaker so
-            # temp files don't accumulate on repeated calls within the same job.
-            # Refs from other sessions (different job IDs) are never touched.
-            existing_ref_ids = [
-                rid for rid, entry in xtts_reference_registry.items()
-                if entry.get("speaker_id") == speaker_id
-                and entry.get("session_id") == effective_session_id
-            ]
-            for old_ref_id in existing_ref_ids:
-                _evict_reference(old_ref_id)
-
             ref_id = f"{speaker_id}_{uuid4().hex}"
-            xtts_reference_registry[ref_id] = {
+            qwen_reference_registry[ref_id] = {
                 "speaker_id": speaker_id,
                 "session_id": effective_session_id,
                 "path": str(out_path),
@@ -904,57 +855,12 @@ async def extract_speaker_references(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-# ============================================================================
-# XTTS
-# ============================================================================
-
-def load_xtts_model(model_name: str = XTTS_MODEL_NAME):
-    global xtts_model, xtts_model_key
-    if xtts_model is None or xtts_model_key != model_name:
-        # Compatibility shim: TTS==0.22.0 references transformers.BeamSearchScorer which
-        # was moved in newer transformers versions. Patch before importing TTS.api.
-        try:
-            import transformers as _transformers
-            if not hasattr(_transformers, "BeamSearchScorer"):
-                from transformers.generation.beam_search import BeamSearchScorer as _bsc
-                _transformers.BeamSearchScorer = _bsc
-        except Exception:
-            pass
-        from TTS.api import TTS
-        logger.info(f"Loading XTTS '{model_name}'")
-        xtts_model = TTS(model_name).to(HOST_DEVICE)
-        xtts_model_key = model_name
-        logger.info("XTTS loaded")
-    return xtts_model
 
 
-@app.post("/tts/xtts/references", response_model=XttsReferenceResponse)
-async def register_xtts_reference(
-    speaker_id: str = Form(...),
-    file: UploadFile = File(...),
-    transcript: Optional[str] = Form(None),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-):
-    temp_path = None
-    try:
-        safe_filename = Path(file.filename or "").name
-        temp_path = TEMP_DIR / f"ref_{uuid4().hex}_{safe_filename}"
-        temp_path.write_bytes(await file.read())
-        ref_id = f"{speaker_id}_{uuid4().hex}"
-        xtts_reference_registry[ref_id] = {
-            "speaker_id": speaker_id,
-            "session_id": None,
-            "path": str(temp_path),
-            "transcript": transcript,
-        }
-        return XttsReferenceResponse(success=True, reference_id=ref_id)
-    except Exception as exc:
-        if temp_path:
-            background_tasks.add_task(lambda p=temp_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(exc))
 
 
-@app.post("/tts/qwen/references", response_model=XttsReferenceResponse)
+
+@app.post("/tts/qwen/references", response_model=QwenReferenceResponse)
 async def register_qwen_reference(
     speaker_id: str = Form(...),
     file: UploadFile = File(...),
@@ -973,70 +879,13 @@ async def register_qwen_reference(
             "path": str(temp_path),
             "transcript": transcript,
         }
-        return XttsReferenceResponse(success=True, reference_id=ref_id)
+        return QwenReferenceResponse(success=True, reference_id=ref_id)
     except Exception as exc:
         if temp_path:
             background_tasks.add_task(lambda p=temp_path: p.unlink(missing_ok=True))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@app.post("/tts/xtts/segment", response_model=TtsResponse)
-async def xtts_segment(
-    text: str = Form(...),
-    model: str = Form("xtts-v2"),
-    language: Optional[str] = Form(None),
-    speaker_id: Optional[str] = Form(None),
-    reference_id: Optional[str] = Form(None),
-    reference_transcript: Optional[str] = Form(None),
-    reference_file: Optional[UploadFile] = File(None),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-):
-    if _xtts_warmup_status == "warming":
-        raise HTTPException(status_code=503, detail="XTTS model is still loading, please wait")
-    if _xtts_warmup_status is not None and _xtts_warmup_status.startswith("failed"):
-        raise HTTPException(status_code=503, detail=f"XTTS model not available: {_xtts_warmup_status}")
-
-    temp_ref_path = None
-    out_path = TEMP_DIR / f"xtts_{uuid4().hex}.wav"
-    try:
-        tts = load_xtts_model(XTTS_MODEL_NAME)
-
-        ref_audio_path: Optional[str] = None
-        if reference_file is not None:
-            safe_ref_name = Path(reference_file.filename or "").name
-            temp_ref_path = TEMP_DIR / f"ref_{uuid4().hex}_{safe_ref_name}"
-            temp_ref_path.write_bytes(await reference_file.read())
-            ref_audio_path = str(temp_ref_path)
-        elif reference_id and reference_id in xtts_reference_registry:
-            ref_audio_path = xtts_reference_registry[reference_id]["path"]
-
-        if not ref_audio_path:
-            raise HTTPException(status_code=400, detail="XTTS requires a reference audio file or valid reference_id.")
-
-        await asyncio.to_thread(
-            tts.tts_to_file,
-            text=text,
-            speaker_wav=ref_audio_path,
-            language=language or "en",
-            file_path=str(out_path),
-        )
-
-        if temp_ref_path:
-            background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
-
-        return TtsResponse(
-            success=True,
-            voice=model,
-            audio_path=str(out_path),
-            file_size_bytes=out_path.stat().st_size,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error(f"XTTS segment failed: {exc}", exc_info=True)
-        if temp_ref_path:
-            background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ============================================================================
@@ -1178,17 +1027,6 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
 # Model warmup (background tasks launched at startup)
 # ============================================================================
 
-async def _warmup_xtts():
-    global _xtts_warmup_status
-    _xtts_warmup_status = "warming"
-    try:
-        logger.info("XTTS warmup starting")
-        await asyncio.to_thread(load_xtts_model)
-        _xtts_warmup_status = "ready"
-        logger.info("XTTS warmup complete")
-    except Exception as exc:
-        _xtts_warmup_status = f"failed: {exc}"
-        logger.warning(f"XTTS warmup failed: {exc}", exc_info=True)
 
 
 async def _warmup_qwen():
@@ -1229,16 +1067,6 @@ async def startup_event():
     if torch.cuda.is_available():
         logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
         logger.info(f"CUDA version: {torch.version.cuda}")
-    try:
-        import transformers as _tf
-        from transformers import AutoConfig, AutoModel, AutoProcessor  # noqa: F401
-        if not hasattr(_tf, "BeamSearchScorer"):
-            from transformers.generation.beam_search import BeamSearchScorer as _bsc
-            _tf.BeamSearchScorer = _bsc
-    except Exception:
-        pass
-
-    asyncio.create_task(_warmup_xtts())
     asyncio.create_task(_warmup_qwen())
 
 

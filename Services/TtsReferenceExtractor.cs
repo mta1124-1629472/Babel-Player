@@ -7,16 +7,16 @@ using System.Threading.Tasks;
 namespace Babel.Player.Services;
 
 /// <summary>
-/// Extracts a clean speech sample from a source video file for use as XTTS reference audio.
-/// Outputs 16kHz mono WAV format as required by XTTS v2.
+/// Extracts a clean speech sample from a source video file for use as TTS reference audio.
+/// Outputs 16kHz mono WAV format as required by TTS models.
 /// </summary>
-public sealed class XttsReferenceExtractor : IAsyncDisposable
+public sealed class TtsReferenceExtractor : IAsyncDisposable
 {
     private readonly AppLog _log;
     private string? _tempWavPath;
     private bool _disposed;
 
-    public XttsReferenceExtractor(AppLog log)
+    public TtsReferenceExtractor(AppLog log)
     {
         _log = log;
     }
@@ -38,14 +38,14 @@ public sealed class XttsReferenceExtractor : IAsyncDisposable
         await CleanupAsync();
 
         var ffmpegPath = ResolveFfmpegPath()
-            ?? throw new InvalidOperationException("ffmpeg not found. XTTS reference extraction requires ffmpeg.");
+            ?? throw new InvalidOperationException("ffmpeg not found. TTS reference extraction requires ffmpeg.");
 
         var tempPath = Path.Combine(
             Path.GetTempPath(),
-            $"babel_xtts_ref_{Guid.NewGuid():N}.wav");
+            $"babel_tts_ref_{Guid.NewGuid():N}.wav");
 
-        _log.Info($"[XttsReferenceExtractor] Extracting reference audio from: {videoPath}");
-        _log.Info($"[XttsReferenceExtractor] Output path: {tempPath}");
+        _log.Info($"[TtsReferenceExtractor] Extracting reference audio from: {videoPath}");
+        _log.Info($"[TtsReferenceExtractor] Output path: {tempPath}");
 
         var psi = new ProcessStartInfo
         {
@@ -56,7 +56,7 @@ public sealed class XttsReferenceExtractor : IAsyncDisposable
             CreateNoWindow = true,
         };
 
-        // Extract first 30 seconds, 16kHz mono WAV (XTTS v2 requirement)
+        // Extract first 30 seconds, 16kHz mono WAV (TTS requirement)
         psi.ArgumentList.Add("-y");
         psi.ArgumentList.Add("-i");
         psi.ArgumentList.Add(videoPath);
@@ -71,7 +71,7 @@ public sealed class XttsReferenceExtractor : IAsyncDisposable
         psi.ArgumentList.Add(tempPath);
 
         using var process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start ffmpeg for XTTS reference extraction.");
+            ?? throw new InvalidOperationException("Failed to start ffmpeg for TTS reference extraction.");
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
         var stderrTask = process.StandardError.ReadToEndAsync(ct);
@@ -94,7 +94,7 @@ public sealed class XttsReferenceExtractor : IAsyncDisposable
         }
 
         _tempWavPath = tempPath;
-        _log.Info($"[XttsReferenceExtractor] Reference extraction complete: {tempPath}");
+        _log.Info($"[TtsReferenceExtractor] Reference extraction complete: {tempPath}");
 
         return tempPath;
     }
@@ -129,19 +129,17 @@ public sealed class XttsReferenceExtractor : IAsyncDisposable
             if (File.Exists(_tempWavPath))
             {
                 File.Delete(_tempWavPath);
-                _log.Info($"[XttsReferenceExtractor] Cleaned up temp file: {_tempWavPath}");
+                _log.Info($"[TtsReferenceExtractor] Cleaned up temp file: {_tempWavPath}");
             }
         }
         catch (Exception ex)
         {
-            _log.Error($"[XttsReferenceExtractor] Failed to clean up temp file: {ex.Message}", ex);
+            _log.Error($"[TtsReferenceExtractor] Failed to clean up temp file: {ex.Message}", ex);
         }
         finally
         {
             _tempWavPath = null;
         }
-
-        await Task.CompletedTask;
     }
 
     /// <summary>

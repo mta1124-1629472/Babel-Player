@@ -77,15 +77,6 @@ public sealed class ModelsTabViewModel : ViewModelBase
                 downloader: downloader));
         }
 
-        // ── XTTS v2 ───────────────────────────────────────────────────────────
-        // Single monolithic model — no per-variant list needed.
-        entries.Add(new ModelDownloadEntry(
-            providerLabel: "XTTS v2",
-            modelId: "xtts-v2",
-            isDownloadedFunc: () => ModelDownloader.IsXttsDownloaded(),
-            downloadFunc: (progress, token) => downloader.DownloadXttsAsync(progress, token),
-            downloader: downloader));
-
         Models = new ObservableCollection<ModelDownloadEntry>(entries);
     }
 }

@@ -308,8 +308,7 @@ public sealed partial class SessionWorkflowCoordinator
         }
 
         _ttsService ??= CreateTtsService();
-        await EnsureSingleSpeakerXttsReferenceClipAsync(cancellationToken);
-        await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
+                await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
         await EnsureMultiSpeakerReferenceClipsAsync(cancellationToken);
 
         ReportStage(

@@ -310,18 +310,14 @@ public sealed partial class SessionWorkflowCoordinator
 
             // No per-speaker reference — fall back to the provider's default key so the
             // provider's auto-extract fallback (or a manually placed default) can still fire.
-            var fallbackKey = string.Equals(CurrentSettings.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal)
-                ? QwenReferenceKeys.SingleSpeakerDefault
-                : XttsReferenceKeys.SingleSpeakerDefault;
+            var fallbackKey = QwenReferenceKeys.SingleSpeakerDefault;
             return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(fallbackKey, out var fallbackPath) &&
                    !string.IsNullOrWhiteSpace(fallbackPath)
                 ? fallbackPath
                 : null;
         }
 
-        var defaultKey = string.Equals(CurrentSettings.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal)
-            ? QwenReferenceKeys.SingleSpeakerDefault
-            : XttsReferenceKeys.SingleSpeakerDefault;
+        var defaultKey = QwenReferenceKeys.SingleSpeakerDefault;
         return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(defaultKey, out var defaultPath) &&
                !string.IsNullOrWhiteSpace(defaultPath)
             ? defaultPath

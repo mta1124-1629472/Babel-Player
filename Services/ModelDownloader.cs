@@ -89,14 +89,6 @@ print('[progress] 100', flush=True)
             $"CTranslate2 translation model {repoId}");
     }
 
-    /// <summary>
-    /// Downloads the XTTS v2 model weights from HuggingFace (coqui/XTTS-v2).
-    /// The download is ~1.8 GB and requires Python + huggingface_hub.
-    /// </summary>
-    public async Task<bool> DownloadXttsAsync(IProgress<double>? progress = null, CancellationToken token = default)
-    {
-        return await DownloadHuggingFaceModelAsync("coqui/XTTS-v2", progress, token);
-    }
 
     private async Task<bool> DownloadHuggingFaceModelAsync(string repoId, IProgress<double>? progress = null, CancellationToken token = default)
     {
@@ -329,15 +321,6 @@ except Exception as e:
             && IsNllbDownloaded(model);
     }
 
-    /// <summary>
-    /// Returns true when the XTTS v2 model snapshot is present in the local HuggingFace cache.
-    /// </summary>
-    public static bool IsXttsDownloaded()
-    {
-        string hfCache = GetHuggingFaceCacheDir();
-        string modelPath = Path.Combine(hfCache, "models--coqui--XTTS-v2");
-        return IsDownloadedInHfCache(modelPath);
-    }
 
     private static bool IsDownloadedInHfCache(string modelPath)
     {

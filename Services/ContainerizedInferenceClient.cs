@@ -242,99 +242,14 @@ public sealed class ContainerizedInferenceClient
             content,
             cancellationToken);
 
-        var result = await DeserializeResponseAsync<XttsReferenceResponseDto>(response, cancellationToken);
+        var result = await DeserializeResponseAsync<QwenReferenceResponseDto>(response, cancellationToken);
         if (!result.Success || string.IsNullOrWhiteSpace(result.ReferenceId))
             throw new InvalidOperationException($"Qwen reference registration failed: {result.ErrorMessage}");
 
         return result.ReferenceId;
     }
 
-    public async Task<string> RegisterXttsReferenceAsync(
-        string speakerId,
-        string referenceAudioPath,
-        string? transcript = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (!File.Exists(referenceAudioPath))
-            throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
 
-        using var content = new MultipartFormDataContent();
-        content.Add(new StringContent(speakerId), "speaker_id");
-        if (!string.IsNullOrWhiteSpace(transcript))
-            content.Add(new StringContent(transcript), "transcript");
-
-        await using var fs = File.OpenRead(referenceAudioPath);
-        content.Add(new StreamContent(fs), "file", Path.GetFileName(referenceAudioPath));
-
-        using var response = await _httpClient.PostAsync(
-            $"{_inferenceServiceUrl}/tts/xtts/references",
-            content,
-            cancellationToken);
-
-        var result = await DeserializeResponseAsync<XttsReferenceResponseDto>(response, cancellationToken);
-        if (!result.Success || string.IsNullOrWhiteSpace(result.ReferenceId))
-            throw new InvalidOperationException($"XTTS reference registration failed: {result.ErrorMessage}");
-
-        return result.ReferenceId;
-    }
-
-    public async Task<TtsResult> XttsSegmentAsync(
-        string text,
-        string model,
-        string? language = null,
-        string? speakerId = null,
-        string? referenceAudioPath = null,
-        string? referenceId = null,
-        string? referenceTranscript = null,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            using var content = new MultipartFormDataContent();
-            content.Add(new StringContent(text), "text");
-            content.Add(new StringContent(string.IsNullOrWhiteSpace(model) ? "xtts-v2" : model), "model");
-            if (!string.IsNullOrWhiteSpace(language))
-                content.Add(new StringContent(language), "language");
-            if (!string.IsNullOrWhiteSpace(speakerId))
-                content.Add(new StringContent(speakerId), "speaker_id");
-            if (!string.IsNullOrWhiteSpace(referenceId))
-                content.Add(new StringContent(referenceId), "reference_id");
-            if (!string.IsNullOrWhiteSpace(referenceTranscript))
-                content.Add(new StringContent(referenceTranscript), "reference_transcript");
-
-            FileStream? fs = null;
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(referenceAudioPath))
-                {
-                    if (!File.Exists(referenceAudioPath))
-                        throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
-                    fs = File.OpenRead(referenceAudioPath);
-                    content.Add(new StreamContent(fs), "reference_file", Path.GetFileName(referenceAudioPath));
-                }
-
-                using var response = await _httpClient.PostAsync(
-                    $"{_inferenceServiceUrl}/tts/xtts/segment",
-                    content,
-                    cancellationToken);
-
-                var result = await DeserializeResponseAsync<TtsApiResponseDto>(response, cancellationToken);
-                if (!result.Success)
-                    throw new InvalidOperationException($"XTTS segment error: {result.ErrorMessage}");
-
-                return new TtsResult(true, result.AudioPath ?? "", result.Voice ?? model ?? "xtts-v2", result.FileSizeBytes, null);
-            }
-            finally
-            {
-                fs?.Dispose();
-            }
-        }
-        catch (Exception ex)
-        {
-            _log.Error($"XTTS segment synthesis failed: {ex.Message}", ex);
-            return new TtsResult(false, "", string.IsNullOrWhiteSpace(model) ? "xtts-v2" : model, 0, ex.Message);
-        }
-    }
 
     /// <summary>
     /// Synthesizes speech for the given text using the Qwen segmented TTS endpoint.
@@ -404,12 +319,6 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
-    /// <summary>
-    /// Downloads a synthesized TTS audio file from the inference service and saves it to the specified local path.
-    /// </summary>
-    /// <param name="filename">The remote TTS audio filename on the service to download (will be URL-escaped).</param>
-    /// <param name="localOutputPath">The local file path where the downloaded audio will be created or overwritten.</param>
-    /// <param name="cancellationToken">Token to cancel the download operation.</param>
     /// <summary>
     /// Downloads synthesized TTS audio identified by the given filename from the inference service and writes it to the specified local file path.
     /// </summary>
@@ -665,7 +574,7 @@ public sealed class ContainerizedInferenceClient
         public string? ErrorMessage { get; set; }
     }
 
-    private sealed class XttsReferenceResponseDto
+    private sealed class QwenReferenceResponseDto
     {
         [JsonPropertyName("success")]
         public bool Success { get; set; }
@@ -676,6 +585,7 @@ public sealed class ContainerizedInferenceClient
         [JsonPropertyName("error_message")]
         public string? ErrorMessage { get; set; }
     }
+
 }
 
 public enum ContainerCapabilityStage

@@ -476,9 +476,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     /// <summary>True when multi-speaker mode is on but no speaker IDs have been detected yet.</summary>
     public bool IsMultiSpeakerNoSpeakersYet => IsMultiSpeakerEnabled && !HasSpeakers;
 
-    /// <summary>True when the active TTS provider uses voice cloning from reference audio (XTTS, Qwen).</summary>
+    /// <summary>True when the active TTS provider uses voice cloning from reference audio (Qwen).</summary>
     public bool IsTtsCloningProvider =>
-        string.Equals(TtsProvider, ProviderNames.XttsContainer, StringComparison.Ordinal) ||
         string.Equals(TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal);
 
     [ObservableProperty]

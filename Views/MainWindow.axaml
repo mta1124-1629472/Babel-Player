@@ -355,7 +355,7 @@
                                                 Text="{Binding Playback.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
                                                 FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
 
-                                     <!-- Ref audio row — only meaningful for voice-cloning providers (XTTS, Qwen) -->
+                                     <!-- Ref audio row only meaningful for voice-cloning providers (Qwen) -->
                                      <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}"
                                                 IsVisible="{Binding Playback.IsTtsCloningProvider}" />
                                      <TextBlock Grid.Row="1" Grid.Column="1"

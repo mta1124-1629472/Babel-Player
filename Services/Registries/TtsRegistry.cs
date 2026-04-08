@@ -69,15 +69,6 @@ public sealed class TtsRegistry : ITtsRegistry
             return
             [
                 new(
-                    ProviderNames.XttsContainer,
-                    "XTTS v2 (Local GPU Host)",
-                    false,
-                    null,
-                    ["xtts-v2"],
-                    SupportedRuntimes: [InferenceRuntime.Containerized],
-                    DefaultRuntime: InferenceRuntime.Containerized,
-                    IsImplemented: true),
-                new(
                     ProviderNames.Qwen,
                     "Qwen3-TTS (Local GPU Host)",
                     false,
@@ -125,8 +116,6 @@ public sealed class TtsRegistry : ITtsRegistry
     public IReadOnlyList<string> GetAvailableModels(string providerId, ComputeProfile profile, AppSettings settings)
     {
         var normalizedProviderId = ResolveProviderId(providerId, settings, profile);
-        if (profile == ComputeProfile.Gpu && string.Equals(normalizedProviderId, ProviderNames.XttsContainer, StringComparison.Ordinal))
-            return ["xtts-v2"];
         if (profile == ComputeProfile.Gpu && string.Equals(normalizedProviderId, ProviderNames.Qwen, StringComparison.Ordinal))
             return QwenModels;
 
@@ -140,17 +129,7 @@ public sealed class TtsRegistry : ITtsRegistry
         var resolvedProfile = ResolveProfile(providerId, settings, profile);
         var resolvedRuntime = InferenceRuntimeCatalog.ResolveRuntime(resolvedProfile);
         var normalizedProviderId = ResolveProviderId(providerId, settings, resolvedProfile);
-        var desc = (resolvedProfile == ComputeProfile.Gpu && string.Equals(normalizedProviderId, ProviderNames.XttsContainer, StringComparison.Ordinal))
-            ? new ProviderDescriptor(
-                ProviderNames.XttsContainer,
-                "XTTS v2 (Local GPU Host)",
-                false,
-                null,
-                ["xtts-v2"],
-                SupportedRuntimes: [InferenceRuntime.Containerized],
-                DefaultRuntime: InferenceRuntime.Containerized,
-                IsImplemented: true)
-            : GetAvailableProviders(resolvedProfile).FirstOrDefault(p => p.Id == normalizedProviderId);
+        var desc = GetAvailableProviders(resolvedProfile).FirstOrDefault(p => p.Id == normalizedProviderId);
         if (desc == null)
             return new ProviderReadiness(false, $"Unknown TTS provider '{normalizedProviderId}'.");
         if (!desc.IsImplemented)
@@ -186,14 +165,10 @@ public sealed class TtsRegistry : ITtsRegistry
         {
             return normalizedProviderId switch
             {
-                ProviderNames.XttsContainer => new XttsContainerTtsProvider(
-                    new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
-                    _log,
-                    new XttsReferenceExtractor(_log)),
                 ProviderNames.Qwen => new QwenContainerTtsProvider(
                     new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
                     _log,
-                    new XttsReferenceExtractor(_log)),
+                    new TtsReferenceExtractor(_log)),
                 _ => throw new PipelineProviderException(
                     $"Containerized TTS provider '{providerId}' is not implemented. Select a supported provider.")
             };

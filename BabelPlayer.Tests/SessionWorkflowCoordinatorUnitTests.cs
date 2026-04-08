@@ -697,7 +697,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             MultiSpeakerEnabled = false,
             SpeakerReferenceAudioPaths = new Dictionary<string, string>
             {
-                [XttsReferenceKeys.SingleSpeakerDefault] = defaultRefPath,
+                [QwenReferenceKeys.SingleSpeakerDefault] = defaultRefPath,
             },
         };
 
