@@ -13,6 +13,7 @@ namespace Babel.Player.Services.Credentials;
 /// </summary>
 public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
 {
+    private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
     private readonly string _filePath;
 
     public string StorageProviderName => OperatingSystem.IsWindows() ? "Local File (DPAPI Encrypted)" : "Local File (Obfuscated)";
@@ -89,7 +90,7 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
     {
         try
         {
-            var json = JsonSerializer.Serialize(keys, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(keys, _jsonOptions);
             File.WriteAllText(_filePath, json, Encoding.UTF8);
         }
         catch

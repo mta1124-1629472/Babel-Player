@@ -37,7 +37,7 @@ public sealed class ContainerizedProbeMetrics
     /// </summary>
     public ServiceMetrics[] GetAllMetrics()
     {
-        return _serviceMetrics.Values.ToArray();
+        return [.. _serviceMetrics.Values];
     }
     
     /// <summary>
@@ -67,11 +67,11 @@ public sealed class ContainerizedProbeMetrics
 /// Per-service probe metrics tracking success rates, timing, and error patterns.
 /// Thread-safe for concurrent access.
 /// </summary>
-public sealed class ServiceMetrics
+public sealed class ServiceMetrics(string serviceUrl)
 {
-    private readonly object _gate = new();
+    private readonly System.Threading.Lock _gate = new();
     
-    public string ServiceUrl { get; }
+    public string ServiceUrl { get; } = serviceUrl;
     
     public long TotalProbes { get; private set; }
     public long SuccessfulProbes { get; private set; }
@@ -105,13 +105,6 @@ public sealed class ServiceMetrics
     /// Count of consecutive failures since the last success.
     /// </summary>
     public long ConsecutiveFailures { get; private set; }
-    
-    public ServiceMetrics(string serviceUrl)
-    {
-        ServiceUrl = serviceUrl;
-        LastProbeAtUtc = DateTimeOffset.MinValue;
-        LastSuccessAtUtc = DateTimeOffset.MinValue;
-    }
     
     /// <summary>
     /// Success rate as a percentage (0-100). Returns 0 if no probes attempted.

@@ -307,29 +307,29 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.TranscriptionCpuThreads = Math.Max(0, TranscriptionCpuThreads);
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
 
-            settings.VideoHwdec          = VideoHwdec;
-            settings.VideoGpuApi         = VideoGpuApi;
-            settings.VideoExportEncoder  = VideoExportEncoder;
-            settings.VideoUseGpuNext     = VideoUseGpuNext;
-            settings.VideoVsrEnabled     = VideoVsrEnabled;
-            settings.VideoVsrQuality     = VideoVsrQuality;
-            settings.VideoHdrEnabled     = VideoHdrEnabled;
-            settings.VideoToneMapping    = VideoToneMapping;
-            settings.VideoTargetPeak     = VideoTargetPeak;
-            settings.VideoHdrComputePeak = VideoHdrComputePeak;
+        settings.VideoHwdec          = VideoHwdec;
+        settings.VideoGpuApi         = VideoGpuApi;
+        settings.VideoExportEncoder  = VideoExportEncoder;
+        settings.VideoUseGpuNext     = VideoUseGpuNext;
+        settings.VideoVsrEnabled     = VideoVsrEnabled;
+        settings.VideoVsrQuality     = VideoVsrQuality;
+        settings.VideoHdrEnabled     = VideoHdrEnabled;
+        settings.VideoToneMapping    = VideoToneMapping;
+        settings.VideoTargetPeak     = VideoTargetPeak;
+        settings.VideoHdrComputePeak = VideoHdrComputePeak;
 
-            // Apply theme change immediately when Save & Close is pressed
-            if (Application.Current is { } app)
+        // Apply theme change immediately when Save & Close is pressed
+        if (Application.Current is { } app)
+        {
+            app.RequestedThemeVariant = SelectedTheme switch
             {
-                app.RequestedThemeVariant = SelectedTheme switch
-                {
-                    "Dark" => ThemeVariant.Dark,
-                    "Light" => ThemeVariant.Light,
-                    _ => ThemeVariant.Default // System
-                };
-            }
+                "Dark" => ThemeVariant.Dark,
+                "Light" => ThemeVariant.Light,
+                _ => ThemeVariant.Default // System
+            };
+        }
 
-            _coordinator.NotifySettingsModified();
+        _coordinator.NotifySettingsModified();
     }
 
     [RelayCommand]
@@ -346,7 +346,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void OpenKofi()
+    private static void OpenKofi()
     {
         try
         {
@@ -364,7 +364,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void OpenGitHubSponsors()
+    private static void OpenGitHubSponsors()
     {
         try
         {

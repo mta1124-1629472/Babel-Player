@@ -24,10 +24,8 @@ public sealed class PythonSubprocessServiceBaseTests : IDisposable
             File.Delete(_tempLogPath);
     }
 
-    private class TestPythonService : PythonSubprocessServiceBase
+    private class TestPythonService(AppLog log) : PythonSubprocessServiceBase(log)
     {
-        public TestPythonService(AppLog log) : base(log) { }
-        
         public Task<ScriptResult> RunTestScriptAsync(
             string scriptContent,
             CancellationToken cancellationToken = default)
