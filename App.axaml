@@ -18,15 +18,39 @@
                       <SolidColorBrush x:Key="PanelBackgroundBrush"        Color="#1A1A28" />
                       <SolidColorBrush x:Key="ControlBackgroundBrush"      Color="#EBEBEB" />
                       <SolidColorBrush x:Key="ButtonBackgroundBrush"       Color="#E0E0E0" />
-                      <SolidColorBrush x:Key="BorderBrushBrush"            Color="#CCCCCC" />
+                      <SolidColorBrush x:Key="BorderBrush"            Color="#CCCCCC" />
                       <SolidColorBrush x:Key="ProgressBackgroundBrush"     Color="#D0D0D0" />
-                      <SolidColorBrush x:Key="PipelineProgressBorderBrush" Color="#D5D5D5" />
                       <SolidColorBrush x:Key="SegmentSelectedBrush"        Color="#E0E0F0" />
                       <SolidColorBrush x:Key="SegmentPointerOverBrush"     Color="#E8E8F8" />
                       <SolidColorBrush x:Key="StatusTextBrush"             Color="#555555" />
                       <SolidColorBrush x:Key="PrimaryTextBrush"            Color="#1C1C2C" />
                       <SolidColorBrush x:Key="VideoOverlayTextBrush"       Color="#C8C8D8" />
                       <SolidColorBrush x:Key="VideoOverlaySubtextBrush"    Color="#A0A0B8" />
+                      <!-- Accent colors (brand-fixed) -->
+                      <SolidColorBrush x:Key="AccentBrush"               Color="#4F46E5" />
+                      <SolidColorBrush x:Key="AccentSecondaryBrush"      Color="#7C3AED" />
+                      <SolidColorBrush x:Key="AccentSubtleBrush"         Color="#312350" />
+                      <!-- Semantic action colors -->
+                      <SolidColorBrush x:Key="DestructiveBrush"          Color="#FEE2E2" />
+                      <SolidColorBrush x:Key="DestructiveFgBrush"        Color="#DC2626" />
+                      <SolidColorBrush x:Key="PositiveBrush"             Color="#DCFCE7" />
+                      <SolidColorBrush x:Key="PositiveFgBrush"           Color="#16A34A" />
+                      <SolidColorBrush x:Key="InfoBrush"                 Color="#DBEAFE" />
+                      <SolidColorBrush x:Key="InfoFgBrush"               Color="#1D4ED8" />
+                      <!-- Surface elevation -->
+                      <SolidColorBrush x:Key="SurfaceRaisedBrush"        Color="#F0F0FA" />
+                      <SolidColorBrush x:Key="SurfaceSubtleBrush"        Color="#E8E8F5" />
+                      <!-- Warning -->
+                      <SolidColorBrush x:Key="WarningBackgroundBrush"    Color="#FFF3E0" />
+                      <SolidColorBrush x:Key="WarningBorderBrush"        Color="#E65100" />
+                      <!-- Control-pill button -->
+                      <SolidColorBrush x:Key="ButtonHoverBrush"                   Color="#D5D5E8" />
+                      <SolidColorBrush x:Key="ControlPillForegroundBrush"         Color="#444460" />
+                      <SolidColorBrush x:Key="ControlPillHoverBrush"              Color="#E0E0F0" />
+                      <SolidColorBrush x:Key="ControlPillPressedBrush"            Color="#D0D0E8" />
+                      <SolidColorBrush x:Key="ControlPillActiveForegroundBrush"   Color="#4F46E5" />
+                      <SolidColorBrush x:Key="ControlPillActiveHoverBrush"        Color="#DDD8FF" />
+                      <SolidColorBrush x:Key="ControlPillActivePressedBrush"      Color="#C8C0FF" />
                   </ResourceDictionary>
                   <ResourceDictionary x:Key="Dark">
                       <!-- Dark theme colors -->
@@ -34,15 +58,39 @@
                       <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#16161E" />
                       <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#1E1E2C" />
                       <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#2A2A3A" />
-                      <SolidColorBrush x:Key="BorderBrushBrush" Color="#252530" />
+                      <SolidColorBrush x:Key="BorderBrush" Color="#252530" />
                       <SolidColorBrush x:Key="ProgressBackgroundBrush" Color="#2A2A3A" />
-                      <SolidColorBrush x:Key="PipelineProgressBorderBrush" Color="#151522" />
                       <SolidColorBrush x:Key="SegmentSelectedBrush" Color="#20203A" />
                       <SolidColorBrush x:Key="SegmentPointerOverBrush" Color="#1C1C2C" />
                       <SolidColorBrush x:Key="StatusTextBrush" Color="#686880" />
                       <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E0DEFF" />
                       <SolidColorBrush x:Key="VideoOverlayTextBrush" Color="#C8C8D8" />
                       <SolidColorBrush x:Key="VideoOverlaySubtextBrush" Color="#A0A0B8" />
+                      <!-- Accent colors (brand-fixed) -->
+                      <SolidColorBrush x:Key="AccentBrush"               Color="#4F46E5" />
+                      <SolidColorBrush x:Key="AccentSecondaryBrush"      Color="#7C3AED" />
+                      <SolidColorBrush x:Key="AccentSubtleBrush"         Color="#312350" />
+                      <!-- Semantic action colors -->
+                      <SolidColorBrush x:Key="DestructiveBrush"          Color="#6B2525" />
+                      <SolidColorBrush x:Key="DestructiveFgBrush"        Color="#FCA5A5" />
+                      <SolidColorBrush x:Key="PositiveBrush"             Color="#1E2E1E" />
+                      <SolidColorBrush x:Key="PositiveFgBrush"           Color="#86EFAC" />
+                      <SolidColorBrush x:Key="InfoBrush"                 Color="#1E2436" />
+                      <SolidColorBrush x:Key="InfoFgBrush"               Color="#93C5FD" />
+                      <!-- Surface elevation -->
+                      <SolidColorBrush x:Key="SurfaceRaisedBrush"        Color="#151522" />
+                      <SolidColorBrush x:Key="SurfaceSubtleBrush"        Color="#18182A" />
+                      <!-- Warning -->
+                      <SolidColorBrush x:Key="WarningBackgroundBrush"    Color="#2A1200" />
+                      <SolidColorBrush x:Key="WarningBorderBrush"        Color="#5A2800" />
+                      <!-- Control-pill button -->
+                      <SolidColorBrush x:Key="ButtonHoverBrush"                   Color="#323248" />
+                      <SolidColorBrush x:Key="ControlPillForegroundBrush"         Color="#A8A8C8" />
+                      <SolidColorBrush x:Key="ControlPillHoverBrush"              Color="#1D1D2A" />
+                      <SolidColorBrush x:Key="ControlPillPressedBrush"            Color="#252537" />
+                      <SolidColorBrush x:Key="ControlPillActiveForegroundBrush"   Color="#E7DBFF" />
+                      <SolidColorBrush x:Key="ControlPillActiveHoverBrush"        Color="#3D2860" />
+                      <SolidColorBrush x:Key="ControlPillActivePressedBrush"      Color="#251840" />
                   </ResourceDictionary>
               </ResourceDictionary.ThemeDictionaries>
           </ResourceDictionary>
@@ -54,5 +102,40 @@
     
       <Application.Styles>
           <FluentTheme />
+          <!-- Corner radius scale:
+               Sm = 4  (inline buttons, inputs, small chips)
+               Md = 8  (cards, overlays, dialogs)
+               Lg = 12 (transport capsule, large surface containers)
+               Pill = 21–22 (Ko-fi / GitHub sponsor buttons — brand exception) -->
+          <!-- control-pill: icon/action buttons in the playback toolbar -->
+          <Style Selector="Button.control-pill">
+              <Setter Property="Foreground" Value="{DynamicResource ControlPillForegroundBrush}" />
+              <Setter Property="Background" Value="Transparent" />
+              <Setter Property="BorderBrush" Value="Transparent" />
+              <Setter Property="BorderThickness" Value="1" />
+              <Setter Property="CornerRadius" Value="6" />
+          </Style>
+          <Style Selector="Button.control-pill /template/ ContentPresenter">
+              <Setter Property="Background" Value="Transparent" />
+          </Style>
+          <Style Selector="Button.control-pill:pointerover /template/ ContentPresenter">
+              <Setter Property="Background" Value="{DynamicResource ControlPillHoverBrush}" />
+          </Style>
+          <Style Selector="Button.control-pill:pressed /template/ ContentPresenter">
+              <Setter Property="Background" Value="{DynamicResource ControlPillPressedBrush}" />
+          </Style>
+          <Style Selector="Button.control-pill.active">
+              <Setter Property="Foreground" Value="{DynamicResource ControlPillActiveForegroundBrush}" />
+              <Setter Property="BorderBrush" Value="{DynamicResource AccentSecondaryBrush}" />
+          </Style>
+          <Style Selector="Button.control-pill.active /template/ ContentPresenter">
+              <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+          </Style>
+          <Style Selector="Button.control-pill.active:pointerover /template/ ContentPresenter">
+              <Setter Property="Background" Value="{DynamicResource ControlPillActiveHoverBrush}" />
+          </Style>
+          <Style Selector="Button.control-pill.active:pressed /template/ ContentPresenter">
+              <Setter Property="Background" Value="{DynamicResource ControlPillActivePressedBrush}" />
+          </Style>
       </Application.Styles>
 </Application>

@@ -9,8 +9,7 @@
         Title="API Keys"
         Width="480" SizeToContent="Height"
         MinWidth="420"
-        RequestedThemeVariant="Dark"
-        Background="#16161E"
+        Background="{DynamicResource PanelBackgroundBrush}"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
@@ -24,9 +23,9 @@
                 <ItemsControl ItemsSource="{Binding Entries}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ApiKeyEntryViewModel">
-                            <Border Background="#1E1E2C" CornerRadius="6"
+                            <Border Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="8"
                                     Padding="14,12" Margin="0,0,0,2"
-                                    BorderBrush="#2A2A3C" BorderThickness="1">
+                                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                                 <StackPanel Spacing="8">
 
                                     <!-- Provider name + status -->
@@ -34,7 +33,7 @@
                                         <TextBlock Grid.Column="0"
                                                    Text="{Binding ProviderDisplayName}"
                                                    FontSize="13" FontWeight="SemiBold"
-                                                   Foreground="#E0E0F0"
+                                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                                    VerticalAlignment="Center" />
                                         <StackPanel Grid.Column="1" Orientation="Horizontal"
                                                     Spacing="5" VerticalAlignment="Center">
@@ -55,9 +54,9 @@
                                                  PlaceholderText="{Binding PlaceholderText}"
                                                  FontFamily="Consolas,monospace"
                                                  FontSize="12"
-                                                 Background="#12121A"
-                                                 BorderBrush="#2A2A3C"
-                                                 Foreground="#C0C0D0"
+                                                 Background="{DynamicResource WindowBackgroundBrush}"
+                                                 BorderBrush="{DynamicResource BorderBrush}"
+                                                 Foreground="{DynamicResource PrimaryTextBrush}"
                                                  CornerRadius="4"
                                                  Padding="8,6" />
 
@@ -65,7 +64,7 @@
                                                 Command="{Binding ToggleRevealCommand}"
                                                 Content="{Binding RevealIcon}"
                                                 Padding="8,6" Margin="6,0,0,0"
-                                                Background="#252535" Foreground="#8080A0"
+                                                Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                                 CornerRadius="4" FontSize="13"
                                                 ToolTip.Tip="Show / hide key" />
 
@@ -73,7 +72,7 @@
                                                 Command="{Binding SaveKeyCommand}"
                                                 Content="Save"
                                                 Padding="10,6" Margin="4,0,0,0"
-                                                Background="#1E2E1E" Foreground="#86EFAC"
+                                                Background="{DynamicResource PositiveBrush}" Foreground="{DynamicResource PositiveFgBrush}"
                                                 CornerRadius="4" FontSize="12" />
 
                                         <Button Grid.Column="3"
@@ -81,14 +80,14 @@
                                                 Content="{Binding ValidateButtonText}"
                                                 IsEnabled="{Binding CanValidateLive}"
                                                 Padding="10,6" Margin="4,0,0,0"
-                                                Background="#1E2436" Foreground="#93C5FD"
+                                                Background="{DynamicResource InfoBrush}" Foreground="{DynamicResource InfoFgBrush}"
                                                 CornerRadius="4" FontSize="12" />
 
                                         <Button Grid.Column="4"
                                                 Command="{Binding ClearKeyCommand}"
                                                 Content="Clear"
                                                 Padding="10,6" Margin="4,0,0,0"
-                                                Background="#2E1E1E" Foreground="#FCA5A5"
+                                                Background="{DynamicResource DestructiveBrush}" Foreground="{DynamicResource DestructiveFgBrush}"
                                                 CornerRadius="4" FontSize="12" />
                                     </Grid>
 
@@ -105,8 +104,8 @@
                 </ItemsControl>
 
                 <!-- Future providers placeholder -->
-                <Border Background="#1A1A28" CornerRadius="6"
-                        Padding="14,10" BorderBrush="#202030" BorderThickness="1">
+                <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="8"
+                        Padding="14,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                     <TextBlock Text="More providers can be added in future updates."
                                FontSize="11" Foreground="#4A4A62"
                                HorizontalAlignment="Center" />
@@ -117,8 +116,8 @@
 
         <!-- Footer -->
         <Border Grid.Row="1" Padding="20,12"
-                BorderBrush="#252530" BorderThickness="0,1,0,0"
-                Background="#12121A">
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                Background="{DynamicResource WindowBackgroundBrush}">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBlock Text="Storage Security:"
@@ -132,7 +131,7 @@
                         Click="OnCloseClick"
                         Content="Close"
                         Padding="16,7" Margin="12,0,0,0"
-                        Background="#252530" Foreground="#C0C0D0"
+                        Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                         CornerRadius="4" FontSize="12" />
             </Grid>
         </Border>

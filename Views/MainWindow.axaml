@@ -20,8 +20,8 @@
         <!-- ═══════════════════════════════════════════════════
              LEFT PANEL: Pipeline
              ═══════════════════════════════════════════════════ -->
-<Border Grid.Column="0" Width="260" Background="#1A1A28"
-        BorderBrush="#2E2E44" BorderThickness="0,0,1,0"
+<Border Grid.Column="0" Width="260" Background="{DynamicResource PanelBackgroundBrush}"
+        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
         IsVisible="{Binding Playback.IsSegmentPaneVisible}">
     <Border.Resources>
         <!-- Shadow the Application ThemeDictionary for all panel descendants.
@@ -30,14 +30,14 @@
         <SolidColorBrush x:Key="StatusTextBrush"         Color="#8A88A8" />
         <SolidColorBrush x:Key="ControlBackgroundBrush"  Color="#EBEBEB" />
         <SolidColorBrush x:Key="ButtonBackgroundBrush"   Color="#2A2A3A" />
-        <SolidColorBrush x:Key="BorderBrushBrush"        Color="#2E2E44" />
+        <SolidColorBrush x:Key="BorderBrush"        Color="#2E2E44" />
         <SolidColorBrush x:Key="ProgressBackgroundBrush" Color="#2A2A3A" />
     </Border.Resources>
             <Grid RowDefinitions="Auto,*,Auto">
 
                 <!-- Header -->
 <Border Grid.Row="0" Padding="16,14,16,12"
-        BorderBrush="{DynamicResource BorderBrushBrush}" BorderThickness="0,0,0,1">
+        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
 <TextBlock Grid.Column="0" Text="Pipeline" FontSize="15" FontWeight="SemiBold"
                                     Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
@@ -72,7 +72,7 @@
                                            SelectedItem="{Binding Playback.TranscriptionRuntime, Mode=TwoWay}"
                                             HorizontalAlignment="Stretch" FontSize="12"
                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                           BorderBrush="{DynamicResource BorderBrushBrush}">
+                                           BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding Converter={StaticResource ComputeProfileDisplayConverter}}"/>
@@ -87,7 +87,7 @@
                                            SelectedItem="{Binding Playback.TranscriptionProvider, Mode=TwoWay}"
                                            HorizontalAlignment="Stretch" FontSize="12"
                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                           BorderBrush="{DynamicResource BorderBrushBrush}" />
+                                           BorderBrush="{DynamicResource BorderBrush}" />
                             </StackPanel>
 
 <StackPanel Spacing="5">
@@ -96,7 +96,7 @@
                                             SelectedItem="{Binding Playback.SelectedTranscriptionModel, Mode=TwoWay}"
                                            HorizontalAlignment="Stretch" FontSize="12"
                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                           BorderBrush="{DynamicResource BorderBrushBrush}">
+                                           BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -117,7 +117,7 @@
 
                         <!-- TRANSLATION -->
                         <StackPanel Spacing="10">
-                            <Border BorderBrush="{DynamicResource BorderBrushBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                                 <TextBlock Text="TRANSLATION" FontSize="10"
                                            Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
                             </Border>
@@ -128,7 +128,7 @@
                                           SelectedItem="{Binding Playback.TranslationRuntime, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                          BorderBrush="{DynamicResource BorderBrushBrush}">
+                                          BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding Converter={StaticResource ComputeProfileDisplayConverter}}"/>
@@ -143,7 +143,7 @@
                                           SelectedItem="{Binding Playback.TranslationProvider, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                          BorderBrush="{DynamicResource BorderBrushBrush}" />
+                                          BorderBrush="{DynamicResource BorderBrush}" />
                             </StackPanel>
 
                             <StackPanel Spacing="5">
@@ -152,7 +152,7 @@
                                           SelectedItem="{Binding Playback.SelectedTranslationModel, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                          BorderBrush="{DynamicResource BorderBrushBrush}">
+                                          BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -168,7 +168,7 @@
 
                         <!-- DUB -->
                         <StackPanel Spacing="10">
-                            <Border BorderBrush="{DynamicResource BorderBrushBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                                 <TextBlock Text="DUB" FontSize="10"
                                            Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
                             </Border>
@@ -179,7 +179,7 @@
                                           SelectedItem="{Binding Playback.TtsRuntime, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                          BorderBrush="{DynamicResource BorderBrushBrush}">
+                                          BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding Converter={StaticResource ComputeProfileDisplayConverter}}"/>
@@ -194,7 +194,7 @@
                                           SelectedItem="{Binding Playback.TtsProvider, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                          BorderBrush="{DynamicResource BorderBrushBrush}" />
+                                          BorderBrush="{DynamicResource BorderBrush}" />
                             </StackPanel>
 
                             <StackPanel Spacing="5">
@@ -203,7 +203,7 @@
                                           SelectedItem="{Binding Playback.SelectedTtsOption, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                          BorderBrush="{DynamicResource BorderBrushBrush}">
+                                          BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -224,7 +224,7 @@
 
                          <!-- API KEYS -->
                          <StackPanel Spacing="8">
-                             <Border BorderBrush="{DynamicResource BorderBrushBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                                  <TextBlock Text="API KEYS" FontSize="10"
                                             Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
                              </Border>
@@ -239,8 +239,8 @@
                                      Padding="10,8"
                                      FontSize="12"
                                      Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                     BorderBrush="{DynamicResource BorderBrushBrush}"
-                                     CornerRadius="5"
+                                     BorderBrush="{DynamicResource BorderBrush}"
+                                     CornerRadius="4"
                                      Click="OnApiKeysClick">
                                  <StackPanel Orientation="Horizontal" Spacing="5">
                                      <TextBlock Text="🔑" VerticalAlignment="Center" />
@@ -251,7 +251,7 @@
 
                          <!-- LANGUAGE ROUTING -->
                          <StackPanel Spacing="10">
-                             <Border BorderBrush="{DynamicResource BorderBrushBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                                  <TextBlock Text="LANGUAGE ROUTING" FontSize="10"
                                             Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
                              </Border>
@@ -279,7 +279,7 @@
 
                          <!-- DIARIZATION / SPEAKERS -->
                          <StackPanel Spacing="10">
-                             <Border BorderBrush="{DynamicResource BorderBrushBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                                  <TextBlock Text="DIARIZATION / SPEAKERS" FontSize="10"
                                             Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
                              </Border>
@@ -348,7 +348,7 @@
                                            IsEnabled="{Binding Playback.HasSpeakers}"
                                            HorizontalAlignment="Stretch" FontSize="12"
                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                           BorderBrush="{DynamicResource BorderBrushBrush}" />
+                                           BorderBrush="{DynamicResource BorderBrush}" />
 
                                  <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="8">
                                      <TextBlock Grid.Row="0" Grid.Column="0" Text="Voice" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
@@ -372,7 +372,7 @@
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="5"
+                                             CornerRadius="4"
                                              Content="Use current voice" />
                                      <Button Grid.Row="0" Grid.Column="1"
                                              Command="{Binding Playback.ClearSelectedSpeakerVoiceCommand}"
@@ -380,7 +380,7 @@
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="5"
+                                             CornerRadius="4"
                                              Content="Clear speaker voice" />
                                      <!-- Ref clip buttons — only for voice-cloning providers -->
                                      <Button Grid.Row="1" Grid.Column="0"
@@ -389,7 +389,7 @@
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="5"
+                                             CornerRadius="4"
                                              Click="OnBrowseReferenceClipClick"
                                              Content="Browse ref clip" />
                                      <Button Grid.Row="1" Grid.Column="1"
@@ -399,7 +399,7 @@
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="5"
+                                             CornerRadius="4"
                                              Content="Clear speaker ref" />
                                 </Grid>
 
@@ -409,7 +409,7 @@
                                                 ToolTip.Tip="Voice/model used for any speaker that has no explicit assignment. Leave blank to use the active TTS voice." />
                                      <TextBox Text="{Binding Playback.DefaultTtsVoiceFallback, Mode=TwoWay}"
                                               PlaceholderText="same as active TTS voice"
-                                              FontSize="12" Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderBrush="{DynamicResource BorderBrushBrush}" />
+                                              FontSize="12" Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderBrush="{DynamicResource BorderBrush}" />
                                  </StackPanel>
 
                             </StackPanel>
@@ -418,7 +418,7 @@
 
                         <!-- ACTIVE CONFIGURATION -->
                         <StackPanel Spacing="8">
-                            <Border BorderBrush="{DynamicResource BorderBrushBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                                 <TextBlock Text="ACTIVE CONFIG" FontSize="10"
                                             Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
                             </Border>
@@ -474,7 +474,7 @@
                                          Value="{Binding Playback.PipelineProgressPercent}"
                                          IsIndeterminate="{Binding Playback.IsPipelineProgressIndeterminate}"
                                          Height="8"
-                                         Foreground="#7C3AED"
+                                         Foreground="{DynamicResource AccentSecondaryBrush}"
                                          Background="{DynamicResource ProgressBackgroundBrush}"
                                          HorizontalAlignment="Stretch"
                                          Margin="0,2,0,0" />
@@ -486,7 +486,7 @@
                                 Padding="0,10"
                                 FontSize="13" FontWeight="SemiBold"
                                 Foreground="White"
-                                CornerRadius="6"
+                                CornerRadius="8"
                                 Command="{Binding Playback.RunPipelineCommand}"
                                 IsEnabled="{Binding Playback.CanRunPipeline}">
                             <Button.Content>
@@ -534,8 +534,8 @@
                                 VerticalContentAlignment="Center"
                                 Padding="0,10"
                                 FontSize="13" FontWeight="SemiBold"
-                                Background="#6B2525" Foreground="White"
-                                CornerRadius="6"
+                                Background="{DynamicResource DestructiveBrush}" Foreground="White"
+                                CornerRadius="8"
                                 Command="{Binding Playback.CancelPipelineCommand}"
                                 IsVisible="{Binding Playback.IsBusy}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -581,8 +581,8 @@
               Background="#0E0E14">
 
             <!-- Diagnostics warning bar (hidden when all deps available) -->
-            <Border Grid.Row="0" Background="#2A1200" Padding="10,5"
-                    BorderBrush="#5A2800" BorderThickness="0,0,0,1"
+            <Border Grid.Row="0" Background="{DynamicResource WarningBackgroundBrush}" Padding="10,5"
+                    BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="0,0,0,1"
                     IsVisible="{Binding Playback.HasDiagnosticsWarning}">
                 <TextBlock Text="{Binding Playback.DiagnosticsWarningText}"
                                 FontSize="11" Foreground="{DynamicResource StatusTextBrush}" />
@@ -597,8 +597,8 @@
                         VerticalAlignment="Top"
                         Margin="12"
                         Padding="10,6"
-                        Background="#151522"
-                        BorderBrush="#2B2940"
+                        Background="{DynamicResource SurfaceRaisedBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
                         BorderThickness="1"
                         CornerRadius="8"
                         IsVisible="{Binding Playback.HasVsrPlaybackStatus}">
@@ -636,30 +636,6 @@
             <Border Grid.Row="3" Padding="12,9"
                     IsVisible="{Binding Playback.IsControlsVisible}">
                 <Border.Styles>
-                    <Style Selector="Button.control-pill">
-                        <Setter Property="Foreground" Value="#A8A8C8" />
-                        <Setter Property="Background" Value="Transparent" />
-                        <Setter Property="BorderBrush" Value="Transparent" />
-                        <Setter Property="BorderThickness" Value="1" />
-                        <Setter Property="CornerRadius" Value="6" />
-                    </Style>
-                    <Style Selector="Button.control-pill /template/ ContentPresenter">
-                        <Setter Property="Background" Value="Transparent" />
-                    </Style>
-                    <Style Selector="Button.control-pill:pointerover /template/ ContentPresenter">
-                        <Setter Property="Background" Value="#1D1D2A" />
-                    </Style>
-                    <Style Selector="Button.control-pill:pressed /template/ ContentPresenter">
-                        <Setter Property="Background" Value="#252537" />
-                    </Style>
-                    <Style Selector="Button.control-pill.active">
-                        <Setter Property="Foreground" Value="#E7DBFF" />
-                        <Setter Property="BorderBrush" Value="#6C4AF2" />
-                    </Style>
-                    <Style Selector="Button.control-pill.active /template/ ContentPresenter">
-                        <Setter Property="Background" Value="#312350" />
-                    </Style>
-
                     <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
                     <Style Selector="Button.dev-pill">
                         <Setter Property="Foreground" Value="#D4A017" />
@@ -708,7 +684,7 @@
                     </StackPanel>
 
                     <!-- Center: playback buttons in a unified transport capsule -->
-                    <Border Grid.Column="2" Background="#18182A" CornerRadius="12" Padding="4,3"
+                    <Border Grid.Column="2" Background="{DynamicResource SurfaceSubtleBrush}" CornerRadius="12" Padding="4,3"
                             VerticalAlignment="Center" HorizontalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="1">
                             <Button Classes="control-pill" Content="&#x23EE;&#xFE0E;"
@@ -723,10 +699,10 @@
                             <Button Command="{Binding Playback.PlayPauseSourceCommand}"
                                     IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                     Width="42" Height="42" Padding="0" Margin="3,0"
-                                    CornerRadius="21" Background="#30304A">
+                                    CornerRadius="21" Background="{DynamicResource ButtonBackgroundBrush}">
                                 <Button.Styles>
                                     <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                        <Setter Property="Background" Value="#3C3C5C" />
+                                        <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
                                     </Style>
                                     <Style Selector="Button:pressed /template/ ContentPresenter">
                                         <Setter Property="Background" Value="#252545" />
@@ -823,14 +799,14 @@
         <!-- ═══════════════════════════════════════════════════
              RIGHT PANEL: Segments
              ═══════════════════════════════════════════════════ -->
-        <Border Grid.Column="2" Width="280" Background="#16161E"
-                BorderBrush="#252530" BorderThickness="1,0,0,0"
+        <Border Grid.Column="2" Width="280" Background="{DynamicResource PanelBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
                 IsVisible="{Binding Playback.IsSegmentPaneVisible}">
             <Grid RowDefinitions="Auto,*">
 
                 <!-- Header -->
                 <Border Grid.Row="0" Padding="14,11"
-                        BorderBrush="#252530" BorderThickness="0,0,0,1">
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
                     <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
                         <TextBlock Grid.Column="0" Text="Segments" FontSize="14"
                                    FontWeight="SemiBold" Foreground="#F0F0F8"
@@ -879,20 +855,20 @@
                             <Setter Property="Background" Value="Transparent" />
                         </Style>
                         <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                            <Setter Property="Background" Value="#20203A" />
+                            <Setter Property="Background" Value="{DynamicResource SegmentSelectedBrush}" />
                         </Style>
                         <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                            <Setter Property="Background" Value="#1C1C2C" />
+                            <Setter Property="Background" Value="{DynamicResource SegmentPointerOverBrush}" />
                         </Style>
                     </ListBox.Styles>
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="models:WorkflowSegmentState">
-                            <Border Padding="14,10" BorderBrush="#252530" BorderThickness="0,0,0,1">
+                            <Border Padding="14,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
                                 <Grid ColumnDefinitions="*,12">
 
                                     <StackPanel Grid.Column="0" Spacing="3">
                                         <!-- Time range -->
-                                        <TextBlock FontSize="11" Foreground="#6A6A82">
+                                        <TextBlock FontSize="11" Foreground="{DynamicResource StatusTextBrush}">
                                             <TextBlock.Text>
                                                 <MultiBinding StringFormat="{}{0:F1}s  —  {1:F1}s">
                                                     <Binding Path="StartSeconds" />
@@ -902,11 +878,11 @@
                                         </TextBlock>
                                         <!-- Original text -->
                                         <TextBlock Text="{Binding SourceText}"
-                                                   FontSize="12" Foreground="#686878"
+                                                   FontSize="12" Foreground="{DynamicResource StatusTextBrush}"
                                                    TextWrapping="Wrap" />
                                         <!-- Translated text -->
                                         <TextBlock Text="{Binding TranslatedText}"
-                                                   FontSize="13" Foreground="#E8E8F0"
+                                                   FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}"
                                                    FontWeight="Medium"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>

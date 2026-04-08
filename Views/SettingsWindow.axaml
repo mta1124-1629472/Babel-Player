@@ -82,8 +82,8 @@
 
                         <!-- Backend restart row -->
                         <Border Padding="10,8"
-                                Background="#1A1A2A"
-                                CornerRadius="6">
+                                Background="{DynamicResource ControlBackgroundBrush}"
+                                CornerRadius="8">
                             <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
                                 <TextBlock Text="Backend status:"
                                            VerticalAlignment="Center"
@@ -232,8 +232,8 @@
                                        Text="(1 = Performance &#xB7; 4 = Quality)"/>
                         </StackPanel>
 
-                        <Border Background="#151522"
-                                BorderBrush="#2B2940"
+                        <Border Background="{DynamicResource SurfaceRaisedBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="12,10"
@@ -242,16 +242,16 @@
                                   RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                                   ColumnSpacing="10"
                                   RowSpacing="6">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Support" FontWeight="SemiBold" Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding VsrSupportHintText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Requested" FontWeight="SemiBold" Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding VsrRequestedStateText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Resolved" FontWeight="SemiBold" Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding VsrResolvedStateText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Last reason" FontWeight="SemiBold" Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding VsrReasonText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Last filter" FontWeight="SemiBold" Foreground="#9A98B8" />
-                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding VsrFilterText}" TextWrapping="Wrap" Foreground="#D8D6F2" />
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Support" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding VsrSupportHintText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Requested" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding VsrRequestedStateText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Resolved" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding VsrResolvedStateText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Last reason" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding VsrReasonText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Last filter" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding VsrFilterText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
                             </Grid>
                         </Border>
 
@@ -302,7 +302,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ModelDownloadEntry">
                                     <Border Margin="0,0,0,6" Padding="10,8"
-                                            Background="#1E1E2C" CornerRadius="6">
+                                            Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="8">
                                         <Grid ColumnDefinitions="Auto,*,Auto">
 
                                             <StackPanel Grid.Column="0" Spacing="2" Width="180">
@@ -315,7 +315,7 @@
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4" Margin="12,0">
                                                 <TextBlock Text="{Binding StatusLabel}"
                                                            FontSize="11"
-                                                           Foreground="#A0A0B8"/>
+                                                           Foreground="{DynamicResource StatusTextBrush}"/>
                                                 <ProgressBar Value="{Binding DownloadProgress}"
                                                              Minimum="0" Maximum="1"
                                                              Height="4"
