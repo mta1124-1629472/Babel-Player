@@ -48,7 +48,10 @@
       "Bash(cat C:/Users/ander/AppData/Local/BabelPlayer/runtime/managed-gpu/.venv/Lib/site-packages/ctranslate2-*.dist-info/METADATA)",
       "Bash(grep -rn \"private.*ResolveVoiceForSegment\\\\|private.*ResolveReferenceAudioForSegment\\\\|RunDiarizationAsync\" /d/Dev/Babel-Player/Services/*.cs)",
       "Bash(coderabbit --version)",
-      "Bash(coderabbit auth:*)"
+      "Bash(coderabbit auth:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "Skill(commit-commands:commit)",
+      "Skill(commit-commands:commit:*)"
     ]
   }
 }
