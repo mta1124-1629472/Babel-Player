@@ -6,6 +6,6 @@ public partial class DevLogWindow : Window
 {
     public DevLogWindow()
     {
-        InitializeComponent();  
+        InitializeComponent();      
     }
 }

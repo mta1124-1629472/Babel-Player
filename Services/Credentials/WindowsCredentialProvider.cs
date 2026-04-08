@@ -9,7 +9,7 @@ namespace Babel.Player.Services.Credentials;
 /// A credential provider that uses the Windows Credential Manager (advapi32.dll).
 /// Keys stored here are protected by the OS and can be backed by TPM/Windows Hello.
 /// </summary>
-public sealed partial class WindowsCredentialProvider : ISecureCredentialProvider
+public sealed class WindowsCredentialProvider : ISecureCredentialProvider
 {
     private const string TargetPrefix = "BabelPlayer:";
     private const uint CredTypeGeneric = 1;
@@ -88,7 +88,7 @@ public sealed partial class WindowsCredentialProvider : ISecureCredentialProvide
 
     private static string GetTargetName(string provider) => $"{TargetPrefix}{provider}";
 
-    private static partial class NativeMethods
+    private static class NativeMethods
     {
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         public struct CREDENTIAL
@@ -107,19 +107,16 @@ public sealed partial class WindowsCredentialProvider : ISecureCredentialProvide
             public string UserName;
         }
 
-        [LibraryImport("advapi32.dll", EntryPoint = "CredWriteW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static partial bool CredWrite(ref CREDENTIAL credential, uint flags);
+        [DllImport("advapi32.dll", EntryPoint = "CredWriteW", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern bool CredWrite([In] ref CREDENTIAL credential, uint flags);
 
-        [LibraryImport("advapi32.dll", EntryPoint = "CredReadW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static partial bool CredRead(string target, uint type, uint reserved, out IntPtr credential);
+        [DllImport("advapi32.dll", EntryPoint = "CredReadW", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern bool CredRead(string target, uint type, uint reserved, out IntPtr credential);
 
-        [LibraryImport("advapi32.dll", EntryPoint = "CredDeleteW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static partial bool CredDelete(string target, uint type, uint flags);
+        [DllImport("advapi32.dll", EntryPoint = "CredDeleteW", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern bool CredDelete(string target, uint type, uint flags);
 
-        [LibraryImport("advapi32.dll", EntryPoint = "CredFree", SetLastError = true)]
-        public static partial void CredFree(IntPtr credential);
+        [DllImport("advapi32.dll", EntryPoint = "CredFree", SetLastError = true)]
+        public static extern void CredFree(IntPtr credential);
     }
 }

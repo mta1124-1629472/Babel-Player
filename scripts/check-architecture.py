@@ -68,7 +68,7 @@ else:
 # ── Check 4: Main project is Avalonia app ───────────────────────────────────
 
 main_csproj = Path("BabelPlayer.csproj")
-content = main_csproj.read_text()
+content = main_csproj.read_text(encoding="utf-8", errors="replace")
 if re.search(r"(?i)avalonia", content):
     ok("Main project is an Avalonia application")
 else:
@@ -77,7 +77,7 @@ else:
 # ── Check 5: Main project has OutputType=WinExe for desktop ─────────────────
 
 main_csproj = Path("BabelPlayer.csproj")
-content = main_csproj.read_text()
+content = main_csproj.read_text(encoding="utf-8", errors="replace")
 if "WinExe" in content and "OutputType" in content:
     ok("Main project OutputType is WinExe")
 else:
