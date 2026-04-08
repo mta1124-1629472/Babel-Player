@@ -116,3 +116,4 @@ ffmpeg.exe
 .codex/environments/environment.toml
 inference/__pycache__/
 scripts/run-local-release-dry-run.ps1
+.vscode/settings.json
