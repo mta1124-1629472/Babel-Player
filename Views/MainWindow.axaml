@@ -12,7 +12,6 @@
         Icon="/Assets/Icons/app.ico"
         Width="1280" Height="700"
         MinWidth="960" MinHeight="520"
-        RequestedThemeVariant="Default"
         Background="{DynamicResource WindowBackgroundBrush}">
 
     <Grid ColumnDefinitions="Auto,*,Auto">
@@ -500,8 +499,8 @@
                                     <Setter Property="Background">
                                         <Setter.Value>
                                             <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
-                                                <GradientStop Color="#4F46E5" Offset="0" />
-                                                <GradientStop Color="#7C3AED" Offset="1" />
+                                                <GradientStop Color="{DynamicResource AccentColor}" Offset="0" />
+                                                <GradientStop Color="{DynamicResource AccentSecondaryColor}" Offset="1" />
                                             </LinearGradientBrush>
                                         </Setter.Value>
                                     </Setter>
@@ -578,7 +577,7 @@
              CENTER PANEL: Video player
              ═══════════════════════════════════════════════════ -->
         <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto"
-              Background="#0E0E14">
+              Background="{DynamicResource WindowBackgroundBrush}">
 
             <!-- Diagnostics warning bar (hidden when all deps available) -->
             <Border Grid.Row="0" Background="{DynamicResource WarningBackgroundBrush}" Padding="10,5"

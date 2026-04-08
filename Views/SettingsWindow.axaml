@@ -30,8 +30,8 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="20" Spacing="12">
 
-                        <!-- Theme -->
-                        <StackPanel Orientation="Horizontal" Spacing="20">
+                        <!-- Theme (hidden — app is forced to Dark) -->
+                        <StackPanel Orientation="Horizontal" Spacing="20" IsVisible="False">
                             <TextBlock Text="Theme:" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding ThemeOptions}"
                                       SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"

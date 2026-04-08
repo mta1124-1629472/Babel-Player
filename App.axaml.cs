@@ -57,15 +57,10 @@ public partial class App : Application
                     $"Environment override active: {AppSettings.InferenceServiceUrlEnvVar}={appSettings.EffectiveContainerizedServiceUrl}");
             }
 
-            // Apply saved theme preference
-            if (!string.IsNullOrEmpty(appSettings.Theme) && Application.Current is { } app)
+            // Apply saved theme preference — forced to Dark in App.axaml
+            if (Application.Current is { } app)
             {
-                app.RequestedThemeVariant = appSettings.Theme switch
-                {
-                    "Dark" => ThemeVariant.Dark,
-                    "Light" => ThemeVariant.Light,
-                    _ => ThemeVariant.Default // System
-                };
+                app.RequestedThemeVariant = ThemeVariant.Dark;
             }
 
             var perSessionStore = new PerSessionSnapshotStore(

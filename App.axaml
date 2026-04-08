@@ -6,8 +6,66 @@
              RequestedThemeVariant="Dark">
 
     <Application.Resources>
-        <converters:ComputeProfileDisplayConverter x:Key="ComputeProfileDisplayConverter" />
-        <converters:GpuHostBackendDisplayConverter x:Key="GpuHostBackendDisplayConverter" />
+        <ResourceDictionary>
+            <converters:ComputeProfileDisplayConverter x:Key="ComputeProfileDisplayConverter" />
+            <converters:GpuHostBackendDisplayConverter x:Key="GpuHostBackendDisplayConverter" />
+
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="WindowBackgroundBrush"          Color="#12121A" />
+                    <SolidColorBrush x:Key="PanelBackgroundBrush"           Color="#16161E" />
+                    <SolidColorBrush x:Key="ControlBackgroundBrush"         Color="#1E1E2C" />
+                    <SolidColorBrush x:Key="ButtonBackgroundBrush"          Color="#2A2A3A" />
+                    <SolidColorBrush x:Key="ButtonHoverBrush"               Color="#3C3C5C" />
+                    <SolidColorBrush x:Key="BorderBrush"                    Color="#252530" />
+                    <SolidColorBrush x:Key="ProgressBackgroundBrush"        Color="#2A2A3A" />
+                    <SolidColorBrush x:Key="PrimaryTextBrush"               Color="#E0DEFF" />
+                    <SolidColorBrush x:Key="StatusTextBrush"                Color="#686880" />
+                    
+                    <Color x:Key="AccentColor">#4F46E5</Color>
+                    <Color x:Key="AccentSecondaryColor">#7C3AED</Color>
+                    
+                    <SolidColorBrush x:Key="AccentBrush"                    Color="{DynamicResource AccentColor}" />
+                    <SolidColorBrush x:Key="AccentSecondaryBrush"           Color="{DynamicResource AccentSecondaryColor}" />
+                    <SolidColorBrush x:Key="AccentSubtleBrush"              Color="#312350" />
+                    
+                    <SolidColorBrush x:Key="DestructiveBrush"               Color="#6B2525" />
+                    <SolidColorBrush x:Key="DestructiveFgBrush"             Color="#FCA5A5" />
+                    <SolidColorBrush x:Key="PositiveBrush"                  Color="#1E2E1E" />
+                    <SolidColorBrush x:Key="PositiveFgBrush"                Color="#86EFAC" />
+                    <SolidColorBrush x:Key="InfoBrush"                      Color="#1E2436" />
+                    <SolidColorBrush x:Key="InfoFgBrush"                    Color="#93C5FD" />
+                    
+                    <SolidColorBrush x:Key="WarningBackgroundBrush"         Color="#2A1200" />
+                    <SolidColorBrush x:Key="WarningBorderBrush"             Color="#5A2800" />
+                    
+                    <SolidColorBrush x:Key="SurfaceRaisedBrush"             Color="#151522" />
+                    <SolidColorBrush x:Key="SurfaceSubtleBrush"             Color="#18182A" />
+                    
+                    <SolidColorBrush x:Key="VideoOverlayTextBrush"          Color="#C8C8D8" />
+                    <SolidColorBrush x:Key="VideoOverlaySubtextBrush"       Color="#A0A0B8" />
+
+                    <SolidColorBrush x:Key="SegmentSelectedBrush"           Color="#20203A" />
+                    <SolidColorBrush x:Key="SegmentPointerOverBrush"         Color="#1C1C2C" />
+
+                    <!-- control-pill specific brushes -->
+                    <SolidColorBrush x:Key="PillForegroundBrush"            Color="#A8A8C8" />
+                    <SolidColorBrush x:Key="PillHoverBackgroundBrush"       Color="#1D1D2A" />
+                    <SolidColorBrush x:Key="PillPressedBackgroundBrush"     Color="#252537" />
+                    <SolidColorBrush x:Key="PillActiveForegroundBrush"      Color="#E7DBFF" />
+                    <SolidColorBrush x:Key="PillActiveHoverBackgroundBrush" Color="#3D2860" />
+                    <SolidColorBrush x:Key="PillActivePressedBackgroundBrush" Color="#251840" />
+
+                    <!-- Disabled state overrides to maintain dark theme consistency -->
+                    <SolidColorBrush x:Key="ComboBoxBackgroundDisabled"     Color="#1E1E2C" />
+                    <SolidColorBrush x:Key="ComboBoxForegroundDisabled"     Color="#4A4A62" />
+                    <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled"    Color="#252530" />
+                    <SolidColorBrush x:Key="TextBoxDefaultBackgroundDisabled" Color="#1E1E2C" />
+                    <SolidColorBrush x:Key="TextBoxForegroundDisabled"      Color="#4A4A62" />
+                    <SolidColorBrush x:Key="TextBoxBorderBrushDisabled"     Color="#252530" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 
     <Application.DataTemplates>
@@ -23,7 +81,7 @@
              Pill = 21-22 (Ko-fi / GitHub sponsor buttons - brand exception) -->
         <!-- control-pill: icon/action buttons in the playback toolbar -->
         <Style Selector="Button.control-pill">
-            <Setter Property="Foreground" Value="#A8A8C8" />
+            <Setter Property="Foreground" Value="{DynamicResource PillForegroundBrush}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
@@ -33,23 +91,23 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Button.control-pill:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#1D1D2A" />
+            <Setter Property="Background" Value="{DynamicResource PillHoverBackgroundBrush}" />
         </Style>
         <Style Selector="Button.control-pill:pressed /template/ ContentPresenter">
-            <Setter Property="Background" Value="#252537" />
+            <Setter Property="Background" Value="{DynamicResource PillPressedBackgroundBrush}" />
         </Style>
         <Style Selector="Button.control-pill.active">
-            <Setter Property="Foreground" Value="#E7DBFF" />
-            <Setter Property="BorderBrush" Value="#7C3AED" />
+            <Setter Property="Foreground" Value="{DynamicResource PillActiveForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentSecondaryBrush}" />
         </Style>
         <Style Selector="Button.control-pill.active /template/ ContentPresenter">
-            <Setter Property="Background" Value="#312350" />
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
         </Style>
         <Style Selector="Button.control-pill.active:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#3D2860" />
+            <Setter Property="Background" Value="{DynamicResource PillActiveHoverBackgroundBrush}" />
         </Style>
         <Style Selector="Button.control-pill.active:pressed /template/ ContentPresenter">
-            <Setter Property="Background" Value="#251840" />
+            <Setter Property="Background" Value="{DynamicResource PillActivePressedBackgroundBrush}" />
         </Style>
     </Application.Styles>
 </Application>
