@@ -183,10 +183,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
     private bool _isMultiSpeakerEnabled;
 
-    public IReadOnlyList<string> DiarizationProviderOptions { get; } =
+    public List<string> DiarizationProviderOptions { get; } =
         BuildDiarizationProviderOptions();
 
-    private static IReadOnlyList<string> BuildDiarizationProviderOptions()
+    private static List<string> BuildDiarizationProviderOptions()
     {
         var options = new List<string> { string.Empty };
 
@@ -399,7 +399,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 ? "\U0001F509"
                 : "\U0001F50A";
 
-    public string DubModeLabel => "🎙 Dub";
+    public static string DubModeLabel => "🎙 Dub";
 
     public string SubtitleToggleLabel => IsSubtitleModeOn ? "CC ✓" : "CC";
 
@@ -708,7 +708,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         || IsStartingStatus(status.TtsStatus);
 
     private static bool IsStartingStatus(string status) =>
-        status.StartsWith("⏳", StringComparison.Ordinal);
+        status.StartsWith('⏳');
 
     private void ApplyReadinessStatus(ref string field, string value, string propertyName)
     {
@@ -1122,13 +1122,13 @@ partial void OnSourcePositionMsChanged(double value)
 
             SelectedTranscriptionModel =
                 _availableTranscriptionModels.FirstOrDefault(m => m.ModelId == TranscriptionModel)
-                ?? _availableTranscriptionModels.FirstOrDefault();
+                ?? (_availableTranscriptionModels.Count > 0 ? _availableTranscriptionModels[0] : null);
             SelectedTranslationModel =
                 _availableTranslationModels.FirstOrDefault(m => m.ModelId == TranslationModel)
-                ?? _availableTranslationModels.FirstOrDefault();
+                ?? (_availableTranslationModels.Count > 0 ? _availableTranslationModels[0] : null);
             SelectedTtsOption =
                 _availableTtsOptions.FirstOrDefault(m => m.ModelId == TtsModelOrVoice)
-                ?? _availableTtsOptions.FirstOrDefault();
+                ?? (_availableTtsOptions.Count > 0 ? _availableTtsOptions[0] : null);
 
             // Multi-speaker routing is always on; migrate old sessions that had it off.
             if (!_coordinator.CurrentSession.MultiSpeakerEnabled)
@@ -1136,9 +1136,7 @@ partial void OnSourcePositionMsChanged(double value)
             IsMultiSpeakerEnabled = true;
 
             // Target language dropdown
-            var targetCode = _coordinator.CurrentSettings.TargetLanguage;
-            var targetEntry = SupportedTargetLanguages.FirstOrDefault(l => l.Code == targetCode);
-            SelectedTargetLanguage = string.IsNullOrEmpty(targetEntry.Label) ? "English" : targetEntry.Label;
+            SelectedTargetLanguage = SupportedTargetLanguages.FirstOrDefault(l => l.Code == _coordinator.CurrentSettings.TargetLanguage).Label ?? "English";
 
             DiarizationProvider = _coordinator.CurrentSettings.DiarizationProvider;
             DiarizationMinSpeakers = _coordinator.CurrentSettings.DiarizationMinSpeakers;
@@ -1209,7 +1207,7 @@ partial void OnSourcePositionMsChanged(double value)
         _availableTranscriptionModels =
             [.. _coordinator.TranscriptionRegistry
                 .GetAvailableModels(TranscriptionProvider, TranscriptionRuntime, _coordinator.CurrentSettings)
-                .Select(m => new ModelOptionViewModel(m, GetTranscriptionModelAvailability(TranscriptionProvider, m)))];
+                .Select(m => new ModelOptionViewModel(m, null, GetTranscriptionModelAvailability(TranscriptionProvider, m)))];
     }
 
     private void RebuildTranslationModelOptions()
@@ -1217,7 +1215,7 @@ partial void OnSourcePositionMsChanged(double value)
         _availableTranslationModels =
             [.. _coordinator.TranslationRegistry
                 .GetAvailableModels(TranslationProvider, TranslationRuntime, _coordinator.CurrentSettings)
-                .Select(m => new ModelOptionViewModel(m, GetTranslationModelAvailability(TranslationProvider, m)))];
+                .Select(m => new ModelOptionViewModel(m, null, GetTranslationModelAvailability(TranslationProvider, m)))];
     }
 
     private void RebuildTtsModelOptions()
@@ -1225,7 +1223,7 @@ partial void OnSourcePositionMsChanged(double value)
         _availableTtsOptions =
             [.. _coordinator.TtsRegistry
                 .GetAvailableModels(TtsProvider, TtsRuntime, _coordinator.CurrentSettings)
-                .Select(m => new ModelOptionViewModel(m, GetTtsModelAvailability(TtsProvider, m)))];
+                .Select(m => new ModelOptionViewModel(m, (TtsProvider == ProviderNames.Qwen && m.StartsWith("Qwen/")) ? m[5..] : null, GetTtsModelAvailability(TtsProvider, m)))];
     }
 
     private static bool? GetTranscriptionModelAvailability(string providerId, string model) =>
@@ -1319,9 +1317,7 @@ partial void OnSourcePositionMsChanged(double value)
                 .Where(p => p.IsImplemented)
                 .ToArray();
             descriptorCache[runtime] = providers;
-            idCache[runtime] = providers
-                .Select(p => p.Id)
-                .ToArray();
+            idCache[runtime] = [.. providers.Select(p => p.Id)];
         }
     }
 
@@ -1361,7 +1357,7 @@ partial void OnSourcePositionMsChanged(double value)
         var normalized = InferenceRuntimeCatalog.NormalizeTranscriptionProvider(runtime, providerId);
         return providers.Any(provider => provider.Id == normalized)
             ? normalized
-            : providers.FirstOrDefault()?.Id ?? normalized;
+            : (providers.Count > 0 ? providers[0].Id : normalized);
     }
 
     private string ResolveTranslationProviderForRuntime(ComputeProfile runtime, string? providerId)
@@ -1370,7 +1366,7 @@ partial void OnSourcePositionMsChanged(double value)
         var normalized = InferenceRuntimeCatalog.NormalizeTranslationProvider(runtime, providerId);
         return providers.Any(provider => provider.Id == normalized)
             ? normalized
-            : providers.FirstOrDefault()?.Id ?? normalized;
+            : (providers.Count > 0 ? providers[0].Id : normalized);
     }
 
     private string ResolveTtsProviderForRuntime(ComputeProfile runtime, string? providerId)
@@ -1379,7 +1375,7 @@ partial void OnSourcePositionMsChanged(double value)
         var normalized = InferenceRuntimeCatalog.NormalizeTtsProvider(runtime, providerId);
         return providers.Any(provider => provider.Id == normalized)
             ? normalized
-            : providers.FirstOrDefault()?.Id ?? normalized;
+            : (providers.Count > 0 ? providers[0].Id : normalized);
     }
 
     private string ResolveTranscriptionModelId(
@@ -1419,7 +1415,7 @@ partial void OnSourcePositionMsChanged(double value)
             return preferredModel;
         }
 
-        return supportedModels.First();
+        return supportedModels[0];
     }
 
     private PipelineSettingsSelection CreatePipelineSettingsSelection(
@@ -2152,5 +2148,7 @@ partial void OnSourcePositionMsChanged(double value)
         _providerReadinessRefreshCts?.Cancel();
         _providerReadinessRefreshCts?.Dispose();
         _providerReadinessRefreshCts = null;
+
+        GC.SuppressFinalize(this);
     }
 }
