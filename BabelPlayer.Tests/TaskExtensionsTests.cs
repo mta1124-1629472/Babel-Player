@@ -76,14 +76,16 @@ public sealed class TaskExtensionsTests : IDisposable
     public async Task FireAndForgetAsync_FaultedTask_LogsError()
     {
         var logPath = System.IO.Path.Combine(_testDir, "fault-test.log");
-        using var log = new AppLog(logPath);
+        {
+            using var log = new AppLog(logPath);
 
-        var faultedTask = Task.FromException(new InvalidOperationException("test error"));
-        faultedTask.FireAndForgetAsync(log, "test operation");
+            var faultedTask = Task.FromException(new InvalidOperationException("test error"));
+            _ = faultedTask.FireAndForgetAsync(log, "test operation");
 
-        // Allow the continuation to run
-        await Task.Delay(100);
-        await log.FlushAsync();
+            // Allow the continuation to run
+            await Task.Delay(100);
+            await log.FlushAsync();
+        }
 
         var logContent = await System.IO.File.ReadAllTextAsync(logPath);
         Assert.Contains("ERROR", logContent);
@@ -94,13 +96,15 @@ public sealed class TaskExtensionsTests : IDisposable
     public async Task FireAndForgetAsync_SuccessfulTask_DoesNotLogError()
     {
         var logPath = System.IO.Path.Combine(_testDir, "success-test.log");
-        using var log = new AppLog(logPath);
+        {
+            using var log = new AppLog(logPath);
 
-        var successfulTask = Task.CompletedTask;
-        successfulTask.FireAndForgetAsync(log, "success operation");
+            var successfulTask = Task.CompletedTask;
+            _ = successfulTask.FireAndForgetAsync(log, "success operation");
 
-        await Task.Delay(50);
-        await log.FlushAsync();
+            await Task.Delay(50);
+            await log.FlushAsync();
+        }
 
         // Log file may not exist or be empty if no entries were written
         if (System.IO.File.Exists(logPath))
@@ -114,14 +118,16 @@ public sealed class TaskExtensionsTests : IDisposable
     public async Task FireAndForgetAsync_FaultedTask_LogsExceptionContext()
     {
         var logPath = System.IO.Path.Combine(_testDir, "context-test.log");
-        using var log = new AppLog(logPath);
+        {
+            using var log = new AppLog(logPath);
 
-        var ex = new ArgumentException("invalid argument");
-        var faultedTask = Task.FromException(ex);
-        faultedTask.FireAndForgetAsync(log, "my custom context");
+            var ex = new ArgumentException("invalid argument");
+            var faultedTask = Task.FromException(ex);
+            _ = faultedTask.FireAndForgetAsync(log, "my custom context");
 
-        await Task.Delay(100);
-        await log.FlushAsync();
+            await Task.Delay(100);
+            await log.FlushAsync();
+        }
 
         var logContent = await System.IO.File.ReadAllTextAsync(logPath);
         Assert.Contains("my custom context", logContent);
@@ -133,13 +139,15 @@ public sealed class TaskExtensionsTests : IDisposable
     public async Task FireAndForgetAsync_DefaultContext_UsedInLogMessage()
     {
         var logPath = System.IO.Path.Combine(_testDir, "default-ctx-test.log");
-        using var log = new AppLog(logPath);
+        {
+            using var log = new AppLog(logPath);
 
-        var faultedTask = Task.FromException(new Exception("boom"));
-        faultedTask.FireAndForgetAsync(log);  // no context argument
+            var faultedTask = Task.FromException(new Exception("boom"));
+            _ = faultedTask.FireAndForgetAsync(log);  // no context argument
 
-        await Task.Delay(100);
-        await log.FlushAsync();
+            await Task.Delay(100);
+            await log.FlushAsync();
+        }
 
         var logContent = await System.IO.File.ReadAllTextAsync(logPath);
         Assert.Contains("background operation", logContent);
@@ -151,13 +159,15 @@ public sealed class TaskExtensionsTests : IDisposable
     public async Task FireAndForgetAsync_CanceledTask_DoesNotLogError()
     {
         var logPath = System.IO.Path.Combine(_testDir, "canceled-test.log");
-        using var log = new AppLog(logPath);
+        {
+            using var log = new AppLog(logPath);
 
-        var canceledTask = Task.FromCanceled(new CancellationToken(canceled: true));
-        canceledTask.FireAndForgetAsync(log, "canceled op");
+            var canceledTask = Task.FromCanceled(new CancellationToken(canceled: true));
+            _ = canceledTask.FireAndForgetAsync(log, "canceled op");
 
-        await Task.Delay(50);
-        await log.FlushAsync();
+            await Task.Delay(50);
+            await log.FlushAsync();
+        }
 
         // Canceled tasks are not faulted, so no error should be logged
         if (System.IO.File.Exists(logPath))
@@ -173,20 +183,22 @@ public sealed class TaskExtensionsTests : IDisposable
     public async Task FireAndForgetAsync_TaskFaultsAfterDelay_LogsError()
     {
         var logPath = System.IO.Path.Combine(_testDir, "delayed-fault-test.log");
-        using var log = new AppLog(logPath);
-
-        async Task FailAfterDelay()
         {
-            await Task.Delay(20);
-            throw new InvalidOperationException("delayed failure");
+            using var log = new AppLog(logPath);
+
+            async Task FailAfterDelay()
+            {
+                await Task.Delay(20);
+                throw new InvalidOperationException("delayed failure");
+            }
+
+            var task = FailAfterDelay();
+            _ = task.FireAndForgetAsync(log, "delayed operation");
+
+            // Wait for the task to fault and continuation to run
+            await Task.Delay(200);
+            await log.FlushAsync();
         }
-
-        var task = FailAfterDelay();
-        task.FireAndForgetAsync(log, "delayed operation");
-
-        // Wait for the task to fault and continuation to run
-        await Task.Delay(200);
-        await log.FlushAsync();
 
         var logContent = await System.IO.File.ReadAllTextAsync(logPath);
         Assert.Contains("ERROR", logContent);

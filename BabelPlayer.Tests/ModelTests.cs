@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Registries;
@@ -11,6 +12,8 @@ namespace BabelPlayer.Tests;
 /// </summary>
 public sealed class ModelTests
 {
+    private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     // ── WorkflowSessionSnapshot.CreateNew ─────────────────────────────────────
 
     [Fact]
@@ -135,7 +138,7 @@ public sealed class ModelTests
     [Fact]
     public void PipelineInvalidation_HasExpectedValues()
     {
-        var values = (PipelineInvalidation[])Enum.GetValues(typeof(PipelineInvalidation));
+        var values = Enum.GetValues<PipelineInvalidation>();
         Assert.Contains(PipelineInvalidation.None, values);
         Assert.Contains(PipelineInvalidation.Tts, values);
         Assert.Contains(PipelineInvalidation.Translation, values);
@@ -242,6 +245,7 @@ public sealed class ModelTests
     public void PipelineProviderException_IsInvalidOperationException()
     {
         var ex = new PipelineProviderException("test message");
+        Assert.IsType<PipelineProviderException>(ex);
         Assert.IsAssignableFrom<InvalidOperationException>(ex);
     }
 
@@ -484,9 +488,9 @@ public sealed class ModelTests
             }
             """;
 
-        var artifact = System.Text.Json.JsonSerializer.Deserialize<TranscriptArtifact>(
+        var artifact = JsonSerializer.Deserialize<TranscriptArtifact>(
             json,
-            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            _jsonOptions);
 
         Assert.NotNull(artifact);
         Assert.Equal("es", artifact.Language);
@@ -506,9 +510,9 @@ public sealed class ModelTests
             }
             """;
 
-        var artifact = System.Text.Json.JsonSerializer.Deserialize<TranscriptArtifact>(
+        var artifact = JsonSerializer.Deserialize<TranscriptArtifact>(
             json,
-            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            _jsonOptions);
 
         Assert.NotNull(artifact);
         Assert.Equal(-1.0, artifact.PeakVramMb);

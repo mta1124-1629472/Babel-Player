@@ -16,28 +16,18 @@ namespace Babel.Player.Services;
 /// TTS provider backed by Qwen3-TTS containerized endpoints.
 /// Uses per-segment reference audio for voice cloning; no separate reference-registration step.
 /// </summary>
-public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
+public sealed class QwenContainerTtsProvider(
+    ContainerizedInferenceClient client,
+    AppLog log,
+    TtsReferenceExtractor extractor) : ITtsProvider, IAsyncDisposable
 {
-    private readonly ContainerizedInferenceClient _client;
-    private readonly AppLog _log;
-    private readonly TtsReferenceExtractor _extractor;
+    private readonly ContainerizedInferenceClient _client = client;
+    private readonly AppLog _log = log;
+    private readonly TtsReferenceExtractor _extractor = extractor;
 
     private string? _autoExtractedReferencePath;
     private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
     private bool _disposed;
-
-    /// <summary>
-    /// Initializes a new instance of QwenContainerTtsProvider with the specified client, logger, and reference extractor.
-    /// </summary>
-    public QwenContainerTtsProvider(
-        ContainerizedInferenceClient client,
-        AppLog log,
-        TtsReferenceExtractor extractor)
-    {
-        _client = client;
-        _log = log;
-        _extractor = extractor;
-    }
 
     /// <summary>
         /// Determines whether the containerized TTS provider is ready based on the given application settings.
@@ -268,8 +258,8 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         };
     }
 
-    private static readonly IReadOnlySet<string> ValidQwenModelNames =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> ValidQwenModelNames =
+        new(StringComparer.OrdinalIgnoreCase)
         {
             "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
             "Qwen/Qwen3-TTS-12Hz-1.7B-Base",

@@ -1878,11 +1878,11 @@ partial void OnSourcePositionMsChanged(double value)
     }
 
     [RelayCommand]
-    private async Task RefreshSegmentsAsync()
+    internal async Task RefreshSegmentsAsync(List<WorkflowSegmentState>? segments = null)
     {
         try
         {
-            var list = await _coordinator.GetSegmentWorkflowListAsync();
+            var list = segments ?? await _coordinator.GetSegmentWorkflowListAsync();
             // Guard: replacing the Segments collection can cause Avalonia's ListBox TwoWay binding
             // to update SelectedSegment (e.g., by re-confirming a structurally-equal item in the
             // new collection). Without this guard, OnSelectedSegmentChanged would call

@@ -718,7 +718,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
         var segmentAudioPath = Path.Combine(segmentsDir, $"{segmentId}.mp3");
 
-        _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText.Substring(0, Math.Min(30, segmentText.Length))}...");
+        _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText[..Math.Min(30, segmentText.Length)]}...");
 
         var targetLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
         var ttsTask = _ttsService.GenerateSegmentTtsAsync(
@@ -739,7 +739,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new InvalidOperationException($"Segment TTS regeneration failed: {errorMsg}");
         }
 
-        var currentSegments = CurrentSession.TtsSegmentAudioPaths ?? new Dictionary<string, string>();
+        var currentSegments = CurrentSession.TtsSegmentAudioPaths ?? [];
         currentSegments[segmentId] = segmentAudioPath;
 
         CurrentSession = CurrentSession with
@@ -793,7 +793,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         var sourceLanguage = CurrentSession.SourceLanguage;
         var targetLanguage = CurrentSession.TargetLanguage;
 
-        _log.Info($"Regenerating translation for segment {segmentId}: {sourceText.Substring(0, Math.Min(30, sourceText.Length))}...");
+        _log.Info($"Regenerating translation for segment {segmentId}: {sourceText[..Math.Min(30, sourceText.Length)]}...");
 
         var result = await _translationService.TranslateSingleSegmentAsync(
             new SingleSegmentTranslationRequest(

@@ -12,14 +12,9 @@ namespace Babel.Player.Services;
 /// <summary>
 /// A real implementation of IAudioProcessingService that uses ffmpeg.
 /// </summary>
-public sealed class FfmpegAudioProcessingService : IAudioProcessingService
+public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingService
 {
-    private readonly AppLog _log;
-
-    public FfmpegAudioProcessingService(AppLog log)
-    {
-        _log = log;
-    }
+    private readonly AppLog _log = log;
 
     public async Task CombineAudioSegmentsAsync(
         IReadOnlyList<string> segmentAudioPaths,

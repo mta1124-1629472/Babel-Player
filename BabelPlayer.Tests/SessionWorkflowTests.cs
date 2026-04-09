@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -11,19 +12,22 @@ using Babel.Player.ViewModels;
 namespace BabelPlayer.Tests;
 
 [Collection("Session workflow shared")]
-public sealed class SessionWorkflowTests : IAsyncLifetime
+public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture) : IAsyncLifetime
 {
-    private readonly SessionWorkflowTemplateFixture _fixture;
-
-    public SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly SessionWorkflowTemplateFixture _fixture = fixture;
 
     public Task InitializeAsync() => Task.CompletedTask;
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private SessionWorkflowCoordinator CreateCoordinator(
+    public record TestContext(
+        SessionWorkflowCoordinator Coordinator,
+        SessionSnapshotStore Store,
+        AppLog Log,
+        string CaseDir,
+        FakeMediaTransport? SourcePlayer = null,
+        FakeMediaTransport? SegmentPlayer = null);
+
+    private static SessionWorkflowCoordinator CreateCoordinator(
         SessionSnapshotStore store,
         AppLog log,
         string caseDir,
@@ -33,26 +37,27 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         var settings = new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
-        
+
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        
+        var audioProcessingService = new FfmpegAudioProcessingService(log);
+
         return new SessionWorkflowCoordinator(
-            store, 
-            log, 
-            settings, 
-            perSessionStore, 
-            recentStore, 
+            store,
+            log,
+            settings,
+            perSessionStore,
+            recentStore,
             transcriptionRegistry,
             translationRegistry,
             ttsRegistry,
-            segmentPlayer, 
-            sourcePlayer);
+            segmentPlayer: segmentPlayer,
+            sourcePlayer: sourcePlayer,
+            audioProcessingService: audioProcessingService);
     }
 
-    private async Task<(SessionWorkflowCoordinator coordinator, SessionSnapshotStore store, AppLog log, string caseDir)>
-        OpenCaseFromTemplateAsync(string templateName, string caseName)
+    private async Task<TestContext> OpenCaseFromTemplateAsync(string templateName, string caseName)
     {
         var templateDir = await _fixture.GetPreparedTemplateAsync(templateName);
         var caseDir = _fixture.CreateCaseDirectory(caseName);
@@ -65,11 +70,10 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         var coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
 
-        return (coordinator, store, log, caseDir);
+        return new TestContext(coordinator, store, log, caseDir);
     }
 
-    private (SessionWorkflowCoordinator coordinator, SessionSnapshotStore store, AppLog log, string caseDir)
-        CreateFreshCase(string caseName)
+    private TestContext CreateFreshCase(string caseName)
     {
         var caseDir = _fixture.CreateCaseDirectory(caseName);
         var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
@@ -78,23 +82,23 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         var coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
 
-        return (coordinator, store, log, caseDir);
+        return new TestContext(coordinator, store, log, caseDir);
     }
 
     [Fact]
     public Task LoadMedia_ThenReopen_ReusesArtifact()
     {
-        var (coordinator, store, log, caseDir) = CreateFreshCase(nameof(LoadMedia_ThenReopen_ReusesArtifact));
+        var ctx = CreateFreshCase(nameof(LoadMedia_ThenReopen_ReusesArtifact));
 
-        coordinator.LoadMedia(_fixture.TestMediaPath);
+        ctx.Coordinator.LoadMedia(_fixture.TestMediaPath);
 
-        coordinator = CreateCoordinator(store, log, caseDir);
-        coordinator.Initialize();
+        var coordinator2 = CreateCoordinator(ctx.Store, ctx.Log, ctx.CaseDir);
+        coordinator2.Initialize();
 
-        Assert.Equal(SessionWorkflowStage.MediaLoaded, coordinator.CurrentSession.Stage);
-        Assert.NotNull(coordinator.CurrentSession.SourceMediaPath);
-        Assert.Equal(_fixture.TestMediaPath, coordinator.CurrentSession.SourceMediaPath);
-        Assert.DoesNotContain("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, coordinator2.CurrentSession.Stage);
+        Assert.NotNull(coordinator2.CurrentSession.SourceMediaPath);
+        Assert.Equal(_fixture.TestMediaPath, coordinator2.CurrentSession.SourceMediaPath);
+        Assert.DoesNotContain("missing", coordinator2.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
 
         return Task.CompletedTask;
     }
@@ -102,11 +106,11 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Fact]
     public Task ReopenWithMissingArtifact_SurfacesDegradedState()
     {
-        var (coordinator, store, log, caseDir) = CreateFreshCase(nameof(ReopenWithMissingArtifact_SurfacesDegradedState));
+        var ctx = CreateFreshCase(nameof(ReopenWithMissingArtifact_SurfacesDegradedState));
 
-        coordinator.LoadMedia(_fixture.TestMediaPath);
+        ctx.Coordinator.LoadMedia(_fixture.TestMediaPath);
 
-        var ingestedPath = coordinator.CurrentSession.IngestedMediaPath;
+        var ingestedPath = ctx.Coordinator.CurrentSession.IngestedMediaPath;
         Assert.NotNull(ingestedPath);
 
         if (File.Exists(ingestedPath))
@@ -114,12 +118,12 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
             File.Delete(ingestedPath);
         }
 
-        coordinator = CreateCoordinator(store, log, caseDir);
-        coordinator.Initialize();
+        var coordinator2 = CreateCoordinator(ctx.Store, ctx.Log, ctx.CaseDir);
+        coordinator2.Initialize();
 
         // Stage must be downgraded — ingested media is missing so media must be re-loaded
-        Assert.Equal(SessionWorkflowStage.Foundation, coordinator.CurrentSession.Stage);
-        Assert.Null(coordinator.CurrentSession.IngestedMediaPath);
+        Assert.Equal(SessionWorkflowStage.Foundation, coordinator2.CurrentSession.Stage);
+        Assert.Null(coordinator2.CurrentSession.IngestedMediaPath);
 
         return Task.CompletedTask;
     }
@@ -129,13 +133,12 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Trait("Category", "RequiresPython")]
     public async Task TranscribeMedia_ThenReopen_ReusesTranscript()
     {
-        var (coordinator, _, _, _) =
-            await OpenCaseFromTemplateAsync("transcribed", nameof(TranscribeMedia_ThenReopen_ReusesTranscript));
+        var ctx = await OpenCaseFromTemplateAsync("transcribed", nameof(TranscribeMedia_ThenReopen_ReusesTranscript));
 
-        Assert.Equal(SessionWorkflowStage.Transcribed, coordinator.CurrentSession.Stage);
-        Assert.NotNull(coordinator.CurrentSession.TranscriptPath);
-        Assert.True(File.Exists(coordinator.CurrentSession.TranscriptPath));
-        Assert.DoesNotContain("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SessionWorkflowStage.Transcribed, ctx.Coordinator.CurrentSession.Stage);
+        Assert.NotNull(ctx.Coordinator.CurrentSession.TranscriptPath);
+        Assert.True(File.Exists(ctx.Coordinator.CurrentSession.TranscriptPath));
+        Assert.DoesNotContain("missing", ctx.Coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -143,21 +146,20 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Trait("Category", "RequiresPython")]
     public async Task ReopenWithMissingTranscript_SurfacesDegradedState()
     {
-        var (coordinator, store, log, caseDir) =
-            await OpenCaseFromTemplateAsync("transcribed", nameof(ReopenWithMissingTranscript_SurfacesDegradedState));
+        var ctx = await OpenCaseFromTemplateAsync("transcribed", nameof(ReopenWithMissingTranscript_SurfacesDegradedState));
 
-        Assert.NotNull(coordinator.CurrentSession.TranscriptPath);
+        Assert.NotNull(ctx.Coordinator.CurrentSession.TranscriptPath);
 
         // Patch the snapshot to reference a non-existent file rather than deleting
         // the real AppData artifact — deleting it would corrupt the shared template.
-        store.Save(coordinator.CurrentSession with { TranscriptPath = Path.Combine(caseDir, "nonexistent.json") });
+        ctx.Store.Save(ctx.Coordinator.CurrentSession with { TranscriptPath = Path.Combine(ctx.CaseDir, "nonexistent.json") });
 
-        coordinator = CreateCoordinator(store, log, caseDir);
-        coordinator.Initialize();
+        var coordinator2 = CreateCoordinator(ctx.Store, ctx.Log, ctx.CaseDir);
+        coordinator2.Initialize();
 
         // Stage must be downgraded — transcript is missing so transcription must re-run
-        Assert.Equal(SessionWorkflowStage.MediaLoaded, coordinator.CurrentSession.Stage);
-        Assert.Null(coordinator.CurrentSession.TranscriptPath);
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, coordinator2.CurrentSession.Stage);
+        Assert.Null(coordinator2.CurrentSession.TranscriptPath);
     }
 
     [Fact]
@@ -165,15 +167,14 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Trait("Category", "RequiresExternalTranslation")]
     public async Task TranslateTranscript_ThenReopen_ReusesTranslation()
     {
-        var (coordinator, _, _, _) =
-            await OpenCaseFromTemplateAsync("translated", nameof(TranslateTranscript_ThenReopen_ReusesTranslation));
+        var ctx = await OpenCaseFromTemplateAsync("translated", nameof(TranslateTranscript_ThenReopen_ReusesTranslation));
 
-        Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
-        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
-        Assert.True(File.Exists(coordinator.CurrentSession.TranslationPath));
-        Assert.DoesNotContain("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("es", coordinator.CurrentSession.SourceLanguage);
-        Assert.Equal("en", coordinator.CurrentSession.TargetLanguage);
+        Assert.Equal(SessionWorkflowStage.Translated, ctx.Coordinator.CurrentSession.Stage);
+        Assert.NotNull(ctx.Coordinator.CurrentSession.TranslationPath);
+        Assert.True(File.Exists(ctx.Coordinator.CurrentSession.TranslationPath));
+        Assert.DoesNotContain("missing", ctx.Coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("es", ctx.Coordinator.CurrentSession.SourceLanguage);
+        Assert.Equal("en", ctx.Coordinator.CurrentSession.TargetLanguage);
     }
 
     [Fact]
@@ -181,89 +182,80 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     [Trait("Category", "RequiresExternalTranslation")]
     public async Task ReopenWithMissingTranslation_SurfacesDegradedState()
     {
-        var (coordinator, store, log, caseDir) =
-            await OpenCaseFromTemplateAsync("translated", nameof(ReopenWithMissingTranslation_SurfacesDegradedState));
+        var ctx = await OpenCaseFromTemplateAsync("translated", nameof(ReopenWithMissingTranslation_SurfacesDegradedState));
 
-        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
+        Assert.NotNull(ctx.Coordinator.CurrentSession.TranslationPath);
 
         // Patch the snapshot to reference a non-existent file rather than deleting
         // the real AppData artifact — deleting it would corrupt the shared template.
-        store.Save(coordinator.CurrentSession with { TranslationPath = Path.Combine(caseDir, "nonexistent.json") });
+        ctx.Store.Save(ctx.Coordinator.CurrentSession with { TranslationPath = Path.Combine(ctx.CaseDir, "nonexistent.json") });
 
-        coordinator = CreateCoordinator(store, log, caseDir);
-        coordinator.Initialize();
+        var coordinator2 = CreateCoordinator(ctx.Store, ctx.Log, ctx.CaseDir);
+        coordinator2.Initialize();
 
         // Stage must be downgraded — translation is missing so translation must re-run
-        Assert.Equal(SessionWorkflowStage.Transcribed, coordinator.CurrentSession.Stage);
-        Assert.Null(coordinator.CurrentSession.TranslationPath);
+        Assert.Equal(SessionWorkflowStage.Transcribed, coordinator2.CurrentSession.Stage);
+        Assert.Null(coordinator2.CurrentSession.TranslationPath);
     }
 
     [Fact]
     [Trait("Category", "RequiresPython")]
     public async Task GenerateTts_ThenReopen_ReusesAudio()
     {
-        var (coordinator, _, _, _) =
-            await OpenCaseFromTemplateAsync("tts", nameof(GenerateTts_ThenReopen_ReusesAudio));
+        var ctx = await OpenCaseFromTemplateAsync("tts", nameof(GenerateTts_ThenReopen_ReusesAudio));
 
-        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
-        Assert.NotNull(coordinator.CurrentSession.TtsPath);
-        Assert.True(File.Exists(coordinator.CurrentSession.TtsPath));
-        Assert.NotNull(coordinator.CurrentSession.TtsSegmentsPath);
-        Assert.NotNull(coordinator.CurrentSession.TtsSegmentAudioPaths);
-        Assert.DoesNotContain("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, ctx.Coordinator.CurrentSession.Stage);
+        Assert.NotNull(ctx.Coordinator.CurrentSession.TtsPath);
+        Assert.True(File.Exists(ctx.Coordinator.CurrentSession.TtsPath));
+        Assert.NotNull(ctx.Coordinator.CurrentSession.TtsSegmentsPath);
+        Assert.NotNull(ctx.Coordinator.CurrentSession.TtsSegmentAudioPaths);
+        Assert.DoesNotContain("missing", ctx.Coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     [Trait("Category", "RequiresPython")]
     public async Task ReopenWithMissingTts_SurfacesDegradedState()
     {
-        var (coordinator, store, log, caseDir) =
-            await OpenCaseFromTemplateAsync("tts", nameof(ReopenWithMissingTts_SurfacesDegradedState));
+        var ctx = await OpenCaseFromTemplateAsync("tts", nameof(ReopenWithMissingTts_SurfacesDegradedState));
 
-        var ttsPath = coordinator.CurrentSession.TtsPath;
+        var ttsPath = ctx.Coordinator.CurrentSession.TtsPath;
         Assert.NotNull(ttsPath);
 
         File.Delete(ttsPath);
 
-        coordinator = CreateCoordinator(store, log, caseDir);
-        coordinator.Initialize();
+        var coordinator2 = CreateCoordinator(ctx.Store, ctx.Log, ctx.CaseDir);
+        coordinator2.Initialize();
 
         // Stage must be downgraded — TTS is missing so TTS must re-run
-        Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
-        Assert.Null(coordinator.CurrentSession.TtsPath);
+        Assert.Equal(SessionWorkflowStage.Translated, coordinator2.CurrentSession.Stage);
+        Assert.Null(coordinator2.CurrentSession.TtsPath);
     }
 
     [Fact]
     [Trait("Category", "Integration")]
     public async Task EndToEndPipeline_SmokeTest()
     {
-        var caseDir = _fixture.CreateCaseDirectory(nameof(EndToEndPipeline_SmokeTest));
-        var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
-        var log = new AppLog(Path.Combine(caseDir, "case.log"));
-        var store = new SessionSnapshotStore(stateFilePath, log);
-        var coordinator = CreateCoordinator(store, log, caseDir);
+        var ctx = CreateFreshCase(nameof(EndToEndPipeline_SmokeTest));
 
-        coordinator.Initialize();
-        coordinator.LoadMedia(_fixture.TestMediaPath);
-        await coordinator.TranscribeMediaAsync();
-        await coordinator.TranslateTranscriptAsync(targetLanguage: "en", sourceLanguage: "es");
-        await coordinator.GenerateTtsAsync();
+        ctx.Coordinator.LoadMedia(_fixture.TestMediaPath);
+        await ctx.Coordinator.TranscribeMediaAsync();
+        await ctx.Coordinator.TranslateTranscriptAsync(targetLanguage: "en", sourceLanguage: "es");
+        await ctx.Coordinator.GenerateTtsAsync();
 
-        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
-        Assert.True(File.Exists(coordinator.CurrentSession.TranscriptPath!));
-        Assert.True(File.Exists(coordinator.CurrentSession.TranslationPath!));
-        Assert.True(File.Exists(coordinator.CurrentSession.TtsPath!));
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, ctx.Coordinator.CurrentSession.Stage);
+        Assert.True(File.Exists(ctx.Coordinator.CurrentSession.TranscriptPath!));
+        Assert.True(File.Exists(ctx.Coordinator.CurrentSession.TranslationPath!));
+        Assert.True(File.Exists(ctx.Coordinator.CurrentSession.TtsPath!));
     }
 
     [Fact]
     [Trait("Category", "Integration")]
     public async Task TranscribeMediaAsync_PersistsDetectedLanguage()
     {
-        var (coordinator, _, _, _) =
-            await OpenCaseFromTemplateAsync("transcribed", nameof(TranscribeMediaAsync_PersistsDetectedLanguage));
+        var ctx = await OpenCaseFromTemplateAsync("transcribed", nameof(TranscribeMediaAsync_PersistsDetectedLanguage));
 
-        Assert.NotNull(coordinator.CurrentSession.SourceLanguage);
-        Assert.NotEmpty(coordinator.CurrentSession.SourceLanguage);
+        Assert.NotNull(ctx.Coordinator.CurrentSession.SourceLanguage);
+        Assert.NotEmpty(ctx.Coordinator.CurrentSession.SourceLanguage);
     }
 
     [Fact]
@@ -271,29 +263,27 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
     public async Task TranslateTranscriptAsync_NoSourceLangParam_UsesSessionLanguage()
     {
         // "transcribed" template has SourceLanguage set (after fix); translate without specifying source.
-        var (coordinator, _, _, _) =
-            await OpenCaseFromTemplateAsync("transcribed", nameof(TranslateTranscriptAsync_NoSourceLangParam_UsesSessionLanguage));
+        var ctx = await OpenCaseFromTemplateAsync("transcribed", nameof(TranslateTranscriptAsync_NoSourceLangParam_UsesSessionLanguage));
 
-        var detectedLang = coordinator.CurrentSession.SourceLanguage;
+        var detectedLang = ctx.Coordinator.CurrentSession.SourceLanguage;
         Assert.NotNull(detectedLang);
 
-        await coordinator.TranslateTranscriptAsync();
+        await ctx.Coordinator.TranslateTranscriptAsync();
 
-        Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
-        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
-        Assert.True(File.Exists(coordinator.CurrentSession.TranslationPath));
-        Assert.Equal(detectedLang, coordinator.CurrentSession.SourceLanguage);
-        Assert.Equal("en", coordinator.CurrentSession.TargetLanguage);
+        Assert.Equal(SessionWorkflowStage.Translated, ctx.Coordinator.CurrentSession.Stage);
+        Assert.NotNull(ctx.Coordinator.CurrentSession.TranslationPath);
+        Assert.True(File.Exists(ctx.Coordinator.CurrentSession.TranslationPath));
+        Assert.Equal(detectedLang, ctx.Coordinator.CurrentSession.SourceLanguage);
+        Assert.Equal("en", ctx.Coordinator.CurrentSession.TargetLanguage);
     }
 
     [Fact]
     [Trait("Category", "Integration")]
     public async Task RegenerateSegmentTranslation_ActuallyWritesNewTextToSegment()
     {
-        var (coordinator, _, _, _) =
-            await OpenCaseFromTemplateAsync("translated", nameof(RegenerateSegmentTranslation_ActuallyWritesNewTextToSegment));
+        var ctx = await OpenCaseFromTemplateAsync("translated", nameof(RegenerateSegmentTranslation_ActuallyWritesNewTextToSegment));
 
-        var translationPath = coordinator.CurrentSession.TranslationPath!;
+        var translationPath = ctx.Coordinator.CurrentSession.TranslationPath!;
         var jsonBefore = await File.ReadAllTextAsync(translationPath);
         var dataBefore = JsonSerializer.Deserialize<JsonElement>(jsonBefore);
         var firstSeg = dataBefore.GetProperty("segments")[0];
@@ -301,14 +291,14 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
 
         const string sentinel = "CORRUPTED_SENTINEL_DO_NOT_PERSIST";
         using var ms = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
+        await using (var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
         {
             RewriteJsonWithCorruptedSegment(dataBefore, segmentId, sentinel, writer);
         }
 
         await File.WriteAllBytesAsync(translationPath, ms.ToArray());
 
-        await coordinator.RegenerateSegmentTranslationAsync(segmentId);
+        await ctx.Coordinator.RegenerateSegmentTranslationAsync(segmentId);
 
         var jsonAfter = await File.ReadAllTextAsync(translationPath);
         var dataAfter = JsonSerializer.Deserialize<JsonElement>(jsonAfter);
@@ -369,9 +359,48 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
 
         writer.WriteEndObject();
     }
+
+    internal static async Task WaitUntilPlayingAsync(FakeMediaTransport player)
+    {
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        while (!player.IsPlaying && DateTime.UtcNow < timeout)
+        {
+            await Task.Yield();
+        }
+    }
+
+    internal static async Task WaitUntilPausedAsync(FakeMediaTransport player)
+    {
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        while (!player.IsPaused && DateTime.UtcNow < timeout)
+        {
+            await Task.Yield();
+        }
+    }
+
+    public sealed class TestContextFactory(SessionWorkflowTemplateFixture fixture)
+    {
+        internal async Task<TestContext> CreateCaseWithFakePlayersAsync(string caseName)
+        {
+            var templateDir = await fixture.GetPreparedTemplateAsync("tts");
+            var caseDir = fixture.CreateCaseDirectory(caseName);
+            SessionWorkflowTemplateFixture.CopyDirectory(templateDir, caseDir);
+
+            var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
+            var log = new AppLog(Path.Combine(caseDir, "case.log"));
+            var store = new SessionSnapshotStore(stateFilePath, log);
+
+            var fakeSegmentPlayer = new FakeMediaTransport();
+            var fakeSourcePlayer = new FakeMediaTransport();
+            var coordinator = CreateCoordinator(store, log, caseDir, fakeSegmentPlayer, fakeSourcePlayer);
+            coordinator.Initialize();
+
+            return new TestContext(coordinator, store, log, caseDir, fakeSourcePlayer, fakeSegmentPlayer);
+        }
+    }
 }
 
-internal sealed class FakeMediaTransport : IMediaTransport, IDisposable
+public sealed class FakeMediaTransport : IMediaTransport, IDisposable
 {
     public string? LastLoadedFile { get; private set; }
     public long LastSeekPosition { get; private set; }
@@ -402,19 +431,14 @@ internal sealed class FakeMediaTransport : IMediaTransport, IDisposable
 }
 
 [Collection("Session workflow shared")]
-public sealed class EmbeddedPlaybackTests : IAsyncLifetime
+public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture) : IAsyncLifetime
 {
-    private readonly SessionWorkflowTemplateFixture _fixture;
-
-    public EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly SessionWorkflowTemplateFixture _fixture = fixture;
 
     public Task InitializeAsync() => Task.CompletedTask;
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private SessionWorkflowCoordinator CreateCoordinator(
+    private static SessionWorkflowCoordinator CreateCoordinator(
         SessionSnapshotStore store,
         AppLog log,
         string caseDir,
@@ -424,22 +448,24 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
         var settings = new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
-        
+
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        
+        var audioProcessingService = new FfmpegAudioProcessingService(log);
+
         return new SessionWorkflowCoordinator(
-            store, 
-            log, 
-            settings, 
-            perSessionStore, 
-            recentStore, 
+            store,
+            log,
+            settings,
+            perSessionStore,
+            recentStore,
             transcriptionRegistry,
             translationRegistry,
             ttsRegistry,
-            segmentPlayer, 
-            sourcePlayer);
+            segmentPlayer: segmentPlayer,
+            sourcePlayer: sourcePlayer,
+            audioProcessingService: audioProcessingService);
     }
 
     private async Task<(SessionWorkflowCoordinator coordinator, FakeMediaTransport sourcePlayer, string caseDir)>
@@ -474,6 +500,8 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
         var first = segments[0];
         await coordinator.PlaySourceMediaAtSegmentAsync(first.SegmentId);
 
+        await SessionWorkflowTests.WaitUntilPlayingAsync(sourcePlayer);
+
         Assert.NotNull(sourcePlayer.LastLoadedFile);
         Assert.True(sourcePlayer.IsPlaying);
         var expectedSeekMs = (long)(first.StartSeconds * 1000);
@@ -501,6 +529,8 @@ public sealed class EmbeddedPlaybackTests : IAsyncLifetime
         var segments = await coordinator.GetSegmentWorkflowListAsync();
         Assert.NotEmpty(segments);
         await coordinator.PlaySourceMediaAtSegmentAsync(segments[0].SegmentId);
+        
+        await SessionWorkflowTests.WaitUntilPlayingAsync(sourcePlayer);
         Assert.True(sourcePlayer.IsPlaying);
 
         coordinator.StopSourceMedia();
@@ -567,29 +597,31 @@ public sealed class SegmentInspectionTests
         var settings = new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
-        
+
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        
+        var audioProcessingService = new FfmpegAudioProcessingService(log);
+
         return new SessionWorkflowCoordinator(
-            store, 
-            log, 
-            settings, 
-            perSessionStore, 
-            recentStore, 
+            store,
+            log,
+            settings,
+            perSessionStore,
+            recentStore,
             transcriptionRegistry,
             translationRegistry,
             ttsRegistry,
-            segmentPlayer, 
-            sourcePlayer);
+            segmentPlayer: segmentPlayer,
+            sourcePlayer: sourcePlayer,
+            audioProcessingService: audioProcessingService);
     }
 
     private static EmbeddedPlaybackViewModel CreatePlaybackVm()
     {
-        var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}");
-        var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.log"));
-        var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.json");
+        var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}");
+        var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.log"));
+        var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.json");
         var store = new SessionSnapshotStore(storePath, log);
         var coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
@@ -599,9 +631,9 @@ public sealed class SegmentInspectionTests
     private static (EmbeddedPlaybackViewModel playback, FakeMediaTransport segmentPlayer, FakeMediaTransport sourcePlayer)
         CreatePlaybackVmWithFakePlayers()
     {
-        var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}");
-        var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.log"));
-        var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid()}.json");
+        var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}");
+        var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.log"));
+        var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.json");
         var store = new SessionSnapshotStore(storePath, log);
         var segmentPlayer = new FakeMediaTransport();
         var sourcePlayer = new FakeMediaTransport();
@@ -800,20 +832,18 @@ public sealed class SegmentInspectionTests
         // with a non-null value would call SeekAndPlayAsync on the source player.
         playback.IsSourceMediaLoaded = true;
 
-        // Baseline: nothing is playing yet.
-        Assert.False(sourcePlayer.IsPlaying);
-        Assert.Equal(0, sourcePlayer.LastSeekPosition);
+        var segments = new List<WorkflowSegmentState>
+        {
+            new("segment_0.0", 0.0, 2.0, "p1", true, "t1", true),
+            new("segment_2.0", 2.0, 4.0, "test", true, "t2", true),
+            new("segment_4.0", 4.0, 6.0, "p2", true, "t3", true)
+        };
 
-        // Trigger a segment refresh. Without the _isUpdatingActiveSegment guard the Avalonia
-        // TwoWay binding would re-select the matching segment from the new collection, calling
-        // SeekAndPlayAsync. The guard must prevent any selection side-effect from causing
-        // source playback.
-        await ((CommunityToolkit.Mvvm.Input.IAsyncRelayCommand)playback.RefreshSegmentsCommand)
-            .ExecuteAsync(null);
+        // This call replaces the internal Segments collection.
+        // If not properly guarded, Avalonia would re-select the segment and trigger playback.
+        await playback.RefreshSegmentsAsync(segments);
 
-        Assert.False(sourcePlayer.IsPlaying);
         Assert.Equal(0, sourcePlayer.LastSeekPosition);
-        // SelectedSegment is cleared by the refresh (no segments in coordinator without a transcript)
-        Assert.Null(playback.SelectedSegment);
+        Assert.False(sourcePlayer.IsPlaying);
     }
 }

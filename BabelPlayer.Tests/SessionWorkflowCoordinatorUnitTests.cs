@@ -16,35 +16,35 @@ namespace BabelPlayer.Tests;
 /// These tests exercise pure coordination logic: Initialize, LoadMedia, Reset*, InjectTestTranscript,
 /// UpdateSettings, CheckSettingsInvalidation, NotifySettingsModified, SegmentId, and SaveCurrentSession.
 /// </summary>
-public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
+public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
 {
-    private readonly string _dir;
-    private readonly AppLog _log;
-    private readonly SessionSnapshotStore _store;
-    private readonly PerSessionSnapshotStore _perSessionStore;
-    private readonly RecentSessionsStore _recentStore;
-    private readonly AppSettings _settings;
+    private readonly TestContext _ctx = new();
 
-    // A small real media file that exists in the test output directory
-    private readonly string _mediaPath;
-
-    public SessionWorkflowCoordinatorUnitTests()
+    private sealed class TestContext
     {
-        _dir = Path.Combine(Path.GetTempPath(), $"babel-coord-unit-tests-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
-        _log = new AppLog(Path.Combine(_dir, "test.log"));
-        _store = new SessionSnapshotStore(Path.Combine(_dir, "session.json"), _log);
-        _perSessionStore = new PerSessionSnapshotStore(Path.Combine(_dir, "sessions"), _log);
-        _recentStore = new RecentSessionsStore(Path.Combine(_dir, "recent-sessions.json"), _log);
-        _settings = new AppSettings();
+        public string Dir { get; } = Path.Combine(Path.GetTempPath(), $"babel-coord-unit-tests-{Guid.NewGuid():N}");
+        public AppLog Log { get; }
+        public SessionSnapshotStore Store { get; }
+        public PerSessionSnapshotStore PerSessionStore { get; }
+        public RecentSessionsStore RecentStore { get; }
+        public AppSettings Settings { get; }
+        public string MediaPath { get; }
 
-        // The test media (sample.mp4) is copied to the output dir by the .csproj
-        _mediaPath = Path.Combine(AppContext.BaseDirectory, "test-assets", "video", "sample.mp4");
+        public TestContext()
+        {
+            Directory.CreateDirectory(Dir);
+            Log = new AppLog(Path.Combine(Dir, "test.log"));
+            Store = new SessionSnapshotStore(Path.Combine(Dir, "session.json"), Log);
+            PerSessionStore = new PerSessionSnapshotStore(Path.Combine(Dir, "sessions"), Log);
+            RecentStore = new RecentSessionsStore(Path.Combine(Dir, "recent-sessions.json"), Log);
+            Settings = new AppSettings();
+            MediaPath = Path.Combine(AppContext.BaseDirectory, "test-assets", "video", "sample.mp4");
+        }
     }
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); }
+        try { Directory.Delete(_ctx.Dir, recursive: true); }
         catch { /* best-effort cleanup */ }
     }
 
@@ -52,48 +52,48 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         AppSettings? settings = null,
         IContainerizedInferenceManager? containerizedInferenceManager = null) =>
         new SessionWorkflowCoordinator(
-            _store,
-            _log,
-            settings ?? _settings,
-            _perSessionStore,
-            _recentStore,
-            new TranscriptionRegistry(_log),
-            new TranslationRegistry(_log),
-            new TtsRegistry(_log),
+            _ctx.Store,
+            _ctx.Log,
+            settings ?? _ctx.Settings,
+            _ctx.PerSessionStore,
+            _ctx.RecentStore,
+            new TranscriptionRegistry(_ctx.Log),
+            new TranslationRegistry(_ctx.Log),
+            new TtsRegistry(_ctx.Log),
             containerizedInferenceManager: containerizedInferenceManager);
 
     private AppSettings CreateMatchingSettings() =>
         new()
         {
-            TranscriptionRuntime = _settings.TranscriptionRuntime,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranscriptionCpuComputeType = _settings.TranscriptionCpuComputeType,
-            TranscriptionCpuThreads = _settings.TranscriptionCpuThreads,
-            TranscriptionNumWorkers = _settings.TranscriptionNumWorkers,
-            TranslationRuntime = _settings.TranslationRuntime,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
-            TtsRuntime = _settings.TtsRuntime,
-            TtsProvider = _settings.TtsProvider,
-            TtsVoice = _settings.TtsVoice,
-            TargetLanguage = _settings.TargetLanguage,
-            PiperModelDir = _settings.PiperModelDir,
-            ContainerizedServiceUrl = _settings.ContainerizedServiceUrl,
-            AlwaysRunContainerAtAppStart = _settings.AlwaysRunContainerAtAppStart,
-            VideoHwdec = _settings.VideoHwdec,
-            VideoGpuApi = _settings.VideoGpuApi,
-            VideoUseGpuNext = _settings.VideoUseGpuNext,
-            VideoVsrEnabled = _settings.VideoVsrEnabled,
-            VideoVsrQuality = _settings.VideoVsrQuality,
-            VideoHdrEnabled = _settings.VideoHdrEnabled,
-            VideoToneMapping = _settings.VideoToneMapping,
-            VideoTargetPeak = _settings.VideoTargetPeak,
-            VideoHdrComputePeak = _settings.VideoHdrComputePeak,
-            VideoExportEncoder = _settings.VideoExportEncoder,
-            Theme = _settings.Theme,
-            MaxRecentSessions = _settings.MaxRecentSessions,
-            AutoSaveEnabled = _settings.AutoSaveEnabled,
+            TranscriptionRuntime = _ctx.Settings.TranscriptionRuntime,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranscriptionCpuComputeType = _ctx.Settings.TranscriptionCpuComputeType,
+            TranscriptionCpuThreads = _ctx.Settings.TranscriptionCpuThreads,
+            TranscriptionNumWorkers = _ctx.Settings.TranscriptionNumWorkers,
+            TranslationRuntime = _ctx.Settings.TranslationRuntime,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
+            TtsRuntime = _ctx.Settings.TtsRuntime,
+            TtsProvider = _ctx.Settings.TtsProvider,
+            TtsVoice = _ctx.Settings.TtsVoice,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
+            PiperModelDir = _ctx.Settings.PiperModelDir,
+            ContainerizedServiceUrl = _ctx.Settings.ContainerizedServiceUrl,
+            AlwaysRunContainerAtAppStart = _ctx.Settings.AlwaysRunContainerAtAppStart,
+            VideoHwdec = _ctx.Settings.VideoHwdec,
+            VideoGpuApi = _ctx.Settings.VideoGpuApi,
+            VideoUseGpuNext = _ctx.Settings.VideoUseGpuNext,
+            VideoVsrEnabled = _ctx.Settings.VideoVsrEnabled,
+            VideoVsrQuality = _ctx.Settings.VideoVsrQuality,
+            VideoHdrEnabled = _ctx.Settings.VideoHdrEnabled,
+            VideoToneMapping = _ctx.Settings.VideoToneMapping,
+            VideoTargetPeak = _ctx.Settings.VideoTargetPeak,
+            VideoHdrComputePeak = _ctx.Settings.VideoHdrComputePeak,
+            VideoExportEncoder = _ctx.Settings.VideoExportEncoder,
+            Theme = _ctx.Settings.Theme,
+            MaxRecentSessions = _ctx.Settings.MaxRecentSessions,
+            AutoSaveEnabled = _ctx.Settings.AutoSaveEnabled,
         };
 
     // ── Initialize ─────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     public void Initialize_WithSavedSnapshot_RestoresSession()
     {
         var snapshot = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
-        _store.Save(snapshot);
+        _ctx.Store.Save(snapshot);
 
         var coord = CreateCoordinator();
         coord.Initialize();
@@ -135,7 +135,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             "test.mp4",
             SessionWorkflowStage.MediaLoaded,
             DateTimeOffset.UtcNow);
-        _recentStore.Upsert(entry);
+        _ctx.RecentStore.Upsert(entry);
 
         var coord = CreateCoordinator();
         coord.Initialize();
@@ -164,33 +164,33 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void LoadMedia_ValidFile_AdvancesToMediaLoadedStage()
     {
-        if (!File.Exists(_mediaPath)) return; // skip if media not present
+        if (!File.Exists(_ctx.MediaPath)) return; // skip if media not present
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
         Assert.Equal(SessionWorkflowStage.MediaLoaded, coord.CurrentSession.Stage);
     }
 
     [Fact]
     public void LoadMedia_ValidFile_SetsSourceMediaPath()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
-        Assert.Equal(_mediaPath, coord.CurrentSession.SourceMediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
+        Assert.Equal(_ctx.MediaPath, coord.CurrentSession.SourceMediaPath);
     }
 
     [Fact]
     public void LoadMedia_ValidFile_CopiesIngestedMedia()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         Assert.NotNull(coord.CurrentSession.IngestedMediaPath);
         Assert.True(File.Exists(coord.CurrentSession.IngestedMediaPath));
@@ -199,22 +199,22 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void LoadMedia_ValidFile_StatusMessageIndicatesReady()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
         Assert.Contains("transcription", coord.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void LoadMedia_ValidFile_QueuesNonAutoPlayMediaReloadRequest()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         var request = coord.ConsumePendingMediaReloadRequest();
         Assert.NotNull(request);
@@ -237,11 +237,11 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void ResetPipelineToMediaLoaded_WhenAtMediaLoaded_ClearsDownstreamFields()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         // Manually inject some downstream fields to verify they get cleared
         coord.InjectTestTranscript(
@@ -261,33 +261,33 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void ResetPipelineToMediaLoaded_ClearsAllArtifactProvenance()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[]}");
         var ttsPath = CreateTempFile("fake audio");
 
-        _store.Save(coord.CurrentSession with
+        _ctx.Store.Save(coord.CurrentSession with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
             TranscriptPath = transcriptPath,
             SourceLanguage = "es",
             TranscribedAtUtc = DateTimeOffset.UtcNow,
             TranslationPath = translationPath,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
-            TargetLanguage = _settings.TargetLanguage,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
             TranslatedAtUtc = DateTimeOffset.UtcNow,
             TtsPath = ttsPath,
-            TtsProvider = _settings.TtsProvider,
-            TtsVoice = _settings.TtsVoice,
+            TtsProvider = _ctx.Settings.TtsProvider,
+            TtsVoice = _ctx.Settings.TtsVoice,
             TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
         });
 
         coord = CreateCoordinator();
@@ -308,28 +308,28 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void ResetPipelineToTranscribed_PreservesTranscriptionProvenanceAndClearsDownstream()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[]}");
 
-        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        _ctx.Store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Translated,
-            SourceMediaPath = _mediaPath,
-            IngestedMediaPath = _mediaPath,
+            SourceMediaPath = _ctx.MediaPath,
+            IngestedMediaPath = _ctx.MediaPath,
             TranscriptPath = transcriptPath,
             SourceLanguage = "es",
             TranscribedAtUtc = DateTimeOffset.UtcNow,
             TranslationPath = translationPath,
-            TargetLanguage = _settings.TargetLanguage,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
             TranslatedAtUtc = DateTimeOffset.UtcNow,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
-            TtsProvider = _settings.TtsProvider,
-            TtsVoice = _settings.TtsVoice,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
+            TtsProvider = _ctx.Settings.TtsProvider,
+            TtsVoice = _ctx.Settings.TtsVoice,
         });
 
         var coord = CreateCoordinator();
@@ -337,8 +337,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         coord.ResetPipelineToTranscribed();
 
         Assert.Equal(SessionWorkflowStage.Transcribed, coord.CurrentSession.Stage);
-        Assert.Equal(_settings.TranscriptionProvider, coord.CurrentSession.TranscriptionProvider);
-        Assert.Equal(_settings.TranscriptionModel, coord.CurrentSession.TranscriptionModel);
+        Assert.Equal(_ctx.Settings.TranscriptionProvider, coord.CurrentSession.TranscriptionProvider);
+        Assert.Equal(_ctx.Settings.TranscriptionModel, coord.CurrentSession.TranscriptionModel);
         Assert.Null(coord.CurrentSession.TranslationProvider);
         Assert.Null(coord.CurrentSession.TranslationModel);
         Assert.Null(coord.CurrentSession.TtsProvider);
@@ -358,11 +358,11 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void ResetPipelineToTranscribed_WhenAtTranslated_ClearsTranslationAndTts()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         var translationPath = CreateTempFile("{\"segments\":[]}");
@@ -420,18 +420,18 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void InjectTestTranscript_PersistsSession()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         coord.InjectTestTranscript(transcriptPath);
         coord.FlushPendingSave();
 
         // Verify the snapshot was written to disk with Transcribed stage
-        var loaded = _store.Load().Snapshot;
+        var loaded = _ctx.Store.Load().Snapshot;
         Assert.NotNull(loaded);
         Assert.Equal(SessionWorkflowStage.Transcribed, loaded.Stage);
         Assert.Equal(transcriptPath, loaded.TranscriptPath);
@@ -449,7 +449,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         coord.SettingsModified += () => raised = true;
 
         // UpdateSettings itself does not raise SettingsModified — that's the caller's job
-        coord.UpdateSettings(_settings);
+        coord.UpdateSettings(_ctx.Settings);
         Assert.False(raised);
     }
 
@@ -560,13 +560,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         var fakeTts = new FakeTtsProvider();
         var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
         var coord = new SessionWorkflowCoordinator(
-            _store,
-            _log,
-            _settings,
-            _perSessionStore,
-            _recentStore,
-            new TranscriptionRegistry(_log),
-            new TranslationRegistry(_log),
+            _ctx.Store,
+            _ctx.Log,
+            _ctx.Settings,
+            _ctx.PerSessionStore,
+            _ctx.RecentStore,
+            new TranscriptionRegistry(_ctx.Log),
+            new TranslationRegistry(_ctx.Log),
             fakeTtsRegistry);
         coord.Initialize();
 
@@ -609,13 +609,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         var fakeTts = new FakeTtsProvider();
         var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
         var coord = new SessionWorkflowCoordinator(
-            _store,
-            _log,
-            _settings,
-            _perSessionStore,
-            _recentStore,
-            new TranscriptionRegistry(_log),
-            new TranslationRegistry(_log),
+            _ctx.Store,
+            _ctx.Log,
+            _ctx.Settings,
+            _ctx.PerSessionStore,
+            _ctx.RecentStore,
+            new TranscriptionRegistry(_ctx.Log),
+            new TranslationRegistry(_ctx.Log),
             fakeTtsRegistry);
         coord.Initialize();
 
@@ -661,13 +661,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         settings.TtsProvider = ProviderNames.Qwen;
 
         var coord = new SessionWorkflowCoordinator(
-            _store,
-            _log,
+            _ctx.Store,
+            _ctx.Log,
             settings,
-            _perSessionStore,
-            _recentStore,
-            new TranscriptionRegistry(_log),
-            new TranslationRegistry(_log),
+            _ctx.PerSessionStore,
+            _ctx.RecentStore,
+            new TranscriptionRegistry(_ctx.Log),
+            new TranslationRegistry(_ctx.Log),
             fakeTtsRegistry);
         coord.Initialize();
 
@@ -686,7 +686,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
           ]
         }
         """);
-        var defaultRefPath = Path.Combine(_dir, "qwen-single-ref.wav");
+        var defaultRefPath = Path.Combine(_ctx.Dir, "qwen-single-ref.wav");
         await File.WriteAllBytesAsync(defaultRefPath, [1, 2, 3]);
 
         coord.CurrentSession = coord.CurrentSession with
@@ -712,11 +712,11 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void CheckSettingsInvalidation_NothingChanged_ReturnsNone()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         var translationPath = CreateTempFile("{\"segments\":[]}");
@@ -725,17 +725,17 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         // Stamp the current provider settings into the snapshot
         var session = coord.CurrentSession with
         {
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
-            TtsProvider = _settings.TtsProvider,
-            TtsVoice = _settings.TtsVoice,
-            TargetLanguage = _settings.TargetLanguage,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
+            TtsProvider = _ctx.Settings.TtsProvider,
+            TtsVoice = _ctx.Settings.TtsVoice,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
         };
         // Directly simulate the coordinator state as if the pipeline had run with current settings
         // by updating the store and reinitialising
-        _store.Save(session);
+        _ctx.Store.Save(session);
         var coord2 = CreateCoordinator();
         coord2.Initialize();
 
@@ -746,18 +746,18 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void CheckSettingsInvalidation_MediaLoaded_TranslationModelChange_ReturnsNone()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         var changedSettings = CreateMatchingSettings();
         changedSettings.TranslationModel = "nllb-200-1.3B";
 
         var coord2 = CreateCoordinator(changedSettings);
         coord2.Initialize();
-        coord2.LoadMedia(_mediaPath);
+        coord2.LoadMedia(_ctx.MediaPath);
 
         Assert.Equal(PipelineInvalidation.None, coord2.CheckSettingsInvalidation());
     }
@@ -765,19 +765,19 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void CheckSettingsInvalidation_Transcribed_TranslationModelChange_ReturnsNone()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
-        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        _ctx.Store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Transcribed,
-            SourceMediaPath = _mediaPath,
-            IngestedMediaPath = _mediaPath,
+            SourceMediaPath = _ctx.MediaPath,
+            IngestedMediaPath = _ctx.MediaPath,
             TranscriptPath = transcriptPath,
             SourceLanguage = "es",
             TranscribedAtUtc = DateTimeOffset.UtcNow,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
         });
 
         var changedSettings = CreateMatchingSettings();
@@ -794,25 +794,25 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void CheckSettingsInvalidation_Translated_TranslationModelChange_ReturnsTranslation()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[]}");
-        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        _ctx.Store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Translated,
-            SourceMediaPath = _mediaPath,
-            IngestedMediaPath = _mediaPath,
+            SourceMediaPath = _ctx.MediaPath,
+            IngestedMediaPath = _ctx.MediaPath,
             TranscriptPath = transcriptPath,
             SourceLanguage = "es",
             TranscribedAtUtc = DateTimeOffset.UtcNow,
             TranslationPath = translationPath,
-            TargetLanguage = _settings.TargetLanguage,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
             TranslatedAtUtc = DateTimeOffset.UtcNow,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
         });
 
         var changedSettings = CreateMatchingSettings();
@@ -829,30 +829,30 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void CheckSettingsInvalidation_TtsGenerated_TtsVoiceChange_ReturnsTts()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[]}");
         var ttsPath = CreateTempFile("tts");
-        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        _ctx.Store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
-            SourceMediaPath = _mediaPath,
-            IngestedMediaPath = _mediaPath,
+            SourceMediaPath = _ctx.MediaPath,
+            IngestedMediaPath = _ctx.MediaPath,
             TranscriptPath = transcriptPath,
             SourceLanguage = "es",
             TranscribedAtUtc = DateTimeOffset.UtcNow,
             TranslationPath = translationPath,
-            TargetLanguage = _settings.TargetLanguage,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
             TranslatedAtUtc = DateTimeOffset.UtcNow,
             TtsPath = ttsPath,
-            TtsProvider = _settings.TtsProvider,
-            TtsVoice = _settings.TtsVoice,
+            TtsProvider = _ctx.Settings.TtsProvider,
+            TtsVoice = _ctx.Settings.TtsVoice,
             TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
         });
 
         var changedSettings = CreateMatchingSettings();
@@ -867,26 +867,26 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void CheckSettingsInvalidation_Transcribed_TtsProviderChanged_ReturnsNone()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         var translationPath = CreateTempFile("{\"segments\":[]}");
         coord.InjectTestTranscript(transcriptPath, translationPath);
 
         // Set the session's TTS provider to match current settings
-        _store.Save(coord.CurrentSession with
+        _ctx.Store.Save(coord.CurrentSession with
         {
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
-            TtsProvider = _settings.TtsProvider,
-            TtsVoice = _settings.TtsVoice,
-            TargetLanguage = _settings.TargetLanguage,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
+            TtsProvider = _ctx.Settings.TtsProvider,
+            TtsVoice = _ctx.Settings.TtsVoice,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
         });
 
         // Now change TTS settings
@@ -903,25 +903,25 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void CheckSettingsInvalidation_TranscriptionProviderChanged_ReturnsTranscription()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
         coord.InjectTestTranscript(transcriptPath);
 
         // Stamp matching settings
-        _store.Save(coord.CurrentSession with
+        _ctx.Store.Save(coord.CurrentSession with
         {
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
-            TtsProvider = _settings.TtsProvider,
-            TtsVoice = _settings.TtsVoice,
-            TargetLanguage = _settings.TargetLanguage,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
+            TtsProvider = _ctx.Settings.TtsProvider,
+            TtsVoice = _ctx.Settings.TtsVoice,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
         });
 
         // Change transcription provider
@@ -938,27 +938,27 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void ApplyPipelineSettings_TranscriptionChange_ResetsPipelineAndRaisesSettingsModified()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"language_probability\":1.0,\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"hola\"}]}");
         var translationPath = CreateTempFile("{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
-        _store.Save(coord.CurrentSession with
+        _ctx.Store.Save(coord.CurrentSession with
         {
             Stage = SessionWorkflowStage.Translated,
             TranscriptPath = transcriptPath,
             TranslationPath = translationPath,
             SourceLanguage = "es",
-            TargetLanguage = _settings.TargetLanguage,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
-            TtsProvider = _settings.TtsProvider,
-            TtsVoice = _settings.TtsVoice,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
+            TtsProvider = _ctx.Settings.TtsProvider,
+            TtsVoice = _ctx.Settings.TtsVoice,
         });
 
         var coord2 = CreateCoordinator();
@@ -971,13 +971,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             ComputeProfile.Gpu,
             ProviderNames.FasterWhisper,
             "base",
-            _settings.TranslationProfile,
-            _settings.TranslationProvider,
-            _settings.TranslationModel,
-            _settings.TtsProfile,
-            _settings.TtsProvider,
-            _settings.TtsVoice,
-            _settings.TargetLanguage));
+            _ctx.Settings.TranslationProfile,
+            _ctx.Settings.TranslationProvider,
+            _ctx.Settings.TranslationModel,
+            _ctx.Settings.TtsProfile,
+            _ctx.Settings.TtsProvider,
+            _ctx.Settings.TtsVoice,
+            _ctx.Settings.TargetLanguage));
 
         Assert.True(settingsModified);
         Assert.Equal(PipelineInvalidation.Transcription, result.Invalidation);
@@ -997,13 +997,13 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             ComputeProfile.Gpu,
             ProviderNames.FasterWhisper,
             "base",
-            _settings.TranslationProfile,
-            _settings.TranslationProvider,
-            _settings.TranslationModel,
-            _settings.TtsProfile,
-            _settings.TtsProvider,
-            _settings.TtsVoice,
-            _settings.TargetLanguage));
+            _ctx.Settings.TranslationProfile,
+            _ctx.Settings.TranslationProvider,
+            _ctx.Settings.TranslationModel,
+            _ctx.Settings.TtsProfile,
+            _ctx.Settings.TtsProvider,
+            _ctx.Settings.TtsVoice,
+            _ctx.Settings.TargetLanguage));
 
         Assert.Equal(1, manager.RequestCount);
         Assert.Equal(ContainerizedStartupTrigger.SettingsChanged, manager.LastRequestTrigger);
@@ -1012,16 +1012,16 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void RestoreSession_QueuesPausedMediaReloadRequest()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
         var firstSessionId = coord.CurrentSession.SessionId;
         coord.ConsumePendingMediaReloadRequest();
 
-        var secondMediaPath = Path.Combine(_dir, $"copy-{Guid.NewGuid():N}.mp4");
-        File.Copy(_mediaPath, secondMediaPath);
+        var secondMediaPath = Path.Combine(_ctx.Dir, $"copy-{Guid.NewGuid():N}.mp4");
+        File.Copy(_ctx.MediaPath, secondMediaPath);
         coord.LoadMedia(secondMediaPath);
         coord.ConsumePendingMediaReloadRequest();
 
@@ -1036,14 +1036,14 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void SaveCurrentSession_MirrorsSnapshotToPerSessionStore()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.LoadMedia(_mediaPath);
+        coord.LoadMedia(_ctx.MediaPath);
         coord.SaveCurrentSession();
 
-        var mirrored = _perSessionStore.Load(coord.CurrentSession.SessionId);
+        var mirrored = _ctx.PerSessionStore.Load(coord.CurrentSession.SessionId);
         Assert.NotNull(mirrored);
         Assert.Equal(coord.CurrentSession.SessionId, mirrored!.SessionId);
         Assert.Equal(coord.CurrentSession.Stage, mirrored.Stage);
@@ -1052,30 +1052,30 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void Initialize_WithMissingTranslation_DowngradesAndClearsDownstreamProvenance()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
-        var missingTranslationPath = Path.Combine(_dir, "missing-translation.json");
+        var missingTranslationPath = Path.Combine(_ctx.Dir, "missing-translation.json");
         var existingTtsPath = CreateTempFile("tts");
-        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        _ctx.Store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
-            SourceMediaPath = _mediaPath,
-            IngestedMediaPath = _mediaPath,
+            SourceMediaPath = _ctx.MediaPath,
+            IngestedMediaPath = _ctx.MediaPath,
             TranscriptPath = transcriptPath,
             SourceLanguage = "es",
             TranscribedAtUtc = DateTimeOffset.UtcNow,
             TranslationPath = missingTranslationPath,
-            TargetLanguage = _settings.TargetLanguage,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
             TranslatedAtUtc = DateTimeOffset.UtcNow,
             TtsPath = existingTtsPath,
-            TtsProvider = _settings.TtsProvider,
-            TtsVoice = _settings.TtsVoice,
+            TtsProvider = _ctx.Settings.TtsProvider,
+            TtsVoice = _ctx.Settings.TtsVoice,
             TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
         });
 
         var coord = CreateCoordinator();
@@ -1093,25 +1093,25 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     [Fact]
     public void ApplyPipelineSettings_AfterDowngradedStaleSession_ChangingTranslationModel_DoesNotResetBelowTranscribed()
     {
-        if (!File.Exists(_mediaPath)) return;
+        if (!File.Exists(_ctx.MediaPath)) return;
 
         var transcriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}");
-        var missingTranslationPath = Path.Combine(_dir, "stale-translation.json");
-        _store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var missingTranslationPath = Path.Combine(_ctx.Dir, "stale-translation.json");
+        _ctx.Store.Save(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Translated,
-            SourceMediaPath = _mediaPath,
-            IngestedMediaPath = _mediaPath,
+            SourceMediaPath = _ctx.MediaPath,
+            IngestedMediaPath = _ctx.MediaPath,
             TranscriptPath = transcriptPath,
             SourceLanguage = "es",
             TranscribedAtUtc = DateTimeOffset.UtcNow,
             TranslationPath = missingTranslationPath,
-            TargetLanguage = _settings.TargetLanguage,
+            TargetLanguage = _ctx.Settings.TargetLanguage,
             TranslatedAtUtc = DateTimeOffset.UtcNow,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
+            TranscriptionProvider = _ctx.Settings.TranscriptionProvider,
+            TranscriptionModel = _ctx.Settings.TranscriptionModel,
+            TranslationProvider = _ctx.Settings.TranslationProvider,
+            TranslationModel = _ctx.Settings.TranslationModel,
         });
 
         var changedSettings = CreateMatchingSettings();
@@ -1261,7 +1261,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         // Set TranslationPath to a non-existent file
         coord.CurrentSession = coord.CurrentSession with
         {
-            TranslationPath = Path.Combine(_dir, "missing-translation.json")
+            TranslationPath = Path.Combine(_ctx.Dir, "missing-translation.json")
         };
 
         await Assert.ThrowsAsync<FileNotFoundException>(
@@ -1275,7 +1275,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     {
         var coord = CreateCoordinator();
         coord.Initialize();
-        Assert.Equal(_store.StateFilePath, coord.StateFilePath);
+        Assert.Equal(_ctx.Store.StateFilePath, coord.StateFilePath);
     }
 
     [Fact]
@@ -1283,14 +1283,14 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     {
         var coord = CreateCoordinator();
         coord.Initialize();
-        Assert.Equal(_log.LogFilePath, coord.LogFilePath);
+        Assert.Equal(_ctx.Log.LogFilePath, coord.LogFilePath);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private string CreateTempFile(string content)
     {
-        var path = Path.Combine(_dir, $"temp-{Guid.NewGuid():N}.json");
+        var path = Path.Combine(_ctx.Dir, $"temp-{Guid.NewGuid():N}.json");
         File.WriteAllText(path, content);
         return path;
     }

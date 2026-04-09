@@ -14,29 +14,33 @@ using Babel.Player.Services.Settings;
 
 namespace BabelPlayer.Tests;
 
-public sealed class ContainerizedProvidersTests : IDisposable
+public sealed class ContainerizedProvidersTests() : IDisposable
 {
-    private readonly string _dir;
-    private readonly AppLog _log;
+    private readonly TestContext _ctx = new();
 
-    public ContainerizedProvidersTests()
+    private sealed class TestContext
     {
-        _dir = Path.Combine(Path.GetTempPath(), $"babel-containerized-tests-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
-        _log = new AppLog(Path.Combine(_dir, "containerized.log"));
+        public string Dir { get; } = Path.Combine(Path.GetTempPath(), $"babel-containerized-tests-{Guid.NewGuid():N}");
+        public AppLog Log { get; }
+
+        public TestContext()
+        {
+            Directory.CreateDirectory(Dir);
+            Log = new AppLog(Path.Combine(Dir, "containerized.log"));
+        }
     }
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); }
+        try { Directory.Delete(_ctx.Dir, recursive: true); }
         catch { }
     }
 
     [Fact]
     public async Task ContainerizedTranslationProvider_TranslateAsync_WritesTranslationArtifact()
     {
-        var transcriptPath = Path.Combine(_dir, "transcript.json");
-        var outputPath = Path.Combine(_dir, "translation.json");
+        var transcriptPath = Path.Combine(_ctx.Dir, "transcript.json");
+        var outputPath = Path.Combine(_ctx.Dir, "translation.json");
 
         await File.WriteAllTextAsync(transcriptPath,
             "{\"language\":\"es\",\"language_probability\":1.0,\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"hola\"}]}");
@@ -52,7 +56,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new ContainerizedTranslationProvider(client, _log, "nllb-200-distilled-1.3B");
+        var provider = new ContainerizedTranslationProvider(client, _ctx.Log, "nllb-200-distilled-1.3B");
 
         var result = await provider.TranslateAsync(new TranslationRequest(
             transcriptPath,
@@ -73,8 +77,8 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task ContainerizedTranslationProvider_TranslateSingleSegmentAsync_UpdatesTargetSegment()
     {
-        var translationPath = Path.Combine(_dir, "translation.json");
-        var outputPath = Path.Combine(_dir, "translation-updated.json");
+        var translationPath = Path.Combine(_ctx.Dir, "translation.json");
+        var outputPath = Path.Combine(_ctx.Dir, "translation-updated.json");
 
         await File.WriteAllTextAsync(translationPath,
             "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"},{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"adios\",\"translatedText\":\"bye\"}]}");
@@ -90,7 +94,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new ContainerizedTranslationProvider(client, _log, "nllb-200-distilled-1.3B");
+        var provider = new ContainerizedTranslationProvider(client, _ctx.Log, "nllb-200-distilled-1.3B");
 
         var result = await provider.TranslateSingleSegmentAsync(new SingleSegmentTranslationRequest(
             "hola",
@@ -114,8 +118,8 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task ContainerizedTranslationProvider_TranslateAsync_ThrowsOnSegmentCountMismatch()
     {
-        var transcriptPath = Path.Combine(_dir, "transcript.json");
-        var outputPath = Path.Combine(_dir, "translation.json");
+        var transcriptPath = Path.Combine(_ctx.Dir, "transcript.json");
+        var outputPath = Path.Combine(_ctx.Dir, "translation.json");
 
         await File.WriteAllTextAsync(transcriptPath,
             "{\"language\":\"es\",\"language_probability\":1.0,\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"hola\"}]}");
@@ -131,7 +135,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new ContainerizedTranslationProvider(client, _log, "nllb-200-distilled-1.3B");
+        var provider = new ContainerizedTranslationProvider(client, _ctx.Log, "nllb-200-distilled-1.3B");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => provider.TranslateAsync(new TranslationRequest(
             transcriptPath,
@@ -144,7 +148,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task ContainerizedTtsProvider_GenerateSegmentTtsAsync_DownloadsAudioToRequestedPath()
     {
-        var outputPath = Path.Combine(_dir, "segment.mp3");
+        var outputPath = Path.Combine(_ctx.Dir, "segment.mp3");
         var audioBytes = Encoding.UTF8.GetBytes("fake-mp3-bytes");
 
         var client = CreateClient((request, _) =>
@@ -167,7 +171,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new ContainerizedTtsProvider(client, _log);
+        var provider = new ContainerizedTtsProvider(client, _ctx.Log);
 
         var result = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
             "hello",
@@ -187,19 +191,19 @@ public sealed class ContainerizedProvidersTests : IDisposable
         var client = CreateClient((_, _) =>
             Json(HttpStatusCode.OK, "{\"success\":true,\"language\":\"es\",\"language_probability\":1.0,\"segments\":[]}"));
 
-        var provider = new ContainerizedTranscriptionProvider(client, _log);
+        var provider = new ContainerizedTranscriptionProvider(client, _ctx.Log);
 
         await Assert.ThrowsAsync<FileNotFoundException>(() => provider.TranscribeAsync(new TranscriptionRequest(
-            Path.Combine(_dir, "missing.wav"),
-            Path.Combine(_dir, "transcript.json"),
+            Path.Combine(_ctx.Dir, "missing.wav"),
+            Path.Combine(_ctx.Dir, "transcript.json"),
             "base")));
     }
 
     [Fact]
     public async Task ContainerizedTranscriptionProvider_TranscribeAsync_WritesTranscriptArtifact()
     {
-        var inputPath = Path.Combine(_dir, "sample.wav");
-        var outputPath = Path.Combine(_dir, "transcript.json");
+        var inputPath = Path.Combine(_ctx.Dir, "sample.wav");
+        var outputPath = Path.Combine(_ctx.Dir, "transcript.json");
         await File.WriteAllBytesAsync(inputPath, [1, 2, 3, 4]);
 
         var client = CreateClient((request, _) =>
@@ -213,7 +217,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new ContainerizedTranscriptionProvider(client, _log);
+        var provider = new ContainerizedTranscriptionProvider(client, _ctx.Log);
 
         var result = await provider.TranscribeAsync(new TranscriptionRequest(
             inputPath,
@@ -239,8 +243,8 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task QwenContainerTtsProvider_GenerateSegmentTtsAsync_PostsToQwenEndpointWithReferenceAudio()
     {
-        var outputPath = Path.Combine(_dir, "qwen-segment.mp3");
-        var referenceAudioPath = Path.Combine(_dir, "speaker-a.wav");
+        var outputPath = Path.Combine(_ctx.Dir, "qwen-segment.mp3");
+        var referenceAudioPath = Path.Combine(_ctx.Dir, "speaker-a.wav");
         await File.WriteAllBytesAsync(referenceAudioPath, Encoding.UTF8.GetBytes("ref-audio"));
         var audioBytes = Encoding.UTF8.GetBytes("qwen-segment-bytes");
         string? postedModel = null;
@@ -272,7 +276,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log));
+        var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
 
         var result = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
             "hello there",
@@ -292,9 +296,9 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task QwenContainerTtsProvider_GenerateSegmentTtsAsync_ThrowsWhenNoReferenceAudio()
     {
-        var outputPath = Path.Combine(_dir, "qwen-missing-ref.mp3");
+        var outputPath = Path.Combine(_ctx.Dir, "qwen-missing-ref.mp3");
         var client = CreateClient((_, _) => Json(HttpStatusCode.OK, "{}"));
-        var provider = new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log));
+        var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
@@ -310,8 +314,8 @@ public sealed class ContainerizedProvidersTests : IDisposable
     public async Task QwenContainerTtsProvider_GenerateSegmentTtsAsync_DeduplicatesReferenceRegistrationPerSpeaker()
     {
         // Three calls — two for spk_00, one for spk_01 — only 2 registrations should occur.
-        var spk00Ref = Path.Combine(_dir, "spk00.wav");
-        var spk01Ref = Path.Combine(_dir, "spk01.wav");
+        var spk00Ref = Path.Combine(_ctx.Dir, "spk00.wav");
+        var spk01Ref = Path.Combine(_ctx.Dir, "spk01.wav");
 
         await File.WriteAllBytesAsync(spk00Ref, Encoding.UTF8.GetBytes("ref-spk00"));
         await File.WriteAllBytesAsync(spk01Ref, Encoding.UTF8.GetBytes("ref-spk01"));
@@ -345,23 +349,23 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log));
+        var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
 
         // spk_00 first call
         var r1 = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
-            "hello", Path.Combine(_dir, "seg1.mp3"), "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            "hello", Path.Combine(_ctx.Dir, "seg1.mp3"), "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
             SpeakerId: "spk_00", ReferenceAudioPath: spk00Ref, Language: "en"));
         Assert.True(r1.Success);
 
         // spk_01 call
         var r2 = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
-            "world", Path.Combine(_dir, "seg2.mp3"), "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            "world", Path.Combine(_ctx.Dir, "seg2.mp3"), "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
             SpeakerId: "spk_01", ReferenceAudioPath: spk01Ref, Language: "en"));
         Assert.True(r2.Success);
 
         // spk_00 second call — should reuse cached reference
         var r3 = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
-            "again", Path.Combine(_dir, "seg3.mp3"), "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            "again", Path.Combine(_ctx.Dir, "seg3.mp3"), "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
             SpeakerId: "spk_00", ReferenceAudioPath: spk00Ref, Language: "en"));
         Assert.True(r3.Success);
 
@@ -375,10 +379,10 @@ public sealed class ContainerizedProvidersTests : IDisposable
         // Combined generation is now delegated to the coordinator; provider must throw.
         var client = CreateClient((_, _) =>
             Json(HttpStatusCode.OK, "{\"success\":true}"));
-        var provider = new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log));
+        var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
         var request = new TtsRequest(
-            Path.Combine(_dir, "dummy.json"),
-            Path.Combine(_dir, "out.mp3"),
+            Path.Combine(_ctx.Dir, "dummy.json"),
+            Path.Combine(_ctx.Dir, "out.mp3"),
             "Qwen/Qwen3-TTS-12Hz-1.7B-Base");
 
         var ex = await Assert.ThrowsAsync<NotImplementedException>(
@@ -395,7 +399,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             Json(HttpStatusCode.OK, "{\"success\":true}"));
 
         var ex = Record.Exception(
-            () => new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log)));
+            () => new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log)));
 
         Assert.Null(ex);
     }
@@ -403,8 +407,8 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task ContainerizedTtsProvider_GenerateTtsAsync_CombinesSegmentsAndWritesOutput()
     {
-        var translationPath = Path.Combine(_dir, "combined-translation.json");
-        var outputPath = Path.Combine(_dir, "combined-output.mp3");
+        var translationPath = Path.Combine(_ctx.Dir, "combined-translation.json");
+        var outputPath = Path.Combine(_ctx.Dir, "combined-output.mp3");
         var audioBytes = Encoding.UTF8.GetBytes("combined-audio");
 
         await File.WriteAllTextAsync(translationPath,
@@ -432,7 +436,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new ContainerizedTtsProvider(client, _log);
+        var provider = new ContainerizedTtsProvider(client, _ctx.Log);
 
         var result = await provider.GenerateTtsAsync(new TtsRequest(
             translationPath,
@@ -449,7 +453,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task ContainerizedProviderReadiness_CheckTranslationForExecutionAsync_ReturnsReadyWhenCapabilityPresent()
     {
-        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
             true,
             false,
             null,
@@ -478,7 +482,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task ContainerizedProviderReadiness_CheckTtsForExecutionAsync_ReturnsNotReadyWhenCapabilityMissing()
     {
-        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
             true,
             true,
             "12.6",
@@ -508,7 +512,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task ContainerizedProviderReadiness_CheckTranslation_ReturnsCheckingThenUnavailable()
     {
-        var probe = new ContainerizedServiceProbe(_log, async (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(_ctx.Log, async (url, _, _) =>
         {
             await Task.Delay(25);
             return ContainerHealthStatus.Unavailable(url, "connection refused");
@@ -541,7 +545,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public void ContainerizedProviderReadiness_CheckTranslation_ReturnsNotReadyWhenCapabilityMissing()
     {
-        var probe = new ContainerizedServiceProbe(_log, (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (url, _, _) =>
             Task.FromResult(new ContainerHealthStatus(
                 IsAvailable: true,
                 CudaAvailable: false,
@@ -580,7 +584,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public void ContainerizedProviderReadiness_CheckTts_ReturnsReadyWhenCapabilityPresent()
     {
-        var probe = new ContainerizedServiceProbe(_log, (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (url, _, _) =>
             Task.FromResult(new ContainerHealthStatus(
                 IsAvailable: true,
                 CudaAvailable: true,
@@ -706,7 +710,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
     public async Task ContainerizedProviderReadiness_CheckTranslationForExecutionAsync_ReturnsLiveButWarmingMessage()
     {
         var warmingDetail = "Capabilities probe is still warming or failed: timeout";
-        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
             true,
             true,
             "12.8",
@@ -736,7 +740,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
     [Fact]
     public async Task ContainerizedProviderReadiness_CheckTtsForExecutionAsync_ReturnsNotReadyWhenSelectedQwenProviderFailedWarmup()
     {
-        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
             true,
             true,
             "12.8",
@@ -777,7 +781,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
         // Simulates Qwen3-TTS loading: first probe returns "warming up" (active warmup),
         // second probe returns ready. Expects the method to retry and ultimately return ready.
         var callCount = 0;
-        var probe = new ContainerizedServiceProbe(_log, (_, _, _) =>
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) =>
         {
             callCount++;
             var ready = callCount >= 2;
@@ -819,7 +823,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
     {
         // Simulates a terminal failure (paging file OOM). Should not retry — returns not-ready immediately.
         var callCount = 0;
-        var probe = new ContainerizedServiceProbe(_log, (_, _, _) =>
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) =>
         {
             callCount++;
             return Task.FromResult(new ContainerHealthStatus(
@@ -864,7 +868,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
             Timeout = TimeSpan.FromSeconds(5)
         };
 
-        return new ContainerizedInferenceClient("http://localhost:8000", _log, httpClient);
+        return new ContainerizedInferenceClient("http://localhost:8000", _ctx.Log, httpClient);
     }
 
     private static Task<HttpResponseMessage> Json(HttpStatusCode statusCode, string json)

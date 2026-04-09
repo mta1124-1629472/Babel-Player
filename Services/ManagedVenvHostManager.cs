@@ -48,7 +48,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private readonly Func<string, string, string, string, string, CancellationToken, Task> _bootstrapRunner;
     private readonly Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>> _runtimeValidator;
     private readonly Func<string, string, string, string, CancellationToken, Task> _hostProcessStarter;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private Task<ContainerizedStartResult>? _inFlightStartTask;
     private Process? _hostProcess;
 
@@ -474,8 +474,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         await RunProcessAsync(
             uvPath,
             Path.GetDirectoryName(venvDir) ?? AppContext.BaseDirectory,
-            cancellationToken,
             null,
+            cancellationToken,
             "venv",
             "--clear",
             "--python",
@@ -485,12 +485,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         await RunProcessAsync(
             uvPath,
             AppContext.BaseDirectory,
-            cancellationToken,
             line =>
             {
                 BootstrapStatusLine = line;
                 BootstrapProgressCallback?.Invoke(line);
             },
+            cancellationToken,
             "pip",
             "install",
             "--index-strategy",
@@ -729,7 +729,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
-    private async Task WaitForVenvUnlockAsync(string pythonPath, CancellationToken cancellationToken)
+    private static async Task WaitForVenvUnlockAsync(string pythonPath, CancellationToken cancellationToken)
     {
         if (!File.Exists(pythonPath))
             return;
@@ -908,8 +908,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private async Task RunProcessAsync(
         string fileName,
         string workingDirectory,
-        CancellationToken cancellationToken,
         Action<string>? onStatusLine,
+        CancellationToken cancellationToken,
         params string[] arguments)
     {
         var psi = new ProcessStartInfo
@@ -1017,7 +1017,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         return new ContainerizedStartResult(true, false, message);
     }
 
-    private string DescribeBootstrapFailure(Exception ex, string venvDir)
+    private static string DescribeBootstrapFailure(Exception ex, string venvDir)
     {
         var detail = ex.Message.Trim();
         if (!IsLockedRuntimeFailure(detail))

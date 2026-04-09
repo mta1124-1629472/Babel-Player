@@ -185,9 +185,18 @@ public sealed class ContainerizedInferenceManagerTests : IDisposable
             cts.Token.ThrowIfCancellationRequested();
             if (File.Exists(_log.LogFilePath))
             {
-                var contents = await File.ReadAllTextAsync(_log.LogFilePath, cts.Token);
-                if (contents.Contains(expectedText, StringComparison.OrdinalIgnoreCase))
-                    return contents;
+                try
+                {
+                    using var stream = new FileStream(_log.LogFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new StreamReader(stream);
+                    var contents = await reader.ReadToEndAsync(cts.Token);
+                    if (contents.Contains(expectedText, StringComparison.OrdinalIgnoreCase))
+                        return contents;
+                }
+                catch (IOException)
+                {
+                    // Fall back to polling if we still hit a lock
+                }
             }
 
             await Task.Delay(25, cts.Token);

@@ -119,10 +119,10 @@ public sealed class TtsReferenceExtractor : IAsyncDisposable
         _disposed = true;
     }
 
-    private async Task CleanupAsync()
+    private Task CleanupAsync()
     {
         if (string.IsNullOrWhiteSpace(_tempWavPath))
-            return;
+            return Task.CompletedTask;
 
         try
         {
@@ -140,6 +140,8 @@ public sealed class TtsReferenceExtractor : IAsyncDisposable
         {
             _tempWavPath = null;
         }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>

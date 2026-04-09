@@ -15,12 +15,12 @@ public sealed partial class SessionWorkflowCoordinator
     public Task TranscribeMediaAsync(
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default) =>
-        TranscribeMediaAsync(progress, cancellationToken, stageContext: null);
+        TranscribeMediaAsync(progress, stageContext: null, cancellationToken);
 
     internal async Task TranscribeMediaAsync(
         IProgress<double>? progress,
-        CancellationToken cancellationToken,
-        PipelineStageContext? stageContext)
+        PipelineStageContext? stageContext,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(CurrentSession.IngestedMediaPath))
             throw new InvalidOperationException("No media loaded. Please load media first.");
@@ -156,14 +156,14 @@ public sealed partial class SessionWorkflowCoordinator
         string? targetLanguage = null,
         string? sourceLanguage = null,
         CancellationToken cancellationToken = default) =>
-        TranslateTranscriptAsync(progress, targetLanguage, sourceLanguage, cancellationToken, stageContext: null);
+        TranslateTranscriptAsync(progress, targetLanguage, sourceLanguage, stageContext: null, cancellationToken);
 
     internal async Task TranslateTranscriptAsync(
         IProgress<double>? progress,
         string? targetLanguage,
         string? sourceLanguage,
-        CancellationToken cancellationToken,
-        PipelineStageContext? stageContext)
+        PipelineStageContext? stageContext,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranscriptPath))
             throw new InvalidOperationException("No transcript available. Please transcribe media first.");
@@ -247,7 +247,7 @@ public sealed partial class SessionWorkflowCoordinator
         IProgress<double>? progress = null,
         string? voice = null,
         CancellationToken cancellationToken = default) =>
-        GenerateTtsAsync(progress, voice, cancellationToken, stageContext: null);
+        GenerateTtsAsync(progress, voice, stageContext: null, cancellationToken);
 
     /// <summary>
     /// Generate per-segment TTS clips for the current translation, stitch them into a combined dub audio file, and update the session state.
@@ -264,8 +264,8 @@ public sealed partial class SessionWorkflowCoordinator
     internal async Task GenerateTtsAsync(
         IProgress<double>? progress,
         string? voice,
-        CancellationToken cancellationToken,
-        PipelineStageContext? stageContext)
+        PipelineStageContext? stageContext,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
             throw new InvalidOperationException("No translation available. Please translate first.");
@@ -521,8 +521,8 @@ public sealed partial class SessionWorkflowCoordinator
         {
             await TranscribeMediaAsync(
                 progress,
-                cancellationToken,
-                GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress));
+                GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress),
+                cancellationToken);
         }
 
         stage = CurrentSession.Stage;
@@ -532,8 +532,8 @@ public sealed partial class SessionWorkflowCoordinator
                 progress,
                 null,
                 null,
-                cancellationToken,
-                GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress));
+                GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                cancellationToken);
         }
 
         stage = CurrentSession.Stage;
@@ -542,8 +542,8 @@ public sealed partial class SessionWorkflowCoordinator
             await GenerateTtsAsync(
                 progress,
                 null,
-                cancellationToken,
-                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress));
+                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+                cancellationToken);
         }
     }
 }

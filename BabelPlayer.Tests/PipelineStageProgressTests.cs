@@ -14,30 +14,34 @@ using Xunit;
 
 namespace BabelPlayer.Tests;
 
-public sealed class PipelineStageProgressTests : IDisposable
+public sealed class PipelineStageProgressTests() : IDisposable
 {
-    private readonly string _dir;
-    private readonly string _storePath;
-    private readonly string _perSessionDir;
-    private readonly string _recentPath;
-    private readonly string _mediaPath;
+    private readonly TestContext _ctx = new();
 
-    public PipelineStageProgressTests()
+    private sealed class TestContext
     {
-        _dir = Path.Combine(Path.GetTempPath(), $"babel-pipeline-progress-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
-        _storePath = Path.Combine(_dir, "session.json");
-        _perSessionDir = Path.Combine(_dir, "sessions");
-        _recentPath = Path.Combine(_dir, "recent-sessions.json");
-        Directory.CreateDirectory(_perSessionDir);
+        public string Dir { get; } = Path.Combine(Path.GetTempPath(), $"babel-pipeline-progress-{Guid.NewGuid():N}");
+        public string StorePath { get; }
+        public string PerSessionDir { get; }
+        public string RecentPath { get; }
+        public string MediaPath { get; }
 
-        _mediaPath = Path.Combine(_dir, "sample.mp4");
-        File.WriteAllText(_mediaPath, "fake media");
+        public TestContext()
+        {
+            Directory.CreateDirectory(Dir);
+            StorePath = Path.Combine(Dir, "session.json");
+            PerSessionDir = Path.Combine(Dir, "sessions");
+            RecentPath = Path.Combine(Dir, "recent-sessions.json");
+            Directory.CreateDirectory(PerSessionDir);
+
+            MediaPath = Path.Combine(Dir, "sample.mp4");
+            File.WriteAllText(MediaPath, "fake media");
+        }
     }
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); }
+        try { Directory.Delete(_ctx.Dir, recursive: true); }
         catch { /* best effort cleanup */ }
     }
 
@@ -51,9 +55,9 @@ public sealed class PipelineStageProgressTests : IDisposable
             new FakeTranslationRegistry(new FakeTranslationProvider()),
             new FakeTtsRegistry(new FakeTtsProvider()));
         coordinator.Initialize();
-        coordinator.LoadMedia(_mediaPath);
+        coordinator.LoadMedia(_ctx.MediaPath);
 
-        var updates = new List<SessionWorkflowCoordinator.PipelineStageUpdate>();
+        List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
         await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
 
         Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
@@ -79,14 +83,14 @@ public sealed class PipelineStageProgressTests : IDisposable
 
         var coordinator = CreateCoordinator(settings, transcriptionRegistry, translationRegistry, ttsRegistry);
         coordinator.Initialize();
-        coordinator.LoadMedia(_mediaPath);
+        coordinator.LoadMedia(_ctx.MediaPath);
         await coordinator.TranscribeMediaAsync();
         await coordinator.TranslateTranscriptAsync();
 
         coordinator = CreateCoordinator(settings, transcriptionRegistry, translationRegistry, ttsRegistry);
         coordinator.Initialize();
 
-        var updates = new List<SessionWorkflowCoordinator.PipelineStageUpdate>();
+        List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
         await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
 
         Assert.NotEmpty(updates);
@@ -112,9 +116,9 @@ public sealed class PipelineStageProgressTests : IDisposable
             new FakeTranslationRegistry(downloadProvider),
             new FakeTtsRegistry(new FakeTtsProvider()));
         coordinator.Initialize();
-        coordinator.LoadMedia(_mediaPath);
+        coordinator.LoadMedia(_ctx.MediaPath);
 
-        var updates = new List<SessionWorkflowCoordinator.PipelineStageUpdate>();
+        List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
         await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
 
         var translationUpdates = updates
@@ -182,10 +186,10 @@ public sealed class PipelineStageProgressTests : IDisposable
         ITranslationRegistry translationRegistry,
         ITtsRegistry ttsRegistry)
     {
-        var log = new AppLog(Path.Combine(_dir, $"test-{Guid.NewGuid():N}.log"));
-        var store = new SessionSnapshotStore(_storePath, log);
-        var perSessionStore = new PerSessionSnapshotStore(_perSessionDir, log);
-        var recentStore = new RecentSessionsStore(_recentPath, log);
+        var log = new AppLog(Path.Combine(_ctx.Dir, $"test-{Guid.NewGuid():N}.log"));
+        var store = new SessionSnapshotStore(_ctx.StorePath, log);
+        var perSessionStore = new PerSessionSnapshotStore(_ctx.PerSessionDir, log);
+        var recentStore = new RecentSessionsStore(_ctx.RecentPath, log);
         return new SessionWorkflowCoordinator(
             store,
             log,

@@ -16,16 +16,16 @@ namespace BabelPlayer.Tests;
 /// Covers the Lazy&lt;T&gt; client initialization, IDisposable semantics, CheckReadiness,
 /// and validation of TTS requests — all without making real network calls.
 /// </summary>
-public sealed class ElevenLabsTtsProviderTests : IDisposable
+public sealed class ElevenLabsTtsProviderTests() : IDisposable
 {
-    private readonly string _testDir;
-    private readonly AppLog _log;
+    private static readonly string _testDir = InitializeTestDir();
+    private readonly AppLog _log = new(Path.Combine(_testDir, "test.log"));
 
-    public ElevenLabsTtsProviderTests()
+    private static string InitializeTestDir()
     {
-        _testDir = Path.Combine(Path.GetTempPath(), $"babel-elevenlabs-tests-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_testDir);
-        _log = new AppLog(Path.Combine(_testDir, "test.log"));
+        var path = Path.Combine(Path.GetTempPath(), $"babel-elevenlabs-tests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(path);
+        return path;
     }
 
     public void Dispose()
@@ -363,7 +363,7 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
                 Directory.CreateDirectory(outputDir);
             
             // Write dummy audio data (3 bytes) to simulate concatenated audio
-            File.WriteAllBytes(outputAudioPath, new byte[] { 0x01, 0x02, 0x03 });
+            File.WriteAllBytes(outputAudioPath, [0x01, 0x02, 0x03]);
             
             return Task.CompletedTask;
         }
@@ -381,7 +381,7 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
                 Directory.CreateDirectory(outputDir);
             
             // Write dummy audio data
-            File.WriteAllBytes(outputPath, new byte[] { 0x01, 0x02, 0x03 });
+            File.WriteAllBytes(outputPath, [0x01, 0x02, 0x03]);
             
             return Task.CompletedTask;
         }
