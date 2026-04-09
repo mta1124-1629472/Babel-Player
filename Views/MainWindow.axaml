@@ -741,8 +741,26 @@
                                 Value="{Binding Playback.SourceVolume, Mode=TwoWay}"
                                 IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                 VerticalAlignment="Center"
-                                Margin="2,0,8,0"
+                                Margin="2,0,4,0"
                                 ToolTip.Tip="Volume" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,8,0">
+                            <TextBlock Text="Duck" FontSize="10" Foreground="#8A88A8" VerticalAlignment="Center" />
+                            <Slider x:Name="DuckingSlider"
+                                    Width="60"
+                                    Orientation="Horizontal"
+                                    Minimum="-30"
+                                    Maximum="0"
+                                    Value="{Binding Playback.AudioDuckingDb, Mode=TwoWay}"
+                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                    VerticalAlignment="Center"
+                                    ToolTip.Tip="Audio Ducking (dB)" />
+                            <TextBlock Text="{Binding Playback.AudioDuckingLabel}" 
+                                       FontSize="10" 
+                                       Foreground="#8A88A8" 
+                                       VerticalAlignment="Center" 
+                                       Width="30" />
+                        </StackPanel>
 
                         <Button Classes="control-pill" Content="&#x25EB;&#xFE0E;"
                                 Command="{Binding Playback.ToggleSegmentPaneCommand}"

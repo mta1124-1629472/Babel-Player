@@ -1460,7 +1460,11 @@ partial void OnSourcePositionMsChanged(double value)
         _coordinator.SourceMediaPlayer?.Volume = sourceGain;
 
         // TTS audio: always at master level (no ducking applied to TTS)
-        _coordinator.SegmentPlayer?.Volume = masterGain;
+        var segmentPlayer = _coordinator.SegmentPlayer;
+        if (segmentPlayer != null)
+        {
+            segmentPlayer.Volume = masterGain;
+        }
     }
 
     private void ApplyDucking()

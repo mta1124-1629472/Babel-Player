@@ -204,8 +204,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         private set => SetProperty(ref _videoEnhancementDiagnostics, value);
     }
 
-    public ManagedCpuRuntimeManager CpuRuntimeManager => _cpuRuntimeManager;
-
     /// <summary>
     /// Loads persisted coordinator state (if any), initializes the current session and bootstrap diagnostics, and prepares any required media reload and persistence state.
     /// </summary>
