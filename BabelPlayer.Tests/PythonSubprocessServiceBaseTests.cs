@@ -138,7 +138,7 @@ time.sleep(2)
 
             if (createdTempFile is null)
             {
-                await Task.Delay(25);
+                await Task.Delay(25, cts.Token);
             }
         }
 

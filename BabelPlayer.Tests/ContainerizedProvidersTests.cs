@@ -512,9 +512,9 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     [Fact]
     public async Task ContainerizedProviderReadiness_CheckTranslation_ReturnsCheckingThenUnavailable()
     {
-        var probe = new ContainerizedServiceProbe(_ctx.Log, async (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(_ctx.Log, async (url, _, ct) =>
         {
-            await Task.Delay(25);
+            await Task.Delay(25, ct);
             return ContainerHealthStatus.Unavailable(url, "connection refused");
         });
 

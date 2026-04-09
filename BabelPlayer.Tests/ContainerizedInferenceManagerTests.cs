@@ -118,10 +118,10 @@ public sealed class ContainerizedInferenceManagerTests : IDisposable
                 healthy
                     ? new ContainerHealthStatus(true, false, null, "http://localhost:8000", null)
                     : ContainerHealthStatus.Unavailable("http://localhost:8000", "down")),
-            startComposeFunc: async (_, _) =>
+            startComposeFunc: async (_, ct) =>
             {
                 startCalls++;
-                await Task.Delay(100);
+                await Task.Delay(100, ct);
                 healthy = true;
                 return new ContainerComposeStartResult(true, "started", string.Empty);
             });

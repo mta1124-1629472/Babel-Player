@@ -246,7 +246,7 @@ public sealed class ModelTests
     {
         var ex = new PipelineProviderException("test message");
         Assert.IsType<PipelineProviderException>(ex);
-        Assert.IsAssignableFrom<InvalidOperationException>(ex);
+        Assert.IsType<InvalidOperationException>(ex, exactMatch: false);
     }
 
     [Fact]

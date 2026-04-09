@@ -15,10 +15,10 @@ public sealed class ContainerizedServiceProbeTests
         var callCount = 0;
         using var log = new AppLog(Path.GetTempFileName());
 
-        var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(log, async (url, _, ct) =>
         {
             Interlocked.Increment(ref callCount);
-            await Task.Delay(25);
+            await Task.Delay(25, ct);
             return new ContainerHealthStatus(
                 IsAvailable: true,
                 CudaAvailable: false,
@@ -52,9 +52,9 @@ public sealed class ContainerizedServiceProbeTests
         using var log = new AppLog(Path.GetTempFileName());
         var exceptionThrown = false;
 
-        var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(log, async (url, _, ct) =>
         {
-            await Task.Delay(10);
+            await Task.Delay(10, ct);
             exceptionThrown = true;
             throw new InvalidOperationException("Simulated probe failure");
         });
@@ -77,9 +77,9 @@ public sealed class ContainerizedServiceProbeTests
     {
         using var log = new AppLog(Path.GetTempFileName());
 
-        var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(log, async (url, _, ct) =>
         {
-            await Task.Delay(10);
+            await Task.Delay(10, ct);
             return new ContainerHealthStatus(
                 IsAvailable: true,
                 CudaAvailable: false,
@@ -105,9 +105,9 @@ public sealed class ContainerizedServiceProbeTests
     {
         using var log = new AppLog(Path.GetTempFileName());
 
-        var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(log, async (url, _, ct) =>
         {
-            await Task.Delay(250);
+            await Task.Delay(250, ct);
             return new ContainerHealthStatus(
                 IsAvailable: true,
                 CudaAvailable: false,
@@ -131,9 +131,9 @@ public sealed class ContainerizedServiceProbeTests
         using var log = new AppLog(Path.GetTempFileName());
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
-        var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(log, async (url, _, ct) =>
         {
-            await Task.Delay(200); // Longer than cancellation timeout
+            await Task.Delay(200, ct); // Longer than cancellation timeout
             return new ContainerHealthStatus(
                 IsAvailable: true,
                 CudaAvailable: false,
@@ -162,7 +162,7 @@ public sealed class ContainerizedServiceProbeTests
         // retryDelay: 10ms  → many retries fit within the 1 s budget on any CI machine
         var probe = new ContainerizedServiceProbe(
             log,
-            (url, _, _) =>
+            (url, _, ct) =>
             {
                 var currentCall = Interlocked.Increment(ref callCount);
                 var health = currentCall < 3
@@ -504,18 +504,18 @@ public sealed class ContainerizedServiceProbeTests
         using var log = new AppLog(Path.GetTempFileName());
         var probeCompleted = new TaskCompletionSource<bool>();
 
-        var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
+        var probe = new ContainerizedServiceProbe(log, async (url, _, ct) =>
         {
             var currentCall = Interlocked.Increment(ref callCount);
             if (currentCall == 1)
             {
                 // First call takes longer to simulate in-flight scenario
-                await Task.Delay(100);
+                await Task.Delay(100, ct);
                 probeCompleted.SetResult(true);
             }
             else
             {
-                await Task.Delay(10);
+                await Task.Delay(10, ct);
             }
             return new ContainerHealthStatus(
                 IsAvailable: true,
