@@ -67,6 +67,19 @@ TEMP_DIR.mkdir(exist_ok=True)
 NEMO_DIARIZATION_DEFAULT_PROVIDER = "nemo"
 NEMO_VAD_MODEL = "vad_multilingual_marblenet"
 NEMO_SPEAKER_EMBEDDING_MODEL = "titanet_large"
+NEMO_VAD_PARAMETERS = {
+    "window_length_in_sec": 0.15,
+    "shift_length_in_sec": 0.01,
+    "smoothing": "median",
+    "overlap": 0.875,
+    "onset": 0.4,
+    "offset": 0.7,
+    "pad_onset": 0.05,
+    "pad_offset": -0.1,
+    "min_duration_on": 0.2,
+    "min_duration_off": 0.2,
+    "filter_speech_first": True,
+}
 WESPEAKER_MODEL = "english"
 
 FLORES = {
@@ -308,6 +321,18 @@ def _probe_nemo_diarization_available() -> tuple[bool, str]:
         missing.append("omegaconf")
     if missing:
         return False, "Missing diarization dependency: " + ", ".join(missing)
+
+    try:
+        config = _build_nemo_diarization_config(
+            Path("probe-manifest.json"),
+            Path("probe-out"),
+            None,
+            None,
+        )
+        _ = config.diarizer.vad.parameters
+    except Exception as exc:
+        return False, f"NeMo diarization config contract invalid: {exc}"
+
     return True, "NeMo ClusteringDiarizer available"
 
 
@@ -389,6 +414,54 @@ def _parse_rttm_file(rttm_path: Path) -> tuple[list[DiarizationSegment], int]:
     return segments, len(seen_speakers)
 
 
+def _build_nemo_diarization_config(
+    manifest_path: Path,
+    out_dir: Path,
+    min_speakers: Optional[int],
+    max_speakers: Optional[int],
+):
+    """
+    Build the minimal NeMo ClusteringDiarizer config required by the current runtime contract.
+
+    The config intentionally stays close to NeMo's documented clustering diarization example and
+    includes the `diarizer.vad.parameters` mapping that newer NeMo releases read during model
+    construction.
+    """
+    from omegaconf import OmegaConf
+
+    clustering_parameters: dict[str, object] = {
+        "oracle_num_speakers": False,
+        "max_num_speakers": max_speakers or 8,
+    }
+    if min_speakers is not None and max_speakers is not None and min_speakers == max_speakers:
+        clustering_parameters["oracle_num_speakers"] = True
+
+    return OmegaConf.create(
+        {
+            "num_workers": 0,
+            "diarizer": {
+                "manifest_filepath": str(manifest_path),
+                "out_dir": str(out_dir),
+                "oracle_vad": False,
+                "clustering": {
+                    "parameters": clustering_parameters,
+                },
+                "vad": {
+                    "model_path": NEMO_VAD_MODEL,
+                    "external_vad_manifest": None,
+                    "parameters": NEMO_VAD_PARAMETERS,
+                },
+                "speaker_embeddings": {
+                    "model_path": NEMO_SPEAKER_EMBEDDING_MODEL,
+                    "parameters": {
+                        "save_embeddings": False,
+                    },
+                },
+            },
+        }
+    )
+
+
 def _run_nemo_diarization(
     audio_path: Path,
     min_speakers: Optional[int],
@@ -409,7 +482,6 @@ def _run_nemo_diarization(
         RuntimeError: If NeMo produces no RTTM output file.
     """
     import nemo.collections.asr as nemo_asr
-    from omegaconf import OmegaConf
 
     with tempfile.TemporaryDirectory(dir=TEMP_DIR, prefix="nemo_diar_") as work_dir_name:
         work_dir = Path(work_dir_name)
@@ -429,38 +501,22 @@ def _run_nemo_diarization(
             manifest_entry["num_speakers"] = min_speakers
 
         manifest_path.write_text(json.dumps(manifest_entry) + "\n", encoding="utf-8")
-
-        clustering_parameters: dict[str, object] = {
-            "oracle_num_speakers": False,
-            "max_num_speakers": max_speakers or 8,
-        }
-        if min_speakers is not None and max_speakers is not None and min_speakers == max_speakers:
-            clustering_parameters["oracle_num_speakers"] = True
-
-        config = OmegaConf.create(
-            {
-                "num_workers": 0,
-                "diarizer": {
-                    "manifest_filepath": str(manifest_path),
-                    "out_dir": str(out_dir),
-                    "oracle_vad": False,
-                    "clustering": {
-                        "parameters": clustering_parameters,
-                    },
-                    "vad": {
-                        "model_path": NEMO_VAD_MODEL,
-                    },
-                    "speaker_embeddings": {
-                        "model_path": NEMO_SPEAKER_EMBEDDING_MODEL,
-                        "parameters": {
-                            "save_embeddings": False,
-                        },
-                    },
-                },
-            }
+        config = _build_nemo_diarization_config(
+            manifest_path,
+            out_dir,
+            min_speakers,
+            max_speakers,
         )
 
-        diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
+        try:
+            diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
+        except Exception as exc:
+            logger.error(
+                "NeMo diarization config contract failed: missing or invalid diarizer.vad.parameters (%s)",
+                exc,
+                exc_info=True,
+            )
+            raise
         diarizer.diarize()
 
         rttm_files = sorted(out_dir.rglob("*.rttm"))

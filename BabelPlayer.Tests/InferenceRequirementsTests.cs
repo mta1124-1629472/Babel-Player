@@ -157,6 +157,16 @@ public sealed class InferenceRequirementsTests
         Assert.Contains("s3prl", lines);
     }
 
+    [Fact]
+    public void InferenceMain_NemoDiarizationConfig_DeclaresVadParametersContract()
+    {
+        var source = ReadProviderSource("inference/main.py");
+
+        Assert.Contains("NEMO_VAD_PARAMETERS", source, StringComparison.Ordinal);
+        Assert.Contains("\"parameters\": NEMO_VAD_PARAMETERS", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.vad.parameters", source, StringComparison.Ordinal);
+    }
+
     // ── requirements.txt (managed CPU runtime) ──────────────────────────────
 
     [Theory]
