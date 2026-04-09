@@ -67,7 +67,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         // RTX Video Enhancement settings
         _videoVsrEnabled     = current.VideoVsrEnabled;
-        _videoVsrQuality     = current.VideoVsrQuality;
         _videoHdrEnabled     = current.VideoHdrEnabled;
         _videoToneMapping    = current.VideoToneMapping;
         _videoTargetPeak     = current.VideoTargetPeak;
@@ -240,9 +239,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private bool _videoVsrEnabled;
 
     [ObservableProperty]
-    private int _videoVsrQuality = 2;
-
-    [ObservableProperty]
     private bool _videoHdrEnabled;
 
     [ObservableProperty]
@@ -312,7 +308,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.VideoExportEncoder  = VideoExportEncoder;
         settings.VideoUseGpuNext     = VideoUseGpuNext;
         settings.VideoVsrEnabled     = VideoVsrEnabled;
-        settings.VideoVsrQuality     = VideoVsrQuality;
         settings.VideoHdrEnabled     = VideoHdrEnabled;
         settings.VideoToneMapping    = VideoToneMapping;
         settings.VideoTargetPeak     = VideoTargetPeak;

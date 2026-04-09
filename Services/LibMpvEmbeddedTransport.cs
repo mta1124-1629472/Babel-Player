@@ -758,7 +758,6 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             Trigger: trigger,
             UseGpuNextRequested: options.UseGpuNext,
             VsrRequested: options.VsrEnabled,
-            VsrQuality: options.VsrQuality,
             ResolvedPlan: plan.ShouldApply ? "apply" : "skip",
             ReasonCode: state switch
             {
@@ -793,7 +792,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
         var message =
             $"RTX VSR diagnostic: state={snapshot.State}, trigger={snapshot.Trigger}, " +
-            $"requested_gpu_next={snapshot.UseGpuNextRequested}, requested_vsr={snapshot.VsrRequested}, quality={snapshot.VsrQuality}, " +
+            $"requested_gpu_next={snapshot.UseGpuNextRequested}, requested_vsr={snapshot.VsrRequested}, " +
             $"resolved_plan={snapshot.ResolvedPlan}, reason={snapshot.ReasonCode}, reason_text='{snapshot.ReasonText}', " +
             $"backend='{snapshot.BackendSummary}', filter='{snapshot.FilterChain ?? "<none>"}', " +
             $"video={snapshot.VideoWidth}x{snapshot.VideoHeight}, display={snapshot.DisplayWidth}x{snapshot.DisplayHeight}, monitor={snapshot.MonitorWidth}x{snapshot.MonitorHeight}, " +

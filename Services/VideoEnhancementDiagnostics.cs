@@ -15,7 +15,6 @@ internal sealed record VsrDiagnosticSnapshot(
     string Trigger,
     bool UseGpuNextRequested,
     bool VsrRequested,
-    int VsrQuality,
     string ResolvedPlan,
     string ReasonCode,
     string ReasonText,
@@ -55,7 +54,6 @@ internal sealed record VideoEnhancementDiagnostics(
     string? NvidiaDriverVersion,
     bool UseGpuNextRequested,
     bool VsrRequested,
-    int VsrQuality,
     VsrDiagnosticSnapshot? LatestVsrSnapshot)
 {
     public static VideoEnhancementDiagnostics Initial { get; } =
@@ -65,7 +63,6 @@ internal sealed record VideoEnhancementDiagnostics(
             NvidiaDriverVersion: null,
             UseGpuNextRequested: false,
             VsrRequested: false,
-            VsrQuality: 2,
             LatestVsrSnapshot: null);
 
     public static VideoEnhancementDiagnostics Create(
@@ -78,7 +75,6 @@ internal sealed record VideoEnhancementDiagnostics(
             NvidiaDriverVersion: hardwareSnapshot.NvidiaDriverVersion,
             UseGpuNextRequested: settings.VideoUseGpuNext,
             VsrRequested: settings.VideoVsrEnabled,
-            VsrQuality: settings.VideoVsrQuality,
             LatestVsrSnapshot: latestVsrSnapshot);
 
     public string SupportHintText
@@ -118,7 +114,7 @@ internal sealed record VideoEnhancementDiagnostics(
             ? "Requested state: gpu-next is disabled, so the d3d11vpp VSR path cannot be attempted."
             : !VsrRequested
                 ? "Requested state: gpu-next is enabled, but RTX VSR itself is turned off."
-                : $"Requested state: gpu-next is enabled and RTX VSR is requested (quality setting is not applied to the current mpv filter).";
+                : "Requested state: gpu-next is enabled and RTX VSR is requested. VSR quality is controlled in NVIDIA Control Panel, not by the mpv filter.";
 
     public string ResolvedStateText =>
         LatestVsrSnapshot is null

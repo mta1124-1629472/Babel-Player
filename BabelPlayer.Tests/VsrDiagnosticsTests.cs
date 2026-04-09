@@ -58,7 +58,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
 
         var snapshot = LibMpvEmbeddedTransport.CreateVsrDiagnosticSnapshot(
             "display-size-updated",
-            new VideoPlaybackOptions(UseGpuNext: true, VsrEnabled: true, VsrQuality: 4),
+            new VideoPlaybackOptions(UseGpuNext: true, VsrEnabled: true),
             plan,
             backendResultCode: null,
             videoOutput: "gpu-next",
@@ -88,7 +88,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
 
         var snapshot = LibMpvEmbeddedTransport.CreateVsrDiagnosticSnapshot(
             "display-size-updated",
-            new VideoPlaybackOptions(UseGpuNext: true, VsrEnabled: true, VsrQuality: 4),
+            new VideoPlaybackOptions(UseGpuNext: true, VsrEnabled: true),
             plan,
             backendResultCode: -12,
             videoOutput: "gpu-next",
@@ -125,7 +125,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
 
         var rejectedSnapshot = LibMpvEmbeddedTransport.CreateVsrDiagnosticSnapshot(
             "display-size-updated",
-            new VideoPlaybackOptions(UseGpuNext: true, VsrEnabled: true, VsrQuality: 4),
+            new VideoPlaybackOptions(UseGpuNext: true, VsrEnabled: true),
             LibMpvEmbeddedTransport.EvaluateVsrFilterPlan(
                 videoWidth: 1280,
                 videoHeight: 720,
@@ -182,7 +182,6 @@ public sealed class VsrDiagnosticsTests : IDisposable
             TargetLanguage = "en",
             VideoUseGpuNext = true,
             VideoVsrEnabled = true,
-            VideoVsrQuality = 4,
         };
 
     private static HardwareSnapshot CreateHardwareSnapshot(

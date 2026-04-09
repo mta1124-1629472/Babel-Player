@@ -219,18 +219,8 @@
                                   Content="RTX Video Super Resolution (VSR)"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
                                     Text="AI upscaling via NVIDIA d3d11vpp. Requires RTX GPU, driver &#x2265; 551.23, and 'RTX Video Enhancement' enabled in NVIDIA Control Panel." />
-
-                        <StackPanel Orientation="Horizontal" Spacing="12"
-                                    IsEnabled="{Binding VideoVsrEnabled}">
-                            <TextBlock Text="VSR Quality:" VerticalAlignment="Center"/>
-                            <Slider Minimum="1" Maximum="4"
-                                    Value="{Binding VideoVsrQuality, Mode=TwoWay}"
-                                    TickFrequency="1" IsSnapToTickEnabled="True"
-                                    Width="140"/>
-                            <TextBlock Text="{Binding VideoVsrQuality}" VerticalAlignment="Center" Width="14"/>
-                            <TextBlock Opacity="0.55" VerticalAlignment="Center"
-                                       Text="(1 = Performance &#xB7; 4 = Quality)"/>
-                        </StackPanel>
+                        <TextBlock TextWrapping="Wrap" Opacity="0.55"
+                                   Text="VSR quality is controlled in NVIDIA Control Panel. mpv's d3d11vpp filter does not expose an in-app quality setting." />
 
                         <Border Background="{DynamicResource SurfaceRaisedBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}"

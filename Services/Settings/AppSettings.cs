@@ -184,7 +184,7 @@ public sealed class AppSettings
 
     /// <summary>
     /// Use the gpu-next video output backend instead of the legacy gpu backend.
-    /// Required for RTX Video Super Resolution and RTX HDR.
+    /// Required for RTX Video Super Resolution and mpv HDR passthrough.
     /// Takes effect on app restart. Default true (modern Windows + GPU drivers handle this well).
     /// </summary>
     public bool VideoUseGpuNext { get; set; } = true;
@@ -193,16 +193,10 @@ public sealed class AppSettings
     /// Enable NVIDIA RTX Video Super Resolution via the d3d11vpp filter.
     /// Requires gpu-next backend, RTX GPU, driver >= 551.23, and
     /// "RTX Video Enhancement" enabled in NVIDIA Control Panel.
+    /// VSR quality remains driver-controlled; mpv does not expose a per-filter quality setting.
     /// Takes effect on app restart.
     /// </summary>
     public bool VideoVsrEnabled { get; set; } = false;
-
-    /// <summary>
-    /// RTX Video Super Resolution quality level (1 = Performance ... 4 = Quality).
-    /// Only used when VideoVsrEnabled is true.
-    /// Takes effect on app restart.
-    /// </summary>
-    public int VideoVsrQuality { get; set; } = 2;
 
     /// <summary>
     /// Enable the mpv HDR output pipeline (target-colorspace-hint + tone-mapping).

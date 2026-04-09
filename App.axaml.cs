@@ -102,7 +102,6 @@ public partial class App : Application
                     GpuApi:         appSettings.VideoGpuApi,
                     UseGpuNext:     appSettings.VideoUseGpuNext,
                     VsrEnabled:     appSettings.VideoVsrEnabled,
-                    VsrQuality:     appSettings.VideoVsrQuality,
                     HdrEnabled:     appSettings.VideoHdrEnabled,
                     ToneMapping:    appSettings.VideoToneMapping,
                     TargetPeak:     appSettings.VideoTargetPeak,

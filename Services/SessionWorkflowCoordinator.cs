@@ -180,7 +180,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 GpuApi:         settings.VideoGpuApi,
                 UseGpuNext:     settings.VideoUseGpuNext,
                 VsrEnabled:     settings.VideoVsrEnabled,
-                VsrQuality:     settings.VideoVsrQuality,
                 HdrEnabled:     settings.VideoHdrEnabled,
                 ToneMapping:    settings.VideoToneMapping,
                 TargetPeak:     settings.VideoTargetPeak,
