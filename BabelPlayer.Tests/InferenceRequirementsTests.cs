@@ -158,13 +158,21 @@ public sealed class InferenceRequirementsTests
     }
 
     [Fact]
-    public void InferenceMain_NemoDiarizationConfig_DeclaresVadParametersContract()
+    public void InferenceMain_NemoDiarizationConfig_DeclaresCompleteStructuredContract()
     {
         var source = ReadProviderSource("inference/main.py");
 
-        Assert.Contains("NEMO_VAD_PARAMETERS", source, StringComparison.Ordinal);
-        Assert.Contains("\"parameters\": NEMO_VAD_PARAMETERS", source, StringComparison.Ordinal);
-        Assert.Contains("config.diarizer.vad.parameters", source, StringComparison.Ordinal);
+        Assert.Contains("NeuralDiarizerInferenceConfig", source, StringComparison.Ordinal);
+        Assert.Contains("config.device = HOST_DEVICE", source, StringComparison.Ordinal);
+        Assert.Contains("config.sample_rate = NEMO_SAMPLE_RATE", source, StringComparison.Ordinal);
+        Assert.Contains("config.verbose = NEMO_VERBOSE", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.collar = NEMO_COLLAR", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.ignore_overlap = NEMO_IGNORE_OVERLAP", source, StringComparison.Ordinal);
+        Assert.Contains("setattr(config.diarizer.vad.parameters, key, value)", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.speaker_embeddings.parameters.window_length_in_sec", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.speaker_embeddings.parameters.shift_length_in_sec", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.speaker_embeddings.parameters.multiscale_weights", source, StringComparison.Ordinal);
+        Assert.Contains("NeMo diarization config contract invalid", source, StringComparison.Ordinal);
     }
 
     // ── requirements.txt (managed CPU runtime) ──────────────────────────────

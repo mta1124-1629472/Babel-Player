@@ -262,6 +262,16 @@ public static class ContainerizedProviderReadiness
         string? detail = null;
         if (probeResult.Capabilities is null || !IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out detail))
         {
+            if (stage == ContainerCapabilityStage.Diarization
+                && string.Equals(
+                    InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(
+                        string.IsNullOrWhiteSpace(providerId) ? settings.DiarizationProvider : providerId),
+                    ProviderNames.WeSpeakerLocal,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return new ProviderReadiness(false, BuildWeSpeakerCapabilityNotReadyMessage(settings, detail));
+            }
+
             var stageLabel = stage switch
             {
                 ContainerCapabilityStage.Transcription => "transcription",
@@ -310,6 +320,11 @@ public static class ContainerizedProviderReadiness
             ? "Managed local GPU host"
             : "Docker GPU host";
 
+    private static string GetInferenceHostLabel(AppSettings settings) =>
+        settings.PreferredLocalGpuBackend == GpuHostBackend.ManagedVenv
+            ? "Managed local inference host"
+            : "Docker inference host";
+
     private static string BuildCapabilityNotReadyMessage(string hostLabel, string stageLabel, string? detail)
     {
         if (string.IsNullOrWhiteSpace(detail))
@@ -322,6 +337,21 @@ public static class ContainerizedProviderReadiness
         }
 
         return $"{hostLabel} is live but missing {stageLabel} capability: {detail}";
+    }
+
+    private static string BuildWeSpeakerCapabilityNotReadyMessage(AppSettings settings, string? detail)
+    {
+        var hostLabel = GetInferenceHostLabel(settings);
+        if (string.IsNullOrWhiteSpace(detail))
+            return $"{hostLabel} is live but WeSpeaker CPU fallback is not ready.";
+
+        if (detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
+            || detail.Contains("probe", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{hostLabel} is live but WeSpeaker CPU fallback is still warming: {detail}";
+        }
+
+        return $"{hostLabel} is live but WeSpeaker CPU fallback is not ready: {detail}";
     }
 
     /// <summary>

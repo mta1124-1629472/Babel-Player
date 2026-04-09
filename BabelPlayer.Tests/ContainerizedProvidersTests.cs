@@ -729,6 +729,36 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
+    public async Task ContainerizedInferenceClient_CheckHealthAsync_ParsesContractInvalidNemoDiarizationCapabilityDetail()
+    {
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/health/live")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"status\":\"healthy\",\"cuda_available\":true,\"cuda_version\":\"12.8\"}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true},\"diarization\":{\"ready\":false,\"detail\":\"nemo: NeMo diarization config contract invalid: Key 'device' is not in struct; wespeaker: WeSpeaker import failed: No module named 'distutils'\",\"providers\":{\"nemo\":false,\"wespeaker\":false},\"provider_details\":{\"nemo\":\"NeMo diarization config contract invalid: Key 'device' is not in struct\",\"wespeaker\":\"WeSpeaker import failed: No module named 'distutils'\"},\"default_provider\":\"nemo\"}}");
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"status\":\"not-found\"}");
+        });
+
+        var health = await client.CheckHealthAsync();
+
+        Assert.NotNull(health.Capabilities);
+        Assert.False(health.Capabilities!.DiarizationReady);
+        Assert.True(health.Capabilities.TryGetDiarizationProviderReadiness(ProviderNames.NemoLocal, out var nemoReady, out var nemoDetail));
+        Assert.False(nemoReady);
+        Assert.Contains("contract invalid", nemoDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("device", nemoDetail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ContainerizedInferenceClient_DiarizeAsync_UsesNemoEndpointAndNormalizesSpeakerIds()
     {
         var inputPath = Path.Combine(_ctx.Dir, "diarize.wav");
@@ -972,8 +1002,10 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                 CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(10)));
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("diarization", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WeSpeaker", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CPU fallback", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("GPU host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

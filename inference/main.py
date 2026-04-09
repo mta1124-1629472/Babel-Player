@@ -67,6 +67,14 @@ TEMP_DIR.mkdir(exist_ok=True)
 NEMO_DIARIZATION_DEFAULT_PROVIDER = "nemo"
 NEMO_VAD_MODEL = "vad_multilingual_marblenet"
 NEMO_SPEAKER_EMBEDDING_MODEL = "titanet_large"
+NEMO_SAMPLE_RATE = 16000
+NEMO_BATCH_SIZE = 64
+NEMO_VERBOSE = False
+NEMO_COLLAR = 0.25
+NEMO_IGNORE_OVERLAP = True
+NEMO_SPEAKER_WINDOW_LENGTHS = (1.5, 1.25, 1.0, 0.75, 0.5)
+NEMO_SPEAKER_SHIFT_LENGTHS = (0.75, 0.625, 0.5, 0.375, 0.25)
+NEMO_SPEAKER_MULTISCALE_WEIGHTS = (1, 1, 1, 1, 1)
 NEMO_VAD_PARAMETERS = {
     "window_length_in_sec": 0.15,
     "shift_length_in_sec": 0.01,
@@ -329,7 +337,18 @@ def _probe_nemo_diarization_available() -> tuple[bool, str]:
             None,
             None,
         )
-        _ = config.diarizer.vad.parameters
+        _ = (
+            config.device,
+            config.sample_rate,
+            config.verbose,
+            config.diarizer.collar,
+            config.diarizer.ignore_overlap,
+            config.diarizer.vad.parameters.window_length_in_sec,
+            config.diarizer.vad.parameters.shift_length_in_sec,
+            config.diarizer.speaker_embeddings.parameters.window_length_in_sec,
+            config.diarizer.speaker_embeddings.parameters.shift_length_in_sec,
+            config.diarizer.speaker_embeddings.parameters.multiscale_weights,
+        )
     except Exception as exc:
         return False, f"NeMo diarization config contract invalid: {exc}"
 
@@ -427,6 +446,7 @@ def _build_nemo_diarization_config(
     includes the `diarizer.vad.parameters` mapping that newer NeMo releases read during model
     construction.
     """
+    from nemo.collections.asr.models.configs.diarizer_config import NeuralDiarizerInferenceConfig
     from omegaconf import OmegaConf
 
     clustering_parameters: dict[str, object] = {
@@ -436,30 +456,33 @@ def _build_nemo_diarization_config(
     if min_speakers is not None and max_speakers is not None and min_speakers == max_speakers:
         clustering_parameters["oracle_num_speakers"] = True
 
-    return OmegaConf.create(
-        {
-            "num_workers": 0,
-            "diarizer": {
-                "manifest_filepath": str(manifest_path),
-                "out_dir": str(out_dir),
-                "oracle_vad": False,
-                "clustering": {
-                    "parameters": clustering_parameters,
-                },
-                "vad": {
-                    "model_path": NEMO_VAD_MODEL,
-                    "external_vad_manifest": None,
-                    "parameters": NEMO_VAD_PARAMETERS,
-                },
-                "speaker_embeddings": {
-                    "model_path": NEMO_SPEAKER_EMBEDDING_MODEL,
-                    "parameters": {
-                        "save_embeddings": False,
-                    },
-                },
-            },
-        }
-    )
+    config = OmegaConf.structured(NeuralDiarizerInferenceConfig())
+    config.device = HOST_DEVICE
+    config.verbose = NEMO_VERBOSE
+    config.sample_rate = NEMO_SAMPLE_RATE
+    config.batch_size = NEMO_BATCH_SIZE
+    config.num_workers = 0
+
+    config.diarizer.manifest_filepath = str(manifest_path)
+    config.diarizer.out_dir = str(out_dir)
+    config.diarizer.oracle_vad = False
+    config.diarizer.collar = NEMO_COLLAR
+    config.diarizer.ignore_overlap = NEMO_IGNORE_OVERLAP
+
+    config.diarizer.vad.model_path = NEMO_VAD_MODEL
+    config.diarizer.vad.external_vad_manifest = None
+    for key, value in NEMO_VAD_PARAMETERS.items():
+        setattr(config.diarizer.vad.parameters, key, value)
+
+    config.diarizer.speaker_embeddings.model_path = NEMO_SPEAKER_EMBEDDING_MODEL
+    config.diarizer.speaker_embeddings.parameters.window_length_in_sec = NEMO_SPEAKER_WINDOW_LENGTHS
+    config.diarizer.speaker_embeddings.parameters.shift_length_in_sec = NEMO_SPEAKER_SHIFT_LENGTHS
+    config.diarizer.speaker_embeddings.parameters.multiscale_weights = NEMO_SPEAKER_MULTISCALE_WEIGHTS
+    config.diarizer.speaker_embeddings.parameters.save_embeddings = False
+
+    config.diarizer.clustering.parameters.oracle_num_speakers = clustering_parameters["oracle_num_speakers"]
+    config.diarizer.clustering.parameters.max_num_speakers = clustering_parameters["max_num_speakers"]
+    return config
 
 
 def _run_nemo_diarization(
@@ -512,7 +535,7 @@ def _run_nemo_diarization(
             diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
         except Exception as exc:
             logger.error(
-                "NeMo diarization config contract failed: missing or invalid diarizer.vad.parameters (%s)",
+                "NeMo config contract mismatch during ClusteringDiarizer initialization: %s",
                 exc,
                 exc_info=True,
             )

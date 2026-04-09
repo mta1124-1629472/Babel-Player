@@ -54,11 +54,11 @@
                     </Grid>
                 </Border>
 
-                <!-- Scrollable body -->
-                <ScrollViewer Grid.Row="1"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="16,16,16,8" Spacing="20">
+                <!-- Scrollable body with sticky footer overlay -->
+                <Grid Grid.Row="1">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="16,16,16,0" Spacing="20">
 
                         <!-- TRANSCRIPTION -->
                         <StackPanel Spacing="10">
@@ -458,7 +458,20 @@
                                            Text="{Binding Playback.HwRamLine}"
                                            FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
                             </Grid>
+                        </StackPanel>
 
+                        <Border Height="260"
+                                Background="Transparent"
+                                IsHitTestVisible="False" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Border VerticalAlignment="Bottom"
+                            Background="{DynamicResource PanelBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="0,1,0,0"
+                            Padding="16,14,16,16">
+                        <StackPanel Spacing="10">
                             <TextBlock Text="{Binding Playback.PipelineStageDetail}"
                                        FontSize="11"
                                        Foreground="{DynamicResource PrimaryTextBrush}"
@@ -476,117 +489,122 @@
                                          Background="{DynamicResource ProgressBackgroundBrush}"
                                          HorizontalAlignment="Stretch"
                                          Margin="0,2,0,0" />
-                        </StackPanel>
 
-                        <Button HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                VerticalContentAlignment="Center"
-                                Padding="0,10"
-                                FontSize="13" FontWeight="SemiBold"
-                                Foreground="White"
-                                CornerRadius="8"
-                                Command="{Binding Playback.RunPipelineCommand}"
-                                IsEnabled="{Binding Playback.CanRunPipeline}">
-                            <Button.Content>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="▶" VerticalAlignment="Center" />
-                                    <TextBlock Text="Run Pipeline" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button.Content>
-                            <Button.Styles>
-                                <Style Selector="Button">
-                                    <Setter Property="Background">
-                                        <Setter.Value>
-                                            <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
-                                                <GradientStop Color="{DynamicResource AccentColor}" Offset="0" />
-                                                <GradientStop Color="{DynamicResource AccentSecondaryColor}" Offset="1" />
-                                            </LinearGradientBrush>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                                <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                    <Setter Property="Background">
-                                        <Setter.Value>
-                                            <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
-                                                <GradientStop Color="#5B52F0" Offset="0" />
-                                                <GradientStop Color="#8B4DF8" Offset="1" />
-                                            </LinearGradientBrush>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                                <Style Selector="Button:pressed /template/ ContentPresenter">
-                                    <Setter Property="Background">
-                                        <Setter.Value>
-                                            <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
-                                                <GradientStop Color="#3D35C8" Offset="0" />
-                                                <GradientStop Color="#6A2FCC" Offset="1" />
-                                            </LinearGradientBrush>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Button.Styles>
-                        </Button>
+                            <Grid>
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Padding="0,10"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Foreground="White"
+                                        CornerRadius="8"
+                                        Command="{Binding Playback.RunPipelineCommand}"
+                                        IsEnabled="{Binding Playback.CanRunPipeline}">
+                                    <Button.Content>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="▶" VerticalAlignment="Center" />
+                                            <TextBlock Text="Run Pipeline" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button.Content>
+                                    <Button.Styles>
+                                        <Style Selector="Button">
+                                            <Setter Property="Background">
+                                                <Setter.Value>
+                                                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                        <GradientStop Color="{DynamicResource AccentColor}" Offset="0" />
+                                                        <GradientStop Color="{DynamicResource AccentSecondaryColor}" Offset="1" />
+                                                    </LinearGradientBrush>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                        <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                            <Setter Property="Background">
+                                                <Setter.Value>
+                                                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                        <GradientStop Color="#5B52F0" Offset="0" />
+                                                        <GradientStop Color="#8B4DF8" Offset="1" />
+                                                    </LinearGradientBrush>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                        <Style Selector="Button:pressed /template/ ContentPresenter">
+                                            <Setter Property="Background">
+                                                <Setter.Value>
+                                                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                        <GradientStop Color="#3D35C8" Offset="0" />
+                                                        <GradientStop Color="#6A2FCC" Offset="1" />
+                                                    </LinearGradientBrush>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Styles>
+                                </Button>
 
-                        <Button HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                VerticalContentAlignment="Center"
-                                Padding="0,10"
-                                FontSize="13"
-                                FontWeight="SemiBold"
-                                Background="{DynamicResource ButtonBackgroundBrush}"
-                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                BorderBrush="{DynamicResource BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Command="{Binding Playback.RunDiarizationOnlyCommand}"
-                                IsEnabled="{Binding Playback.CanRunDiarizationOnly}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="↻" VerticalAlignment="Center" />
-                                <TextBlock Text="Re-diarize" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Padding="0,10"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Background="{DynamicResource DestructiveBrush}"
+                                        Foreground="White"
+                                        CornerRadius="8"
+                                        Command="{Binding Playback.CancelPipelineCommand}"
+                                        IsVisible="{Binding Playback.IsBusy}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="⏹" VerticalAlignment="Center" />
+                                        <TextBlock Text="Cancel Pipeline" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
 
-                        <Button HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                VerticalContentAlignment="Center"
-                                Padding="0,10"
-                                FontSize="13" FontWeight="SemiBold"
-                                Background="{DynamicResource DestructiveBrush}" Foreground="White"
-                                CornerRadius="8"
-                                Command="{Binding Playback.CancelPipelineCommand}"
-                                IsVisible="{Binding Playback.IsBusy}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="⏹" VerticalAlignment="Center" />
-                                <TextBlock Text="Cancel Pipeline" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                            <TextBlock Grid.Column="0"
-                                        Text="{Binding Playback.StatusText}"
-                                        FontSize="11"
-                                        Foreground="{DynamicResource StatusTextBrush}"
-                                        HorizontalAlignment="Center"
-                                        TextWrapping="Wrap"
-                                       MaxHeight="52" />
-
-                            <Button Grid.Column="1"
-                                    Command="{Binding Playback.ShowStatusErrorDetailsCommand}"
-                                    IsVisible="{Binding Playback.HasErrorDetails}"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Bottom"
-                                    Padding="6,2"
-                                    MinWidth="24"
-                                    FontSize="12"
+                            <Button HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    VerticalContentAlignment="Center"
+                                    Padding="0,10"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
                                     Background="{DynamicResource ButtonBackgroundBrush}"
-                                     Foreground="{DynamicResource PrimaryTextBrush}"
-                                    CornerRadius="4"
-                                    ToolTip.Tip="Expand error details">
-                                <TextBlock Text="↗" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    Foreground="{DynamicResource PrimaryTextBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Command="{Binding Playback.RunDiarizationOnlyCommand}"
+                                    IsEnabled="{Binding Playback.CanRunDiarizationOnly}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="↻" VerticalAlignment="Center" />
+                                    <TextBlock Text="Re-diarize" VerticalAlignment="Center" />
+                                </StackPanel>
                             </Button>
-                        </Grid>
 
-                    </StackPanel>
-                </ScrollViewer>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding Playback.StatusText}"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource StatusTextBrush}"
+                                           HorizontalAlignment="Center"
+                                           TextWrapping="Wrap"
+                                           MaxHeight="52" />
+
+                                <Button Grid.Column="1"
+                                        Command="{Binding Playback.ShowStatusErrorDetailsCommand}"
+                                        IsVisible="{Binding Playback.HasErrorDetails}"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Bottom"
+                                        Padding="6,2"
+                                        MinWidth="24"
+                                        FontSize="12"
+                                        Background="{DynamicResource ButtonBackgroundBrush}"
+                                        Foreground="{DynamicResource PrimaryTextBrush}"
+                                        CornerRadius="4"
+                                        ToolTip.Tip="Expand error details">
+                                    <TextBlock Text="↗" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
 
             </Grid>
         </Border>

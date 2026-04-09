@@ -726,6 +726,8 @@ public sealed class RegistryTests : IDisposable
         }
 
         Assert.False(readiness.IsReady);
+        Assert.Contains("WeSpeaker", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CPU fallback", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("warming", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
