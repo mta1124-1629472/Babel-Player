@@ -32,7 +32,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranscriptionProvider? _transcriptionService;
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
-    private readonly ConcurrentBag<Task> _pendingTtsTasks = new();
+    private readonly ConcurrentBag<Task> _pendingTtsTasks = [];
     private readonly IAudioProcessingService? _audioProcessingService;
 
 
