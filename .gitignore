@@ -91,6 +91,7 @@ desktop.ini
 app-output.log
 build.log
 test.log
+build_output.txt
 dist/
 publish/
 tasks.json

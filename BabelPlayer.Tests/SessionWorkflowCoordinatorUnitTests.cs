@@ -653,12 +653,12 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     }
 
     [Fact]
-    public async Task RegenerateSegmentTts_SingleSpeakerXtts_UsesDefaultReferenceClip()
+    public async Task RegenerateSegmentTts_SingleSpeakerQwen_UsesDefaultReferenceClip()
     {
         var fakeTts = new FakeTtsProvider();
         var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
         var settings = CreateMatchingSettings();
-        settings.TtsProvider = ProviderNames.XttsContainer;
+        settings.TtsProvider = ProviderNames.Qwen;
 
         var coord = new SessionWorkflowCoordinator(
             _store,
@@ -686,14 +686,14 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
           ]
         }
         """);
-        var defaultRefPath = Path.Combine(_dir, "xtts-single-ref.wav");
+        var defaultRefPath = Path.Combine(_dir, "qwen-single-ref.wav");
         await File.WriteAllBytesAsync(defaultRefPath, [1, 2, 3]);
 
         coord.CurrentSession = coord.CurrentSession with
         {
             Stage = SessionWorkflowStage.Translated,
             TranslationPath = translationPath,
-            TtsVoice = "xtts-v2",
+            TtsVoice = "qwen-tts",
             MultiSpeakerEnabled = false,
             SpeakerReferenceAudioPaths = new Dictionary<string, string>
             {

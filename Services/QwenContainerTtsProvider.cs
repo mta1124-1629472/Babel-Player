@@ -21,27 +21,41 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
     private readonly TtsReferenceExtractor _extractor;
-    private readonly Func<IReadOnlyList<string>, string, CancellationToken, Task> _combineAudioFunc;
 
     private string? _autoExtractedReferencePath;
     private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of QwenContainerTtsProvider with the specified client, logger, and reference extractor.
+    /// </summary>
     public QwenContainerTtsProvider(
         ContainerizedInferenceClient client,
         AppLog log,
-        TtsReferenceExtractor extractor,
-        Func<IReadOnlyList<string>, string, CancellationToken, Task>? combineAudioFunc = null)
+        TtsReferenceExtractor extractor)
     {
         _client = client;
         _log = log;
         _extractor = extractor;
-        _combineAudioFunc = combineAudioFunc ?? CombineAudioSegmentsAsync;
     }
 
-    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
+    /// <summary>
+        /// Determines whether the containerized TTS provider is ready based on the given application settings.
+        /// </summary>
+        /// <param name="settings">Application settings used to evaluate TTS readiness.</param>
+        /// <param name="keyStore">Optional API key store used during readiness checks.</param>
+        /// <returns>A <see cref="ProviderReadiness"/> value indicating the provider's readiness status and any required configuration.</returns>
+        public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
         ContainerizedProviderReadiness.CheckTts(settings);
 
+    /// <summary>
+    /// Synthesizes speech for a single segment using Qwen3-TTS and saves the resulting audio to the requested output path.
+    /// </summary>
+    /// <param name="request">Parameters for segment synthesis. Must include non-empty Text and either ReferenceAudioPath or SourceVideoPath; OutputAudioPath is where the synthesized audio will be written.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting asynchronous operations.</param>
+    /// <returns>A <see cref="TtsResult"/> describing the synthesis outcome; its <c>AudioPath</c> is the final local output path specified by <paramref name="request"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown when <see cref="SingleSegmentTtsRequest.Text"/> is null, empty, or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no reference audio is available or when the TTS service reports a failure.</exception>
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default)
@@ -78,102 +92,25 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         return result with { AudioPath = request.OutputAudioPath };
     }
 
-    public async Task<TtsResult> GenerateTtsAsync(
+    /// <summary>
+    /// Generates combined TTS audio for the provided TtsRequest and produces a single output audio result.
+    /// </summary>
+    /// <returns>The TtsResult describing the produced output audio path and related metadata.</returns>
+    /// <exception cref="NotImplementedException">Always thrown: combined generation is now handled by the coordinator.</exception>
+    public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(request.TranslationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
-
-        var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
-        var validSegments = (translation.Segments ?? [])
-            .Where(seg => !string.IsNullOrWhiteSpace(seg.TranslatedText))
-            .ToList();
-        var totalSegments = validSegments.Count;
-        var segmentAudioPaths = new List<string>();
-        var workDir = Path.Combine(
-            Path.GetTempPath(),
-            $"babel-qwen-{Path.GetFileNameWithoutExtension(request.OutputAudioPath)}-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(workDir);
-        var language = ResolveLanguage(request.Language ?? translation.TargetLanguage);
-
-        try
-        {
-            request.SegmentProgress?.Report((0, totalSegments));
-            var segmentIndex = 0;
-            foreach (var seg in validSegments)
-            {
-                segmentIndex++;
-                var resolvedModel = ResolveModel(ResolveVoiceForSegment(seg, request));
-                var referenceAudioPath = ResolveReferenceAudioForSegment(seg, request);
-
-                if (string.IsNullOrWhiteSpace(referenceAudioPath) &&
-                    !string.IsNullOrWhiteSpace(request.SourceVideoPath))
-                {
-                    referenceAudioPath = await EnsureAutoExtractedReferenceAsync(request.SourceVideoPath, cancellationToken);
-                }
-
-                if (string.IsNullOrWhiteSpace(referenceAudioPath))
-                    throw new InvalidOperationException(
-                        $"Qwen3-TTS requires a reference clip for speaker '{seg.SpeakerId ?? "default"}'.");
-
-                _log.Info(
-                    $"[QwenContainerTts] Combined synth segment start " +
-                    $"(segment={seg.Id ?? segmentIndex.ToString()}, model={resolvedModel}, " +
-                    $"reference={Path.GetFileName(referenceAudioPath)})");
-
-                var result = await QwenSegmentWithRetryAsync(
-                    seg.TranslatedText!, resolvedModel, language,
-                    referenceAudioPath,
-                    seg.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault,
-                    seg.Text,
-                    cancellationToken);
-
-                if (!result.Success)
-                    throw new InvalidOperationException($"Qwen3-TTS combined synthesis failed: {result.ErrorMessage}");
-
-                var segmentAudioPath = Path.Combine(
-                    workDir,
-                    $"{segmentIndex:D4}_{SanitizeFileComponent(seg.Id ?? $"segment_{segmentIndex}")}.mp3");
-
-                await DownloadToOutputPathAsync(result.AudioPath, segmentAudioPath, cancellationToken);
-                segmentAudioPaths.Add(segmentAudioPath);
-                request.SegmentProgress?.Report((segmentIndex, totalSegments));
-            }
-
-            if (segmentAudioPaths.Count == 0)
-                throw new InvalidOperationException("No translated text found for Qwen3-TTS synthesis.");
-
-            var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
-            if (!string.IsNullOrWhiteSpace(outputDir))
-                Directory.CreateDirectory(outputDir);
-
-            if (segmentAudioPaths.Count == 1)
-                File.Copy(segmentAudioPaths[0], request.OutputAudioPath, overwrite: true);
-            else
-                await _combineAudioFunc(segmentAudioPaths, request.OutputAudioPath, cancellationToken);
-
-            _log.Info($"[QwenContainerTts] Combined synth saved: {request.OutputAudioPath}");
-            return new TtsResult(
-                true,
-                request.OutputAudioPath,
-                ResolveModel(request.VoiceName),
-                new FileInfo(request.OutputAudioPath).Length,
-                null);
-        }
-        finally
-        {
-            try
-            {
-                if (Directory.Exists(workDir))
-                    Directory.Delete(workDir, recursive: true);
-            }
-            catch
-            {
-            }
-        }
+        throw new NotImplementedException("PLACEHOLDER: Combined generation is now handled by the coordinator.");
     }
 
+    /// <summary>
+    /// Reset the provider's session state.
+    /// </summary>
+    /// <remarks>
+    /// Clears the in-memory reference ID cache and, if an auto-extracted reference audio path is present,
+    /// deletes that extracted file via the configured extractor and clears the cached path.
+    /// </remarks>
     public async Task ResetSessionAsync()
     {
         _log.Info("[QwenContainerTts] Resetting session state");
@@ -343,6 +280,11 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
             ? voiceName.Trim()
             : "Qwen/Qwen3-TTS-12Hz-1.7B-Base";
 
+    /// <summary>
+    /// Sanitizes a string for use as a file name component by replacing characters invalid in file names with underscores.
+    /// </summary>
+    /// <param name="value">The input string to sanitize.</param>
+    /// <returns>The input string with every character invalid in file names replaced by '_' so it can be safely used as a file name component.</returns>
     private static string SanitizeFileComponent(string value)
     {
         var invalid = Path.GetInvalidFileNameChars();
@@ -350,79 +292,5 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         return new string(chars);
     }
 
-    private static string EscapeConcatListPath(string path) =>
-        path.Replace("\\", "/", StringComparison.Ordinal)
-            .Replace("'", "'\\''", StringComparison.Ordinal);
 
-    private static async Task CombineAudioSegmentsAsync(
-        IReadOnlyList<string> segmentAudioPaths,
-        string outputAudioPath,
-        CancellationToken cancellationToken)
-    {
-        if (segmentAudioPaths.Count == 0)
-            throw new InvalidOperationException("Cannot combine zero Qwen TTS segment audio files.");
-
-        var ffmpegPath = DependencyLocator.FindFfmpeg()
-            ?? throw new InvalidOperationException("ffmpeg not found. Qwen3-TTS combined output requires ffmpeg.");
-        var concatListDir = Path.Combine(Path.GetTempPath(), $"babel-qwen-concat-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(concatListDir);
-        var concatListPath = Path.Combine(concatListDir, "inputs.txt");
-        var concatFile = string.Join(
-            Environment.NewLine,
-            segmentAudioPaths.Select(path => $"file '{EscapeConcatListPath(path)}'"));
-
-        await File.WriteAllTextAsync(concatListPath, concatFile, cancellationToken);
-
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = ffmpegPath,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-
-            psi.ArgumentList.Add("-y");
-            psi.ArgumentList.Add("-f");
-            psi.ArgumentList.Add("concat");
-            psi.ArgumentList.Add("-safe");
-            psi.ArgumentList.Add("0");
-            psi.ArgumentList.Add("-i");
-            psi.ArgumentList.Add(concatListPath);
-            psi.ArgumentList.Add("-vn");
-            psi.ArgumentList.Add("-c:a");
-            psi.ArgumentList.Add("libmp3lame");
-            psi.ArgumentList.Add("-q:a");
-            psi.ArgumentList.Add("3");
-            psi.ArgumentList.Add(outputAudioPath);
-
-            using var process = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start ffmpeg for Qwen TTS segment concatenation.");
-
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
-            var stdout = await stdoutTask;
-            var stderr = await stderrTask;
-
-            if (process.ExitCode != 0)
-            {
-                throw new InvalidOperationException(
-                    $"ffmpeg Qwen TTS concatenation failed with exit code {process.ExitCode}: {stderr} {stdout}".Trim());
-            }
-        }
-        finally
-        {
-            try
-            {
-                if (Directory.Exists(concatListDir))
-                    Directory.Delete(concatListDir, recursive: true);
-            }
-            catch
-            {
-            }
-        }
-    }
 }

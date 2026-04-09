@@ -33,6 +33,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
     private readonly ConcurrentBag<Task> _pendingTtsTasks = new();
+    private readonly IAudioProcessingService? _audioProcessingService;
+
 
     private readonly IMediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
@@ -146,16 +148,20 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SessionSwitchService? sessionSwitchService = null,
         IDiarizationRegistry? diarizationRegistry = null,
         ContainerizedServiceProbe? containerizedProbe = null,
-        IContainerizedInferenceManager? containerizedInferenceManager = null)
+        IContainerizedInferenceManager? containerizedInferenceManager = null,
+        IAudioProcessingService? audioProcessingService = null)
+
     {
         _store = store;
         _log = log;
         _perSessionStore = perSessionStore;
         _recentStore = recentStore;
-        _artifactReader = artifactReader ?? new SessionArtifactReader();
-        _sessionSwitchService = sessionSwitchService ?? new SessionSwitchService(perSessionStore, recentStore, log);
         _containerizedProbe = containerizedProbe;
         _containerizedInferenceManager = containerizedInferenceManager;
+        _audioProcessingService = audioProcessingService;
+        _artifactReader = artifactReader ?? new SessionArtifactReader();
+        _sessionSwitchService = sessionSwitchService ?? new SessionSwitchService(perSessionStore, recentStore, log);
+
         _cpuRuntimeManager = new ManagedCpuRuntimeManager(log);
         TranscriptionRegistry = transcriptionRegistry;
         TranslationRegistry = translationRegistry;
@@ -685,7 +691,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         var regenVoice = targetSegment is not null
             ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
             : CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
-                await EnsureSingleSpeakerQwenReferenceClipAsync();
+        await EnsureSingleSpeakerQwenReferenceClipAsync();
         var referenceAudioPath = targetSegment is not null
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;

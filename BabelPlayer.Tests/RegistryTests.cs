@@ -256,12 +256,6 @@ public sealed class RegistryTests : IDisposable
         Assert.Contains(providers, p => p.Id == ProviderNames.EdgeTts);
     }
 
-    [Fact]
-    public void TtsRegistry_GetAvailableProviders_IncludesXttsContainer()
-    {
-        var providers = _ttsRegistry.GetAvailableProviders();
-        Assert.Contains(providers, p => p.Id == ProviderNames.XttsContainer);
-    }
 
     [Fact]
     public void TtsRegistry_CheckReadiness_UnknownProvider_ReturnsNotReady()
@@ -304,13 +298,6 @@ public sealed class RegistryTests : IDisposable
         Assert.NotNull(provider);
     }
 
-    [Fact]
-    public void TtsRegistry_CreateProvider_XttsContainer_DoesNotThrow_WhenRuntimeIsContainerized()
-    {
-        var settings = new AppSettings { TtsRuntime = InferenceRuntime.Containerized, TtsProvider = ProviderNames.XttsContainer };
-        var provider = _ttsRegistry.CreateProvider(ProviderNames.XttsContainer, settings, null, ComputeProfile.Gpu);
-        Assert.NotNull(provider);
-    }
 
     [Fact]
     public void TtsRegistry_CreateProvider_ElevenLabs_DoesNotThrow()
@@ -409,12 +396,6 @@ public sealed class RegistryTests : IDisposable
         Assert.Equal(ProviderNames.Qwen, normalized);
     }
 
-    [Fact]
-    public void InferenceRuntimeCatalog_NormalizeTtsProvider_XttsOnGpu_PreservesXttsId()
-    {
-        var normalized = InferenceRuntimeCatalog.NormalizeTtsProvider(ComputeProfile.Gpu, ProviderNames.XttsContainer);
-        Assert.Equal(ProviderNames.XttsContainer, normalized);
-    }
 
     [Fact]
     public void AllRegistries_ContainerizedService_CheckReadiness_RequiresConfiguredUrl()
@@ -430,7 +411,7 @@ public sealed class RegistryTests : IDisposable
         var translation = _translationRegistry.CheckReadiness(
             ProviderNames.Nllb200, "nllb-200-distilled-1.3B", settingsWithEmptyUrl, null, ComputeProfile.Gpu);
         var tts = _ttsRegistry.CheckReadiness(
-            ProviderNames.XttsContainer, "xtts-v2", settingsWithEmptyUrl, null, ComputeProfile.Gpu);
+            ProviderNames.Qwen, "Qwen/Qwen3-TTS-12Hz-1.7B-Base", settingsWithEmptyUrl, null, ComputeProfile.Gpu);
 
         Assert.False(transcription.IsReady);
         Assert.False(translation.IsReady);
@@ -451,7 +432,7 @@ public sealed class RegistryTests : IDisposable
         var translation = _translationRegistry.CheckReadiness(
             ProviderNames.Nllb200, "nllb-200-distilled-1.3B", settingsWithUrl, null, ComputeProfile.Gpu);
         var tts = _ttsRegistry.CheckReadiness(
-            ProviderNames.XttsContainer, "xtts-v2", settingsWithUrl, null, ComputeProfile.Gpu);
+            ProviderNames.Qwen, "Qwen/Qwen3-TTS-12Hz-1.7B-Base", settingsWithUrl, null, ComputeProfile.Gpu);
 
         Assert.False(transcription.IsReady);
         Assert.False(translation.IsReady);
@@ -482,19 +463,17 @@ public sealed class RegistryTests : IDisposable
         var providers = _ttsRegistry.GetAvailableProviders(ComputeProfile.Cloud);
 
         Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.Piper);
-        Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.XttsContainer);
         Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.Qwen);
         Assert.DoesNotContain(providers, provider => provider.Id == ProviderNames.GoogleCloudTts);
         Assert.Contains(providers, provider => provider.Id == ProviderNames.EdgeTts);
     }
 
     [Fact]
-    public void TtsRegistry_GetAvailableProviders_GpuShowsXttsContainerAndQwen()
+    public void TtsRegistry_GetAvailableProviders_GpuShowsOnlyQwen()
     {
         var providers = _ttsRegistry.GetAvailableProviders(ComputeProfile.Gpu);
 
-        Assert.Equal(2, providers.Count);
-        Assert.Contains(providers, p => p.Id == ProviderNames.XttsContainer);
+        Assert.Single(providers);
         Assert.Contains(providers, p => p.Id == ProviderNames.Qwen);
     }
 

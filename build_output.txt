@@ -1,0 +1,26 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Avalonia Accelerate Trial requires telemetry. To opt out, please purchase a license. Learn more: https://avaloniaui.net/accelerate/
+  BabelPlayer -> D:\Dev\Babel-Player\bin\Debug\net10.0\BabelPlayer.dll
+  Avalonia Accelerate Trial requires telemetry. To opt out, please purchase a license. Learn more: https://avaloniaui.net/accelerate/
+D:\Dev\Babel-Player\BabelPlayer.Tests\PipelineStageProgressTests.cs(198,13): error CS1503: Argument 9: cannot convert from 'BabelPlayer.Tests.PipelineStageProgressTests.StubAudioProcessingService' to 'Babel.Player.Services.IMediaTransportManager?' [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(82,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(100,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(121,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(139,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(157,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(185,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+
+Build FAILED.
+
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(82,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(100,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(121,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(139,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(157,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\TaskExtensionsTests.cs(185,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+D:\Dev\Babel-Player\BabelPlayer.Tests\PipelineStageProgressTests.cs(198,13): error CS1503: Argument 9: cannot convert from 'BabelPlayer.Tests.PipelineStageProgressTests.StubAudioProcessingService' to 'Babel.Player.Services.IMediaTransportManager?' [D:\Dev\Babel-Player\BabelPlayer.Tests\BabelPlayer.Tests.csproj]
+    6 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:11.06

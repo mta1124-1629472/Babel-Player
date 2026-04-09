@@ -33,7 +33,6 @@
   <ItemGroup>
     <Compile Remove="BabelPlayer\**" />
     <Compile Remove="BabelPlayer.Tests\**" />
-    <Compile Remove="Services\ManagedVenvHostManager.cs" />
     <EmbeddedResource Remove="BabelPlayer\**" />
     <None Remove="BabelPlayer\**" />
   </ItemGroup>

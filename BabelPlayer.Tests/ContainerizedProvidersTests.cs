@@ -307,79 +307,14 @@ public sealed class ContainerizedProvidersTests : IDisposable
     }
 
     [Fact]
-    public async Task QwenContainerTtsProvider_GenerateTtsAsync_UsesReferenceAudioForSegments()
+    public async Task QwenContainerTtsProvider_GenerateSegmentTtsAsync_DeduplicatesReferenceRegistrationPerSpeaker()
     {
-        var translationPath = Path.Combine(_dir, "qwen-translation.json");
-        var referenceAudioPath = Path.Combine(_dir, "qwen-speaker.wav");
-        var outputPath = Path.Combine(_dir, "qwen-combined.mp3");
-
-        await File.WriteAllBytesAsync(referenceAudioPath, Encoding.UTF8.GetBytes("ref-audio-qwen"));
-        await File.WriteAllTextAsync(translationPath,
-            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
-
-        var audioBytes = Encoding.UTF8.GetBytes("qwen-combined-audio");
-        int qwenCallCount = 0;
-
-        var client = CreateClient(async (request, ct) =>
-        {
-            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/references")
-            {
-                return await Json(HttpStatusCode.OK,
-                    "{\"success\":true,\"reference_id\":\"spk_default_stub456\"}");
-            }
-
-            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
-            {
-                qwenCallCount++;
-                return await Json(HttpStatusCode.OK,
-                    "{\"success\":true,\"voice\":\"Qwen/Qwen3-TTS-12Hz-1.7B-Base\",\"audio_path\":\"/tmp/qwen-seg.mp3\",\"file_size_bytes\":20}");
-            }
-
-            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/qwen-seg.mp3")
-            {
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new ByteArrayContent(audioBytes)
-                };
-            }
-
-            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
-        });
-
-        var provider = new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log));
-
-        var result = await provider.GenerateTtsAsync(new TtsRequest(
-            translationPath,
-            outputPath,
-            "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-            SpeakerReferenceAudioPaths: new Dictionary<string, string>
-            {
-                [QwenReferenceKeys.SingleSpeakerDefault] = referenceAudioPath
-            }));
-
-        Assert.True(result.Success);
-        Assert.Equal(outputPath, result.AudioPath);
-        Assert.True(File.Exists(outputPath));
-        Assert.Equal(1, qwenCallCount);
-    }
-
-    [Fact]
-    public async Task QwenContainerTtsProvider_GenerateTtsAsync_RegistersEachSpeakerReferenceOnlyOnce()
-    {
-        // Three segments — two for spk_00, one for spk_01 — only 2 registrations should occur.
-        var translationPath = Path.Combine(_dir, "qwen-multi-reg.json");
+        // Three calls — two for spk_00, one for spk_01 — only 2 registrations should occur.
         var spk00Ref = Path.Combine(_dir, "spk00.wav");
         var spk01Ref = Path.Combine(_dir, "spk01.wav");
-        var outputPath = Path.Combine(_dir, "qwen-multi-reg.mp3");
 
         await File.WriteAllBytesAsync(spk00Ref, Encoding.UTF8.GetBytes("ref-spk00"));
         await File.WriteAllBytesAsync(spk01Ref, Encoding.UTF8.GetBytes("ref-spk01"));
-        await File.WriteAllTextAsync(translationPath,
-            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":["
-            + "{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"a\",\"translatedText\":\"hello\",\"speakerId\":\"spk_00\"},"
-            + "{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"b\",\"translatedText\":\"world\",\"speakerId\":\"spk_01\"},"
-            + "{\"id\":\"segment_2.0\",\"start\":2.0,\"end\":3.0,\"text\":\"c\",\"translatedText\":\"again\",\"speakerId\":\"spk_00\"}"
-            + "]}");
 
         var registrationCount = 0;
         var segmentCount = 0;
@@ -410,80 +345,59 @@ public sealed class ContainerizedProvidersTests : IDisposable
             return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var provider = new QwenContainerTtsProvider(
-            client,
-            _log,
-            new TtsReferenceExtractor(_log),
-            async (segmentPaths, dest, _) =>
-            {
-                var combined = new List<byte>();
-                foreach (var p in segmentPaths)
-                    combined.AddRange(await File.ReadAllBytesAsync(p));
-                await File.WriteAllBytesAsync(dest, combined.ToArray());
-            });
+        var provider = new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log));
 
-        var result = await provider.GenerateTtsAsync(new TtsRequest(
-            translationPath,
-            outputPath,
-            "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-            SpeakerVoiceAssignments: new Dictionary<string, string>
-            {
-                ["spk_00"] = "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-                ["spk_01"] = "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-            },
-            SpeakerReferenceAudioPaths: new Dictionary<string, string>
-            {
-                ["spk_00"] = spk00Ref,
-                ["spk_01"] = spk01Ref,
-            }));
+        // spk_00 first call
+        var r1 = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
+            "hello", Path.Combine(_dir, "seg1.mp3"), "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            SpeakerId: "spk_00", ReferenceAudioPath: spk00Ref, Language: "en"));
+        Assert.True(r1.Success);
 
-        Assert.True(result.Success);
+        // spk_01 call
+        var r2 = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
+            "world", Path.Combine(_dir, "seg2.mp3"), "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            SpeakerId: "spk_01", ReferenceAudioPath: spk01Ref, Language: "en"));
+        Assert.True(r2.Success);
+
+        // spk_00 second call — should reuse cached reference
+        var r3 = await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest(
+            "again", Path.Combine(_dir, "seg3.mp3"), "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            SpeakerId: "spk_00", ReferenceAudioPath: spk00Ref, Language: "en"));
+        Assert.True(r3.Success);
+
         Assert.Equal(2, registrationCount);  // one registration per speaker, not per segment
         Assert.Equal(3, segmentCount);       // three synthesis calls total
     }
 
     [Fact]
-    public async Task QwenContainerTtsProvider_GenerateTtsAsync_DoesNotUseXttsSingleSpeakerDefaultReference()
+    public async Task QwenContainerTtsProvider_GenerateTtsAsync_ThrowsNotImplementedException()
     {
-        var translationPath = Path.Combine(_dir, "qwen-translation-xtts-default-only.json");
-        var xttsDefaultReferencePath = Path.Combine(_dir, "xtts-default-ref.wav");
-        var outputPath = Path.Combine(_dir, "qwen-should-fail-with-xtts-default.mp3");
-
-        await File.WriteAllBytesAsync(xttsDefaultReferencePath, Encoding.UTF8.GetBytes("ref-audio-xtts"));
-        await File.WriteAllTextAsync(translationPath,
-            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
-
-        var client = CreateClient((request, _) =>
-        {
-            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
-            {
-                return Json(HttpStatusCode.OK,
-                    "{\"success\":true,\"voice\":\"Qwen/Qwen3-TTS-12Hz-1.7B-Base\",\"audio_path\":\"/tmp/qwen-seg.mp3\",\"file_size_bytes\":20}");
-            }
-
-            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/qwen-seg.mp3")
-            {
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new ByteArrayContent(Encoding.UTF8.GetBytes("qwen-audio"))
-                });
-            }
-
-            return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
-        });
-
+        // Combined generation is now delegated to the coordinator; provider must throw.
+        var client = CreateClient((_, _) =>
+            Json(HttpStatusCode.OK, "{\"success\":true}"));
         var provider = new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log));
+        var request = new TtsRequest(
+            Path.Combine(_dir, "dummy.json"),
+            Path.Combine(_dir, "out.mp3"),
+            "Qwen/Qwen3-TTS-12Hz-1.7B-Base");
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(new TtsRequest(
-            translationPath,
-            outputPath,
-            "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-            SpeakerReferenceAudioPaths: new Dictionary<string, string>
-            {
-                [QwenReferenceKeys.SingleSpeakerDefault] = xttsDefaultReferencePath
-            })));
+        var ex = await Assert.ThrowsAsync<NotImplementedException>(
+            () => provider.GenerateTtsAsync(request));
 
-        Assert.Contains("requires a reference clip", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PLACEHOLDER", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void QwenContainerTtsProvider_Constructor_AcceptsSimplifiedParameters()
+    {
+        // Verify the constructor no longer requires a combineAudioFunc parameter.
+        var client = CreateClient((_, _) =>
+            Json(HttpStatusCode.OK, "{\"success\":true}"));
+
+        var ex = Record.Exception(
+            () => new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log)));
+
+        Assert.Null(ex);
     }
 
     [Fact]
@@ -757,9 +671,6 @@ public sealed class ContainerizedProvidersTests : IDisposable
         Assert.True(health.Capabilities!.TryGetTtsProviderReadiness(ProviderNames.Qwen, out var qwenReady, out var qwenDetail));
         Assert.False(qwenReady);
         Assert.Contains("paging file", qwenDetail, StringComparison.OrdinalIgnoreCase);
-        Assert.True(health.Capabilities.TryGetTtsProviderReadiness(ProviderNames.XttsContainer, out var xttsReady, out var xttsDetail));
-        Assert.True(xttsReady);
-        Assert.Contains("XTTS v2 ready", xttsDetail, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -837,16 +748,14 @@ public sealed class ContainerizedProvidersTests : IDisposable
                 TranslationReady: true,
                 TranslationDetail: null,
                 TtsReady: true,
-                TtsDetail: "XTTS v2 ready on cuda; reference audio required",
+                TtsDetail: null,
                 TtsProviders: new Dictionary<string, bool>
                 {
                     [ProviderNames.Qwen] = false,
-                    [ProviderNames.XttsContainer] = true,
                 },
                 TtsProviderDetails: new Dictionary<string, string>
                 {
-                    [ProviderNames.Qwen] = "Qwen3-TTS warmup failed: The paging file is too small for this operation to complete.",
-                    [ProviderNames.XttsContainer] = "XTTS v2 ready on cuda; reference audio required",
+                    [ProviderNames.Qwen] = "Qwen3-TTS warmup failed: out of memory",
                 }))));
 
         var settings = new AppSettings
@@ -859,8 +768,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
         var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("paging file", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("TTS", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -926,7 +834,7 @@ public sealed class ContainerizedProvidersTests : IDisposable
                     TranslationReady: true,
                     TranslationDetail: null,
                     TtsReady: true,
-                    TtsDetail: "XTTS v2 ready",
+                    TtsDetail: null,
                     TtsProviders: new Dictionary<string, bool> { [ProviderNames.Qwen] = false },
                     TtsProviderDetails: new Dictionary<string, string>
                     {

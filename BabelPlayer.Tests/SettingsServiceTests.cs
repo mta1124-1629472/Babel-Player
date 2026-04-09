@@ -53,7 +53,7 @@ public sealed class SettingsServiceTests : IDisposable
         Assert.Equal(ComputeProfile.Gpu, settings.TranslationProfile);
         Assert.Equal(ProviderNames.Nllb200, settings.TranslationProvider);
         Assert.Equal(ComputeProfile.Gpu, settings.TtsProfile);
-        Assert.Equal(ProviderNames.XttsContainer, settings.TtsProvider);
+        Assert.Equal(ProviderNames.Qwen, settings.TtsProvider);
         Assert.Equal(GpuHostBackend.DockerHost, settings.PreferredLocalGpuBackend);
         Assert.True(settings.AlwaysStartLocalGpuRuntimeAtAppStart);
         Assert.Equal("http://localhost:8000", settings.AdvancedGpuServiceUrl);

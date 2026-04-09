@@ -377,9 +377,9 @@ public sealed class ModelTests
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.FasterWhisper));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.GoogleTranslateFree));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.EdgeTts));
-        Assert.False(string.IsNullOrWhiteSpace(ProviderNames.XttsContainer));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Piper));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Nllb200));
+        Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Qwen));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.ContainerizedService));
     }
 
@@ -405,28 +405,68 @@ public sealed class ModelTests
             ProviderNames.Deepl,
             ProviderNames.OpenAi,
             ProviderNames.EdgeTts,
-            ProviderNames.XttsContainer,
             ProviderNames.Piper,
             ProviderNames.ElevenLabs,
             ProviderNames.GoogleCloudTts,
             ProviderNames.OpenAiTts,
+            ProviderNames.Qwen,
             ProviderNames.ContainerizedService,
         };
         Assert.Equal(names.Length, new System.Collections.Generic.HashSet<string>(names).Count);
     }
 
     [Fact]
-    public void InferenceRuntimeCatalog_DefaultTtsProvider_ContainerizedIsXttsContainer()
+    public void InferenceRuntimeCatalog_DefaultTtsProvider_ContainerizedIsQwen()
     {
         var provider = InferenceRuntimeCatalog.DefaultTtsProvider(InferenceRuntime.Containerized);
-        Assert.Equal(ProviderNames.XttsContainer, provider);
+        Assert.Equal(ProviderNames.Qwen, provider);
     }
 
     [Fact]
-    public void InferenceRuntimeCatalog_NormalizeTtsProvider_ContainerizedBlankIsXttsContainer()
+    public void InferenceRuntimeCatalog_NormalizeTtsProvider_ContainerizedBlankIsQwen()
     {
         var provider = InferenceRuntimeCatalog.NormalizeTtsProvider(InferenceRuntime.Containerized, "");
-        Assert.Equal(ProviderNames.XttsContainer, provider);
+        Assert.Equal(ProviderNames.Qwen, provider);
+    }
+
+    // ── ITtsProvider.MaxConcurrency default ───────────────────────────────────
+
+    [Fact]
+    public void ITtsProvider_MaxConcurrency_DefaultIsAtLeastOne()
+    {
+        // The interface default implementation must return at least 1.
+        // Use a minimal inline implementation to get the default value.
+        ITtsProvider provider = new MinimalTtsProvider();
+        Assert.True(provider.MaxConcurrency >= 1,
+            $"MaxConcurrency must be at least 1, got {provider.MaxConcurrency}");
+    }
+
+    [Fact]
+    public void ITtsProvider_MaxConcurrency_DefaultIsAtMostFour()
+    {
+        // The interface default caps at 4 to prevent VRAM contention on local providers.
+        ITtsProvider provider = new MinimalTtsProvider();
+        Assert.True(provider.MaxConcurrency <= 4,
+            $"Default MaxConcurrency should be at most 4 (for local GPU), got {provider.MaxConcurrency}");
+    }
+
+    [Fact]
+    public void ITtsProvider_MaxConcurrency_DefaultIsBoundedByProcessorCount()
+    {
+        // Default is Math.Max(1, Math.Min(4, ProcessorCount / 2)).
+        var expected = Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
+        ITtsProvider provider = new MinimalTtsProvider();
+        Assert.Equal(expected, provider.MaxConcurrency);
+    }
+
+    /// <summary>Minimal provider implementation that relies entirely on ITtsProvider defaults.</summary>
+    private sealed class MinimalTtsProvider : ITtsProvider
+    {
+        public Task<TtsResult> GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException("PLACEHOLDER: MinimalTtsProvider.GenerateTtsAsync is only used to exercise ITtsProvider defaults in tests.");
+
+        public Task<TtsResult> GenerateSegmentTtsAsync(SingleSegmentTtsRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException("PLACEHOLDER: MinimalTtsProvider.GenerateSegmentTtsAsync is only used to exercise ITtsProvider defaults in tests.");
     }
 
     // ── TranscriptArtifact ────────────────────────────────────────────────────

@@ -21,6 +21,12 @@ namespace Babel.Player.Services;
 public interface ITtsProvider
 {
     /// <summary>
+    /// Maximum number of concurrent segment synthesis requests this provider supports.
+    /// Local GPU providers should return a low value (2-4) to avoid VRAM contention.
+    /// Cloud providers can return higher values (8-16) since they are network-bound.
+    /// </summary>
+    int MaxConcurrency => Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
+    /// <summary>
     /// Generates speech for all translated segments in a translation JSON,
     /// returning the combined output audio stream.
     /// </summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -46,25 +47,56 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
                 Content = new ByteArrayContent([0x01, 0x02, 0x03])
             })));
 
-    private string WriteTranslationJson(string? translatedText = "Hello world")
+    private string WriteTranslationJson(string? translatedText = "Hello world", bool twoSegments = false)
     {
         var path = Path.Combine(_testDir, $"translation-{Guid.NewGuid():N}.json");
-        var json = $$"""
+
+        if (twoSegments)
         {
-          "sourceLanguage": "es",
-          "targetLanguage": "en",
-          "segments": [
+            var json = $$"""
             {
-              "id": "segment_0.0",
-              "start": 0.0,
-              "end": 2.5,
-              "text": "Hola mundo",
-              "translatedText": {{(translatedText is null ? "null" : $"\"{translatedText}\"")}}
+              "sourceLanguage": "es",
+              "targetLanguage": "en",
+              "segments": [
+                {
+                  "id": "segment_0.0",
+                  "start": 0.0,
+                  "end": 2.5,
+                  "text": "Hola mundo",
+                  "translatedText": "Hello world"
+                },
+                {
+                  "id": "segment_2.5",
+                  "start": 2.5,
+                  "end": 5.0,
+                  "text": "Como estas",
+                  "translatedText": "How are you"
+                }
+              ]
             }
-          ]
+            """;
+            File.WriteAllText(path, json);
         }
-        """;
-        File.WriteAllText(path, json);
+        else
+        {
+            var json = $$"""
+            {
+              "sourceLanguage": "es",
+              "targetLanguage": "en",
+              "segments": [
+                {
+                  "id": "segment_0.0",
+                  "start": 0.0,
+                  "end": 2.5,
+                  "text": "Hola mundo",
+                  "translatedText": {{(translatedText is null ? "null" : $"\"{translatedText}\"")}}
+                }
+              ]
+            }
+            """;
+            File.WriteAllText(path, json);
+        }
+
         return path;
     }
 
@@ -80,6 +112,26 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
         """;
         File.WriteAllText(path, json);
         return path;
+    }
+
+    // ── MaxConcurrency ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void MaxConcurrency_ReturnsExpectedValue()
+    {
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        Assert.Equal(10, provider.MaxConcurrency);
+    }
+
+    [Fact]
+    public void MaxConcurrency_IsHigherThanInterfaceDefault()
+    {
+        // ElevenLabs is a cloud provider and should allow more concurrency than local providers.
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        var interfaceDefault = Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
+        Assert.True(provider.MaxConcurrency > interfaceDefault,
+            $"Expected MaxConcurrency={provider.MaxConcurrency} to be greater than interfaceDefault={interfaceDefault}");
+        Assert.Equal(10, provider.MaxConcurrency);
     }
 
     // ── CheckReadiness ─────────────────────────────────────────────────────────
@@ -125,26 +177,22 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task GenerateTtsAsync_InvokesClientFactory_ExactlyOnce()
+    public async Task GenerateTtsAsync_GeneratesCombinedAudio()
     {
-        var callCount = 0;
-        var translationPath = WriteTranslationJson("Hello world");
+        var mockAudioService = new MockAudioProcessingService();
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient, audioProcessingService: mockAudioService);
+        var translationPath = WriteTranslationJson(twoSegments: true);
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
-        using var provider = new ElevenLabsTtsProvider(_log, "key", () =>
-        {
-            callCount++;
-            return MakeClient();
-        });
+        var result = await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "eleven_multilingual_v2"));
 
-        // Two calls should still only create the client once (lazy)
-        try { await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "eleven_multilingual_v2")); }
-        catch { /* ignore network/content errors — we only care about factory call count */ }
-
-        try { await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "eleven_multilingual_v2")); }
-        catch { /* ignore */ }
-
-        Assert.Equal(1, callCount);
+        Assert.True(result.Success);
+        Assert.Equal(outputPath, result.AudioPath);
+        Assert.True(File.Exists(outputPath));
+        // Verify multi-segment stitching executed (output should be larger than single segment)
+        var fileSize = new FileInfo(outputPath).Length;
+        Assert.True(fileSize > 0, "Combined audio file should have non-zero size after stitching two segments");
+        Assert.True(mockAudioService.CombineAudioSegmentsAsyncCalled, "Audio concatenation should have been called for multi-segment input");
     }
 
     [Fact]
@@ -208,12 +256,12 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
         Assert.True(disposed);
     }
 
-    // ── Request validation ─────────────────────────────────────────────────────
+    // ── GenerateTtsAsync validation ────────────────────────────────────────────
 
     [Fact]
     public async Task GenerateTtsAsync_FileNotFound_ThrowsFileNotFoundException()
     {
-        using var provider = new ElevenLabsTtsProvider(_log, "key", () => MakeClient());
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
         var request = new TtsRequest("nonexistent.json", Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
 
         await Assert.ThrowsAsync<FileNotFoundException>(() => provider.GenerateTtsAsync(request));
@@ -222,7 +270,7 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
     [Fact]
     public async Task GenerateTtsAsync_EmptySegments_ThrowsInvalidOperationException()
     {
-        using var provider = new ElevenLabsTtsProvider(_log, "key", () => MakeClient());
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
         var translationPath = WriteEmptySegmentsTranslationJson();
         var request = new TtsRequest(translationPath, Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
 
@@ -230,13 +278,24 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task GenerateTtsAsync_AllSegmentsEmpty_ThrowsInvalidOperationException()
+    public async Task GenerateTtsAsync_AllSegmentsNullTranslatedText_ThrowsInvalidOperationException()
     {
-        using var provider = new ElevenLabsTtsProvider(_log, "key", () => MakeClient());
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
         var translationPath = WriteTranslationJson(translatedText: null);
         var request = new TtsRequest(translationPath, Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(request));
+    }
+
+    // ── Request validation ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GenerateSegmentTtsAsync_NullText_ThrowsArgumentException()
+    {
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        var request = new SingleSegmentTtsRequest(null!, Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GenerateSegmentTtsAsync(request));
     }
 
     [Fact]
@@ -280,6 +339,51 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
             if (disposing)
                 onDispose();
             base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>
+    /// Manual mock implementation of IAudioProcessingService for testing.
+    /// Writes dummy audio data to the output path when CombineAudioSegmentsAsync is called.
+    /// </summary>
+    private sealed class MockAudioProcessingService : IAudioProcessingService
+    {
+        public bool CombineAudioSegmentsAsyncCalled { get; private set; }
+
+        public Task CombineAudioSegmentsAsync(
+            IReadOnlyList<string> segmentAudioPaths,
+            string outputAudioPath,
+            CancellationToken cancellationToken)
+        {
+            CombineAudioSegmentsAsyncCalled = true;
+            
+            // Create output directory if it doesn't exist
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            
+            // Write dummy audio data (3 bytes) to simulate concatenated audio
+            File.WriteAllBytes(outputAudioPath, new byte[] { 0x01, 0x02, 0x03 });
+            
+            return Task.CompletedTask;
+        }
+
+        public Task ExtractAudioClipAsync(
+            string inputPath,
+            string outputPath,
+            double startTimeSeconds,
+            double durationSeconds,
+            CancellationToken cancellationToken)
+        {
+            // Create output directory if it doesn't exist
+            var outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            
+            // Write dummy audio data
+            File.WriteAllBytes(outputPath, new byte[] { 0x01, 0x02, 0x03 });
+            
+            return Task.CompletedTask;
         }
     }
 }

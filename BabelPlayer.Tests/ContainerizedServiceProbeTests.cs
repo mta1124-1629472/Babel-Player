@@ -407,8 +407,27 @@ public sealed class ContainerizedServiceProbeTests
         Assert.Equal(150, results.Length);
         Assert.All(results, result => Assert.True(result.State == ContainerizedProbeState.Checking || result.State == ContainerizedProbeState.Available));
         
-        // Wait for all background probes to complete
-        await Task.Delay(500);
+        // Wait for all background probes to complete (robust polling loop for CI stability)
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        bool allAvailable = false;
+        while (DateTime.UtcNow < timeout)
+        {
+            allAvailable = true;
+            foreach (var url in serviceUrls)
+            {
+                var state = probe.GetCurrentOrStartBackgroundProbe(url).State;
+                if (state != ContainerizedProbeState.Available)
+                {
+                    allAvailable = false;
+                    break;
+                }
+            }
+            if (allAvailable) break;
+            await Task.Delay(100);
+        }
+
+        Assert.True(allAvailable, "Background probes did not reach Available state within timeout.");
+
         
         // Verify cache works and metrics are accurate
         foreach (var url in serviceUrls)

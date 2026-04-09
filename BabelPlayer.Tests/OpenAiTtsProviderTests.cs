@@ -82,6 +82,24 @@ public sealed class OpenAiTtsProviderTests : IDisposable
         return path;
     }
 
+    // ── MaxConcurrency ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void MaxConcurrency_ReturnsExpectedValue()
+    {
+        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient);
+        Assert.Equal(12, provider.MaxConcurrency);
+    }
+
+    [Fact]
+    public void MaxConcurrency_IsHigherThanLocalDefault()
+    {
+        // OpenAI is a cloud provider and should allow more concurrency than local GPU providers.
+        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient);
+        Assert.True(provider.MaxConcurrency > 4,
+            $"Cloud provider MaxConcurrency={provider.MaxConcurrency} should exceed local GPU limit of 4");
+    }
+
     // ── CheckReadiness ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -109,42 +127,18 @@ public sealed class OpenAiTtsProviderTests : IDisposable
         Assert.True(result.IsReady);
     }
 
-    // ── Lazy<T> client initialization ─────────────────────────────────────────
+    // ── GenerateTtsAsync behavior ──────────────────────────────────────────────
 
     [Fact]
-    public void Constructor_DoesNotInvokeClientFactory()
+    public async Task GenerateTtsAsync_ThrowsNotImplementedException()
     {
-        var callCount = 0;
-        _ = new OpenAiTtsProvider(_log, "key", () =>
-        {
-            callCount++;
-            return MakeClient();
-        });
-
-        Assert.Equal(0, callCount);
-    }
-
-    [Fact]
-    public async Task GenerateTtsAsync_InvokesClientFactory_ExactlyOnce()
-    {
-        var callCount = 0;
+        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient);
         var translationPath = WriteTranslationJson("Hello world");
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
-        using var provider = new OpenAiTtsProvider(_log, "key", () =>
-        {
-            callCount++;
-            return MakeClient();
-        });
-
-        // Two calls should only create the client once
-        try { await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "tts-1")); }
-        catch { /* ignore network/content errors */ }
-
-        try { await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "tts-1")); }
-        catch { /* ignore */ }
-
-        Assert.Equal(1, callCount);
+        var ex = await Assert.ThrowsAsync<NotImplementedException>(() =>
+            provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "tts-1")));
+        Assert.Contains("PLACEHOLDER", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -209,32 +203,12 @@ public sealed class OpenAiTtsProviderTests : IDisposable
     // ── Request validation ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GenerateTtsAsync_FileNotFound_ThrowsFileNotFoundException()
+    public async Task GenerateSegmentTtsAsync_NullText_ThrowsArgumentException()
     {
-        using var provider = new OpenAiTtsProvider(_log, "key", () => MakeClient());
-        var request = new TtsRequest("nonexistent.json", Path.Combine(_testDir, "out.mp3"), "tts-1");
+        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient);
+        var request = new SingleSegmentTtsRequest(null!, Path.Combine(_testDir, "out.mp3"), "tts-1");
 
-        await Assert.ThrowsAsync<FileNotFoundException>(() => provider.GenerateTtsAsync(request));
-    }
-
-    [Fact]
-    public async Task GenerateTtsAsync_EmptySegments_ThrowsInvalidOperationException()
-    {
-        using var provider = new OpenAiTtsProvider(_log, "key", () => MakeClient());
-        var translationPath = WriteEmptySegmentsTranslationJson();
-        var request = new TtsRequest(translationPath, Path.Combine(_testDir, "out.mp3"), "tts-1");
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(request));
-    }
-
-    [Fact]
-    public async Task GenerateTtsAsync_AllSegmentsNullText_ThrowsInvalidOperationException()
-    {
-        using var provider = new OpenAiTtsProvider(_log, "key", () => MakeClient());
-        var translationPath = WriteTranslationJson(translatedText: null);
-        var request = new TtsRequest(translationPath, Path.Combine(_testDir, "out.mp3"), "tts-1");
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(request));
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GenerateSegmentTtsAsync(request));
     }
 
     [Fact]
@@ -258,12 +232,10 @@ public sealed class OpenAiTtsProviderTests : IDisposable
     // ── Model name normalization ───────────────────────────────────────────────
 
     [Fact]
-    public async Task GenerateTtsAsync_UnrecognizedVoiceName_FallsBackToTts1()
+    public async Task GenerateSegmentTtsAsync_UnrecognizedVoiceName_FallsBackToTts1()
     {
-        // Even with an unrecognized voice name, the method should proceed to call the client
-        // (normalization defaults to tts-1). The factory call count verifies client was created.
+        // Even with an unrecognized voice name, the method should proceed (normalization defaults to tts-1).
         var callCount = 0;
-        var translationPath = WriteTranslationJson("Hello");
         var outputPath = Path.Combine(_testDir, "model-out.mp3");
 
         using var provider = new OpenAiTtsProvider(_log, "key", () =>
@@ -272,11 +244,10 @@ public sealed class OpenAiTtsProviderTests : IDisposable
             return MakeClient();
         });
 
-        try { await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "unknown-model")); }
-        catch { /* ignore network errors */ }
+        await provider.GenerateSegmentTtsAsync(new SingleSegmentTtsRequest("Hello", outputPath, "unknown-model"));
 
-        // At least the client was created (via the lazy factory), meaning no early throw on normalization
         Assert.Equal(1, callCount);
+        Assert.True(File.Exists(outputPath));
     }
 
     // ── Stub helpers ──────────────────────────────────────────────────────────

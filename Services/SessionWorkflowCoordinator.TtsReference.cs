@@ -38,45 +38,28 @@ public sealed partial class SessionWorkflowCoordinator
         if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
             throw new FileNotFoundException("Cannot create Qwen reference audio: source media is unavailable.", mediaPath);
 
-        var ffmpegPath = DependencyLocator.FindFfmpeg()
-            ?? throw new InvalidOperationException("ffmpeg not found. Qwen auto reference extraction requires ffmpeg.");
         var refsDir = Path.Combine(GetSessionDirectory(), "tts", "references");
         Directory.CreateDirectory(refsDir);
         var outputPath = Path.Combine(refsDir, "qwen-single-speaker-reference.wav");
 
         if (!File.Exists(outputPath))
         {
-            var psi = new ProcessStartInfo
+            if (_audioProcessingService is not null)
             {
-                FileName = ffmpegPath,
-                RedirectStandardOutput = false,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            psi.ArgumentList.Add("-y");
-            psi.ArgumentList.Add("-i");
-            psi.ArgumentList.Add(mediaPath);
-            psi.ArgumentList.Add("-t");
-            psi.ArgumentList.Add("30");
-            psi.ArgumentList.Add("-vn");
-            psi.ArgumentList.Add("-ac");
-            psi.ArgumentList.Add("1");
-            psi.ArgumentList.Add("-ar");
-            psi.ArgumentList.Add("16000");
-            psi.ArgumentList.Add("-sample_fmt");
-            psi.ArgumentList.Add("s16");
-            psi.ArgumentList.Add(outputPath);
-
-            using var proc = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start ffmpeg for Qwen reference extraction.");
-
-            var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
-            await proc.WaitForExitAsync(cancellationToken);
-            var stderr = await stderrTask;
-            if (proc.ExitCode != 0 || !File.Exists(outputPath))
-                throw new InvalidOperationException($"Qwen reference extraction failed: {stderr}");
+                await _audioProcessingService.ExtractAudioClipAsync(
+                    mediaPath,
+                    outputPath,
+                    startTimeSeconds: 0,
+                    durationSeconds: 30,
+                    cancellationToken);
+            }
+            else
+            {
+                _log.Warning("Audio processing service unavailable. Qwen auto reference extraction skipped.");
+                return;
+            }
         }
+
 
         var updatedRefs = references is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
@@ -121,14 +104,13 @@ public sealed partial class SessionWorkflowCoordinator
         if (bestBySpeaker.Count == 0)
             return;
 
-        var ffmpegPath = DependencyLocator.FindFfmpeg();
-        if (ffmpegPath is null)
+        if (_audioProcessingService is null)
         {
-            _log.Warning("ffmpeg not found — multi-speaker auto-reference extraction skipped.");
+            _log.Warning("Audio processing service unavailable — multi-speaker auto-reference extraction skipped.");
             return;
         }
 
-        const string sampleRate = "16000";
+
         const string providerTag = "qwen";
         var refsDir = Path.Combine(GetSessionDirectory(), "tts", "references");
         Directory.CreateDirectory(refsDir);
@@ -148,41 +130,25 @@ public sealed partial class SessionWorkflowCoordinator
             var safeSpeakerId = string.Join("_", speakerId.Split(Path.GetInvalidFileNameChars()));
             var outputPath = Path.Combine(refsDir, $"{providerTag}-ref-{safeSpeakerId}.wav");
 
-            var psi = new ProcessStartInfo
+            try
             {
-                FileName = ffmpegPath,
-                RedirectStandardOutput = false,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            psi.ArgumentList.Add("-y");
-            psi.ArgumentList.Add("-ss");
-            psi.ArgumentList.Add(segStart.ToString("F3", CultureInfo.InvariantCulture));
-            psi.ArgumentList.Add("-i");
-            psi.ArgumentList.Add(mediaPath);
-            psi.ArgumentList.Add("-t");
-            psi.ArgumentList.Add(extractDuration.ToString("F3", CultureInfo.InvariantCulture));
-            psi.ArgumentList.Add("-vn");
-            psi.ArgumentList.Add("-ac");
-            psi.ArgumentList.Add("1");
-            psi.ArgumentList.Add("-ar");
-            psi.ArgumentList.Add(sampleRate);
-            psi.ArgumentList.Add("-sample_fmt");
-            psi.ArgumentList.Add("s16");
-            psi.ArgumentList.Add(outputPath);
-
-            using var proc = Process.Start(psi)
-                ?? throw new InvalidOperationException($"Failed to start ffmpeg for speaker '{speakerId}' reference extraction.");
-            var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
-            await proc.WaitForExitAsync(cancellationToken);
-            var stderr = await stderrTask;
-
-            if (proc.ExitCode != 0 || !File.Exists(outputPath))
+                await _audioProcessingService.ExtractAudioClipAsync(
+                    mediaPath,
+                    outputPath,
+                    segStart,
+                    extractDuration,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
             {
-                _log.Warning($"Auto-reference extraction failed for speaker '{speakerId}': {stderr}");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.Warning($"Auto-reference extraction failed for speaker '{speakerId}': {ex.Message}");
                 continue;
             }
+
 
             updated[speakerId] = outputPath;
             anyNew = true;

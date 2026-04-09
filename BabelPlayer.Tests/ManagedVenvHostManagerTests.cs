@@ -133,6 +133,8 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
             requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
             constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            bootstrapRunner: (uvPath, venvDir, pythonPath, requirementsPath, constraintsPath, token) =>
+                Task.CompletedTask,
             runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
                 false,
                 "PyTorch is installed, but torch.cuda.is_available() returned false.")));
@@ -179,6 +181,8 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
             requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
             constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            bootstrapRunner: (uvPath, venvDir, pythonPath, requirementsPath, constraintsPath, token) =>
+                Task.CompletedTask,
             runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
                 true,
                 "Managed Python runtime can access CUDA 12.8.",
@@ -239,6 +243,8 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
             requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
             constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            bootstrapRunner: (uvPath, venvDir, pythonPath, requirementsPath, constraintsPath, token) =>
+                Task.CompletedTask,
             runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
                 true,
                 "Managed Python runtime can access CUDA 12.8.",
@@ -281,6 +287,8 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
             requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
             constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            bootstrapRunner: (uvPath, venvDir, pythonPath, requirementsPath, constraintsPath, token) =>
+                Task.CompletedTask,
             runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
                 true,
                 "Managed Python runtime can access CUDA 12.8.",
@@ -485,6 +493,8 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
             requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
             constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            bootstrapRunner: (uvPath, venvDir, pythonPath, requirementsPath, constraintsPath, token) =>
+                Task.CompletedTask,
             runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
                 true,
                 "Managed Python runtime can access CUDA 12.8.",
@@ -582,6 +592,8 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
             requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
             constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            bootstrapRunner: (uvPath, venvDir, pythonPath, requirementsPath, constraintsPath, token) =>
+                Task.CompletedTask,
             runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
                 true,
                 "Managed Python runtime can access CUDA 12.8.",
@@ -808,6 +820,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     private static string ComputeBootstrapVersion(string requirementsPath, string constraintsPath)
     {
         var builder = new StringBuilder();
+        builder.AppendLine("3.12"); // PythonVersion constant from ManagedVenvHostManager
         builder.AppendLine(File.ReadAllText(requirementsPath));
         builder.AppendLine(File.ReadAllText(constraintsPath));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));

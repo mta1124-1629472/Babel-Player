@@ -23,11 +23,13 @@ public sealed class TtsRegistry : ITtsRegistry
 {
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
+    private readonly IAudioProcessingService? _audioProcessingService;
 
-    public TtsRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null)
+    public TtsRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null, IAudioProcessingService? audioProcessingService = null)
     {
         _log = log;
         _containerizedProbe = containerizedProbe;
+        _audioProcessingService = audioProcessingService;
     }
 
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null)
@@ -179,7 +181,7 @@ public sealed class TtsRegistry : ITtsRegistry
             ProviderNames.Piper => new PiperTtsProvider(_log, settings.PiperModelDir),
             ProviderNames.EdgeTts => new EdgeTtsProvider(_log),
             ProviderNames.ElevenLabs => new ElevenLabsTtsProvider(
-                _log, keyStore?.GetKey(CredentialKeys.ElevenLabs) ?? string.Empty),
+                _log, keyStore?.GetKey(CredentialKeys.ElevenLabs) ?? string.Empty, audioProcessingService: _audioProcessingService),
             ProviderNames.GoogleCloudTts => new GoogleCloudTtsProvider(
                 _log, keyStore?.GetKey(CredentialKeys.GoogleAi) ?? string.Empty),
             ProviderNames.OpenAiTts => new OpenAiTtsProvider(

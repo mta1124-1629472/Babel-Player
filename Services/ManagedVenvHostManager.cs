@@ -34,7 +34,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private static readonly TimeSpan VenvUnlockTimeout = TimeSpan.FromSeconds(5);
     // Pin the full Python patch version so uv resolves a reproducible interpreter build.
     // Python 3.12 is required for the managed GPU runtime compatibility path.
-    private const string PythonVersion = "3.12.7";
+    private const string PythonVersion = "3.12";
 
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _probe;
@@ -279,7 +279,18 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
 
         _log.Info($"Validating managed GPU runtime via {pythonPath}.");
-        var runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+        ManagedGpuRuntimeValidationResult runtimeValidation;
+        try
+        {
+            runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // If the runtime validator itself throws an exception, preserve the error message
+            // and return a failure that includes the validation context
+            return Fail($"Managed local GPU runtime validation failed: {ex.Message}");
+        }
+
         if (!runtimeValidation.CudaAvailable)
         {
             var isMissingTorch = runtimeValidation.Message.Contains("missing PyTorch", StringComparison.OrdinalIgnoreCase);
@@ -326,7 +337,15 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 }
 
                 _log.Info($"Re-validating managed GPU runtime after auto-rebuild.");
-                runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+                try
+                {
+                    runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    return Fail($"Managed local GPU runtime validation failed after auto-rebuild: {ex.Message}");
+                }
+                
                 if (!runtimeValidation.CudaAvailable)
                 {
                     return Fail(
@@ -1120,6 +1139,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string constraintsPath)
     {
         var builder = new StringBuilder();
+        builder.AppendLine(PythonVersion);
         builder.AppendLine(File.ReadAllText(requirementsPath));
         builder.AppendLine(File.ReadAllText(constraintsPath));
 

@@ -102,12 +102,6 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void InferTtsProfile_XttsContainer_ReturnsGpu()
-    {
-        Assert.Equal(ComputeProfile.Gpu, InferenceRuntimeCatalog.InferTtsProfile(ProviderNames.XttsContainer));
-    }
-
-    [Fact]
     public void InferTtsProfile_Qwen_ReturnsGpu()
     {
         Assert.Equal(ComputeProfile.Gpu, InferenceRuntimeCatalog.InferTtsProfile(ProviderNames.Qwen));
@@ -164,9 +158,9 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void DefaultTtsProvider_Gpu_ReturnsXttsContainer()
+    public void DefaultTtsProvider_Gpu_ReturnsQwen()
     {
-        Assert.Equal(ProviderNames.XttsContainer, InferenceRuntimeCatalog.DefaultTtsProvider(ComputeProfile.Gpu));
+        Assert.Equal(ProviderNames.Qwen, InferenceRuntimeCatalog.DefaultTtsProvider(ComputeProfile.Gpu));
     }
 
     [Fact]
@@ -294,10 +288,10 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void NormalizeTtsProvider_GpuProfile_ElevenLabsMapsToXtts()
+    public void NormalizeTtsProvider_GpuProfile_ElevenLabsMapsToQwen()
     {
         var result = InferenceRuntimeCatalog.NormalizeTtsProvider(ComputeProfile.Gpu, ProviderNames.ElevenLabs);
-        Assert.Equal(ProviderNames.XttsContainer, result);
+        Assert.Equal(ProviderNames.Qwen, result);
     }
 
     [Fact]
@@ -325,7 +319,7 @@ public sealed class InferenceRuntimeCatalogTests
     public void NormalizeTtsProvider_ContainerizedServiceId_ReturnsDefault()
     {
         var result = InferenceRuntimeCatalog.NormalizeTtsProvider(ComputeProfile.Gpu, ProviderNames.ContainerizedService);
-        Assert.Equal(ProviderNames.XttsContainer, result);
+        Assert.Equal(ProviderNames.Qwen, result);
     }
 
     // ── IsKnownTranscriptionProvider ──────────────────────────────────────────
@@ -382,7 +376,7 @@ public sealed class InferenceRuntimeCatalogTests
     [InlineData(ProviderNames.ElevenLabs)]
     [InlineData(ProviderNames.GoogleCloudTts)]
     [InlineData(ProviderNames.OpenAiTts)]
-    [InlineData(ProviderNames.XttsContainer)]
+
     [InlineData(ProviderNames.Qwen)]
     public void IsKnownTtsProvider_KnownProviders_ReturnTrue(string providerId)
     {
@@ -449,8 +443,8 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void InferTtsRuntime_XttsProvider_ReturnsContainerized()
+    public void InferTtsRuntime_Qwen_ReturnsContainerized()
     {
-        Assert.Equal(InferenceRuntime.Containerized, InferenceRuntimeCatalog.InferTtsRuntime(ProviderNames.XttsContainer));
+        Assert.Equal(InferenceRuntime.Containerized, InferenceRuntimeCatalog.InferTtsRuntime(ProviderNames.Qwen));
     }
 }
