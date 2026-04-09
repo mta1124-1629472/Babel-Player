@@ -24,15 +24,8 @@ import json
 import os
 import sys
 
-try:
-    import ctranslate2
-    from transformers import AutoTokenizer
-except ImportError:
-    import subprocess
-    print('Installing ctranslate2 translation dependencies...', flush=True)
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'ctranslate2', 'transformers', 'sentencepiece'])
-    import ctranslate2
-    from transformers import AutoTokenizer
+import ctranslate2
+from transformers import AutoTokenizer
 
 FLORES = {
     'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',
@@ -93,15 +86,8 @@ import json
 import os
 import sys
 
-try:
-    import ctranslate2
-    from transformers import AutoTokenizer
-except ImportError:
-    import subprocess
-    print('Installing ctranslate2 translation dependencies...', flush=True)
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'ctranslate2', 'transformers', 'sentencepiece'])
-    import ctranslate2
-    from transformers import AutoTokenizer
+import ctranslate2
+from transformers import AutoTokenizer
 
 FLORES = {
     'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',

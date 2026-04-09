@@ -21,6 +21,18 @@ public static class ContainerizedProviderReadiness
     private static readonly TimeSpan CapabilityWarmupBudget = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan CapabilityWarmupRetryDelay = TimeSpan.FromSeconds(2);
 
+    internal readonly record struct ExecutionWaitOptions(
+        TimeSpan ExecutionProbeBudget,
+        TimeSpan CapabilityWarmupBudget,
+        TimeSpan CapabilityWarmupRetryDelay)
+    {
+        public static ExecutionWaitOptions Default { get; } =
+            new(
+                ContainerizedProviderReadiness.ExecutionProbeBudget,
+                ContainerizedProviderReadiness.CapabilityWarmupBudget,
+                ContainerizedProviderReadiness.CapabilityWarmupRetryDelay);
+    }
+
     public static ProviderReadiness CheckTranscription(
         AppSettings settings,
         ContainerizedServiceProbe? probe = null,
@@ -33,34 +45,101 @@ public static class ContainerizedProviderReadiness
         ApiKeyStore? keyStore = null) =>
         Check(settings, ContainerCapabilityStage.Translation, probe);
 
-    public static ProviderReadiness CheckTts(
+    /// <summary>
+        /// Determines whether the configured containerized GPU host is ready to perform TTS (text-to-speech) operations.
+        /// </summary>
+        /// <returns>
+        /// A <see cref="ProviderReadiness"/> describing whether the TTS capability is available and, when not ready, a human-readable detail explaining the state.
+        /// </returns>
+        public static ProviderReadiness CheckTts(
         AppSettings settings,
         ContainerizedServiceProbe? probe = null,
         ApiKeyStore? keyStore = null) =>
         Check(settings, ContainerCapabilityStage.Tts, probe);
 
+    /// <summary>
+        /// Determines whether the configured containerized GPU host exposes a ready diarization capability.
+        /// </summary>
+        /// <param name="providerId">Optional diarization provider identifier to check; if empty, the value from <c>settings.DiarizationProvider</c> is used.</param>
+        /// <returns>A <see cref="ProviderReadiness"/> indicating whether diarization (or the specified diarization provider) is ready; when not ready the result contains a user-facing detail message.</returns>
+        public static ProviderReadiness CheckDiarization(
+        AppSettings settings,
+        string providerId,
+        ContainerizedServiceProbe? probe = null,
+        ApiKeyStore? keyStore = null) =>
+        Check(settings, ContainerCapabilityStage.Diarization, probe, providerId);
+
+    /// <summary>
+        /// Waits for the containerized transcription capability to become ready for execution and reports its readiness.
+        /// </summary>
+        /// <param name="settings">Application settings used to locate and label the GPU inference host.</param>
+        /// <param name="probe">Probe used to query and wait for the host's health and capability state.</param>
+        /// <param name="cancellationToken">Token to cancel the wait operation.</param>
+        /// <returns>A <see cref="ProviderReadiness"/> describing whether the transcription capability is available for execution; when not ready, includes a message explaining why.</returns>
     public static Task<ProviderReadiness> CheckTranscriptionForExecutionAsync(
         AppSettings settings,
         ContainerizedServiceProbe probe,
         CancellationToken cancellationToken = default) =>
-        CheckForExecutionAsync(settings, ContainerCapabilityStage.Transcription, probe, cancellationToken);
+        CheckForExecutionAsync(settings, ContainerCapabilityStage.Transcription, probe, cancellationToken, waitOptions: ExecutionWaitOptions.Default);
 
     public static Task<ProviderReadiness> CheckTranslationForExecutionAsync(
         AppSettings settings,
         ContainerizedServiceProbe probe,
         CancellationToken cancellationToken = default) =>
-        CheckForExecutionAsync(settings, ContainerCapabilityStage.Translation, probe, cancellationToken);
+        CheckForExecutionAsync(settings, ContainerCapabilityStage.Translation, probe, cancellationToken, waitOptions: ExecutionWaitOptions.Default);
 
+    /// <summary>
+        /// Checks whether the containerized TTS capability is ready for execution by waiting for the provided probe to report readiness.
+        /// </summary>
+        /// <param name="probe">Probe used to query and wait for the containerized service's status.</param>
+        /// <param name="cancellationToken">Token that can be used to cancel the wait for probe readiness.</param>
+        /// <returns>A <see cref="ProviderReadiness"/> describing whether the TTS capability is ready and providing a human-readable status detail.</returns>
     public static Task<ProviderReadiness> CheckTtsForExecutionAsync(
         AppSettings settings,
         ContainerizedServiceProbe probe,
         CancellationToken cancellationToken = default) =>
-        CheckForExecutionAsync(settings, ContainerCapabilityStage.Tts, probe, cancellationToken);
+        CheckForExecutionAsync(settings, ContainerCapabilityStage.Tts, probe, cancellationToken, waitOptions: ExecutionWaitOptions.Default);
 
+    /// <summary>
+        /// Checks whether the diarization capability is ready for execution on the configured containerized GPU host, optionally targeting a specific provider ID; this may wait briefly while the host reports its readiness state.
+        /// </summary>
+        /// <param name="providerId">Optional provider identifier to check readiness for a specific diarization provider; if empty, the configured default provider is used.</param>
+        /// <returns>A <see cref="ProviderReadiness"/> describing whether diarization is ready and including a human-readable detail message.</returns>
+    public static Task<ProviderReadiness> CheckDiarizationForExecutionAsync(
+        AppSettings settings,
+        string providerId,
+        ContainerizedServiceProbe probe,
+        CancellationToken cancellationToken = default) =>
+        CheckForExecutionAsync(settings, ContainerCapabilityStage.Diarization, probe, cancellationToken, providerId, ExecutionWaitOptions.Default);
+
+    internal static Task<ProviderReadiness> CheckDiarizationForExecutionAsync(
+        AppSettings settings,
+        string providerId,
+        ContainerizedServiceProbe probe,
+        ExecutionWaitOptions waitOptions,
+        CancellationToken cancellationToken = default) =>
+        CheckForExecutionAsync(settings, ContainerCapabilityStage.Diarization, probe, cancellationToken, providerId, waitOptions);
+
+    internal static Task<ProviderReadiness> CheckTtsForExecutionAsync(
+        AppSettings settings,
+        ContainerizedServiceProbe probe,
+        ExecutionWaitOptions waitOptions,
+        CancellationToken cancellationToken = default) =>
+        CheckForExecutionAsync(settings, ContainerCapabilityStage.Tts, probe, cancellationToken, waitOptions: waitOptions);
+
+    /// <summary>
+    /// Determines readiness of a containerized GPU provider for a specific capability stage.
+    /// </summary>
+    /// <param name="settings">Application settings used to locate the GPU service host.</param>
+    /// <param name="stage">The capability stage to check (e.g., Transcription, Translation, Tts, Diarization).</param>
+    /// <param name="probe">Optional service probe to consult; if null, a short health check is performed.</param>
+    /// <param name="providerId">Optional provider identifier used for provider-specific readiness checks (applies to TTS and Diarization).</param>
+    /// <returns>A <see cref="ProviderReadiness"/> that is ready when the requested stage (and provider when specified) is available; otherwise contains a failure state and human-readable detail.</returns>
     private static ProviderReadiness Check(
         AppSettings settings,
         ContainerCapabilityStage stage,
-        ContainerizedServiceProbe? probe)
+        ContainerizedServiceProbe? probe,
+        string? providerId = null)
     {
         var serviceUrl = settings.EffectiveGpuServiceUrl;
         if (string.IsNullOrWhiteSpace(serviceUrl))
@@ -69,15 +148,29 @@ public static class ContainerizedProviderReadiness
         var probeResult = probe?.GetCurrentOrStartBackgroundProbe(serviceUrl)
             ?? FromHealth(ContainerizedInferenceClient.CheckHealth(serviceUrl, timeoutSeconds: 2));
 
-        return MapProbeResultToReadiness(settings, probeResult, stage);
+        return MapProbeResultToReadiness(settings, probeResult, stage, providerId);
     }
 
+    /// <summary>
+    /// Waits for the containerized GPU host to report readiness for the specified capability and maps the probe result to a ProviderReadiness suitable for execution-time checks.
+    /// </summary>
+    /// <param name="settings">Application settings used to determine the GPU service URL and host labeling.</param>
+    /// <param name="stage">The capability stage to check (e.g., Transcription, Translation, Tts, Diarization).</param>
+    /// <param name="probe">Probe instance used to query and wait for the host's probe state.</param>
+    /// <param name="cancellationToken">Token to cancel waiting and warmup retries.</param>
+    /// <param name="providerId">Optional provider identifier for provider-specific readiness selection (used for TTS and Diarization); when null or empty, the configured default provider from settings is used.</param>
+    /// <returns>A ProviderReadiness that indicates whether the requested capability is ready for execution and contains a human-readable detail message when not ready.</returns>
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled while waiting for the probe or during warmup retries.</exception>
     private static async Task<ProviderReadiness> CheckForExecutionAsync(
         AppSettings settings,
         ContainerCapabilityStage stage,
         ContainerizedServiceProbe probe,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? providerId = null,
+        ExecutionWaitOptions waitOptions = default)
     {
+        waitOptions = waitOptions == default ? ExecutionWaitOptions.Default : waitOptions;
+
         var serviceUrl = settings.EffectiveGpuServiceUrl;
         if (string.IsNullOrWhiteSpace(serviceUrl))
             return new ProviderReadiness(false, "No GPU inference host URL configured.");
@@ -85,38 +178,47 @@ public static class ContainerizedProviderReadiness
         var probeResult = await probe.WaitForProbeAsync(
             serviceUrl,
             forceRefresh: true,
-            waitTimeout: ExecutionProbeBudget,
-            cancellationToken);
+            waitTimeout: waitOptions.ExecutionProbeBudget,
+            cancellationToken).ConfigureAwait(false);
 
-        if (IsCapabilityActivelyWarming(probeResult, stage, settings))
+        if (IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
         {
             var warmupSw = Stopwatch.StartNew();
-            while (warmupSw.Elapsed < CapabilityWarmupBudget)
+            while (warmupSw.Elapsed < waitOptions.CapabilityWarmupBudget)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                await Task.Delay(CapabilityWarmupRetryDelay, cancellationToken);
+                await Task.Delay(waitOptions.CapabilityWarmupRetryDelay, cancellationToken).ConfigureAwait(false);
                 probeResult = await probe.WaitForProbeAsync(
                     serviceUrl,
                     forceRefresh: true,
-                    waitTimeout: ExecutionProbeBudget,
-                    cancellationToken);
-                if (!IsCapabilityActivelyWarming(probeResult, stage, settings))
+                    waitTimeout: waitOptions.ExecutionProbeBudget,
+                    cancellationToken).ConfigureAwait(false);
+                if (!IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
                     break;
             }
         }
 
-        return MapProbeResultToReadiness(settings, probeResult, stage);
+        return MapProbeResultToReadiness(settings, probeResult, stage, providerId);
     }
 
+    /// <summary>
+    /// Determines whether the specified capability on the containerized host is in an active warmup state that warrants retrying probe checks.
+    /// </summary>
+    /// <param name="probeResult">The latest probe result for the containerized host.</param>
+    /// <param name="stage">The capability stage to evaluate (e.g., Transcription, Tts, Diarization).</param>
+    /// <param name="settings">Application settings used to resolve provider selection when applicable.</param>
+    /// <param name="providerId">Optional provider identifier to evaluate provider-specific readiness for stages that support it; may be null.</param>
+    /// <returns>`true` if the capability is available at the host level but not yet ready and its detail contains "warming" without "failed"; `false` otherwise.</returns>
     private static bool IsCapabilityActivelyWarming(
         ContainerizedProbeResult probeResult,
         ContainerCapabilityStage stage,
-        AppSettings settings)
+        AppSettings settings,
+        string? providerId)
     {
         if (probeResult.State != ContainerizedProbeState.Available || probeResult.Capabilities is null)
             return false;
 
-        if (IsStageReadyForSelection(settings, probeResult.Capabilities, stage, out var detail))
+        if (IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out var detail))
             return false;
 
         // Retry only for active warmup (e.g. "Qwen3-TTS warming up").
@@ -127,10 +229,19 @@ public static class ContainerizedProviderReadiness
             && !detail.Contains("failed", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Map a container probe result to a ProviderReadiness describing whether the requested capability stage is available.
+    /// </summary>
+    /// <param name="settings">Application settings used to determine host labeling and provider defaults.</param>
+    /// <param name="probeResult">Probe information including service URL, state, capabilities, and any error/detail text.</param>
+    /// <param name="stage">The capability stage to evaluate (Transcription, Translation, Tts, or Diarization).</param>
+    /// <param name="providerId">Optional provider identifier to evaluate provider-specific readiness for TTS or Diarization; when null or empty the corresponding default from <paramref name="settings"/> is used.</param>
+    /// <returns>A <see cref="ProviderReadiness"/> indicating readiness; when not ready the returned object contains a user-facing message explaining the reason.</returns>
     internal static ProviderReadiness MapProbeResultToReadiness(
         AppSettings settings,
         ContainerizedProbeResult probeResult,
-        ContainerCapabilityStage stage)
+        ContainerCapabilityStage stage,
+        string? providerId = null)
     {
         var hostLabel = GetHostLabel(settings);
         if (probeResult.State == ContainerizedProbeState.Checking)
@@ -149,13 +260,14 @@ public static class ContainerizedProviderReadiness
         }
 
         string? detail = null;
-        if (probeResult.Capabilities is null || !IsStageReadyForSelection(settings, probeResult.Capabilities, stage, out detail))
+        if (probeResult.Capabilities is null || !IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out detail))
         {
             var stageLabel = stage switch
             {
                 ContainerCapabilityStage.Transcription => "transcription",
                 ContainerCapabilityStage.Translation => "translation",
-                _ => "TTS",
+                ContainerCapabilityStage.Tts => "TTS",
+                _ => "diarization",
             };
             return new ProviderReadiness(
                 false,
@@ -212,25 +324,62 @@ public static class ContainerizedProviderReadiness
         return $"{hostLabel} is live but missing {stageLabel} capability: {detail}";
     }
 
+    /// <summary>
+    /// Determines whether the requested capability stage is ready, optionally scoped to a specific provider for TTS or Diarization.
+    /// </summary>
+    /// <param name="settings">Application settings used to select a default provider when <paramref name="providerId"/> is not provided.</param>
+    /// <param name="capabilities">Snapshot of container capabilities and provider-specific readiness information.</param>
+    /// <param name="stage">The capability stage to check (e.g., Transcription, Translation, Tts, Diarization).</param>
+    /// <param name="providerId">Optional provider identifier; when null or whitespace, the corresponding provider from <paramref name="settings"/> is used for TTS and Diarization.</param>
+    /// <param name="detail">Output detail string describing the capability or provider readiness state; provider-specific detail overrides the generic stage detail when available.</param>
+    /// <returns>`true` if the stage (or the selected provider for TTS/Diarization) is ready, `false` otherwise.</returns>
     private static bool IsStageReadyForSelection(
         AppSettings settings,
         ContainerCapabilitiesSnapshot capabilities,
         ContainerCapabilityStage stage,
+        string? providerId,
         out string? detail)
     {
         detail = capabilities.Detail(stage);
 
-        if (stage != ContainerCapabilityStage.Tts)
-            return capabilities.IsReady(stage);
+        if (stage == ContainerCapabilityStage.Tts)
+        {
+            var ttsProviderId = string.IsNullOrWhiteSpace(providerId) ? settings.TtsProvider : providerId;
+            if (string.IsNullOrWhiteSpace(ttsProviderId))
+            {
+                detail = "TTS provider is not advertised by host.";
+                return false;
+            }
 
-        var providerId = settings.TtsProvider;
-        if (string.IsNullOrWhiteSpace(providerId))
-            return capabilities.IsReady(stage);
+            if (!capabilities.TryGetTtsProviderReadiness(ttsProviderId, out var providerReady, out var providerDetail))
+            {
+                detail = $"TTS provider '{ttsProviderId}' is not advertised by host.";
+                return false;
+            }
 
-        if (!capabilities.TryGetTtsProviderReadiness(providerId, out var providerReady, out var providerDetail))
-            return capabilities.IsReady(stage);
+            detail = string.IsNullOrWhiteSpace(providerDetail) ? detail : providerDetail;
+            return providerReady;
+        }
 
-        detail = string.IsNullOrWhiteSpace(providerDetail) ? detail : providerDetail;
-        return providerReady;
+        if (stage == ContainerCapabilityStage.Diarization)
+        {
+            var diarizationProviderId = string.IsNullOrWhiteSpace(providerId) ? settings.DiarizationProvider : providerId;
+            if (string.IsNullOrWhiteSpace(diarizationProviderId))
+            {
+                detail = "Diarization provider is not advertised by host.";
+                return false;
+            }
+
+            if (!capabilities.TryGetDiarizationProviderReadiness(diarizationProviderId, out var providerReady, out var providerDetail))
+            {
+                detail = $"Diarization provider '{diarizationProviderId}' is not advertised by host.";
+                return false;
+            }
+
+            detail = string.IsNullOrWhiteSpace(providerDetail) ? detail : providerDetail;
+            return providerReady;
+        }
+
+        return capabilities.IsReady(stage);
     }
 }

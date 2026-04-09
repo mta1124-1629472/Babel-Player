@@ -78,4 +78,22 @@ public sealed class LibMpvEmbeddedTransportTests
         Assert.Equal(2560, plan.MonitorWidth);
         Assert.Equal(1440, plan.MonitorHeight);
     }
+
+    [Fact]
+    public void EvaluateVsrFilterPlan_UsesLimitingAxisForUltrawideScale()
+    {
+        var plan = LibMpvEmbeddedTransport.EvaluateVsrFilterPlan(
+            videoWidth: 1920,
+            videoHeight: 1080,
+            displayWidth: 1920,
+            displayHeight: 1080,
+            monitorWidth: 3440,
+            monitorHeight: 1440,
+            hwPixelFormat: "nv12");
+
+        Assert.True(plan.ShouldApply);
+        Assert.Equal(1.3, plan.Scale);
+        Assert.NotNull(plan.FilterChain);
+        Assert.Contains("scale=1.3", plan.FilterChain);
+    }
 }

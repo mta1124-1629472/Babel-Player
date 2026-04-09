@@ -48,6 +48,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private readonly Func<string, string, string, string, string, CancellationToken, Task> _bootstrapRunner;
     private readonly Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>> _runtimeValidator;
     private readonly Func<string, string, string, string, CancellationToken, Task> _hostProcessStarter;
+    private readonly TimeSpan _postStartProbeTimeout;
     private readonly Lock _gate = new();
     private Task<ContainerizedStartResult>? _inFlightStartTask;
     private Process? _hostProcess;
@@ -64,7 +65,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         Func<string>? constraintsPathResolver = null,
         Func<string, string, string, string, string, CancellationToken, Task>? bootstrapRunner = null,
         Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>>? runtimeValidator = null,
-        Func<string, string, string, string, CancellationToken, Task>? hostProcessStarter = null)
+        Func<string, string, string, string, CancellationToken, Task>? hostProcessStarter = null,
+        TimeSpan? postStartProbeTimeout = null)
     {
         _log = log;
         _probe = probe;
@@ -78,6 +80,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         _bootstrapRunner = bootstrapRunner ?? RunUvBootstrapAsync;
         _runtimeValidator = runtimeValidator ?? ValidateManagedGpuRuntimeAsync;
         _hostProcessStarter = hostProcessStarter ?? StartHostProcessAsync;
+        _postStartProbeTimeout = postStartProbeTimeout ?? PostStartProbeTimeout;
     }
 
     public ManagedHostState State { get; private set; } = ManagedHostState.NotInstalled;
@@ -400,14 +403,14 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         await File.WriteAllTextAsync(scriptVersionPath, ComputeScriptVersion(inferenceScriptPath), cancellationToken);
 
         _log.Info(
-            $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={PostStartProbeTimeout.TotalSeconds}s");
+            $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={_postStartProbeTimeout.TotalSeconds}s");
         var readiness = _probe is not null
             ? await _probe.WaitForProbeAsync(
                 AppSettings.ManagedGpuServiceUrl,
                 forceRefresh: true,
-                waitTimeout: PostStartProbeTimeout,
+                waitTimeout: _postStartProbeTimeout,
                 cancellationToken)
-            : FromHealth(await SafeCheckHealthAsync(AppSettings.ManagedGpuServiceUrl, PostStartProbeTimeout, cancellationToken));
+            : FromHealth(await SafeCheckHealthAsync(AppSettings.ManagedGpuServiceUrl, _postStartProbeTimeout, cancellationToken));
 
         _log.Info(
             $"Managed GPU host readiness probe result: state={readiness.State}, error='{readiness.ErrorDetail ?? "<none>"}', " +

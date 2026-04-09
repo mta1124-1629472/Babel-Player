@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
 using System.Text.RegularExpressions;
 
@@ -28,7 +29,6 @@ public sealed record HardwareSnapshot(
     bool IsRtxCapable,
     bool IsVsrDriverSufficient,
     string? NvidiaDriverVersion,
-    bool IsHdrDisplayAvailable,
     string? GpuComputeCapability = null)
 {
     /// <summary>Placeholder shown while background detection is still running.</summary>
@@ -44,7 +44,6 @@ public sealed record HardwareSnapshot(
         IsRtxCapable: false,
         IsVsrDriverSufficient: false,
         NvidiaDriverVersion: null,
-        IsHdrDisplayAvailable: false,
         GpuComputeCapability: null);
 
     // ── Formatted display lines ────────────────────────────────────────────────
@@ -157,7 +156,6 @@ public sealed record HardwareSnapshot(
         var npuLabel                      = InferNpu(cpuName);
         var (driverVer, isVsrSufficient)  = DetectNvidiaDriver();
         var isRtx                         = IsRtxGpu(gpuName);
-        var isHdr                         = DetectHdrDisplay();
         var gpuComputeCapability          = DetectGpuComputeCapability(hasCuda, findPython);
 
         return new HardwareSnapshot(
@@ -172,7 +170,6 @@ public sealed record HardwareSnapshot(
             IsRtxCapable: isRtx,
             IsVsrDriverSufficient: isVsrSufficient,
             NvidiaDriverVersion: driverVer,
-            IsHdrDisplayAvailable: isHdr,
             GpuComputeCapability: gpuComputeCapability);
     }
 
@@ -327,35 +324,130 @@ public sealed record HardwareSnapshot(
         return m.Success ? (true, m.Groups[1].Value) : (false, null);
     }
 
-    // ── HDR display (Windows-only) ────────────────────────────────────────────
+    // ── Active HDR display (Windows-only) ─────────────────────────────────────
 
-    private static bool DetectHdrDisplay()
+    public static bool QueryActiveHdrDisplay()
     {
-        if (!OperatingSystem.IsWindows()) return false;
+        if (!OperatingSystem.IsWindows())
+            return false;
 
         try
         {
-            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
-                @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration");
-            if (key == null) return false;
-
-            foreach (var subkeyName in key.GetSubKeyNames())
+            var factoryIid = IID_IDXGIFactory1;
+            var hr = CreateDXGIFactory1(in factoryIid, out var factoryPtr);
+            if (hr < 0 || factoryPtr == IntPtr.Zero)
             {
-                using var subkey = key.OpenSubKey(subkeyName);
-                if (subkey == null) continue;
-                foreach (var childName in subkey.GetSubKeyNames())
+                Debug.WriteLine($"HDR detection: CreateDXGIFactory1 failed with HRESULT 0x{hr:X8}.");
+                return false;
+            }
+
+            try
+            {
+                var enumAdapters1 = GetDxgiMethod<EnumAdapters1Delegate>(factoryPtr, slot: VtblSlot_IDXGIFactory1_EnumAdapters1);
+
+                for (uint adapterIndex = 0; ; adapterIndex++)
                 {
-                    using var child = subkey.OpenSubKey(childName);
-                    if (child == null) continue;
-                    var hdrVal = child.GetValue("HDRSupported");
-                    if (hdrVal is int i && i != 0) return true;
-                    if (hdrVal is uint u && u != 0) return true;
+                    hr = enumAdapters1(factoryPtr, adapterIndex, out var adapterPtr);
+                    if (hr == DXGI_ERROR_NOT_FOUND)
+                        break;
+
+                    if (hr < 0 || adapterPtr == IntPtr.Zero)
+                        continue;
+
+                    try
+                    {
+                        var enumOutputs = GetDxgiMethod<EnumOutputsDelegate>(adapterPtr, slot: VtblSlot_IDXGIAdapter_EnumOutputs);
+
+                        for (uint outputIndex = 0; ; outputIndex++)
+                        {
+                            hr = enumOutputs(adapterPtr, outputIndex, out var outputPtr);
+                            if (hr == DXGI_ERROR_NOT_FOUND)
+                                break;
+
+                            if (hr < 0 || outputPtr == IntPtr.Zero)
+                                continue;
+
+                            try
+                            {
+                                if (TryGetOutputDesc1(outputPtr, out var outputDesc)
+                                    && outputDesc.AttachedToDesktop
+                                    && IsHdrColorSpace(outputDesc.ColorSpace))
+                                {
+                                    return true;
+                                }
+                            }
+                            finally
+                            {
+                                Marshal.Release(outputPtr);
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        Marshal.Release(adapterPtr);
+                    }
                 }
             }
+            finally
+            {
+                Marshal.Release(factoryPtr);
+            }
         }
-        catch { /* fall through */ }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"HDR detection: DXGI query failed ({ex.Message}).");
+        }
 
         return false;
+    }
+
+    private static bool TryGetOutputDesc1(IntPtr outputPtr, out DXGI_OUTPUT_DESC1 outputDesc)
+    {
+        outputDesc = default;
+
+        try
+        {
+            var output6Iid = IID_IDXGIOutput6;
+            var hr = Marshal.QueryInterface(outputPtr, in output6Iid, out var output6Ptr);
+            if (hr < 0 || output6Ptr == IntPtr.Zero)
+            {
+                Debug.WriteLine($"HDR detection: IDXGIOutput6 query failed with HRESULT 0x{hr:X8}.");
+                return false;
+            }
+
+            try
+            {
+                var getDesc1 = GetDxgiMethod<GetOutputDesc1Delegate>(output6Ptr, slot: VtblSlot_IDXGIOutput6_GetDesc1);
+                hr = getDesc1(output6Ptr, out outputDesc);
+                if (hr < 0)
+                    Debug.WriteLine($"HDR detection: IDXGIOutput6.GetDesc1 failed with HRESULT 0x{hr:X8}.");
+                return hr >= 0;
+            }
+            finally
+            {
+                Marshal.Release(output6Ptr);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"HDR detection: output descriptor query failed ({ex.Message}).");
+            return false;
+        }
+    }
+
+    private static bool IsHdrColorSpace(DXGI_COLOR_SPACE_TYPE colorSpace) =>
+        colorSpace is DXGI_COLOR_SPACE_TYPE.RGB_FULL_G2084_NONE_P2020
+            or DXGI_COLOR_SPACE_TYPE.YCBCR_STUDIO_G2084_LEFT_P2020
+            or DXGI_COLOR_SPACE_TYPE.RGB_STUDIO_G2084_NONE_P2020
+            or DXGI_COLOR_SPACE_TYPE.YCBCR_STUDIO_G2084_TOPLEFT_P2020
+            or DXGI_COLOR_SPACE_TYPE.YCBCR_STUDIO_GHLG_TOPLEFT_P2020;
+
+    private static TDelegate GetDxgiMethod<TDelegate>(IntPtr comPtr, int slot)
+        where TDelegate : Delegate
+    {
+        var vtable = Marshal.ReadIntPtr(comPtr);
+        var methodPtr = Marshal.ReadIntPtr(vtable, slot * IntPtr.Size);
+        return Marshal.GetDelegateForFunctionPointer<TDelegate>(methodPtr);
     }
 
     // ── OpenVINO (via Python import probe) ────────────────────────────────────
@@ -412,5 +504,82 @@ public sealed record HardwareSnapshot(
             return proc.ExitCode == 0 ? output : null;
         }
         catch { return null; }
+    }
+
+    private static readonly Guid IID_IDXGIFactory1 = new("770aae78-f26f-4dba-a829-253c83d1b387");
+    private static readonly Guid IID_IDXGIOutput6 = new("068346e8-aaec-4b84-add7-137f513f77a1");
+    private const int DXGI_ERROR_NOT_FOUND = unchecked((int)0x887A0002);
+
+    // COM vtable slot indices — zero-based position in the virtual function table,
+    // counting all inherited slots.  Reference: DXGI interface method ordering in
+    // the Windows SDK headers (dxgi.h / dxgi1_6.h).
+    //
+    //   IDXGIFactory1 : IDXGIFactory(7-11) : IDXGIObject(3-6) : IUnknown(0-2)
+    //     slot 12 → IDXGIFactory1::EnumAdapters1
+    private const int VtblSlot_IDXGIFactory1_EnumAdapters1 = 12;
+    //
+    //   IDXGIAdapter : IDXGIObject(3-6) : IUnknown(0-2)
+    //     slot  7 → IDXGIAdapter::EnumOutputs
+    private const int VtblSlot_IDXGIAdapter_EnumOutputs = 7;
+    //
+    //   IDXGIOutput6 : IDXGIOutput5(26) : IDXGIOutput4(25) : IDXGIOutput3(24)
+    //                : IDXGIOutput2(23) : IDXGIOutput1(19-22) : IDXGIOutput(7-18)
+    //                : IDXGIObject(3-6) : IUnknown(0-2)
+    //     slot 27 → IDXGIOutput6::GetDesc1
+    private const int VtblSlot_IDXGIOutput6_GetDesc1 = 27;
+
+    [DllImport("dxgi.dll", ExactSpelling = true)]
+    private static extern int CreateDXGIFactory1(in Guid riid, out IntPtr ppFactory);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int EnumAdapters1Delegate(IntPtr factoryPtr, uint adapterIndex, out IntPtr adapterPtr);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int EnumOutputsDelegate(IntPtr adapterPtr, uint outputIndex, out IntPtr outputPtr);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetOutputDesc1Delegate(IntPtr output6Ptr, out DXGI_OUTPUT_DESC1 outputDesc);
+
+    private enum DXGI_COLOR_SPACE_TYPE : uint
+    {
+        RGB_FULL_G2084_NONE_P2020 = 12,
+        YCBCR_STUDIO_G2084_LEFT_P2020 = 13,
+        RGB_STUDIO_G2084_NONE_P2020 = 14,
+        YCBCR_STUDIO_G2084_TOPLEFT_P2020 = 16,
+        YCBCR_STUDIO_GHLG_TOPLEFT_P2020 = 18,
+    }
+
+    private enum DXGI_MODE_ROTATION : uint
+    {
+        Unspecified = 0,
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private unsafe struct DXGI_OUTPUT_DESC1
+    {
+        public fixed char DeviceName[32];
+        public RECT DesktopCoordinates;
+        [MarshalAs(UnmanagedType.Bool)]
+        public bool AttachedToDesktop;
+        public DXGI_MODE_ROTATION Rotation;
+        public IntPtr Monitor;
+        public uint BitsPerColor;
+        public DXGI_COLOR_SPACE_TYPE ColorSpace;
+        public fixed float RedPrimary[2];
+        public fixed float GreenPrimary[2];
+        public fixed float BluePrimary[2];
+        public fixed float WhitePoint[2];
+        public float MinLuminance;
+        public float MaxLuminance;
+        public float MaxFullFrameLuminance;
     }
 }

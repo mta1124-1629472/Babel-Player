@@ -13,15 +13,75 @@ public sealed partial class SessionWorkflowCoordinator
 {
     // ── Diarization ──────────────────────────────────────────────────────
 
-    private async Task RunDiarizationAsync(string audioPath, string transcriptPath, CancellationToken ct)
+    private readonly record struct DiarizationExecutionOutcome(
+        bool SpeakerAssignmentsChanged,
+        int SpeakerCount,
+        int SegmentCount);
+
+    /// <summary>
+    /// Runs diarization on the current session's ingested media and merges detected speaker assignments into the transcript
+    /// and optional translation, updating session state on success.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the diarization operation.</param>
+    /// <returns>`true` if speaker assignments were changed in the transcript or translation, `false` otherwise.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the session is not at or beyond the Transcribed stage, when required session paths are missing or empty,
+    /// or when no diarization provider is selected.
+    /// </exception>
+    /// <exception cref="FileNotFoundException">
+    /// Thrown when the ingested media file or the transcript file does not exist on disk.
+    /// </exception>
+    public async Task<bool> RunDiarizationAsync(CancellationToken cancellationToken = default)
     {
-        if (DiarizationRegistry is null) return;
+        if (CurrentSession.Stage < SessionWorkflowStage.Transcribed)
+            throw new InvalidOperationException("No transcript available. Please transcribe media first.");
+
+        if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
+            throw new InvalidOperationException("No ingested media is available for diarization.");
+
+        if (!File.Exists(CurrentSession.IngestedMediaPath))
+            throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
+
+        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
+            throw new InvalidOperationException("No transcript available. Please transcribe media first.");
+
+        if (!File.Exists(CurrentSession.TranscriptPath))
+            throw new FileNotFoundException($"Transcript file not found: {CurrentSession.TranscriptPath}");
+
+        if (string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider))
+            throw new InvalidOperationException("No diarization provider is selected.");
+
+        var outcome = await ExecuteDiarizationAsync(
+            CurrentSession.IngestedMediaPath,
+            CurrentSession.TranscriptPath,
+            cancellationToken);
+
+        return outcome.SpeakerAssignmentsChanged;
+    }
+
+    /// <summary>
+    /// Executes speaker diarization for the specified audio file and merges detected speaker assignments into the transcript and optional translation artifacts.
+    /// </summary>
+    /// <param name="audioPath">Filesystem path to the source audio to diarize.</param>
+    /// <param name="transcriptPath">Filesystem path to the transcript file to update with diarization speaker IDs.</param>
+    /// <param name="ct">Cancellation token to cancel the operation.</param>
+    /// <returns>
+    /// A <see cref="DiarizationExecutionOutcome"/> containing whether speaker assignments were applied to transcript/translation, the detected speaker count, and the diarized segment count.
+    /// </returns>
+    private async Task<DiarizationExecutionOutcome> ExecuteDiarizationAsync(
+        string audioPath,
+        string transcriptPath,
+        CancellationToken ct)
+    {
+        if (DiarizationRegistry is null)
+            throw new PipelineProviderException("No diarization registry is configured.");
 
         var readiness = DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
         if (!readiness.IsReady)
         {
-            _log.Warning($"Diarization skipped: {readiness.BlockingReason}");
-            return;
+            var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
+            _log.Warning($"Diarization skipped: {blockingReason}");
+            throw new PipelineProviderException(blockingReason);
         }
 
         var provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
@@ -29,29 +89,31 @@ public sealed partial class SessionWorkflowCoordinator
         var request = new DiarizationRequest(
             SourceAudioPath:  audioPath,
             MinSpeakers:      CurrentSettings.DiarizationMinSpeakers,
-            MaxSpeakers:      CurrentSettings.DiarizationMaxSpeakers,
-            HuggingFaceToken: string.IsNullOrWhiteSpace(CurrentSettings.DiarizationHuggingFaceToken)
-                                  ? null
-                                  : CurrentSettings.DiarizationHuggingFaceToken);
+            MaxSpeakers:      CurrentSettings.DiarizationMaxSpeakers);
 
         _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={audioPath}, " +
                   $"minSpeakers={CurrentSettings.DiarizationMinSpeakers?.ToString() ?? "auto"}, " +
-                  $"maxSpeakers={CurrentSettings.DiarizationMaxSpeakers?.ToString() ?? "auto"}, " +
-                  $"hasToken={!string.IsNullOrWhiteSpace(CurrentSettings.DiarizationHuggingFaceToken)}");
+                  $"maxSpeakers={CurrentSettings.DiarizationMaxSpeakers?.ToString() ?? "auto"}");
 
         var result = await provider.DiarizeAsync(request, ct);
 
         if (!result.Success)
         {
             _log.Warning($"Diarization failed: {result.ErrorMessage}");
-            return;
+            throw new InvalidOperationException(result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
         }
 
-        await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
+        var transcriptChanged = await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
+        var translationChanged = false;
 
         if (!string.IsNullOrWhiteSpace(CurrentSession.TranslationPath) &&
             File.Exists(CurrentSession.TranslationPath))
-            await MergeSpeakerIdsIntoTranslationAsync(transcriptPath, CurrentSession.TranslationPath, ct);
+        {
+            translationChanged = await MergeSpeakerIdsIntoTranslationAsync(
+                transcriptPath,
+                CurrentSession.TranslationPath,
+                ct);
+        }
 
         CurrentSession = CurrentSession with
         {
@@ -61,27 +123,54 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
 
         _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
+
+        return new DiarizationExecutionOutcome(
+            SpeakerAssignmentsChanged: transcriptChanged || translationChanged,
+            SpeakerCount: result.SpeakerCount,
+            SegmentCount: result.Segments.Count);
     }
 
-    private static async Task MergeDiarizationIntoTranscriptAsync(
+    /// <summary>
+    /// Merges diarization speaker assignments into an existing transcript file, updating segment speaker IDs when they change.
+    /// </summary>
+    /// <param name="transcriptPath">Path to the transcript JSON file to read and potentially overwrite.</param>
+    /// <param name="diarizedSegments">List of diarized speaker segments used to assign speaker IDs to transcript segments.</param>
+    /// <param name="ct">Cancellation token to observe during I/O operations.</param>
+    /// <returns>`true` if the transcript file was modified and written back to disk, `false` if no speaker assignments changed or the transcript had no segments.</returns>
+    private static async Task<bool> MergeDiarizationIntoTranscriptAsync(
         string transcriptPath,
         IReadOnlyList<DiarizedSegment> diarizedSegments,
         CancellationToken ct)
     {
         var artifact = await ArtifactJson.LoadTranscriptAsync(transcriptPath, ct);
-        if (artifact.Segments is null) return;
+        if (artifact.Segments is null) return false;
+
+        var before = CaptureTranscriptSpeakerAssignments(artifact.Segments);
 
         var result = new List<TranscriptSegmentArtifact>();
         foreach (var seg in artifact.Segments)
             result.AddRange(SplitSegmentAtSpeakerBoundaries(seg, diarizedSegments));
+
+        var changed = !before.SequenceEqual(CaptureTranscriptSpeakerAssignments(result));
+        if (!changed)
+            return false;
 
         artifact.Segments.Clear();
         artifact.Segments.AddRange(result);
 
         var json = ArtifactJson.SerializeTranscript(artifact);
         await File.WriteAllTextAsync(transcriptPath, json, ct);
+        return true;
     }
 
+    /// <summary>
+    /// Splits a transcript segment into one or more segments aligned to diarized speaker turns.
+    /// </summary>
+    /// <param name="segment">The transcript segment to split; its SpeakerId may be updated when no split is required.</param>
+    /// <param name="diarized">A list of diarized speaker turns used to determine speaker boundaries and assignments.</param>
+    /// <returns>
+    /// A list of transcript segments covering the same time span as the input segment. If no speaker boundary requires splitting, the returned list contains the original segment (with SpeakerId set). If splits occur, each returned segment has Start/End, Text, Words, SpeakerId set and OriginalStart populated with the input segment's start.
+    /// </returns>
     private static IReadOnlyList<TranscriptSegmentArtifact> SplitSegmentAtSpeakerBoundaries(
         TranscriptSegmentArtifact segment,
         IReadOnlyList<DiarizedSegment> diarized)
@@ -131,7 +220,14 @@ public sealed partial class SessionWorkflowCoordinator
         }).ToList<TranscriptSegmentArtifact>();
     }
 
-    private static async Task MergeSpeakerIdsIntoTranslationAsync(
+    /// <summary>
+    /// Merge speaker IDs from a transcript artifact into a translation artifact when segment start times align.
+    /// </summary>
+    /// <param name="transcriptPath">Filesystem path to the transcript JSON artifact.</param>
+    /// <param name="translationPath">Filesystem path to the translation JSON artifact to update.</param>
+    /// <param name="ct">Cancellation token for the asynchronous file and I/O operations.</param>
+    /// <returns>`true` if one or more translation segments had their `SpeakerId` changed and the translation file was written; `false` if no changes were made or either artifact had no segments.</returns>
+    private static async Task<bool> MergeSpeakerIdsIntoTranslationAsync(
         string transcriptPath,
         string translationPath,
         CancellationToken ct)
@@ -139,7 +235,7 @@ public sealed partial class SessionWorkflowCoordinator
         var transcript = await ArtifactJson.LoadTranscriptAsync(transcriptPath, ct);
         var translation = await ArtifactJson.LoadTranslationAsync(translationPath, ct);
 
-        if (transcript.Segments is null || translation.Segments is null) return;
+        if (transcript.Segments is null || translation.Segments is null) return false;
 
         // Build lookup keyed by OriginalStart (set on split segments) or Start.
         // For split segments that share the same OriginalStart, the first entry wins
@@ -161,12 +257,43 @@ public sealed partial class SessionWorkflowCoordinator
             anyChanged = true;
         }
 
-        if (!anyChanged) return;
+        if (!anyChanged) return false;
 
         var json = ArtifactJson.SerializeTranslation(translation);
         await File.WriteAllTextAsync(translationPath, json, ct);
+        return true;
     }
 
+    /// <summary>
+    /// Produces a comparable list of speaker-assignment tuples extracted from transcript segments.
+    /// </summary>
+    /// <param name="segments">The transcript segments to capture assignments from.</param>
+    /// <returns>
+    /// A list of tuples for each segment containing its Start, End, OriginalStart (may be null), and SpeakerId (empty string if the segment's SpeakerId is null).
+    /// </returns>
+    private static IReadOnlyList<(double Start, double End, double? OriginalStart, string SpeakerId)> CaptureTranscriptSpeakerAssignments(
+        IReadOnlyList<TranscriptSegmentArtifact> segments)
+    {
+        var result = new List<(double Start, double End, double? OriginalStart, string SpeakerId)>(segments.Count);
+        foreach (var segment in segments)
+        {
+            result.Add((
+                segment.Start,
+                segment.End,
+                segment.OriginalStart,
+                segment.SpeakerId ?? string.Empty));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Selects the speaker ID whose diarized interval has the largest overlap with the specified time range.
+    /// </summary>
+    /// <param name="start">Start time of the range in seconds.</param>
+    /// <param name="end">End time of the range in seconds.</param>
+    /// <param name="diarizedSegments">Diarized segments to consider (each with start/end times and a SpeakerId).</param>
+    /// <returns>The speaker ID with the greatest positive overlap, or "spk_00" if no diarized segment overlaps the range.</returns>
     private static string FindBestSpeakerFor(double start, double end, IReadOnlyList<DiarizedSegment> diarizedSegments)
     {
         string? best = null;
@@ -507,10 +634,10 @@ public sealed partial class SessionWorkflowCoordinator
     public IMediaTransport? SegmentPlayer => _transportManager.SegmentPlayer;
 
     /// <summary>
-    /// Releases resources held by the coordinator: flushes any pending session save, unsubscribes event handlers, and disposes managed services and transport.
+    /// Performs an orderly shutdown by flushing pending state, unsubscribing event handlers, waiting for in-flight TTS tasks, and disposing managed resources.
     /// </summary>
     /// <remarks>
-    /// Flushes pending save state, unsubscribes segment and source-diagnostic event handlers when registered, disposes the containerized inference manager and the TTS service if they implement <see cref="IDisposable"/>, and disposes the transport manager.
+    /// Attempts to complete any pending save and in-flight TTS operations before disposing internal services and transport resources. Exceptions thrown during disposal or while waiting for pending tasks are caught and ignored to allow shutdown to continue.
     /// </remarks>
     public void Dispose()
     {

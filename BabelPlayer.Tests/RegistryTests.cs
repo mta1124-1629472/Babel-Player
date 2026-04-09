@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
@@ -533,57 +537,196 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void DiarizationRegistry_GetAvailableProviders_ContainsPyannoteLocal()
+    public void DiarizationRegistry_GetAvailableProviders_ReturnsNemoAndWeSpeakerOnly()
     {
         var providers = _diarizationRegistry.GetAvailableProviders();
-        Assert.Contains(providers, p => p.Id == ProviderNames.PyannoteLocal);
+        Assert.Equal(
+            [ProviderNames.NemoLocal, ProviderNames.WeSpeakerLocal],
+            providers.Select(provider => provider.Id).ToArray());
     }
 
     [Fact]
-    public void DiarizationRegistry_PyannoteLocal_IsImplemented()
+    public void DiarizationRegistry_CreateProvider_NemoLocal_ReturnsNemoContainerizedProvider()
     {
-        var providers = _diarizationRegistry.GetAvailableProviders();
-        var pyannote = Assert.Single(providers, p => p.Id == ProviderNames.PyannoteLocal);
-        Assert.True(pyannote.IsImplemented);
+        var provider = _diarizationRegistry.CreateProvider(
+            ProviderNames.NemoLocal,
+            new AppSettings
+            {
+                PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+                AdvancedGpuServiceUrl = "http://localhost:8000",
+            },
+            null);
+
+        Assert.IsType<NemoContainerizedDiarizationProvider>(provider);
     }
 
     [Fact]
-    public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithNoToken_ReturnsNotReady()
+    public void DiarizationRegistry_CreateProvider_WeSpeakerLocal_ReturnsWeSpeakerContainerizedProvider()
     {
-        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "api-keys.json")));
-        var readiness = _diarizationRegistry.CheckReadiness(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
+        var provider = _diarizationRegistry.CreateProvider(
+            ProviderNames.WeSpeakerLocal,
+            new AppSettings
+            {
+                PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+                AdvancedGpuServiceUrl = "http://localhost:8000",
+            },
+            null);
+
+        Assert.IsType<WeSpeakerContainerizedDiarizationProvider>(provider);
+    }
+
+    [Fact]
+    public void DiarizationRegistry_CreateProvider_ReusesNormalizedServiceUrlClientCache()
+    {
+        var registry = new DiarizationRegistry(_log);
+
+        _ = registry.CreateProvider(
+            ProviderNames.NemoLocal,
+            new AppSettings
+            {
+                PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+                AdvancedGpuServiceUrl = "http://localhost:8000",
+            },
+            null);
+
+        _ = registry.CreateProvider(
+            ProviderNames.WeSpeakerLocal,
+            new AppSettings
+            {
+                PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+                AdvancedGpuServiceUrl = "http://localhost:8000/",
+            },
+            null);
+
+        var cacheField = typeof(DiarizationRegistry).GetField("_clientCache", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(cacheField);
+
+        var cache = cacheField!.GetValue(registry);
+        Assert.NotNull(cache);
+
+        var countProperty = cache!.GetType().GetProperty("Count");
+        Assert.NotNull(countProperty);
+
+        var count = (int)countProperty!.GetValue(cache)!;
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public async Task DiarizationRegistry_NemoLocal_CheckReadiness_UsesProviderSpecificContainerCapability()
+    {
+        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+            true,
+            true,
+            "12.8",
+            "http://localhost:8000",
+            null,
+            new ContainerCapabilitiesSnapshot(
+                TranscriptionReady: true,
+                TranscriptionDetail: null,
+                TranslationReady: true,
+                TranslationDetail: null,
+                TtsReady: true,
+                TtsDetail: null,
+                DiarizationReady: true,
+                DiarizationDetail: "Diarization available",
+                DiarizationProviders: new Dictionary<string, bool>
+                {
+                    [ProviderNames.NemoLocal] = true,
+                    [ProviderNames.WeSpeakerLocal] = false,
+                },
+                DiarizationProviderDetails: new Dictionary<string, string>
+                {
+                    [ProviderNames.NemoLocal] = "NeMo ready",
+                    [ProviderNames.WeSpeakerLocal] = "CPU fallback warming",
+                },
+                DiarizationDefaultProvider: ProviderNames.NemoLocal))));
+        var registry = new DiarizationRegistry(_log, probe);
+
+        var readiness = registry.CheckReadiness(
+            ProviderNames.NemoLocal,
+            new AppSettings
+            {
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+                DiarizationProvider = ProviderNames.NemoLocal,
+            },
+            null);
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (!readiness.IsReady
+               && readiness.BlockingReason?.Contains("starting", StringComparison.OrdinalIgnoreCase) == true
+               && DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+            readiness = registry.CheckReadiness(
+                ProviderNames.NemoLocal,
+                new AppSettings
+                {
+                    PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+                    DiarizationProvider = ProviderNames.NemoLocal,
+                },
+                null);
+        }
+
+        Assert.True(readiness.IsReady);
+    }
+
+    [Fact]
+    public void DiarizationRegistry_WeSpeakerLocal_CheckReadiness_UsesProviderSpecificContainerCapability()
+    {
+        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+            true,
+            true,
+            "12.8",
+            "http://localhost:8000",
+            null,
+            new ContainerCapabilitiesSnapshot(
+                TranscriptionReady: true,
+                TranscriptionDetail: null,
+                TranslationReady: true,
+                TranslationDetail: null,
+                TtsReady: true,
+                TtsDetail: null,
+                DiarizationReady: true,
+                DiarizationDetail: "Diarization available",
+                DiarizationProviders: new Dictionary<string, bool>
+                {
+                    [ProviderNames.NemoLocal] = true,
+                    [ProviderNames.WeSpeakerLocal] = false,
+                },
+                DiarizationProviderDetails: new Dictionary<string, string>
+                {
+                    [ProviderNames.NemoLocal] = "NeMo ready",
+                    [ProviderNames.WeSpeakerLocal] = "CPU fallback warming",
+                },
+                DiarizationDefaultProvider: ProviderNames.NemoLocal))));
+        var registry = new DiarizationRegistry(_log, probe);
+
+        var readiness = registry.CheckReadiness(
+            ProviderNames.WeSpeakerLocal,
+            new AppSettings
+            {
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+                DiarizationProvider = ProviderNames.WeSpeakerLocal,
+            },
+            null);
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (readiness.BlockingReason?.Contains("starting", StringComparison.OrdinalIgnoreCase) == true
+               && DateTimeOffset.UtcNow < deadline)
+        {
+            Thread.Sleep(10);
+            readiness = registry.CheckReadiness(
+                ProviderNames.WeSpeakerLocal,
+                new AppSettings
+                {
+                    PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+                    DiarizationProvider = ProviderNames.WeSpeakerLocal,
+                },
+                null);
+        }
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("HuggingFace token is required", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithValidToken_DoesNotBlockOnToken()
-    {
-        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "api-keys.json")));
-        keyStore.SetKey(CredentialKeys.HuggingFace, "hf_test_token");
-
-
-        // Note: CheckReadiness will still run the pyannote.audio import probe,
-        // which may return NotReady in CI if pyannote isn't installed —
-        // but the blocking reason will NOT mention HuggingFace.
-        var readiness = _diarizationRegistry.CheckReadiness(
-            ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
-
-        if (!readiness.IsReady)
-        {
-            Assert.DoesNotContain("HuggingFace", readiness.BlockingReason ?? "",
-                StringComparison.OrdinalIgnoreCase);
-        }
-    }
-
-    [Fact]
-    public void DiarizationRegistry_PyannoteLocal_CreateProvider_DoesNotThrow()
-    {
-        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "empty-keys.json")));
-        var provider = _diarizationRegistry.CreateProvider(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
-
-        Assert.NotNull(provider);
+        Assert.Contains("warming", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -17,6 +17,16 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken = default) =>
         TranscribeMediaAsync(progress, stageContext: null, cancellationToken);
 
+    /// <summary>
+    /// Transcribes the session's ingested media, writes the transcript to the session directory, updates session state, and optionally runs diarization.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter receiving values from 0 to 1 for the overall transcription stage.</param>
+    /// <param name="stageContext">Optional pipeline stage context used for reporting stage-specific updates.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no media is loaded, when a required model download fails, or when transcription itself fails.
+    /// </exception>
+    /// <exception cref="FileNotFoundException">Thrown when the ingested media file cannot be found on disk.</exception>
+    /// <exception cref="PipelineProviderException">Thrown when the configured transcription provider/runtime is not ready for execution and the blocking reason prevents continuation.</exception>
     internal async Task TranscribeMediaAsync(
         IProgress<double>? progress,
         PipelineStageContext? stageContext,
@@ -141,7 +151,7 @@ public sealed partial class SessionWorkflowCoordinator
                 "Transcript complete. Running diarization to assign speaker turns before translation and dubbing…",
                 progress01: 0,
                 isIndeterminate: true);
-            await RunDiarizationAsync(CurrentSession.IngestedMediaPath!, transcriptPath, cancellationToken);
+            await ExecuteDiarizationAsync(CurrentSession.IngestedMediaPath!, transcriptPath, cancellationToken);
         }
 
         ReportStage(
@@ -509,6 +519,11 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken = default) =>
         AdvancePipelineAsync(progress, stageProgress: null, cancellationToken);
 
+    /// <summary>
+    /// Advances the current session through any remaining pipeline stages (transcription, translation, and TTS) in order.
+    /// </summary>
+    /// <param name="progress">Optional overall progress reporter receiving values from 0.0 to 1.0 for the combined operation.</param>
+    /// <param name="stageProgress">Optional per-stage progress reporter that receives detailed stage updates.</param>
     internal async Task AdvancePipelineAsync(
         IProgress<double>? progress = null,
         IProgress<PipelineStageUpdate>? stageProgress = null,

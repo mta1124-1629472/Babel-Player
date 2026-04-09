@@ -39,26 +39,20 @@ public sealed class AppSettings
     /// </summary>
     public int TranscriptionNumWorkers { get; set; } = 1;
 
-    /// <summary>Diarization provider identifier (e.g. "pyannote-local"). Empty string = diarization disabled.</summary>
-    public string DiarizationProvider { get; set; } = "";
-
     /// <summary>
-    /// HuggingFace user access token required to download the gated pyannote speaker
-    /// diarization model. Obtain one at https://huggingface.co/settings/tokens after
-    /// accepting the model terms at https://hf.co/pyannote/speaker-diarization-3.1.
-    /// Empty string = no token (will fail for gated models).
+    /// Diarization provider identifier (e.g. "nemo-local"). Defaults to NeMo; empty string disables diarization.
     /// </summary>
-    public string DiarizationHuggingFaceToken { get; set; } = "";
+    public string DiarizationProvider { get; set; } = ProviderNames.NemoLocal;
 
     /// <summary>
     /// Optional lower bound on the number of speakers to detect.
-    /// null means no constraint (pyannote auto-detects).
+    /// null means no lower bound hint.
     /// </summary>
     public int? DiarizationMinSpeakers { get; set; } = null;
 
     /// <summary>
     /// Optional upper bound on the number of speakers to detect.
-    /// null means no constraint (pyannote auto-detects).
+    /// null means no upper bound hint.
     /// </summary>
     public int? DiarizationMaxSpeakers { get; set; } = null;
 
@@ -199,10 +193,10 @@ public sealed class AppSettings
     public bool VideoVsrEnabled { get; set; } = false;
 
     /// <summary>
-    /// Enable the mpv HDR output pipeline (target-colorspace-hint + tone-mapping).
+    /// Enable mpv HDR passthrough (target-colorspace-hint + tone-mapping).
     /// Requests an HDR-capable mpv output path for the OS/display pipeline.
-    /// Pair with NVIDIA RTX HDR in NVIDIA Control Panel when the playback surface
-    /// is one NVIDIA supports for driver-level SDR-to-HDR conversion.
+    /// This is separate from NVIDIA RTX Auto HDR, which remains a driver-level
+    /// SDR-to-HDR feature configured in NVIDIA Control Panel.
     /// Requires an HDR-capable display with Windows HDR enabled.
     /// Takes effect on app restart.
     /// </summary>
@@ -224,10 +218,10 @@ public sealed class AppSettings
 
     /// <summary>
     /// Enable dynamic per-frame peak detection for HDR tone-mapping.
-    /// May cause brightness instability on some content. Default false.
+    /// May cause brightness instability on some content. Default true.
     /// Takes effect on app restart.
     /// </summary>
-    public bool VideoHdrComputePeak { get; set; } = false;
+    public bool VideoHdrComputePeak { get; set; } = true;
 
     /// <summary>
     /// ffmpeg encoder used by the video export stage (not yet implemented).

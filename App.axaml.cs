@@ -97,12 +97,13 @@ public partial class App : Application
             _apiKeyStore = new ApiKeyStore(keyProvider, legacyKeyPath);
             var modelDownloader = new ModelDownloader(appLog);
             var transportManager = new MediaTransportManager(
-                videoOptions: new VideoPlaybackOptions(
+                videoOptionsFactory: () => new VideoPlaybackOptions(
                     HwdecMode:      appSettings.VideoHwdec,
                     GpuApi:         appSettings.VideoGpuApi,
                     UseGpuNext:     appSettings.VideoUseGpuNext,
                     VsrEnabled:     appSettings.VideoVsrEnabled,
                     HdrEnabled:     appSettings.VideoHdrEnabled,
+                    AllowHdrPassthrough: appSettings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
                     ToneMapping:    appSettings.VideoToneMapping,
                     TargetPeak:     appSettings.VideoTargetPeak,
                     HdrComputePeak: appSettings.VideoHdrComputePeak),

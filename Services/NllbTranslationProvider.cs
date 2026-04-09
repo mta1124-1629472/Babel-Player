@@ -22,15 +22,8 @@ public sealed class NllbTranslationProvider : PythonSubprocessServiceBase, ITran
     private const string NllbScript = @"
 import sys, json
 
-try:
-    import torch
-    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-except ImportError:
-    import subprocess
-    print('Installing torch and transformers (large download, first run only)...')
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'torch', 'transformers'])
-    import torch
-    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 FLORES = {
     'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',
@@ -86,15 +79,8 @@ print('NLLB translation complete')
     private const string NllbSegmentScript = @"
 import sys, json
 
-try:
-    import torch
-    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-except ImportError:
-    import subprocess
-    print('Installing torch and transformers (large download, first run only)...')
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'torch', 'transformers'])
-    import torch
-    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 FLORES = {
     'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',

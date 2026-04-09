@@ -12,7 +12,7 @@ namespace Babel.Player.Services;
 /// Base class for services that execute inference work by spawning Python subprocesses.
 ///
 /// Eliminates boilerplate shared by all five AI pipeline services:
-///   - Python executable discovery via <see cref="DependencyLocator"/>
+///   - Managed CPU runtime bootstrap and Python executable resolution
 ///   - Temp-script write → process spawn → stdout/stderr capture → cleanup
 ///   - Async wait with <see cref="CancellationToken"/> support
 ///   - Uniform failure logging and exception throwing
@@ -27,13 +27,49 @@ public abstract class PythonSubprocessServiceBase
 
     protected readonly AppLog Log;
     protected readonly string PythonPath;
+    private readonly ManagedCpuRuntimeManager? _cpuRuntimeManager;
 
     protected PythonSubprocessServiceBase(AppLog log)
+        : this(log, new ManagedCpuRuntimeManager(log))
     {
-        Log        = log;
-        PythonPath = DependencyLocator.FindPython()
-            ?? throw new InvalidOperationException(
-                "Python not found. Expected bundled python next to the app or python on PATH.");
+    }
+
+    protected PythonSubprocessServiceBase(
+        AppLog log,
+        ManagedCpuRuntimeManager cpuRuntimeManager)
+        : this(log, cpuRuntimeManager.GetPythonExecutablePath(), cpuRuntimeManager)
+    {
+        // ManagedCpuRuntimeManager pins its runtime root at construction so the subprocess
+        // Python path and bootstrap marker checks resolve against the same managed CPU venv.
+    }
+
+    protected PythonSubprocessServiceBase(
+        AppLog log,
+        string pythonPath,
+        ManagedCpuRuntimeManager? cpuRuntimeManager = null)
+    {
+        if (cpuRuntimeManager is not null)
+        {
+            var managedPythonPath = cpuRuntimeManager.GetPythonExecutablePath();
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            if (!string.Equals(
+                    Path.GetFullPath(pythonPath),
+                    Path.GetFullPath(managedPythonPath),
+                    comparison))
+            {
+                throw new ArgumentException(
+                    $"The supplied pythonPath ('{pythonPath}') must match the managed runtime Python executable path " +
+                    $"('{managedPythonPath}') when a {nameof(ManagedCpuRuntimeManager)} is provided.",
+                    nameof(pythonPath));
+            }
+        }
+
+        Log = log;
+        PythonPath = pythonPath;
+        _cpuRuntimeManager = cpuRuntimeManager;
     }
 
     /// <summary>Captures the output of a single Python subprocess invocation.</summary>
@@ -80,16 +116,18 @@ public abstract class PythonSubprocessServiceBase
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         CancellationToken cancellationToken = default)
     {
-        // Guard against path traversal via scriptPrefix
+        // Guard against path traversal via scriptPrefix — fast arg-check before any I/O.
         if (!IsValidScriptPrefix(scriptPrefix))
             throw new ArgumentException(
                 $"scriptPrefix must contain only alphanumeric characters, hyphens, and underscores. Got: {scriptPrefix}",
                 nameof(scriptPrefix));
 
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
-
-        // Check for cancellation before doing any work
+        // Honour cancellation before triggering the (potentially expensive) bootstrap.
         cancellationToken.ThrowIfCancellationRequested();
+
+        await EnsurePythonRuntimeReadyAsync(cancellationToken).ConfigureAwait(false);
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
 
         try
         {
@@ -176,6 +214,30 @@ public abstract class PythonSubprocessServiceBase
         {
             if (File.Exists(scriptPath))
                 File.Delete(scriptPath);
+        }
+    }
+
+    private async Task EnsurePythonRuntimeReadyAsync(CancellationToken cancellationToken)
+    {
+        if (_cpuRuntimeManager is null)
+        {
+            if (string.IsNullOrWhiteSpace(PythonPath) || !File.Exists(PythonPath))
+            {
+                throw new InvalidOperationException(
+                    "Python subprocess runtime is not ready. A valid Python executable path must be provided.");
+            }
+
+            return;
+        }
+
+        await _cpuRuntimeManager.EnsureInstalledAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if (_cpuRuntimeManager.State != ManagedCpuState.Ready || !File.Exists(PythonPath))
+        {
+            var failureReason = _cpuRuntimeManager.FailureReason
+                ?? $"Expected managed CPU Python at {PythonPath}.";
+            throw new InvalidOperationException(
+                $"Managed CPU runtime is not ready for subprocess providers. {failureReason}");
         }
     }
 

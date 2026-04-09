@@ -20,8 +20,16 @@ public sealed class ApiKeyStore
     /// <summary>Canonical provider IDs managed by this store (in display order).</summary>
 
     public static IReadOnlyList<string> KnownProviders { get; } =
-        [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl, CredentialKeys.HuggingFace];
+        [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl];
 
+    private static IReadOnlyList<string> LegacyMigrationProviders { get; } =
+        [CredentialKeys.LegacyHuggingFace];
+
+    /// <summary>
+    /// Maps a provider identifier to a user-facing display name.
+    /// </summary>
+    /// <param name="providerKey">The canonical provider identifier.</param>
+    /// <returns>A human-friendly display name for the provider, or the original <paramref name="providerKey"/> if no mapping exists.</returns>
     public static string GetDisplayName(string providerKey) => providerKey switch
     {
         CredentialKeys.OpenAi       => "OpenAI",
@@ -29,7 +37,6 @@ public sealed class ApiKeyStore
         CredentialKeys.GoogleGemini => "Google Gemini",
         CredentialKeys.ElevenLabs   => "ElevenLabs",
         CredentialKeys.Deepl        => "DeepL",
-        CredentialKeys.HuggingFace  => "HuggingFace (pyannote diarization)",
         _                           => providerKey,
     };
 
@@ -69,7 +76,17 @@ public sealed class ApiKeyStore
                 }
             }
 
-            if (migratedCount > 0)
+            var hasLegacyOnlyKeys = false;
+            foreach (var providerId in LegacyMigrationProviders)
+            {
+                if (!string.IsNullOrEmpty(legacyProvider.GetKey(providerId)))
+                {
+                    hasLegacyOnlyKeys = true;
+                    break;
+                }
+            }
+
+            if (migratedCount > 0 || hasLegacyOnlyKeys)
             {
                 // Logic for "shredding" or just deleting the old file.
                 // For now, simple delete is safer than leaving encrypted keys in a known location.

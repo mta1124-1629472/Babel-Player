@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -80,10 +81,10 @@ public sealed class VsrDiagnosticsTests : IDisposable
         var plan = LibMpvEmbeddedTransport.EvaluateVsrFilterPlan(
             videoWidth: 1280,
             videoHeight: 720,
-            displayWidth: 1538,
-            displayHeight: 789,
-            monitorWidth: 1538,
-            monitorHeight: 789,
+            displayWidth: 1600,
+            displayHeight: 900,
+            monitorWidth: 1600,
+            monitorHeight: 900,
             hwPixelFormat: "nv12");
 
         var snapshot = LibMpvEmbeddedTransport.CreateVsrDiagnosticSnapshot(
@@ -101,8 +102,8 @@ public sealed class VsrDiagnosticsTests : IDisposable
         Assert.Equal("libmpv rejected the vf add command", snapshot.BackendResultLabel);
         Assert.Equal("libmpv rejected the vf add command", snapshot.ReasonText);
         Assert.Contains("rejected", snapshot.PlaybackStatusText, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1538, snapshot.MonitorWidth);
-        Assert.Equal(789, snapshot.MonitorHeight);
+        Assert.Equal(1600, snapshot.MonitorWidth);
+        Assert.Equal(900, snapshot.MonitorHeight);
     }
 
     [Fact]
@@ -129,10 +130,10 @@ public sealed class VsrDiagnosticsTests : IDisposable
             LibMpvEmbeddedTransport.EvaluateVsrFilterPlan(
                 videoWidth: 1280,
                 videoHeight: 720,
-                displayWidth: 1538,
-                displayHeight: 789,
-                monitorWidth: 1538,
-                monitorHeight: 789,
+                displayWidth: 1600,
+                displayHeight: 900,
+                monitorWidth: 1600,
+                monitorHeight: 900,
                 hwPixelFormat: "nv12"),
             backendResultCode: -12,
             videoOutput: "gpu-next",
@@ -149,6 +150,154 @@ public sealed class VsrDiagnosticsTests : IDisposable
         Assert.Contains("libmpv rejected the filter command", settingsVm.VsrResolvedStateText, StringComparison.Ordinal);
         Assert.Contains("result -12", settingsVm.VsrReasonText, StringComparison.Ordinal);
         Assert.Contains("d3d11vpp=scaling-mode=nvidia", settingsVm.VsrFilterText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HdrPassthrough_IsAvailableWhenWindowsHdrIsActiveOnNonRtxHardware()
+    {
+        var coordinator = CreateCoordinator(CreateSettings());
+        coordinator.Initialize();
+        coordinator.HardwareSnapshot = CreateHardwareSnapshot(
+            isRtxCapable: false,
+            isVsrDriverSufficient: false,
+            nvidiaDriverVersion: null);
+
+        using var settingsVm = new SettingsViewModel(
+            new SettingsService(_settingsPath, _log),
+            coordinator,
+            (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () => true);
+
+        Assert.True(settingsVm.IsHdrDisplayActive);
+        Assert.True(settingsVm.HdrSettingsAvailable);
+        Assert.False(settingsVm.HasHdrAvailabilityHint);
+        Assert.Equal(string.Empty, settingsVm.HdrAvailabilityHintText);
+        Assert.Equal(
+            "RTX Auto HDR (SDR→HDR) is a separate driver feature — enable it in NVIDIA Control Panel.",
+            SettingsViewModel.HdrDriverFeatureHintText);
+    }
+
+    [Fact]
+    public void HdrPassthrough_ShowsWindowsHintWhenWindowsHdrIsOff()
+    {
+        var coordinator = CreateCoordinator(CreateSettings());
+        coordinator.Initialize();
+        coordinator.HardwareSnapshot = CreateHardwareSnapshot(
+            isRtxCapable: false,
+            isVsrDriverSufficient: false,
+            nvidiaDriverVersion: null);
+
+        using var settingsVm = new SettingsViewModel(
+            new SettingsService(_settingsPath, _log),
+            coordinator,
+            (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () => false);
+
+        Assert.False(settingsVm.IsHdrDisplayActive);
+        Assert.False(settingsVm.HdrSettingsAvailable);
+        Assert.True(settingsVm.HasHdrAvailabilityHint);
+        Assert.Equal(
+            "Enable HDR in Windows Display Settings to use HDR passthrough.",
+            settingsVm.HdrAvailabilityHintText);
+    }
+
+    [Fact]
+    public void HdrPassthrough_RemainsUnavailableWhenGpuNextIsDisabled()
+    {
+        var settings = CreateSettings();
+        settings.VideoUseGpuNext = false;
+
+        var coordinator = CreateCoordinator(settings);
+        coordinator.Initialize();
+        coordinator.HardwareSnapshot = CreateHardwareSnapshot(
+            isRtxCapable: false,
+            isVsrDriverSufficient: false,
+            nvidiaDriverVersion: null);
+
+        using var settingsVm = new SettingsViewModel(
+            new SettingsService(_settingsPath, _log),
+            coordinator,
+            (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () => true);
+
+        Assert.True(settingsVm.IsHdrDisplayActive);
+        Assert.False(settingsVm.HdrSettingsAvailable);
+        Assert.False(settingsVm.HasHdrAvailabilityHint);
+        Assert.Equal(string.Empty, settingsVm.HdrAvailabilityHintText);
+    }
+
+    [Fact]
+    public void HdrPassthrough_RaisesPropertyChangesWhenDisplayStateIsRefreshed()
+    {
+        var coordinator = CreateCoordinator(CreateSettings());
+        coordinator.Initialize();
+        var isHdrDisplayActive = false;
+
+        using var settingsVm = new SettingsViewModel(
+            new SettingsService(_settingsPath, _log),
+            coordinator,
+            (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () => isHdrDisplayActive);
+
+        var changedProperties = new List<string>();
+        settingsVm.PropertyChanged += CaptureChange;
+
+        isHdrDisplayActive = true;
+        settingsVm.RefreshHdrDisplayState();
+
+        settingsVm.PropertyChanged -= CaptureChange;
+
+        Assert.Contains(nameof(SettingsViewModel.IsHdrDisplayActive), changedProperties);
+        Assert.Contains(nameof(SettingsViewModel.HdrSettingsAvailable), changedProperties);
+        Assert.Contains(nameof(SettingsViewModel.HdrAvailabilityHintText), changedProperties);
+        Assert.Contains(nameof(SettingsViewModel.HasHdrAvailabilityHint), changedProperties);
+
+        void CaptureChange(object? sender, PropertyChangedEventArgs e)
+        {
+            if (!string.IsNullOrWhiteSpace(e.PropertyName))
+                changedProperties.Add(e.PropertyName!);
+        }
+    }
+
+    [Fact]
+    public void HdrPassthrough_CachesDisplayStateUntilRefreshed()
+    {
+        var coordinator = CreateCoordinator(CreateSettings());
+        coordinator.Initialize();
+
+        var providerCallCount = 0;
+        var isHdrDisplayActive = false;
+
+        using var settingsVm = new SettingsViewModel(
+            new SettingsService(_settingsPath, _log),
+            coordinator,
+            (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () =>
+            {
+                providerCallCount++;
+                return isHdrDisplayActive;
+            });
+
+        Assert.Equal(1, providerCallCount);
+        Assert.False(settingsVm.IsHdrDisplayActive);
+        Assert.False(settingsVm.HdrSettingsAvailable);
+        Assert.Equal(1, providerCallCount);
+
+        _ = settingsVm.HdrAvailabilityHintText;
+        Assert.Equal(1, providerCallCount);
+
+        isHdrDisplayActive = true;
+        settingsVm.RefreshHdrDisplayState();
+
+        Assert.Equal(2, providerCallCount);
+        Assert.True(settingsVm.IsHdrDisplayActive);
+        Assert.True(settingsVm.HdrSettingsAvailable);
+        Assert.Equal(2, providerCallCount);
     }
 
     private SessionWorkflowCoordinator CreateCoordinator(AppSettings settings)
@@ -206,7 +355,6 @@ public sealed class VsrDiagnosticsTests : IDisposable
             IsRtxCapable: isRtxCapable,
             IsVsrDriverSufficient: isVsrDriverSufficient,
             NvidiaDriverVersion: nvidiaDriverVersion,
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: "12.0");
 
     private sealed class FakeTranscriptionRegistry : ITranscriptionRegistry

@@ -24,13 +24,7 @@ public sealed class EdgeTtsProvider : PythonSubprocessServiceBase, ITtsProvider
 
         var script = @"
 import sys, json, asyncio
-
-try:
-    import edge_tts
-except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'edge-tts'])
-    import edge_tts
+import edge_tts
 
 async def generate():
     with open(sys.argv[1], 'r', encoding='utf-8') as f:
@@ -95,13 +89,7 @@ asyncio.run(generate())
 
         var script = @"
 import sys, asyncio
-
-try:
-    import edge_tts
-except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'edge-tts'])
-    import edge_tts
+import edge_tts
 
 async def generate():
     voice = sys.argv[1] if len(sys.argv) > 1 else 'en-US-AriaNeural'

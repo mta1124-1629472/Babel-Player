@@ -29,8 +29,7 @@ public sealed class HardwareEncoderHelperTests
             NpuLabel: null,
             IsRtxCapable: false,
             IsVsrDriverSufficient: false,
-            NvidiaDriverVersion: null,
-            IsHdrDisplayAvailable: false);
+            NvidiaDriverVersion: null);
 
     // ── Explicit encoder override ─────────────────────────────────────────────
 

@@ -24,6 +24,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private readonly ApiKeyStore? _apiKeyStore;
     private readonly Window _ownerWindow;
     private readonly IContainerizedInferenceManager _containerizedManager;
+    private readonly Func<bool> _hdrDisplayStateProvider;
+    private bool _isHdrDisplayActive;
     private CancellationTokenSource? _restartCts;
 
     public SettingsViewModel(
@@ -32,7 +34,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         Window ownerWindow,
         ModelsTabViewModel modelsTab,
         IContainerizedInferenceManager? containerizedManager = null,
-        ApiKeyStore? apiKeyStore = null)
+        ApiKeyStore? apiKeyStore = null,
+        Func<bool>? hdrDisplayStateProvider = null)
     {
         _settingsService       = settingsService;
         _coordinator           = coordinator;
@@ -40,6 +43,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         ModelsTab              = modelsTab;
         _containerizedManager  = containerizedManager ?? NullInferenceManager.Instance;
         _apiKeyStore           = apiKeyStore;
+        _hdrDisplayStateProvider = hdrDisplayStateProvider ?? HardwareSnapshot.QueryActiveHdrDisplay;
+        _isHdrDisplayActive    = _hdrDisplayStateProvider();
 
         var current = _coordinator.CurrentSettings;
         SelectedVoice          = current.TtsVoice;
@@ -65,12 +70,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _videoExportEncoder  = current.VideoExportEncoder;
         _videoUseGpuNext     = current.VideoUseGpuNext;
 
-        // RTX Video Enhancement settings
+        // Video enhancement settings
         _videoVsrEnabled     = current.VideoVsrEnabled;
         _videoHdrEnabled     = current.VideoHdrEnabled;
-        _videoToneMapping    = current.VideoToneMapping;
-        _videoTargetPeak     = current.VideoTargetPeak;
-        _videoHdrComputePeak = current.VideoHdrComputePeak;
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
@@ -218,6 +220,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HdrSettingsAvailable))]
+    [NotifyPropertyChangedFor(nameof(HdrAvailabilityHintText))]
+    [NotifyPropertyChangedFor(nameof(HasHdrAvailabilityHint))]
     private bool _videoUseGpuNext;
 
     public string[] HwdecOptions { get; } =
@@ -233,7 +237,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         ["auto", "h264_nvenc", "hevc_nvenc", "h264_amf", "hevc_amf",
          "h264_qsv", "hevc_qsv", "libx264", "libx265"];
 
-    // ── RTX Video Enhancement settings ────────────────────────────────────────
+    // ── Video enhancement settings ────────────────────────────────────────────
 
     [ObservableProperty]
     private bool _videoVsrEnabled;
@@ -241,31 +245,29 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _videoHdrEnabled;
 
-    [ObservableProperty]
-    private string _videoToneMapping = "bt.2390";
-
-    [ObservableProperty]
-    private string _videoTargetPeak = "auto";
-
-    [ObservableProperty]
-    private bool _videoHdrComputePeak;
-
-    public string[] ToneMappingOptions { get; } = ["bt.2390", "mobius", "clip", "auto"];
-
     public string VsrSupportHintText => _coordinator.VideoEnhancementDiagnostics.SupportHintText;
     public string VsrRequestedStateText => _coordinator.VideoEnhancementDiagnostics.RequestedStateText;
     public string VsrResolvedStateText => _coordinator.VideoEnhancementDiagnostics.ResolvedStateText;
     public string VsrReasonText => _coordinator.VideoEnhancementDiagnostics.LastReasonText;
     public string VsrFilterText => _coordinator.VideoEnhancementDiagnostics.LastFilterText;
 
-    /// <summary>True when the current display is detected as HDR-capable.</summary>
-    public bool IsHdrCapable => _coordinator.HardwareSnapshot.IsHdrDisplayAvailable;
+    /// <summary>True when Windows HDR is currently active for at least one desktop output.</summary>
+    public bool IsHdrDisplayActive => _isHdrDisplayActive;
 
     /// <summary>
-    /// HDR Output Pipeline settings are only meaningful when gpu-next is enabled
-    /// AND an HDR-capable display is detected.
+    /// HDR passthrough requires both gpu-next and an active Windows HDR display pipeline.
     /// </summary>
-    public bool HdrSettingsAvailable => VideoUseGpuNext && IsHdrCapable;
+    public bool HdrSettingsAvailable => VideoUseGpuNext && IsHdrDisplayActive;
+
+    public string HdrAvailabilityHintText =>
+        VideoUseGpuNext && !IsHdrDisplayActive
+            ? "Enable HDR in Windows Display Settings to use HDR passthrough."
+            : string.Empty;
+
+    public bool HasHdrAvailabilityHint => !string.IsNullOrWhiteSpace(HdrAvailabilityHintText);
+
+    public static string HdrDriverFeatureHintText =>
+        "RTX Auto HDR (SDR→HDR) is a separate driver feature — enable it in NVIDIA Control Panel.";
 
     // ── Hotkeys ───────────────────────────────────────────────────────────────
 
@@ -309,9 +311,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.VideoUseGpuNext     = VideoUseGpuNext;
         settings.VideoVsrEnabled     = VideoVsrEnabled;
         settings.VideoHdrEnabled     = VideoHdrEnabled;
-        settings.VideoToneMapping    = VideoToneMapping;
-        settings.VideoTargetPeak     = VideoTargetPeak;
-        settings.VideoHdrComputePeak = VideoHdrComputePeak;
 
         // Apply theme change immediately when Save & Close is pressed
         if (Application.Current is { } app)
@@ -386,14 +385,24 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics))
-            return;
+        if (e.PropertyName == nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics))
+        {
+            OnPropertyChanged(nameof(VsrSupportHintText));
+            OnPropertyChanged(nameof(VsrRequestedStateText));
+            OnPropertyChanged(nameof(VsrResolvedStateText));
+            OnPropertyChanged(nameof(VsrReasonText));
+            OnPropertyChanged(nameof(VsrFilterText));
+        }
 
-        OnPropertyChanged(nameof(VsrSupportHintText));
-        OnPropertyChanged(nameof(VsrRequestedStateText));
-        OnPropertyChanged(nameof(VsrResolvedStateText));
-        OnPropertyChanged(nameof(VsrReasonText));
-        OnPropertyChanged(nameof(VsrFilterText));
+    }
+
+    internal void RefreshHdrDisplayState()
+    {
+        _isHdrDisplayActive = _hdrDisplayStateProvider();
+        OnPropertyChanged(nameof(IsHdrDisplayActive));
+        OnPropertyChanged(nameof(HdrSettingsAvailable));
+        OnPropertyChanged(nameof(HdrAvailabilityHintText));
+        OnPropertyChanged(nameof(HasHdrAvailabilityHint));
     }
 
     // ── Null-object for tests / design-time ───────────────────────────────────

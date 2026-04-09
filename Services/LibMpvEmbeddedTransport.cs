@@ -14,8 +14,8 @@ namespace Babel.Player.Services;
 /// using libmpv's own GPU pipeline (OpenGL/D3D11 under the hood).
 ///
 /// When <see cref="VideoPlaybackOptions.UseGpuNext"/> is true the transport switches to the
-/// gpu-next video output backend, which is required for RTX Video Super Resolution and the
-/// correct mpv HDR pipeline.
+/// gpu-next video output backend, which is required for RTX Video Super Resolution and mpv
+/// HDR passthrough.
 ///
 /// VSR is applied dynamically when a file finishes loading: a background event-polling thread
 /// detects the MPV_EVENT_FILE_LOADED event (id 8), queries the video dimensions, computes the
@@ -116,11 +116,11 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         SetOption("hwdec",   _options.HwdecMode);
         SetOption("gpu-api", _options.GpuApi);
 
-        // ── HDR pipeline options (gpu-next + HDR display required) ────────────
-        if (_options.UseGpuNext && _options.HdrEnabled)
+        // ── HDR passthrough options (gpu-next + active HDR display required) ──
+        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
         {
-            // Request mpv's HDR-capable output path. NVIDIA RTX HDR still depends on
-            // Windows HDR state and whether the playback surface is one NVIDIA hooks.
+            // Request mpv's HDR-capable output path. Driver-level Auto HDR remains
+            // separate and cannot be controlled from this playback path.
             SetOption("target-colorspace-hint", "yes");
             // Tone-mapping algorithm for HDR → display peak mapping.
             SetOption("tone-mapping", _options.ToneMapping);
@@ -148,12 +148,12 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _isPaused = true;
         _hasEnded = false;
 
-        if (_options.UseGpuNext && _options.HdrEnabled)
+        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
         {
             _log?.Info(
-                $"Configured mpv HDR output path: gpu-next={_options.UseGpuNext}, " +
+                $"Configured mpv HDR passthrough: gpu-next={_options.UseGpuNext}, " +
                 $"tone_mapping={_options.ToneMapping}, target_peak='{_options.TargetPeak}', " +
-                "note=driver-level RTX HDR activation still depends on a supported NVIDIA playback path.");
+                "note=driver-level Auto HDR remains separate and is not controlled by this app.");
         }
 
         // Start the background event loop only when VSR may be applied.
@@ -623,7 +623,9 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         if (monitorWidth <= 0 || monitorHeight <= 0)
             return VsrFilterPlan.Skip("monitor-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
 
-        double scaleExact = Math.Max(monitorWidth, monitorHeight) / (double)Math.Max(videoWidth, videoHeight);
+        double scaleExact = Math.Min(
+            monitorWidth / (double)videoWidth,
+            monitorHeight / (double)videoHeight);
         double scale = Math.Floor(scaleExact * 10.0) / 10.0;
 
         if (scale <= 1.0)

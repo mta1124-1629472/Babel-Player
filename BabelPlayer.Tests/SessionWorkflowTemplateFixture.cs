@@ -96,6 +96,7 @@ public sealed class SessionWorkflowTemplateFixture : IAsyncDisposable
         var transcriptionRegistry = new FakeTranscriptionRegistry();
         var translationRegistry = new FakeTranslationRegistry();
         var ttsRegistry = new FakeTtsRegistry();
+        var diarizationRegistry = FakeDiarizationFactory.CreateDefaultRegistry();
         var audioProcessing = new FakeAudioProcessingService();
         var coordinator = new SessionWorkflowCoordinator(
             store, 
@@ -106,6 +107,7 @@ public sealed class SessionWorkflowTemplateFixture : IAsyncDisposable
             transcriptionRegistry, 
             translationRegistry, 
             ttsRegistry,
+            diarizationRegistry: diarizationRegistry,
             audioProcessingService: audioProcessing);
 
         coordinator.Initialize();

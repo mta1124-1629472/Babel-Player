@@ -51,4 +51,18 @@ public sealed class ApiKeyStoreTests : IDisposable
         Assert.Equal("test-deepl-key", reloaded.GetKey(CredentialKeys.Deepl));
         Assert.True(File.Exists(filePath));
     }
+
+    [Fact]
+    public void LegacyHuggingFaceOnlyFile_IsDeletedDuringMigrationCleanup()
+    {
+        var legacyPath = Path.Combine(_dir, "legacy", "api-keys.json");
+        var currentPath = Path.Combine(_dir, "current", "api-keys.json");
+
+        var legacyStore = new FileSystemCredentialProvider(legacyPath);
+        legacyStore.SetKey(CredentialKeys.LegacyHuggingFace, "legacy-hf-token");
+
+        _ = new ApiKeyStore(new FileSystemCredentialProvider(currentPath), legacyPath);
+
+        Assert.False(File.Exists(legacyPath));
+    }
 }

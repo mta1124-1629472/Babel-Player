@@ -27,12 +27,7 @@ public sealed class GoogleTranslationProvider : PythonSubprocessServiceBase, ITr
         var script = @"
 import sys, json, asyncio
 
-try:
-    from googletrans import Translator
-except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'googletrans==4.0.0rc1'])
-    from googletrans import Translator
+from googletrans import Translator
 
 async def main():
     with open(sys.argv[1], 'r', encoding='utf-8') as f:
@@ -137,12 +132,7 @@ asyncio.run(main())
         var script = @"
 import sys, json, asyncio
 
-try:
-    from googletrans import Translator
-except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'googletrans==4.0.0rc1'])
-    from googletrans import Translator
+from googletrans import Translator
 
 async def main():
     src_lang   = sys.argv[1]

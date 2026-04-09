@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from importlib import import_module
 from pathlib import Path
 from datetime import datetime
@@ -46,22 +47,13 @@ nllb_model_key = None
 qwen_reference_registry: dict[str, dict[str, str | None]] = {}
 qwen_model = None
 qwen_model_key = None
-pyannote_pipeline = None
-pyannote_pipeline_key: str | None = None
+wespeaker_model = None
+wespeaker_model_key: str | None = None
+_wespeaker_model_lock = threading.Lock()
 
 # Warmup state: None = not started, "warming" = in progress,
 # "ready" = model loaded, "failed: <reason>" = terminal failure
 _qwen_warmup_status: str | None = None
-# Pyannote is loaded lazily on first /diarize (requires HF token);
-# this lock prevents concurrent load races. It must be created from an
-# async context so it binds to the running event loop used by the app.
-_pyannote_load_lock: asyncio.Lock | None = None
-
-async def _get_pyannote_load_lock() -> asyncio.Lock:
-    global _pyannote_load_lock
-    if _pyannote_load_lock is None:
-        _pyannote_load_lock = asyncio.Lock()
-    return _pyannote_load_lock
 HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
 # Tracks effective compute type after per-stage validation and potential downgrades
@@ -72,6 +64,10 @@ COMPUTE_DOWNGRADE_REASONS: dict[str, str] = {}
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
 TEMP_DIR.mkdir(exist_ok=True)
+NEMO_DIARIZATION_DEFAULT_PROVIDER = "nemo"
+NEMO_VAD_MODEL = "vad_multilingual_marblenet"
+NEMO_SPEAKER_EMBEDDING_MODEL = "titanet_large"
+WESPEAKER_MODEL = "english"
 
 FLORES = {
     # Latin-script European
@@ -146,6 +142,8 @@ class StageCapability(BaseModel):
     detail: Optional[str] = None
     providers: Optional[dict[str, bool]] = None
     provider_details: Optional[dict[str, str]] = None
+    default_provider: Optional[str] = None
+    engines: Optional[list[str]] = None
 
 
 class CapabilitiesResponse(BaseModel):
@@ -266,6 +264,12 @@ def _probe_nllb_available() -> tuple[bool, str]:
 
 
 def _probe_qwen_available() -> tuple[bool, str]:
+    """
+    Report Qwen3-TTS warmup readiness and a human-readable status message.
+    
+    Returns:
+        A tuple `(ready, detail)` where `ready` is `True` if the Qwen3-TTS model is loaded and ready, `False` otherwise, and `detail` is a short human-readable status message describing the warmup state or device.
+    """
     status = _qwen_warmup_status
     if status is None or status == "warming":
         return False, "Qwen3-TTS warming up"
@@ -274,12 +278,334 @@ def _probe_qwen_available() -> tuple[bool, str]:
     return False, f"Qwen3-TTS warmup {status}"
 
 
-def _probe_pyannote_available() -> tuple[bool, str]:
+def _find_module(module_name: str):
+    """
+    Locate the import specification for a given module name.
+    
+    Parameters:
+        module_name (str): The dotted module or package name to look up.
+    
+    Returns:
+        importlib.machinery.ModuleSpec | None: The module's import spec if found, `None` if the module cannot be located or the lookup fails due to import-related or value errors.
+    """
     try:
-        import pyannote.audio  # noqa: F401
-        return True, "pyannote.audio installed; requires HF token at runtime"
-    except Exception as exc:
-        return False, str(exc)
+        return importlib.util.find_spec(module_name)
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return None
+
+
+def _probe_nemo_diarization_available() -> tuple[bool, str]:
+    """
+    Check whether the Python packages required for NeMo-based diarization are importable.
+    
+    Returns:
+        tuple: First element is `True` if required NeMo packages are present, `False` otherwise; second element is a human-readable detail message describing availability or listing missing packages.
+    """
+    missing: list[str] = []
+    if _find_module("nemo.collections.asr") is None:
+        missing.append("nemo.collections.asr")
+    if _find_module("omegaconf") is None:
+        missing.append("omegaconf")
+    if missing:
+        return False, "Missing diarization dependency: " + ", ".join(missing)
+    return True, "NeMo ClusteringDiarizer available"
+
+
+def _probe_wespeaker_available() -> tuple[bool, str]:
+    """
+    Check whether the WeSpeaker diarization backend is importable and available for use.
+    
+    Returns:
+        tuple[bool, str]: `True` and an availability message if WeSpeaker can be imported; `False` and an error message otherwise.
+    """
+    if _find_module("wespeaker") is None:
+        return False, "Missing diarization dependency: wespeaker"
+    return True, "WeSpeaker available (CPU only; min/max speaker hints ignored)"
+
+
+def _normalize_native_speaker_label(raw_label, assigned_labels: dict[str, str]) -> str:
+    """
+    Normalize a raw speaker label into a stable internal speaker ID and cache the mapping.
+    
+    If `raw_label` is empty or None, a default native key of the form `speaker_<n>` is used. If a mapping for the native key already exists in `assigned_labels`, the existing normalized ID is returned. Otherwise a new normalized ID of the form `spk_XX` (zero-padded two digits) is created, stored in `assigned_labels` under the native key, and returned.
+    
+    Parameters:
+        raw_label: The original speaker label (any value convertible to string) or None.
+        assigned_labels (dict[str, str]): Mutable mapping from native labels to normalized speaker IDs; this function will add a new entry when creating a normalization.
+    
+    Returns:
+        str: The normalized speaker ID (e.g., `spk_00`, `spk_01`, ...).
+    """
+    key = str(raw_label).strip() if raw_label is not None else ""
+    if not key:
+        key = f"speaker_{len(assigned_labels)}"
+    if key in assigned_labels:
+        return assigned_labels[key]
+
+    used_labels = set(assigned_labels.values())
+    speaker_index = len(assigned_labels)
+    while True:
+        normalized = f"spk_{speaker_index:02d}"
+        if normalized not in used_labels:
+            break
+        speaker_index += 1
+    assigned_labels[key] = normalized
+    return normalized
+
+
+def _parse_rttm_file(rttm_path: Path) -> tuple[list[DiarizationSegment], int]:
+    """
+    Parse an RTTM file into diarization segments with normalized speaker labels.
+    
+    Parameters:
+        rttm_path (Path): Path to an RTTM-format file.
+    
+    Returns:
+        tuple[list[DiarizationSegment], int]: A pair where the first element is a list of diarization
+        segments (each containing start time, end time, and a normalized `speaker_id`), and the
+        second element is the count of unique normalized speakers found.
+    """
+    segments: list[DiarizationSegment] = []
+    seen_speakers: set[str] = set()
+    assigned_labels: dict[str, str] = {}
+
+    for line in rttm_path.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) < 8 or parts[0] != "SPEAKER":
+            continue
+
+        start = round(float(parts[3]), 3)
+        end = round(start + float(parts[4]), 3)
+        speaker_id = _normalize_native_speaker_label(parts[7], assigned_labels)
+        segments.append(DiarizationSegment(start=start, end=end, speaker_id=speaker_id))
+        seen_speakers.add(speaker_id)
+
+    return segments, len(seen_speakers)
+
+
+def _run_nemo_diarization(
+    audio_path: Path,
+    min_speakers: Optional[int],
+    max_speakers: Optional[int],
+) -> tuple[list[DiarizationSegment], int]:
+    """
+    Run NeMo's ClusteringDiarizer on a staged audio file and return parsed diarization results.
+    
+    Parameters:
+        audio_path (Path): Path to the input audio file to diarize.
+        min_speakers (Optional[int]): Minimum number of speakers hint; if equal to `max_speakers` the diarizer is instructed to use that exact speaker count.
+        max_speakers (Optional[int]): Maximum number of speakers hint; used to limit clustering if provided.
+    
+    Returns:
+        tuple[list[DiarizationSegment], int]: A tuple where the first element is a list of diarization segments with normalized speaker IDs and rounded start/end times, and the second element is the number of distinct speakers detected.
+    
+    Raises:
+        RuntimeError: If NeMo produces no RTTM output file.
+    """
+    import nemo.collections.asr as nemo_asr
+    from omegaconf import OmegaConf
+
+    with tempfile.TemporaryDirectory(dir=TEMP_DIR, prefix="nemo_diar_") as work_dir_name:
+        work_dir = Path(work_dir_name)
+        out_dir = work_dir / "out"
+        manifest_path = work_dir / "manifest.json"
+
+        manifest_entry = {
+            "audio_filepath": str(audio_path),
+            "offset": 0.0,
+            "duration": None,
+            "label": "infer",
+            "text": "-",
+            "rttm_filepath": None,
+            "uem_filepath": None,
+        }
+        if min_speakers is not None and max_speakers is not None and min_speakers == max_speakers:
+            manifest_entry["num_speakers"] = min_speakers
+
+        manifest_path.write_text(json.dumps(manifest_entry) + "\n", encoding="utf-8")
+
+        clustering_parameters: dict[str, object] = {
+            "oracle_num_speakers": False,
+            "max_num_speakers": max_speakers or 8,
+        }
+        if min_speakers is not None and max_speakers is not None and min_speakers == max_speakers:
+            clustering_parameters["oracle_num_speakers"] = True
+
+        config = OmegaConf.create(
+            {
+                "num_workers": 0,
+                "diarizer": {
+                    "manifest_filepath": str(manifest_path),
+                    "out_dir": str(out_dir),
+                    "oracle_vad": False,
+                    "clustering": {
+                        "parameters": clustering_parameters,
+                    },
+                    "vad": {
+                        "model_path": NEMO_VAD_MODEL,
+                    },
+                    "speaker_embeddings": {
+                        "model_path": NEMO_SPEAKER_EMBEDDING_MODEL,
+                        "parameters": {
+                            "save_embeddings": False,
+                        },
+                    },
+                },
+            }
+        )
+
+        diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
+        diarizer.diarize()
+
+        rttm_files = sorted(out_dir.rglob("*.rttm"))
+        if not rttm_files:
+            raise RuntimeError("NeMo diarization did not produce an RTTM file")
+
+        return _parse_rttm_file(rttm_files[0])
+
+
+def load_wespeaker_model(model_name: str = WESPEAKER_MODEL):
+    """
+    Load and cache a WeSpeaker model and ensure the model is placed on the CPU.
+    
+    If a different model name is requested than the currently cached one, the function loads the named model, sets it to use the CPU, and updates the module cache.
+    
+    Parameters:
+        model_name (str): Identifier or path of the WeSpeaker model to load (defaults to the module's WESPEAKER_MODEL).
+    
+    Returns:
+        wespeaker_model: The loaded WeSpeaker model instance (cached for subsequent calls).
+    """
+    global wespeaker_model, wespeaker_model_key
+    if wespeaker_model is not None and wespeaker_model_key == model_name:
+        return wespeaker_model
+
+    with _wespeaker_model_lock:
+        if wespeaker_model is None or wespeaker_model_key != model_name:
+            import wespeaker
+
+            logger.info(f"Loading WeSpeaker '{model_name}' on cpu")
+            wespeaker_model = wespeaker.load_model(model_name)
+            wespeaker_model.set_device("cpu")
+            wespeaker_model_key = model_name
+            logger.info("WeSpeaker loaded")
+    return wespeaker_model
+
+
+def _validate_diarization_speaker_bounds(
+    min_speakers: Optional[int],
+    max_speakers: Optional[int],
+) -> None:
+    if min_speakers is not None and min_speakers < 1:
+        raise HTTPException(status_code=400, detail="min_speakers must be at least 1")
+    if max_speakers is not None and max_speakers < 1:
+        raise HTTPException(status_code=400, detail="max_speakers must be at least 1")
+    if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
+        raise HTTPException(status_code=400, detail="min_speakers cannot be greater than max_speakers")
+
+
+def _run_wespeaker_diarization(audio_path: Path) -> tuple[list[DiarizationSegment], int]:
+    """
+    Run speaker diarization on an audio file using the WeSpeaker backend and return normalized segments.
+    
+    Parameters:
+        audio_path (Path): Path to the audio file to be diarized.
+    
+    Returns:
+        segments (list[DiarizationSegment]): Ordered list of diarization segments with start/end times and normalized speaker IDs.
+        speaker_count (int): Number of distinct normalized speakers detected.
+    """
+    model = load_wespeaker_model()
+    diar_result = model.diarize(str(audio_path))
+
+    segments: list[DiarizationSegment] = []
+    seen_speakers: set[str] = set()
+    assigned_labels: dict[str, str] = {}
+    for item in diar_result:
+        _, start, end, raw_speaker_id = item
+        speaker_id = _normalize_native_speaker_label(raw_speaker_id, assigned_labels)
+        segments.append(
+            DiarizationSegment(
+                start=round(float(start), 3),
+                end=round(float(end), 3),
+                speaker_id=speaker_id,
+            )
+        )
+        seen_speakers.add(speaker_id)
+
+    return segments, len(seen_speakers)
+
+
+def _probe_diarization_providers() -> tuple[dict[str, bool], dict[str, str], bool, str]:
+    """
+    Probe availability of NeMo and WeSpeaker diarization providers and summarize overall readiness.
+    
+    Returns:
+        provider_ready (dict[str, bool]): Mapping of provider name to availability (e.g., {'nemo': True, 'wespeaker': False}).
+        provider_details (dict[str, str]): Mapping of provider name to a human-readable availability/detail message.
+        stage_ready (bool): `True` if at least one provider is available, `False` otherwise.
+        detail (str): Human-readable stage-level status:
+            - "Diarization available" when the default provider (NeMo) is available,
+            - "Default diarization provider unavailable; CPU fallback available" when some provider is available but the default is not,
+            - otherwise a concatenation of provider-specific detail messages.
+    """
+    provider_ready: dict[str, bool] = {}
+    provider_details: dict[str, str] = {}
+
+    nemo_ready, nemo_detail = _probe_nemo_diarization_available()
+    wespeaker_ready, wespeaker_detail = _probe_wespeaker_available()
+
+    provider_ready["nemo"] = nemo_ready
+    provider_ready["wespeaker"] = wespeaker_ready
+    provider_details["nemo"] = nemo_detail
+    provider_details["wespeaker"] = wespeaker_detail
+
+    stage_ready = any(provider_ready.values())
+    if stage_ready and provider_ready[NEMO_DIARIZATION_DEFAULT_PROVIDER]:
+        detail = "Diarization available"
+    elif stage_ready:
+        detail = "Default diarization provider unavailable; CPU fallback available"
+    else:
+        detail = f"nemo: {nemo_detail}; wespeaker: {wespeaker_detail}"
+
+    return provider_ready, provider_details, stage_ready, detail
+
+
+def _stage_audio_upload_to_temp(audio: UploadFile, prefix: str) -> Path:
+    """
+    Create a safe temporary file path for an uploaded audio file.
+    
+    Parameters:
+    	audio (UploadFile): Uploaded file; its base filename (basename) is used when constructing the temp name.
+    	prefix (str): Short prefix to include in the generated filename.
+    
+    Returns:
+    	Path: Path inside TEMP_DIR combining the prefix, a random UUID, and the uploaded file's base name.
+    """
+    safe_name = Path(audio.filename or "").name or "audio"
+    temp_audio_path = TEMP_DIR / f"{prefix}_{uuid4().hex}_{safe_name}"
+    return temp_audio_path
+
+
+def _build_diarization_response(
+    segments: list[DiarizationSegment],
+    speaker_count: int,
+) -> DiarizationResponse:
+    """
+    Builds a successful DiarizationResponse containing the provided segments and speaker count.
+    
+    Parameters:
+        segments (list[DiarizationSegment]): Ordered list of diarization segments.
+        speaker_count (int): Number of distinct speakers detected.
+    
+    Returns:
+        DiarizationResponse: A response object with `success=True`, the given `segments`, and `speaker_count`.
+    """
+    return DiarizationResponse(
+        success=True,
+        segments=segments,
+        speaker_count=speaker_count,
+    )
 
 
 # ============================================================================
@@ -304,6 +630,18 @@ async def health_check():
 
 @app.get("/capabilities", response_model=CapabilitiesResponse)
 async def get_stage_capabilities():
+    """
+    Builds and returns the service capabilities for transcription, translation, TTS, and diarization.
+    
+    Queries available backends (Whisper, NLLB, Qwen3-TTS, NeMo/WeSpeaker) and assembles a CapabilitiesResponse summarizing readiness, human-readable details, per-stage provider availability, provider-specific details, the diarization default provider, and supported diarization engines.
+    
+    Returns:
+        CapabilitiesResponse: Summary of stage capabilities with the following fields populated:
+            - transcription: StageCapability for Whisper readiness and detail.
+            - translation: StageCapability for NLLB readiness and detail.
+            - tts: StageCapability indicating Qwen3-TTS readiness, detail, and provider map/details for "qwen-tts".
+            - diarization: StageCapability indicating overall diarization readiness, detail, provider readiness map, provider detail map, `default_provider` (NeMo), and `engines` (["nemo", "wespeaker"]).
+    """
     tx_ready, tx_detail = _probe_whisper_available()
     tl_ready, tl_detail = _probe_nllb_available()
 
@@ -314,7 +652,7 @@ async def get_stage_capabilities():
     else:
         tts_detail = f"qwen: {qwen_detail}"
 
-    diar_ready, diar_detail = _probe_pyannote_available()
+    diar_providers, diar_provider_details, diar_ready, diar_detail = _probe_diarization_providers()
 
     return CapabilitiesResponse(
         transcription=StageCapability(ready=tx_ready, detail=tx_detail),
@@ -329,7 +667,14 @@ async def get_stage_capabilities():
                 "qwen-tts": qwen_detail,
             },
         ),
-        diarization=StageCapability(ready=diar_ready, detail=diar_detail),
+        diarization=StageCapability(
+            ready=diar_ready,
+            detail=diar_detail,
+            providers=diar_providers,
+            provider_details=diar_provider_details,
+            default_provider=NEMO_DIARIZATION_DEFAULT_PROVIDER,
+            engines=["nemo", "wespeaker"],
+        ),
     )
 
 
@@ -441,7 +786,7 @@ async def transcribe(
         logger.error(f"Transcription failed: {exc}", exc_info=True)
         if temp_audio_path:
             background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ============================================================================
@@ -543,116 +888,92 @@ async def translate(
 # Diarization
 # ============================================================================
 
-async def load_pyannote_pipeline_async(hf_token: str):
-    """Load (or return cached) pyannote speaker-diarization-3.1 pipeline.
-
-    Protected by an asyncio.Lock so concurrent /diarize requests cannot race
-    on the global during the first load.  Subsequent calls return the cached
-    pipeline without acquiring the lock in the hot path.
-    """
-    global pyannote_pipeline, pyannote_pipeline_key
-
-    # Fast path: already loaded with the same token
-    if pyannote_pipeline is not None and pyannote_pipeline_key == hf_token:
-        return pyannote_pipeline
-
-    # Acquire the lock lazily — _pyannote_load_lock starts as None and must be
-    # created from within an async context so it binds to the running event loop.
-    lock = await _get_pyannote_load_lock()
-    async with lock:
-        # Re-check inside the lock in case another coroutine loaded while we waited
-        if pyannote_pipeline is not None and pyannote_pipeline_key == hf_token:
-            return pyannote_pipeline
-
-        def _load():
-            from pyannote.audio import Pipeline
-            logger.info("Loading pyannote speaker-diarization-3.1")
-            pipeline = Pipeline.from_pretrained(
-                "pyannote/speaker-diarization-3.1",
-                use_auth_token=hf_token,
-            )
-            if HOST_DEVICE == "cuda":
-                pipeline = pipeline.to(torch.device("cuda"))
-            logger.info("pyannote pipeline loaded")
-            return pipeline
-
-        pyannote_pipeline = await asyncio.to_thread(_load)
-        pyannote_pipeline_key = hf_token
-
-    return pyannote_pipeline
-
-
 @app.post("/diarize", response_model=DiarizationResponse)
 async def diarize(
-    file: UploadFile = File(...),
-    hf_token: str = Form(...),
+    audio: UploadFile = File(...),
     min_speakers: Optional[int] = Form(None),
     max_speakers: Optional[int] = Form(None),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """Run speaker diarization on an audio file.
-
-    Returns time-stamped speaker segments that can be merged with Whisper
-    transcript segments on the C# side to assign a speaker_id to each
-    transcript segment.
-
-    Parameters
-    ----------
-    file        : audio file (WAV preferred; any ffmpeg-readable format works)
-    hf_token    : HuggingFace access token accepted on
-                  huggingface.co/pyannote/speaker-diarization-3.1
-    min_speakers: optional hint — minimum expected speaker count
-    max_speakers: optional hint — maximum expected speaker count
     """
-    if not hf_token or not hf_token.strip():
-        raise HTTPException(status_code=400, detail="hf_token is required for pyannote diarization")
-
+    Perform speaker diarization on uploaded audio and return a structured diarization response.
+    
+    Parameters:
+        min_speakers (Optional[int]): Minimum number of speakers to detect; used as a hint when provided.
+        max_speakers (Optional[int]): Maximum number of speakers to detect; used as a hint when provided.
+    
+    Returns:
+        DiarizationResponse: Object containing the list of diarization segments and the detected speaker count.
+    
+    Raises:
+        HTTPException: If diarization fails or the uploaded audio cannot be processed.
+    """
+    _validate_diarization_speaker_bounds(min_speakers, max_speakers)
     temp_audio_path: Optional[Path] = None
     try:
-        safe_name = Path(file.filename or "").name or "audio"
-        temp_audio_path = TEMP_DIR / f"diar_{uuid4().hex}_{safe_name}"
-        temp_audio_path.write_bytes(await file.read())
-
-        pipeline = await load_pyannote_pipeline_async(hf_token.strip())
-
-        # Capture loop params explicitly so the closure is unambiguous
-        _min = min_speakers
-        _max = max_speakers
-
-        def _run_diarization():
-            kwargs: dict = {}
-            if _min is not None:
-                kwargs["min_speakers"] = _min
-            if _max is not None:
-                kwargs["max_speakers"] = _max
-            return pipeline(str(temp_audio_path), **kwargs)
-
-        diarization = await asyncio.to_thread(_run_diarization)
-
-        segments: list[DiarizationSegment] = []
-        speakers: set[str] = set()
-        for turn, _, speaker in diarization.itertracks(yield_label=True):
-            segments.append(DiarizationSegment(
-                start=round(turn.start, 3),
-                end=round(turn.end, 3),
-                speaker_id=speaker,
-            ))
-            speakers.add(speaker)
-
-        background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
-        return DiarizationResponse(
-            success=True,
-            segments=segments,
-            speaker_count=len(speakers),
+        temp_audio_path = _stage_audio_upload_to_temp(audio, "diar")
+        temp_audio_path.write_bytes(await audio.read())
+        segments, speaker_count = await asyncio.to_thread(
+            _run_nemo_diarization,
+            temp_audio_path,
+            min_speakers,
+            max_speakers,
         )
+        return _build_diarization_response(segments, speaker_count)
 
     except HTTPException:
         raise
     except Exception as exc:
         logger.error(f"Diarization failed: {exc}", exc_info=True)
-        if temp_audio_path:
-            background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
         raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        if temp_audio_path:
+            temp_audio_path.unlink(missing_ok=True)
+
+
+@app.post("/diarize/wespeaker", response_model=DiarizationResponse)
+async def diarize_wespeaker(
+    audio: UploadFile = File(...),
+    min_speakers: Optional[int] = Form(None),
+    max_speakers: Optional[int] = Form(None),
+):
+    """
+    Perform speaker diarization on uploaded audio using the WeSpeaker backend.
+    
+    This endpoint accepts optional speaker-count hints for parity with the NeMo endpoint but ignores them; it writes the uploaded audio to a temporary file, runs WeSpeaker diarization in a background thread, cleans up the temp file in a finally block, and returns the diarization result.
+    
+    Parameters:
+        audio (UploadFile): Uploaded audio file to diarize.
+        min_speakers (Optional[int]): Hint for minimum number of speakers (accepted but ignored).
+        max_speakers (Optional[int]): Hint for maximum number of speakers (accepted but ignored).
+    
+    Returns:
+        DiarizationResponse: Structured response containing diarization segments and the detected speaker count.
+    
+    Raises:
+        HTTPException: Raised with status 400 when diarization fails for reasons other than pre-existing HTTP errors.
+    """
+    _validate_diarization_speaker_bounds(min_speakers, max_speakers)
+    _ = min_speakers
+    _ = max_speakers
+
+    temp_audio_path: Optional[Path] = None
+    try:
+        temp_audio_path = _stage_audio_upload_to_temp(audio, "diar_wespeaker")
+        temp_audio_path.write_bytes(await audio.read())
+        segments, speaker_count = await asyncio.to_thread(
+            _run_wespeaker_diarization,
+            temp_audio_path,
+        )
+        return _build_diarization_response(segments, speaker_count)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"WeSpeaker diarization failed: {exc}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if temp_audio_path:
+            temp_audio_path.unlink(missing_ok=True)
 
 
 # ============================================================================

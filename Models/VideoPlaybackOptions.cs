@@ -11,6 +11,7 @@ public sealed record VideoPlaybackOptions(
     bool   UseGpuNext      = false,
     bool   VsrEnabled      = false,
     bool   HdrEnabled      = false,
+    bool   AllowHdrPassthrough = false,
     string ToneMapping     = "bt.2390",
     string TargetPeak      = "auto",
-    bool   HdrComputePeak  = false);
+    bool   HdrComputePeak  = true);

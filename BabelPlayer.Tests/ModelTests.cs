@@ -195,6 +195,16 @@ public sealed class ModelTests
         Assert.Equal("d3d11", opts.GpuApi);
     }
 
+    [Fact]
+    public void VideoPlaybackOptions_DefaultHdrPassthroughToneMappingValues_AreExpected()
+    {
+        var opts = new VideoPlaybackOptions();
+
+        Assert.Equal("bt.2390", opts.ToneMapping);
+        Assert.Equal("auto", opts.TargetPeak);
+        Assert.True(opts.HdrComputePeak);
+    }
+
     // ── ProviderDescriptor defaults ───────────────────────────────────────────
 
     [Fact]
