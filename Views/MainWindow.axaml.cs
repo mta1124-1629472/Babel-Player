@@ -24,6 +24,10 @@ public partial class MainWindow : Window
     private EventHandler<PointerEventArgs>? _videoOverlayPointerMovedHandler;
     private EventHandler<SizeChangedEventArgs>? _videoViewSizeChangedHandler;
     private EventHandler? _videoNativePointerActivityHandler;
+    private EventHandler<PixelPointEventArgs>? _windowPositionChangedHandler;
+    private EventHandler? _windowScalingChangedHandler;
+    private EventHandler? _screensChangedHandler;
+    private Screens? _subscribedScreens;
 
     public MainWindow()
     {
@@ -71,9 +75,41 @@ public partial class MainWindow : Window
         }
     }
 
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+
+        _windowPositionChangedHandler ??= OnWindowPositionChanged;
+        _windowScalingChangedHandler ??= OnWindowMetricsChanged;
+        _screensChangedHandler ??= OnScreensChanged;
+
+        PositionChanged += _windowPositionChangedHandler;
+        ScalingChanged += _windowScalingChangedHandler;
+
+        _subscribedScreens = Screens;
+        _subscribedScreens.Changed += _screensChangedHandler;
+
+        var videoView = this.FindControl<MpvVideoView>("VideoView");
+        if (videoView is not null)
+            UpdateEmbeddedTransportViewportMetrics(videoView);
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         base.OnClosed(e);
+
+        if (_windowPositionChangedHandler is not null)
+        {
+            PositionChanged -= _windowPositionChangedHandler;
+        }
+
+        if (_windowScalingChangedHandler is not null)
+        {
+            ScalingChanged -= _windowScalingChangedHandler;
+        }
+
+        if (_subscribedScreens is not null && _screensChangedHandler is not null)
+            _subscribedScreens.Changed -= _screensChangedHandler;
 
         if (DataContext is MainWindowViewModel vm)
         {
@@ -102,6 +138,10 @@ public partial class MainWindow : Window
         _videoOverlayPointerMovedHandler = null;
         _videoViewSizeChangedHandler = null;
         _videoNativePointerActivityHandler = null;
+        _windowPositionChangedHandler = null;
+        _windowScalingChangedHandler = null;
+        _screensChangedHandler = null;
+        _subscribedScreens = null;
     }
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
@@ -160,9 +200,9 @@ public partial class MainWindow : Window
                 if (player is LibMpvEmbeddedTransport embedded)
                 {
                     _embeddedTransport = embedded;
-                    if (sender is MpvVideoView videoView)
-                        UpdateEmbeddedTransportDisplaySize(videoView);
                     embedded.AttachToWindow(hwnd);
+                    if (sender is MpvVideoView videoView)
+                        UpdateEmbeddedTransportViewportMetrics(videoView);
                     TryApplyPendingMediaReloadRequest();
                 }
             }
@@ -176,10 +216,29 @@ public partial class MainWindow : Window
     private void OnVideoViewSizeChanged(object? sender, SizeChangedEventArgs e)
     {
         if (sender is MpvVideoView videoView)
-            UpdateEmbeddedTransportDisplaySize(videoView);
+            UpdateEmbeddedTransportViewportMetrics(videoView);
     }
 
-    private void UpdateEmbeddedTransportDisplaySize(MpvVideoView videoView)
+    private void OnWindowPositionChanged(object? sender, PixelPointEventArgs e)
+    {
+        OnWindowMetricsChanged(sender, EventArgs.Empty);
+    }
+
+    private void OnWindowMetricsChanged(object? sender, EventArgs e)
+    {
+        var videoView = this.FindControl<MpvVideoView>("VideoView");
+        if (videoView is not null)
+            UpdateEmbeddedTransportViewportMetrics(videoView);
+    }
+
+    private void OnScreensChanged(object? sender, EventArgs e)
+    {
+        var videoView = this.FindControl<MpvVideoView>("VideoView");
+        if (videoView is not null)
+            UpdateEmbeddedTransportViewportMetrics(videoView);
+    }
+
+    private void UpdateEmbeddedTransportViewportMetrics(MpvVideoView videoView)
     {
         if (_embeddedTransport is null)
             return;
@@ -188,6 +247,9 @@ public partial class MainWindow : Window
         var width = Math.Max(0, (int)Math.Round(videoView.Bounds.Width * scale));
         var height = Math.Max(0, (int)Math.Round(videoView.Bounds.Height * scale));
         _embeddedTransport.SetDisplaySize(width, height);
+
+        var screen = Screens.ScreenFromWindow(this);
+        _embeddedTransport.SetMonitorResolution(screen?.Bounds.Width ?? 0, screen?.Bounds.Height ?? 0);
     }
 
     private static readonly string[] VideoExtensions = ["*.mp4", "*.mkv", "*.avi", "*.webm", "*.mov"];

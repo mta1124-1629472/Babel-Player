@@ -52,6 +52,8 @@ public sealed class VsrDiagnosticsTests : IDisposable
             videoHeight: 720,
             displayWidth: 1280,
             displayHeight: 720,
+            monitorWidth: 1280,
+            monitorHeight: 720,
             hwPixelFormat: "nv12");
 
         var snapshot = LibMpvEmbeddedTransport.CreateVsrDiagnosticSnapshot(
@@ -68,6 +70,8 @@ public sealed class VsrDiagnosticsTests : IDisposable
         Assert.Equal("no-upscaling-required", snapshot.ReasonCode);
         Assert.Equal("no upscaling is required", snapshot.ReasonText);
         Assert.Equal("VSR skipped: no upscaling is required", snapshot.PlaybackStatusText);
+        Assert.Equal(1280, snapshot.MonitorWidth);
+        Assert.Equal(720, snapshot.MonitorHeight);
     }
 
     [Fact]
@@ -78,6 +82,8 @@ public sealed class VsrDiagnosticsTests : IDisposable
             videoHeight: 720,
             displayWidth: 1538,
             displayHeight: 789,
+            monitorWidth: 1538,
+            monitorHeight: 789,
             hwPixelFormat: "nv12");
 
         var snapshot = LibMpvEmbeddedTransport.CreateVsrDiagnosticSnapshot(
@@ -95,6 +101,8 @@ public sealed class VsrDiagnosticsTests : IDisposable
         Assert.Equal("libmpv rejected the vf add command", snapshot.BackendResultLabel);
         Assert.Equal("libmpv rejected the vf add command", snapshot.ReasonText);
         Assert.Contains("rejected", snapshot.PlaybackStatusText, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1538, snapshot.MonitorWidth);
+        Assert.Equal(789, snapshot.MonitorHeight);
     }
 
     [Fact]
@@ -123,6 +131,8 @@ public sealed class VsrDiagnosticsTests : IDisposable
                 videoHeight: 720,
                 displayWidth: 1538,
                 displayHeight: 789,
+                monitorWidth: 1538,
+                monitorHeight: 789,
                 hwPixelFormat: "nv12"),
             backendResultCode: -12,
             videoOutput: "gpu-next",

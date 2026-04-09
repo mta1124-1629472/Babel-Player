@@ -24,6 +24,8 @@ internal sealed record VsrDiagnosticSnapshot(
     int VideoHeight,
     int DisplayWidth,
     int DisplayHeight,
+    int MonitorWidth,
+    int MonitorHeight,
     double Scale,
     string HwPixelFormat,
     int? BackendResultCode,
