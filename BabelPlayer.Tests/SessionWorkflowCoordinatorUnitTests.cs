@@ -85,7 +85,6 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             VideoGpuApi = _ctx.Settings.VideoGpuApi,
             VideoUseGpuNext = _ctx.Settings.VideoUseGpuNext,
             VideoVsrEnabled = _ctx.Settings.VideoVsrEnabled,
-            VideoVsrQuality = _ctx.Settings.VideoVsrQuality,
             VideoHdrEnabled = _ctx.Settings.VideoHdrEnabled,
             VideoToneMapping = _ctx.Settings.VideoToneMapping,
             VideoTargetPeak = _ctx.Settings.VideoTargetPeak,

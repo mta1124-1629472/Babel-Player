@@ -24,7 +24,6 @@ public sealed class ManagedHostComputeTypePolicyTests
             IsRtxCapable: false,
             IsVsrDriverSufficient: false,
             NvidiaDriverVersion: null,
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: null);
 
         // Act
@@ -52,7 +51,6 @@ public sealed class ManagedHostComputeTypePolicyTests
             IsRtxCapable: true,
             IsVsrDriverSufficient: false,
             NvidiaDriverVersion: null,
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: null);
 
         // Act
@@ -80,7 +78,6 @@ public sealed class ManagedHostComputeTypePolicyTests
             IsRtxCapable: true,
             IsVsrDriverSufficient: true,
             NvidiaDriverVersion: "552.00",
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: "9.0"); // Hopper
 
         // Act
@@ -108,7 +105,6 @@ public sealed class ManagedHostComputeTypePolicyTests
             IsRtxCapable: false,
             IsVsrDriverSufficient: true,
             NvidiaDriverVersion: "552.00",
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: "10.0"); // Blackwell
 
         // Act
@@ -136,7 +132,6 @@ public sealed class ManagedHostComputeTypePolicyTests
             IsRtxCapable: false,
             IsVsrDriverSufficient: false,
             NvidiaDriverVersion: null,
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: null);
 
         // Act
@@ -164,7 +159,6 @@ public sealed class ManagedHostComputeTypePolicyTests
             IsRtxCapable: false,
             IsVsrDriverSufficient: true,
             NvidiaDriverVersion: "552.00",
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: "10.0");
 
         // Act & Assert
@@ -189,7 +183,6 @@ public sealed class ManagedHostComputeTypePolicyTests
             IsRtxCapable: true,
             IsVsrDriverSufficient: true,
             NvidiaDriverVersion: "552.00",
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: "9.0");
 
         // Act & Assert
@@ -214,7 +207,6 @@ public sealed class ManagedHostComputeTypePolicyTests
             IsRtxCapable: true,
             IsVsrDriverSufficient: true,
             NvidiaDriverVersion: "552.00",
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: null);
 
         // Act & Assert
@@ -246,7 +238,6 @@ public sealed class ManagedHostComputeTypePolicyTests
             IsRtxCapable: false,
             IsVsrDriverSufficient: true,
             NvidiaDriverVersion: "552.00",
-            IsHdrDisplayAvailable: false,
             GpuComputeCapability: capability);
 
         // Act & Assert

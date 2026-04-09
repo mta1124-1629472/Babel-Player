@@ -60,4 +60,14 @@ public sealed class AppSettingsTests
 
         Assert.Equal(AppSettings.ManagedGpuServiceUrl, settings.EffectiveGpuServiceUrl);
     }
+
+    [Fact]
+    public void HdrPassthroughDefaults_PreserveConfigOnlyToneMappingSettings()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal("bt.2390", settings.VideoToneMapping);
+        Assert.Equal("auto", settings.VideoTargetPeak);
+        Assert.True(settings.VideoHdrComputePeak);
+    }
 }

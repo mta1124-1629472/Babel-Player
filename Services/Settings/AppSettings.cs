@@ -184,7 +184,7 @@ public sealed class AppSettings
 
     /// <summary>
     /// Use the gpu-next video output backend instead of the legacy gpu backend.
-    /// Required for RTX Video Super Resolution and RTX HDR.
+    /// Required for RTX Video Super Resolution and mpv HDR passthrough.
     /// Takes effect on app restart. Default true (modern Windows + GPU drivers handle this well).
     /// </summary>
     public bool VideoUseGpuNext { get; set; } = true;
@@ -193,22 +193,16 @@ public sealed class AppSettings
     /// Enable NVIDIA RTX Video Super Resolution via the d3d11vpp filter.
     /// Requires gpu-next backend, RTX GPU, driver >= 551.23, and
     /// "RTX Video Enhancement" enabled in NVIDIA Control Panel.
+    /// VSR quality remains driver-controlled; mpv does not expose a per-filter quality setting.
     /// Takes effect on app restart.
     /// </summary>
     public bool VideoVsrEnabled { get; set; } = false;
 
     /// <summary>
-    /// RTX Video Super Resolution quality level (1 = Performance ... 4 = Quality).
-    /// Only used when VideoVsrEnabled is true.
-    /// Takes effect on app restart.
-    /// </summary>
-    public int VideoVsrQuality { get; set; } = 2;
-
-    /// <summary>
-    /// Enable the mpv HDR output pipeline (target-colorspace-hint + tone-mapping).
+    /// Enable mpv HDR passthrough (target-colorspace-hint + tone-mapping).
     /// Requests an HDR-capable mpv output path for the OS/display pipeline.
-    /// Pair with NVIDIA RTX HDR in NVIDIA Control Panel when the playback surface
-    /// is one NVIDIA supports for driver-level SDR-to-HDR conversion.
+    /// This is separate from NVIDIA RTX Auto HDR, which remains a driver-level
+    /// SDR-to-HDR feature configured in NVIDIA Control Panel.
     /// Requires an HDR-capable display with Windows HDR enabled.
     /// Takes effect on app restart.
     /// </summary>
@@ -230,10 +224,10 @@ public sealed class AppSettings
 
     /// <summary>
     /// Enable dynamic per-frame peak detection for HDR tone-mapping.
-    /// May cause brightness instability on some content. Default false.
+    /// May cause brightness instability on some content. Default true.
     /// Takes effect on app restart.
     /// </summary>
-    public bool VideoHdrComputePeak { get; set; } = false;
+    public bool VideoHdrComputePeak { get; set; } = true;
 
     /// <summary>
     /// ffmpeg encoder used by the video export stage (not yet implemented).

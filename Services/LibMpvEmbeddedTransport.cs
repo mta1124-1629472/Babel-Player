@@ -14,8 +14,8 @@ namespace Babel.Player.Services;
 /// using libmpv's own GPU pipeline (OpenGL/D3D11 under the hood).
 ///
 /// When <see cref="VideoPlaybackOptions.UseGpuNext"/> is true the transport switches to the
-/// gpu-next video output backend, which is required for RTX Video Super Resolution and the
-/// correct mpv HDR pipeline.
+/// gpu-next video output backend, which is required for RTX Video Super Resolution and mpv
+/// HDR passthrough.
 ///
 /// VSR is applied dynamically when a file finishes loading: a background event-polling thread
 /// detects the MPV_EVENT_FILE_LOADED event (id 8), queries the video dimensions, computes the
@@ -39,9 +39,11 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     private Thread? _eventThread;
     private volatile bool _eventThreadRunning;
 
-    // Display dimensions supplied by the host (set via SetDisplaySize).
+    // Display-surface dimensions supplied by the host (set via SetDisplaySize).
     private int _displayWidth;
     private int _displayHeight;
+    private int _monitorWidth;
+    private int _monitorHeight;
     private VsrDiagnosticSnapshot? _lastVsrDiagnostic;
 
     private delegate IntPtr mpv_create_delegate();
@@ -114,11 +116,11 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         SetOption("hwdec",   _options.HwdecMode);
         SetOption("gpu-api", _options.GpuApi);
 
-        // ── HDR pipeline options (gpu-next + HDR display required) ────────────
-        if (_options.UseGpuNext && _options.HdrEnabled)
+        // ── HDR passthrough options (gpu-next + active HDR display required) ──
+        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
         {
-            // Request mpv's HDR-capable output path. NVIDIA RTX HDR still depends on
-            // Windows HDR state and whether the playback surface is one NVIDIA hooks.
+            // Request mpv's HDR-capable output path. Driver-level Auto HDR remains
+            // separate and cannot be controlled from this playback path.
             SetOption("target-colorspace-hint", "yes");
             // Tone-mapping algorithm for HDR → display peak mapping.
             SetOption("tone-mapping", _options.ToneMapping);
@@ -146,12 +148,12 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _isPaused = true;
         _hasEnded = false;
 
-        if (_options.UseGpuNext && _options.HdrEnabled)
+        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
         {
             _log?.Info(
-                $"Configured mpv HDR output path: gpu-next={_options.UseGpuNext}, " +
+                $"Configured mpv HDR passthrough: gpu-next={_options.UseGpuNext}, " +
                 $"tone_mapping={_options.ToneMapping}, target_peak='{_options.TargetPeak}', " +
-                "note=driver-level RTX HDR activation still depends on a supported NVIDIA playback path.");
+                "note=driver-level Auto HDR remains separate and is not controlled by this app.");
         }
 
         // Start the background event loop only when VSR may be applied.
@@ -160,8 +162,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
     }
 
     /// <summary>
-    /// Informs the transport of the native render-target dimensions so that the VSR
-    /// upscale factor can be computed correctly when a file loads.
+    /// Informs the transport of the native render-target dimensions for diagnostics and
+    /// filter re-evaluation when a file loads or the render surface changes.
     /// Call this after the HWND is created and whenever the window is resized.
     /// </summary>
     public void SetDisplaySize(int width, int height)
@@ -181,6 +183,31 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
             if (_isLoaded && _handle != IntPtr.Zero)
                 ApplyVsrFilter("display-size-updated");
+        }
+    }
+
+    /// <summary>
+    /// Informs the transport of the monitor's native pixel resolution so VSR scale
+    /// evaluation compares the source video against the actual display output.
+    /// Call this after the window is opened and whenever its monitor context changes.
+    /// </summary>
+    public void SetMonitorResolution(int width, int height)
+    {
+        width = Math.Max(0, width);
+        height = Math.Max(0, height);
+
+        if (_monitorWidth == width && _monitorHeight == height)
+            return;
+
+        _monitorWidth = width;
+        _monitorHeight = height;
+
+        if (_options.UseGpuNext && _options.VsrEnabled)
+        {
+            _log?.Info($"Updated monitor resolution for embedded video surface: width={width}, height={height}");
+
+            if (_isLoaded && _handle != IntPtr.Zero)
+                ApplyVsrFilter("monitor-resolution-updated");
         }
     }
 
@@ -498,7 +525,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
                 CreateVsrDiagnosticSnapshot(
                     trigger,
                     _options,
-                    VsrFilterPlan.Skip("video-width-unavailable", 0, 0, _displayWidth, _displayHeight, string.Empty),
+                    VsrFilterPlan.Skip("video-width-unavailable", 0, 0, _displayWidth, _displayHeight, _monitorWidth, _monitorHeight, string.Empty),
                     backendResultCode: null,
                     videoOutput: runtimeVideoOutput,
                     gpuContext: runtimeGpuContext,
@@ -513,7 +540,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
                 CreateVsrDiagnosticSnapshot(
                     trigger,
                     _options,
-                    VsrFilterPlan.Skip("video-height-unavailable", videoW, 0, _displayWidth, _displayHeight, string.Empty),
+                    VsrFilterPlan.Skip("video-height-unavailable", videoW, 0, _displayWidth, _displayHeight, _monitorWidth, _monitorHeight, string.Empty),
                     backendResultCode: null,
                     videoOutput: runtimeVideoOutput,
                     gpuContext: runtimeGpuContext,
@@ -531,6 +558,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             videoH,
             _displayWidth,
             _displayHeight,
+            _monitorWidth,
+            _monitorHeight,
             hwFmt);
 
         if (!plan.ShouldApply || string.IsNullOrWhiteSpace(plan.FilterChain))
@@ -581,19 +610,26 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         int videoHeight,
         int displayWidth,
         int displayHeight,
+        int monitorWidth,
+        int monitorHeight,
         string hwPixelFormat)
     {
         if (videoWidth <= 0 || videoHeight <= 0)
-            return VsrFilterPlan.Skip("video-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat);
+            return VsrFilterPlan.Skip("video-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
 
         if (displayWidth <= 0 || displayHeight <= 0)
-            return VsrFilterPlan.Skip("display-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat);
+            return VsrFilterPlan.Skip("display-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
 
-        double scaleExact = Math.Max(displayWidth, displayHeight) / (double)Math.Max(videoWidth, videoHeight);
+        if (monitorWidth <= 0 || monitorHeight <= 0)
+            return VsrFilterPlan.Skip("monitor-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
+
+        double scaleExact = Math.Min(
+            monitorWidth / (double)videoWidth,
+            monitorHeight / (double)videoHeight);
         double scale = Math.Floor(scaleExact * 10.0) / 10.0;
 
         if (scale <= 1.0)
-            return VsrFilterPlan.Skip("no-upscaling-required", videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat, scale);
+            return VsrFilterPlan.Skip("no-upscaling-required", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat, scale);
 
         bool needsFormatConversion =
             !string.IsNullOrEmpty(hwPixelFormat) &&
@@ -605,7 +641,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             ? $"@vsr:lavfi=[format=nv12],d3d11vpp=scaling-mode=nvidia:scale={scaleStr}"
             : $"@vsr:d3d11vpp=scaling-mode=nvidia:scale={scaleStr}";
 
-        return VsrFilterPlan.Apply(filterChain, scale, videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat);
+        return VsrFilterPlan.Apply(filterChain, scale, videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
     }
 
     private IntPtr LoadLibMpvDll()
@@ -724,7 +760,6 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             Trigger: trigger,
             UseGpuNextRequested: options.UseGpuNext,
             VsrRequested: options.VsrEnabled,
-            VsrQuality: options.VsrQuality,
             ResolvedPlan: plan.ShouldApply ? "apply" : "skip",
             ReasonCode: state switch
             {
@@ -738,6 +773,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             VideoHeight: plan.VideoHeight,
             DisplayWidth: plan.DisplayWidth,
             DisplayHeight: plan.DisplayHeight,
+            MonitorWidth: plan.MonitorWidth,
+            MonitorHeight: plan.MonitorHeight,
             Scale: plan.Scale,
             HwPixelFormat: plan.HwPixelFormat,
             BackendResultCode: backendResultCode,
@@ -757,10 +794,10 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
         var message =
             $"RTX VSR diagnostic: state={snapshot.State}, trigger={snapshot.Trigger}, " +
-            $"requested_gpu_next={snapshot.UseGpuNextRequested}, requested_vsr={snapshot.VsrRequested}, quality={snapshot.VsrQuality}, " +
+            $"requested_gpu_next={snapshot.UseGpuNextRequested}, requested_vsr={snapshot.VsrRequested}, " +
             $"resolved_plan={snapshot.ResolvedPlan}, reason={snapshot.ReasonCode}, reason_text='{snapshot.ReasonText}', " +
             $"backend='{snapshot.BackendSummary}', filter='{snapshot.FilterChain ?? "<none>"}', " +
-            $"video={snapshot.VideoWidth}x{snapshot.VideoHeight}, display={snapshot.DisplayWidth}x{snapshot.DisplayHeight}, " +
+            $"video={snapshot.VideoWidth}x{snapshot.VideoHeight}, display={snapshot.DisplayWidth}x{snapshot.DisplayHeight}, monitor={snapshot.MonitorWidth}x{snapshot.MonitorHeight}, " +
             $"scale={snapshot.Scale:F1}, hwfmt='{snapshot.HwPixelFormat}', vo='{snapshot.VideoOutput ?? "<unknown>"}', " +
             $"gpu_context='{snapshot.GpuContext ?? "<unknown>"}', hwdec='{snapshot.HwdecCurrent ?? "<unknown>"}'";
 
@@ -790,6 +827,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
                 "video-height-unavailable" => "video height is unavailable",
                 "video-size-unavailable" => "video size is unavailable",
                 "display-size-unavailable" => "display size is unavailable",
+                "monitor-size-unavailable" => "monitor size is unavailable",
                 "no-upscaling-required" => "no upscaling is required",
                 _ => plan.Reason,
             },
@@ -805,6 +843,8 @@ internal sealed record VsrFilterPlan(
     int VideoHeight,
     int DisplayWidth,
     int DisplayHeight,
+    int MonitorWidth,
+    int MonitorHeight,
     string HwPixelFormat)
 {
     public static VsrFilterPlan Skip(
@@ -813,6 +853,8 @@ internal sealed record VsrFilterPlan(
         int videoHeight,
         int displayWidth,
         int displayHeight,
+        int monitorWidth,
+        int monitorHeight,
         string hwPixelFormat,
         double scale = 0.0) =>
         new(
@@ -824,6 +866,8 @@ internal sealed record VsrFilterPlan(
             VideoHeight: videoHeight,
             DisplayWidth: displayWidth,
             DisplayHeight: displayHeight,
+            MonitorWidth: monitorWidth,
+            MonitorHeight: monitorHeight,
             HwPixelFormat: hwPixelFormat);
 
     public static VsrFilterPlan Apply(
@@ -833,6 +877,8 @@ internal sealed record VsrFilterPlan(
         int videoHeight,
         int displayWidth,
         int displayHeight,
+        int monitorWidth,
+        int monitorHeight,
         string hwPixelFormat) =>
         new(
             ShouldApply: true,
@@ -843,5 +889,7 @@ internal sealed record VsrFilterPlan(
             VideoHeight: videoHeight,
             DisplayWidth: displayWidth,
             DisplayHeight: displayHeight,
+            MonitorWidth: monitorWidth,
+            MonitorHeight: monitorHeight,
             HwPixelFormat: hwPixelFormat);
 }

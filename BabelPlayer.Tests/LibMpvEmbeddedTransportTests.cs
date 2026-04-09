@@ -12,6 +12,8 @@ public sealed class LibMpvEmbeddedTransportTests
             videoHeight: 720,
             displayWidth: 0,
             displayHeight: 0,
+            monitorWidth: 2560,
+            monitorHeight: 1440,
             hwPixelFormat: "nv12");
 
         Assert.False(plan.ShouldApply);
@@ -27,6 +29,8 @@ public sealed class LibMpvEmbeddedTransportTests
             videoHeight: 720,
             displayWidth: 3840,
             displayHeight: 2160,
+            monitorWidth: 3840,
+            monitorHeight: 2160,
             hwPixelFormat: "nv12");
 
         Assert.True(plan.ShouldApply);
@@ -45,11 +49,51 @@ public sealed class LibMpvEmbeddedTransportTests
             videoHeight: 1080,
             displayWidth: 3840,
             displayHeight: 2160,
+            monitorWidth: 3840,
+            monitorHeight: 2160,
             hwPixelFormat: "p010");
 
         Assert.True(plan.ShouldApply);
         Assert.NotNull(plan.FilterChain);
         Assert.Contains("lavfi=[format=nv12]", plan.FilterChain);
         Assert.Contains("d3d11vpp=", plan.FilterChain);
+    }
+
+    [Fact]
+    public void EvaluateVsrFilterPlan_AppliesWhenWindowMatchesSourceButMonitorRequiresUpscaling()
+    {
+        var plan = LibMpvEmbeddedTransport.EvaluateVsrFilterPlan(
+            videoWidth: 1280,
+            videoHeight: 720,
+            displayWidth: 1280,
+            displayHeight: 720,
+            monitorWidth: 2560,
+            monitorHeight: 1440,
+            hwPixelFormat: "nv12");
+
+        Assert.True(plan.ShouldApply);
+        Assert.Equal(2.0, plan.Scale);
+        Assert.Equal(1280, plan.DisplayWidth);
+        Assert.Equal(720, plan.DisplayHeight);
+        Assert.Equal(2560, plan.MonitorWidth);
+        Assert.Equal(1440, plan.MonitorHeight);
+    }
+
+    [Fact]
+    public void EvaluateVsrFilterPlan_UsesLimitingAxisForUltrawideScale()
+    {
+        var plan = LibMpvEmbeddedTransport.EvaluateVsrFilterPlan(
+            videoWidth: 1920,
+            videoHeight: 1080,
+            displayWidth: 1920,
+            displayHeight: 1080,
+            monitorWidth: 3440,
+            monitorHeight: 1440,
+            hwPixelFormat: "nv12");
+
+        Assert.True(plan.ShouldApply);
+        Assert.Equal(1.3, plan.Scale);
+        Assert.NotNull(plan.FilterChain);
+        Assert.Contains("scale=1.3", plan.FilterChain);
     }
 }

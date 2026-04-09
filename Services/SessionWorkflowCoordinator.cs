@@ -175,13 +175,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _transportManager = transportManager ?? new MediaTransportManager(
             segmentPlayer,
             sourcePlayer,
-            new VideoPlaybackOptions(
+            videoOptionsFactory: () => new VideoPlaybackOptions(
                 HwdecMode:      settings.VideoHwdec,
                 GpuApi:         settings.VideoGpuApi,
                 UseGpuNext:     settings.VideoUseGpuNext,
                 VsrEnabled:     settings.VideoVsrEnabled,
-                VsrQuality:     settings.VideoVsrQuality,
                 HdrEnabled:     settings.VideoHdrEnabled,
+                AllowHdrPassthrough: settings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
                 ToneMapping:    settings.VideoToneMapping,
                 TargetPeak:     settings.VideoTargetPeak,
                 HdrComputePeak: settings.VideoHdrComputePeak),

@@ -118,7 +118,6 @@ public sealed class SettingsService
         public string? VideoGpuApi { get; set; }
         public bool? VideoUseGpuNext { get; set; }
         public bool? VideoVsrEnabled { get; set; }
-        public int? VideoVsrQuality { get; set; }
         public bool? VideoHdrEnabled { get; set; }
         public string? VideoToneMapping { get; set; }
         public string? VideoTargetPeak { get; set; }
@@ -181,7 +180,6 @@ public sealed class SettingsService
             settings.VideoGpuApi = VideoGpuApi ?? settings.VideoGpuApi;
             settings.VideoUseGpuNext = VideoUseGpuNext ?? settings.VideoUseGpuNext;
             settings.VideoVsrEnabled = VideoVsrEnabled ?? settings.VideoVsrEnabled;
-            settings.VideoVsrQuality = VideoVsrQuality ?? settings.VideoVsrQuality;
             settings.VideoHdrEnabled = VideoHdrEnabled ?? settings.VideoHdrEnabled;
             settings.VideoToneMapping = VideoToneMapping ?? settings.VideoToneMapping;
             settings.VideoTargetPeak = VideoTargetPeak ?? settings.VideoTargetPeak;
@@ -220,7 +218,6 @@ public sealed class SettingsService
             VideoGpuApi = settings.VideoGpuApi,
             VideoUseGpuNext = settings.VideoUseGpuNext,
             VideoVsrEnabled = settings.VideoVsrEnabled,
-            VideoVsrQuality = settings.VideoVsrQuality,
             VideoHdrEnabled = settings.VideoHdrEnabled,
             VideoToneMapping = settings.VideoToneMapping,
             VideoTargetPeak = settings.VideoTargetPeak,

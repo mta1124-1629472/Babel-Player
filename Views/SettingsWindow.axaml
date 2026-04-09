@@ -210,7 +210,7 @@
                                   Content="Use gpu-next video output (required for RTX enhancements)"/>
                         <TextBlock TextWrapping="Wrap"
                                    Opacity="0.6"
-                                   Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or RTX HDR." />
+                                   Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or HDR Passthrough." />
 
                         <TextBlock Text="RTX Video Enhancement" FontWeight="SemiBold" Margin="0,12,0,0"/>
 
@@ -219,18 +219,8 @@
                                   Content="RTX Video Super Resolution (VSR)"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
                                     Text="AI upscaling via NVIDIA d3d11vpp. Requires RTX GPU, driver &#x2265; 551.23, and 'RTX Video Enhancement' enabled in NVIDIA Control Panel." />
-
-                        <StackPanel Orientation="Horizontal" Spacing="12"
-                                    IsEnabled="{Binding VideoVsrEnabled}">
-                            <TextBlock Text="VSR Quality:" VerticalAlignment="Center"/>
-                            <Slider Minimum="1" Maximum="4"
-                                    Value="{Binding VideoVsrQuality, Mode=TwoWay}"
-                                    TickFrequency="1" IsSnapToTickEnabled="True"
-                                    Width="140"/>
-                            <TextBlock Text="{Binding VideoVsrQuality}" VerticalAlignment="Center" Width="14"/>
-                            <TextBlock Opacity="0.55" VerticalAlignment="Center"
-                                       Text="(1 = Performance &#xB7; 4 = Quality)"/>
-                        </StackPanel>
+                        <TextBlock TextWrapping="Wrap" Opacity="0.55"
+                                   Text="VSR quality is controlled in NVIDIA Control Panel. mpv's d3d11vpp filter does not expose an in-app quality setting." />
 
                         <Border Background="{DynamicResource SurfaceRaisedBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}"
@@ -257,28 +247,17 @@
 
                         <CheckBox IsChecked="{Binding VideoHdrEnabled, Mode=TwoWay}"
                                   IsEnabled="{Binding HdrSettingsAvailable}"
-                                  Content="HDR Output Pipeline"
+                                  Content="HDR Passthrough"
                                   Margin="0,8,0,0"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                   Text="Enables mpv's HDR output path so Windows receives an HDR-capable signal. Pair with NVIDIA RTX HDR in NVIDIA Control Panel when the playback surface is one NVIDIA supports. Requires an HDR display with Windows HDR enabled." />
-
-                        <StackPanel Spacing="8" IsEnabled="{Binding VideoHdrEnabled}">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="Tone Mapping:" VerticalAlignment="Center" Width="100"/>
-                                <ComboBox ItemsSource="{Binding ToneMappingOptions}"
-                                          SelectedItem="{Binding VideoToneMapping, Mode=TwoWay}"
-                                          Width="140"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="Target Peak (nits):" VerticalAlignment="Center" Width="100"/>
-                                <TextBox Text="{Binding VideoTargetPeak, Mode=TwoWay}"
-                                         Width="80"
-                                         ToolTip.Tip="Enter a nit value (e.g. 1000) or 'auto'"/>
-                            </StackPanel>
-                            <CheckBox IsChecked="{Binding VideoHdrComputePeak, Mode=TwoWay}"
-                                      Content="Dynamic peak detection (hdr-compute-peak)"
-                                      ToolTip.Tip="Per-frame brightness peak analysis. May cause brightness instability on some content."/>
-                        </StackPanel>
+                                   Text="Enables mpv's HDR passthrough path so HDR source video stays HDR through the Windows display pipeline. Requires gpu-next and Windows HDR enabled on at least one connected display." />
+                        <TextBlock TextWrapping="Wrap"
+                                   Opacity="0.55"
+                                   IsVisible="{Binding HasHdrAvailabilityHint}"
+                                   Text="{Binding HdrAvailabilityHintText}" />
+                        <TextBlock TextWrapping="Wrap"
+                                   Opacity="0.5"
+                                   Text="{x:Static vm:SettingsViewModel.HdrDriverFeatureHintText}" />
 
                         <TextBlock TextWrapping="Wrap"
                                    Opacity="0.6"
