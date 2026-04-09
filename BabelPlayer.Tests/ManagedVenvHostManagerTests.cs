@@ -271,11 +271,14 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     public async Task EnsureStartedAsync_PostStartProbeFailureReturnsLastUnavailableDetail()
     {
         var probeCalls = 0;
-        var probe = new ContainerizedServiceProbe(_log, (url, _, _) =>
-        {
-            var currentCall = Interlocked.Increment(ref probeCalls);
-            return Task.FromResult(ContainerHealthStatus.Unavailable(url, $"connection refused #{currentCall}"));
-        });
+        var probe = new ContainerizedServiceProbe(
+            _log,
+            (url, _, _) =>
+            {
+                var currentCall = Interlocked.Increment(ref probeCalls);
+                return Task.FromResult(ContainerHealthStatus.Unavailable(url, $"connection refused #{currentCall}"));
+            },
+            retryDelay: TimeSpan.FromMilliseconds(10));
 
         var manager = new ManagedVenvHostManager(
             _log,
@@ -294,7 +297,8 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
                 "Managed Python runtime can access CUDA 12.8.",
                 "12.8")),
             hostProcessStarter: (_, _, _, hostPidPath, token) =>
-                File.WriteAllTextAsync(hostPidPath, "12345", token));
+                File.WriteAllTextAsync(hostPidPath, "12345", token),
+            postStartProbeTimeout: TimeSpan.FromMilliseconds(60));
 
         PrepareBootstrappedRuntimeArtifacts();
 

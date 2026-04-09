@@ -25,6 +25,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private readonly Window _ownerWindow;
     private readonly IContainerizedInferenceManager _containerizedManager;
     private readonly Func<bool> _hdrDisplayStateProvider;
+    private bool _isHdrDisplayActive;
     private CancellationTokenSource? _restartCts;
 
     public SettingsViewModel(
@@ -43,6 +44,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _containerizedManager  = containerizedManager ?? NullInferenceManager.Instance;
         _apiKeyStore           = apiKeyStore;
         _hdrDisplayStateProvider = hdrDisplayStateProvider ?? HardwareSnapshot.QueryActiveHdrDisplay;
+        _isHdrDisplayActive    = _hdrDisplayStateProvider();
 
         var current = _coordinator.CurrentSettings;
         SelectedVoice          = current.TtsVoice;
@@ -250,7 +252,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public string VsrFilterText => _coordinator.VideoEnhancementDiagnostics.LastFilterText;
 
     /// <summary>True when Windows HDR is currently active for at least one desktop output.</summary>
-    public bool IsHdrDisplayActive => _hdrDisplayStateProvider();
+    public bool IsHdrDisplayActive => _isHdrDisplayActive;
 
     /// <summary>
     /// HDR passthrough requires both gpu-next and an active Windows HDR display pipeline.
@@ -396,6 +398,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     internal void RefreshHdrDisplayState()
     {
+        _isHdrDisplayActive = _hdrDisplayStateProvider();
         OnPropertyChanged(nameof(IsHdrDisplayActive));
         OnPropertyChanged(nameof(HdrSettingsAvailable));
         OnPropertyChanged(nameof(HdrAvailabilityHintText));

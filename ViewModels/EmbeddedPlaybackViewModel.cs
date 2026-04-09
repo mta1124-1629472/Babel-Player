@@ -38,6 +38,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private CancellationTokenSource? _providerReadinessRefreshCts;
     private int _providerReadinessRefreshVersion;
     private ProviderSelectionSnapshot? _lastQueuedProviderReadinessSnapshot;
+    private CancellationTokenSource? _autoSpeakerDetectionRefreshCts;
+    private int _autoSpeakerDetectionRefreshVersion;
 
     [ObservableProperty]
     private ObservableCollection<WorkflowSegmentState> _segments = [];
@@ -64,6 +66,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanRunPipeline))]
+    [NotifyPropertyChangedFor(nameof(CanRunDiarizationOnly))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -183,90 +186,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
     private bool _isMultiSpeakerEnabled;
 
-    public List<string> DiarizationProviderOptions { get; } =
-        BuildDiarizationProviderOptions();
-
-    private static List<string> BuildDiarizationProviderOptions()
-    {
-        var options = new List<string> { string.Empty };
-
-        foreach (var providerName in GetRegisteredDiarizationProviderNames())
-        {
-            if (!string.IsNullOrWhiteSpace(providerName) &&
-                !options.Contains(providerName, StringComparer.Ordinal))
-            {
-                options.Add(providerName);
-            }
-        }
-
-        if (!options.Contains(ProviderNames.PyannoteLocal, StringComparer.Ordinal))
-        {
-            options.Add(ProviderNames.PyannoteLocal);
-        }
-
-        return options;
-    }
-
-    private static IEnumerable<string> GetRegisteredDiarizationProviderNames()
-    {
-        var registryType = typeof(DiarizationRegistry);
-        object? registryInstance = registryType
-            .GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)?
-            .GetValue(null);
-
-        foreach (var memberName in new[] { "ProviderNames", "AvailableProviderNames", "Providers" })
-        {
-            foreach (var providerName in ReadProviderNames(registryType, registryInstance, memberName))
-            {
-                yield return providerName;
-            }
-        }
-    }
-
-    private static IEnumerable<string> ReadProviderNames(
-        Type registryType,
-        object? registryInstance,
-        string memberName)
-    {
-        var bindingFlags = System.Reflection.BindingFlags.Public |
-                           System.Reflection.BindingFlags.Static |
-                           System.Reflection.BindingFlags.Instance;
-
-        var property = registryType.GetProperty(memberName, bindingFlags);
-        var value = property?.GetValue(property.GetMethod?.IsStatic == true ? null : registryInstance);
-
-        if (value is IEnumerable<string> stringValues)
-        {
-            foreach (var stringValue in stringValues)
-            {
-                yield return stringValue;
-            }
-
-            yield break;
-        }
-
-        if (value is System.Collections.IEnumerable values)
-        {
-            foreach (var item in values)
-            {
-                if (item is string stringItem)
-                {
-                    yield return stringItem;
-                    continue;
-                }
-
-                var name = item?.GetType()
-                    .GetProperty("Name", bindingFlags)?
-                    .GetValue(item) as string;
-
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    yield return name;
-                }
-            }
-        }
-    }
     [ObservableProperty]
+    private IReadOnlyList<string> _diarizationProviderOptions = [string.Empty];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRunDiarizationOnly))]
     private string _diarizationProvider = string.Empty;
 
     [ObservableProperty]
@@ -275,21 +199,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private decimal? _diarizationMaxSpeakers;
 
-    private bool _isAutoSpeakerDetectionEnabled;
-
     private string _autoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
-
-    public bool IsAutoSpeakerDetectionEnabled
-    {
-        get => _isAutoSpeakerDetectionEnabled;
-        set
-        {
-            if (!SetProperty(ref _isAutoSpeakerDetectionEnabled, value))
-                return;
-
-            OnIsAutoSpeakerDetectionEnabledChanged(value);
-        }
-    }
 
     public string AutoSpeakerDetectionStatus
     {
@@ -342,6 +252,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private const int ControlsHideDelayMs = 3000;
     private const double PositionUpdateThresholdMs = 0.5;
 
+    /// <summary>
+    /// Initializes a new EmbeddedPlaybackViewModel and wires up provider/state caches, timers, and coordinator event handlers.
+    /// </summary>
+    /// <param name="coordinator">The session workflow coordinator that provides session state, registries, and pipeline operations.</param>
+    /// <param name="apiKeyStore">Optional store for API keys used by providers; may be null when not required.</param>
+    /// <param name="errorDialogService">Optional service to show error dialogs; may be null in non-UI or test contexts.</param>
+    /// <param name="logFilePath">Optional path for diagnostic log output; may be null to disable file logging.</param>
     public EmbeddedPlaybackViewModel(
         SessionWorkflowCoordinator coordinator,
         ApiKeyStore? apiKeyStore = null,
@@ -355,6 +272,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
         _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
         BuildProviderCaches();
+        RebuildDiarizationProviderOptions();
         SyncProviderModelFieldsFromSettings();
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
@@ -405,6 +323,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
     public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
     public bool CanRunPipeline => !IsBusy;
+    public bool CanRunDiarizationOnly =>
+        !IsBusy &&
+        _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed &&
+        !string.IsNullOrWhiteSpace(DiarizationProvider);
     public bool HasErrorDetails => !string.IsNullOrWhiteSpace(StatusErrorDetail);
     public bool HasDiagnosticsWarning => !_coordinator.BootstrapDiagnostics.AllDependenciesAvailable;
     public string DiagnosticsWarningText => _coordinator.BootstrapDiagnostics.DiagnosticSummary;
@@ -797,45 +719,45 @@ partial void OnSourcePositionMsChanged(double value)
         UpdateSelectedSpeakerDetails(value);
     }
 
+    /// <summary>
+    /// Handles changes to the multi-speaker enabled setting and updates coordinator state and UI data.
+    /// </summary>
+    /// <param name="value">`true` to enable multi-speaker mode; `false` to disable. When `false`, clears the selected diarization provider.</param>
     partial void OnIsMultiSpeakerEnabledChanged(bool value)
     {
         if (_isSynchronizingPipelineSettings) return;
 
         if (!value)
-            IsAutoSpeakerDetectionEnabled = false;
+            DiarizationProvider = string.Empty;
 
         _coordinator.SetMultiSpeakerEnabled(value);
         _ = RefreshSegmentsAsync();
     }
 
-    private void OnIsAutoSpeakerDetectionEnabledChanged(bool value)
+    /// <summary>
+    /// Updates the availability of the diarization-only command when the view model's busy state changes.
+    /// </summary>
+    /// <param name="value">The new busy state; true when the view model is busy, false otherwise.</param>
+    partial void OnIsBusyChanged(bool value)
     {
-        if (_isSynchronizingPipelineSettings) return;
-
-        DiarizationProvider = value ? ProviderNames.PyannoteLocal : string.Empty;
+        RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// Handle a change to the diarization provider selection by normalizing the selection, applying it to current settings, and updating related UI state and availability.
+    /// </summary>
+    /// <param name="value">The newly selected diarization provider identifier or display value.</param>
     partial void OnDiarizationProviderChanged(string value)
     {
         if (_isSynchronizingPipelineSettings) return;
 
-        var normalized = string.IsNullOrWhiteSpace(value)
-            ? string.Empty
-            : value.Trim();
-
-        if (!DiarizationProviderOptions.Contains(normalized, StringComparer.Ordinal))
-            normalized = string.Empty;
-
-        var expectedAutoDetect = string.Equals(normalized, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
+        var normalized = NormalizeDiarizationProviderSelection(value);
 
         _isSynchronizingPipelineSettings = true;
         try
         {
             if (!string.Equals(normalized, value, StringComparison.Ordinal))
                 DiarizationProvider = normalized;
-
-            if (IsAutoSpeakerDetectionEnabled != expectedAutoDetect)
-                IsAutoSpeakerDetectionEnabled = expectedAutoDetect;
         }
         finally
         {
@@ -845,8 +767,13 @@ partial void OnSourcePositionMsChanged(double value)
         _coordinator.CurrentSettings.DiarizationProvider = normalized;
         _coordinator.NotifySettingsModified();
         RefreshAutoSpeakerDetectionStatus();
+        RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// Handle changes to the minimum diarization speaker count by updating the coordinator's current settings and signaling that settings were modified.
+    /// </summary>
+    /// <param name="value">The new minimum speaker count; nullable to clear. The value is normalized to a valid integer speaker count before being applied.</param>
     partial void OnDiarizationMinSpeakersChanged(decimal? value)
     {
         if (_isSynchronizingPipelineSettings) return;
@@ -1083,11 +1010,15 @@ partial void OnSourcePositionMsChanged(double value)
     }
 
     /// <summary>
-    /// Synchronizes all provider/model UI backing fields from CurrentSettings.
-    /// Called when CurrentSession changes (e.g., media restored from cache).
-    /// This ensures dropdowns always display the actual configured state,
-    /// not stale values from a previous session.
+    /// Synchronizes the view-model's provider, runtime, and model selection fields from the coordinator's current settings.
+    /// Called when CurrentSession changes (e.g., media restored from cache) to ensure dropdowns always display
+    /// the actual configured state, not stale values from a previous session.
     /// </summary>
+    /// <remarks>
+    /// Updates TTS playback rate, resolves and selects runtimes/providers/models, rebuilds model option lists,
+    /// ensures multi-speaker mode is enabled, refreshes diarization provider options and related settings,
+    /// and triggers provider readiness, auto-speaker detection, and speaker-id list refreshes.
+    /// </remarks>
     private void SyncProviderModelFieldsFromSettings()
     {
         _isSynchronizingPipelineSettings = true;
@@ -1142,11 +1073,10 @@ partial void OnSourcePositionMsChanged(double value)
             // Target language dropdown
             SelectedTargetLanguage = SupportedTargetLanguages.FirstOrDefault(l => l.Code == _coordinator.CurrentSettings.TargetLanguage).Label ?? "English";
 
-            DiarizationProvider = _coordinator.CurrentSettings.DiarizationProvider;
+            RebuildDiarizationProviderOptions();
+            DiarizationProvider = NormalizeDiarizationProviderSelection(_coordinator.CurrentSettings.DiarizationProvider);
             DiarizationMinSpeakers = _coordinator.CurrentSettings.DiarizationMinSpeakers;
             DiarizationMaxSpeakers = _coordinator.CurrentSettings.DiarizationMaxSpeakers;
-            IsAutoSpeakerDetectionEnabled =
-                string.Equals(_coordinator.CurrentSettings.DiarizationProvider, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
             DefaultTtsVoiceFallback = _coordinator.CurrentSession.DefaultTtsVoiceFallback ?? string.Empty;
 
             // Notify after RebuildAllModelOptions() so bindings read the rebuilt backing fields.
@@ -1163,10 +1093,21 @@ partial void OnSourcePositionMsChanged(double value)
         }
     }
 
+    /// <summary>
+    /// Updates AutoSpeakerDetectionStatus to reflect whether the selected diarization provider is available and ready.
+    /// </summary>
+    /// <remarks>
+    /// Sets a user-facing status string for these cases:
+    /// - No provider selected: explains manual speaker mapping is the default.
+    /// - Registry unavailable: indicates diarization is not supported in this build.
+    /// - Provider present: reports enabled when ready, otherwise shows the provider's display name and the blocking reason.
+    /// - Exceptions during readiness check: reports the failure message while noting manual mapping still works.
+    /// </remarks>
     private void RefreshAutoSpeakerDetectionStatus()
     {
-        if (!IsAutoSpeakerDetectionEnabled)
+        if (string.IsNullOrWhiteSpace(DiarizationProvider))
         {
+            CancelAutoSpeakerDetectionRefresh();
             AutoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
             return;
         }
@@ -1174,23 +1115,140 @@ partial void OnSourcePositionMsChanged(double value)
         var registry = _coordinator.DiarizationRegistry;
         if (registry is null)
         {
-            AutoSpeakerDetectionStatus = "⚠ Auto speaker detection is unavailable in this build. Using manual mapping.";
+            CancelAutoSpeakerDetectionRefresh();
+            AutoSpeakerDetectionStatus = "⚠ Speaker diarization is unavailable in this build. Manual mapping remains available.";
             return;
         }
 
+        var providerLabel = ResolveDiarizationProviderLabel();
+        AutoSpeakerDetectionStatus = $"Checking {providerLabel} readiness…";
+        QueueAutoSpeakerDetectionStatusRefresh(registry, DiarizationProvider, providerLabel);
+    }
+    private string ResolveDiarizationProviderLabel()
+    {
+        if (string.IsNullOrWhiteSpace(DiarizationProvider))
+            return "speaker";
+
+        var registry = _coordinator.DiarizationRegistry;
+        return registry?
+            .GetAvailableProviders()
+            .FirstOrDefault(provider => string.Equals(provider.Id, DiarizationProvider, StringComparison.Ordinal))
+            ?.DisplayName
+            ?? DiarizationProvider;
+    }
+
+    /// <summary>
+    /// Rebuilds the list of available diarization provider identifiers for the UI selector.
+    /// </summary>
+    /// <remarks>
+    /// The list always starts with an empty entry. When a coordinator diarization registry is available,
+    /// each implemented provider's Id is appended (duplicates and empty Ids are ignored).
+    /// The resulting collection is assigned to <see cref="DiarizationProviderOptions"/>.
+    /// </remarks>
+    private void RebuildDiarizationProviderOptions()
+    {
+        var options = new List<string> { string.Empty };
+
+        if (_coordinator.DiarizationRegistry is not null)
+        {
+            foreach (var providerId in _coordinator.DiarizationRegistry
+                         .GetAvailableProviders()
+                         .Where(provider => provider.IsImplemented)
+                         .Select(provider => provider.Id))
+            {
+                if (!string.IsNullOrWhiteSpace(providerId) &&
+                    !options.Contains(providerId, StringComparer.Ordinal))
+                {
+                    options.Add(providerId);
+                }
+            }
+        }
+
+        DiarizationProviderOptions = options;
+    }
+
+    private void QueueAutoSpeakerDetectionStatusRefresh(
+        IDiarizationRegistry registry,
+        string providerId,
+        string providerLabel)
+    {
+        var version = Interlocked.Increment(ref _autoSpeakerDetectionRefreshVersion);
+        var cts = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _autoSpeakerDetectionRefreshCts, cts);
+        previous?.Cancel();
+        previous?.Dispose();
+
+        _ = RefreshAutoSpeakerDetectionStatusAsync(
+            registry,
+            providerId,
+            providerLabel,
+            _coordinator.CurrentSettings,
+            _coordinator.KeyStore,
+            version,
+            cts.Token);
+    }
+
+    private async Task RefreshAutoSpeakerDetectionStatusAsync(
+        IDiarizationRegistry registry,
+        string providerId,
+        string providerLabel,
+        Services.Settings.AppSettings settings,
+        ApiKeyStore? keyStore,
+        int version,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            var readiness = registry.CheckReadiness(ProviderNames.PyannoteLocal, _coordinator.CurrentSettings, _coordinator.KeyStore);
-            AutoSpeakerDetectionStatus = readiness.IsReady
-                ? "⚠ Advanced mode enabled. Requires pyannote runtime + HuggingFace model access on user machines."
-                : $"⚠ Auto detection not ready: {readiness.BlockingReason}. Manual mapping will still work.";
+            var readiness = await Task.Run(
+                () => registry.CheckReadiness(providerId, settings, keyStore),
+                cancellationToken);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (version != _autoSpeakerDetectionRefreshVersion || cancellationToken.IsCancellationRequested)
+                    return;
+
+                AutoSpeakerDetectionStatus = readiness.IsReady
+                    ? $"Speaker diarization is enabled via {providerLabel}."
+                    : $"⚠ {providerLabel} is not ready: {readiness.BlockingReason}. Manual mapping will still work.";
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer settings refresh.
         }
         catch (Exception ex)
         {
-            AutoSpeakerDetectionStatus = $"⚠ Auto detection readiness check failed: {ex.Message}. Manual mapping will still work.";
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (version != _autoSpeakerDetectionRefreshVersion || cancellationToken.IsCancellationRequested)
+                    return;
+
+                AutoSpeakerDetectionStatus = $"⚠ Speaker diarization readiness check failed: {ex.Message}. Manual mapping will still work.";
+            });
         }
     }
 
+    private void CancelAutoSpeakerDetectionRefresh()
+    {
+        _autoSpeakerDetectionRefreshCts?.Cancel();
+        _autoSpeakerDetectionRefreshCts?.Dispose();
+        _autoSpeakerDetectionRefreshCts = null;
+    }
+    private string NormalizeDiarizationProviderSelection(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim();
+
+        return DiarizationProviderOptions.Contains(normalized, StringComparer.Ordinal)
+            ? normalized
+            : string.Empty;
+    }
+
+    /// <summary>
+    /// Raises property-change notifications for the active transcription, CPU tuning, translation, and TTS configuration display lines.
+    /// </summary>
     private void NotifyActiveConfigChanged()
     {
         OnPropertyChanged(nameof(ActiveTranscriptionConfigLine));
@@ -1690,7 +1748,7 @@ partial void OnSourcePositionMsChanged(double value)
     private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart)
         => ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
 
-    private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private async void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
         {
@@ -1722,6 +1780,8 @@ partial void OnSourcePositionMsChanged(double value)
             case nameof(SessionWorkflowCoordinator.CurrentSession):
                 OnPropertyChanged(nameof(VoiceModelLabel));
                 OnPropertyChanged(nameof(SourceLanguageDisplay));
+                OnPropertyChanged(nameof(CanRunDiarizationOnly));
+                RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
                 var oldPath = _lastKnownSourceMediaPath;
                 var newPath = _coordinator.CurrentSession.SourceMediaPath;
                 IsSourceMediaLoaded = !string.IsNullOrEmpty(_coordinator.CurrentSession.IngestedMediaPath);
@@ -1744,7 +1804,7 @@ partial void OnSourcePositionMsChanged(double value)
 
                 if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
                 {
-                    _ = RefreshSegmentsAsync();
+                    await RefreshSegmentsAsync();
                 }
                 else
                 {
@@ -1988,6 +2048,7 @@ partial void OnSourcePositionMsChanged(double value)
     }
 
     private CancellationTokenSource? _pipelineCts;
+    private CancellationTokenSource? _diarizationCts;
 
     [RelayCommand]
     private void CancelPipeline()
@@ -2061,6 +2122,60 @@ partial void OnSourcePositionMsChanged(double value)
         ResetInteractiveModes();
         StatusText = "Pipeline cleared. Ready to run fresh.";
         ClearStatusErrorDetail();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRunDiarizationOnly))]
+    private async Task RunDiarizationOnlyAsync()
+    {
+        _diarizationCts?.Cancel();
+        _diarizationCts?.Dispose();
+        _diarizationCts = new CancellationTokenSource();
+        var ct = _diarizationCts.Token;
+
+        try
+        {
+            IsBusy = true;
+            StatusText = $"Running {ResolveDiarizationProviderLabel()} diarization…";
+            ClearStatusErrorDetail();
+
+            var hadTranslatableOutput = _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Translated;
+            var speakerAssignmentsChanged = await _coordinator.RunDiarizationAsync(ct);
+            string completionStatus;
+
+            if (speakerAssignmentsChanged && hadTranslatableOutput)
+            {
+                _coordinator.ResetPipelineToTranslated();
+                completionStatus = "Diarization updated speaker assignments. TTS output was reset to translated state.";
+            }
+            else if (speakerAssignmentsChanged)
+            {
+                completionStatus = "Diarization updated speaker assignments.";
+            }
+            else
+            {
+                completionStatus = "Diarization complete. Speaker assignments were unchanged.";
+            }
+
+            await RefreshSegmentsAsync();
+            StatusText = completionStatus;
+            ClearStatusErrorDetail();
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Re-diarize cancelled.";
+            ClearStatusErrorDetail();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Re-diarize failed: {ex.Message}";
+            SetStatusErrorDetail("Re-diarize failed", ex);
+        }
+        finally
+        {
+            IsBusy = false;
+            _diarizationCts?.Dispose();
+            _diarizationCts = null;
+        }
     }
 
     [RelayCommand]
@@ -2167,6 +2282,8 @@ partial void OnSourcePositionMsChanged(double value)
         _providerReadinessRefreshCts?.Cancel();
         _providerReadinessRefreshCts?.Dispose();
         _providerReadinessRefreshCts = null;
+
+        CancelAutoSpeakerDetectionRefresh();
 
         GC.SuppressFinalize(this);
     }

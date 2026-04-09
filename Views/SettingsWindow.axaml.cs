@@ -7,8 +7,6 @@ namespace Babel.Player.Views;
 
 public partial class SettingsWindow : Window
 {
-    private EventHandler<PixelPointEventArgs>? _windowPositionChangedHandler;
-    private EventHandler? _windowScalingChangedHandler;
     private EventHandler? _screensChangedHandler;
     private Screens? _subscribedScreens;
 
@@ -22,12 +20,7 @@ public partial class SettingsWindow : Window
     {
         base.OnOpened(e);
 
-        _windowPositionChangedHandler ??= OnWindowPositionChanged;
-        _windowScalingChangedHandler ??= OnWindowMetricsChanged;
         _screensChangedHandler ??= OnScreensChanged;
-
-        PositionChanged += _windowPositionChangedHandler;
-        ScalingChanged += _windowScalingChangedHandler;
 
         _subscribedScreens = Screens;
         _subscribedScreens.Changed += _screensChangedHandler;
@@ -55,29 +48,15 @@ public partial class SettingsWindow : Window
 
     private void OnClosed(object? sender, System.EventArgs e)
     {
-        if (_windowPositionChangedHandler is not null)
-            PositionChanged -= _windowPositionChangedHandler;
-
-        if (_windowScalingChangedHandler is not null)
-            ScalingChanged -= _windowScalingChangedHandler;
-
         if (_subscribedScreens is not null && _screensChangedHandler is not null)
             _subscribedScreens.Changed -= _screensChangedHandler;
 
-        _windowPositionChangedHandler = null;
-        _windowScalingChangedHandler = null;
         _screensChangedHandler = null;
         _subscribedScreens = null;
 
         if (DataContext is System.IDisposable disposable)
             disposable.Dispose();
     }
-
-    private void OnWindowPositionChanged(object? sender, PixelPointEventArgs e) =>
-        RefreshHdrDisplayState();
-
-    private void OnWindowMetricsChanged(object? sender, System.EventArgs e) =>
-        RefreshHdrDisplayState();
 
     private void OnScreensChanged(object? sender, System.EventArgs e) =>
         RefreshHdrDisplayState();

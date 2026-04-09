@@ -33,7 +33,10 @@ public static class ProviderNames
     public const string Qwen           = "qwen-tts";
 
     // ── Diarization ─────────────────────────────────────────────────────
-    public const string PyannoteLocal = "pyannote-local";
+    public const string NemoDiarizationAlias = "nemo";
+    public const string WeSpeakerDiarizationAlias = "wespeaker";
+    public const string NemoLocal = "nemo-local";
+    public const string WeSpeakerLocal = "wespeaker-local";
 }
 
 /// <summary>
@@ -47,5 +50,5 @@ public static class CredentialKeys
     public const string GoogleGemini  = "google-gemini";  // Gemini transcription + translation
     public const string ElevenLabs    = "elevenlabs";
     public const string Deepl         = "deepl";
-    public const string HuggingFace   = "huggingface";    // pyannote diarization pipeline
+    public const string LegacyHuggingFace = "huggingface";
 }

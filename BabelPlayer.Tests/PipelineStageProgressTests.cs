@@ -205,7 +205,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
             keyStore: null,
             artifactReader: null,
             sessionSwitchService: null,
-            diarizationRegistry: null,
+            diarizationRegistry: FakeDiarizationFactory.CreateDefaultRegistry(),
             containerizedProbe: null,
             containerizedInferenceManager: null,
             audioProcessingService: new StubAudioProcessingService());

@@ -288,44 +288,43 @@
                                        IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
                                        Foreground="{DynamicResource PrimaryTextBrush}" />
 
-                             <!-- Auto speaker detection (pyannote) — only meaningful when multi-speaker is on -->
-                             <CheckBox Content="Auto speaker detection"
-                                       IsChecked="{Binding Playback.IsAutoSpeakerDetectionEnabled, Mode=TwoWay}"
-                                       IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
-                                       Foreground="{DynamicResource PrimaryTextBrush}" />
+                             <StackPanel Spacing="5">
+                                 <TextBlock Text="Diarization Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                 <ComboBox ItemsSource="{Binding Playback.DiarizationProviderOptions}"
+                                           SelectedItem="{Binding Playback.DiarizationProvider, Mode=TwoWay}"
+                                           IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
+                                           HorizontalAlignment="Stretch" FontSize="12"
+                                           Background="{DynamicResource ControlBackgroundBrush}"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           BorderBrush="{DynamicResource BorderBrush}">
+                                     <ComboBox.ItemTemplate>
+                                         <DataTemplate>
+                                             <TextBlock Text="{Binding Converter={StaticResource DiarizationProviderDisplayConverter}}" />
+                                         </DataTemplate>
+                                     </ComboBox.ItemTemplate>
+                                 </ComboBox>
+                             </StackPanel>
 
-                            <!-- Controls that only apply when auto-detection is enabled -->
-                             <!-- HF token hint -->
-                             <TextBlock Text="HuggingFace token required — set it in 🔑 API Keys above."
-                                        FontSize="11" Foreground="{DynamicResource StatusTextBrush}"
-                                        TextWrapping="Wrap"
-                                        IsVisible="{Binding Playback.IsAutoSpeakerDetectionEnabled}" />
-
-                             <!-- Speaker count constraints — only visible when auto-detection is on -->
+                             <!-- Controls that only apply when a provider is selected -->
                              <StackPanel Spacing="5"
-                                         IsVisible="{Binding Playback.IsAutoSpeakerDetectionEnabled}">
+                                         IsVisible="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
                                      <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
                                      <NumericUpDown Grid.Row="0" Grid.Column="1"
                                                     Value="{Binding Playback.DiarizationMinSpeakers, Mode=TwoWay}"
                                                     Minimum="1" Maximum="20"
                                                     Width="80"
-                                                    ToolTip.Tip="Leave blank to let pyannote auto-detect" />
+                                                    ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
                                      <TextBlock Grid.Row="1" Grid.Column="0" Text="Max Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
                                      <NumericUpDown Grid.Row="1" Grid.Column="1"
                                                     Value="{Binding Playback.DiarizationMaxSpeakers, Mode=TwoWay}"
                                                     Minimum="1" Maximum="20"
                                                     Width="80"
-                                                    ToolTip.Tip="Leave blank to let pyannote auto-detect" />
+                                                    ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
                                  </Grid>
                             </StackPanel>
 
-                             <!-- Setup guide + status — only enabled when auto-detection is on -->
-                             <Button Content="Get HF access (token + models)"
-                                     Click="OnAutoSpeakerSetupGuideClick"
-                                     IsEnabled="{Binding Playback.IsAutoSpeakerDetectionEnabled}"
-                                     HorizontalAlignment="Left"
-                                     ToolTip.Tip="Opens HuggingFace token settings and the two pyannote model pages you must accept" />
+                             <!-- Status -->
                              <TextBlock Text="{Binding Playback.AutoSpeakerDetectionStatus}"
                                         FontSize="11"
                                         Foreground="{DynamicResource StatusTextBrush}"
@@ -337,7 +336,7 @@
                                          IsVisible="{Binding Playback.IsMultiSpeakerEnabled}">
 
                                  <!-- Hint shown when multi-speaker is on but no speaker IDs have been detected yet -->
-                                 <TextBlock Text="Transcribe with auto-detection enabled to assign speaker IDs."
+                                 <TextBlock Text="Transcribe with a diarization provider selected to assign speaker IDs."
                                             FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
                                             IsVisible="{Binding Playback.IsMultiSpeakerNoSpeakersYet}" />
 
@@ -526,6 +525,25 @@
                                     </Setter>
                                 </Style>
                             </Button.Styles>
+                        </Button>
+
+                        <Button HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Padding="0,10"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Background="{DynamicResource ButtonBackgroundBrush}"
+                                Foreground="{DynamicResource PrimaryTextBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Command="{Binding Playback.RunDiarizationOnlyCommand}"
+                                IsEnabled="{Binding Playback.CanRunDiarizationOnly}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="↻" VerticalAlignment="Center" />
+                                <TextBlock Text="Re-diarize" VerticalAlignment="Center" />
+                            </StackPanel>
                         </Button>
 
                         <Button HorizontalAlignment="Stretch"
@@ -886,14 +904,29 @@
 
                                     <StackPanel Grid.Column="0" Spacing="3">
                                         <!-- Time range -->
-                                        <TextBlock FontSize="11" Foreground="{DynamicResource StatusTextBrush}">
-                                            <TextBlock.Text>
-                                                <MultiBinding StringFormat="{}{0:F1}s  —  {1:F1}s">
-                                                    <Binding Path="StartSeconds" />
-                                                    <Binding Path="EndSeconds" />
-                                                </MultiBinding>
-                                            </TextBlock.Text>
-                                        </TextBlock>
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Border Background="{Binding SpeakerId, Converter={StaticResource SpeakerIdToColorConverter}}"
+                                                    CornerRadius="999"
+                                                    Padding="7,2"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding SpeakerId, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                <TextBlock Text="{Binding SpeakerId, Converter={StaticResource SpeakerIdToShortLabelConverter}}"
+                                                           FontSize="10"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="White"
+                                                           VerticalAlignment="Center" />
+                                            </Border>
+                                            <TextBlock FontSize="11"
+                                                       Foreground="{DynamicResource StatusTextBrush}"
+                                                       VerticalAlignment="Center">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0:F1}s  —  {1:F1}s">
+                                                        <Binding Path="StartSeconds" />
+                                                        <Binding Path="EndSeconds" />
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </StackPanel>
                                         <!-- Original text -->
                                         <TextBlock Text="{Binding SourceText}"
                                                    FontSize="12" Foreground="{DynamicResource StatusTextBrush}"

@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Text;
 using System.ComponentModel;
-using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -286,6 +285,14 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Opens a file picker to select an audio reference clip for the currently selected speaker and assigns the chosen file to that speaker.
+    /// </summary>
+    /// <remarks>
+    /// If the window's DataContext is not a MainWindowViewModel or there is no selected speaker id, the method returns without action.
+    /// If the user cancels the file picker or the chosen file has no local path, the method returns without assigning a reference clip.
+    /// When a valid file is selected, the view model's playback is updated via SetReferenceAudioForSelectedSpeaker(path).
+    /// </remarks>
     public async void OnBrowseReferenceClipClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;
@@ -309,21 +316,14 @@ public partial class MainWindow : Window
         await vm.Playback.SetReferenceAudioForSelectedSpeaker(path);
     }
 
-    public void OnAutoSpeakerSetupGuideClick(object? sender, RoutedEventArgs e)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo { FileName = "https://huggingface.co/settings/tokens", UseShellExecute = true });
-            Process.Start(new ProcessStartInfo { FileName = "https://huggingface.co/pyannote/speaker-diarization-3.1", UseShellExecute = true });
-            Process.Start(new ProcessStartInfo { FileName = "https://huggingface.co/pyannote/segmentation-3.0", UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            if (DataContext is MainWindowViewModel vm)
-                vm.Playback.StatusText = $"Failed to open setup guide: {ex.Message}";
-        }
-    }
-
+    /// <summary>
+    /// Prompts the user to choose an output .srt file and exports the current playback segments as SubRip subtitles.
+    /// </summary>
+    /// <remarks>
+    /// If no segments are available, sets the playback status to "No segments available to export." 
+    /// On success sets the playback status to "Exported captions to {file.Name}." 
+    /// On failure sets the playback status to "Failed to export captions: {error message}".
+    /// </remarks>
     public async void OnExportCaptionsClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm)

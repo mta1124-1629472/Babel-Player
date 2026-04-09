@@ -169,6 +169,12 @@ public sealed class InferenceRuntimeCatalogTests
         Assert.Equal(ProviderNames.EdgeTts, InferenceRuntimeCatalog.DefaultTtsProvider(ComputeProfile.Cloud));
     }
 
+    [Fact]
+    public void DefaultDiarizationProvider_ReturnsNemoLocal()
+    {
+        Assert.Equal(ProviderNames.NemoLocal, InferenceRuntimeCatalog.DefaultDiarizationProvider());
+    }
+
     // ── NormalizeTranscriptionProvider ───────────────────────────────────────
 
     [Fact]
@@ -322,6 +328,51 @@ public sealed class InferenceRuntimeCatalogTests
         Assert.Equal(ProviderNames.Qwen, result);
     }
 
+    [Fact]
+    public void NormalizeDiarizationProvider_NemoAlias_ReturnsNemoLocal()
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(ProviderNames.NemoDiarizationAlias);
+        Assert.Equal(ProviderNames.NemoLocal, result);
+    }
+
+    [Fact]
+    public void NormalizeDiarizationProvider_WeSpeakerAlias_ReturnsWeSpeakerLocal()
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(ProviderNames.WeSpeakerDiarizationAlias);
+        Assert.Equal(ProviderNames.WeSpeakerLocal, result);
+    }
+
+    [Fact]
+    public void NormalizeDiarizationProvider_Null_ReturnsDefaultProvider()
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(null);
+        Assert.Equal(ProviderNames.NemoLocal, result);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    public void NormalizeDiarizationProvider_Whitespace_PreservesDisabledState(string providerId)
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(providerId);
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void NormalizeDiarizationCapabilityProviderId_NemoAlias_ReturnsNemoLocal()
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(ProviderNames.NemoDiarizationAlias);
+        Assert.Equal(ProviderNames.NemoLocal, result);
+    }
+
+    [Fact]
+    public void NormalizeDiarizationCapabilityProviderId_WeSpeakerAlias_ReturnsWeSpeakerLocal()
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(ProviderNames.WeSpeakerDiarizationAlias);
+        Assert.Equal(ProviderNames.WeSpeakerLocal, result);
+    }
+
     // ── IsKnownTranscriptionProvider ──────────────────────────────────────────
 
     [Theory]
@@ -391,6 +442,24 @@ public sealed class InferenceRuntimeCatalogTests
     public void IsKnownTtsProvider_UnknownProviders_ReturnFalse(string? providerId)
     {
         Assert.False(InferenceRuntimeCatalog.IsKnownTtsProvider(providerId));
+    }
+
+    [Theory]
+    [InlineData(ProviderNames.NemoLocal)]
+    [InlineData(ProviderNames.WeSpeakerLocal)]
+    public void IsKnownDiarizationProvider_KnownProviders_ReturnTrue(string providerId)
+    {
+        Assert.True(InferenceRuntimeCatalog.IsKnownDiarizationProvider(providerId));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("unknown-diarizer")]
+    [InlineData(ProviderNames.Piper)]
+    public void IsKnownDiarizationProvider_UnknownProviders_ReturnFalse(string? providerId)
+    {
+        Assert.False(InferenceRuntimeCatalog.IsKnownDiarizationProvider(providerId));
     }
 
     // ── NormalizeSettings ─────────────────────────────────────────────────────

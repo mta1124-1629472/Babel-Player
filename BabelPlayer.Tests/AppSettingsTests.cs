@@ -70,4 +70,12 @@ public sealed class AppSettingsTests
         Assert.Equal("auto", settings.VideoTargetPeak);
         Assert.True(settings.VideoHdrComputePeak);
     }
+
+    [Fact]
+    public void DiarizationProvider_DefaultsToNemo()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal(ProviderNames.NemoLocal, settings.DiarizationProvider);
+    }
 }

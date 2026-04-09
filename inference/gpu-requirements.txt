@@ -21,3 +21,4 @@ qwen-tts>=0.1.1
 soundfile>=0.12.1
 hf_xet>=0.1.0
 nemo-toolkit[asr]>=2.7.0
+git+https://github.com/wenet-e2e/wespeaker.git@c92349a14d6b426808c4e09b8b12e076864dfc11

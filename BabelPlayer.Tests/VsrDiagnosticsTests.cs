@@ -263,6 +263,43 @@ public sealed class VsrDiagnosticsTests : IDisposable
         }
     }
 
+    [Fact]
+    public void HdrPassthrough_CachesDisplayStateUntilRefreshed()
+    {
+        var coordinator = CreateCoordinator(CreateSettings());
+        coordinator.Initialize();
+
+        var providerCallCount = 0;
+        var isHdrDisplayActive = false;
+
+        using var settingsVm = new SettingsViewModel(
+            new SettingsService(_settingsPath, _log),
+            coordinator,
+            (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () =>
+            {
+                providerCallCount++;
+                return isHdrDisplayActive;
+            });
+
+        Assert.Equal(1, providerCallCount);
+        Assert.False(settingsVm.IsHdrDisplayActive);
+        Assert.False(settingsVm.HdrSettingsAvailable);
+        Assert.Equal(1, providerCallCount);
+
+        _ = settingsVm.HdrAvailabilityHintText;
+        Assert.Equal(1, providerCallCount);
+
+        isHdrDisplayActive = true;
+        settingsVm.RefreshHdrDisplayState();
+
+        Assert.Equal(2, providerCallCount);
+        Assert.True(settingsVm.IsHdrDisplayActive);
+        Assert.True(settingsVm.HdrSettingsAvailable);
+        Assert.Equal(2, providerCallCount);
+    }
+
     private SessionWorkflowCoordinator CreateCoordinator(AppSettings settings)
     {
         var store = new SessionSnapshotStore(_storePath, _log);

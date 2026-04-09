@@ -9,6 +9,9 @@
         <ResourceDictionary>
             <converters:ComputeProfileDisplayConverter x:Key="ComputeProfileDisplayConverter" />
             <converters:GpuHostBackendDisplayConverter x:Key="GpuHostBackendDisplayConverter" />
+            <converters:DiarizationProviderDisplayConverter x:Key="DiarizationProviderDisplayConverter" />
+            <converters:SpeakerIdToShortLabelConverter x:Key="SpeakerIdToShortLabelConverter" />
+            <converters:SpeakerIdToColorConverter x:Key="SpeakerIdToColorConverter" />
 
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
