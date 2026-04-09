@@ -320,6 +320,12 @@ def _probe_wespeaker_available() -> tuple[bool, str]:
     """
     if _find_module("wespeaker") is None:
         return False, "Missing diarization dependency: wespeaker"
+
+    try:
+        import wespeaker  # noqa: F401
+    except Exception as exc:
+        return False, f"WeSpeaker import failed: {exc}"
+
     return True, "WeSpeaker available (CPU only; min/max speaker hints ignored)"
 
 
@@ -559,6 +565,14 @@ def _probe_diarization_providers() -> tuple[dict[str, bool], dict[str, str], boo
     provider_ready["wespeaker"] = wespeaker_ready
     provider_details["nemo"] = nemo_detail
     provider_details["wespeaker"] = wespeaker_detail
+
+    logger.info(
+        "Diarization capability probe: nemo=%s (%s); wespeaker=%s (%s)",
+        nemo_ready,
+        nemo_detail,
+        wespeaker_ready,
+        wespeaker_detail,
+    )
 
     stage_ready = any(provider_ready.values())
     if stage_ready and provider_ready[NEMO_DIARIZATION_DEFAULT_PROVIDER]:

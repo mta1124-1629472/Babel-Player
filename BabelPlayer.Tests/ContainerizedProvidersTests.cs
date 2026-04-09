@@ -709,7 +709,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
             {
                 return Json(HttpStatusCode.OK,
-                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true},\"diarization\":{\"ready\":true,\"detail\":\"Diarization available\",\"providers\":{\"nemo\":true,\"wespeaker\":false},\"provider_details\":{\"nemo\":\"NeMo ready\",\"wespeaker\":\"CPU fallback warming\"},\"default_provider\":\"nemo\"}}");
+                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true},\"diarization\":{\"ready\":true,\"detail\":\"Diarization available\",\"providers\":{\"nemo\":true,\"wespeaker\":false},\"provider_details\":{\"nemo\":\"NeMo ready\",\"wespeaker\":\"WeSpeaker import failed: No module named 's3prl'\"},\"default_provider\":\"nemo\"}}");
             }
 
             return Json(HttpStatusCode.NotFound, "{\"status\":\"not-found\"}");
@@ -725,7 +725,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.Equal("NeMo ready", nemoDetail);
         Assert.True(health.Capabilities.TryGetDiarizationProviderReadiness(ProviderNames.WeSpeakerLocal, out var wespeakerReady, out var wespeakerDetail));
         Assert.False(wespeakerReady);
-        Assert.Contains("warming", wespeakerDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("s3prl", wespeakerDetail, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

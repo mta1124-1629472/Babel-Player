@@ -815,6 +815,45 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
+    public async Task RunDiarizationAsync_WhenSpeakerBoundsAreInvalid_ThrowsBeforeProviderExecution()
+    {
+        var providerInvoked = false;
+        var fakeProvider = new FakeDiarizationProvider(_ =>
+        {
+            providerInvoked = true;
+            return new DiarizationResult(
+                true,
+                [new DiarizedSegment(0.0, 1.0, "spk_00")],
+                1,
+                null);
+        });
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var settings = CreateMatchingSettings();
+        settings.DiarizationProvider = ProviderNames.NemoLocal;
+        settings.DiarizationMinSpeakers = 5;
+        settings.DiarizationMaxSpeakers = 1;
+
+        var coord = CreateCoordinator(settings, diarizationRegistry: fakeRegistry);
+        coord.Initialize();
+
+        var transcriptPath = CreateTempFile("""{"language":"es","segments":[{"start":0.0,"end":1.0,"text":"hola"}]}""");
+        var mediaPath = CreateTempFile("audio");
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => coord.RunDiarizationAsync());
+
+        Assert.Contains("min speakers", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("max speakers", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(providerInvoked);
+    }
+
+    [Fact]
     public async Task RunDiarizationAsync_WhenRegistryIsMissing_Throws()
     {
         var settings = CreateMatchingSettings();

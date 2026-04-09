@@ -148,6 +148,15 @@ public sealed class InferenceRequirementsTests
         Assert.Contains("2.7", nemoLine);
     }
 
+    [Fact]
+    public void GpuRequirements_WeSpeakerFallbackDependency_IsPresent()
+    {
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "gpu-requirements.txt");
+        var lines = ReadRequirementsLines(requirementsPath);
+
+        Assert.Contains("s3prl", lines);
+    }
+
     // ── requirements.txt (managed CPU runtime) ──────────────────────────────
 
     [Theory]

@@ -731,6 +731,36 @@ public sealed class SegmentInspectionTests
     }
 
     [Fact]
+    public void EmbeddedPlaybackViewModel_DiarizationMinSpeakers_InvalidPair_RevertsAndDoesNotPersist()
+    {
+        var playback = CreatePlaybackVm();
+
+        playback.DiarizationMaxSpeakers = 3;
+        playback.DiarizationMinSpeakers = 5;
+
+        Assert.Null(playback.DiarizationMinSpeakers);
+        Assert.Null(playback.Coordinator.CurrentSettings.DiarizationMinSpeakers);
+        Assert.Equal(3, playback.DiarizationMaxSpeakers);
+        Assert.Equal(3, playback.Coordinator.CurrentSettings.DiarizationMaxSpeakers);
+        Assert.Equal("Diarization min speakers cannot be greater than max speakers.", playback.StatusText);
+    }
+
+    [Fact]
+    public void EmbeddedPlaybackViewModel_DiarizationMaxSpeakers_InvalidPair_RevertsAndDoesNotPersist()
+    {
+        var playback = CreatePlaybackVm();
+
+        playback.DiarizationMinSpeakers = 4;
+        playback.DiarizationMaxSpeakers = 2;
+
+        Assert.Null(playback.DiarizationMaxSpeakers);
+        Assert.Null(playback.Coordinator.CurrentSettings.DiarizationMaxSpeakers);
+        Assert.Equal(4, playback.DiarizationMinSpeakers);
+        Assert.Equal(4, playback.Coordinator.CurrentSettings.DiarizationMinSpeakers);
+        Assert.Equal("Diarization min speakers cannot be greater than max speakers.", playback.StatusText);
+    }
+
+    [Fact]
     public void EmbeddedPlaybackViewModel_RunDiarizationOnlyCommand_RequiresProviderAndTranscribedStage()
     {
         var playback = CreatePlaybackVm();

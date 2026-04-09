@@ -778,7 +778,16 @@ partial void OnSourcePositionMsChanged(double value)
     {
         if (_isSynchronizingPipelineSettings) return;
 
-        _coordinator.CurrentSettings.DiarizationMinSpeakers = NormalizeSpeakerCount(value);
+        var normalized = NormalizeSpeakerCount(value);
+        if (HasInvalidDiarizationSpeakerBounds(normalized, _coordinator.CurrentSettings.DiarizationMaxSpeakers))
+        {
+            RejectInvalidDiarizationSpeakerBoundsChange(
+                nameof(DiarizationMinSpeakers),
+                _coordinator.CurrentSettings.DiarizationMinSpeakers);
+            return;
+        }
+
+        _coordinator.CurrentSettings.DiarizationMinSpeakers = normalized;
         _coordinator.NotifySettingsModified();
     }
 
@@ -786,7 +795,16 @@ partial void OnSourcePositionMsChanged(double value)
     {
         if (_isSynchronizingPipelineSettings) return;
 
-        _coordinator.CurrentSettings.DiarizationMaxSpeakers = NormalizeSpeakerCount(value);
+        var normalized = NormalizeSpeakerCount(value);
+        if (HasInvalidDiarizationSpeakerBounds(_coordinator.CurrentSettings.DiarizationMinSpeakers, normalized))
+        {
+            RejectInvalidDiarizationSpeakerBoundsChange(
+                nameof(DiarizationMaxSpeakers),
+                _coordinator.CurrentSettings.DiarizationMaxSpeakers);
+            return;
+        }
+
+        _coordinator.CurrentSettings.DiarizationMaxSpeakers = normalized;
         _coordinator.NotifySettingsModified();
     }
 
@@ -820,6 +838,29 @@ partial void OnSourcePositionMsChanged(double value)
 
         var rounded = (int)Math.Round(value.Value, MidpointRounding.AwayFromZero);
         return Math.Clamp(rounded, 1, 20);
+    }
+
+    private static bool HasInvalidDiarizationSpeakerBounds(int? minSpeakers, int? maxSpeakers) =>
+        minSpeakers.HasValue && maxSpeakers.HasValue && minSpeakers.Value > maxSpeakers.Value;
+
+    private void RejectInvalidDiarizationSpeakerBoundsChange(string propertyName, int? previousValue)
+    {
+        _isSynchronizingPipelineSettings = true;
+        try
+        {
+            var previousDecimal = previousValue.HasValue ? (decimal?)previousValue.Value : null;
+            if (string.Equals(propertyName, nameof(DiarizationMinSpeakers), StringComparison.Ordinal))
+                DiarizationMinSpeakers = previousDecimal;
+            else
+                DiarizationMaxSpeakers = previousDecimal;
+        }
+        finally
+        {
+            _isSynchronizingPipelineSettings = false;
+        }
+
+        StatusText = "Diarization min speakers cannot be greater than max speakers.";
+        ClearStatusErrorDetail();
     }
 
     private async Task SeekAndPlayAsync(WorkflowSegmentState segment)

@@ -84,6 +84,10 @@ public sealed partial class SessionWorkflowCoordinator
             throw new PipelineProviderException(blockingReason);
         }
 
+        ValidateDiarizationSpeakerBounds(
+            CurrentSettings.DiarizationMinSpeakers,
+            CurrentSettings.DiarizationMaxSpeakers);
+
         var provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
 
         var request = new DiarizationRequest(
@@ -128,6 +132,17 @@ public sealed partial class SessionWorkflowCoordinator
             SpeakerAssignmentsChanged: transcriptChanged || translationChanged,
             SpeakerCount: result.SpeakerCount,
             SegmentCount: result.Segments.Count);
+    }
+
+    private void ValidateDiarizationSpeakerBounds(int? minSpeakers, int? maxSpeakers)
+    {
+        if (!minSpeakers.HasValue || !maxSpeakers.HasValue || minSpeakers.Value <= maxSpeakers.Value)
+            return;
+
+        var message =
+            $"Invalid diarization speaker bounds: min speakers ({minSpeakers.Value}) cannot be greater than max speakers ({maxSpeakers.Value}).";
+        _log.Warning(message);
+        throw new InvalidOperationException(message);
     }
 
     /// <summary>
