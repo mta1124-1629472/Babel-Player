@@ -82,6 +82,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private double _ttsPlaybackRate = 1.0;
 
+    [ObservableProperty]
+    private double _ttsVolume = 1.0;
+
     /// <summary>
     /// Set when the CTranslate2 translation provider fails and the pipeline
     /// automatically falls back to the NLLB PyTorch provider.

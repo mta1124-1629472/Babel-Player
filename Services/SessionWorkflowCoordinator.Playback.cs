@@ -343,6 +343,7 @@ public sealed partial class SessionWorkflowCoordinator
     {
         var player = _transportManager.GetOrCreateSegmentPlayer();
         player.PlaybackRate = TtsPlaybackRate;
+        player.Volume = TtsVolume;
 
         // Subscribe to segment lifecycle events exactly once.
         if (!_subscribedToSegmentEvents)
@@ -366,6 +367,12 @@ public sealed partial class SessionWorkflowCoordinator
     {
         if (_transportManager.SegmentPlayer is { } player)
             player.PlaybackRate = value;
+    }
+
+    partial void OnTtsVolumeChanged(double value)
+    {
+        if (_transportManager.SegmentPlayer is { } player)
+            player.Volume = value;
     }
 
     /// <summary>
@@ -398,6 +405,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         var player = GetOrCreateSegmentPlayer();
         player.Load(audioPath);
+        player.Volume = TtsVolume;
         ActiveTtsSegmentId = segmentId;
         _ = Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play TTS for segment {segmentId}");
         return Task.CompletedTask;
