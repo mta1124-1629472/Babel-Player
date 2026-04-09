@@ -318,7 +318,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private string _selectedSpeakerReferenceAudioPath = "";
 
     private double _preMuteVolume = 1.0;
-    private double _preDuckTransportVolume = 1.0;
     private bool _isDucked;
     private bool _preFullscreenSegmentPaneVisible = true;
     private string? _activeSrtPath;
@@ -934,11 +933,17 @@ partial void OnSourcePositionMsChanged(double value)
     partial void OnSourceVolumeChanged(double value)
     {
         if (IsMuted && value > 0) IsMuted = false;
-        var player = _coordinator.SourceMediaPlayer;
-        if (player != null) player.Volume = value;
-        // Master volume also applies to TTS segment audio.
-        var segment = _coordinator.SegmentPlayer;
-        if (segment != null) segment.Volume = value;
+        RecalculateOutputVolumes();
+    }
+
+    partial void OnAudioDuckingDbChanged(double value)
+    {
+        RecalculateOutputVolumes();
+    }
+
+    partial void OnIsMutedChanged(bool value)
+    {
+        RecalculateOutputVolumes();
     }
 
     partial void OnSelectedPlaybackRateChanged(string value)
@@ -1439,22 +1444,39 @@ partial void OnSourcePositionMsChanged(double value)
             ttsVoice ?? TtsModelOrVoice,
             _coordinator.CurrentSettings.TargetLanguage);
 
+    /// <summary>
+    /// Single source of truth for all audio output levels.
+    /// Call this whenever SourceVolume, IsMuted, AudioDuckingDb, or _isDucked changes.
+    /// </summary>
+    private void RecalculateOutputVolumes()
+    {
+        double masterGain = IsMuted ? 0.0 : SourceVolume;
+
+        // Source audio: apply ducking attenuation when TTS is active
+        double sourceGain = _isDucked
+            ? masterGain * Math.Pow(10.0, AudioDuckingDb / 20.0)
+            : masterGain;
+
+        var player = _coordinator.SourceMediaPlayer;
+        if (player != null) player.Volume = sourceGain;
+
+        // TTS audio: always at master level (no ducking applied to TTS)
+        var segment = _coordinator.SegmentPlayer;
+        if (segment != null) segment.Volume = masterGain;
+    }
+
     private void ApplyDucking()
     {
         if (_isDucked) return;
-        var player = _coordinator.SourceMediaPlayer;
-        if (player == null) return;
-        _preDuckTransportVolume = player.Volume;
-        player.Volume = _preDuckTransportVolume * Math.Pow(10.0, AudioDuckingDb / 20.0);
         _isDucked = true;
+        RecalculateOutputVolumes();
     }
 
     private void RestoreDucking()
     {
         if (!_isDucked) return;
-        var player = _coordinator.SourceMediaPlayer;
-        if (player != null) player.Volume = _preDuckTransportVolume;
         _isDucked = false;
+        RecalculateOutputVolumes();
     }
 
     partial void OnIsDubModeOnChanged(bool value)
