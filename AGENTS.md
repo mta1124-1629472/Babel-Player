@@ -250,11 +250,15 @@ method parameters, not by reading settings directly.
 ## Verification Expectations
 
 Before calling work complete:
-- run the build
-- run relevant tests
+- run the build using `dotnet build babel-player.sln` for full consistency
+- run relevant tests using `dotnet test babel-player.sln`
 - add or update tests when the change is testable
 - perform the milestone's manual smoke path
 - record a smoke note in `docs/smoke/` using the conventions below
+
+### Troubleshooting
+If the build fails with a "process cannot access the file" error (locked by `clrdbg.exe` or `.NET Host`), run the following to clear locks:
+`taskkill /F /IM clrdbg.exe /IM dotnet.exe`
 
 Do not claim completion based on static inspection alone.
 

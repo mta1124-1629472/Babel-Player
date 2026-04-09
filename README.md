@@ -355,7 +355,7 @@ Babel-Player/
 │   ├── native/win-x64/       # libmpv-2.dll (native video playback)
 │   └── BabelPlayer.Tests/    # xUnit integration tests (contains test assets)
 └── [Metadata]
-    ├── AGENTS.md / README.md
+    ├── AGENTS.md / CLAUDE.md / gemini.md
     ├── .gitignore / PLAN.md
     └── LICENSE
 ```
@@ -379,6 +379,8 @@ Key files:
 Read these first:
 
 - [AGENTS.md](AGENTS.md) — operating rules and non-negotiables
+- [CLAUDE.md](CLAUDE.md) — context and instructions for Claude
+- [gemini.md](gemini.md) — context and instructions for Gemini
 - [PLAN.md](PLAN.md) — milestone order and gates
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow and scope discipline
 - [docs/architecture.md](docs/architecture.md) — structural map and ownership rules

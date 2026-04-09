@@ -3,10 +3,20 @@
 ## Commands
 
 ```bash
-dotnet build                              # Build the project
-dotnet test                               # Run all tests
+dotnet clean babel-player.sln
+dotnet build babel-player.sln             # Full build (includes restore)
+dotnet build babel-player.sln --no-restore # Fast build (skip restore)
+dotnet test babel-player.sln             # Run all tests
 dotnet run --project BabelPlayer.csproj   # Launch the app
 python3 scripts/check-architecture.py    # Architecture linter
+```
+
+## Troubleshooting Build Issues
+
+If the build fails with a "process cannot access the file" error (typically locked by `clrdbg.exe` or `.NET Host`), run the following command to force-clear the locks:
+
+```powershell
+taskkill /F /IM clrdbg.exe /IM dotnet.exe
 ```
 
 ## Essential Reading
@@ -112,8 +122,8 @@ Babel-Player/
 ## Testing
 
 ```bash
-dotnet test                            # All tests
-dotnet test --filter "ClassName=SessionWorkflowTests"
+dotnet test babel-player.sln             # All tests
+dotnet test babel-player.sln --filter "ClassName=SessionWorkflowTests"
 ```
 
 - 22 integration tests in `BabelPlayer.Tests/SessionWorkflowTests.cs`
