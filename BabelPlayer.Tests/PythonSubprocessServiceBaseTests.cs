@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Services;
@@ -24,8 +25,18 @@ public sealed class PythonSubprocessServiceBaseTests : IDisposable
             File.Delete(_tempLogPath);
     }
 
-    private class TestPythonService(AppLog log) : PythonSubprocessServiceBase(log)
+    private sealed class TestPythonService : PythonSubprocessServiceBase
     {
+        public TestPythonService(AppLog log, ManagedCpuRuntimeManager cpuRuntimeManager)
+            : base(log, cpuRuntimeManager)
+        {
+        }
+
+        public TestPythonService(AppLog log, string pythonPath, ManagedCpuRuntimeManager? cpuRuntimeManager = null)
+            : base(log, pythonPath, cpuRuntimeManager)
+        {
+        }
+
         public Task<ScriptResult> RunTestScriptAsync(
             string scriptContent,
             CancellationToken cancellationToken = default)
@@ -73,12 +84,15 @@ public sealed class PythonSubprocessServiceBaseTests : IDisposable
         }
     }
 
+    private static string? FindAnyWorkingPython() => DependencyLocator.FindPython();
+
     [Fact]
     public async Task RunPythonScriptAsync_HandlesCancellationGracefully()
     {
-        if (DependencyLocator.FindPython() is null) return;
+        var pythonPath = FindAnyWorkingPython();
+        if (pythonPath is null) return;
         using var log = new AppLog(_tempLogPath);
-        var service = new TestPythonService(log);
+        var service = new TestPythonService(log, pythonPath);
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
         // Script that runs longer than cancellation timeout
@@ -99,9 +113,10 @@ print('Should not reach here')
     [Fact]
     public async Task RunPythonScriptAsync_CleansUpTempFileOnCancellation()
     {
-        if (DependencyLocator.FindPython() is null) return;
+        var pythonPath = FindAnyWorkingPython();
+        if (pythonPath is null) return;
         using var log = new AppLog(_tempLogPath);
-        var service = new TestPythonService(log);
+        var service = new TestPythonService(log, pythonPath);
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
         var script = @"
@@ -157,9 +172,10 @@ time.sleep(2)
     [Fact]
     public async Task RunPythonScriptAsync_HandlesStdinProcessDeath()
     {
-        if (DependencyLocator.FindPython() is null) return;
+        var pythonPath = FindAnyWorkingPython();
+        if (pythonPath is null) return;
         using var log = new AppLog(_tempLogPath);
-        var service = new TestPythonService(log);
+        var service = new TestPythonService(log, pythonPath);
 
         // Script that exits immediately without reading stdin
         var script = @"
@@ -178,9 +194,10 @@ sys.exit(1)
     [Fact]
     public async Task RunPythonScriptAsync_HandlesStdinIOException()
     {
-        if (DependencyLocator.FindPython() is null) return;
+        var pythonPath = FindAnyWorkingPython();
+        if (pythonPath is null) return;
         using var log = new AppLog(_tempLogPath);
-        var service = new TestPythonService(log);
+        var service = new TestPythonService(log, pythonPath);
 
         // Script that closes stdin immediately
         var script = @"
@@ -201,9 +218,10 @@ print('Stdin closed successfully')
     [Fact]
     public async Task RunPythonScriptAsync_PropagatesOperationCancelledException()
     {
-        if (DependencyLocator.FindPython() is null) return;
+        var pythonPath = FindAnyWorkingPython();
+        if (pythonPath is null) return;
         using var log = new AppLog(_tempLogPath);
-        var service = new TestPythonService(log);
+        var service = new TestPythonService(log, pythonPath);
         using var cts = new CancellationTokenSource();
 
         // Cancel before starting the script
@@ -228,9 +246,10 @@ print('Stdin closed successfully')
             return;
         }
 
-        if (DependencyLocator.FindPython() is null) return;
+        var pythonPath = FindAnyWorkingPython();
+        if (pythonPath is null) return;
         using var log = new AppLog(_tempLogPath);
-        var service = new TestPythonService(log);
+        var service = new TestPythonService(log, pythonPath);
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
         // Script that might resist termination (though most Python processes will terminate)
@@ -256,9 +275,10 @@ time.sleep(10)
     [Fact]
     public async Task RunPythonScriptAsync_SuccessfulExecutionWithCancellation()
     {
-        if (DependencyLocator.FindPython() is null) return;
+        var pythonPath = FindAnyWorkingPython();
+        if (pythonPath is null) return;
         using var log = new AppLog(_tempLogPath);
-        var service = new TestPythonService(log);
+        var service = new TestPythonService(log, pythonPath);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         var script = @"
@@ -277,9 +297,10 @@ print('With multiple lines')
     [Fact]
     public async Task RunPythonScriptAsync_HandlesEnvironmentVariables()
     {
-        if (DependencyLocator.FindPython() is null) return;
+        var pythonPath = FindAnyWorkingPython();
+        if (pythonPath is null) return;
         using var log = new AppLog(_tempLogPath);
-        var service = new TestPythonService(log);
+        var service = new TestPythonService(log, pythonPath);
 
         var script = @"
 import os
@@ -306,9 +327,10 @@ print('ANOTHER_VAR=' + os.environ.get('ANOTHER_VAR', 'not_set'))
     [Fact]
     public async Task RunPythonScriptAsync_HandlesArguments()
     {
-        if (DependencyLocator.FindPython() is null) return;
+        var pythonPath = FindAnyWorkingPython();
+        if (pythonPath is null) return;
         using var log = new AppLog(_tempLogPath);
-        var service = new TestPythonService(log);
+        var service = new TestPythonService(log, pythonPath);
 
         var script = @"
 import sys
@@ -329,5 +351,88 @@ for i, arg in enumerate(sys.argv):
         Assert.Contains("Arg 1: arg1", result.Stdout);
         Assert.Contains("Arg 2: arg2", result.Stdout);
         Assert.Contains("Arg 3: arg with spaces", result.Stdout);
+    }
+
+    [Fact]
+    public void Providers_ResolveManagedCpuPythonPathByDefault()
+    {
+        using var log = new AppLog(_tempLogPath);
+        var expected = ManagedRuntimeLayout.GetCpuPythonPath();
+
+        Assert.Equal(expected, GetPythonPath(new EdgeTtsProvider(log)));
+        Assert.Equal(expected, GetPythonPath(new PiperTtsProvider(log, Path.GetTempPath())));
+        Assert.Equal(expected, GetPythonPath(new CTranslate2TranslationProvider(log, "nllb-200-distilled-600M")));
+        Assert.Equal(expected, GetPythonPath(new FasterWhisperTranscriptionProvider(log)));
+        Assert.Equal(expected, GetPythonPath(new GoogleTranslationProvider(log)));
+        Assert.Equal(expected, GetPythonPath(new NllbTranslationProvider(log, "nllb-200-distilled-600M")));
+    }
+
+    [Fact]
+    public async Task RunPythonScriptAsync_WhenManagedCpuRuntimeIsNotReady_ThrowsClearError()
+    {
+        using var log = new AppLog(_tempLogPath);
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"cpu-runtime-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+
+        var requirementsPath = Path.Combine(tempRoot, "requirements.txt");
+        await File.WriteAllTextAsync(requirementsPath, "edge-tts==7.2.8");
+
+        var runtimeManager = new ManagedCpuRuntimeManager(
+            log,
+            uvResolver: () => null,
+            cpuRuntimeRootResolver: () => tempRoot,
+            requirementsPathResolver: () => requirementsPath);
+
+        var pythonPath = runtimeManager.GetPythonExecutablePath();
+        var service = new TestPythonService(log, pythonPath, runtimeManager);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.RunTestScriptAsync("print('hello')"));
+
+        Assert.Contains("Managed CPU runtime is not ready", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("uv.exe was not found", ex.Message, StringComparison.Ordinal);
+
+        try { Directory.Delete(tempRoot, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public void ManagedCpuRuntimeManager_CapturesRuntimeRootOnce_ForManagerAndSubprocessPath()
+    {
+        using var log = new AppLog(_tempLogPath);
+
+        var tempRootA = Path.Combine(Path.GetTempPath(), $"cpu-runtime-root-a-{Guid.NewGuid():N}");
+        var tempRootB = Path.Combine(Path.GetTempPath(), $"cpu-runtime-root-b-{Guid.NewGuid():N}");
+        var resolveCount = 0;
+
+        var runtimeManager = new ManagedCpuRuntimeManager(
+            log,
+            cpuRuntimeRootResolver: () =>
+            {
+                resolveCount++;
+                return resolveCount == 1 ? tempRootA : tempRootB;
+            });
+
+        Assert.Equal(1, resolveCount);
+        Assert.Equal(tempRootA, runtimeManager.RuntimeRoot);
+        Assert.Equal(Path.Combine(tempRootA, ".venv", "Scripts", "python.exe"), runtimeManager.GetPythonExecutablePath());
+        Assert.Equal(Path.Combine(tempRootA, ".cpu-bootstrap-version"), runtimeManager.GetBootstrapMarkerPath());
+
+        var service = new TestPythonService(log, runtimeManager);
+        Assert.Equal(Path.Combine(tempRootA, ".venv", "Scripts", "python.exe"), GetPythonPath(service));
+
+        Assert.Equal(1, resolveCount);
+    }
+
+    private static string GetPythonPath(object provider)
+    {
+        var field = typeof(PythonSubprocessServiceBase).GetField(
+            "PythonPath",
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic |
+            System.Reflection.BindingFlags.FlattenHierarchy);
+
+        Assert.NotNull(field);
+        return Assert.IsType<string>(field!.GetValue(provider));
     }
 }

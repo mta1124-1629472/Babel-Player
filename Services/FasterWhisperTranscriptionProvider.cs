@@ -123,13 +123,7 @@ def _sample_vram_mb():
     except Exception:
         return -1
 
-try:
-    from faster_whisper import WhisperModel
-except ImportError:
-    import subprocess
-    print('Installing faster-whisper (this may take a few minutes on first run)...')
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'faster-whisper'])
-    from faster_whisper import WhisperModel
+from faster_whisper import WhisperModel
 
 model_name = '{modelNameLiteral}'
 print('CPU transcription runtime: compute_type={cpuComputeTypeLiteral}, cpu_threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, num_workers={numWorkers}')

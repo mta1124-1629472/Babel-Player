@@ -19,12 +19,12 @@ public enum ManagedCpuState
 public sealed class ManagedCpuRuntimeManager
 {
     private const string PythonVersion = "3.11.6";
+    private static readonly SemaphoreSlim InstallGate = new(1, 1);
 
     private readonly AppLog _log;
     private readonly Func<string?> _uvResolver;
-    private readonly Func<string> _cpuRuntimeRootResolver;
+    private readonly string _cpuRuntimeRoot;
     private readonly Func<string> _requirementsPathResolver;
-    private readonly SemaphoreSlim _installGate = new(1, 1);
 
     public ManagedCpuRuntimeManager(
         AppLog log,
@@ -34,7 +34,7 @@ public sealed class ManagedCpuRuntimeManager
     {
         _log = log;
         _uvResolver = uvResolver ?? DependencyLocator.FindUv;
-        _cpuRuntimeRootResolver = cpuRuntimeRootResolver ?? ManagedRuntimeLayout.GetCpuRuntimeRoot;
+        _cpuRuntimeRoot = (cpuRuntimeRootResolver ?? ManagedRuntimeLayout.GetCpuRuntimeRoot)();
         _requirementsPathResolver = requirementsPathResolver ?? ResolveCpuRequirementsPath;
     }
 
@@ -55,10 +55,10 @@ public sealed class ManagedCpuRuntimeManager
     {
         get
         {
-            var pythonPath = ManagedRuntimeLayout.GetCpuPythonPath();
+            var pythonPath = GetPythonExecutablePath();
             if (!File.Exists(pythonPath))
                 return true;
-            var markerPath = ManagedRuntimeLayout.GetCpuBootstrapMarkerPath();
+            var markerPath = GetBootstrapMarkerPath();
             if (!File.Exists(markerPath))
                 return true;
             try
@@ -94,7 +94,7 @@ public sealed class ManagedCpuRuntimeManager
             return;
         }
 
-        await _installGate.WaitAsync(cancellationToken);
+        await InstallGate.WaitAsync(cancellationToken);
         try
         {
             // Re-check under lock in case a concurrent call already bootstrapped.
@@ -108,9 +108,21 @@ public sealed class ManagedCpuRuntimeManager
         }
         finally
         {
-            _installGate.Release();
+            InstallGate.Release();
         }
     }
+
+    /// <summary>
+    /// Returns the captured managed CPU runtime root for this manager instance.
+    /// The root is resolved once in the constructor so Python and marker paths stay consistent.
+    /// </summary>
+    public string RuntimeRoot => _cpuRuntimeRoot;
+
+    public string GetPythonExecutablePath() =>
+        Path.Combine(RuntimeRoot, ".venv", "Scripts", "python.exe");
+
+    public string GetBootstrapMarkerPath() =>
+        Path.Combine(RuntimeRoot, ".cpu-bootstrap-version");
 
     private async Task RunBootstrapAsync(
         Action<string>? onStatusLine,
@@ -130,21 +142,10 @@ public sealed class ManagedCpuRuntimeManager
             return;
         }
 
-        var runtimeRoot = _cpuRuntimeRootResolver();
-        var defaultVenvDir = ManagedRuntimeLayout.GetCpuVenvDirectory();
-        var defaultPythonPath = ManagedRuntimeLayout.GetCpuPythonPath();
-        var defaultMarkerPath = ManagedRuntimeLayout.GetCpuBootstrapMarkerPath();
-        var defaultRuntimeRoot = Path.GetDirectoryName(defaultVenvDir) ?? runtimeRoot;
-
-        var venvDir = Path.Combine(
-            runtimeRoot,
-            Path.GetFileName(Path.TrimEndingDirectorySeparator(defaultVenvDir)));
-        var pythonPath = Path.Combine(
-            venvDir,
-            Path.GetRelativePath(defaultVenvDir, defaultPythonPath));
-        var markerPath = Path.Combine(
-            runtimeRoot,
-            Path.GetRelativePath(defaultRuntimeRoot, defaultMarkerPath));
+        var runtimeRoot = RuntimeRoot;
+        var venvDir = Path.Combine(runtimeRoot, ".venv");
+        var pythonPath = GetPythonExecutablePath();
+        var markerPath = GetBootstrapMarkerPath();
         Directory.CreateDirectory(runtimeRoot);
 
         State = ManagedCpuState.Installing;

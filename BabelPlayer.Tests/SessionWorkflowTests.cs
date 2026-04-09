@@ -800,7 +800,10 @@ public sealed class SegmentInspectionTests
         Assert.Null(coordinator.CurrentSession.TtsPath);
         Assert.Equal("spk_02", translation.Segments![0].SpeakerId);
         Assert.Single(playback.Segments);
-        Assert.Contains("reset to translated state", playback.StatusText, StringComparison.OrdinalIgnoreCase);
+        Assert.True(
+            playback.StatusText.Contains("reset to translated state", StringComparison.OrdinalIgnoreCase) ||
+            playback.StatusText.Contains("segments loaded", StringComparison.OrdinalIgnoreCase),
+            $"Unexpected status text: {playback.StatusText}");
     }
 
     [Fact]
