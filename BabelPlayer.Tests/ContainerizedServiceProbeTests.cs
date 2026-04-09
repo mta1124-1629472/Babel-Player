@@ -345,24 +345,31 @@ public sealed class ContainerizedServiceProbeTests
             Assert.Equal(ContainerizedProbeState.Checking, result.State);
         }
 
-        // Complete the first probe
+        // Complete the first probe (which was started first but forced-refreshed away)
         probeCompleted.SetResult(true);
-        await Task.Delay(500); // Further increased wait time for stability
 
-        // Verify the final state - be more tolerant of timing
-        var final = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
-        Assert.True(final.State == ContainerizedProbeState.Available || final.State == ContainerizedProbeState.Checking);
-        
-        // If still checking, wait a bit more and verify cache
-        if (final.State == ContainerizedProbeState.Checking)
+        // Wait for the final probe to complete and populate the cache.
+        // We use a polling loop instead of a fixed delay to handle variable CI performance.
+        ContainerizedProbeResult final = null!;
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        bool success = false;
+
+        while (DateTime.UtcNow < timeout)
         {
-            await Task.Delay(200);
             final = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
-            Assert.Equal(ContainerizedProbeState.Available, final.State);
+            if (final.State == ContainerizedProbeState.Available)
+            {
+                success = true;
+                break;
+            }
+            await Task.Delay(50);
         }
+
+        Assert.True(success, $"Probe did not reach Available state. Current state: {final?.State}");
+        Assert.NotNull(final);
         Assert.True(final.WasCacheHit);
 
-        // Implementation may deduplicate concurrent force-refresh requests.
+        // Implementation may deduplicate concurrent force-refresh requests, but we started at least 4.
         Assert.True(callCount >= 1);
     }
 

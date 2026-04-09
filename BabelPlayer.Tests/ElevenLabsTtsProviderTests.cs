@@ -40,14 +40,14 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
 
     private static AppSettings MakeSettings() => new();
 
-    private ElevenLabsApiClient MakeClient() =>
+    private static ElevenLabsApiClient MakeClient() =>
         new("test-key", new StubHttpMessageHandler(_ =>
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new ByteArrayContent([0x01, 0x02, 0x03])
             })));
 
-    private string WriteTranslationJson(string? translatedText = "Hello world", bool twoSegments = false)
+    private static string WriteTranslationJson(string? translatedText = "Hello world", bool twoSegments = false)
     {
         var path = Path.Combine(_testDir, $"translation-{Guid.NewGuid():N}.json");
 
@@ -100,7 +100,7 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
         return path;
     }
 
-    private string WriteEmptySegmentsTranslationJson()
+    private static string WriteEmptySegmentsTranslationJson()
     {
         var path = Path.Combine(_testDir, $"empty-translation-{Guid.NewGuid():N}.json");
         var json = """
