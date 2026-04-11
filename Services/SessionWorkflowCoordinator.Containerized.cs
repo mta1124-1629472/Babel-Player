@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using Babel.Player.Models;
 using Babel.Player.Services.Registries;
 
@@ -166,7 +167,8 @@ public sealed partial class SessionWorkflowCoordinator
             ContainerizedStartupTrigger.SettingsChanged,
             cancellationToken).ConfigureAwait(false);
 
-        RuntimeWarmupStatusText = result.Message;
+        var message = result.Message;
+        Dispatcher.UIThread.Post(() => RuntimeWarmupStatusText = message);
         await RefreshRuntimeWarmupStatusFromProbeAsync(forceRefresh: true, cancellationToken).ConfigureAwait(false);
     }
 
@@ -181,7 +183,8 @@ public sealed partial class SessionWorkflowCoordinator
             CurrentSettings.EffectiveGpuServiceUrl,
             forceRefresh: forceRefresh,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        RuntimeWarmupStatusText = DescribeRuntimeWarmupStatus(probeResult);
+        var statusText = DescribeRuntimeWarmupStatus(probeResult);
+        Dispatcher.UIThread.Post(() => RuntimeWarmupStatusText = statusText);
     }
 
     private string? DescribeRuntimeWarmupStatus(ContainerizedProbeResult probeResult)
