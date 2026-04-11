@@ -1438,7 +1438,7 @@ def load_nllb_model(model_name: str):
         model_kwargs: dict = {}
         if HOST_DEVICE == "cuda":
             cuda_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-            model_kwargs["dtype"] = cuda_dtype
+            model_kwargs["torch_dtype"] = cuda_dtype
             model_kwargs["device_map"] = "cuda"
         nllb_model = AutoModelForSeq2SeqLM.from_pretrained(normalized_model_name, **model_kwargs)
         nllb_model.eval()

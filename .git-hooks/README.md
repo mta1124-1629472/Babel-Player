@@ -61,5 +61,5 @@ Cannot be bypassed (informational only).
 
 - Hooks use `bash` — works in Git Bash, WSL, GitHub Actions, and most Unix-like environments
 - On Windows CMD/PowerShell, ensure Git Bash is available (`bash --version`)
-- Hooks are **not** committed to the repository by default (`.git-hooks/` is typically gitignored)
+- Hooks in this repository are committed under `.git-hooks/`; each developer must activate them locally with `git config core.hooksPath .git-hooks`
 - CI runs the same checks independently — hooks are a developer convenience, not a gate

@@ -37,6 +37,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _ttsProviderIdsByRuntime = [];
     private readonly ObservableCollection<ProviderHealthSnapshot> _providerHealthSnapshots = [];
     private readonly Dictionary<string, Queue<string>> _providerHealthHistoryByKey = new(StringComparer.Ordinal);
+    private readonly object _providerHealthHistoryLock = new();
     private CancellationTokenSource? _providerHealthRefreshCts;
     private int _providerHealthRefreshVersion;
     private ProviderDiagnosticsSelectionSnapshot? _lastQueuedProviderHealthSnapshot;
@@ -613,6 +614,14 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         });
     }
 
+    private static string GetRuntimeHostLabel(ComputeProfile runtime) => runtime switch
+    {
+        ComputeProfile.Gpu   => "Managed local GPU host",
+        ComputeProfile.Cpu   => "Managed local CPU runtime",
+        ComputeProfile.Cloud => "Cloud service",
+        _                    => "Managed local CPU runtime",
+    };
+
     private ProviderHealthSnapshot BuildTranscriptionHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
             section: "Transcription",
@@ -629,7 +638,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 snapshot.TranscriptionRuntime),
             statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
             inlineStatusFactory: GetReadinessStatus,
-            hostLabel: "Managed local GPU host");
+            hostLabel: GetRuntimeHostLabel(snapshot.TranscriptionRuntime));
 
     private ProviderHealthSnapshot BuildTranslationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
@@ -647,7 +656,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 snapshot.TranslationRuntime),
             statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
             inlineStatusFactory: GetReadinessStatus,
-            hostLabel: "Managed local GPU host");
+            hostLabel: GetRuntimeHostLabel(snapshot.TranslationRuntime));
 
     private ProviderHealthSnapshot BuildTtsHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
@@ -665,7 +674,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 snapshot.TtsRuntime),
             statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
             inlineStatusFactory: GetReadinessStatus,
-            hostLabel: "Managed local GPU host");
+            hostLabel: GetRuntimeHostLabel(snapshot.TtsRuntime));
 
     private ProviderHealthSnapshot BuildDiarizationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot)
     {
@@ -704,24 +713,24 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private ProviderHealthSnapshot BuildManualDiarizationSnapshot(string inlineStatus) =>
         new(
             "Diarization",
-            "manual",
+            ProviderNames.Manual,
             "Manual speaker mapping",
             "Local",
-            "Ready",
+            "Not configured",
             NormalizeDiagnosticText(inlineStatus),
-            "No provider selected.",
+            "No diarization provider selected.",
             "No diarization provider selected.",
             string.Empty,
-            IsReady: true,
-            IsLive: true,
+            IsReady: false,
+            IsLive: false,
             IsStale: false,
             CheckedAtText: DateTimeOffset.UtcNow.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture),
             History: AppendProviderHealthHistory(
-                "Diarization|manual|Manual speaker mapping|Local",
+                $"Diarization|{ProviderNames.Manual}|Manual speaker mapping|Local",
                 DateTimeOffset.UtcNow,
-                "Ready",
+                "Not configured",
                 "No diarization provider selected.",
-                isReady: true));
+                isReady: false));
 
     private ProviderHealthSnapshot BuildHealthSnapshot(
         string section,
@@ -941,17 +950,20 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         string hostState,
         bool isReady)
     {
-        if (!_providerHealthHistoryByKey.TryGetValue(key, out var queue))
-        {
-            queue = new Queue<string>();
-            _providerHealthHistoryByKey[key] = queue;
-        }
-
         var entry = $"{checkedAtUtc.ToLocalTime():HH:mm:ss} · {(isReady ? "ready" : "not ready")} · {statusLine}{(string.IsNullOrWhiteSpace(hostState) ? string.Empty : $" · {hostState}")}";
-        if (queue.Count >= 3)
-            queue.Dequeue();
-        queue.Enqueue(entry);
-        return queue.ToArray();
+        lock (_providerHealthHistoryLock)
+        {
+            if (!_providerHealthHistoryByKey.TryGetValue(key, out var queue))
+            {
+                queue = new Queue<string>();
+                _providerHealthHistoryByKey[key] = queue;
+            }
+
+            if (queue.Count >= 3)
+                queue.Dequeue();
+            queue.Enqueue(entry);
+            return queue.ToArray();
+        }
     }
 
     private bool UsesContainerizedRuntime(ProviderDiagnosticsSelectionSnapshot snapshot) =>
@@ -2570,7 +2582,7 @@ partial void OnSourcePositionMsChanged(double value)
         await RefreshSegmentsAsync();
     }
 
-public void Dispose()
+    public void Dispose()
     {
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
         _coordinator.SettingsModified -= OnCoordinatorSettingsModified;

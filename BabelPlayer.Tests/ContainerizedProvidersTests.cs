@@ -406,20 +406,16 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
-    public void QwenContainerTtsProvider_MaxConcurrency_UsesRuntimePolicy()
+    public void QwenContainerTtsProvider_MaxConcurrency_IsOne()
     {
-        Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, "2");
-        try
-        {
-            var client = CreateClient((_, _) => Json(HttpStatusCode.OK, "{\"success\":true}"));
-            var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
+        // MaxConcurrency is fixed at 1 because _referenceIdCache and
+        // _autoExtractedReferencePath are not thread-safe. This test
+        // guards against accidental reversion to a higher concurrency
+        // before proper synchronization is in place.
+        var client = CreateClient((_, _) => Json(HttpStatusCode.OK, "{\"success\":true}"));
+        var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
 
-            Assert.Equal(2, provider.MaxConcurrency);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, null);
-        }
+        Assert.Equal(1, provider.MaxConcurrency);
     }
 
     [Fact]
