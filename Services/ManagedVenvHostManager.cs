@@ -157,8 +157,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         if (ShouldDeferRestartForBusyHost(preflight))
         {
-            // Only mark as Ready and return healthy if the host is actually available.
-            if (preflight.IsAvailable)
+            var canReuseTrackedHost =
+                preflight.IsAvailable
+                || HasActiveLocalRequests()
+                || (IsTrackedHostProcessRunning() && IsTransientBusyHealthFailure(preflight.ErrorMessage));
+
+            if (canReuseTrackedHost)
             {
                 State = ManagedHostState.Ready;
                 var deferMessage = BuildBusyHostDeferMessage(serviceUrl, preflight);
@@ -591,39 +595,44 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         bool stopTrackedProcess,
         CancellationToken cancellationToken)
     {
-        if (_requestLeaseTracker is null)
+        IDisposable? recoveryToken = null;
+        if (_requestLeaseTracker is not null)
         {
-            _log.Warning("Managed GPU host recovery cannot proceed: request lease tracker is not initialized.");
-            return false;
-        }
+            // Begin recovery gate to block new leases and wait for existing ones to drain.
+            recoveryToken = _requestLeaseTracker.BeginRecovery();
 
-        // Begin recovery gate to block new leases and wait for existing ones to drain.
-        using var recoveryToken = _requestLeaseTracker.BeginRecovery();
+            try
+            {
+                await _requestLeaseTracker.WaitForZeroActiveRequestsAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                _log.Warning("Managed GPU host recovery canceled while waiting for active requests to complete.");
+                throw;
+            }
+        }
 
         try
         {
-            await _requestLeaseTracker.WaitForZeroActiveRequestsAsync(cancellationToken).ConfigureAwait(false);
+            var stoppedAny = false;
+
+            if (stopTrackedProcess && await StopTrackedHostProcessAsync(cancellationToken))
+                stoppedAny = true;
+
+            if (await StopPidFileHostProcessAsync(hostPidPath, pythonPath, cancellationToken))
+                stoppedAny = true;
+
+            if (await StopRemainingManagedPythonProcessesAsync(pythonPath, cancellationToken))
+                stoppedAny = true;
+
+            await DeletePidFileIfPresentAsync(hostPidPath);
+            await WaitForVenvUnlockAsync(pythonPath, cancellationToken);
+            return stoppedAny;
         }
-        catch (OperationCanceledException)
+        finally
         {
-            _log.Warning("Managed GPU host recovery canceled while waiting for active requests to complete.");
-            throw;
+            recoveryToken?.Dispose();
         }
-
-        var stoppedAny = false;
-
-        if (stopTrackedProcess && await StopTrackedHostProcessAsync(cancellationToken))
-            stoppedAny = true;
-
-        if (await StopPidFileHostProcessAsync(hostPidPath, pythonPath, cancellationToken))
-            stoppedAny = true;
-
-        if (await StopRemainingManagedPythonProcessesAsync(pythonPath, cancellationToken))
-            stoppedAny = true;
-
-        await DeletePidFileIfPresentAsync(hostPidPath);
-        await WaitForVenvUnlockAsync(pythonPath, cancellationToken);
-        return stoppedAny;
     }
 
     /// <summary>
@@ -913,6 +922,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         // cache files created by a prior version.
         psi.Environment["HUGGINGFACE_HUB_CACHE"] = ManagedRuntimeLayout.GetModelCacheDir();
         psi.Environment["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1";
+        psi.Environment[QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable] =
+            QwenRuntimePolicy.ResolveMaxConcurrency().ToString();
 
         return psi;
     }
@@ -1070,7 +1081,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             _log.Info($"Managed GPU host health probe starting: url={serviceUrl}, timeout={timeout.TotalSeconds}s");
             var health = await _healthCheckFunc(serviceUrl, timeout, cancellationToken);
             _log.Info(
-                $"Managed GPU host health probe finished: available={health.IsAvailable}, " +
+                $"Managed GPU host health probe finished: status='{health.StatusLine}', available={health.IsAvailable}, " +
                 $"cuda_available={health.CudaAvailable}, cuda_version='{health.CudaVersion ?? "<none>"}', " +
                 $"busy={health.Busy}, active_requests={health.ActiveRequests}, active_qwen={health.ActiveQwenRequests}, " +
                 $"active_diarization={health.ActiveDiarizationRequests}, error='{health.ErrorMessage ?? "<none>"}', " +
@@ -1352,7 +1363,20 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             health.ErrorMessage,
             health.CudaAvailable,
             health.CudaVersion,
-            health.Capabilities);
+            health.Capabilities,
+            health.CapabilitiesError,
+            ProviderHealth: health.ProviderHealth,
+            ActiveRequests: health.ActiveRequests,
+            ActiveQwenRequests: health.ActiveQwenRequests,
+            ActiveDiarizationRequests: health.ActiveDiarizationRequests,
+            Busy: health.Busy,
+            BusyReason: health.BusyReason,
+            QwenMaxConcurrency: health.QwenMaxConcurrency,
+            QwenQueueDepth: health.QwenQueueDepth,
+            QwenLastQueueWaitMs: health.QwenLastQueueWaitMs,
+            QwenLastGenerationMs: health.QwenLastGenerationMs,
+            QwenLastReferencePrepMs: health.QwenLastReferencePrepMs,
+            QwenLastWarmupMs: health.QwenLastWarmupMs);
 
     private static bool RequiresCuda(string computeType) =>
         string.Equals(computeType, "float16", StringComparison.OrdinalIgnoreCase)

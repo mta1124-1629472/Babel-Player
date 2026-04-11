@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -405,6 +406,23 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
+    public void QwenContainerTtsProvider_MaxConcurrency_UsesRuntimePolicy()
+    {
+        Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, "2");
+        try
+        {
+            var client = CreateClient((_, _) => Json(HttpStatusCode.OK, "{\"success\":true}"));
+            var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
+
+            Assert.Equal(2, provider.MaxConcurrency);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, null);
+        }
+    }
+
+    [Fact]
     public async Task ContainerizedTtsProvider_GenerateTtsAsync_CombinesSegmentsAndWritesOutput()
     {
         var translationPath = Path.Combine(_ctx.Dir, "combined-translation.json");
@@ -696,6 +714,45 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
+    public async Task ContainerizedInferenceClient_CheckHealthAsync_ParsesQwenMetricsAndProviderHealth()
+    {
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/health/live")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"status\":\"healthy\",\"cuda_available\":true,\"cuda_version\":\"12.8\",\"active_requests\":2,\"active_qwen_requests\":1,\"busy\":true,\"busy_reason\":\"qwen queued (1); max concurrency 2\",\"qwen_max_concurrency\":2,\"qwen_queue_depth\":1,\"qwen_last_queue_wait_ms\":321.5,\"qwen_last_generation_ms\":24567.0,\"qwen_last_reference_prep_ms\":812.0,\"qwen_last_warmup_ms\":6789.0,\"provider_health\":{\"qwen-tts\":{\"ready\":false,\"state\":\"warming\",\"detail\":\"Qwen3-TTS warming up\",\"checked_at\":\"2026-04-10T23:50:34Z\",\"is_stale\":false,\"failure_category\":null,\"metrics\":{\"queue_depth\":1},\"history\":[{\"timestamp\":\"2026-04-10T23:49:00Z\",\"state\":\"warming\",\"ready\":false,\"detail\":\"Qwen3-TTS warming up\"}]}}}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":false,\"detail\":\"qwen pending\",\"providers\":{\"qwen-tts\":false},\"provider_details\":{\"qwen-tts\":\"Qwen3-TTS warming up\"},\"provider_health\":{\"qwen-tts\":{\"ready\":false,\"state\":\"warming\",\"detail\":\"Qwen3-TTS warming up\",\"checked_at\":\"2026-04-10T23:50:34Z\",\"is_stale\":false,\"failure_category\":null,\"metrics\":{\"queue_depth\":1},\"history\":[{\"timestamp\":\"2026-04-10T23:49:00Z\",\"state\":\"warming\",\"ready\":false,\"detail\":\"Qwen3-TTS warming up\"}]}}}}");
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"status\":\"not-found\"}");
+        });
+
+        var health = await client.CheckHealthAsync();
+
+        Assert.Equal(2, health.QwenMaxConcurrency);
+        Assert.Equal(1, health.QwenQueueDepth);
+        Assert.Equal(321.5, health.QwenLastQueueWaitMs);
+        Assert.Equal(24567.0, health.QwenLastGenerationMs);
+        Assert.Equal(812.0, health.QwenLastReferencePrepMs);
+        Assert.Equal(6789.0, health.QwenLastWarmupMs);
+        Assert.NotNull(health.ProviderHealth);
+        Assert.True(health.ProviderHealth!.TryGetValue(ProviderNames.Qwen, out var liveProviderHealth));
+        Assert.Equal("warming", liveProviderHealth!.State);
+        Assert.NotNull(health.Capabilities);
+        Assert.True(health.Capabilities!.TryGetTtsProviderHealth(ProviderNames.Qwen, out var capabilityProviderHealth));
+        Assert.Equal("Qwen3-TTS warming up", capabilityProviderHealth!.Detail);
+        Assert.Single(capabilityProviderHealth.History);
+        Assert.Contains("qwen-queue=1", health.StatusLine, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("qwen-max=2", health.StatusLine, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ContainerizedInferenceClient_CheckHealthAsync_ParsesDiarizationCapabilities()
     {
         var client = CreateClient((request, _) =>
@@ -842,6 +899,10 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.Null(health.Capabilities);
         Assert.NotNull(health.CapabilitiesError);
         Assert.Contains("HttpClient.Timeout", health.CapabilitiesError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("active=4", health.StatusLine, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("qwen=2", health.StatusLine, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("diarization=1", health.StatusLine, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("busy=Qwen warmup in progress", health.StatusLine, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("capabilities unavailable", health.StatusLine, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -988,7 +1049,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         var settings = new AppSettings
         {
             PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
-            ContainerizedServiceUrl = "http://localhost:8000",
+            ContainerizedServiceUrl = AppSettings.ManagedGpuServiceUrl,
             DiarizationProvider = ProviderNames.WeSpeakerLocal,
         };
 
@@ -1004,6 +1065,106 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.False(readiness.IsReady);
         Assert.Contains("live but diarization capability is still warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContainerizedProviderReadiness_CheckDiarization_ReturnsCachedProviderFailureDetailInsteadOfStarting()
+    {
+        var callCount = 0;
+        var releaseRefresh = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probe = new ContainerizedServiceProbe(
+            _ctx.Log,
+            async (url, _, ct) =>
+            {
+                var currentCall = Interlocked.Increment(ref callCount);
+                if (currentCall == 1)
+                {
+                    await Task.Delay(10, ct);
+                    return new ContainerHealthStatus(
+                        true,
+                        true,
+                        "12.8",
+                        url,
+                        null,
+                        new ContainerCapabilitiesSnapshot(
+                            TranscriptionReady: true,
+                            TranscriptionDetail: null,
+                            TranslationReady: true,
+                            TranslationDetail: null,
+                            TtsReady: true,
+                            TtsDetail: null,
+                            DiarizationReady: false,
+                            DiarizationDetail: "NeMo diarization config contract invalid: Key 'device' is not in struct",
+                            DiarizationProviders: new Dictionary<string, bool>
+                            {
+                                [ProviderNames.NemoLocal] = false,
+                            },
+                            DiarizationProviderDetails: new Dictionary<string, string>
+                            {
+                                [ProviderNames.NemoLocal] = "NeMo diarization config contract invalid: Key 'device' is not in struct",
+                            },
+                            DiarizationDefaultProvider: ProviderNames.NemoLocal));
+                }
+
+                await releaseRefresh.Task.WaitAsync(ct);
+                return new ContainerHealthStatus(
+                    true,
+                    true,
+                    "12.8",
+                    url,
+                    null,
+                    new ContainerCapabilitiesSnapshot(
+                        TranscriptionReady: true,
+                        TranscriptionDetail: null,
+                        TranslationReady: true,
+                        TranslationDetail: null,
+                        TtsReady: true,
+                        TtsDetail: null,
+                        DiarizationReady: false,
+                        DiarizationDetail: "NeMo diarization config contract invalid: Key 'device' is not in struct",
+                        DiarizationProviders: new Dictionary<string, bool>
+                        {
+                            [ProviderNames.NemoLocal] = false,
+                        },
+                        DiarizationProviderDetails: new Dictionary<string, string>
+                        {
+                            [ProviderNames.NemoLocal] = "NeMo diarization config contract invalid: Key 'device' is not in struct",
+                        },
+                        DiarizationDefaultProvider: ProviderNames.NemoLocal));
+            },
+            retryDelay: TimeSpan.FromMilliseconds(10));
+
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+            ContainerizedServiceUrl = "http://localhost:8000",
+            DiarizationProvider = ProviderNames.NemoLocal,
+        };
+
+        var first = await probe.WaitForProbeAsync(
+            AppSettings.ManagedGpuServiceUrl,
+            forceRefresh: true,
+            waitTimeout: TimeSpan.FromMilliseconds(500));
+
+        Assert.Equal(ContainerizedProbeState.Available, first.State);
+        await Task.Delay(25);
+
+        var cached = probe.GetCurrentOrStartBackgroundProbe(AppSettings.ManagedGpuServiceUrl);
+        Assert.Equal(ContainerizedProbeState.Available, cached.State);
+        Assert.True(cached.WasCacheHit);
+
+        ExpireCachedProbeResult(probe, AppSettings.ManagedGpuServiceUrl);
+
+        var readiness = ContainerizedProviderReadiness.CheckDiarization(settings, ProviderNames.NemoLocal, probe);
+        await WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains("NeMo diarization config contract invalid", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("starting", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.True(callCount >= 2);
+
+        releaseRefresh.SetResult(true);
+        await Task.Delay(50);
     }
 
     [Fact]
@@ -1037,7 +1198,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         var settings = new AppSettings
         {
             PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
-            ContainerizedServiceUrl = "http://localhost:8000",
+            ContainerizedServiceUrl = AppSettings.ManagedGpuServiceUrl,
             DiarizationProvider = ProviderNames.WeSpeakerLocal,
         };
 
@@ -1189,5 +1350,40 @@ public sealed class ContainerizedProvidersTests() : IDisposable
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             _handler(request, cancellationToken);
+    }
+
+    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
+    {
+        var entriesField = typeof(ContainerizedServiceProbe).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Could not find _entries field.");
+
+        var entries = entriesField.GetValue(probe)
+            ?? throw new InvalidOperationException("ContainerizedServiceProbe entries cache was null.");
+
+        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
+        var tryGetValue = entries.GetType().GetMethod("TryGetValue")
+            ?? throw new InvalidOperationException("Could not find TryGetValue on probe cache.");
+
+        var tryGetArgs = new object?[] { normalizedUrl, null };
+        var found = (bool)(tryGetValue.Invoke(entries, tryGetArgs) ?? false);
+        if (!found)
+            throw new InvalidOperationException($"No cached probe entry found for {normalizedUrl}.");
+
+        var entry = tryGetArgs[1] ?? throw new InvalidOperationException("Probe cache entry was null.");
+        var expiresProperty = entry.GetType().GetProperty("ExpiresAtUtc")
+            ?? throw new InvalidOperationException("Could not find ExpiresAtUtc on probe cache entry.");
+        expiresProperty.SetValue(entry, DateTimeOffset.UtcNow.AddSeconds(-1));
+    }
+
+    private static async Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (getCount() >= expectedMinimum)
+                return;
+
+            await Task.Delay(10);
+        }
     }
 }

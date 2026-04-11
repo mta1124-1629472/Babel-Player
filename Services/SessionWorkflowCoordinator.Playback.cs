@@ -76,7 +76,19 @@ public sealed partial class SessionWorkflowCoordinator
         if (DiarizationRegistry is null)
             throw new PipelineProviderException("No diarization registry is configured.");
 
-        var readiness = DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+        var providerDescriptor = DiarizationRegistry
+            .GetAvailableProviders()
+            .FirstOrDefault(provider => string.Equals(provider.Id, CurrentSettings.DiarizationProvider, StringComparison.Ordinal));
+        var usesContainerizedRuntime = providerDescriptor?.EffectiveDefaultRuntime == InferenceRuntime.Containerized;
+
+        var readiness = usesContainerizedRuntime && ContainerizedProbe is not null
+            ? await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
+                    CurrentSettings,
+                    CurrentSettings.DiarizationProvider,
+                    ContainerizedProbe,
+                    ct)
+                .ConfigureAwait(false)
+            : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
         if (!readiness.IsReady)
         {
             var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";

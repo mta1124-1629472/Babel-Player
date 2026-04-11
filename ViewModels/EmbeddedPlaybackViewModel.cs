@@ -35,11 +35,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _transcriptionProviderIdsByRuntime = [];
     private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _translationProviderIdsByRuntime = [];
     private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _ttsProviderIdsByRuntime = [];
-    private CancellationTokenSource? _providerReadinessRefreshCts;
-    private int _providerReadinessRefreshVersion;
-    private ProviderSelectionSnapshot? _lastQueuedProviderReadinessSnapshot;
-    private CancellationTokenSource? _autoSpeakerDetectionRefreshCts;
-    private int _autoSpeakerDetectionRefreshVersion;
+    private readonly ObservableCollection<ProviderHealthSnapshot> _providerHealthSnapshots = [];
+    private readonly Dictionary<string, Queue<string>> _providerHealthHistoryByKey = new(StringComparer.Ordinal);
+    private CancellationTokenSource? _providerHealthRefreshCts;
+    private int _providerHealthRefreshVersion;
+    private ProviderDiagnosticsSelectionSnapshot? _lastQueuedProviderHealthSnapshot;
 
     [ObservableProperty]
     private ObservableCollection<WorkflowSegmentState> _segments = [];
@@ -449,8 +449,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     public string TranslationKeyStatus => _translationKeyStatus;
 
     public string TtsKeyStatus => _ttsKeyStatus;
+    public ObservableCollection<ProviderHealthSnapshot> ProviderHealthSnapshots => _providerHealthSnapshots;
 
-    private sealed record ProviderSelectionSnapshot(
+    private sealed record ProviderDiagnosticsSelectionSnapshot(
         ComputeProfile TranscriptionRuntime,
         string TranscriptionProvider,
         string TranscriptionModel,
@@ -460,12 +461,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         ComputeProfile TtsRuntime,
         string TtsProvider,
         string TtsModelOrVoice,
+        string DiarizationProvider,
         string GpuServiceUrl);
-
-    private sealed record ProviderReadinessStatus(
-        string TranscriptionStatus,
-        string TranslationStatus,
-        string TtsStatus);
 
     private static string GetReadinessStatus(ProviderReadiness readiness)
     {
@@ -487,13 +484,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         return $"⚠️ {readiness.BlockingReason}";
     }
 
-    private void RefreshProviderReadinessStatuses(bool force = false)
+    private void RefreshProviderHealthDiagnostics(bool force = false)
     {
-        var snapshot = CaptureProviderSelectionSnapshot();
-        QueueProviderReadinessRefresh(snapshot, force);
+        var snapshot = CaptureProviderHealthSelectionSnapshot();
+        QueueProviderHealthRefresh(snapshot, force);
     }
 
-    private ProviderSelectionSnapshot CaptureProviderSelectionSnapshot() =>
+    private ProviderDiagnosticsSelectionSnapshot CaptureProviderHealthSelectionSnapshot() =>
         new(
             TranscriptionRuntime,
             TranscriptionProvider,
@@ -504,32 +501,34 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             TtsRuntime,
             TtsProvider,
             TtsModelOrVoice,
+            DiarizationProvider,
             _coordinator.CurrentSettings.EffectiveContainerizedServiceUrl);
 
-    private void QueueProviderReadinessRefresh(ProviderSelectionSnapshot snapshot, bool force = false)
+    private void QueueProviderHealthRefresh(ProviderDiagnosticsSelectionSnapshot snapshot, bool force = false)
     {
-        if (!force && snapshot == _lastQueuedProviderReadinessSnapshot)
+        if (!force && snapshot == _lastQueuedProviderHealthSnapshot)
             return;
 
-        _lastQueuedProviderReadinessSnapshot = snapshot;
-        var version = Interlocked.Increment(ref _providerReadinessRefreshVersion);
+        _lastQueuedProviderHealthSnapshot = snapshot;
+        var version = Interlocked.Increment(ref _providerHealthRefreshVersion);
         var cts = new CancellationTokenSource();
-        var previous = Interlocked.Exchange(ref _providerReadinessRefreshCts, cts);
+        var previous = Interlocked.Exchange(ref _providerHealthRefreshCts, cts);
         previous?.Cancel();
         previous?.Dispose();
 
         _coordinator.Log.Info(
-            $"Provider readiness refresh queued: v={version}, " +
+            $"Provider diagnostics refresh queued: v={version}, " +
             $"selection=({snapshot.TranscriptionRuntime}/{snapshot.TranscriptionProvider}/{snapshot.TranscriptionModel}, " +
             $"{snapshot.TranslationRuntime}/{snapshot.TranslationProvider}/{snapshot.TranslationModel}, " +
-            $"{snapshot.TtsRuntime}/{snapshot.TtsProvider}/{snapshot.TtsModelOrVoice}), " +
+            $"{snapshot.TtsRuntime}/{snapshot.TtsProvider}/{snapshot.TtsModelOrVoice}, " +
+            $"{snapshot.DiarizationProvider}), " +
             $"gpuServiceUrl={snapshot.GpuServiceUrl}");
 
-        _ = RefreshProviderReadinessStatusesAsync(snapshot, version, cts.Token);
+        _ = RefreshProviderHealthDiagnosticsAsync(snapshot, version, cts.Token);
     }
 
-    private async Task RefreshProviderReadinessStatusesAsync(
-        ProviderSelectionSnapshot snapshot,
+    private async Task RefreshProviderHealthDiagnosticsAsync(
+        ProviderDiagnosticsSelectionSnapshot snapshot,
         int version,
         CancellationToken cancellationToken)
     {
@@ -538,11 +537,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         {
             await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
 
-            var status = await ComputeProviderReadinessStatusAsync(snapshot, cancellationToken);
-            await ApplyProviderReadinessStatusAsync(status, version, cancellationToken);
+            var health = await ComputeProviderHealthSnapshotsAsync(snapshot, cancellationToken);
+            await ApplyProviderHealthSnapshotsAsync(health, version, cancellationToken);
 
             if (UsesContainerizedRuntime(snapshot)
-                && ContainsStartingStatus(status)
+                && ContainsStartingStatus(health)
                 && _coordinator.ContainerizedProbe is not null)
             {
                 _ = await _coordinator.ContainerizedProbe.WaitForProbeAsync(
@@ -552,83 +551,444 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                     cancellationToken);
 
                 cancellationToken.ThrowIfCancellationRequested();
-                var settledStatus = await ComputeProviderReadinessStatusAsync(snapshot, cancellationToken);
-                await ApplyProviderReadinessStatusAsync(settledStatus, version, cancellationToken);
+                var settledHealth = await ComputeProviderHealthSnapshotsAsync(snapshot, cancellationToken);
+                await ApplyProviderHealthSnapshotsAsync(settledHealth, version, cancellationToken);
             }
 
             stopwatch.Stop();
             _coordinator.Log.Info(
-                $"Provider readiness refresh complete: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}");
+                $"Provider diagnostics refresh complete: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}");
         }
         catch (OperationCanceledException)
         {
             stopwatch.Stop();
             _coordinator.Log.Info(
-                $"Provider readiness refresh canceled: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}");
+                $"Provider diagnostics refresh canceled: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}");
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
             _coordinator.Log.Error(
-                $"Provider readiness refresh failed: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}",
+                $"Provider diagnostics refresh failed: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}",
                 ex);
         }
     }
 
-    private Task<ProviderReadinessStatus> ComputeProviderReadinessStatusAsync(
-        ProviderSelectionSnapshot snapshot,
+    private Task<IReadOnlyList<ProviderHealthSnapshot>> ComputeProviderHealthSnapshotsAsync(
+        ProviderDiagnosticsSelectionSnapshot snapshot,
         CancellationToken cancellationToken) =>
-        Task.Run(() => ComputeProviderReadinessStatus(snapshot), cancellationToken);
+        Task.Run(() =>
+        {
+            var transcription = BuildTranscriptionHealthSnapshot(snapshot);
+            var translation = BuildTranslationHealthSnapshot(snapshot);
+            var tts = BuildTtsHealthSnapshot(snapshot);
+            var diarization = BuildDiarizationHealthSnapshot(snapshot);
+            return (IReadOnlyList<ProviderHealthSnapshot>)[transcription, translation, tts, diarization];
+        }, cancellationToken);
 
-    private ProviderReadinessStatus ComputeProviderReadinessStatus(ProviderSelectionSnapshot snapshot) =>
-        new(
-            GetReadinessStatus(_coordinator.TranscriptionRegistry.CheckReadiness(
-                snapshot.TranscriptionProvider,
-                snapshot.TranscriptionModel,
-                _coordinator.CurrentSettings,
-                _apiKeyStore,
-                snapshot.TranscriptionRuntime)),
-            GetReadinessStatus(_coordinator.TranslationRegistry.CheckReadiness(
-                snapshot.TranslationProvider,
-                snapshot.TranslationModel,
-                _coordinator.CurrentSettings,
-                _apiKeyStore,
-                snapshot.TranslationRuntime)),
-            GetReadinessStatus(_coordinator.TtsRegistry.CheckReadiness(
-                snapshot.TtsProvider,
-                snapshot.TtsModelOrVoice,
-                _coordinator.CurrentSettings,
-                _apiKeyStore,
-                snapshot.TtsRuntime)));
-
-    private async Task ApplyProviderReadinessStatusAsync(
-        ProviderReadinessStatus status,
+    private async Task ApplyProviderHealthSnapshotsAsync(
+        IReadOnlyList<ProviderHealthSnapshot> health,
         int version,
         CancellationToken cancellationToken)
     {
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            if (version != _providerReadinessRefreshVersion || cancellationToken.IsCancellationRequested)
+            if (version != _providerHealthRefreshVersion || cancellationToken.IsCancellationRequested)
                 return;
 
-            ApplyReadinessStatus(ref _transcriptionKeyStatus, status.TranscriptionStatus, nameof(TranscriptionKeyStatus));
-            ApplyReadinessStatus(ref _translationKeyStatus, status.TranslationStatus, nameof(TranslationKeyStatus));
-            ApplyReadinessStatus(ref _ttsKeyStatus, status.TtsStatus, nameof(TtsKeyStatus));
+            _providerHealthSnapshots.Clear();
+            foreach (var snapshot in health)
+                _providerHealthSnapshots.Add(snapshot);
+
+            var transcription = health.FirstOrDefault(h => string.Equals(h.Section, "Transcription", StringComparison.Ordinal));
+            var translation = health.FirstOrDefault(h => string.Equals(h.Section, "Translation", StringComparison.Ordinal));
+            var tts = health.FirstOrDefault(h => string.Equals(h.Section, "TTS", StringComparison.Ordinal));
+            var diarization = health.FirstOrDefault(h => string.Equals(h.Section, "Diarization", StringComparison.Ordinal));
+
+            ApplyReadinessStatus(ref _transcriptionKeyStatus, transcription?.InlineStatus ?? string.Empty, nameof(TranscriptionKeyStatus));
+            ApplyReadinessStatus(ref _translationKeyStatus, translation?.InlineStatus ?? string.Empty, nameof(TranslationKeyStatus));
+            ApplyReadinessStatus(ref _ttsKeyStatus, tts?.InlineStatus ?? string.Empty, nameof(TtsKeyStatus));
+            AutoSpeakerDetectionStatus = diarization?.InlineStatus ?? "Manual speaker mapping is the default release flow.";
+            OnPropertyChanged(nameof(HasAutoSpeakerDetectionStatus));
         });
     }
 
-    private static bool UsesContainerizedRuntime(ProviderSelectionSnapshot snapshot) =>
+    private ProviderHealthSnapshot BuildTranscriptionHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
+        BuildHealthSnapshot(
+            section: "Transcription",
+            providerId: snapshot.TranscriptionProvider,
+            selectionLabel: $"{snapshot.TranscriptionRuntime} / {snapshot.TranscriptionProvider} / {snapshot.TranscriptionModel}",
+            runtimeLabel: snapshot.TranscriptionRuntime.ToString(),
+            isContainerized: snapshot.TranscriptionRuntime == ComputeProfile.Gpu,
+            gpuServiceUrl: snapshot.GpuServiceUrl,
+            readinessFactory: () => _coordinator.TranscriptionRegistry.CheckReadiness(
+                snapshot.TranscriptionProvider,
+                snapshot.TranscriptionModel,
+                _coordinator.CurrentSettings,
+                _apiKeyStore,
+                snapshot.TranscriptionRuntime),
+            statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
+            inlineStatusFactory: GetReadinessStatus,
+            hostLabel: "Managed local GPU host");
+
+    private ProviderHealthSnapshot BuildTranslationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
+        BuildHealthSnapshot(
+            section: "Translation",
+            providerId: snapshot.TranslationProvider,
+            selectionLabel: $"{snapshot.TranslationRuntime} / {snapshot.TranslationProvider} / {snapshot.TranslationModel}",
+            runtimeLabel: snapshot.TranslationRuntime.ToString(),
+            isContainerized: snapshot.TranslationRuntime == ComputeProfile.Gpu,
+            gpuServiceUrl: snapshot.GpuServiceUrl,
+            readinessFactory: () => _coordinator.TranslationRegistry.CheckReadiness(
+                snapshot.TranslationProvider,
+                snapshot.TranslationModel,
+                _coordinator.CurrentSettings,
+                _apiKeyStore,
+                snapshot.TranslationRuntime),
+            statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
+            inlineStatusFactory: GetReadinessStatus,
+            hostLabel: "Managed local GPU host");
+
+    private ProviderHealthSnapshot BuildTtsHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
+        BuildHealthSnapshot(
+            section: "TTS",
+            providerId: snapshot.TtsProvider,
+            selectionLabel: $"{snapshot.TtsRuntime} / {snapshot.TtsProvider} / {snapshot.TtsModelOrVoice}",
+            runtimeLabel: snapshot.TtsRuntime.ToString(),
+            isContainerized: snapshot.TtsRuntime == ComputeProfile.Gpu,
+            gpuServiceUrl: snapshot.GpuServiceUrl,
+            readinessFactory: () => _coordinator.TtsRegistry.CheckReadiness(
+                snapshot.TtsProvider,
+                snapshot.TtsModelOrVoice,
+                _coordinator.CurrentSettings,
+                _apiKeyStore,
+                snapshot.TtsRuntime),
+            statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
+            inlineStatusFactory: GetReadinessStatus,
+            hostLabel: "Managed local GPU host");
+
+    private ProviderHealthSnapshot BuildDiarizationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot)
+    {
+        var registry = _coordinator.DiarizationRegistry;
+        if (registry is null)
+            return BuildManualDiarizationSnapshot("⚠ Speaker diarization is unavailable in this build. Manual mapping remains available.");
+
+        if (string.IsNullOrWhiteSpace(snapshot.DiarizationProvider))
+            return BuildManualDiarizationSnapshot("Manual speaker mapping is the default release flow.");
+
+        var provider = registry
+            .GetAvailableProviders()
+            .FirstOrDefault(desc => string.Equals(desc.Id, snapshot.DiarizationProvider, StringComparison.Ordinal));
+
+        if (provider is null)
+            return BuildManualDiarizationSnapshot($"⚠ Unknown diarization provider '{snapshot.DiarizationProvider}'. Manual mapping will still work.");
+
+        var isContainerized = provider.EffectiveDefaultRuntime == InferenceRuntime.Containerized;
+        var hostLabel = isContainerized ? "Managed local GPU host" : "Managed local CPU runtime";
+        return BuildHealthSnapshot(
+            section: "Diarization",
+            providerId: provider.Id,
+            selectionLabel: $"{provider.EffectiveDefaultRuntime} / {provider.DisplayName}",
+            runtimeLabel: provider.EffectiveDefaultRuntime.ToString(),
+            isContainerized: isContainerized,
+            gpuServiceUrl: snapshot.GpuServiceUrl,
+            readinessFactory: () => registry.CheckReadiness(provider.Id, _coordinator.CurrentSettings, _apiKeyStore),
+            statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
+            inlineStatusFactory: readiness =>
+                readiness.IsReady
+                    ? $"Speaker diarization is enabled via {provider.DisplayName}."
+                    : $"⚠ {provider.DisplayName} is not ready: {readiness.BlockingReason}. Manual mapping will still work.",
+            hostLabel: hostLabel);
+    }
+
+    private ProviderHealthSnapshot BuildManualDiarizationSnapshot(string inlineStatus) =>
+        new(
+            "Diarization",
+            "manual",
+            "Manual speaker mapping",
+            "Local",
+            "Ready",
+            NormalizeDiagnosticText(inlineStatus),
+            "No provider selected.",
+            "No diarization provider selected.",
+            string.Empty,
+            IsReady: true,
+            IsLive: true,
+            IsStale: false,
+            CheckedAtText: DateTimeOffset.UtcNow.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture),
+            History: AppendProviderHealthHistory(
+                "Diarization|manual|Manual speaker mapping|Local",
+                DateTimeOffset.UtcNow,
+                "Ready",
+                "No diarization provider selected.",
+                isReady: true));
+
+    private ProviderHealthSnapshot BuildHealthSnapshot(
+        string section,
+        string providerId,
+        string selectionLabel,
+        string runtimeLabel,
+        bool isContainerized,
+        string? gpuServiceUrl,
+        Func<ProviderReadiness> readinessFactory,
+        Func<ProviderReadiness, string> statusLineFactory,
+        Func<ProviderReadiness, string> inlineStatusFactory,
+        string hostLabel)
+    {
+        ProviderReadiness readiness;
+        try
+        {
+            readiness = readinessFactory();
+        }
+        catch (Exception ex)
+        {
+            var checkedAtUtc = DateTimeOffset.UtcNow;
+            var hostStateText = isContainerized
+                ? $"{hostLabel} unavailable"
+                : $"{hostLabel} ({runtimeLabel})";
+            var statusLineText = $"⚠ {section} readiness check failed";
+            var inlineStatusText = $"⚠ {section} readiness check failed: {ex.Message}";
+            var historyEntries = AppendProviderHealthHistory(
+                $"{section}|{providerId}|{selectionLabel}|{runtimeLabel}",
+                checkedAtUtc,
+                statusLineText,
+                hostStateText,
+                isReady: false);
+
+            return new ProviderHealthSnapshot(
+                section,
+                providerId,
+                selectionLabel,
+                runtimeLabel,
+                statusLineText,
+                inlineStatusText,
+                ex.Message,
+                hostStateText,
+                string.Empty,
+                IsReady: false,
+                IsLive: false,
+                IsStale: false,
+                CheckedAtText: checkedAtUtc.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture),
+                History: historyEntries);
+        }
+
+        ContainerizedProbeResult? probeResult = null;
+        if (isContainerized && _coordinator.ContainerizedProbe is not null && !string.IsNullOrWhiteSpace(gpuServiceUrl))
+        {
+            probeResult = _coordinator.ContainerizedProbe.GetCurrentOrStartBackgroundProbe(gpuServiceUrl);
+        }
+
+        var remoteProviderHealth = ResolveRemoteProviderHealth(probeResult, section, providerId);
+        var checkedAt = DateTimeOffset.UtcNow;
+        var statusLine = NormalizeDiagnosticText(statusLineFactory(readiness));
+        var inlineStatus = NormalizeDiagnosticText(inlineStatusFactory(readiness));
+        var detail = string.IsNullOrWhiteSpace(remoteProviderHealth?.Detail)
+            ? readiness.RequiresModelDownload
+            ? readiness.ModelDownloadDescription ?? readiness.BlockingReason ?? "Model download required."
+            : readiness.BlockingReason ?? (readiness.IsReady ? "Ready" : "Not ready")
+            : remoteProviderHealth!.Detail!;
+        var hostState = BuildHostStateText(hostLabel, runtimeLabel, probeResult, isContainerized);
+        var metricsText = BuildMetricsText(section, providerId, probeResult, remoteProviderHealth);
+        var history = remoteProviderHealth is { History.Count: > 0 }
+            ? remoteProviderHealth.History.Select(FormatProviderHistoryEntry).ToArray()
+            : AppendProviderHealthHistory(
+                $"{section}|{providerId}|{selectionLabel}|{runtimeLabel}",
+                checkedAt,
+                statusLine,
+                hostState,
+                readiness.IsReady);
+        var checkedAtText = TryFormatCheckedAt(remoteProviderHealth?.CheckedAt)
+            ?? checkedAt.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture);
+
+        return new ProviderHealthSnapshot(
+            section,
+            providerId,
+            selectionLabel,
+            runtimeLabel,
+            statusLine,
+            inlineStatus,
+            detail,
+            hostState,
+            metricsText,
+            IsReady: readiness.IsReady,
+            IsLive: isContainerized ? probeResult?.State == ContainerizedProbeState.Available : readiness.IsReady,
+            IsStale: probeResult?.IsStale == true || remoteProviderHealth?.IsStale == true,
+            CheckedAtText: checkedAtText,
+            History: history);
+    }
+
+    private static string NormalizeDiagnosticText(string text) =>
+        string.IsNullOrWhiteSpace(text)
+            ? text
+            : text
+                .Replace("âš  ", "Warning: ", StringComparison.Ordinal)
+                .Replace("âœ“", "ok", StringComparison.Ordinal)
+                .Replace("Â·", "|", StringComparison.Ordinal);
+
+    private static string BuildHostStateText(
+        string hostLabel,
+        string runtimeLabel,
+        ContainerizedProbeResult? probeResult,
+        bool isContainerized)
+    {
+        if (!isContainerized)
+            return $"{hostLabel} ({runtimeLabel})";
+
+        if (probeResult is null)
+            return $"{hostLabel} checking";
+
+        return probeResult.State switch
+        {
+            ContainerizedProbeState.Checking => $"{hostLabel} checking",
+            ContainerizedProbeState.Unavailable => $"{hostLabel} unavailable",
+            ContainerizedProbeState.Available when probeResult.IsStale => $"{hostLabel} live (stale)",
+            ContainerizedProbeState.Available => $"{hostLabel} live",
+            _ => $"{hostLabel} checking",
+        };
+    }
+
+    private static ContainerProviderHealthSnapshot? ResolveRemoteProviderHealth(
+        ContainerizedProbeResult? probeResult,
+        string section,
+        string providerId)
+    {
+        if (probeResult is null || string.IsNullOrWhiteSpace(providerId))
+            return null;
+
+        if (string.Equals(section, "TTS", StringComparison.Ordinal))
+        {
+            if (probeResult.Capabilities?.TryGetTtsProviderHealth(providerId, out var ttsHealth) == true)
+                return ttsHealth;
+
+            if (probeResult.ProviderHealth is not null && probeResult.ProviderHealth.TryGetValue(providerId, out var liveTtsHealth))
+                return liveTtsHealth;
+        }
+
+        if (string.Equals(section, "Diarization", StringComparison.Ordinal))
+        {
+            if (probeResult.Capabilities?.TryGetDiarizationProviderHealth(providerId, out var diarizationHealth) == true)
+                return diarizationHealth;
+
+            if (probeResult.ProviderHealth is not null && probeResult.ProviderHealth.TryGetValue(providerId, out var liveDiarizationHealth))
+                return liveDiarizationHealth;
+        }
+
+        return null;
+    }
+
+    private static string BuildMetricsText(
+        string section,
+        string providerId,
+        ContainerizedProbeResult? probeResult,
+        ContainerProviderHealthSnapshot? remoteProviderHealth)
+    {
+        if (!string.Equals(section, "TTS", StringComparison.Ordinal)
+            || !string.Equals(providerId, ProviderNames.Qwen, StringComparison.Ordinal)
+            || probeResult is null)
+        {
+            return string.Empty;
+        }
+
+        var parts = new List<string>();
+        if (probeResult.QwenMaxConcurrency > 0)
+            parts.Add($"Qwen concurrency {probeResult.QwenMaxConcurrency}");
+        if (probeResult.QwenQueueDepth > 0)
+            parts.Add($"queue {probeResult.QwenQueueDepth}");
+        if (probeResult.ActiveQwenRequests > 0)
+            parts.Add($"active {probeResult.ActiveQwenRequests}");
+        if (probeResult.QwenLastQueueWaitMs.HasValue)
+            parts.Add($"last wait {probeResult.QwenLastQueueWaitMs.Value:F0} ms");
+        if (probeResult.QwenLastReferencePrepMs.HasValue)
+            parts.Add($"ref {probeResult.QwenLastReferencePrepMs.Value:F0} ms");
+        if (probeResult.QwenLastGenerationMs.HasValue)
+            parts.Add($"gen {probeResult.QwenLastGenerationMs.Value:F0} ms");
+        if (probeResult.QwenLastWarmupMs.HasValue)
+            parts.Add($"warmup {probeResult.QwenLastWarmupMs.Value:F0} ms");
+
+        if (parts.Count == 0 && remoteProviderHealth?.Metrics is { Count: > 0 })
+        {
+            foreach (var metric in remoteProviderHealth.Metrics)
+                parts.Add($"{metric.Key}={metric.Value}");
+        }
+
+        return parts.Count == 0 ? string.Empty : string.Join(" · ", parts);
+    }
+
+    private static string FormatProviderHistoryEntry(ContainerProviderHealthHistoryEntry entry)
+    {
+        var timestamp = TryFormatCheckedAt(entry.Timestamp) ?? "unknown";
+        var state = entry.Ready ? "ready" : "not ready";
+        var detail = string.IsNullOrWhiteSpace(entry.Detail) ? string.Empty : $" · {entry.Detail}";
+        var category = string.IsNullOrWhiteSpace(entry.FailureCategory) ? string.Empty : $" · {entry.FailureCategory}";
+        return $"{timestamp} · {state}{detail}{category}";
+    }
+
+    private static string? TryFormatCheckedAt(string? isoTimestamp)
+    {
+        if (string.IsNullOrWhiteSpace(isoTimestamp))
+            return null;
+
+        if (!DateTimeOffset.TryParse(isoTimestamp, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+            return isoTimestamp;
+
+        return parsed.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture);
+    }
+
+    private IReadOnlyList<string> AppendProviderHealthHistory(
+        string key,
+        DateTimeOffset checkedAtUtc,
+        string statusLine,
+        string hostState,
+        bool isReady)
+    {
+        if (!_providerHealthHistoryByKey.TryGetValue(key, out var queue))
+        {
+            queue = new Queue<string>();
+            _providerHealthHistoryByKey[key] = queue;
+        }
+
+        var entry = $"{checkedAtUtc.ToLocalTime():HH:mm:ss} · {(isReady ? "ready" : "not ready")} · {statusLine}{(string.IsNullOrWhiteSpace(hostState) ? string.Empty : $" · {hostState}")}";
+        if (queue.Count >= 3)
+            queue.Dequeue();
+        queue.Enqueue(entry);
+        return queue.ToArray();
+    }
+
+    private bool UsesContainerizedRuntime(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         snapshot.TranscriptionRuntime == ComputeProfile.Gpu
         || snapshot.TranslationRuntime == ComputeProfile.Gpu
-        || snapshot.TtsRuntime == ComputeProfile.Gpu;
+        || snapshot.TtsRuntime == ComputeProfile.Gpu
+        || IsContainerizedDiarizationProvider(snapshot.DiarizationProvider);
 
-    private static bool ContainsStartingStatus(ProviderReadinessStatus status) =>
-        IsStartingStatus(status.TranscriptionStatus)
-        || IsStartingStatus(status.TranslationStatus)
-        || IsStartingStatus(status.TtsStatus);
+    private bool IsContainerizedDiarizationProvider(string? providerId)
+    {
+        if (string.IsNullOrWhiteSpace(providerId) || _coordinator.DiarizationRegistry is null)
+            return false;
+
+        var provider = _coordinator.DiarizationRegistry
+            .GetAvailableProviders()
+            .FirstOrDefault(desc => string.Equals(desc.Id, providerId, StringComparison.Ordinal));
+        return provider?.EffectiveDefaultRuntime == InferenceRuntime.Containerized;
+    }
+
+    private static bool ContainsStartingStatus(IReadOnlyList<ProviderHealthSnapshot> health) =>
+        health.Any(snapshot => IsStartingStatus(snapshot.StatusLine));
 
     private static bool IsStartingStatus(string status) =>
         status.StartsWith('⏳');
+
+    private string ResolveDiarizationProviderLabel()
+    {
+        if (string.IsNullOrWhiteSpace(DiarizationProvider))
+            return "speaker";
+
+        var registry = _coordinator.DiarizationRegistry;
+        return registry?
+            .GetAvailableProviders()
+            .FirstOrDefault(provider => string.Equals(provider.Id, DiarizationProvider, StringComparison.Ordinal))
+            ?.DisplayName
+            ?? DiarizationProvider;
+    }
 
     private void ApplyReadinessStatus(ref string field, string value, string propertyName)
     {
@@ -766,7 +1126,7 @@ partial void OnSourcePositionMsChanged(double value)
 
         _coordinator.CurrentSettings.DiarizationProvider = normalized;
         _coordinator.NotifySettingsModified();
-        RefreshAutoSpeakerDetectionStatus();
+        RefreshProviderHealthDiagnostics();
         RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
     }
 
@@ -1124,58 +1484,13 @@ partial void OnSourcePositionMsChanged(double value)
             OnPropertyChanged(nameof(AvailableTranscriptionModels));
             OnPropertyChanged(nameof(AvailableTranslationModels));
             OnPropertyChanged(nameof(AvailableTtsOptions));
-            RefreshAutoSpeakerDetectionStatus();
-            RefreshProviderReadinessStatuses();
+            RefreshProviderHealthDiagnostics();
             RebuildSpeakerIds();
         }
         finally
         {
             _isSynchronizingPipelineSettings = false;
         }
-    }
-
-    /// <summary>
-    /// Updates AutoSpeakerDetectionStatus to reflect whether the selected diarization provider is available and ready.
-    /// </summary>
-    /// <remarks>
-    /// Sets a user-facing status string for these cases:
-    /// - No provider selected: explains manual speaker mapping is the default.
-    /// - Registry unavailable: indicates diarization is not supported in this build.
-    /// - Provider present: reports enabled when ready, otherwise shows the provider's display name and the blocking reason.
-    /// - Exceptions during readiness check: reports the failure message while noting manual mapping still works.
-    /// </remarks>
-    private void RefreshAutoSpeakerDetectionStatus()
-    {
-        if (string.IsNullOrWhiteSpace(DiarizationProvider))
-        {
-            CancelAutoSpeakerDetectionRefresh();
-            AutoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
-            return;
-        }
-
-        var registry = _coordinator.DiarizationRegistry;
-        if (registry is null)
-        {
-            CancelAutoSpeakerDetectionRefresh();
-            AutoSpeakerDetectionStatus = "⚠ Speaker diarization is unavailable in this build. Manual mapping remains available.";
-            return;
-        }
-
-        var providerLabel = ResolveDiarizationProviderLabel();
-        AutoSpeakerDetectionStatus = $"Checking {providerLabel} readiness…";
-        QueueAutoSpeakerDetectionStatusRefresh(registry, DiarizationProvider, providerLabel);
-    }
-    private string ResolveDiarizationProviderLabel()
-    {
-        if (string.IsNullOrWhiteSpace(DiarizationProvider))
-            return "speaker";
-
-        var registry = _coordinator.DiarizationRegistry;
-        return registry?
-            .GetAvailableProviders()
-            .FirstOrDefault(provider => string.Equals(provider.Id, DiarizationProvider, StringComparison.Ordinal))
-            ?.DisplayName
-            ?? DiarizationProvider;
     }
 
     /// <summary>
@@ -1206,75 +1521,6 @@ partial void OnSourcePositionMsChanged(double value)
         }
 
         DiarizationProviderOptions = options;
-    }
-
-    private void QueueAutoSpeakerDetectionStatusRefresh(
-        IDiarizationRegistry registry,
-        string providerId,
-        string providerLabel)
-    {
-        var version = Interlocked.Increment(ref _autoSpeakerDetectionRefreshVersion);
-        var cts = new CancellationTokenSource();
-        var previous = Interlocked.Exchange(ref _autoSpeakerDetectionRefreshCts, cts);
-        previous?.Cancel();
-        previous?.Dispose();
-
-        _ = RefreshAutoSpeakerDetectionStatusAsync(
-            registry,
-            providerId,
-            providerLabel,
-            _coordinator.CurrentSettings,
-            _coordinator.KeyStore,
-            version,
-            cts.Token);
-    }
-
-    private async Task RefreshAutoSpeakerDetectionStatusAsync(
-        IDiarizationRegistry registry,
-        string providerId,
-        string providerLabel,
-        Services.Settings.AppSettings settings,
-        ApiKeyStore? keyStore,
-        int version,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var readiness = await Task.Run(
-                () => registry.CheckReadiness(providerId, settings, keyStore),
-                cancellationToken);
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                if (version != _autoSpeakerDetectionRefreshVersion || cancellationToken.IsCancellationRequested)
-                    return;
-
-                AutoSpeakerDetectionStatus = readiness.IsReady
-                    ? $"Speaker diarization is enabled via {providerLabel}."
-                    : $"⚠ {providerLabel} is not ready: {readiness.BlockingReason}. Manual mapping will still work.";
-            });
-        }
-        catch (OperationCanceledException)
-        {
-            // Superseded by a newer settings refresh.
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                if (version != _autoSpeakerDetectionRefreshVersion || cancellationToken.IsCancellationRequested)
-                    return;
-
-                AutoSpeakerDetectionStatus = $"⚠ Speaker diarization readiness check failed: {ex.Message}. Manual mapping will still work.";
-            });
-        }
-    }
-
-    private void CancelAutoSpeakerDetectionRefresh()
-    {
-        _autoSpeakerDetectionRefreshCts?.Cancel();
-        _autoSpeakerDetectionRefreshCts?.Dispose();
-        _autoSpeakerDetectionRefreshCts = null;
     }
     private string NormalizeDiarizationProviderSelection(string? value)
     {
@@ -2305,7 +2551,7 @@ partial void OnSourcePositionMsChanged(double value)
         await RefreshSegmentsAsync();
     }
 
-    public void Dispose()
+public void Dispose()
     {
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
         _coordinator.SettingsModified -= OnCoordinatorSettingsModified;
@@ -2320,12 +2566,26 @@ partial void OnSourcePositionMsChanged(double value)
         _controlsHideTimer.Stop();
         _controlsHideTimer.Tick -= OnControlsHideTimerTick;
 
-        _providerReadinessRefreshCts?.Cancel();
-        _providerReadinessRefreshCts?.Dispose();
-        _providerReadinessRefreshCts = null;
-
-        CancelAutoSpeakerDetectionRefresh();
+        _providerHealthRefreshCts?.Cancel();
+        _providerHealthRefreshCts?.Dispose();
+        _providerHealthRefreshCts = null;
 
         GC.SuppressFinalize(this);
     }
 }
+
+public sealed record ProviderHealthSnapshot(
+    string Section,
+    string ProviderId,
+    string SelectionLabel,
+    string RuntimeLabel,
+    string StatusLine,
+    string InlineStatus,
+    string Detail,
+    string HostState,
+    string MetricsText,
+    bool IsReady,
+    bool IsLive,
+    bool IsStale,
+    string CheckedAtText,
+    IReadOnlyList<string> History);

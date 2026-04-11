@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,7 +25,19 @@ public sealed record ContainerizedProbeResult(
     string? CapabilitiesError = null,
     TimeSpan? Duration = null,
     bool WasCacheHit = false,
-    bool IsStale = false);
+    bool IsStale = false,
+    IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? ProviderHealth = null,
+    int ActiveRequests = 0,
+    int ActiveQwenRequests = 0,
+    int ActiveDiarizationRequests = 0,
+    bool Busy = false,
+    string? BusyReason = null,
+    int QwenMaxConcurrency = 0,
+    int QwenQueueDepth = 0,
+    double? QwenLastQueueWaitMs = null,
+    double? QwenLastGenerationMs = null,
+    double? QwenLastReferencePrepMs = null,
+    double? QwenLastWarmupMs = null);
 
 public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
 {
@@ -136,11 +149,12 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     return completedResult;
                 }
 
-                if (entry.LastAvailableResult is not null)
+                var staleAvailable = GetStaleAvailableResult(entry);
+                if (staleAvailable is not null)
                 {
                     _log.Info($"Container probe returning stale available result while refresh is in-flight: url={normalizedUrl}");
                     ReportCacheAccess(normalizedUrl, true);
-                    return entry.LastAvailableResult with { WasCacheHit = true, IsStale = true };
+                    return staleAvailable with { WasCacheHit = true, IsStale = true };
                 }
 
                 _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
@@ -169,6 +183,14 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             
             // Fire-and-forget with proper exception handling to prevent resource leaks
             ObserveCompletionWithFaultHandling(normalizedUrl, entry, entry.InFlightTask);
+            var staleCachedAvailable = !forceRefresh ? GetStaleAvailableResult(entry) : null;
+            if (staleCachedAvailable is not null)
+            {
+                _log.Info($"Container probe returning stale available result while refresh is starting: url={normalizedUrl}");
+                ReportCacheAccess(normalizedUrl, true);
+                return staleCachedAvailable with { WasCacheHit = true, IsStale = true };
+            }
+
             return Checking(normalizedUrl);
         }
     }
@@ -386,7 +408,19 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     health.Capabilities,
                     health.CapabilitiesError,
                     stopwatch.Elapsed,
-                    WasCacheHit: false);
+                    WasCacheHit: false,
+                    ProviderHealth: health.ProviderHealth,
+                    ActiveRequests: health.ActiveRequests,
+                    ActiveQwenRequests: health.ActiveQwenRequests,
+                    ActiveDiarizationRequests: health.ActiveDiarizationRequests,
+                    Busy: health.Busy,
+                    BusyReason: health.BusyReason,
+                    QwenMaxConcurrency: health.QwenMaxConcurrency,
+                    QwenQueueDepth: health.QwenQueueDepth,
+                    QwenLastQueueWaitMs: health.QwenLastQueueWaitMs,
+                    QwenLastGenerationMs: health.QwenLastGenerationMs,
+                    QwenLastReferencePrepMs: health.QwenLastReferencePrepMs,
+                    QwenLastWarmupMs: health.QwenLastWarmupMs);
             }
             catch (OperationCanceledException)
             {
@@ -472,4 +506,11 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         public ContainerizedProbeResult? LastAvailableResult { get; set; }
         public DateTimeOffset ExpiresAtUtc { get; set; }
     }
+
+    private static ContainerizedProbeResult? GetStaleAvailableResult(ProbeEntry entry) =>
+        entry.LastAvailableResult is { State: ContainerizedProbeState.Available } lastAvailable
+            ? lastAvailable
+            : entry.CachedResult is { State: ContainerizedProbeState.Available } cachedAvailable
+                ? cachedAvailable
+                : null;
 }

@@ -536,7 +536,9 @@ public sealed class ContainerizedInferenceClient
                     capabilitiesDto.Diarization?.Detail,
                     NormalizeDiarizationProviderReadiness(capabilitiesDto.Diarization?.Providers),
                     NormalizeDiarizationProviderDetails(capabilitiesDto.Diarization?.ProviderDetails),
-                    NormalizeDiarizationDefaultProvider(capabilitiesDto.Diarization?.DefaultProvider));
+                    NormalizeDiarizationDefaultProvider(capabilitiesDto.Diarization?.DefaultProvider),
+                    TtsProviderHealth: NormalizeProviderHealthMap(capabilitiesDto.Tts?.ProviderHealth),
+                    DiarizationProviderHealth: NormalizeDiarizationProviderHealth(capabilitiesDto.Diarization?.ProviderHealth));
             }
             catch (Exception ex)
             {
@@ -555,7 +557,14 @@ public sealed class ContainerizedInferenceClient
                 ActiveQwenRequests: live.ActiveQwenRequests,
                 ActiveDiarizationRequests: live.ActiveDiarizationRequests,
                 Busy: live.Busy,
-                BusyReason: live.BusyReason);
+                BusyReason: live.BusyReason,
+                ProviderHealth: NormalizeProviderHealthMap(live.ProviderHealth),
+                QwenMaxConcurrency: live.QwenMaxConcurrency,
+                QwenQueueDepth: live.QwenQueueDepth,
+                QwenLastQueueWaitMs: live.QwenLastQueueWaitMs,
+                QwenLastGenerationMs: live.QwenLastGenerationMs,
+                QwenLastReferencePrepMs: live.QwenLastReferencePrepMs,
+                QwenLastWarmupMs: live.QwenLastWarmupMs);
         }
         catch (Exception ex)
         {
@@ -617,6 +626,27 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("busy_reason")]
         public string? BusyReason { get; set; }
+
+        [JsonPropertyName("provider_health")]
+        public Dictionary<string, ProviderHealthSnapshotDto>? ProviderHealth { get; set; }
+
+        [JsonPropertyName("qwen_max_concurrency")]
+        public int QwenMaxConcurrency { get; set; }
+
+        [JsonPropertyName("qwen_queue_depth")]
+        public int QwenQueueDepth { get; set; }
+
+        [JsonPropertyName("qwen_last_queue_wait_ms")]
+        public double? QwenLastQueueWaitMs { get; set; }
+
+        [JsonPropertyName("qwen_last_generation_ms")]
+        public double? QwenLastGenerationMs { get; set; }
+
+        [JsonPropertyName("qwen_last_reference_prep_ms")]
+        public double? QwenLastReferencePrepMs { get; set; }
+
+        [JsonPropertyName("qwen_last_warmup_ms")]
+        public double? QwenLastWarmupMs { get; set; }
     }
 
     private sealed class CapabilitiesResponseDto
@@ -650,6 +680,54 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("default_provider")]
         public string? DefaultProvider { get; set; }
+
+        [JsonPropertyName("provider_health")]
+        public Dictionary<string, ProviderHealthSnapshotDto>? ProviderHealth { get; set; }
+    }
+
+    private sealed class ProviderHealthSnapshotDto
+    {
+        [JsonPropertyName("ready")]
+        public bool Ready { get; set; }
+
+        [JsonPropertyName("state")]
+        public string? State { get; set; }
+
+        [JsonPropertyName("detail")]
+        public string? Detail { get; set; }
+
+        [JsonPropertyName("checked_at")]
+        public string? CheckedAt { get; set; }
+
+        [JsonPropertyName("is_stale")]
+        public bool IsStale { get; set; }
+
+        [JsonPropertyName("failure_category")]
+        public string? FailureCategory { get; set; }
+
+        [JsonPropertyName("metrics")]
+        public Dictionary<string, JsonElement>? Metrics { get; set; }
+
+        [JsonPropertyName("history")]
+        public List<ProviderHealthHistoryEntryDto>? History { get; set; }
+    }
+
+    private sealed class ProviderHealthHistoryEntryDto
+    {
+        [JsonPropertyName("timestamp")]
+        public string? Timestamp { get; set; }
+
+        [JsonPropertyName("state")]
+        public string? State { get; set; }
+
+        [JsonPropertyName("ready")]
+        public bool Ready { get; set; }
+
+        [JsonPropertyName("detail")]
+        public string? Detail { get; set; }
+
+        [JsonPropertyName("failure_category")]
+        public string? FailureCategory { get; set; }
     }
 
     private sealed class TranscriptionApiResponseDto
@@ -826,6 +904,61 @@ public sealed class ContainerizedInferenceClient
         return normalized;
     }
 
+    private static IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? NormalizeProviderHealthMap(
+        IReadOnlyDictionary<string, ProviderHealthSnapshotDto>? providerHealth)
+    {
+        if (providerHealth is null || providerHealth.Count == 0)
+            return null;
+
+        return providerHealth.ToDictionary(
+            pair => pair.Key,
+            pair => ToProviderHealthSnapshot(pair.Value),
+            StringComparer.Ordinal);
+    }
+
+    private static IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? NormalizeDiarizationProviderHealth(
+        IReadOnlyDictionary<string, ProviderHealthSnapshotDto>? providerHealth)
+    {
+        if (providerHealth is null || providerHealth.Count == 0)
+            return null;
+
+        var normalized = new Dictionary<string, ContainerProviderHealthSnapshot>(StringComparer.Ordinal);
+        foreach (var pair in providerHealth)
+            normalized[InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(pair.Key)] = ToProviderHealthSnapshot(pair.Value);
+        return normalized;
+    }
+
+    private static ContainerProviderHealthSnapshot ToProviderHealthSnapshot(ProviderHealthSnapshotDto dto)
+    {
+        var metrics = dto.Metrics is null || dto.Metrics.Count == 0
+            ? null
+            : dto.Metrics.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value.ToString(),
+                StringComparer.Ordinal);
+
+        var history = dto.History is null || dto.History.Count == 0
+            ? Array.Empty<ContainerProviderHealthHistoryEntry>()
+            : dto.History
+                .Select(entry => new ContainerProviderHealthHistoryEntry(
+                    entry.Timestamp,
+                    entry.State,
+                    entry.Ready,
+                    entry.Detail,
+                    entry.FailureCategory))
+                .ToArray();
+
+        return new ContainerProviderHealthSnapshot(
+            dto.Ready,
+            dto.State,
+            dto.Detail,
+            dto.CheckedAt,
+            dto.IsStale,
+            dto.FailureCategory,
+            metrics,
+            history);
+    }
+
     /// <summary>
     /// Normalizes a diarization default provider identifier for use with the runtime catalog.
     /// </summary>
@@ -938,7 +1071,9 @@ public sealed record ContainerCapabilitiesSnapshot(
     string? DiarizationDetail = null,
     IReadOnlyDictionary<string, bool>? DiarizationProviders = null,
     IReadOnlyDictionary<string, string>? DiarizationProviderDetails = null,
-    string? DiarizationDefaultProvider = null)
+    string? DiarizationDefaultProvider = null,
+    IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? TtsProviderHealth = null,
+    IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? DiarizationProviderHealth = null)
 {
     /// <summary>
     /// Indicates whether the given capability stage is ready.
@@ -995,6 +1130,14 @@ public sealed record ContainerCapabilitiesSnapshot(
         return found || detail is not null;
     }
 
+    public bool TryGetTtsProviderHealth(string providerId, out ContainerProviderHealthSnapshot? providerHealth)
+    {
+        providerHealth = null;
+        return !string.IsNullOrWhiteSpace(providerId)
+            && TtsProviderHealth is not null
+            && TtsProviderHealth.TryGetValue(providerId, out providerHealth);
+    }
+
     /// <summary>
     /// Attempts to retrieve the readiness and detail information for a diarization provider identified by <paramref name="providerId"/>.
     /// </summary>
@@ -1021,7 +1164,32 @@ public sealed record ContainerCapabilitiesSnapshot(
 
         return found || detail is not null;
     }
+
+    public bool TryGetDiarizationProviderHealth(string providerId, out ContainerProviderHealthSnapshot? providerHealth)
+    {
+        providerHealth = null;
+        return !string.IsNullOrWhiteSpace(providerId)
+            && DiarizationProviderHealth is not null
+            && DiarizationProviderHealth.TryGetValue(providerId, out providerHealth);
+    }
 }
+
+public sealed record ContainerProviderHealthHistoryEntry(
+    string? Timestamp,
+    string? State,
+    bool Ready,
+    string? Detail,
+    string? FailureCategory);
+
+public sealed record ContainerProviderHealthSnapshot(
+    bool Ready,
+    string? State,
+    string? Detail,
+    string? CheckedAt,
+    bool IsStale,
+    string? FailureCategory,
+    IReadOnlyDictionary<string, string>? Metrics,
+    IReadOnlyList<ContainerProviderHealthHistoryEntry> History);
 
 public sealed record ContainerHealthStatus(
     bool IsAvailable,
@@ -1035,7 +1203,14 @@ public sealed record ContainerHealthStatus(
     int ActiveQwenRequests = 0,
     int ActiveDiarizationRequests = 0,
     bool Busy = false,
-    string? BusyReason = null)
+    string? BusyReason = null,
+    IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? ProviderHealth = null,
+    int QwenMaxConcurrency = 0,
+    int QwenQueueDepth = 0,
+    double? QwenLastQueueWaitMs = null,
+    double? QwenLastGenerationMs = null,
+    double? QwenLastReferencePrepMs = null,
+    double? QwenLastWarmupMs = null)
 {
     /// <summary>
         /// Create a ContainerHealthStatus that marks the container at the given URL as unavailable.
@@ -1055,15 +1230,36 @@ public sealed record ContainerHealthStatus(
             var cuda = CudaAvailable
                 ? $"CUDA {CudaVersion ?? "✓"}"
                 : "CPU-only";
+            var activity = BuildActivitySummary();
 
             if (Capabilities is null)
             {
                 return string.IsNullOrWhiteSpace(CapabilitiesError)
-                    ? $"Healthy ({cuda})"
-                    : $"Healthy ({cuda}) · capabilities unavailable";
+                    ? $"Healthy ({cuda}){activity}"
+                    : $"Healthy ({cuda}){activity} · capabilities unavailable";
             }
 
-            return $"Healthy ({cuda}) · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")} · diar={(Capabilities.DiarizationReady ? "✓" : "x")}";
+            return $"Healthy ({cuda}){activity} · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")} · diar={(Capabilities.DiarizationReady ? "✓" : "x")}";
         }
+    }
+
+    private string BuildActivitySummary()
+    {
+        var parts = new List<string>();
+
+        if (ActiveRequests > 0)
+            parts.Add($"active={ActiveRequests}");
+        if (ActiveQwenRequests > 0)
+            parts.Add($"qwen={ActiveQwenRequests}");
+        if (ActiveDiarizationRequests > 0)
+            parts.Add($"diarization={ActiveDiarizationRequests}");
+        if (QwenQueueDepth > 0)
+            parts.Add($"qwen-queue={QwenQueueDepth}");
+        if (QwenMaxConcurrency > 0)
+            parts.Add($"qwen-max={QwenMaxConcurrency}");
+        if (Busy)
+            parts.Add(string.IsNullOrWhiteSpace(BusyReason) ? "busy" : $"busy={BusyReason}");
+
+        return parts.Count == 0 ? string.Empty : $" · {string.Join(" · ", parts)}";
     }
 }

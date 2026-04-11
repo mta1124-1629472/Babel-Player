@@ -102,6 +102,55 @@ public sealed class ContainerizedServiceProbeTests
     }
 
     [Fact]
+    public async Task GetCurrentOrStartBackgroundProbe_ReturnsStaleAvailableResultWhenCacheExpires()
+    {
+        var callCount = 0;
+        using var log = new AppLog(Path.GetTempFileName());
+        var releaseRefresh = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var probe = new ContainerizedServiceProbe(log, async (url, _, ct) =>
+        {
+            var currentCall = Interlocked.Increment(ref callCount);
+            if (currentCall == 1)
+            {
+                await Task.Delay(10, ct);
+            }
+            else
+            {
+                await releaseRefresh.Task.WaitAsync(ct);
+            }
+
+            return new ContainerHealthStatus(
+                IsAvailable: true,
+                CudaAvailable: false,
+                CudaVersion: null,
+                ServiceUrl: url,
+                ErrorMessage: null,
+                Capabilities: new ContainerCapabilitiesSnapshot(true, null, true, null, true, null));
+        });
+
+        var first = await probe.WaitForProbeAsync(
+            "http://localhost:8000",
+            forceRefresh: true,
+            waitTimeout: TimeSpan.FromSeconds(1));
+
+        Assert.Equal(ContainerizedProbeState.Available, first.State);
+        Assert.False(first.IsStale);
+
+        ExpireCachedProbeResult(probe, "http://localhost:8000");
+        var stale = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
+        await WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
+
+        Assert.Equal(ContainerizedProbeState.Available, stale.State);
+        Assert.True(stale.IsStale);
+        Assert.True(stale.WasCacheHit);
+        Assert.True(callCount >= 2);
+
+        releaseRefresh.SetResult(true);
+        await Task.Delay(50);
+    }
+
+    [Fact]
     public async Task GetCurrentOrStartBackgroundProbe_HandlesProbeFunctionException()
     {
         using var log = new AppLog(Path.GetTempFileName());
@@ -155,6 +204,18 @@ public sealed class ContainerizedServiceProbeTests
         var expiresProperty = entry.GetType().GetProperty("ExpiresAtUtc")
             ?? throw new InvalidOperationException("Could not find ExpiresAtUtc on probe cache entry.");
         expiresProperty.SetValue(entry, DateTimeOffset.UtcNow.AddSeconds(-1));
+    }
+
+    private static async Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (getCount() >= expectedMinimum)
+                return;
+
+            await Task.Delay(10);
+        }
     }
 
     [Fact]
