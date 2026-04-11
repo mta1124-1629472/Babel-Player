@@ -460,6 +460,80 @@
                             </Grid>
                         </StackPanel>
 
+                        <!-- PROVIDER DIAGNOSTICS -->
+                        <StackPanel Spacing="8">
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="PROVIDER DIAGNOSTICS" FontSize="10"
+                                            Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                            </Border>
+
+                            <ItemsControl ItemsSource="{Binding Playback.ProviderHealthSnapshots}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ProviderHealthSnapshot">
+                                        <Border Padding="10,8"
+                                                Background="{DynamicResource ControlBackgroundBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="6"
+                                                Margin="0,0,0,6">
+                                            <StackPanel Spacing="4">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding Section}"
+                                                               FontSize="12"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource PrimaryTextBrush}" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding StatusLine}"
+                                                               FontSize="11"
+                                                               Foreground="{DynamicResource StatusTextBrush}"
+                                                               HorizontalAlignment="Right" />
+                                                </Grid>
+
+                                                <TextBlock Text="{Binding SelectionLabel}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding Detail}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource StatusTextBrush}"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding HostState}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource StatusTextBrush}"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding MetricsText}"
+                                                           FontSize="10"
+                                                           Foreground="{DynamicResource StatusTextBrush}"
+                                                           TextWrapping="Wrap"
+                                                           IsVisible="{Binding MetricsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Text="{Binding CheckedAtText}"
+                                                               FontSize="10"
+                                                               Foreground="{DynamicResource StatusTextBrush}" />
+                                                    <TextBlock Text="stale"
+                                                               FontSize="10"
+                                                               Foreground="{DynamicResource StatusTextBrush}"
+                                                               IsVisible="{Binding IsStale}" />
+                                                </StackPanel>
+
+                                                <ItemsControl ItemsSource="{Binding History}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding}"
+                                                                       FontSize="10"
+                                                                       Foreground="{DynamicResource StatusTextBrush}"
+                                                                       TextWrapping="Wrap" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
                         <Border Height="260"
                                 Background="Transparent"
                                 IsHitTestVisible="False" />

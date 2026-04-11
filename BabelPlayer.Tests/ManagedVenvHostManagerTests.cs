@@ -101,6 +101,27 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     }
 
     [Fact]
+    public void CreateHostProcessStartInfo_SetsQwenConcurrencyEnvironmentVariable()
+    {
+        var original = Environment.GetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable);
+        Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, "2");
+        try
+        {
+            var psi = ManagedVenvHostManager.CreateHostProcessStartInfo(
+                "python.exe",
+                Path.Combine(_dir, "main.py"),
+                "float16");
+
+            Assert.True(psi.Environment.TryGetValue(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, out var value));
+            Assert.Equal("2", value);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, original);
+        }
+    }
+
+    [Fact]
     public async Task EnsureStartedAsync_GpuSelectedWithoutCuda_FailsWithoutFallingBack()
     {
         var manager = new ManagedVenvHostManager(

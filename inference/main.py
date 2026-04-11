@@ -3,6 +3,8 @@
 
 import argparse
 import asyncio
+from collections import deque
+from contextlib import asynccontextmanager
 import importlib.util
 import json
 import logging
@@ -11,8 +13,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from time import perf_counter
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
@@ -62,6 +65,9 @@ _provider_health_cache: dict[str, dict[str, object]] = {
         "detail": "Qwen3-TTS capability check pending",
         "checked_at": None,
         "is_stale": True,
+        "failure_category": None,
+        "metrics": {},
+        "history": deque(maxlen=8),
     },
     "nemo": {
         "ready": False,
@@ -69,15 +75,21 @@ _provider_health_cache: dict[str, dict[str, object]] = {
         "detail": "NeMo capability check pending",
         "checked_at": None,
         "is_stale": True,
+        "failure_category": None,
+        "metrics": {},
+        "history": deque(maxlen=8),
     },
 }
 _provider_health_refresh_lock: asyncio.Lock | None = None
 _provider_health_refresh_task: asyncio.Task | None = None
 _qwen_model_load_lock: asyncio.Lock | None = None
 _qwen_segment_semaphore: asyncio.Semaphore | None = None
+_qwen_segment_waiters = 0
 _active_request_count = 0
 _active_qwen_request_count = 0
 _active_diarization_request_count = 0
+_flash_attn_available: bool | None = None
+_qwen_max_concurrency = 1
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -178,6 +190,13 @@ class HealthLiveResponse(BaseModel):
     active_diarization_requests: int = 0
     busy: bool = False
     busy_reason: Optional[str] = None
+    qwen_max_concurrency: int = 1
+    qwen_queue_depth: int = 0
+    qwen_last_queue_wait_ms: Optional[float] = None
+    qwen_last_generation_ms: Optional[float] = None
+    qwen_last_reference_prep_ms: Optional[float] = None
+    qwen_last_warmup_ms: Optional[float] = None
+    provider_health: Optional[dict[str, "ProviderHealthSnapshot"]] = None
 
 
 class StageCapability(BaseModel):
@@ -185,8 +204,28 @@ class StageCapability(BaseModel):
     detail: Optional[str] = None
     providers: Optional[dict[str, bool]] = None
     provider_details: Optional[dict[str, str]] = None
+    provider_health: Optional[dict[str, "ProviderHealthSnapshot"]] = None
     default_provider: Optional[str] = None
     engines: Optional[list[str]] = None
+
+
+class ProviderHealthHistoryEntry(BaseModel):
+    timestamp: str
+    state: str
+    ready: bool
+    detail: str
+    failure_category: Optional[str] = None
+
+
+class ProviderHealthSnapshot(BaseModel):
+    ready: bool
+    state: str
+    detail: str
+    checked_at: Optional[str] = None
+    is_stale: bool = False
+    failure_category: Optional[str] = None
+    metrics: dict[str, object] = Field(default_factory=dict)
+    history: list[ProviderHealthHistoryEntry] = Field(default_factory=list)
 
 
 class CapabilitiesResponse(BaseModel):
@@ -322,6 +361,27 @@ def _find_module(module_name: str):
         return None
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _resolve_qwen_max_concurrency() -> int:
+    raw_value = os.getenv("BABEL_QWEN_MAX_CONCURRENCY", "1").strip()
+    try:
+        requested = int(raw_value)
+    except ValueError:
+        logger.warning("Invalid BABEL_QWEN_MAX_CONCURRENCY=%r; defaulting to 1", raw_value)
+        return 1
+    return max(1, min(2, requested))
+
+
+def _probe_flash_attn_available() -> bool:
+    global _flash_attn_available
+    if _flash_attn_available is None:
+        _flash_attn_available = _find_module("flash_attn") is not None
+    return _flash_attn_available
+
+
 def _ensure_provider_health_defaults(provider: str) -> dict[str, object]:
     """
     Ensure a provider health cache entry exists for the given provider and return it.
@@ -347,8 +407,15 @@ def _ensure_provider_health_defaults(provider: str) -> dict[str, object]:
             "detail": f"{provider} capability check pending",
             "checked_at": None,
             "is_stale": True,
+            "failure_category": None,
+            "metrics": {},
+            "history": deque(maxlen=8),
         }
         _provider_health_cache[provider] = entry
+    if not isinstance(entry.get("history"), deque):
+        entry["history"] = deque(entry.get("history", []), maxlen=8)
+    if not isinstance(entry.get("metrics"), dict):
+        entry["metrics"] = {}
     return entry
 
 
@@ -375,7 +442,7 @@ def _provider_health_is_stale(provider: str) -> bool:
     if not isinstance(checked_at, datetime):
         entry["is_stale"] = True
         return True
-    age_seconds = (datetime.utcnow() - checked_at).total_seconds()
+    age_seconds = (_utc_now() - checked_at).total_seconds()
     is_stale = age_seconds >= PROVIDER_HEALTH_REFRESH_STALE_SECONDS
     entry["is_stale"] = is_stale
     return is_stale
@@ -388,6 +455,8 @@ def _record_provider_health(
     detail: str,
     *,
     checked_at: Optional[datetime] = None,
+    failure_category: Optional[str] = None,
+    metrics: Optional[dict[str, object]] = None,
 ) -> None:
     """
     Record the readiness and state details for a health provider in the provider health cache.
@@ -407,50 +476,84 @@ def _record_provider_health(
     entry["ready"] = ready
     entry["state"] = state
     entry["detail"] = detail
-    entry["checked_at"] = checked_at or datetime.utcnow()
+    entry["checked_at"] = checked_at or _utc_now()
     entry["is_stale"] = False
+    entry["failure_category"] = failure_category
+    if metrics:
+        entry.setdefault("metrics", {}).update(metrics)
+
+    history = entry.setdefault("history", deque(maxlen=8))
+    history.appendleft(
+        {
+            "timestamp": entry["checked_at"].isoformat(),
+            "state": state,
+            "ready": ready,
+            "detail": detail,
+            "failure_category": failure_category,
+        }
+    )
 
 
-def _mark_provider_health_refreshing(provider: str, detail: str) -> None:
-    """
-    Mark a provider's health entry as refreshing and mark its cached status as stale.
+def _mark_provider_health_refreshing(
+    provider: str,
+    detail: str,
+    *,
+    failure_category: Optional[str] = None,
+) -> None:
+    _record_provider_health(
+        provider,
+        False,
+        "refreshing",
+        detail,
+        failure_category=failure_category,
+    )
+    _provider_health_cache[provider]["is_stale"] = True
 
-    Preserves the last-known "ready" and other probe fields from the existing cache entry when present,
-    so that callers can still see stale success while a refresh is in progress. Only sets state to
-    "refreshing", marks as stale, and updates the detail field. Falls back to recording a fresh not-ready
-    state when there is no existing cache entry.
 
-    Parameters:
-        provider (str): Provider identifier (e.g., "qwen" or "nemo").
-        detail (str): Human-readable detail or reason for the refreshing state.
-    """
-    existing = _provider_health_cache.get(provider)
-    if existing is not None:
-        # Preserve last-known probe values; only update state, detail, and staleness
-        existing["state"] = "refreshing"
-        existing["detail"] = detail
-        existing["is_stale"] = True
-    else:
-        # No existing entry: record a fresh not-ready state
-        _record_provider_health(provider, False, "refreshing", detail)
-        _provider_health_cache[provider]["is_stale"] = True
+def _build_provider_health_snapshot(provider: str) -> ProviderHealthSnapshot:
+    entry = _ensure_provider_health_defaults(provider)
+    history = [
+        ProviderHealthHistoryEntry(**item)
+        for item in list(entry.get("history", []))
+    ]
+    checked_at = entry.get("checked_at")
+    checked_at_text = checked_at.isoformat() if isinstance(checked_at, datetime) else None
+    return ProviderHealthSnapshot(
+        ready=bool(entry.get("ready")),
+        state=str(entry.get("state", "pending")),
+        detail=str(entry.get("detail", "")),
+        checked_at=checked_at_text,
+        is_stale=bool(entry.get("is_stale")),
+        failure_category=entry.get("failure_category"),
+        metrics=dict(entry.get("metrics", {})),
+        history=history,
+    )
+
+
+def _update_provider_health_metrics(provider: str, **metrics: object) -> None:
+    entry = _ensure_provider_health_defaults(provider)
+    entry.setdefault("metrics", {}).update(metrics)
+
+
+def _get_provider_health_metrics(provider: str) -> dict[str, object]:
+    entry = _ensure_provider_health_defaults(provider)
+    return dict(entry.get("metrics", {}))
 
 
 async def _ensure_provider_health_primitives() -> None:
-    """
-    Ensure module-level async primitives for provider health and Qwen concurrency are initialized.
-    
-    Creates (if not already set) an asyncio.Lock for provider health refresh coordination, an
-    asyncio.Lock for serializing Qwen model loads, and an asyncio.Semaphore(1) to limit concurrent
-    Qwen segment syntheses.
-    """
-    global _provider_health_refresh_lock, _qwen_model_load_lock, _qwen_segment_semaphore
+    global _provider_health_refresh_lock, _qwen_model_load_lock, _qwen_segment_semaphore, _qwen_max_concurrency
     if _provider_health_refresh_lock is None:
         _provider_health_refresh_lock = asyncio.Lock()
     if _qwen_model_load_lock is None:
         _qwen_model_load_lock = asyncio.Lock()
     if _qwen_segment_semaphore is None:
-        _qwen_segment_semaphore = asyncio.Semaphore(1)
+        _qwen_max_concurrency = _resolve_qwen_max_concurrency()
+        _qwen_segment_semaphore = asyncio.Semaphore(_qwen_max_concurrency)
+        _update_provider_health_metrics(
+            "qwen",
+            max_concurrency=_qwen_max_concurrency,
+            queue_depth=_qwen_segment_waiters,
+        )
 
 
 def _schedule_provider_health_refresh(force: bool = False) -> None:
@@ -469,26 +572,40 @@ def _schedule_provider_health_refresh(force: bool = False) -> None:
     _provider_health_refresh_task = asyncio.create_task(_refresh_provider_health_cache(force=force))
 
 
-def _check_nemo_diarization_contract() -> tuple[bool, str]:
+def _check_nemo_import_viability() -> tuple[bool, str]:
     """
-    Check the NeMo diarization runtime contract without instantiating the diarizer.
-    
-    Validates that required modules are importable and that the NeMo diarization
-    configuration exposes the expected fields used by probes and background refresh.
-    
-    Returns:
-        tuple: A pair where the first element is `True` if the contract appears valid
-        and `False` otherwise; the second element is a human-readable detail string
-        describing success or the failure reason.
+    Check that the NeMo diarization import stack is available without constructing the diarizer.
+
+    This stays lightweight enough for background health refresh and startup probing.
     """
     missing: list[str] = []
     if _find_module("nemo.collections.asr") is None:
         missing.append("nemo.collections.asr")
     if _find_module("omegaconf") is None:
         missing.append("omegaconf")
+    if _find_module("lightning.pytorch") is None:
+        missing.append("lightning.pytorch")
+
     if missing:
         return False, "Missing diarization dependency: " + ", ".join(missing)
 
+    try:
+        import nemo.collections.asr  # noqa: F401
+        import lightning.pytorch  # noqa: F401
+        import omegaconf  # noqa: F401
+    except Exception as exc:
+        return False, f"NeMo import failed: {exc}"
+
+    return True, "NeMo import dependencies available"
+
+
+def _check_nemo_diarization_contract() -> tuple[bool, str]:
+    """
+    Check the NeMo diarization config contract without constructing the diarizer.
+
+    This validates the config keys that the background refresh and the startup
+    probe rely on, while keeping the public capabilities endpoint lightweight.
+    """
     try:
         config = _build_nemo_diarization_config(
             Path("probe-manifest.json"),
@@ -500,18 +617,64 @@ def _check_nemo_diarization_contract() -> tuple[bool, str]:
             config.device,
             config.sample_rate,
             config.verbose,
+            config.batch_size,
+            config.num_workers,
             config.diarizer.collar,
             config.diarizer.ignore_overlap,
+            config.diarizer.vad.model_path,
             config.diarizer.vad.parameters.window_length_in_sec,
             config.diarizer.vad.parameters.shift_length_in_sec,
+            config.diarizer.speaker_embeddings.model_path,
             config.diarizer.speaker_embeddings.parameters.window_length_in_sec,
             config.diarizer.speaker_embeddings.parameters.shift_length_in_sec,
             config.diarizer.speaker_embeddings.parameters.multiscale_weights,
+            config.diarizer.clustering.parameters.oracle_num_speakers,
+            config.diarizer.clustering.parameters.max_num_speakers,
         )
     except Exception as exc:
         return False, f"NeMo diarization config contract invalid: {exc}"
 
-    return True, "NeMo ClusteringDiarizer available"
+    return True, "NeMo diarization config contract ready"
+
+
+def _check_nemo_diarizer_construction() -> tuple[bool, str]:
+    if _find_module("nemo.collections.asr") is None:
+        return False, "Missing diarization dependency: nemo.collections.asr"
+
+    import nemo.collections.asr as nemo_asr
+
+    with tempfile.TemporaryDirectory(dir=TEMP_DIR, prefix="nemo_probe_") as work_dir_name:
+        work_dir = Path(work_dir_name)
+        out_dir = work_dir / "out"
+        manifest_path = work_dir / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "audio_filepath": str(work_dir / "probe.wav"),
+                    "offset": 0.0,
+                    "duration": None,
+                    "label": "infer",
+                    "text": "-",
+                    "rttm_filepath": None,
+                    "uem_filepath": None,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        config = _build_nemo_diarization_config(manifest_path, out_dir, None, None)
+        try:
+            diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
+        except Exception as exc:
+            logger.warning(
+                "NeMo runtime construction failed: %s",
+                exc,
+                exc_info=True,
+            )
+            return False, f"NeMo diarizer construction failed: {exc}"
+        _ = diarizer
+
+    return True, "NeMo ClusteringDiarizer construction ready"
 
 
 async def _refresh_qwen_provider_health(force: bool = False) -> None:
@@ -543,12 +706,56 @@ async def _refresh_nemo_provider_health(force: bool = False) -> None:
     """
     if not force and not _provider_health_is_stale("nemo"):
         return
-    _mark_provider_health_refreshing("nemo", "NeMo capability check in progress")
+    _mark_provider_health_refreshing("nemo", "NeMo import check in progress", failure_category="import")
     try:
-        ready, detail = _check_nemo_diarization_contract()
-        _record_provider_health("nemo", ready, "ready" if ready else "failed", detail)
+        import_ready, import_detail = _check_nemo_import_viability()
+        _record_provider_health(
+            "nemo",
+            import_ready,
+            "import-ready" if import_ready else "failed",
+            import_detail,
+            failure_category=None if import_ready else "import",
+        )
+        if not import_ready:
+            return
+
+        _mark_provider_health_refreshing(
+            "nemo",
+            "NeMo config contract check in progress",
+            failure_category="config-contract",
+        )
+        contract_ready, contract_detail = _check_nemo_diarization_contract()
+        _record_provider_health(
+            "nemo",
+            contract_ready,
+            "config-ready" if contract_ready else "failed",
+            contract_detail,
+            failure_category=None if contract_ready else "config-contract",
+        )
+        if not contract_ready:
+            return
+
+        _mark_provider_health_refreshing(
+            "nemo",
+            "NeMo diarizer construction check in progress",
+            failure_category="construction",
+        )
+        construction_ready, construction_detail = await asyncio.to_thread(_check_nemo_diarizer_construction)
+        _record_provider_health(
+            "nemo",
+            construction_ready,
+            "ready" if construction_ready else "failed",
+            construction_detail,
+            failure_category=None if construction_ready else "construction",
+        )
     except Exception as exc:
-        _record_provider_health("nemo", False, "failed", f"NeMo capability check failed: {exc}")
+        _record_provider_health(
+            "nemo",
+            False,
+            "failed",
+            f"NeMo capability check failed: {exc}",
+            failure_category="construction",
+        )
         logger.warning(f"NeMo capability check failed: {exc}", exc_info=True)
 
 
@@ -623,15 +830,6 @@ async def _count_active_requests(request, call_next):
 
 
 def _build_busy_reason() -> Optional[str]:
-    """
-    Construct a human-readable busy reason based on active request counters.
-    
-    Returns:
-        busy_reason (Optional[str]): A descriptive string summarizing which request
-        categories are currently active and their counts (for example,
-        "qwen requests active (2); diarization requests active (1)"), or `None`
-        when there are no active requests.
-    """
     if _active_qwen_request_count > 0 and _active_diarization_request_count > 0:
         return (
             f"qwen requests active ({_active_qwen_request_count}); "
@@ -957,9 +1155,10 @@ async def health_live():
         HealthLiveResponse: Contains service status, UTC ISO-8601 timestamp, CUDA availability and CUDA version (when available), current active request counters (total, Qwen TTS, diarization), a `busy` flag indicating whether there are in-flight requests, and a human-readable `busy_reason`.
     """
     cuda_available = torch.cuda.is_available()
+    qwen_metrics = _get_provider_health_metrics("qwen")
     return HealthLiveResponse(
         status="healthy",
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=_utc_now().isoformat(),
         cuda_available=cuda_available,
         cuda_version=torch.version.cuda if cuda_available else None,
         active_requests=_active_request_count,
@@ -967,6 +1166,16 @@ async def health_live():
         active_diarization_requests=_active_diarization_request_count,
         busy=(_active_request_count > 0),
         busy_reason=_build_busy_reason(),
+        qwen_max_concurrency=_qwen_max_concurrency,
+        qwen_queue_depth=int(qwen_metrics.get("queue_depth", _qwen_segment_waiters) or 0),
+        qwen_last_queue_wait_ms=qwen_metrics.get("last_queue_wait_ms"),
+        qwen_last_generation_ms=qwen_metrics.get("last_generation_ms"),
+        qwen_last_reference_prep_ms=qwen_metrics.get("last_reference_prep_ms"),
+        qwen_last_warmup_ms=qwen_metrics.get("last_warmup_ms"),
+        provider_health={
+            "qwen-tts": _build_provider_health_snapshot("qwen"),
+            "nemo-diarization": _build_provider_health_snapshot("nemo"),
+        },
     )
 
 
@@ -1013,12 +1222,18 @@ async def get_stage_capabilities():
             provider_details={
                 "qwen-tts": qwen_detail,
             },
+            provider_health={
+                "qwen-tts": _build_provider_health_snapshot("qwen"),
+            },
         ),
         diarization=StageCapability(
             ready=diar_ready,
             detail=diar_detail,
             providers=diar_providers,
             provider_details=diar_provider_details,
+            provider_health={
+                "nemo": _build_provider_health_snapshot("nemo"),
+            },
             default_provider=NEMO_DIARIZATION_DEFAULT_PROVIDER,
             engines=["nemo"],
         ),
@@ -1552,6 +1767,8 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
     if qwen_model is None or qwen_model_key != model_name:
         from qwen_tts import Qwen3TTSModel
         logger.info(f"Loading Qwen3-TTS '{model_name}' on {HOST_DEVICE}")
+        if HOST_DEVICE == "cuda" and not _probe_flash_attn_available():
+            logger.info("flash-attn is not installed; Qwen3-TTS will use sdpa attention")
         qwen_model = Qwen3TTSModel.from_pretrained(
             model_name,
             device_map={"": "cuda:0"} if HOST_DEVICE == "cuda" else HOST_DEVICE,
@@ -1582,7 +1799,13 @@ async def _ensure_qwen_model_ready(model_name: str) -> object:
     entry = _ensure_provider_health_defaults("qwen")
 
     if qwen_model is not None and qwen_model_key == model_name and bool(entry["ready"]):
-        _record_provider_health("qwen", True, "ready", f"Qwen3-TTS model loaded on {HOST_DEVICE}")
+        _record_provider_health(
+            "qwen",
+            True,
+            "ready",
+            f"Qwen3-TTS model loaded on {HOST_DEVICE}",
+            metrics={"max_concurrency": _qwen_max_concurrency},
+        )
         return qwen_model
 
     _mark_provider_health_refreshing("qwen", "Qwen3-TTS warming up")
@@ -1592,11 +1815,19 @@ async def _ensure_qwen_model_ready(model_name: str) -> object:
 
     async with lock:
         if qwen_model is not None and qwen_model_key == model_name:
-            _record_provider_health("qwen", True, "ready", f"Qwen3-TTS model loaded on {HOST_DEVICE}")
+            _record_provider_health(
+                "qwen",
+                True,
+                "ready",
+                f"Qwen3-TTS model loaded on {HOST_DEVICE}",
+                metrics={"max_concurrency": _qwen_max_concurrency},
+            )
             return qwen_model
 
         try:
+            warmup_start = perf_counter()
             model = await asyncio.to_thread(load_qwen_model, model_name)
+            warmup_ms = (perf_counter() - warmup_start) * 1000.0
         except OSError as exc:
             reason = str(exc)
             if "Errno 22" in reason or "Invalid argument" in reason:
@@ -1609,15 +1840,43 @@ async def _ensure_qwen_model_ready(model_name: str) -> object:
                     f"Insufficient virtual memory ({reason}). "
                     "Increase your Windows page file size or use the smaller 0.6B model."
                 )
-            _record_provider_health("qwen", False, "failed", f"failed: {reason}")
+            _record_provider_health(
+                "qwen",
+                False,
+                "failed",
+                f"failed: {reason}",
+                failure_category="warmup",
+            )
             logger.warning(f"Qwen3-TTS warmup failed: {reason}", exc_info=True)
             raise
         except Exception as exc:
-            _record_provider_health("qwen", False, "failed", f"failed: {exc}")
+            _record_provider_health(
+                "qwen",
+                False,
+                "failed",
+                f"failed: {exc}",
+                failure_category="warmup",
+            )
             logger.warning(f"Qwen3-TTS warmup failed: {exc}", exc_info=True)
             raise
 
-        _record_provider_health("qwen", True, "ready", f"Qwen3-TTS model loaded on {HOST_DEVICE}")
+        metrics = {
+            "max_concurrency": _qwen_max_concurrency,
+            "last_warmup_ms": round(warmup_ms, 2),
+            "flash_attn_available": _probe_flash_attn_available() if HOST_DEVICE == "cuda" else None,
+        }
+        _update_provider_health_metrics("qwen", **metrics)
+        detail = f"Qwen3-TTS model loaded on {HOST_DEVICE}"
+        if HOST_DEVICE == "cuda" and not _probe_flash_attn_available():
+            detail += " (flash-attn unavailable; using sdpa)"
+        _record_provider_health("qwen", True, "ready", detail, metrics=metrics)
+        logger.info(
+            "Qwen3-TTS warmup completed in %.1f ms on %s (max_concurrency=%s, flash_attn=%s)",
+            warmup_ms,
+            HOST_DEVICE,
+            _qwen_max_concurrency,
+            _probe_flash_attn_available() if HOST_DEVICE == "cuda" else None,
+        )
         return model
 
 
@@ -1676,16 +1935,35 @@ async def qwen_segment(
     if semaphore is None:
         raise HTTPException(status_code=500, detail="Qwen3-TTS execution semaphore was not initialized")
 
+    global _qwen_segment_waiters
     temp_ref_path: Optional[Path] = None
     out_path = TEMP_DIR / f"qwen_{uuid4().hex}.wav"
+    qwen_request_started = perf_counter()
+    _qwen_segment_waiters += 1
+    queue_wait_ms: Optional[float] = None
+    reference_prep_ms: Optional[float] = None
+    generation_ms: Optional[float] = None
+    qwen_queue_depth = _qwen_segment_waiters
+    waiter_counted = True
 
-    async with semaphore:
-        try:
+    try:
+        async with semaphore:
+            queue_wait_ms = (perf_counter() - qwen_request_started) * 1000.0
+            _qwen_segment_waiters = max(0, _qwen_segment_waiters - 1)
+            waiter_counted = False
+            qwen_queue_depth = _qwen_segment_waiters
+            _update_provider_health_metrics(
+                "qwen",
+                max_concurrency=_qwen_max_concurrency,
+                queue_depth=qwen_queue_depth,
+                last_queue_wait_ms=round(queue_wait_ms, 2),
+            )
             if not text.strip():
                 raise HTTPException(status_code=400, detail="text cannot be empty")
 
             tts = await _ensure_qwen_model_ready(model)
 
+            reference_prep_started = perf_counter()
             ref_audio_path: Optional[str] = None
             if reference_file is not None:
                 safe_reference_name = os.path.basename(reference_file.filename or "")
@@ -1703,6 +1981,9 @@ async def qwen_segment(
                 raise HTTPException(
                     status_code=400,
                     detail="Qwen3-TTS requires reference audio: provide reference_file or a valid reference_id")
+            reference_prep_ms = (perf_counter() - reference_prep_started) * 1000.0
+
+            generation_started = perf_counter()
 
             def _synth_and_write() -> None:
                 """
@@ -1721,10 +2002,30 @@ async def qwen_segment(
                 sf.write(str(out_path), wavs[0], sample_rate, subtype="PCM_16")
 
             await asyncio.to_thread(_synth_and_write)
+            generation_ms = (perf_counter() - generation_started) * 1000.0
 
             if temp_ref_path:
                 background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
 
+            total_ms = (perf_counter() - qwen_request_started) * 1000.0
+            _update_provider_health_metrics(
+                "qwen",
+                max_concurrency=_qwen_max_concurrency,
+                queue_depth=qwen_queue_depth,
+                last_queue_wait_ms=round(queue_wait_ms or 0.0, 2),
+                last_reference_prep_ms=round(reference_prep_ms or 0.0, 2),
+                last_generation_ms=round(generation_ms or 0.0, 2),
+                last_segment_ms=round(total_ms, 2),
+            )
+            logger.info(
+                "Qwen3-TTS segment timing: queue_wait_ms=%.1f reference_prep_ms=%.1f generation_ms=%.1f total_ms=%.1f queue_depth=%s max_concurrency=%s",
+                queue_wait_ms or 0.0,
+                reference_prep_ms or 0.0,
+                generation_ms or 0.0,
+                total_ms,
+                qwen_queue_depth,
+                _qwen_max_concurrency,
+            )
             logger.info(f"Qwen3-TTS segment written: {out_path} ({out_path.stat().st_size} bytes)")
             return TtsResponse(
                 success=True,
@@ -1732,16 +2033,18 @@ async def qwen_segment(
                 audio_path=str(out_path),
                 file_size_bytes=out_path.stat().st_size,
             )
-
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.error(f"Qwen3-TTS segment failed: {exc}", exc_info=True)
-            if temp_ref_path:
-                background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
-            if out_path.exists():
-                background_tasks.add_task(lambda p=out_path: p.unlink(missing_ok=True))
-            raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Qwen3-TTS segment failed: {exc}", exc_info=True)
+        if temp_ref_path:
+            background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
+        if out_path.exists():
+            background_tasks.add_task(lambda p=out_path: p.unlink(missing_ok=True))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if waiter_counted and _qwen_segment_waiters > 0:
+            _qwen_segment_waiters -= 1
 
 
 # ============================================================================
@@ -1780,13 +2083,8 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
 # Startup / shutdown
 # ============================================================================
 
-@app.on_event("startup")
-async def startup_event():
-    """
-    Perform application startup initialization for the inference service.
-    
-    Initializes provider-health primitives and schedules an immediate provider health refresh; also records basic runtime information (CUDA availability and device/version) to the application logs.
-    """
+@asynccontextmanager
+async def lifespan(_: FastAPI):
     logger.info("Babel Player inference service starting")
     logger.info(f"CUDA available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
@@ -1794,13 +2092,15 @@ async def startup_event():
         logger.info(f"CUDA version: {torch.version.cuda}")
     await _ensure_provider_health_primitives()
     _schedule_provider_health_refresh(force=True)
+    try:
+        yield
+    finally:
+        logger.info("Babel Player inference service shutting down")
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("Babel Player inference service shutting down")
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+app.router.lifespan_context = lifespan
 
 
 if __name__ == "__main__":

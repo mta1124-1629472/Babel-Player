@@ -2,11 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
 using Babel.Player.ViewModels;
 
 namespace BabelPlayer.Tests;
@@ -34,7 +38,8 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         IMediaTransport? segmentPlayer = null,
         IMediaTransport? sourcePlayer = null,
         Babel.Player.Services.Settings.AppSettings? settings = null,
-        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null)
+        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null,
+        ContainerizedServiceProbe? containerizedProbe = null)
     {
         settings ??= new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
@@ -58,6 +63,7 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
             translationRegistry,
             ttsRegistry,
             diarizationRegistry: diarizationRegistry,
+            containerizedProbe: containerizedProbe,
             segmentPlayer: segmentPlayer,
             sourcePlayer: sourcePlayer,
             audioProcessingService: audioProcessingService);
@@ -68,8 +74,9 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         AppLog log,
         string caseDir,
         Babel.Player.Services.Settings.AppSettings settings,
-        Babel.Player.Services.Registries.IDiarizationRegistry diarizationRegistry) =>
-        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry);
+        Babel.Player.Services.Registries.IDiarizationRegistry diarizationRegistry,
+        ContainerizedServiceProbe? containerizedProbe = null) =>
+        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry, containerizedProbe);
 
     private async Task<TestContext> OpenCaseFromTemplateAsync(string templateName, string caseName)
     {
@@ -459,7 +466,8 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
         IMediaTransport? segmentPlayer = null,
         IMediaTransport? sourcePlayer = null,
         Babel.Player.Services.Settings.AppSettings? settings = null,
-        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null)
+        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null,
+        ContainerizedServiceProbe? containerizedProbe = null)
     {
         settings ??= new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
@@ -481,6 +489,7 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
             translationRegistry,
             ttsRegistry,
             diarizationRegistry: diarizationRegistry,
+            containerizedProbe: containerizedProbe,
             segmentPlayer: segmentPlayer,
             sourcePlayer: sourcePlayer,
             audioProcessingService: audioProcessingService);
@@ -613,6 +622,33 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
 
 public sealed class SegmentInspectionTests
 {
+    private sealed class LocalDiarizationRegistry : Babel.Player.Services.Registries.IDiarizationRegistry
+    {
+        private readonly IReadOnlyList<ProviderDescriptor> _providers =
+        [
+            new ProviderDescriptor(
+                ProviderNames.WeSpeakerLocal,
+                "WeSpeaker",
+                RequiresApiKey: false,
+                CredentialKey: null,
+                SupportedModels: [],
+                SupportedRuntimes: [InferenceRuntime.Local],
+                DefaultRuntime: InferenceRuntime.Local,
+                IsImplemented: true,
+                Notes: null),
+        ];
+
+        public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() => _providers;
+
+        public IDiarizationProvider CreateProvider(string providerId, Babel.Player.Services.Settings.AppSettings settings, ApiKeyStore? keyStore = null) =>
+            throw new InvalidOperationException("LocalDiarizationRegistry test double does not support CreateProvider.");
+
+        public ProviderReadiness CheckReadiness(string providerId, Babel.Player.Services.Settings.AppSettings settings, ApiKeyStore? keyStore) =>
+            providerId == ProviderNames.WeSpeakerLocal
+                ? new ProviderReadiness(true, "Ready")
+                : new ProviderReadiness(false, $"Unknown diarization provider '{providerId}'.");
+    }
+
     private static SessionWorkflowCoordinator CreateCoordinator(
         SessionSnapshotStore store,
         AppLog log,
@@ -620,7 +656,8 @@ public sealed class SegmentInspectionTests
         IMediaTransport? segmentPlayer = null,
         IMediaTransport? sourcePlayer = null,
         Babel.Player.Services.Settings.AppSettings? settings = null,
-        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null)
+        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null,
+        ContainerizedServiceProbe? containerizedProbe = null)
     {
         settings ??= new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
@@ -642,6 +679,7 @@ public sealed class SegmentInspectionTests
             translationRegistry,
             ttsRegistry,
             diarizationRegistry: diarizationRegistry,
+            containerizedProbe: containerizedProbe,
             segmentPlayer: segmentPlayer,
             sourcePlayer: sourcePlayer,
             audioProcessingService: audioProcessingService);
@@ -653,15 +691,24 @@ public sealed class SegmentInspectionTests
         string caseDir,
         Babel.Player.Services.Settings.AppSettings settings,
         Babel.Player.Services.Registries.IDiarizationRegistry diarizationRegistry) =>
-        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry);
+        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry, null);
 
-    private static EmbeddedPlaybackViewModel CreatePlaybackVm(Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null)
+    private static EmbeddedPlaybackViewModel CreatePlaybackVm(
+        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null,
+        ContainerizedServiceProbe? containerizedProbe = null,
+        Babel.Player.Services.Settings.AppSettings? settings = null)
     {
         var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}");
         var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.log"));
         var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.json");
         var store = new SessionSnapshotStore(storePath, log);
-        var coordinator = CreateCoordinator(store, log, caseDir, diarizationRegistry: diarizationRegistry);
+        var coordinator = CreateCoordinator(
+            store,
+            log,
+            caseDir,
+            settings: settings,
+            diarizationRegistry: diarizationRegistry,
+            containerizedProbe: containerizedProbe);
         coordinator.Initialize();
         return new EmbeddedPlaybackViewModel(coordinator);
     }
@@ -686,6 +733,26 @@ public sealed class SegmentInspectionTests
         return (new EmbeddedPlaybackViewModel(coordinator), segmentPlayer, sourcePlayer);
     }
 
+    private static async Task<ProviderHealthSnapshot> WaitForProviderHealthSnapshotAsync(
+        EmbeddedPlaybackViewModel playback,
+        string section,
+        Func<ProviderHealthSnapshot, bool>? predicate = null,
+        int attempts = 40,
+        int delayMs = 50)
+    {
+        for (var i = 0; i < attempts; i++)
+        {
+            var snapshot = playback.ProviderHealthSnapshots.FirstOrDefault(entry =>
+                string.Equals(entry.Section, section, StringComparison.Ordinal));
+            if (snapshot is not null && (predicate is null || predicate(snapshot)))
+                return snapshot;
+
+            await Task.Delay(delayMs);
+        }
+
+        throw new Xunit.Sdk.XunitException($"Timed out waiting for provider health snapshot '{section}'.");
+    }
+
     [Fact]
     public void EmbeddedPlaybackViewModel_DiarizationProviderOptions_ShowOffNeMoAndWeSpeaker()
     {
@@ -707,16 +774,12 @@ public sealed class SegmentInspectionTests
     [Fact]
     public void EmbeddedPlaybackViewModel_DiarizationProvider_UpdatesSettingsAndStatus()
     {
-        using var playback = CreatePlaybackVm();
+        using var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
 
         playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
         Assert.Equal(ProviderNames.WeSpeakerLocal, playback.Coordinator.CurrentSettings.DiarizationProvider);
-        Assert.Contains("WeSpeaker", playback.AutoSpeakerDetectionStatus, StringComparison.Ordinal);
-        Assert.True(
-            playback.AutoSpeakerDetectionStatus.StartsWith("Checking ", StringComparison.Ordinal) ||
-            playback.AutoSpeakerDetectionStatus.StartsWith("Speaker diarization is enabled via ", StringComparison.Ordinal),
-            $"Unexpected diarization status: {playback.AutoSpeakerDetectionStatus}");
+        Assert.Equal(ProviderNames.WeSpeakerLocal, playback.DiarizationProvider);
     }
 
     [Fact]
@@ -728,6 +791,49 @@ public sealed class SegmentInspectionTests
 
         Assert.Equal(string.Empty, playback.Coordinator.CurrentSettings.DiarizationProvider);
         Assert.Equal("Manual speaker mapping is the default release flow.", playback.AutoSpeakerDetectionStatus);
+    }
+
+    [Fact]
+    public async Task EmbeddedPlaybackViewModel_ProviderHealthSnapshots_DiarizationInlineStatusAndHistoryAreUnified()
+    {
+        var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
+
+        playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
+
+        var snapshot = await WaitForProviderHealthSnapshotAsync(
+            playback,
+            "Diarization",
+            s => s.StatusLine == "Ready");
+
+        Assert.Equal("Ready", snapshot.StatusLine);
+        Assert.Contains("Managed local CPU runtime", snapshot.HostState, StringComparison.Ordinal);
+        Assert.Contains("WeSpeaker", snapshot.SelectionLabel, StringComparison.Ordinal);
+        Assert.Contains("Speaker diarization is enabled via WeSpeaker.", snapshot.InlineStatus, StringComparison.Ordinal);
+        Assert.NotEmpty(snapshot.History);
+        Assert.Contains("ready", snapshot.History[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EmbeddedPlaybackViewModel_ProviderHealthSnapshots_ContainerizedHostStateFormatterShowsStaleAndLive()
+    {
+        var method = typeof(EmbeddedPlaybackViewModel).GetMethod(
+            "BuildHostStateText",
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not find BuildHostStateText method.");
+
+        var liveText = (string)method.Invoke(null, ["Managed local GPU host", "Containerized", null, true])!;
+        var staleText = (string)method.Invoke(null, [
+            "Managed local GPU host",
+            "Containerized",
+            new ContainerizedProbeResult(
+                "http://127.0.0.1:8000",
+                ContainerizedProbeState.Available,
+                DateTimeOffset.UtcNow,
+                IsStale: true),
+            true])!;
+
+        Assert.Equal("Managed local GPU host checking", liveText);
+        Assert.Equal("Managed local GPU host live (stale)", staleText);
     }
 
     [Fact]

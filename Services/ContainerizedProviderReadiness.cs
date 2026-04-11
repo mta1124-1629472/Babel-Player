@@ -271,7 +271,7 @@ public static class ContainerizedProviderReadiness
             // the caller (CheckForExecutionAsync) to continue normally.
             return new ProviderReadiness(
                 false,
-                BuildCapabilitiesUnavailableMessage(hostLabel, stage, probeResult.CapabilitiesError));
+                BuildCapabilitiesUnavailableMessage(hostLabel, stage, probeResult.CapabilitiesError, probeResult.IsStale));
         }
 
         string? detail = null;
@@ -286,7 +286,7 @@ public static class ContainerizedProviderReadiness
             };
             return new ProviderReadiness(
                 false,
-                BuildCapabilityNotReadyMessage(hostLabel, stageLabel, detail));
+                BuildCapabilityNotReadyMessage(hostLabel, stageLabel, detail, probeResult.IsStale));
         }
 
         return ProviderReadiness.Ready;
@@ -351,16 +351,26 @@ public static class ContainerizedProviderReadiness
     /// <returns>A message stating that the host is live but the specified capability is not ready. If <paramref name="detail"/> is provided, it is appended and the message wording indicates active warming when the detail contains "warming" or "probe".</returns>
     private static string BuildCapabilityNotReadyMessage(string hostLabel, string stageLabel, string? detail)
     {
+        return BuildCapabilityNotReadyMessage(hostLabel, stageLabel, detail, isStale: false);
+    }
+
+    private static string BuildCapabilityNotReadyMessage(
+        string hostLabel,
+        string stageLabel,
+        string? detail,
+        bool isStale)
+    {
+        var cachedPrefix = isStale ? " with a cached result" : string.Empty;
         if (string.IsNullOrWhiteSpace(detail))
-            return $"{hostLabel} is live but {stageLabel} capability is not ready.";
+            return $"{hostLabel} is live{cachedPrefix} but {stageLabel} capability is not ready.";
 
         if (detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
             || detail.Contains("probe", StringComparison.OrdinalIgnoreCase))
         {
-            return $"{hostLabel} is live but {stageLabel} capability is still warming (missing {stageLabel} capability): {detail}";
+            return $"{hostLabel} is live{cachedPrefix} but {stageLabel} capability is still warming (missing {stageLabel} capability): {detail}";
         }
 
-        return $"{hostLabel} is live but missing {stageLabel} capability: {detail}";
+        return $"{hostLabel} is live{cachedPrefix} but missing {stageLabel} capability: {detail}";
     }
 
     /// <summary>
@@ -373,7 +383,8 @@ public static class ContainerizedProviderReadiness
     private static string BuildCapabilitiesUnavailableMessage(
         string hostLabel,
         ContainerCapabilityStage stage,
-        string? detail)
+        string? detail,
+        bool isStale)
     {
         var stageLabel = stage switch
         {
@@ -383,10 +394,11 @@ public static class ContainerizedProviderReadiness
             _ => "diarization",
         };
 
+        var cachedPrefix = isStale ? " with a cached result" : string.Empty;
         if (string.IsNullOrWhiteSpace(detail))
-            return $"{hostLabel} is live but {stageLabel} capability metadata is unavailable.";
+            return $"{hostLabel} is live{cachedPrefix} but {stageLabel} capability metadata is unavailable.";
 
-        return $"{hostLabel} is live but {stageLabel} capability metadata could not be read: {detail}";
+        return $"{hostLabel} is live{cachedPrefix} but {stageLabel} capability metadata could not be read: {detail}";
     }
 
     /// <summary>
