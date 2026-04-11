@@ -33,6 +33,7 @@ public static class ProviderNames
     public const string Qwen           = "qwen-tts";
 
     // ── Diarization ─────────────────────────────────────────────────────
+    public const string Manual = "manual";
     public const string NemoDiarizationAlias = "nemo";
     public const string WeSpeakerDiarizationAlias = "wespeaker";
     public const string NemoLocal = "nemo-local";
