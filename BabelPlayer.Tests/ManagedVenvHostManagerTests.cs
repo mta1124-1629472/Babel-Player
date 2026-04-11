@@ -103,6 +103,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     [Fact]
     public void CreateHostProcessStartInfo_SetsQwenConcurrencyEnvironmentVariable()
     {
+        var original = Environment.GetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable);
         Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, "2");
         try
         {
@@ -116,7 +117,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         }
         finally
         {
-            Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, null);
+            Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, original);
         }
     }
 

@@ -753,28 +753,8 @@ public sealed class SegmentInspectionTests
         throw new Xunit.Sdk.XunitException($"Timed out waiting for provider health snapshot '{section}'.");
     }
 
-    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
-    {
-        var entriesField = typeof(ContainerizedServiceProbe).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not find _entries field.");
-
-        var entries = entriesField.GetValue(probe)
-            ?? throw new InvalidOperationException("ContainerizedServiceProbe entries cache was null.");
-
-        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
-        var tryGetValue = entries.GetType().GetMethod("TryGetValue")
-            ?? throw new InvalidOperationException("Could not find TryGetValue on probe cache.");
-
-        var tryGetArgs = new object?[] { normalizedUrl, null };
-        var found = (bool)(tryGetValue.Invoke(entries, tryGetArgs) ?? false);
-        if (!found)
-            throw new InvalidOperationException($"No cached probe entry found for {normalizedUrl}.");
-
-        var entry = tryGetArgs[1] ?? throw new InvalidOperationException("Probe cache entry was null.");
-        var expiresProperty = entry.GetType().GetProperty("ExpiresAtUtc")
-            ?? throw new InvalidOperationException("Could not find ExpiresAtUtc on probe cache entry.");
-        expiresProperty.SetValue(entry, DateTimeOffset.UtcNow.AddSeconds(-1));
-    }
+    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl) =>
+        ProbeTestHelpers.ExpireCachedProbeResult(probe, serviceUrl);
 
     private static object InvokePrivateSnapshotCapture(EmbeddedPlaybackViewModel playback)
     {
