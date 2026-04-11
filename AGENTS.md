@@ -48,6 +48,33 @@ Tests are filtered by category. Core tests run in CI; full suite requires local 
 
 ---
 
+## Git Hooks
+
+The repository includes optional git hooks in `.git-hooks/` that automate verification:
+
+| Hook | When | What it runs |
+|---|---|---|
+| `pre-commit` | Before every commit | Architecture linter, Python syntax, C# build (if .cs files changed) |
+| `commit-msg` | Before every commit | Message format rules (length, no WIP, no "Merge ", PLACEHOLDER warnings) |
+| `pre-push` | Before every push | Full verification: `dotnet build`, `dotnet test` (core only), architecture linter, Python syntax |
+| `post-merge` | After pull/merge | Reminds you to `dotnet restore` if dependencies changed |
+
+**Activate:**
+```bash
+git config core.hooksPath .git-hooks
+```
+
+**Bypass a hook** (when you know what you're doing):
+```bash
+git commit --no-verify    # skip pre-commit + commit-msg
+git push --no-verify      # skip pre-push
+```
+
+CI runs the same checks independently — hooks are a developer convenience, not a gate.
+See `.git-hooks/README.md` for full documentation.
+
+---
+
 ## Code Style Guidelines
 
 ### General

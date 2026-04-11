@@ -1612,7 +1612,9 @@ partial void OnSourcePositionMsChanged(double value)
 
         if (result.Invalidation != PipelineInvalidation.None)
             ResetInteractiveModes();
-        StatusText = result.StatusMessage;
+        StatusText = string.IsNullOrWhiteSpace(_coordinator.RuntimeWarmupStatusText)
+            ? result.StatusMessage
+            : _coordinator.RuntimeWarmupStatusText;
         ClearStatusErrorDetail();
 
         if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
@@ -2057,6 +2059,13 @@ partial void OnSourcePositionMsChanged(double value)
                 OnPropertyChanged(nameof(HwNpuLine));
                 OnPropertyChanged(nameof(HwLibsLine));
                 break;
+            case nameof(SessionWorkflowCoordinator.RuntimeWarmupStatusText):
+                if (!string.IsNullOrWhiteSpace(_coordinator.RuntimeWarmupStatusText))
+                {
+                    StatusText = _coordinator.RuntimeWarmupStatusText;
+                    ClearStatusErrorDetail();
+                }
+                break;
             case nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics):
                 OnPropertyChanged(nameof(HasVsrPlaybackStatus));
                 OnPropertyChanged(nameof(VsrPlaybackStatusText));
@@ -2371,10 +2380,20 @@ partial void OnSourcePositionMsChanged(double value)
             IsBusy = true;
             StatusText = "Running pipeline…";
             ClearStatusErrorDetail();
-            await _coordinator.AdvancePipelineAsync(
-                progress: null,
-                stageProgress: stageProgress,
-                cancellationToken: ct);
+            if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Diarized)
+            {
+                await _coordinator.ContinuePipelineAsync(
+                    progress: null,
+                    stageProgress: stageProgress,
+                    cancellationToken: ct);
+            }
+            else
+            {
+                await _coordinator.AdvancePipelineAsync(
+                    progress: null,
+                    stageProgress: stageProgress,
+                    cancellationToken: ct);
+            }
             ShowPipelineRefreshDetail("Loading segments and refreshing playback data…");
             StatusText = "Loading segments…";
             await RefreshSegmentsAsync();

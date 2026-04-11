@@ -22,11 +22,31 @@ public sealed partial class SessionWorkflowCoordinator
         string Title,
         IProgress<PipelineStageUpdate>? Reporter);
 
-    private static IReadOnlyList<SessionWorkflowStage> GetRemainingPipelineStages(SessionWorkflowStage currentStage)
+    private static IReadOnlyList<SessionWorkflowStage> GetAdvancePipelineStages(
+        SessionWorkflowStage currentStage,
+        bool pauseAfterDiarization)
     {
-        var stages = new List<SessionWorkflowStage>(capacity: 3);
+        var stages = new List<SessionWorkflowStage>(capacity: pauseAfterDiarization ? 2 : 3);
         if (currentStage < SessionWorkflowStage.Transcribed)
             stages.Add(SessionWorkflowStage.Transcribed);
+
+        if (pauseAfterDiarization)
+        {
+            if (currentStage < SessionWorkflowStage.Diarized)
+                stages.Add(SessionWorkflowStage.Diarized);
+            return stages;
+        }
+
+        if (currentStage < SessionWorkflowStage.Translated)
+            stages.Add(SessionWorkflowStage.Translated);
+        if (currentStage < SessionWorkflowStage.TtsGenerated)
+            stages.Add(SessionWorkflowStage.TtsGenerated);
+        return stages;
+    }
+
+    private static IReadOnlyList<SessionWorkflowStage> GetContinuationPipelineStages(SessionWorkflowStage currentStage)
+    {
+        var stages = new List<SessionWorkflowStage>(capacity: 2);
         if (currentStage < SessionWorkflowStage.Translated)
             stages.Add(SessionWorkflowStage.Translated);
         if (currentStage < SessionWorkflowStage.TtsGenerated)
@@ -66,6 +86,7 @@ public sealed partial class SessionWorkflowCoordinator
         stage switch
         {
             SessionWorkflowStage.Transcribed => "Transcription",
+            SessionWorkflowStage.Diarized => "Speaker Mapping",
             SessionWorkflowStage.Translated => "Translation",
             SessionWorkflowStage.TtsGenerated => "Dub",
             _ => stage.ToString(),

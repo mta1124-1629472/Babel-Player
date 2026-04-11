@@ -82,6 +82,7 @@ Models/
  ProviderNames.cs
  RecentSessionEntry.cs
  SessionWorkflowStage.cs
+ SessionWorkflowStageJsonConverter.cs
  TranscriptionResult.cs
  VideoPlaybackOptions.cs
  WorkflowSegmentState.cs
@@ -93,6 +94,7 @@ Program.cs
 Properties/AssemblyInfo.cs
 Services/
  AppLog.cs
+ AudioConcatUtility.cs
  AvaloniaErrorDialogService.cs
  BackgroundTaskObserver.cs
  BenchmarkCli.cs
@@ -105,6 +107,7 @@ Services/
  ContainerizedInferenceManager.cs
  ContainerizedProbeMetrics.cs
  ContainerizedProviderReadiness.cs
+ ContainerizedRequestLeaseTracker.cs
  ContainerizedServiceProbe.cs
  ContainerizedTranscriptionProvider.cs
  ContainerizedTranslationProvider.cs
@@ -124,6 +127,7 @@ Services/
  ElevenLabsApiClient.cs
  ElevenLabsTtsProvider.cs
  FasterWhisperTranscriptionProvider.cs
+ FfmpegAudioProcessingService.cs
  GeminiApiClient.cs
  GeminiTranscriptionProvider.cs
  GeminiTranslationProvider.cs
@@ -133,6 +137,7 @@ Services/
  GoogleTranslationProvider.cs
  HardwareEncoderHelper.cs
  HardwareSnapshot.cs
+ IAudioProcessingService.cs
  IBenchmarkableProvider.cs
  IErrorDialogService.cs
  IMediaTransport.cs
@@ -149,6 +154,7 @@ Services/
  ManagedVenvHostManager.cs
  MediaTransportManager.cs
  ModelDownloader.cs
+ NemoContainerizedDiarizationProvider.cs
  NllbTranslationProvider.cs
  OpenAiApiClient.cs
  OpenAiTranslationProvider.cs
@@ -158,10 +164,10 @@ Services/
  PipelineProviderException.cs
  PiperTtsProvider.cs
  ProbeMetricsReporter.cs
- PyannoteDiarizationProvider.cs
  PythonSubprocessServiceBase.cs
  QwenContainerTtsProvider.cs
  QwenReferenceKeys.cs
+ QwenRuntimePolicy.cs
  RecentSessionsStore.cs
  Registries/
   DiarizationRegistry.cs
@@ -187,12 +193,13 @@ Services/
   SettingsService.cs
  SrtGenerator.cs
  StageContracts.cs
+ TaskExtensions.cs
+ TtsReferenceExtractor.cs
  VideoEnhancementDiagnostics.cs
  VideoExportPlanner.cs
  WerComputer.cs
- XttsContainerTtsProvider.cs
- XttsReferenceExtractor.cs
- XttsReferenceKeys.cs
+ WeSpeakerContainerizedDiarizationProvider.cs
+ WeSpeakerCpuDiarizationProvider.cs
 ViewLocator.cs
 ViewModels/
  ApiKeysViewModel.cs
@@ -382,21 +389,21 @@ Views/
  System.Xml.XPath.XDocument.dll
  WindowsBase.dll
 <NUGET>/
- avalonia.desktop/12.0.0-rc1/lib/net10.0/Avalonia.Desktop.dll
- avalonia.fonts.inter/12.0.0-rc1/lib/net10.0/Avalonia.Fonts.Inter.dll
- avalonia.freedesktop.atspi/12.0.0-rc1/lib/net10.0/Avalonia.FreeDesktop.AtSpi.dll
- avalonia.freedesktop/12.0.0-rc1/lib/net10.0/Avalonia.FreeDesktop.dll
- avalonia.harfbuzz/12.0.0-rc1/lib/net10.0/Avalonia.HarfBuzz.dll
+ avalonia.desktop/12.0.0/lib/net10.0/Avalonia.Desktop.dll
+ avalonia.fonts.inter/12.0.0/lib/net10.0/Avalonia.Fonts.Inter.dll
+ avalonia.freedesktop.atspi/12.0.0/lib/net10.0/Avalonia.FreeDesktop.AtSpi.dll
+ avalonia.freedesktop/12.0.0/lib/net10.0/Avalonia.FreeDesktop.dll
+ avalonia.harfbuzz/12.0.0/lib/net10.0/Avalonia.HarfBuzz.dll
  avalonia.markup.xaml.loader/11.2.0/lib/net8.0/Avalonia.Markup.Xaml.Loader.dll
- avalonia.native/12.0.0-rc1/lib/net10.0/Avalonia.Native.dll
- avalonia.remote.protocol/12.0.0-rc1/lib/net10.0/Avalonia.Remote.Protocol.dll
- avalonia.skia/12.0.0-rc1/lib/net10.0/Avalonia.Skia.dll
- avalonia.themes.fluent/12.0.0-rc1/lib/net10.0/Avalonia.Themes.Fluent.dll
- avalonia.win32/12.0.0-rc1/lib/net10.0/
+ avalonia.native/12.0.0/lib/net10.0/Avalonia.Native.dll
+ avalonia.remote.protocol/12.0.0/lib/net10.0/Avalonia.Remote.Protocol.dll
+ avalonia.skia/12.0.0/lib/net10.0/Avalonia.Skia.dll
+ avalonia.themes.fluent/12.0.0/lib/net10.0/Avalonia.Themes.Fluent.dll
+ avalonia.win32/12.0.0/lib/net10.0/
   Avalonia.Win32.Automation.dll
   Avalonia.Win32.dll
- avalonia.x11/12.0.0-rc1/lib/net10.0/Avalonia.X11.dll
- avalonia/12.0.0-rc1/ref/net10.0/
+ avalonia.x11/12.0.0/lib/net10.0/Avalonia.X11.dll
+ avalonia/12.0.0/ref/net10.0/
   Avalonia.Base.dll
   Avalonia.Controls.dll
   Avalonia.DesignerSupport.dll
@@ -409,15 +416,15 @@ Views/
   Avalonia.OpenGL.dll
   Avalonia.Vulkan.dll
  avaloniaui.diagnosticssupport/2.2.0-beta3/lib/net10.0/AvaloniaUI.DiagnosticsSupport.Avalonia.dll
- communitytoolkit.mvvm/8.2.1/lib/net6.0/CommunityToolkit.Mvvm.dll
+ communitytoolkit.mvvm/8.4.2/lib/net8.0/CommunityToolkit.Mvvm.dll
  harfbuzzsharp/8.3.1.3/lib/net8.0/HarfBuzzSharp.dll
- microcom.runtime/0.11.0/lib/net5.0/MicroCom.Runtime.dll
+ microcom.runtime/0.11.4/lib/net5.0/MicroCom.Runtime.dll
  microsoft.extensions.dependencyinjection.abstractions/8.0.0/lib/net8.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll
  microsoft.extensions.logging.abstractions/8.0.0/lib/net8.0/Microsoft.Extensions.Logging.Abstractions.dll
  microsoft.io.recyclablememorystream/3.0.1/lib/net6.0/Microsoft.IO.RecyclableMemoryStream.dll
  skiasharp/3.119.3-preview.1.1/ref/net8.0/SkiaSharp.dll
  system.security.cryptography.protecteddata/10.0.5/lib/net10.0/System.Security.Cryptography.ProtectedData.dll
- tmds.dbus.protocol/0.90.3/lib/net9.0/Tmds.DBus.Protocol.dll
+ tmds.dbus.protocol/0.92.0/lib/net9.0/Tmds.DBus.Protocol.dll
 
 [analyzerReferences]
 <DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.5/analyzers/dotnet/cs/
@@ -430,12 +437,12 @@ Views/
 <DOTNET>/sdk/10.0.201/Sdks/Microsoft.NET.Sdk/analyzers/
  Microsoft.CodeAnalysis.CSharp.NetAnalyzers.dll
  Microsoft.CodeAnalysis.NetAnalyzers.dll
-<NUGET>/avalonia/12.0.0-rc1/analyzers/dotnet/cs/
+<NUGET>/avalonia/12.0.0/analyzers/dotnet/cs/
  Avalonia.Analyzers.CodeFixes.CSharp.dll
  Avalonia.Analyzers.CSharp.dll
  Avalonia.Analyzers.VisualBasic.dll
  Avalonia.Generators.dll
-<NUGET>/communitytoolkit.mvvm/8.2.1/analyzers/dotnet/roslyn4.3/cs/
+<NUGET>/communitytoolkit.mvvm/8.4.2/analyzers/dotnet/roslyn5.0/cs/
  CommunityToolkit.Mvvm.CodeFixers.dll
  CommunityToolkit.Mvvm.SourceGenerators.dll
 <NUGET>/microsoft.extensions.logging.abstractions/8.0.0/analyzers/dotnet/roslyn4.4/cs/Microsoft.Extensions.Logging.Generators.dll

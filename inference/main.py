@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from time import perf_counter
 from pathlib import Path
 from datetime import datetime, timezone
@@ -90,6 +91,7 @@ _active_qwen_request_count = 0
 _active_diarization_request_count = 0
 _flash_attn_available: bool | None = None
 _qwen_max_concurrency = 1
+_nemo_diarizer_construction_lock = threading.Lock()
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -510,6 +512,22 @@ def _mark_provider_health_refreshing(
     _provider_health_cache[provider]["is_stale"] = True
 
 
+def _mark_provider_health_warming(
+    provider: str,
+    detail: str,
+    *,
+    failure_category: Optional[str] = None,
+) -> None:
+    _record_provider_health(
+        provider,
+        False,
+        "warming",
+        detail,
+        failure_category=failure_category,
+    )
+    _provider_health_cache[provider]["is_stale"] = True
+
+
 def _build_provider_health_snapshot(provider: str) -> ProviderHealthSnapshot:
     entry = _ensure_provider_health_defaults(provider)
     history = [
@@ -538,6 +556,20 @@ def _update_provider_health_metrics(provider: str, **metrics: object) -> None:
 def _get_provider_health_metrics(provider: str) -> dict[str, object]:
     entry = _ensure_provider_health_defaults(provider)
     return dict(entry.get("metrics", {}))
+
+
+def _get_provider_activity_reasons() -> list[str]:
+    reasons: list[str] = []
+    for provider in ("qwen", "nemo"):
+        entry = _ensure_provider_health_defaults(provider)
+        state = str(entry.get("state", "")).strip().lower()
+        detail = str(entry.get("detail", "")).strip()
+        if state == "warming":
+            reasons.append(detail or f"{provider} warming up")
+            continue
+        if state == "refreshing" and detail:
+            reasons.append(detail)
+    return reasons
 
 
 async def _ensure_provider_health_primitives() -> None:
@@ -625,9 +657,14 @@ def _check_nemo_diarization_contract() -> tuple[bool, str]:
             config.diarizer.vad.parameters.window_length_in_sec,
             config.diarizer.vad.parameters.shift_length_in_sec,
             config.diarizer.speaker_embeddings.model_path,
+            config.diarizer.speaker_embeddings.window_length_in_sec,
+            config.diarizer.speaker_embeddings.shift_length_in_sec,
+            config.diarizer.speaker_embeddings.multiscale_weights,
+            config.diarizer.speaker_embeddings.scale_n,
             config.diarizer.speaker_embeddings.parameters.window_length_in_sec,
             config.diarizer.speaker_embeddings.parameters.shift_length_in_sec,
             config.diarizer.speaker_embeddings.parameters.multiscale_weights,
+            config.diarizer.speaker_embeddings.parameters.scale_n,
             config.diarizer.clustering.parameters.oracle_num_speakers,
             config.diarizer.clustering.parameters.max_num_speakers,
         )
@@ -664,7 +701,8 @@ def _check_nemo_diarizer_construction() -> tuple[bool, str]:
         )
         config = _build_nemo_diarization_config(manifest_path, out_dir, None, None)
         try:
-            diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
+            with _nemo_diarizer_construction_lock:
+                diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
         except Exception as exc:
             logger.warning(
                 "NeMo runtime construction failed: %s",
@@ -830,18 +868,28 @@ async def _count_active_requests(request, call_next):
 
 
 def _build_busy_reason() -> Optional[str]:
+    provider_reasons = _get_provider_activity_reasons()
+    provider_reason = "; ".join(provider_reasons) if provider_reasons else None
+
     if _active_qwen_request_count > 0 and _active_diarization_request_count > 0:
-        return (
+        request_reason = (
             f"qwen requests active ({_active_qwen_request_count}); "
             f"diarization requests active ({_active_diarization_request_count})"
         )
-    if _active_qwen_request_count > 0:
-        return f"qwen requests active ({_active_qwen_request_count})"
-    if _active_diarization_request_count > 0:
-        return f"diarization requests active ({_active_diarization_request_count})"
-    if _active_request_count > 0:
-        return f"{_active_request_count} request(s) active"
-    return None
+    elif _active_qwen_request_count > 0:
+        request_reason = f"qwen requests active ({_active_qwen_request_count})"
+    elif _active_diarization_request_count > 0:
+        request_reason = f"diarization requests active ({_active_diarization_request_count})"
+    elif _active_request_count > 0:
+        request_reason = f"{_active_request_count} request(s) active"
+    else:
+        request_reason = None
+
+    if request_reason and provider_reason:
+        return f"{request_reason}; {provider_reason}"
+    if request_reason:
+        return request_reason
+    return provider_reason
 
 
 def _probe_qwen_available() -> tuple[bool, str]:
@@ -972,9 +1020,14 @@ def _build_nemo_diarization_config(
         setattr(config.diarizer.vad.parameters, key, value)
 
     config.diarizer.speaker_embeddings.model_path = NEMO_SPEAKER_EMBEDDING_MODEL
+    config.diarizer.speaker_embeddings.window_length_in_sec = NEMO_SPEAKER_WINDOW_LENGTHS
+    config.diarizer.speaker_embeddings.shift_length_in_sec = NEMO_SPEAKER_SHIFT_LENGTHS
+    config.diarizer.speaker_embeddings.multiscale_weights = NEMO_SPEAKER_MULTISCALE_WEIGHTS
+    config.diarizer.speaker_embeddings.scale_n = len(NEMO_SPEAKER_WINDOW_LENGTHS)
     config.diarizer.speaker_embeddings.parameters.window_length_in_sec = NEMO_SPEAKER_WINDOW_LENGTHS
     config.diarizer.speaker_embeddings.parameters.shift_length_in_sec = NEMO_SPEAKER_SHIFT_LENGTHS
     config.diarizer.speaker_embeddings.parameters.multiscale_weights = NEMO_SPEAKER_MULTISCALE_WEIGHTS
+    config.diarizer.speaker_embeddings.parameters.scale_n = len(NEMO_SPEAKER_WINDOW_LENGTHS)
     config.diarizer.speaker_embeddings.parameters.save_embeddings = False
 
     config.diarizer.clustering.parameters.oracle_num_speakers = clustering_parameters["oracle_num_speakers"]
@@ -1029,7 +1082,8 @@ def _run_nemo_diarization(
         )
 
         try:
-            diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
+            with _nemo_diarizer_construction_lock:
+                diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
         except Exception as exc:
             logger.error(
                 "NeMo config contract mismatch during ClusteringDiarizer initialization: %s",
@@ -1156,6 +1210,7 @@ async def health_live():
     """
     cuda_available = torch.cuda.is_available()
     qwen_metrics = _get_provider_health_metrics("qwen")
+    busy_reason = _build_busy_reason()
     return HealthLiveResponse(
         status="healthy",
         timestamp=_utc_now().isoformat(),
@@ -1164,8 +1219,8 @@ async def health_live():
         active_requests=_active_request_count,
         active_qwen_requests=_active_qwen_request_count,
         active_diarization_requests=_active_diarization_request_count,
-        busy=(_active_request_count > 0),
-        busy_reason=_build_busy_reason(),
+        busy=not not busy_reason,
+        busy_reason=busy_reason,
         qwen_max_concurrency=_qwen_max_concurrency,
         qwen_queue_depth=int(qwen_metrics.get("queue_depth", _qwen_segment_waiters) or 0),
         qwen_last_queue_wait_ms=qwen_metrics.get("last_queue_wait_ms"),
@@ -1808,7 +1863,7 @@ async def _ensure_qwen_model_ready(model_name: str) -> object:
         )
         return qwen_model
 
-    _mark_provider_health_refreshing("qwen", "Qwen3-TTS warming up")
+    _mark_provider_health_warming("qwen", "Qwen3-TTS warming up", failure_category="warmup")
     lock = _qwen_model_load_lock
     if lock is None:
         raise RuntimeError("Qwen3-TTS model load lock was not initialized")

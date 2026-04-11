@@ -15,8 +15,7 @@ googletrans==4.0.0rc1
 # TTS - Coqui XTTS
 tts==0.22.0
 
-# TTS - Qwen3-TTS
-qwen-tts==0.1.1
+# Audio utilities shared with managed CPU providers
 soundfile==0.12.1
 
 # Diarization
@@ -25,7 +24,7 @@ s3prl==0.4.17
 
 # Shared ML
 torch==2.2.2
-# qwen-tts==0.1.1 pins transformers==4.57.3, so CPU runtime must match that constraint.
+# Managed CPU providers and the GPU Qwen runtime both require this transformers pin.
 transformers==4.57.3
 # FIX: was "accelerator==1.2.0" (wrong package name); correct package is "accelerate"
 accelerate==1.12.0

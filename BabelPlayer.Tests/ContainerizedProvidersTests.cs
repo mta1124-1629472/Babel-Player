@@ -532,7 +532,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("missing TTS capability", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("TTS capability is unavailable", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("model unavailable", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -604,7 +604,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         } while (DateTimeOffset.UtcNow < deadline);
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("missing translation capability", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("translation capability is warming", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("warming", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -933,7 +933,8 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         var readiness = await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(settings, probe);
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("live but translation capability is still warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("translation capability", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("capability is warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -1063,7 +1064,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                 CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(10)));
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("live but diarization capability is still warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("diarization capability is warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -1339,19 +1340,6 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         return Task.FromResult(response);
     }
 
-    private sealed class StubHttpMessageHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;
-
-        public StubHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
-        {
-            _handler = handler;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            _handler(request, cancellationToken);
-    }
-
     private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
     {
         var entriesField = typeof(ContainerizedServiceProbe).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -1386,4 +1374,18 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             await Task.Delay(10);
         }
     }
+
+    private sealed class StubHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;
+
+        public StubHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
+        {
+            _handler = handler;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            _handler(request, cancellationToken);
+    }
+
 }

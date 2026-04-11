@@ -79,10 +79,55 @@ public sealed class SessionSnapshotStoreTests : IDisposable
     public void SaveThenLoad_RoundTrips_Stage()
     {
         var snapshot = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow)
-            with { Stage = SessionWorkflowStage.Transcribed };
+            with
+            {
+                Stage = SessionWorkflowStage.Diarized,
+                DiarizationProvider = ProviderNames.NemoLocal,
+                SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+            };
         _store.Save(snapshot);
         var loaded = _store.Load().Snapshot!;
-        Assert.Equal(SessionWorkflowStage.Transcribed, loaded.Stage);
+        Assert.Equal(SessionWorkflowStage.Diarized, loaded.Stage);
+    }
+
+    [Fact]
+    public void Save_WritesStageAsStringName()
+    {
+        var snapshot = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow)
+            with
+            {
+                Stage = SessionWorkflowStage.Diarized,
+                DiarizationProvider = ProviderNames.NemoLocal,
+                SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+            };
+
+        _store.Save(snapshot);
+        using var doc = JsonDocument.Parse(File.ReadAllText(_stateFile));
+
+        Assert.Equal("Diarized", doc.RootElement.GetProperty("Stage").GetString());
+    }
+
+    [Fact]
+    public void Load_LegacyNumericStageValue_IsAccepted()
+    {
+        var now = DateTimeOffset.Parse("2025-01-15T12:00:00Z");
+        Directory.CreateDirectory(Path.GetDirectoryName(_stateFile)!);
+        File.WriteAllText(
+            _stateFile,
+            $$"""
+              {
+                "SessionId": "{{Guid.NewGuid()}}",
+                "Stage": 3,
+                "CreatedAtUtc": "{{now:O}}",
+                "LastUpdatedAtUtc": "{{now:O}}",
+                "StatusMessage": "legacy"
+              }
+              """);
+
+        var loaded = _store.Load().Snapshot;
+
+        Assert.NotNull(loaded);
+        Assert.Equal(SessionWorkflowStage.Translated, loaded!.Stage);
     }
 
     [Fact]

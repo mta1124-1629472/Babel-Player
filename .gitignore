@@ -118,3 +118,5 @@ ffmpeg.exe
 inference/__pycache__/
 scripts/run-local-release-dry-run.ps1
 .vscode/settings.json
+.qwen/
+gha-creds-*.json

@@ -168,7 +168,7 @@ public sealed class RecentSessionsStoreTests : IDisposable
             id,
             "/path/to/media.mp4",
             "media.mp4",
-            SessionWorkflowStage.Translated,
+            SessionWorkflowStage.Diarized,
             DateTimeOffset.Parse("2025-01-15T12:00:00Z"));
 
         _store.Upsert(entry);
@@ -179,6 +179,41 @@ public sealed class RecentSessionsStoreTests : IDisposable
         Assert.Equal(entry.SourceMediaFileName, loaded.SourceMediaFileName);
         Assert.Equal(entry.Stage, loaded.Stage);
         Assert.Equal(entry.LastUpdatedAtUtc, loaded.LastUpdatedAtUtc);
+    }
+
+    [Fact]
+    public void Upsert_WritesStageAsStringName()
+    {
+        var entry = MakeEntry(stage: SessionWorkflowStage.Diarized);
+
+        _store.Upsert(entry);
+        using var doc = JsonDocument.Parse(File.ReadAllText(_filePath));
+
+        Assert.Equal("Diarized", doc.RootElement[0].GetProperty("Stage").GetString());
+    }
+
+    [Fact]
+    public void Load_LegacyNumericStageValue_IsAccepted()
+    {
+        var now = DateTimeOffset.Parse("2025-01-15T12:00:00Z");
+        File.WriteAllText(
+            _filePath,
+            $$"""
+              [
+                {
+                  "SessionId": "{{Guid.NewGuid()}}",
+                  "SourceMediaPath": "/path/to/media.mp4",
+                  "SourceMediaFileName": "media.mp4",
+                  "Stage": 3,
+                  "LastUpdatedAtUtc": "{{now:O}}"
+                }
+              ]
+              """);
+
+        var loaded = _store.Load();
+
+        Assert.Single(loaded);
+        Assert.Equal(SessionWorkflowStage.Translated, loaded[0].Stage);
     }
 
     [Fact]

@@ -54,7 +54,10 @@ public sealed partial class SessionWorkflowCoordinator
         var outcome = await ExecuteDiarizationAsync(
             CurrentSession.IngestedMediaPath,
             CurrentSession.TranscriptPath,
-            cancellationToken);
+            cancellationToken,
+            resultingStage: CurrentSession.Stage >= SessionWorkflowStage.Translated
+                ? CurrentSession.Stage
+                : SessionWorkflowStage.Diarized);
 
         return outcome.SpeakerAssignmentsChanged;
     }
@@ -71,7 +74,9 @@ public sealed partial class SessionWorkflowCoordinator
     private async Task<DiarizationExecutionOutcome> ExecuteDiarizationAsync(
         string audioPath,
         string transcriptPath,
-        CancellationToken ct)
+        CancellationToken ct,
+        SessionWorkflowStage? resultingStage = null,
+        string? statusMessage = null)
     {
         if (DiarizationRegistry is null)
             throw new PipelineProviderException("No diarization registry is configured.");
@@ -131,10 +136,21 @@ public sealed partial class SessionWorkflowCoordinator
                 ct);
         }
 
+        var nextStage = resultingStage ?? (
+            CurrentSession.Stage >= SessionWorkflowStage.Translated
+                ? CurrentSession.Stage
+                : SessionWorkflowStage.Diarized);
+        var nextStatusMessage = statusMessage ?? (
+            nextStage >= SessionWorkflowStage.Translated
+                ? "Diarization complete. Speaker assignments updated."
+                : "Speaker mapping ready. Assign voices, then continue.");
+
         CurrentSession = CurrentSession with
         {
+            Stage = nextStage,
             DiarizationProvider = CurrentSettings.DiarizationProvider,
             SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+            StatusMessage = nextStatusMessage,
         };
         SaveCurrentSession();
 

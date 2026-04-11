@@ -138,21 +138,13 @@ public sealed partial class SessionWorkflowCoordinator
             TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
             TranscriptionModel = CurrentSettings.TranscriptionModel,
-            StatusMessage = $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
+            StatusMessage = ShouldPauseForSpeakerMapping()
+                ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for speaker mapping."
+                : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
         };
 
         _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
         SaveCurrentSession();
-
-        if (CurrentSession.MultiSpeakerEnabled && !string.IsNullOrEmpty(CurrentSettings.DiarizationProvider))
-        {
-            ReportStage(
-                stageContext,
-                "Transcript complete. Running diarization to assign speaker turns before translation and dubbing…",
-                progress01: 0,
-                isIndeterminate: true);
-            await ExecuteDiarizationAsync(CurrentSession.IngestedMediaPath!, transcriptPath, cancellationToken);
-        }
 
         ReportStage(
             stageContext,
@@ -529,7 +521,9 @@ public sealed partial class SessionWorkflowCoordinator
         IProgress<PipelineStageUpdate>? stageProgress = null,
         CancellationToken cancellationToken = default)
     {
-        var remainingStages = GetRemainingPipelineStages(CurrentSession.Stage);
+        var pauseAfterDiarization = ShouldPauseForSpeakerMapping()
+            && CurrentSession.Stage < SessionWorkflowStage.Diarized;
+        var remainingStages = GetAdvancePipelineStages(CurrentSession.Stage, pauseAfterDiarization);
         var stage = CurrentSession.Stage;
 
         if (stage < SessionWorkflowStage.Transcribed)
@@ -538,6 +532,15 @@ public sealed partial class SessionWorkflowCoordinator
                 progress,
                 GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress),
                 cancellationToken);
+        }
+
+        stage = CurrentSession.Stage;
+        if (pauseAfterDiarization && stage < SessionWorkflowStage.Diarized)
+        {
+            await ExecuteDiarizationStageAsync(
+                GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress),
+                cancellationToken);
+            return;
         }
 
         stage = CurrentSession.Stage;
@@ -561,4 +564,97 @@ public sealed partial class SessionWorkflowCoordinator
                 cancellationToken);
         }
     }
+
+    public Task ContinuePipelineAsync(
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        ContinuePipelineAsync(progress, stageProgress: null, cancellationToken);
+
+    internal async Task ContinuePipelineAsync(
+        IProgress<double>? progress = null,
+        IProgress<PipelineStageUpdate>? stageProgress = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (CurrentSession.Stage < SessionWorkflowStage.Diarized)
+            throw new InvalidOperationException("Speaker mapping is not ready yet. Run the pipeline through diarization first.");
+
+        var remainingStages = GetContinuationPipelineStages(CurrentSession.Stage);
+        var stage = CurrentSession.Stage;
+
+        if (stage < SessionWorkflowStage.Translated)
+        {
+            await TranslateTranscriptAsync(
+                progress,
+                null,
+                null,
+                GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                cancellationToken);
+        }
+
+        stage = CurrentSession.Stage;
+        if (stage < SessionWorkflowStage.TtsGenerated)
+        {
+            await GenerateTtsAsync(
+                progress,
+                null,
+                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+                cancellationToken);
+        }
+    }
+
+    public Task RunTtsOnlyAsync(
+        IProgress<double>? progress = null,
+        string? voice = null,
+        CancellationToken cancellationToken = default) =>
+        RunTtsOnlyAsync(progress, voice, stageProgress: null, cancellationToken);
+
+    internal async Task RunTtsOnlyAsync(
+        IProgress<double>? progress,
+        string? voice,
+        IProgress<PipelineStageUpdate>? stageProgress,
+        CancellationToken cancellationToken)
+    {
+        if (CurrentSession.Stage < SessionWorkflowStage.Translated)
+            throw new InvalidOperationException("No translation is available. Continue the pipeline through translation first.");
+
+        var remainingStages = GetContinuationPipelineStages(CurrentSession.Stage);
+        await GenerateTtsAsync(
+            progress,
+            voice,
+            GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+            cancellationToken);
+    }
+
+    private async Task ExecuteDiarizationStageAsync(
+        PipelineStageContext? stageContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
+            throw new InvalidOperationException("No ingested media is available for speaker mapping.");
+        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
+            throw new InvalidOperationException("No transcript is available for speaker mapping.");
+
+        ReportStage(
+            stageContext,
+            $"Running {CurrentSettings.DiarizationProvider} diarization to identify speakers before translation and dubbing…",
+            progress01: 0,
+            isIndeterminate: true);
+
+        var outcome = await ExecuteDiarizationAsync(
+            CurrentSession.IngestedMediaPath,
+            CurrentSession.TranscriptPath,
+            cancellationToken,
+            resultingStage: SessionWorkflowStage.Diarized,
+            statusMessage: "Speaker mapping ready. Assign voices, then continue.");
+
+        ReportStage(
+            stageContext,
+            $"Speaker mapping ready. Identified {outcome.SpeakerCount} speakers across {outcome.SegmentCount} segments.",
+            progress01: 1,
+            isIndeterminate: false);
+    }
+
+    private bool ShouldPauseForSpeakerMapping() =>
+        CurrentSession.MultiSpeakerEnabled
+        && !string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider);
 }
