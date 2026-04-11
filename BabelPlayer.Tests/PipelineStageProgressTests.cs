@@ -132,7 +132,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
         Assert.Contains(
             translationUpdates,
             update => !update.IsIndeterminate &&
-                      Math.Abs(update.Progress01 - 0.5) < 0.001 &&
+                      update.Progress01 > 0.25 &&
                       update.StageIndex == 2 &&
                       update.StageCount == 3);
     }

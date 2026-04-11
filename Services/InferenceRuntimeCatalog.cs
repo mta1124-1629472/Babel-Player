@@ -84,10 +84,22 @@ public static class InferenceRuntimeCatalog
         DefaultTtsProvider(MapLegacyRuntimeToProfile(runtime));
 
     /// <summary>
-    /// Gets the default diarization provider identifier.
+    /// Gets the canonical provider identifier used as the default for diarization.
     /// </summary>
     /// <returns>The provider ID for the default diarization provider: <c>ProviderNames.NemoLocal</c>.</returns>
     public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
+
+    /// <summary>
+    /// Determines the effective InferenceRuntime for a diarization provider identifier.
+    /// </summary>
+    /// <param name="providerId">The diarization provider identifier or null; accepts canonical names and legacy aliases.</param>
+    /// <returns><see cref="InferenceRuntime.Containerized"/> when the provider is NeMo (canonical or legacy alias); <see cref="InferenceRuntime.Local"/> for WeSpeaker (canonical or legacy alias) or any other/unknown value.</returns>
+    public static InferenceRuntime InferDiarizationRuntime(string? providerId) => providerId switch
+    {
+        ProviderNames.NemoLocal or ProviderNames.NemoDiarizationAlias => InferenceRuntime.Containerized,
+        ProviderNames.WeSpeakerLocal or ProviderNames.WeSpeakerDiarizationAlias => InferenceRuntime.Local,
+        _ => InferenceRuntime.Local,
+    };
 
     /// <summary>
     /// Normalizes a transcription provider identifier to a canonical provider ID appropriate for the given compute profile.

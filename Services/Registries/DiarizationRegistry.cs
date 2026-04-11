@@ -28,23 +28,29 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
 {
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private readonly ConcurrentDictionary<string, ContainerizedInferenceClient> _clientCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Initializes a new instance of <see cref="DiarizationRegistry"/> with the given logging facility and an optional probe for containerized services.
+    /// Initializes a DiarizationRegistry with the required application log and optional components for containerized inference support.
     /// </summary>
-    /// <param name="log">Application logger used by the registry and the providers it creates.</param>
+    /// <param name="log">Application logger used for registry and provider operations.</param>
     /// <param name="containerizedProbe">Optional probe to check containerized inference service health and availability; may be <c>null</c>.</param>
-    public DiarizationRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null)
+    /// <param name="requestLeaseTracker">Optional tracker for managing request leases when creating or using containerized inference clients; may be <c>null</c>.</param>
+    public DiarizationRegistry(
+        AppLog log,
+        ContainerizedServiceProbe? containerizedProbe = null,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker = null)
     {
         _log = log;
         _containerizedProbe = containerizedProbe;
+        _requestLeaseTracker = requestLeaseTracker;
     }
 
     /// <summary>
-    /// Lists the diarization providers available in this registry.
+    /// Lists the diarization providers supported by this registry.
     /// </summary>
-    /// <returns>A read-only list of <see cref="ProviderDescriptor"/> objects describing each available diarization provider.</returns>
+    /// <returns>A read-only list of <see cref="ProviderDescriptor"/> instances describing each available diarization provider.</returns>
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
     [
         new ProviderDescriptor(
@@ -63,10 +69,10 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
             false,
             null,
             [ProviderNames.WeSpeakerDiarizationAlias],
-            SupportedRuntimes: [InferenceRuntime.Containerized],
-            DefaultRuntime: InferenceRuntime.Containerized,
+            SupportedRuntimes: [InferenceRuntime.Local],
+            DefaultRuntime: InferenceRuntime.Local,
             IsImplemented: true,
-            Notes: "Uses the containerized WeSpeaker CPU fallback endpoint."),
+            Notes: "Uses the managed CPU WeSpeaker provider."),
     ];
 
     /// <summary>
@@ -91,32 +97,39 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     }
 
     /// <summary>
-    /// Create an IDiarizationProvider instance for the specified provider identifier.
+    /// Creates a diarization provider instance for the specified provider ID.
     /// </summary>
-    /// <param name="providerId">The provider identifier to instantiate (e.g., ProviderNames.NemoLocal or ProviderNames.WeSpeakerLocal).</param>
-    /// <param name="settings">Application settings used to configure the provider (its EffectiveContainerizedServiceUrl is used to construct the containerized client).</param>
-    /// <param name="keyStore">API key store (accepted but not used by the current provider implementations).</param>
-    /// <returns>The instantiated diarization provider configured according to the provided settings.</returns>
+    /// <param name="providerId">The identifier of the diarization provider to create.</param>
+    /// <param name="settings">Application settings used when constructing provider instances (e.g., service endpoints).</param>
+    /// <param name="keyStore">Optional API key store; may be used by some providers to obtain credentials.</param>
+    /// <returns>An <see cref="IDiarizationProvider"/> implementation corresponding to <paramref name="providerId"/>.</returns>
     /// <exception cref="PipelineProviderException">Thrown when the specified providerId is not implemented.</exception>
     public IDiarizationProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)
     {
-        var serviceUrl = ContainerizedInferenceClient.NormalizeBaseUrl(settings.EffectiveContainerizedServiceUrl);
-        var client = _clientCache.GetOrAdd(serviceUrl, normalizedServiceUrl => new ContainerizedInferenceClient(normalizedServiceUrl, _log));
-
         return providerId switch
         {
             ProviderNames.NemoLocal => new NemoContainerizedDiarizationProvider(
-                client,
+                GetOrCreateContainerizedClient(settings),
                 _log,
                 _containerizedProbe),
-            ProviderNames.WeSpeakerLocal => new WeSpeakerContainerizedDiarizationProvider(
-                client,
-                _log,
-                _containerizedProbe),
+            ProviderNames.WeSpeakerLocal => new WeSpeakerCpuDiarizationProvider(_log),
             _ => throw new PipelineProviderException(
                 $"Diarization provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")
         };
+    }
+
+    /// <summary>
+    /// Get or create a cached ContainerizedInferenceClient for the effective containerized service URL in the provided settings.
+    /// </summary>
+    /// <param name="settings">Application settings used to determine the effective containerized service URL.</param>
+    /// <returns>The ContainerizedInferenceClient associated with the normalized service URL; a previously created instance is returned when available.</returns>
+    private ContainerizedInferenceClient GetOrCreateContainerizedClient(AppSettings settings)
+    {
+        var serviceUrl = ContainerizedInferenceClient.NormalizeBaseUrl(settings.EffectiveContainerizedServiceUrl);
+        return _clientCache.GetOrAdd(
+            serviceUrl,
+            normalizedServiceUrl => new ContainerizedInferenceClient(normalizedServiceUrl, _log, null, _requestLeaseTracker));
     }
 
 }

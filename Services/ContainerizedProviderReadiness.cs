@@ -208,15 +208,19 @@ public static class ContainerizedProviderReadiness
     /// <param name="stage">The capability stage to evaluate (e.g., Transcription, Tts, Diarization).</param>
     /// <param name="settings">Application settings used to resolve provider selection when applicable.</param>
     /// <param name="providerId">Optional provider identifier to evaluate provider-specific readiness for stages that support it; may be null.</param>
-    /// <returns>`true` if the capability is available at the host level but not yet ready and its detail contains "warming" without "failed"; `false` otherwise.</returns>
+    /// <returns>`true` if the capability is available at the host level but not yet ready and its detail contains "warming" without "failed"; also returns `true` when the host is available but capabilities are null with a non-null error (indicating transient startup/warmup); `false` otherwise.</returns>
     private static bool IsCapabilityActivelyWarming(
         ContainerizedProbeResult probeResult,
         ContainerCapabilityStage stage,
         AppSettings settings,
         string? providerId)
     {
-        if (probeResult.State != ContainerizedProbeState.Available || probeResult.Capabilities is null)
+        if (probeResult.State != ContainerizedProbeState.Available)
             return false;
+
+        // Treat null capabilities with a non-null error as actively warming to allow retry.
+        if (probeResult.Capabilities is null)
+            return !string.IsNullOrWhiteSpace(probeResult.CapabilitiesError);
 
         if (IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out var detail))
             return false;
@@ -230,13 +234,13 @@ public static class ContainerizedProviderReadiness
     }
 
     /// <summary>
-    /// Map a container probe result to a ProviderReadiness describing whether the requested capability stage is available.
+    /// Converts a container probe result into a ProviderReadiness that reflects whether the requested capability stage (and optional provider) is ready on the configured GPU host.
     /// </summary>
-    /// <param name="settings">Application settings used to determine host labeling and provider defaults.</param>
-    /// <param name="probeResult">Probe information including service URL, state, capabilities, and any error/detail text.</param>
-    /// <param name="stage">The capability stage to evaluate (Transcription, Translation, Tts, or Diarization).</param>
-    /// <param name="providerId">Optional provider identifier to evaluate provider-specific readiness for TTS or Diarization; when null or empty the corresponding default from <paramref name="settings"/> is used.</param>
-    /// <returns>A <see cref="ProviderReadiness"/> indicating readiness; when not ready the returned object contains a user-facing message explaining the reason.</returns>
+    /// <param name="settings">Application settings used to derive host labeling and provider defaults.</param>
+    /// <param name="probeResult">Result of the container probe or health check containing host state, advertised capabilities, and any error details.</param>
+    /// <param name="stage">The capability stage to evaluate (transcription, translation, TTS, or diarization).</param>
+    /// <param name="providerId">Optional provider identifier to select a specific TTS or diarization provider; when null or empty the corresponding provider configured in <paramref name="settings"/> is used.</param>
+    /// <returns><c>ProviderReadiness.Ready</c> when the requested stage/provider is available; otherwise a non-ready ProviderReadiness containing a user-facing message explaining why the capability or host is not ready.</returns>
     internal static ProviderReadiness MapProbeResultToReadiness(
         AppSettings settings,
         ContainerizedProbeResult probeResult,
@@ -259,19 +263,20 @@ public static class ContainerizedProviderReadiness
             return new ProviderReadiness(false, BuildUnreachableMessage(settings, probeResult.ServiceUrl, unreachableDetail));
         }
 
-        string? detail = null;
-        if (probeResult.Capabilities is null || !IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out detail))
+        if (probeResult.Capabilities is null)
         {
-            if (stage == ContainerCapabilityStage.Diarization
-                && string.Equals(
-                    InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(
-                        string.IsNullOrWhiteSpace(providerId) ? settings.DiarizationProvider : providerId),
-                    ProviderNames.WeSpeakerLocal,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return new ProviderReadiness(false, BuildWeSpeakerCapabilityNotReadyMessage(settings, detail));
-            }
+            // Return not-ready status but do not prevent warmup retry path from operating.
+            // The null capabilities could be transient (e.g., host just starting), and
+            // IsCapabilityActivelyWarming will treat this case as "not warming" allowing
+            // the caller (CheckForExecutionAsync) to continue normally.
+            return new ProviderReadiness(
+                false,
+                BuildCapabilitiesUnavailableMessage(hostLabel, stage, probeResult.CapabilitiesError));
+        }
 
+        string? detail = null;
+        if (!IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out detail))
+        {
             var stageLabel = stage switch
             {
                 ContainerCapabilityStage.Transcription => "transcription",
@@ -287,6 +292,11 @@ public static class ContainerizedProviderReadiness
         return ProviderReadiness.Ready;
     }
 
+    /// <summary>
+    /// Creates a ContainerizedProbeResult from a ContainerHealthStatus snapshot.
+    /// </summary>
+    /// <param name="health">Health snapshot from the container inference host.</param>
+    /// <returns>A ContainerizedProbeResult representing the same service URL, availability state, timestamped now, error text, CUDA info, capabilities, and capability error as the provided health snapshot.</returns>
     private static ContainerizedProbeResult FromHealth(ContainerHealthStatus health) =>
         new(
             health.ServiceUrl,
@@ -295,8 +305,15 @@ public static class ContainerizedProviderReadiness
             health.ErrorMessage,
             health.CudaAvailable,
             health.CudaVersion,
-            health.Capabilities);
+            health.Capabilities,
+            health.CapabilitiesError);
 
+    /// <summary>
+    /// Builds a user-facing message explaining that the configured GPU inference host is unreachable and how to proceed.
+    /// </summary>
+    /// <param name="serviceUrl">The configured service URL for the GPU inference host.</param>
+    /// <param name="detail">Probe detail or error text to include in the message.</param>
+    /// <returns>A human-readable message guiding the user to start or check the configured GPU host, including probe detail.</returns>
     private static string BuildUnreachableMessage(AppSettings settings, string serviceUrl, string detail)
     {
         var hostLabel = GetHostLabel(settings);
@@ -315,16 +332,23 @@ public static class ContainerizedProviderReadiness
         return $"Configured {hostLabel} is not reachable: {detail}";
     }
 
-    private static string GetHostLabel(AppSettings settings) =>
+    /// <summary>
+            /// Selects a human-readable label for the configured local GPU host backend.
+            /// </summary>
+            /// <param name="settings">Application settings whose PreferredLocalGpuBackend determines the label.</param>
+            /// <returns>A label describing the configured local GPU host: "Managed local GPU host" for ManagedVenv, otherwise "Docker GPU host".</returns>
+            private static string GetHostLabel(AppSettings settings) =>
         settings.PreferredLocalGpuBackend == GpuHostBackend.ManagedVenv
             ? "Managed local GPU host"
             : "Docker GPU host";
 
-    private static string GetInferenceHostLabel(AppSettings settings) =>
-        settings.PreferredLocalGpuBackend == GpuHostBackend.ManagedVenv
-            ? "Managed local inference host"
-            : "Docker inference host";
-
+    /// <summary>
+    /// Builds a user-facing message indicating the host is reachable but the requested capability stage is not ready.
+    /// </summary>
+    /// <param name="hostLabel">Human-readable label for the GPU host (for example, "Docker GPU host" or "Managed local GPU host").</param>
+    /// <param name="stageLabel">Human-readable label for the capability stage (for example, "TTS", "transcription", or "diarization").</param>
+    /// <param name="detail">Optional detail text from the host's capability metadata; influences wording when it mentions warming or probe activity.</param>
+    /// <returns>A message stating that the host is live but the specified capability is not ready. If <paramref name="detail"/> is provided, it is appended and the message wording indicates active warming when the detail contains "warming" or "probe".</returns>
     private static string BuildCapabilityNotReadyMessage(string hostLabel, string stageLabel, string? detail)
     {
         if (string.IsNullOrWhiteSpace(detail))
@@ -339,19 +363,30 @@ public static class ContainerizedProviderReadiness
         return $"{hostLabel} is live but missing {stageLabel} capability: {detail}";
     }
 
-    private static string BuildWeSpeakerCapabilityNotReadyMessage(AppSettings settings, string? detail)
+    /// <summary>
+    /// Builds a human-readable status message indicating that the host's capability metadata for the specified stage is unavailable or could not be read.
+    /// </summary>
+    /// <param name="hostLabel">Label for the host (e.g., "Managed local GPU host" or "Docker GPU host") used in the message.</param>
+    /// <param name="stage">The capability stage (transcription, translation, TTS, or diarization) to include in the message.</param>
+    /// <param name="detail">Optional detail or error text to append; if null or whitespace the message states metadata is unavailable without additional detail.</param>
+    /// <returns>A formatted message stating that the host is live but the specified stage's capability metadata is unavailable or could not be read; includes the provided detail when present.</returns>
+    private static string BuildCapabilitiesUnavailableMessage(
+        string hostLabel,
+        ContainerCapabilityStage stage,
+        string? detail)
     {
-        var hostLabel = GetInferenceHostLabel(settings);
-        if (string.IsNullOrWhiteSpace(detail))
-            return $"{hostLabel} is live but WeSpeaker CPU fallback is not ready.";
-
-        if (detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
-            || detail.Contains("probe", StringComparison.OrdinalIgnoreCase))
+        var stageLabel = stage switch
         {
-            return $"{hostLabel} is live but WeSpeaker CPU fallback is still warming: {detail}";
-        }
+            ContainerCapabilityStage.Transcription => "transcription",
+            ContainerCapabilityStage.Translation => "translation",
+            ContainerCapabilityStage.Tts => "TTS",
+            _ => "diarization",
+        };
 
-        return $"{hostLabel} is live but WeSpeaker CPU fallback is not ready: {detail}";
+        if (string.IsNullOrWhiteSpace(detail))
+            return $"{hostLabel} is live but {stageLabel} capability metadata is unavailable.";
+
+        return $"{hostLabel} is live but {stageLabel} capability metadata could not be read: {detail}";
     }
 
     /// <summary>

@@ -149,12 +149,13 @@ public sealed class InferenceRequirementsTests
     }
 
     [Fact]
-    public void GpuRequirements_WeSpeakerFallbackDependency_IsPresent()
+    public void GpuRequirements_WeSpeakerDependencies_AreRemoved()
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "gpu-requirements.txt");
         var lines = ReadRequirementsLines(requirementsPath);
 
-        Assert.Contains("s3prl", lines);
+        Assert.DoesNotContain(lines, line => line.Contains("wespeaker", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain("s3prl", lines);
     }
 
     [Fact]
@@ -184,12 +185,23 @@ public sealed class InferenceRequirementsTests
     [InlineData("sentencepiece==0.2.1")]
     [InlineData("faster-whisper==1.2.1")]
     [InlineData("googletrans==4.0.0rc1")]
+    [InlineData("git+https://github.com/wenet-e2e/wespeaker.git@c92349a14d6b426808c4e09b8b12e076864dfc11")]
+    [InlineData("s3prl")]
     public void CpuRequirements_ContainsPinnedCpuSubprocessDependencies(string expectedLine)
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var lines = ReadRequirementsLines(requirementsPath);
 
         Assert.Contains(expectedLine, lines);
+    }
+
+    [Fact]
+    public void CpuRequirements_DoesNotContainPyannoteAudio()
+    {
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
+        var lines = ReadRequirementsLines(requirementsPath);
+
+        Assert.DoesNotContain(lines, line => line.Contains("pyannote.audio", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]

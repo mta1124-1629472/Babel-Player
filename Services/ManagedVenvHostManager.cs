@@ -28,7 +28,9 @@ public sealed record ManagedGpuRuntimeValidationResult(
 
 public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDisposable
 {
-    private static readonly TimeSpan PreflightHealthTimeout = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PreflightHealthTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan PreflightStabilizationWindow = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan PreflightRetryDelay = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan PostStartProbeTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan VenvUnlockTimeout = TimeSpan.FromSeconds(5);
@@ -48,11 +50,29 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private readonly Func<string, string, string, string, string, CancellationToken, Task> _bootstrapRunner;
     private readonly Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>> _runtimeValidator;
     private readonly Func<string, string, string, string, CancellationToken, Task> _hostProcessStarter;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private readonly TimeSpan _postStartProbeTimeout;
     private readonly Lock _gate = new();
     private Task<ContainerizedStartResult>? _inFlightStartTask;
     private Process? _hostProcess;
 
+    /// <summary>
+    /// Initializes a ManagedVenvHostManager with optional dependency overrides and runtime configuration.
+    /// </summary>
+    /// <param name="log">Application logger used for operational messages.</param>
+    /// <param name="probe">Optional readiness probe used to wait for the hosted service to become available.</param>
+    /// <param name="healthCheckFunc">Optional function to perform health checks against the managed host service.</param>
+    /// <param name="hardwareSnapshotProvider">Optional provider for the local hardware capability snapshot.</param>
+    /// <param name="uvResolver">Optional resolver that returns the path to the uv executable.</param>
+    /// <param name="runtimeRootResolver">Optional resolver that returns the runtime root directory for the managed venv.</param>
+    /// <param name="inferenceScriptResolver">Optional resolver that returns the path to the inference script.</param>
+    /// <param name="requirementsPathResolver">Optional resolver that returns the path to the pip requirements file used for bootstrapping.</param>
+    /// <param name="constraintsPathResolver">Optional resolver that returns the path to the pip constraints file used for bootstrapping.</param>
+    /// <param name="bootstrapRunner">Optional bootstrap runner delegate that creates or rebuilds the Python venv and installs dependencies.</param>
+    /// <param name="runtimeValidator">Optional validator delegate that verifies the runtime (e.g., CUDA/PyTorch availability) for the given python interpreter.</param>
+    /// <param name="hostProcessStarter">Optional delegate that starts the managed Python host process.</param>
+    /// <param name="requestLeaseTracker">Optional tracker used to detect active local requests for defer/cleanup decisioning.</param>
+    /// <param name="postStartProbeTimeout">Optional timeout used when waiting for the host to become ready after startup.</param>
     public ManagedVenvHostManager(
         AppLog log,
         ContainerizedServiceProbe? probe = null,
@@ -66,6 +86,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         Func<string, string, string, string, string, CancellationToken, Task>? bootstrapRunner = null,
         Func<string, CancellationToken, Task<ManagedGpuRuntimeValidationResult>>? runtimeValidator = null,
         Func<string, string, string, string, CancellationToken, Task>? hostProcessStarter = null,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker = null,
         TimeSpan? postStartProbeTimeout = null)
     {
         _log = log;
@@ -80,6 +101,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         _bootstrapRunner = bootstrapRunner ?? RunUvBootstrapAsync;
         _runtimeValidator = runtimeValidator ?? ValidateManagedGpuRuntimeAsync;
         _hostProcessStarter = hostProcessStarter ?? StartHostProcessAsync;
+        _requestLeaseTracker = requestLeaseTracker;
         _postStartProbeTimeout = postStartProbeTimeout ?? PostStartProbeTimeout;
     }
 
@@ -101,6 +123,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             "Managed GPU host autostart");
     }
 
+    /// <summary>
+    /// Orchestrates ensuring the managed local GPU host is running and ready, reusing an existing host, deferring restart when busy, or performing a restart/bootstrap as needed.
+    /// </summary>
+    /// <param name="settings">Application settings used to decide whether to attempt and how to start the managed GPU host.</param>
+    /// <param name="trigger">The startup trigger that initiated this ensure-start attempt.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation of the start operation.</param>
+    /// <returns>A <see cref="ContainerizedStartResult"/> describing whether a start was attempted, whether the host is available (reused or started), and a human-readable message explaining the outcome.</returns>
     public async Task<ContainerizedStartResult> EnsureStartedAsync(
         AppSettings settings,
         ContainerizedStartupTrigger trigger,
@@ -115,27 +144,40 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
+        var scriptChangedSinceLastStart = IsScriptChangedSinceLastStart();
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
-        if (preflight.IsAvailable && !IsScriptChangedSinceLastStart())
+        preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
+
+        if (preflight.IsAvailable && !scriptChangedSinceLastStart)
         {
             State = ManagedHostState.Ready;
             _log.Info("Managed GPU host startup path: reuse");
             return new ContainerizedStartResult(false, true, $"Managed local GPU host already available at {serviceUrl}.");
         }
 
+        if (ShouldDeferRestartForBusyHost(preflight))
+        {
+            // Only mark as Ready and return healthy if the host is actually available.
+            if (preflight.IsAvailable)
+            {
+                State = ManagedHostState.Ready;
+                var deferMessage = BuildBusyHostDeferMessage(serviceUrl, preflight);
+                _log.Info(
+                    $"Managed GPU host startup deferred: trigger={trigger}, active_requests={_requestLeaseTracker?.ActiveRequests ?? 0}, " +
+                    $"host_busy={preflight.Busy}, reason='{deferMessage}'");
+                return new ContainerizedStartResult(false, true, deferMessage);
+            }
+            else
+            {
+                // Host is busy but not available; do not mark Ready or return healthy.
+                var notAvailableMessage = $"Managed GPU host is not available: {preflight.ErrorMessage ?? "unknown error"}";
+                _log.Warning($"Managed GPU host startup path: host reported busy but is not available.");
+                return new ContainerizedStartResult(false, false, notAvailableMessage);
+            }
+        }
+
         if (preflight.IsAvailable)
             _log.Info("Managed GPU host script changed since last start; will stop stale process and restart.");
-
-        if (ShouldDeferRestartForBusyHost(preflight, trigger))
-        {
-            State = ManagedHostState.Ready;
-            _log.Info(
-                $"Managed GPU host startup deferred: trigger={trigger}, reason='busy host suspected', detail='{preflight.ErrorMessage ?? "<none>"}'");
-            return new ContainerizedStartResult(
-                false,
-                true,
-                $"Managed local GPU host is running but did not answer health probe quickly; deferring restart ({trigger}).");
-        }
 
         Task<ContainerizedStartResult> task;
         lock (_gate)
@@ -532,12 +574,42 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             cancellationToken);
     }
 
+    /// <summary>
+    /// Attempts to stop any stale managed GPU host processes and wait for the virtual environment to be unlocked.
+    /// </summary>
+    /// <param name="pythonPath">Full path to the managed Python executable used to identify matching processes.</param>
+    /// <param name="hostPidPath">Path to the pid file that may reference a running host process; the file will be deleted if present.</param>
+    /// <param name="stopTrackedProcess">
+    /// If true, also attempts to stop the currently tracked host process instance held by this manager.
+    /// If false, the tracked process will not be stopped.
+    /// </param>
+    /// <param name="cancellationToken">Token to observe for cancellation while stopping processes and waiting for venv unlock.</param>
+    /// <returns>`true` if any managed host process was stopped, `false` if none were stopped or recovery was skipped due to active local requests.</returns>
     private async Task<bool> RecoverStaleHostProcessesAsync(
         string pythonPath,
         string hostPidPath,
         bool stopTrackedProcess,
         CancellationToken cancellationToken)
     {
+        if (_requestLeaseTracker is null)
+        {
+            _log.Warning("Managed GPU host recovery cannot proceed: request lease tracker is not initialized.");
+            return false;
+        }
+
+        // Begin recovery gate to block new leases and wait for existing ones to drain.
+        using var recoveryToken = _requestLeaseTracker.BeginRecovery();
+
+        try
+        {
+            await _requestLeaseTracker.WaitForZeroActiveRequestsAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _log.Warning("Managed GPU host recovery canceled while waiting for active requests to complete.");
+            throw;
+        }
+
         var stoppedAny = false;
 
         if (stopTrackedProcess && await StopTrackedHostProcessAsync(cancellationToken))
@@ -554,6 +626,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         return stoppedAny;
     }
 
+    /// <summary>
+    /// Stops the currently tracked managed GPU host process if one is running.
+    /// </summary>
+    /// <returns>`true` if a tracked process was stopped, `false` otherwise.</returns>
+    /// <remarks>
+    /// This method should be called only during recovery when the recovery gate is active and all active requests have completed.
+    /// </remarks>
     private async Task<bool> StopTrackedHostProcessAsync(CancellationToken cancellationToken)
     {
         Process? trackedProcess;
@@ -974,6 +1053,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
+    /// <summary>
+    /// Probes the managed GPU host at the given URL and returns its health status; exceptions are converted into an unavailable status.
+    /// </summary>
+    /// <param name="serviceUrl">The service URL to probe (e.g., http://127.0.0.1:18000).</param>
+    /// <param name="timeout">Maximum duration to wait for the health probe.</param>
+    /// <param name="cancellationToken">Token to cancel the probe.</param>
+    /// <returns>The observed <see cref="ContainerHealthStatus"/>; if an error occurs, returns an unavailable status whose message contains the error.</returns>
     private async Task<ContainerHealthStatus> SafeCheckHealthAsync(
         string serviceUrl,
         TimeSpan timeout,
@@ -986,7 +1072,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             _log.Info(
                 $"Managed GPU host health probe finished: available={health.IsAvailable}, " +
                 $"cuda_available={health.CudaAvailable}, cuda_version='{health.CudaVersion ?? "<none>"}', " +
-                $"error='{health.ErrorMessage ?? "<none>"}'");
+                $"busy={health.Busy}, active_requests={health.ActiveRequests}, active_qwen={health.ActiveQwenRequests}, " +
+                $"active_diarization={health.ActiveDiarizationRequests}, error='{health.ErrorMessage ?? "<none>"}', " +
+                $"capabilities_error='{health.CapabilitiesError ?? "<none>"}'");
             return health;
         }
         catch (Exception ex)
@@ -1031,20 +1119,62 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"The app attempted automatic recovery but the runtime still could not be rebuilt. Details: {detail}";
     }
 
-    private static bool IsLockedRuntimeFailure(string message) =>
+    /// <summary>
+        /// Determines whether a bootstrap/runtime failure message indicates a locked or permission-related runtime directory.
+        /// </summary>
+        /// <param name="message">The failure message text to inspect.</param>
+        /// <returns>`true` if the message suggests the runtime directory was locked or inaccessible, `false` otherwise.</returns>
+        private static bool IsLockedRuntimeFailure(string message) =>
         message.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
         || message.Contains("failed to remove directory", StringComparison.OrdinalIgnoreCase)
         || message.Contains("remained locked", StringComparison.OrdinalIgnoreCase);
 
-    private bool ShouldDeferRestartForBusyHost(
-        ContainerHealthStatus preflight,
-        ContainerizedStartupTrigger trigger)
+    /// <summary>
+    /// Waits for a tracked managed host to stabilize by repeatedly rechecking its health within a short stabilization window.
+    /// </summary>
+    /// <param name="serviceUrl">The URL of the managed host health endpoint to probe.</param>
+    /// <param name="initialHealth">The initial health result to base stabilization on.</param>
+    /// <returns>The final <see cref="ContainerHealthStatus"/> observed: an available status if the host becomes ready, otherwise the most recent health (which may indicate busy or unavailable).</returns>
+    private async Task<ContainerHealthStatus> StabilizeTrackedHostHealthAsync(
+        string serviceUrl,
+        ContainerHealthStatus initialHealth,
+        CancellationToken cancellationToken)
     {
-        if (trigger != ContainerizedStartupTrigger.AppStartup
-            && trigger != ContainerizedStartupTrigger.SettingsChanged)
+        if (initialHealth.IsAvailable)
+            return initialHealth;
+
+        if (!IsTrackedHostProcessRunning() && !HasActiveLocalRequests())
+            return initialHealth;
+
+        var lastHealth = initialHealth;
+        var deadline = DateTimeOffset.UtcNow + PreflightStabilizationWindow;
+        while (DateTimeOffset.UtcNow < deadline)
         {
-            return false;
+            if (ShouldDeferRestartForBusyHost(lastHealth))
+                return lastHealth;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Delay(PreflightRetryDelay, cancellationToken).ConfigureAwait(false);
+            lastHealth = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken).ConfigureAwait(false);
+            if (lastHealth.IsAvailable)
+                return lastHealth;
         }
+
+        return lastHealth;
+    }
+
+    /// <summary>
+    /// Determines whether a managed-host restart should be deferred because the host is busy or there are active local requests.
+    /// </summary>
+    /// <param name="preflight">The preflight health probe result for the tracked host.</param>
+    /// <returns>`true` if restart should be deferred due to active local requests, the host reporting busy, or the tracked host running with a transient busy health failure; `false` otherwise.</returns>
+    private bool ShouldDeferRestartForBusyHost(ContainerHealthStatus preflight)
+    {
+        if (HasActiveLocalRequests())
+            return true;
+
+        if (preflight.Busy)
+            return true;
 
         if (!IsTrackedHostProcessRunning())
             return false;
@@ -1052,6 +1182,16 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         return IsTransientBusyHealthFailure(preflight.ErrorMessage);
     }
 
+    /// <summary>
+    /// Indicates whether there are currently active local requests tracked by the optional request lease tracker.
+    /// </summary>
+    /// <returns><c>true</c> if a request lease tracker is present and reports active requests; <c>false</c> otherwise.</returns>
+    private bool HasActiveLocalRequests() => _requestLeaseTracker?.HasActiveRequests == true;
+
+    /// <summary>
+    /// Determines whether the currently tracked host process exists and has not exited.
+    /// </summary>
+    /// <returns>`true` if a tracked host process is present and has not exited; `false` if there is no tracked process, it has exited, or the process status cannot be determined.</returns>
     private bool IsTrackedHostProcessRunning()
     {
         try
@@ -1064,6 +1204,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
+    /// <summary>
+    /// Detects whether an error message represents a transient busy or timeout condition reported by the health probe.
+    /// </summary>
+    /// <param name="error">The error message text to inspect.</param>
+    /// <returns>`true` if the text indicates a transient timeout or cancellation (for example: timeout, HttpClient timeout, or operation/request canceled); `false` otherwise.</returns>
     private static bool IsTransientBusyHealthFailure(string? error)
     {
         if (string.IsNullOrWhiteSpace(error))
@@ -1075,6 +1220,40 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             || error.Contains("timed out", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Builds a human-readable message explaining why a restart of the managed local GPU host is being deferred.
+    /// </summary>
+    /// <param name="serviceUrl">The service URL used in the health probe and included in the message.</param>
+    /// <param name="preflight">The preflight health probe result used to determine busy state and reason.</param>
+    /// <returns>
+    /// A string describing the deferral reason: either that active local requests are being served, that the host reported busy (including the probe's busy reason when present), or that the host did not respond within the stabilization window.
+    /// </returns>
+    private string BuildBusyHostDeferMessage(string serviceUrl, ContainerHealthStatus preflight)
+    {
+        if (HasActiveLocalRequests())
+        {
+            return
+                $"Managed local GPU host is serving active requests at {serviceUrl}; deferring restart until those requests complete.";
+        }
+
+        if (preflight.Busy)
+        {
+            var busyReason = string.IsNullOrWhiteSpace(preflight.BusyReason)
+                ? "the host reported active work"
+                : preflight.BusyReason;
+            return
+                $"Managed local GPU host is busy at {serviceUrl}; deferring restart while {busyReason}.";
+        }
+
+        return
+            $"Managed local GPU host is running at {serviceUrl} but did not answer the health probe within the stabilization window; deferring restart.";
+    }
+
+    /// <summary>
+    /// Builds a user-facing failure message describing why the managed local GPU host did not become ready.
+    /// </summary>
+    /// <param name="readiness">Probe result used to determine the error detail or state to include in the message.</param>
+    /// <returns>A single-line message explaining the readiness failure for the managed local GPU host; includes the probe's error detail or state and appends the host process exit code when the tracked process exited before readiness.</returns>
     private string BuildReadinessFailureMessage(ContainerizedProbeResult readiness)
     {
         var detail = readiness.ErrorDetail ?? readiness.State.ToString();

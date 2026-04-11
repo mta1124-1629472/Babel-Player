@@ -13,24 +13,56 @@ namespace Babel.Player.Services;
 
 public sealed class ContainerizedInferenceClient
 {
-    private const string CapabilitiesWarmupPrefix = "Capabilities probe is still warming or failed";
     private readonly HttpClient _httpClient;
     private readonly AppLog _log;
     private readonly string _inferenceServiceUrl;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = false };
 
+    /// <summary>
+    /// Initializes a new ContainerizedInferenceClient for the specified inference service URL and logger, using a default HttpClient and no request lease tracker.
+    /// </summary>
+    /// <param name="inferenceServiceUrl">The base URL of the containerized inference service; if null or empty, "http://localhost:8000" is used.</param>
     public ContainerizedInferenceClient(string inferenceServiceUrl, AppLog log)
-        : this(inferenceServiceUrl, log, null)
+        : this(inferenceServiceUrl, log, null, null)
     {
     }
 
+    /// <summary>
+    /// Initializes a ContainerizedInferenceClient using the provided inference service URL and logging, optionally reusing an HttpClient.
+    /// </summary>
+    /// <param name="inferenceServiceUrl">Base URL of the containerized inference service; the value will be normalized (trimmed and trailing '/' removed) and defaults to "http://localhost:8000" when null or empty.</param>
+    /// <param name="log">Logging instance used by the client.</param>
+    /// <param name="httpClient">Optional HttpClient to reuse for requests; when null the client will create a new HttpClient with a 10-minute timeout.</param>
     public ContainerizedInferenceClient(string inferenceServiceUrl, AppLog log, HttpClient? httpClient)
+        : this(inferenceServiceUrl, log, httpClient, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a ContainerizedInferenceClient with the specified service URL, logger, optional HTTP client, and optional request-lease tracker.
+    /// </summary>
+    /// <param name="inferenceServiceUrl">Base URL of the containerized inference service; the value is normalized (trimmed and trailing slash removed). If null or empty, a default of "http://localhost:8000" is used.</param>
+    /// <param name="log">Application logger used by the client.</param>
+    /// <param name="httpClient">Optional HttpClient to use. If null, a new HttpClient with a 10-minute timeout is created.</param>
+    /// <param name="requestLeaseTracker">Optional tracker for acquiring per-request leases to coordinate concurrency; when null, no leasing is performed.</param>
+    public ContainerizedInferenceClient(
+        string inferenceServiceUrl,
+        AppLog log,
+        HttpClient? httpClient,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker)
     {
         _inferenceServiceUrl = NormalizeBaseUrl(inferenceServiceUrl);
         _log = log;
         _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        _requestLeaseTracker = requestLeaseTracker;
     }
 
+    /// <summary>
+    /// Checks the health of the configured containerized inference service.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the health probe.</param>
+    /// <returns>A ContainerHealthStatus describing service availability, CUDA status/version, capabilities snapshot (if available), active request counts, busy state and reason, and any error or capabilities error messages.</returns>
     public Task<ContainerHealthStatus> CheckHealthAsync(
         CancellationToken cancellationToken = default) =>
         ProbeHealthAsync(_httpClient, _inferenceServiceUrl, cancellationToken);
@@ -72,6 +104,17 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    /// <summary>
+    /// Transcribes an audio file using the containerized inference service.
+    /// </summary>
+    /// <param name="audioFilePath">Path to the audio file to transcribe; must exist.</param>
+    /// <param name="modelName">Model identifier to use for transcription.</param>
+    /// <param name="language">Optional hint for the transcription language.</param>
+    /// <param name="cpuComputeType">CPU compute precision requested by the container (defaults to "int8" when blank).</param>
+    /// <param name="cpuThreads">Number of CPU threads to request; included only when greater than 0.</param>
+    /// <param name="numWorkers">Number of worker processes to request; values less than 1 are treated as 1.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A TranscriptionResult with Success=true and populated segments, Language, and LanguageProbability on success; otherwise Success=false and ErrorMessage populated.</returns>
     public async Task<TranscriptionResult> TranscribeAsync(
         string audioFilePath,
         string modelName = "base",
@@ -83,6 +126,8 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Transcription);
+
             if (!File.Exists(audioFilePath))
                 throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
 
@@ -132,9 +177,14 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Translates segments from a transcript JSON string.
-    /// <paramref name="transcriptJson"/> must be the raw transcript artifact JSON.
+    /// Translates a serialized transcript from a source language into a target language using the specified model.
     /// </summary>
+    /// <param name="transcriptJson">JSON-serialized transcript to translate (expected format produced by the transcription endpoint).</param>
+    /// <param name="sourceLanguage">Language code of the input transcript.</param>
+    /// <param name="targetLanguage">Language code to translate the transcript into.</param>
+    /// <param name="model">Identifier of the translation model to use.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>A <see cref="TranslationResult"/> containing success state, translated segments, resolved source and target language codes, and an error message when unsuccessful.</returns>
     public async Task<TranslationResult> TranslateAsync(
         string transcriptJson,
         string sourceLanguage,
@@ -144,6 +194,8 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Translation);
+
             _log.Info($"Translating {sourceLanguage} -> {targetLanguage}");
 
             using var content = new FormUrlEncodedContent(
@@ -191,14 +243,12 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Generate speech audio for the provided text using the specified voice.
+    /// Generate speech audio from the provided text using the containerized TTS service.
     /// </summary>
-    /// <param name="text">The text to synthesize to speech.</param>
-    /// <param name="voice">The voice identifier to use for synthesis.</param>
-    /// <param name="cancellationToken">Cancellation token to cancel the HTTP request.</param>
-    /// <returns>
-    /// A <see cref="TtsResult"/> containing success state, the generated audio path (empty on failure), the voice used, the file size in bytes, and an error message when unsuccessful.
-    /// </returns>
+    /// <param name="text">The text to synthesize into speech.</param>
+    /// <param name="voice">The voice identifier to use for synthesis (defaults to "en-US-AriaNeural").</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the request.</param>
+    /// <returns>A TtsResult where Success is true on success and contains the remote audio path, resolved voice, and file size in bytes; on failure Success is false and Error contains the failure message.</returns>
     public async Task<TtsResult> TextToSpeechAsync(
         string text,
         string voice = "en-US-AriaNeural",
@@ -206,6 +256,8 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Tts);
+
             _log.Info($"Generating TTS with voice: {voice}");
 
             using var content = new FormUrlEncodedContent(
@@ -235,16 +287,14 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Performs speaker diarization on the given audio file using the containerized inference service.
+    /// Performs speaker diarization on a local audio file using the containerized inference service.
     /// </summary>
-    /// <param name="audioFilePath">Path to the audio file to diarize.</param>
-    /// <param name="engine">Requested diarization engine identifier (for example, <see cref="ProviderNames.WeSpeakerLocal"/> or its legacy alias).</param>
-    /// <param name="minSpeakers">Optional hint for the minimum number of speakers to detect.</param>
-    /// <param name="maxSpeakers">Optional hint for the maximum number of speakers to detect.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>
-    /// A <see cref="DiarizationResult"/> containing the success flag, normalized diarization segments, the determined speaker count, and an error message if the operation failed.
-    /// </returns>
+    /// <param name="audioFilePath">Path to an existing audio file to diarize.</param>
+    /// <param name="engine">Identifier of the diarization provider to request.</param>
+    /// <param name="minSpeakers">Optional minimum number of speakers to detect.</param>
+    /// <param name="maxSpeakers">Optional maximum number of speakers to detect.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>A <see cref="DiarizationResult"/> containing a success flag, the list of normalized diarization segments, the determined speaker count, and an error message when <see cref="DiarizationResult.Success"/> is <c>false</c>.</returns>
     public async Task<DiarizationResult> DiarizeAsync(
         string audioFilePath,
         string engine,
@@ -254,11 +304,19 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Diarization);
+
             if (!File.Exists(audioFilePath))
                 throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
 
             var normalizedEngine = NormalizeDiarizationEngine(engine);
-            var endpoint = normalizedEngine == ProviderNames.WeSpeakerLocal ? "/diarize/wespeaker" : "/diarize";
+            if (!string.Equals(normalizedEngine, ProviderNames.NemoLocal, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Containerized diarization only supports {ProviderNames.NemoLocal}; '{normalizedEngine}' now runs via the managed CPU runtime.");
+            }
+
+            const string endpoint = "/diarize";
             _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
 
             using var content = new MultipartFormDataContent();
@@ -293,11 +351,11 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Register an audio reference for a speaker with the Qwen TTS service.
+    /// Registers a Qwen voice reference audio for a speaker and returns the created reference ID.
     /// </summary>
-    /// <param name="speakerId">Identifier of the speaker to associate with the uploaded reference audio.</param>
-    /// <param name="referenceAudioPath">Path to the local audio file to upload as the reference.</param>
-    /// <returns>The created reference identifier.</returns>
+    /// <param name="speakerId">Identifier of the speaker to associate with the reference.</param>
+    /// <param name="referenceAudioPath">Path to the local reference audio file to upload.</param>
+    /// <returns>The reference ID assigned by the service.</returns>
     /// <exception cref="FileNotFoundException">Thrown if <paramref name="referenceAudioPath"/> does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the service reports a failure or returns no reference ID.</exception>
     public async Task<string> RegisterQwenReferenceAsync(
@@ -305,6 +363,8 @@ public sealed class ContainerizedInferenceClient
         string referenceAudioPath,
         CancellationToken cancellationToken = default)
     {
+        using var lease = AcquireLease(ContainerizedRequestKind.Qwen);
+
         if (!File.Exists(referenceAudioPath))
             throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
 
@@ -329,17 +389,17 @@ public sealed class ContainerizedInferenceClient
 
 
     /// <summary>
-    /// Synthesizes speech for the given text using the Qwen segmented TTS endpoint.
+    /// Generate a Qwen-segmented text-to-speech audio asset for the given text using an optional reference audio or reference ID.
     /// </summary>
-    /// <param name="text">The text to synthesize.</param>
-    /// <param name="model">TTS model identifier; when null or whitespace the default model "Qwen/Qwen3-TTS-12Hz-1.7B-Base" is used.</param>
-    /// <param name="language">Optional language tag (e.g., BCP-47) to guide synthesis.</param>
-    /// <param name="referenceAudioPath">Path to a reference audio file to upload; the file is uploaded only when <paramref name="referenceId"/> is not provided.</param>
-    /// <param name="referenceText">Optional textual description or transcript of the reference audio.</param>
-    /// <param name="referenceId">Identifier of a previously registered reference; when provided, no reference file is uploaded.</param>
-    /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
+    /// <param name="text">The input text to synthesize.</param>
+    /// <param name="model">The TTS model id to use; when null or whitespace the default "Qwen/Qwen3-TTS-12Hz-1.7B-Base" is used.</param>
+    /// <param name="language">Optional language hint for synthesis.</param>
+    /// <param name="referenceAudioPath">Optional path to a reference audio file; used only when <paramref name="referenceId"/> is not provided and must exist.</param>
+    /// <param name="referenceText">Optional reference text associated with the reference audio.</param>
+    /// <param name="referenceId">Optional pre-registered reference identifier; when provided, the reference audio file is not uploaded.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>
-    /// A <see cref="TtsResult"/> containing the synthesis outcome: on success includes the remote audio path, voice identifier, and file size in bytes; on failure includes an error message and an empty audio path.
+    /// A <see cref="TtsResult"/> containing the synthesized audio path, resolved voice/model, file size, and an error message when <see cref="TtsResult.Success"/> is false.
     /// </returns>
     public async Task<TtsResult> QwenSegmentAsync(
         string text,
@@ -352,6 +412,8 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Qwen);
+
             using var content = new MultipartFormDataContent();
             content.Add(new StringContent(text), "text");
             content.Add(new StringContent(string.IsNullOrWhiteSpace(model) ? "Qwen/Qwen3-TTS-12Hz-1.7B-Base" : model), "model");
@@ -397,10 +459,10 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Downloads synthesized TTS audio identified by the given filename from the inference service and writes it to the specified local file path.
+    /// Downloads a TTS audio file from the containerized inference service and saves it to the specified local path.
     /// </summary>
-    /// <param name="filename">The remote TTS audio filename on the service (will be URL-escaped).</param>
-    /// <param name="localOutputPath">Path to create or overwrite with the downloaded audio file.</param>
+    /// <param name="filename">The remote audio filename to request from the service.</param>
+    /// <param name="localOutputPath">The local filesystem path where the downloaded audio will be saved (created or overwritten).</param>
     /// <param name="cancellationToken">Token to cancel the download operation.</param>
     /// <exception cref="InvalidOperationException">Thrown when the service responds with a non-success status; the exception message contains the response body.</exception>
     public async Task DownloadTtsAudioAsync(
@@ -408,6 +470,8 @@ public sealed class ContainerizedInferenceClient
         string localOutputPath,
         CancellationToken cancellationToken = default)
     {
+        using var lease = AcquireLease(ContainerizedRequestKind.Tts);
+
         using var response = await _httpClient.GetAsync(
             $"{_inferenceServiceUrl}/tts/audio/{Uri.EscapeDataString(filename)}",
             HttpCompletionOption.ResponseHeadersRead,
@@ -431,14 +495,12 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Probes the containerized inference service for liveness, CUDA status, and a capabilities snapshot.
+    /// Probes the containerized inference service at the specified base URL for liveness and reported capabilities.
     /// </summary>
     /// <param name="httpClient">The HTTP client used to perform the probe requests.</param>
     /// <param name="serviceUrl">Base URL of the inference service to probe.</param>
     /// <param name="cancellationToken">Cancellation token to abort the probe requests.</param>
-    /// <returns>
-    /// A <see cref="ContainerHealthStatus"/> indicating whether the container is available. When available, includes CUDA availability/version and a capabilities snapshot; when unavailable, contains an error message describing the failure.
-    /// </returns>
+    /// <returns>A <see cref="ContainerHealthStatus"/> describing availability, CUDA status, active request counts, busy state, and either a capabilities snapshot or a capabilities error when capability probing failed; returns an unavailable status if the probe fails.</returns>
     private static async Task<ContainerHealthStatus> ProbeHealthAsync(
         HttpClient httpClient,
         string serviceUrl,
@@ -453,7 +515,7 @@ public sealed class ContainerizedInferenceClient
             if (!string.Equals(live.Status, "healthy", StringComparison.OrdinalIgnoreCase))
                 return ContainerHealthStatus.Unavailable(serviceUrl, $"Unexpected live status '{live.Status ?? "unknown"}'.");
 
-            ContainerCapabilitiesSnapshot capabilities;
+            ContainerCapabilitiesSnapshot? capabilities = null;
             string? capabilitiesError = null;
             try
             {
@@ -478,8 +540,7 @@ public sealed class ContainerizedInferenceClient
             }
             catch (Exception ex)
             {
-                capabilitiesError = $"{CapabilitiesWarmupPrefix}: {ex.Message}";
-                capabilities = CreateUnavailableCapabilitiesSnapshot(capabilitiesError);
+                capabilitiesError = ex.Message;
             }
 
             return new ContainerHealthStatus(
@@ -487,30 +548,20 @@ public sealed class ContainerizedInferenceClient
                 CudaAvailable: live.CudaAvailable,
                 CudaVersion: live.CudaVersion,
                 ServiceUrl: serviceUrl,
-                ErrorMessage: capabilitiesError,
-                Capabilities: capabilities);
+                ErrorMessage: null,
+                Capabilities: capabilities,
+                CapabilitiesError: capabilitiesError,
+                ActiveRequests: live.ActiveRequests,
+                ActiveQwenRequests: live.ActiveQwenRequests,
+                ActiveDiarizationRequests: live.ActiveDiarizationRequests,
+                Busy: live.Busy,
+                BusyReason: live.BusyReason);
         }
         catch (Exception ex)
         {
             return ContainerHealthStatus.Unavailable(serviceUrl, ex.Message);
         }
     }
-
-    /// <summary>
-    /// Creates a capabilities snapshot where every capability stage is marked not ready and all detail fields contain the provided message.
-    /// </summary>
-    /// <param name="detail">A message describing why capabilities are unavailable; stored in each stage's detail field.</param>
-    /// <returns>A <see cref="ContainerCapabilitiesSnapshot"/> with all stages set as not ready and their detail fields populated with <paramref name="detail"/>.</returns>
-    private static ContainerCapabilitiesSnapshot CreateUnavailableCapabilitiesSnapshot(string detail) =>
-        new(
-            TranscriptionReady: false,
-            TranscriptionDetail: detail,
-            TranslationReady: false,
-            TranslationDetail: detail,
-            TtsReady: false,
-            TtsDetail: detail,
-            DiarizationReady: false,
-            DiarizationDetail: detail);
 
     /// <summary>
     /// Deserialize an HTTP response JSON payload into an instance of <typeparamref name="T"/> and ensure the response indicates success.
@@ -551,6 +602,21 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("cuda_version")]
         public string? CudaVersion { get; set; }
+
+        [JsonPropertyName("active_requests")]
+        public int ActiveRequests { get; set; }
+
+        [JsonPropertyName("active_qwen_requests")]
+        public int ActiveQwenRequests { get; set; }
+
+        [JsonPropertyName("active_diarization_requests")]
+        public int ActiveDiarizationRequests { get; set; }
+
+        [JsonPropertyName("busy")]
+        public bool Busy { get; set; }
+
+        [JsonPropertyName("busy_reason")]
+        public string? BusyReason { get; set; }
     }
 
     private sealed class CapabilitiesResponseDto
@@ -825,9 +891,10 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Count distinct non-empty speaker identifiers present in the provided diarization segments.
+    /// Counts the unique, non-blank speaker identifiers present in the given diarization segments.
     /// </summary>
-    /// <returns>The number of unique, non-blank speaker IDs found in <paramref name="segments"/>.</returns>
+    /// <param name="segments">The diarization segments to inspect for speaker identifiers.</param>
+    /// <returns>The count of unique, non-blank speaker IDs in <paramref name="segments"/>.</returns>
     private static int CountDistinctSpeakers(IReadOnlyList<DiarizedSegment> segments)
     {
         var speakers = new HashSet<string>(StringComparer.Ordinal);
@@ -839,6 +906,14 @@ public sealed class ContainerizedInferenceClient
 
         return speakers.Count;
     }
+
+    /// <summary>
+    /// Acquires a per-request lease for the specified request kind when a lease tracker is configured.
+    /// </summary>
+    /// <param name="kind">The kind of containerized request to acquire a lease for.</param>
+    /// <returns>An <see cref="IDisposable"/> representing the acquired lease that must be disposed to release it, or <c>null</c> if no lease tracker is configured.</returns>
+    private IDisposable? AcquireLease(ContainerizedRequestKind kind) =>
+        _requestLeaseTracker?.Acquire(kind);
 
 }
 
@@ -954,10 +1029,22 @@ public sealed record ContainerHealthStatus(
     string? CudaVersion,
     string ServiceUrl,
     string? ErrorMessage,
-    ContainerCapabilitiesSnapshot? Capabilities = null)
+    ContainerCapabilitiesSnapshot? Capabilities = null,
+    string? CapabilitiesError = null,
+    int ActiveRequests = 0,
+    int ActiveQwenRequests = 0,
+    int ActiveDiarizationRequests = 0,
+    bool Busy = false,
+    string? BusyReason = null)
 {
-    public static ContainerHealthStatus Unavailable(string url, string? reason = null) =>
-        new(false, false, null, url, reason, null);
+    /// <summary>
+        /// Create a ContainerHealthStatus that marks the container at the given URL as unavailable.
+        /// </summary>
+        /// <param name="url">The service URL being reported as unavailable.</param>
+        /// <param name="reason">Optional human-readable reason or error message explaining the unavailability.</param>
+        /// <returns>A ContainerHealthStatus marked unavailable for the specified URL with default capability and activity values; the provided reason is included when present.</returns>
+        public static ContainerHealthStatus Unavailable(string url, string? reason = null) =>
+        new(false, false, null, url, reason, null, null, 0, 0, 0, false, null);
 
     public string StatusLine
     {
@@ -970,7 +1057,11 @@ public sealed record ContainerHealthStatus(
                 : "CPU-only";
 
             if (Capabilities is null)
-                return $"Healthy ({cuda})";
+            {
+                return string.IsNullOrWhiteSpace(CapabilitiesError)
+                    ? $"Healthy ({cuda})"
+                    : $"Healthy ({cuda}) · capabilities unavailable";
+            }
 
             return $"Healthy ({cuda}) · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")} · diar={(Capabilities.DiarizationReady ? "✓" : "x")}";
         }

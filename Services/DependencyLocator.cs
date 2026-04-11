@@ -317,17 +317,17 @@ public static class DependencyLocator
     }
 
     /// <summary>
-    /// Constructs a SessionWorkflowCoordinator with its required services, registries, and host managers wired together.
+    /// Constructs and wires a SessionWorkflowCoordinator with transcription, translation, TTS, and diarization registries, audio processing, containerized probes and inference managers, and a session snapshot store.
     /// </summary>
-    /// <param name="appLog">Application logger used by created services.</param>
-    /// <param name="appSettings">Application settings applied to the coordinator.</param>
-    /// <param name="perSessionStore">Per-session snapshot store passed to the coordinator.</param>
-    /// <param name="recentStore">Recent sessions store passed to the coordinator.</param>
-    /// <param name="apiKeyStore">API key store passed to the coordinator.</param>
-    /// <param name="transportManager">Media transport manager used by the coordinator.</param>
-    /// <param name="appDataRoot">Root application data directory used to locate the session snapshot file.</param>
-    /// <param name="primaryGpuManager">Outputs the ManagedVenvHostManager instance selected as the primary GPU manager.</param>
-    /// <returns>A SessionWorkflowCoordinator instance configured with transcription, translation, TTS, diarization registries, audio processing, containerized probes and inference managers, and the snapshot store.</returns>
+    /// <param name="appLog">Application logger used by the created components.</param>
+    /// <param name="appSettings">Application settings passed to the coordinator.</param>
+    /// <param name="perSessionStore">Per-session snapshot store for active session state.</param>
+    /// <param name="recentStore">Store of recent sessions.</param>
+    /// <param name="apiKeyStore">API key store used by the coordinator.</param>
+    /// <param name="transportManager">Media transport manager supplied to the coordinator.</param>
+    /// <param name="appDataRoot">Root directory used to locate the persisted session snapshot file.</param>
+    /// <param name="primaryGpuManager">Outputs the managed virtual environment host manager that serves as the primary GPU-backed inference host.</param>
+    /// <returns>The configured SessionWorkflowCoordinator instance.</returns>
     private static SessionWorkflowCoordinator CreateCoordinatorInstance(
         AppLog appLog,
         AppSettings appSettings,
@@ -339,17 +339,21 @@ public static class DependencyLocator
         out ManagedVenvHostManager primaryGpuManager)
     {
         var containerizedProbe = new ContainerizedServiceProbe(appLog);
-        var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+        var requestLeaseTracker = new ContainerizedRequestLeaseTracker();
+        var managedHostManager = new ManagedVenvHostManager(
+            appLog,
+            containerizedProbe,
+            requestLeaseTracker: requestLeaseTracker);
         primaryGpuManager = managedHostManager;
         var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
         var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
 
         var audioProcessingService = new FfmpegAudioProcessingService(appLog);
 
-        var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
-        var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
-        var ttsRegistry = new TtsRegistry(appLog, containerizedProbe, audioProcessingService);
-        var diarizationRegistry = new DiarizationRegistry(appLog, containerizedProbe);
+        var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe, requestLeaseTracker);
+        var translationRegistry = new TranslationRegistry(appLog, containerizedProbe, requestLeaseTracker);
+        var ttsRegistry = new TtsRegistry(appLog, containerizedProbe, audioProcessingService, requestLeaseTracker);
+        var diarizationRegistry = new DiarizationRegistry(appLog, containerizedProbe, requestLeaseTracker);
 
         var snapshotStore = new SessionSnapshotStore(
             Path.Combine(appDataRoot, "state", "current-session.json"), appLog);

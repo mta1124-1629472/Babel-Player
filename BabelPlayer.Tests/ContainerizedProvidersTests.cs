@@ -709,7 +709,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
             {
                 return Json(HttpStatusCode.OK,
-                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true},\"diarization\":{\"ready\":true,\"detail\":\"Diarization available\",\"providers\":{\"nemo\":true,\"wespeaker\":false},\"provider_details\":{\"nemo\":\"NeMo ready\",\"wespeaker\":\"WeSpeaker import failed: No module named 's3prl'\"},\"default_provider\":\"nemo\"}}");
+                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true},\"diarization\":{\"ready\":true,\"detail\":\"Diarization available\",\"providers\":{\"nemo\":true},\"provider_details\":{\"nemo\":\"NeMo ready\"},\"default_provider\":\"nemo\"}}");
             }
 
             return Json(HttpStatusCode.NotFound, "{\"status\":\"not-found\"}");
@@ -723,9 +723,9 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.True(health.Capabilities.TryGetDiarizationProviderReadiness(ProviderNames.NemoLocal, out var nemoReady, out var nemoDetail));
         Assert.True(nemoReady);
         Assert.Equal("NeMo ready", nemoDetail);
-        Assert.True(health.Capabilities.TryGetDiarizationProviderReadiness(ProviderNames.WeSpeakerLocal, out var wespeakerReady, out var wespeakerDetail));
+        Assert.False(health.Capabilities.TryGetDiarizationProviderReadiness(ProviderNames.WeSpeakerLocal, out var wespeakerReady, out var wespeakerDetail));
         Assert.False(wespeakerReady);
-        Assert.Contains("s3prl", wespeakerDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(wespeakerDetail);
     }
 
     [Fact]
@@ -742,7 +742,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
             {
                 return Json(HttpStatusCode.OK,
-                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true},\"diarization\":{\"ready\":false,\"detail\":\"nemo: NeMo diarization config contract invalid: Key 'device' is not in struct; wespeaker: WeSpeaker import failed: No module named 'distutils'\",\"providers\":{\"nemo\":false,\"wespeaker\":false},\"provider_details\":{\"nemo\":\"NeMo diarization config contract invalid: Key 'device' is not in struct\",\"wespeaker\":\"WeSpeaker import failed: No module named 'distutils'\"},\"default_provider\":\"nemo\"}}");
+                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true},\"diarization\":{\"ready\":false,\"detail\":\"nemo: NeMo diarization config contract invalid: Key 'device' is not in struct\",\"providers\":{\"nemo\":false},\"provider_details\":{\"nemo\":\"NeMo diarization config contract invalid: Key 'device' is not in struct\"},\"default_provider\":\"nemo\"}}");
             }
 
             return Json(HttpStatusCode.NotFound, "{\"status\":\"not-found\"}");
@@ -756,6 +756,8 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.False(nemoReady);
         Assert.Contains("contract invalid", nemoDetail, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("device", nemoDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.False(health.Capabilities.TryGetDiarizationProviderReadiness(ProviderNames.WeSpeakerLocal, out _, out var wespeakerDetail));
+        Assert.Null(wespeakerDetail);
     }
 
     [Fact]
@@ -788,32 +790,26 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
-    public async Task ContainerizedInferenceClient_DiarizeAsync_UsesWeSpeakerEndpointAndNormalizesSpeakerIds()
+    public async Task ContainerizedInferenceClient_DiarizeAsync_RejectsWeSpeakerOnContainerizedClient()
     {
         var inputPath = Path.Combine(_ctx.Dir, "wespeaker.wav");
         await File.WriteAllBytesAsync(inputPath, [1, 2, 3, 4]);
-        string? postedPath = null;
+        var requestCount = 0;
 
         var client = CreateClient((request, _) =>
         {
-            if (request.Method == HttpMethod.Post)
-            {
-                postedPath = request.RequestUri?.AbsolutePath;
-                return Json(HttpStatusCode.OK,
-                    "{\"success\":true,\"speaker_count\":2,\"segments\":[{\"start\":0.0,\"end\":1.0,\"speaker_id\":\"1\"},{\"start\":1.0,\"end\":2.0,\"speaker_id\":\"2\"}]}");
-            }
-
-            return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+            Interlocked.Increment(ref requestCount);
+            return Json(HttpStatusCode.OK,
+                "{\"success\":true,\"speaker_count\":2,\"segments\":[{\"start\":0.0,\"end\":1.0,\"speaker_id\":\"1\"},{\"start\":1.0,\"end\":2.0,\"speaker_id\":\"2\"}]}");
         });
 
         var result = await client.DiarizeAsync(inputPath, ProviderNames.WeSpeakerLocal);
 
-        Assert.True(result.Success);
-        Assert.Equal("/diarize/wespeaker", postedPath);
-        Assert.Equal(2, result.SpeakerCount);
-        Assert.Collection(result.Segments,
-            first => Assert.Equal("spk_00", first.SpeakerId),
-            second => Assert.Equal("spk_01", second.SpeakerId));
+        Assert.False(result.Success);
+        Assert.Equal(0, requestCount);
+        Assert.Contains("managed CPU runtime", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(result.Segments);
+        Assert.Equal(0, result.SpeakerCount);
     }
 
     [Fact]
@@ -824,7 +820,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/health/live")
             {
                 return Json(HttpStatusCode.OK,
-                    "{\"status\":\"healthy\",\"cuda_available\":true,\"cuda_version\":\"12.8\"}");
+                    "{\"status\":\"healthy\",\"cuda_available\":true,\"cuda_version\":\"12.8\",\"active_requests\":4,\"active_qwen_requests\":2,\"active_diarization_requests\":1,\"busy\":true,\"busy_reason\":\"Qwen warmup in progress\"}");
             }
 
             if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
@@ -837,12 +833,16 @@ public sealed class ContainerizedProvidersTests() : IDisposable
 
         Assert.True(health.IsAvailable);
         Assert.True(health.CudaAvailable);
-        Assert.NotNull(health.Capabilities);
-        Assert.False(health.Capabilities!.TranscriptionReady);
-        Assert.False(health.Capabilities.TranslationReady);
-        Assert.False(health.Capabilities.TtsReady);
-        Assert.Contains("warming or failed", health.Capabilities.TranslationDetail, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("warming or failed", health.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(4, health.ActiveRequests);
+        Assert.Equal(2, health.ActiveQwenRequests);
+        Assert.Equal(1, health.ActiveDiarizationRequests);
+        Assert.True(health.Busy);
+        Assert.Equal("Qwen warmup in progress", health.BusyReason);
+        Assert.Null(health.ErrorMessage);
+        Assert.Null(health.Capabilities);
+        Assert.NotNull(health.CapabilitiesError);
+        Assert.Contains("HttpClient.Timeout", health.CapabilitiesError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("capabilities unavailable", health.StatusLine, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1002,10 +1002,8 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                 CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(10)));
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("WeSpeaker", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("CPU fallback", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("GPU host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("live but diarization capability is still warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

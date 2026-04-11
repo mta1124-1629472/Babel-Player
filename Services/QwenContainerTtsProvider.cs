@@ -29,6 +29,8 @@ public sealed class QwenContainerTtsProvider(
     private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
     private bool _disposed;
 
+    public int MaxConcurrency => 1;
+
     /// <summary>
         /// Determines whether the containerized TTS provider is ready based on the given application settings.
         /// </summary>

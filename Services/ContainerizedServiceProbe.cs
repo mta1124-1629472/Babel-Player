@@ -21,8 +21,10 @@ public sealed record ContainerizedProbeResult(
     bool CudaAvailable = false,
     string? CudaVersion = null,
     ContainerCapabilitiesSnapshot? Capabilities = null,
+    string? CapabilitiesError = null,
     TimeSpan? Duration = null,
-    bool WasCacheHit = false);
+    bool WasCacheHit = false,
+    bool IsStale = false);
 
 public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
 {
@@ -57,6 +59,17 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         _metrics = metrics ?? new ContainerizedProbeMetrics();
     }
 
+    /// <summary>
+    /// Gets the current probe result for the specified containerized service URL or starts a background probe and returns a checking result.
+    /// </summary>
+    /// <param name="serviceUrl">The service base URL to probe. If null or blank, an unavailable result is returned with an explanatory error detail.</param>
+    /// <param name="forceRefresh">If true, bypasses cached results and forces a new background probe (cancelling any in-flight probe for the same URL).</param>
+    /// <returns>
+    /// A <see cref="ContainerizedProbeResult"/> that is one of:
+    /// - a cached available or unavailable result (cached returns have <c>WasCacheHit = true</c>),
+    /// - a stale available result (returned during an in-flight refresh and marked with <c>IsStale = true</c>),
+    /// - or a Checking result when a background probe has been started or an in-flight probe is being reused.
+    /// </returns>
     public ContainerizedProbeResult GetCurrentOrStartBackgroundProbe(
         string? serviceUrl,
         bool forceRefresh = false)
@@ -92,7 +105,8 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                 if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
                 {
                     _log.Info($"Container probe cache hit (after race): url={normalizedUrl}, state={entry.CachedResult.State}");
-                    return entry.CachedResult;
+                    ReportCacheAccess(normalizedUrl, true);
+                    return entry.CachedResult with { WasCacheHit = true };
                 }
 
                 // If the in-flight task completed but the observer hasn't cached the result yet,
@@ -115,9 +129,18 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     {
                         entry.CachedResult = completedResult;
                         entry.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+                        if (completedResult.State == ContainerizedProbeState.Available)
+                            entry.LastAvailableResult = completedResult;
                     }
                     _log.Info($"Container probe completed (observer not yet run): url={normalizedUrl}, state={completedResult.State}");
                     return completedResult;
+                }
+
+                if (entry.LastAvailableResult is not null)
+                {
+                    _log.Info($"Container probe returning stale available result while refresh is in-flight: url={normalizedUrl}");
+                    ReportCacheAccess(normalizedUrl, true);
+                    return entry.LastAvailableResult with { WasCacheHit = true, IsStale = true };
                 }
 
                 _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
@@ -150,6 +173,16 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         }
     }
 
+    /// <summary>
+    /// Waits until the service probe reports an Available state or the wait budget is exhausted.
+    /// </summary>
+    /// <param name="serviceUrl">The service base URL to probe; blank or null is treated as an empty URL.</param>
+    /// <param name="forceRefresh">If true, bypasses cached results and starts a fresh probe attempt (used to bypass negative cache).</param>
+    /// <param name="waitTimeout">Maximum time to wait for an Available result; if null, the passive probe timeout is used.</param>
+    /// <param name="cancellationToken">Token to cancel the wait operation.</param>
+    /// <returns>
+    /// The observed probe result: an Available result if one was observed within the budget; otherwise the most recent Unavailable result if any, or the most recent stale Available result if present, or a Checking result when no prior outcomes exist.
+    /// </returns>
     public async Task<ContainerizedProbeResult> WaitForProbeAsync(
         string? serviceUrl,
         bool forceRefresh = false,
@@ -163,6 +196,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             : ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
  
         ContainerizedProbeResult? lastFailure = null;
+        ContainerizedProbeResult? lastAvailable = null;
  
         while (DateTimeOffset.UtcNow < deadline)
         {
@@ -171,8 +205,13 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             var result = GetCurrentOrStartBackgroundProbe(serviceUrl, forceRefresh);
  
             if (result.State == ContainerizedProbeState.Available)
-                return result;
- 
+            {
+                if (!result.IsStale)
+                    return result;
+                // Stale: keep as fallback but keep waiting for a fresh probe.
+                lastAvailable = result;
+            }
+
             if (result.State == ContainerizedProbeState.Unavailable)
             {
                 lastFailure = result;
@@ -201,6 +240,12 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning last unavailable state.");
             return lastFailure;
         }
+
+        if (lastAvailable != null)
+        {
+            _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning last stale available state.");
+            return lastAvailable;
+        }
  
         _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning Checking state.");
         return Checking(normalizedUrl);
@@ -222,6 +267,12 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         }
     }
 
+    /// <summary>
+    /// Observes the completion of an in-flight probe task, updates the entry's cached state and last-available snapshot, clears in-flight tracking on completion or cancellation, and reports probe metrics and logs.
+    /// </summary>
+    /// <param name="normalizedUrl">Normalized base URL of the service being probed.</param>
+    /// <param name="entry">The per-service probe entry containing coordination and cached results to update.</param>
+    /// <param name="task">The probe task whose completion is being observed.</param>
     private async Task ObserveCompletionAsync(
         string normalizedUrl,
         ProbeEntry entry,
@@ -278,6 +329,8 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     {
                         entry.CachedResult = result;
                         entry.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+                        if (result.State == ContainerizedProbeState.Available)
+                            entry.LastAvailableResult = result;
                     }
                 }
             }
@@ -303,6 +356,16 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         }
     }
 
+    /// <summary>
+    /// Runs the configured health check for the given normalized service URL and produces a ContainerizedProbeResult.
+    /// </summary>
+    /// <param name="normalizedUrl">The normalized base URL of the containerized service to probe.</param>
+    /// <param name="timeout">Maximum time budget for the underlying health check.</param>
+    /// <param name="cancellationToken">Token used to cancel the probe.</param>
+    /// <returns>
+    /// A ContainerizedProbeResult representing the probe outcome (state, timing, CUDA and capabilities info, and error details).
+    /// If the underlying probe throws an exception other than cancellation, the method returns an Unavailable result with ErrorDetail set to the exception message.
+    /// </returns>
     private Task<ContainerizedProbeResult> StartProbeTask(string normalizedUrl, TimeSpan timeout, CancellationToken cancellationToken)
     {
         return Task.Run(async () =>
@@ -321,6 +384,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     health.CudaAvailable,
                     health.CudaVersion,
                     health.Capabilities,
+                    health.CapabilitiesError,
                     stopwatch.Elapsed,
                     WasCacheHit: false);
             }
@@ -338,6 +402,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     DateTimeOffset.UtcNow,
                     ex.Message,
                     false,
+                    null,
                     null,
                     null,
                     stopwatch.Elapsed,
@@ -404,6 +469,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         public Task<ContainerizedProbeResult>? InFlightTask { get; set; }
         public CancellationTokenSource? Cts { get; set; }
         public ContainerizedProbeResult? CachedResult { get; set; }
+        public ContainerizedProbeResult? LastAvailableResult { get; set; }
         public DateTimeOffset ExpiresAtUtc { get; set; }
     }
 }

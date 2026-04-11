@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Services;
@@ -47,6 +48,60 @@ public sealed class ContainerizedServiceProbeTests
     }
 
     [Fact]
+    public async Task WaitForProbeAsync_ReturnsStaleAvailableResultWhileRefreshIsInFlight()
+    {
+        var callCount = 0;
+        using var log = new AppLog(Path.GetTempFileName());
+        var releaseRefresh = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var probe = new ContainerizedServiceProbe(log, async (url, _, ct) =>
+        {
+            var currentCall = Interlocked.Increment(ref callCount);
+            if (currentCall == 1)
+            {
+                await Task.Delay(10, ct);
+            }
+            else
+            {
+                await releaseRefresh.Task.WaitAsync(ct);
+            }
+
+            return new ContainerHealthStatus(
+                IsAvailable: true,
+                CudaAvailable: false,
+                CudaVersion: null,
+                ServiceUrl: url,
+                ErrorMessage: null,
+                Capabilities: new ContainerCapabilitiesSnapshot(true, null, true, null, true, null));
+        });
+
+        var first = await probe.WaitForProbeAsync(
+            "http://localhost:8000",
+            forceRefresh: true,
+            waitTimeout: TimeSpan.FromSeconds(1));
+
+        Assert.Equal(ContainerizedProbeState.Available, first.State);
+        Assert.False(first.IsStale);
+
+        ExpireCachedProbeResult(probe, "http://localhost:8000");
+        var refresh = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000", forceRefresh: true);
+        Assert.Equal(ContainerizedProbeState.Checking, refresh.State);
+
+        var stale = await probe.WaitForProbeAsync(
+            "http://localhost:8000",
+            forceRefresh: false,
+            waitTimeout: TimeSpan.FromMilliseconds(100));
+
+        Assert.Equal(ContainerizedProbeState.Available, stale.State);
+        Assert.True(stale.IsStale);
+        Assert.True(stale.WasCacheHit);
+        Assert.Equal(2, callCount);
+
+        releaseRefresh.SetResult(true);
+        await Task.Delay(50);
+    }
+
+    [Fact]
     public async Task GetCurrentOrStartBackgroundProbe_HandlesProbeFunctionException()
     {
         using var log = new AppLog(Path.GetTempFileName());
@@ -70,6 +125,36 @@ public sealed class ContainerizedServiceProbeTests
         Assert.Equal(ContainerizedProbeState.Unavailable, cachedResult.State);
         Assert.Contains("Simulated probe failure", cachedResult.ErrorDetail);
         Assert.True(exceptionThrown);
+    }
+
+    /// <summary>
+    /// Uses reflection to access ContainerizedServiceProbe's private _entries field and modify the ExpiresAtUtc
+    /// property of a cached probe entry to simulate expiration. This test helper couples the test to the internal
+    /// implementation details of ContainerizedServiceProbe (specifically its _entries cache structure and the
+    /// ExpiresAtUtc property shape) as well as ContainerizedInferenceClient.NormalizeBaseUrl. Maintainers should
+    /// update this helper if those internals are refactored.
+    /// </summary>
+    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
+    {
+        var entriesField = typeof(ContainerizedServiceProbe).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Could not find _entries field.");
+
+        var entries = entriesField.GetValue(probe)
+            ?? throw new InvalidOperationException("ContainerizedServiceProbe entries cache was null.");
+
+        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
+        var tryGetValue = entries.GetType().GetMethod("TryGetValue")
+            ?? throw new InvalidOperationException("Could not find TryGetValue on probe cache.");
+
+        var tryGetArgs = new object?[] { normalizedUrl, null };
+        var found = (bool)(tryGetValue.Invoke(entries, tryGetArgs) ?? false);
+        if (!found)
+            throw new InvalidOperationException($"No cached probe entry found for {normalizedUrl}.");
+
+        var entry = tryGetArgs[1] ?? throw new InvalidOperationException("Probe cache entry was null.");
+        var expiresProperty = entry.GetType().GetProperty("ExpiresAtUtc")
+            ?? throw new InvalidOperationException("Could not find ExpiresAtUtc on probe cache entry.");
+        expiresProperty.SetValue(entry, DateTimeOffset.UtcNow.AddSeconds(-1));
     }
 
     [Fact]

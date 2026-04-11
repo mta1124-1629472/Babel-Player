@@ -475,7 +475,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task EnsureStartedAsync_HealthUnavailableWithTrackedHost_RestartsInsteadOfReusing()
+    public async Task EnsureStartedAsync_HealthUnavailableWithTrackedHost_ReusesWhenStabilizationRecovers()
     {
         var healthCheckCount = 0;
         var hostStartCalls = 0;
@@ -520,9 +520,13 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             },
             ContainerizedStartupTrigger.Execution);
 
-        Assert.True(result.Attempted);
+        Assert.False(result.Attempted);
         Assert.True(result.IsReady);
-        Assert.Equal(1, hostStartCalls);
+        Assert.Contains("already available", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, hostStartCalls);
+        Assert.False(staleProcess.HasExited);
+
+        staleProcess.Kill(entireProcessTree: true);
         await WaitForExitAsync(staleProcess);
     }
 
@@ -568,6 +572,59 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         Assert.False(result.Attempted);
         Assert.True(result.IsReady);
         Assert.Contains("deferring restart", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, hostStartCalls);
+        Assert.False(trackedProcess.HasExited);
+
+        trackedProcess.Kill(entireProcessTree: true);
+        await WaitForExitAsync(trackedProcess);
+    }
+
+    [Theory]
+    [InlineData(ContainerizedStartupTrigger.Execution)]
+    [InlineData(ContainerizedStartupTrigger.Manual)]
+    public async Task EnsureStartedAsync_BusyTrackedHost_DefersRestart_ForExecutionAndManual(
+        ContainerizedStartupTrigger trigger)
+    {
+        var hostStartCalls = 0;
+        var requestLeaseTracker = new ContainerizedRequestLeaseTracker();
+
+        using var trackedProcess = StartLongRunningProcess();
+        using var lease = requestLeaseTracker.Acquire(ContainerizedRequestKind.Qwen);
+        var manager = new ManagedVenvHostManager(
+            _log,
+            healthCheckFunc: (serviceUrl, _, _) =>
+                Task.FromResult(ContainerHealthStatus.Unavailable(serviceUrl, "offline")),
+            hardwareSnapshotProvider: () => CreateHardwareSnapshot(hasCuda: true, hasAvx2: true),
+            uvResolver: () => Path.Combine(_dir, "uv.exe"),
+            runtimeRootResolver: () => _dir,
+            inferenceScriptResolver: () => Path.Combine(_dir, "main.py"),
+            requirementsPathResolver: () => Path.Combine(_dir, "gpu-requirements.txt"),
+            constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
+            runtimeValidator: (_, _) => Task.FromResult(new ManagedGpuRuntimeValidationResult(
+                true,
+                "Managed Python runtime can access CUDA 12.8.",
+                "12.8")),
+            hostProcessStarter: (_, _, _, hostPidPath, token) =>
+            {
+                hostStartCalls++;
+                return File.WriteAllTextAsync(hostPidPath, "12345", token);
+            },
+            requestLeaseTracker: requestLeaseTracker);
+
+        PrepareBootstrappedRuntimeArtifacts();
+        SetTrackedHostProcess(manager, trackedProcess);
+
+        var result = await manager.EnsureStartedAsync(
+            new AppSettings
+            {
+                TranslationProfile = ComputeProfile.Gpu,
+                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv
+            },
+            trigger);
+
+        Assert.False(result.Attempted);
+        Assert.True(result.IsReady);
+        Assert.Contains("serving active requests", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, hostStartCalls);
         Assert.False(trackedProcess.HasExited);
 

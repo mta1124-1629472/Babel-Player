@@ -543,6 +543,14 @@ public sealed class RegistryTests : IDisposable
         Assert.Equal(
             [ProviderNames.NemoLocal, ProviderNames.WeSpeakerLocal],
             providers.Select(provider => provider.Id).ToArray());
+
+        var nemo = Assert.Single(providers, provider => provider.Id == ProviderNames.NemoLocal);
+        Assert.Contains(InferenceRuntime.Containerized, nemo.SupportedRuntimes!);
+        Assert.Equal(InferenceRuntime.Containerized, nemo.DefaultRuntime);
+
+        var wespeaker = Assert.Single(providers, provider => provider.Id == ProviderNames.WeSpeakerLocal);
+        Assert.Contains(InferenceRuntime.Local, wespeaker.SupportedRuntimes!);
+        Assert.Equal(InferenceRuntime.Local, wespeaker.DefaultRuntime);
     }
 
     [Fact]
@@ -561,18 +569,14 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void DiarizationRegistry_CreateProvider_WeSpeakerLocal_ReturnsWeSpeakerContainerizedProvider()
+    public void DiarizationRegistry_CreateProvider_WeSpeakerLocal_ReturnsWeSpeakerCpuProvider()
     {
         var provider = _diarizationRegistry.CreateProvider(
             ProviderNames.WeSpeakerLocal,
-            new AppSettings
-            {
-                PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
-                AdvancedGpuServiceUrl = "http://localhost:8000",
-            },
+            new AppSettings(),
             null);
 
-        Assert.IsType<WeSpeakerContainerizedDiarizationProvider>(provider);
+        Assert.IsType<WeSpeakerCpuDiarizationProvider>(provider);
     }
 
     [Fact]
@@ -612,126 +616,6 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public async Task DiarizationRegistry_NemoLocal_CheckReadiness_UsesProviderSpecificContainerCapability()
-    {
-        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
-            true,
-            true,
-            "12.8",
-            "http://localhost:8000",
-            null,
-            new ContainerCapabilitiesSnapshot(
-                TranscriptionReady: true,
-                TranscriptionDetail: null,
-                TranslationReady: true,
-                TranslationDetail: null,
-                TtsReady: true,
-                TtsDetail: null,
-                DiarizationReady: true,
-                DiarizationDetail: "Diarization available",
-                DiarizationProviders: new Dictionary<string, bool>
-                {
-                    [ProviderNames.NemoLocal] = true,
-                    [ProviderNames.WeSpeakerLocal] = false,
-                },
-                DiarizationProviderDetails: new Dictionary<string, string>
-                {
-                    [ProviderNames.NemoLocal] = "NeMo ready",
-                    [ProviderNames.WeSpeakerLocal] = "CPU fallback warming",
-                },
-                DiarizationDefaultProvider: ProviderNames.NemoLocal))));
-        var registry = new DiarizationRegistry(_log, probe);
-
-        var readiness = registry.CheckReadiness(
-            ProviderNames.NemoLocal,
-            new AppSettings
-            {
-                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
-                DiarizationProvider = ProviderNames.NemoLocal,
-            },
-            null);
-
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
-        while (!readiness.IsReady
-               && readiness.BlockingReason?.Contains("starting", StringComparison.OrdinalIgnoreCase) == true
-               && DateTimeOffset.UtcNow < deadline)
-        {
-            await Task.Delay(50);
-            readiness = registry.CheckReadiness(
-                ProviderNames.NemoLocal,
-                new AppSettings
-                {
-                    PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
-                    DiarizationProvider = ProviderNames.NemoLocal,
-                },
-                null);
-        }
-
-        Assert.True(readiness.IsReady);
-    }
-
-    [Fact]
-    public void DiarizationRegistry_WeSpeakerLocal_CheckReadiness_UsesProviderSpecificContainerCapability()
-    {
-        var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
-            true,
-            true,
-            "12.8",
-            "http://localhost:8000",
-            null,
-            new ContainerCapabilitiesSnapshot(
-                TranscriptionReady: true,
-                TranscriptionDetail: null,
-                TranslationReady: true,
-                TranslationDetail: null,
-                TtsReady: true,
-                TtsDetail: null,
-                DiarizationReady: true,
-                DiarizationDetail: "Diarization available",
-                DiarizationProviders: new Dictionary<string, bool>
-                {
-                    [ProviderNames.NemoLocal] = true,
-                    [ProviderNames.WeSpeakerLocal] = false,
-                },
-                DiarizationProviderDetails: new Dictionary<string, string>
-                {
-                    [ProviderNames.NemoLocal] = "NeMo ready",
-                    [ProviderNames.WeSpeakerLocal] = "CPU fallback warming",
-                },
-                DiarizationDefaultProvider: ProviderNames.NemoLocal))));
-        var registry = new DiarizationRegistry(_log, probe);
-
-        var readiness = registry.CheckReadiness(
-            ProviderNames.WeSpeakerLocal,
-            new AppSettings
-            {
-                PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
-                DiarizationProvider = ProviderNames.WeSpeakerLocal,
-            },
-            null);
-
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
-        while (readiness.BlockingReason?.Contains("starting", StringComparison.OrdinalIgnoreCase) == true
-               && DateTimeOffset.UtcNow < deadline)
-        {
-            Thread.Sleep(10);
-            readiness = registry.CheckReadiness(
-                ProviderNames.WeSpeakerLocal,
-                new AppSettings
-                {
-                    PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
-                    DiarizationProvider = ProviderNames.WeSpeakerLocal,
-                },
-                null);
-        }
-
-        Assert.False(readiness.IsReady);
-        Assert.Contains("WeSpeaker", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("CPU fallback", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("warming", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
     public void DiarizationRegistry_CheckReadiness_UnknownProvider_ReturnsNotReady()
     {
         var readiness = _diarizationRegistry.CheckReadiness("nonexistent-diarizer", new AppSettings(), null);
@@ -744,5 +628,21 @@ public sealed class RegistryTests : IDisposable
     {
         Assert.Throws<PipelineProviderException>(
             () => _diarizationRegistry.CreateProvider("nonexistent-diarizer", new AppSettings(), null));
+    }
+
+    [Fact]
+    public void InferenceRuntimeCatalog_InferDiarizationRuntime_NemoReturnsContainerized()
+    {
+        Assert.Equal(
+            InferenceRuntime.Containerized,
+            InferenceRuntimeCatalog.InferDiarizationRuntime(ProviderNames.NemoLocal));
+    }
+
+    [Fact]
+    public void InferenceRuntimeCatalog_InferDiarizationRuntime_WeSpeakerReturnsLocal()
+    {
+        Assert.Equal(
+            InferenceRuntime.Local,
+            InferenceRuntimeCatalog.InferDiarizationRuntime(ProviderNames.WeSpeakerLocal));
     }
 }

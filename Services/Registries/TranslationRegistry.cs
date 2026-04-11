@@ -23,13 +23,29 @@ public sealed class TranslationRegistry : ITranslationRegistry
 {
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
 
-    public TranslationRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null)
+    /// <summary>
+    /// Initializes a new instance of TranslationRegistry.
+    /// </summary>
+    /// <param name="log">Application logger used by the registry.</param>
+    /// <param name="containerizedProbe">Optional probe for checking availability of the containerized inference service.</param>
+    /// <param name="requestLeaseTracker">Optional tracker for containerized request leases forwarded to created containerized inference clients.</param>
+    public TranslationRegistry(
+        AppLog log,
+        ContainerizedServiceProbe? containerizedProbe = null,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker = null)
     {
         _log = log;
         _containerizedProbe = containerizedProbe;
+        _requestLeaseTracker = requestLeaseTracker;
     }
 
+    /// <summary>
+    /// Returns descriptors for translation providers available for the given compute profile, or a combined set for UI selection when <paramref name="profile"/> is null.
+    /// </summary>
+    /// <param name="profile">Optional compute profile to filter providers (e.g., Cpu, Gpu, Cloud). When null, returns the combined provider list used for the general UI/model picker.</param>
+    /// <returns>A read-only list of <see cref="ProviderDescriptor"/> describing the translation providers available for the specified profile.</returns>
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null)
     {
         if (profile is null)
@@ -180,6 +196,15 @@ public sealed class TranslationRegistry : ITranslationRegistry
         return await provider.EnsureReadyAsync(settings, progress, ct);
     }
 
+    /// <summary>
+    /// Creates an ITranslationProvider configured for the resolved provider identifier, compute profile, and runtime.
+    /// </summary>
+    /// <param name="providerId">The requested provider identifier or alias; may be normalized based on settings and profile.</param>
+    /// <param name="settings">Application settings used to select models and container service URL (e.g., TranslationModel, EffectiveContainerizedServiceUrl).</param>
+    /// <param name="keyStore">Optional API key store used to supply provider credentials when required.</param>
+    /// <param name="profile">Optional compute profile override; if null the profile is resolved from settings or inferred.</param>
+    /// <returns>An initialized ITranslationProvider appropriate for the resolved provider and runtime.</returns>
+    /// <exception cref="PipelineProviderException">Thrown when the resolved provider is not implemented.</exception>
     public ITranslationProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, ComputeProfile? profile = null)
     {
         var resolvedProfile = ResolveProfile(providerId, settings, profile);
@@ -199,7 +224,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
             }
 
             return new ContainerizedTranslationProvider(
-                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log, null, _requestLeaseTracker),
                 _log,
                 containerizedModel);
         }

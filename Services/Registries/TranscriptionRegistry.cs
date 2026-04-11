@@ -23,13 +23,29 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
 {
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
 
-    public TranscriptionRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null)
+    /// <summary>
+    /// Initializes a new TranscriptionRegistry with the provided logging and optional containerized service helpers.
+    /// </summary>
+    /// <param name="log">Logging facility used by the registry.</param>
+    /// <param name="containerizedProbe">Optional probe used to check readiness of containerized inference services.</param>
+    /// <param name="requestLeaseTracker">Optional tracker for managing request leases against containerized services.</param>
+    public TranscriptionRegistry(
+        AppLog log,
+        ContainerizedServiceProbe? containerizedProbe = null,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker = null)
     {
         _log = log;
         _containerizedProbe = containerizedProbe;
+        _requestLeaseTracker = requestLeaseTracker;
     }
 
+    /// <summary>
+    /// List available transcription provider descriptors, optionally filtered and tailored for a specific compute profile.
+    /// </summary>
+    /// <param name="profile">Optional compute profile used to select or tailor providers and their runtimes. If null, returns a mix of local/containerized and cloud providers; if Cpu or Gpu, returns a Faster Whisper descriptor configured for that runtime; otherwise returns cloud providers.</param>
+    /// <returns>A read-only list of ProviderDescriptor objects applicable for the specified profile.</returns>
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null)
     {
         if (profile is null)
@@ -141,6 +157,15 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
         return await provider.EnsureReadyAsync(settings, progress, ct);
     }
 
+    /// <summary>
+    /// Create an ITranscriptionProvider instance for the resolved provider and runtime.
+    /// </summary>
+    /// <param name="providerId">Provider identifier or alias used to resolve the effective provider.</param>
+    /// <param name="settings">Application settings used to resolve runtime, profile, and containerized service URL.</param>
+    /// <param name="keyStore">Optional API key store used to supply credentials for cloud providers.</param>
+    /// <param name="profile">Optional compute profile override; when null the profile is resolved from settings or inferred.</param>
+    /// <returns>An ITranscriptionProvider implementation configured for the resolved provider and runtime.</returns>
+    /// <exception cref="PipelineProviderException">Thrown when the requested provider is not implemented.</exception>
     public ITranscriptionProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, ComputeProfile? profile = null)
     {
         var resolvedProfile = ResolveProfile(providerId, settings, profile);
@@ -150,7 +175,7 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
         if (resolvedRuntime == InferenceRuntime.Containerized)
         {
             return new ContainerizedTranscriptionProvider(
-                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log, null, _requestLeaseTracker),
                 _log);
         }
 
