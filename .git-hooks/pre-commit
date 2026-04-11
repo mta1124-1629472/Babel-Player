@@ -6,7 +6,7 @@
 #
 # Runs fast, local-only checks before every commit:
 #   1. Architecture linter (structural rules, placeholders, provider constants)
-#   2. C# syntax compile check (Python inference script)
+#   2. Python syntax compile check (inference script)
 #   3. Optional: dotnet build if any .cs or .csproj files changed
 # ─────────────────────────────────────────────────────────────
 
