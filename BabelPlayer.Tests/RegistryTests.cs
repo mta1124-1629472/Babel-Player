@@ -182,10 +182,10 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TranslationRegistry_CreateProvider_DeeplWithNoKey_DoesNotThrow()
+    public void TranslationRegistry_CreateProvider_DeeplWithNoKey_ThrowsArgumentException()
     {
-        var provider = _translationRegistry.CreateProvider(ProviderNames.Deepl, new AppSettings(), null);
-        Assert.NotNull(provider);
+        Assert.Throws<ArgumentException>(() =>
+            _translationRegistry.CreateProvider(ProviderNames.Deepl, new AppSettings(), null));
     }
 
     [Fact]
