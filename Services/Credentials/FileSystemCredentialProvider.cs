@@ -3,64 +3,34 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using Babel.Player.Models;
 
 namespace Babel.Player.Services.Credentials;
 
 /// <summary>
 /// A credential provider that stores encrypted keys in a JSON file.
-/// On Windows, it uses DPAPI (CurrentUser) for protection.
-/// On other platforms, it uses AES-256-GCM.
+/// On Windows, it uses DPAPI (CurrentUser) for the install secret and for
+/// credential protection.  On other platforms, it uses AES-256-GCM with a
+/// per-installation random key that is stored with owner-only permissions.
 /// </summary>
 public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
 {
     private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
     private readonly string _filePath;
 
-    public string StorageProviderName => OperatingSystem.IsWindows() ? Babel.Player.Models.ProviderNames.LocalFileDpapi : Babel.Player.Models.ProviderNames.LocalFileAes256Gcm;
+    // Derived key is computed once per instance — PBKDF2 at 100k iterations is expensive.
+    private readonly Lazy<byte[]> _derivedKey;
 
-    private byte[] GetOrCreateInstallSecret()
-    {
-        var secretPath = Path.Combine(Path.GetDirectoryName(_filePath) ?? "", ".install_secret");
-        if (File.Exists(secretPath))
-        {
-            var stored = File.ReadAllBytes(secretPath);
-            if (OperatingSystem.IsWindows())
-            {
-                return System.Security.Cryptography.ProtectedData.Unprotect(stored, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-            }
-            // For macOS/Linux where a platform store isn't trivial in plain .NET, we fallback to just reading it.
-            // A production system might use libsecret/Keychain here, but the prompt says:
-            // "stores it in the platform secure store (Windows DPAPI/Windows Credential Manager, macOS Keychain, Linux libsecret/keyring), and retrieves it thereafter"
-            // Wait, we need to respect the prompt. Let's do DPAPI on Windows, and store directly on Linux/Mac with strict permissions.
-            // "Ensure the secret is only exportable to the running user/account and handle errors when secure storage is unavailable."
-            return stored;
-        }
+    // Version prefix present on all v1 payloads (both Windows DPAPI and non-Windows AES-GCM).
+    private const string V1Prefix = "v1:";
 
-        var newSecret = new byte[32];
-        System.Security.Cryptography.RandomNumberGenerator.Fill(newSecret);
+    // Fixed salt is acceptable because the PBKDF2 password is itself a
+    // cryptographically random 32-byte per-installation secret.
+    private static readonly byte[] _pbkdf2Salt = Encoding.UTF8.GetBytes("BabelPlayer_SecureSalt_2024");
 
-        if (OperatingSystem.IsWindows())
-        {
-            var protectedSecret = System.Security.Cryptography.ProtectedData.Protect(newSecret, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-            File.WriteAllBytes(secretPath, protectedSecret);
-        }
-        else
-        {
-            File.WriteAllBytes(secretPath, newSecret);
-            // In a real app we'd chmod 600 here.
-            try {
-                File.SetUnixFileMode(secretPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            } catch { }
-        }
-
-        return newSecret;
-    }
-
-    private byte[] DeriveKey()
-    {
-        var secret = GetOrCreateInstallSecret();
-        return System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(secret, secret, 100000, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
-    }
+    public string StorageProviderName => OperatingSystem.IsWindows()
+        ? ProviderNames.LocalFileDpapi
+        : ProviderNames.LocalFileAes256Gcm;
 
     public FileSystemCredentialProvider(string filePath)
     {
@@ -68,6 +38,65 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
         var dir = Path.GetDirectoryName(filePath);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
+
+        _derivedKey = new Lazy<byte[]>(DeriveKey);
+    }
+
+    // ── Key derivation ────────────────────────────────────────────────────
+
+    private byte[] DeriveKey()
+    {
+        var secret = GetOrCreateInstallSecret();
+        return System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
+            secret, _pbkdf2Salt, 100000, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
+    }
+
+    /// <summary>
+    /// Returns a stable per-installation 32-byte random secret, creating and persisting
+    /// it on first use alongside the credential file.
+    /// On Windows, the key file is wrapped with DPAPI before being written to disk.
+    /// On other platforms, the file is restricted to owner read/write (chmod 600).
+    /// </summary>
+    private byte[] GetOrCreateInstallSecret()
+    {
+        var secretPath = Path.Combine(Path.GetDirectoryName(_filePath) ?? "", ".install_secret");
+
+        if (File.Exists(secretPath))
+        {
+            try
+            {
+                var stored = File.ReadAllBytes(secretPath);
+                if (OperatingSystem.IsWindows())
+                {
+                    return System.Security.Cryptography.ProtectedData.Unprotect(
+                        stored, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                }
+                return stored;
+            }
+            catch (IOException) { /* fall through to generate a new secret */ }
+            catch (UnauthorizedAccessException) { /* fall through to generate a new secret */ }
+        }
+
+        var newSecret = new byte[32];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(newSecret);
+
+        if (OperatingSystem.IsWindows())
+        {
+            var protectedSecret = System.Security.Cryptography.ProtectedData.Protect(
+                newSecret, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            File.WriteAllBytes(secretPath, protectedSecret);
+        }
+        else
+        {
+            File.WriteAllBytes(secretPath, newSecret);
+            try
+            {
+                File.SetUnixFileMode(secretPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            catch { /* best-effort permission restriction */ }
+        }
+
+        return newSecret;
     }
 
     public bool HasKey(string provider)
@@ -149,10 +178,10 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
         {
             var encrypted = System.Security.Cryptography.ProtectedData.Protect(
                 data, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-            return "v1:" + Convert.ToBase64String(encrypted);
+            return V1Prefix + Convert.ToBase64String(encrypted);
         }
 
-        var key = DeriveKey();
+        var key = _derivedKey.Value;
         var nonce = new byte[12];
         System.Security.Cryptography.RandomNumberGenerator.Fill(nonce);
         var tag = new byte[16];
@@ -166,16 +195,16 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
         Buffer.BlockCopy(tag, 0, result, nonce.Length, tag.Length);
         Buffer.BlockCopy(ciphertext, 0, result, nonce.Length + tag.Length, ciphertext.Length);
 
-        return "v1:" + Convert.ToBase64String(result);
+        return V1Prefix + Convert.ToBase64String(result);
     }
 
     private string Unprotect(string stored)
     {
         try
         {
-            if (stored.StartsWith("v1:"))
+            if (stored.StartsWith(V1Prefix, StringComparison.Ordinal))
             {
-                var bytes = Convert.FromBase64String(stored.Substring(3));
+                var bytes = Convert.FromBase64String(stored.Substring(V1Prefix.Length));
 
                 if (OperatingSystem.IsWindows())
                 {
@@ -184,8 +213,9 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
                     return Encoding.UTF8.GetString(decrypted);
                 }
 
+                // Non-Windows: AES-GCM format: nonce(12) || tag(16) || ciphertext
                 if (bytes.Length < 12 + 16) return "";
-                var key = DeriveKey();
+                var key = _derivedKey.Value;
                 var nonce = new byte[12];
                 var tag = new byte[16];
                 var ciphertext = new byte[bytes.Length - 12 - 16];
@@ -196,15 +226,12 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
 
                 var plaintext = new byte[ciphertext.Length];
                 using var aesGcm = new System.Security.Cryptography.AesGcm(key, tag.Length);
-                try {
-                    aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
-                    return Encoding.UTF8.GetString(plaintext);
-                } catch {
-                    // Fall back to legacy if decryption fails
-                }
+                aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
+                return Encoding.UTF8.GetString(plaintext);
             }
 
-            // Legacy base64/Windows path
+            // Legacy format: base64(plaintext) on non-Windows, or base64(DPAPI) on Windows,
+            // written by the pre-v1 implementation.
             var legacyBytes = Convert.FromBase64String(stored);
             if (OperatingSystem.IsWindows())
             {
