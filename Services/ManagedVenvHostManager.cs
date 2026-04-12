@@ -1392,7 +1392,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var depsMarkerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
             if (!File.Exists(depsMarkerPath))
                 return true;
-            var storedDepsHash = File.ReadAllText(depsMarkerPath).Trim();
+            var storedDepsHash = ReadMarkerFile(depsMarkerPath);
             var currentDepsHash = ComputeBootstrapVersion(
                 _requirementsPathResolver(),
                 _constraintsPathResolver());
@@ -1403,7 +1403,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var scriptMarkerPath = Path.Combine(runtimeRoot, ".script-version");
             if (!File.Exists(scriptMarkerPath))
                 return true;
-            var storedScriptHash = File.ReadAllText(scriptMarkerPath).Trim();
+            var storedScriptHash = ReadMarkerFile(scriptMarkerPath);
             var currentScriptHash = ComputeScriptVersion(_inferenceScriptResolver());
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
@@ -1413,14 +1413,32 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
+
+    private static string ReadMarkerFile(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 128, FileOptions.SequentialScan);
+        using var sr = new StreamReader(fs);
+        return sr.ReadToEnd().Trim();
+    }
+
     private static string ComputeBootstrapVersion(
         string requirementsPath,
         string constraintsPath)
     {
         var builder = new StringBuilder();
         builder.AppendLine(PythonVersion);
-        builder.AppendLine(File.ReadAllText(requirementsPath));
-        builder.AppendLine(File.ReadAllText(constraintsPath));
+
+        using (var reqFs = new FileStream(requirementsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
+        using (var reqSr = new StreamReader(reqFs))
+        {
+            builder.AppendLine(reqSr.ReadToEnd());
+        }
+
+        using (var consFs = new FileStream(constraintsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
+        using (var consSr = new StreamReader(consFs))
+        {
+            builder.AppendLine(consSr.ReadToEnd());
+        }
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(bytes);
@@ -1428,8 +1446,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
     private static string ComputeScriptVersion(string inferenceScriptPath)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath)));
-        return Convert.ToHexString(bytes);
+        using var fs = new FileStream(inferenceScriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan);
+        return Convert.ToHexString(SHA256.HashData(fs));
     }
 
     private static string ResolveInferenceScriptPath() =>
