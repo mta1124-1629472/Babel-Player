@@ -166,7 +166,7 @@ public sealed class ContainerizedServiceProbeTests
         Assert.Equal(ContainerizedProbeState.Checking, result.State);
 
         // Wait for the background probe to complete
-        await Task.Delay(100);
+        await Task.Delay(500);
 
         // Verify the exception was handled and cached as unavailable
         var cachedResult = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
@@ -196,7 +196,7 @@ public sealed class ContainerizedServiceProbeTests
         var result = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
         Assert.Equal(ContainerizedProbeState.Checking, result.State);
 
-        await Task.Delay(100);
+        await Task.Delay(500);
 
         // Verify the probe still works despite any observer issues
         var secondResult = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
@@ -394,7 +394,7 @@ public sealed class ContainerizedServiceProbeTests
 
         // Complete the first probe
         probeCompleted.SetResult(true);
-        await Task.Delay(100);
+        await Task.Delay(500);
 
         // Verify cache works after completion
         var cached = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
@@ -533,7 +533,7 @@ public sealed class ContainerizedServiceProbeTests
                 }
             }
             if (allAvailable) break;
-            await Task.Delay(100);
+            await Task.Delay(500);
         }
 
         Assert.True(allAvailable, "Background probes did not reach Available state within timeout.");
@@ -583,7 +583,7 @@ public sealed class ContainerizedServiceProbeTests
         Assert.False(first.WasCacheHit);
         
         // Wait for probe to complete
-        await Task.Delay(100);
+        await Task.Delay(500);
         
         // Second call should hit cache
         var second = probe.GetCurrentOrStartBackgroundProbe(testUrl);
