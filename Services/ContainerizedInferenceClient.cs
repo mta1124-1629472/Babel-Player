@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -461,6 +462,57 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    public async Task<IReadOnlyList<QwenBatchSegmentResult>> QwenBatchAsync(
+        string model,
+        IReadOnlyList<QwenBatchSegmentPayload> segments,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var lease = AcquireLease(ContainerizedRequestKind.Qwen);
+
+            var payload = new QwenBatchRequestPayloadDto(
+                string.IsNullOrWhiteSpace(model) ? "Qwen/Qwen3-TTS-12Hz-1.7B-Base" : model,
+                segments.Select(segment => new QwenBatchSegmentPayloadDto(
+                    segment.SegmentId,
+                    segment.Text,
+                    segment.Language,
+                    segment.ReferenceId)).ToList());
+
+            using var content = new StringContent(
+                JsonSerializer.Serialize(payload, JsonOptions),
+                Encoding.UTF8,
+                "application/json");
+
+            using var response = await _httpClient.PostAsync(
+                $"{_inferenceServiceUrl}/tts/qwen/batch",
+                content,
+                cancellationToken);
+
+            var result = await DeserializeResponseAsync<QwenBatchResponseDto>(response, cancellationToken);
+            if (!result.Success)
+                throw new InvalidOperationException($"Qwen TTS batch error: {result.ErrorMessage}");
+
+            return result.Segments?
+                .Where(segment => !string.IsNullOrWhiteSpace(segment.SegmentId))
+                .Select(segment => new QwenBatchSegmentResult(
+                    segment.SegmentId!,
+                    new TtsResult(
+                        true,
+                        segment.AudioPath ?? string.Empty,
+                        segment.Voice ?? model,
+                        segment.FileSizeBytes,
+                        null)))
+                .ToList()
+                ?? [];
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Qwen TTS batch synthesis failed: {ex.Message}", ex);
+            return [];
+        }
+    }
+
     /// <summary>
     /// Downloads a TTS audio file from the containerized inference service and saves it to the specified local path.
     /// </summary>
@@ -829,6 +881,43 @@ public sealed class ContainerizedInferenceClient
         public string? ErrorMessage { get; set; }
     }
 
+    private sealed record QwenBatchRequestPayloadDto(
+        [property: JsonPropertyName("model")] string Model,
+        [property: JsonPropertyName("segments")] List<QwenBatchSegmentPayloadDto> Segments);
+
+    private sealed record QwenBatchSegmentPayloadDto(
+        [property: JsonPropertyName("segment_id")] string SegmentId,
+        [property: JsonPropertyName("text")] string Text,
+        [property: JsonPropertyName("language")] string? Language,
+        [property: JsonPropertyName("reference_id")] string ReferenceId);
+
+    private sealed class QwenBatchResponseDto
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("segments")]
+        public List<QwenBatchSegmentResponseDto>? Segments { get; set; }
+
+        [JsonPropertyName("error_message")]
+        public string? ErrorMessage { get; set; }
+    }
+
+    private sealed class QwenBatchSegmentResponseDto
+    {
+        [JsonPropertyName("segment_id")]
+        public string? SegmentId { get; set; }
+
+        [JsonPropertyName("voice")]
+        public string? Voice { get; set; }
+
+        [JsonPropertyName("audio_path")]
+        public string? AudioPath { get; set; }
+
+        [JsonPropertyName("file_size_bytes")]
+        public long FileSizeBytes { get; set; }
+    }
+
     private sealed class DiarizationApiResponseDto
     {
         [JsonPropertyName("success")]
@@ -1052,6 +1141,16 @@ public sealed class ContainerizedInferenceClient
         _requestLeaseTracker?.Acquire(kind);
 
 }
+
+public sealed record QwenBatchSegmentPayload(
+    string SegmentId,
+    string Text,
+    string? Language,
+    string ReferenceId);
+
+public sealed record QwenBatchSegmentResult(
+    string SegmentId,
+    TtsResult Result);
 
 public enum ContainerCapabilityStage
 {

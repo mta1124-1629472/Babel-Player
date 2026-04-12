@@ -371,62 +371,77 @@ public sealed partial class SessionWorkflowCoordinator
                 progress01: 0,
                 isIndeterminate: true);
 
-            await Parallel.ForEachAsync(
-                candidateSegments,
-                new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = cancellationToken },
-                async (seg, ct) =>
-                {
-                    var id = seg.Id;
-                    var text = seg.TranslatedText;
-
-                    if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(id))
+            if (_ttsService is QwenContainerTtsProvider qwenProvider)
+            {
+                await GenerateQwenBatchSegmentAudioAsync(
+                    qwenProvider,
+                    candidateSegments,
+                    segmentsDir,
+                    v,
+                    ttsLanguage,
+                    stageContext,
+                    segmentAudioPaths,
+                    cancellationToken);
+            }
+            else
+            {
+                await Parallel.ForEachAsync(
+                    candidateSegments,
+                    new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = cancellationToken },
+                    async (seg, ct) =>
                     {
-                        _log.Info($"Skipping segment {id}: empty text or ID");
-                        return;
-                    }
+                        var id = seg.Id;
+                        var text = seg.TranslatedText;
 
-                    var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
-                    var resolvedVoice = ResolveVoiceForSegment(seg, v);
-                    var referenceAudioPath = ResolveReferenceAudioForSegment(seg);
-
-                    _log.Info($"Generating TTS for segment {id} (voice={resolvedVoice}, speaker={seg.SpeakerId ?? "<none>"}): {text[..Math.Min(30, text.Length)]}...");
-
-                    try
-                    {
-                        var segTask = _ttsService.GenerateSegmentTtsAsync(
-                            new SingleSegmentTtsRequest(
-                                text,
-                                segmentAudioPath,
-                                resolvedVoice,
-                                seg.SpeakerId,
-                                referenceAudioPath,
-                                Language: ttsLanguage,
-                                SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
-                            ct);
-                        _pendingTtsTasks.Add(segTask);
-                        var segResult = await segTask;
-
-                        if (segResult.Success && File.Exists(segmentAudioPath))
+                        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(id))
                         {
-                            segmentAudioPaths[id] = segmentAudioPath;
-                            var done = Interlocked.Increment(ref completed);
-                            ReportStage(
-                                stageContext,
-                                $"Generated segment clip {done} of {totalSegments}…",
-                                progress01: (double)done / totalSegments,
-                                isIndeterminate: false);
-                            _log.Info($"Segment TTS generated: {id} -> {segmentAudioPath}");
+                            _log.Info($"Skipping segment {id}: empty text or ID");
+                            return;
                         }
-                        else
+
+                        var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
+                        var resolvedVoice = ResolveVoiceForSegment(seg, v);
+                        var referenceAudioPath = ResolveReferenceAudioForSegment(seg);
+
+                        _log.Info($"Generating TTS for segment {id} (voice={resolvedVoice}, speaker={seg.SpeakerId ?? "<none>"}): {text[..Math.Min(30, text.Length)]}...");
+
+                        try
                         {
-                            _log.Warning($"Segment TTS failed or file missing: {id}");
+                            var segTask = _ttsService.GenerateSegmentTtsAsync(
+                                new SingleSegmentTtsRequest(
+                                    text,
+                                    segmentAudioPath,
+                                    resolvedVoice,
+                                    seg.SpeakerId,
+                                    referenceAudioPath,
+                                    Language: ttsLanguage,
+                                    SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
+                                ct);
+                            _pendingTtsTasks.Add(segTask);
+                            var segResult = await segTask;
+
+                            if (segResult.Success && File.Exists(segmentAudioPath))
+                            {
+                                segmentAudioPaths[id] = segmentAudioPath;
+                                var done = Interlocked.Increment(ref completed);
+                                ReportStage(
+                                    stageContext,
+                                    $"Generated segment clip {done} of {totalSegments}…",
+                                    progress01: (double)done / totalSegments,
+                                    isIndeterminate: false);
+                                _log.Info($"Segment TTS generated: {id} -> {segmentAudioPath}");
+                            }
+                            else
+                            {
+                                _log.Warning($"Segment TTS failed or file missing: {id}");
+                            }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        _log.Error($"Segment TTS generation failed for {id}: {ex.Message}", ex);
-                    }
-                });
+                        catch (Exception ex)
+                        {
+                            _log.Error($"Segment TTS generation failed for {id}: {ex.Message}", ex);
+                        }
+                    });
+            }
 
             var orderedPaths = new List<string>();
             foreach (var seg in candidateSegments)
@@ -504,6 +519,69 @@ public sealed partial class SessionWorkflowCoordinator
             $"Dub complete. {succeeded}/{totalSegments} segment clips are ready with voice {v}.",
             progress01: 1,
             isIndeterminate: false);
+    }
+
+    private async Task GenerateQwenBatchSegmentAudioAsync(
+        QwenContainerTtsProvider qwenProvider,
+        IReadOnlyList<TranslationSegmentArtifact> candidateSegments,
+        string segmentsDir,
+        string defaultVoice,
+        string? ttsLanguage,
+        PipelineStageContext? stageContext,
+        ConcurrentDictionary<string, string> segmentAudioPaths,
+        CancellationToken cancellationToken)
+    {
+        var batchRequests = new List<QwenBatchSegmentRequest>(candidateSegments.Count);
+        foreach (var segment in candidateSegments)
+        {
+            var id = segment.Id;
+            var text = segment.TranslatedText;
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(text))
+                continue;
+
+            var outputPath = Path.Combine(segmentsDir, $"{id}.mp3");
+            var resolvedVoice = ResolveVoiceForSegment(segment, defaultVoice);
+            var referenceAudioPath = ResolveReferenceAudioForSegment(segment);
+
+            batchRequests.Add(new QwenBatchSegmentRequest(
+                id,
+                text,
+                outputPath,
+                resolvedVoice,
+                segment.SpeakerId,
+                referenceAudioPath,
+                ttsLanguage,
+                CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath));
+        }
+
+        if (batchRequests.Count == 0)
+            return;
+
+        _log.Info($"Generating {batchRequests.Count} Qwen batch TTS segments.");
+        var generatedPaths = await qwenProvider.GenerateSegmentsAsync(
+            batchRequests,
+            new Progress<(int Completed, int Total)>(update =>
+            {
+                ReportStage(
+                    stageContext,
+                    $"Generated segment clip {update.Completed} of {update.Total}…",
+                    progress01: update.Total <= 0 ? 0 : (double)update.Completed / update.Total,
+                    isIndeterminate: false);
+            }),
+            cancellationToken);
+
+        foreach (var batchRequest in batchRequests)
+        {
+            if (generatedPaths.TryGetValue(batchRequest.SegmentId, out var outputPath) && File.Exists(outputPath))
+            {
+                segmentAudioPaths[batchRequest.SegmentId] = outputPath;
+                _log.Info($"Qwen batch segment TTS generated: {batchRequest.SegmentId} -> {outputPath}");
+            }
+            else
+            {
+                _log.Warning($"Qwen batch segment TTS missing output: {batchRequest.SegmentId}");
+            }
+        }
     }
 
     public Task AdvancePipelineAsync(
