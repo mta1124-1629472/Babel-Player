@@ -1,8 +1,9 @@
 # Core inference dependencies
+
 fastapi==0.104.0
 uvicorn[standard]==0.24.0
 pydantic==2.10.6
-python-multipart==0.0.6
+python-multipart==0.0.22
 
 # Transcription
 faster-whisper==1.2.1
@@ -23,9 +24,10 @@ git+https://github.com/wenet-e2e/wespeaker.git@c92349a14d6b426808c4e09b8b12e0768
 s3prl==0.4.17
 
 # Shared ML
-torch==2.2.2
+# Shared ML
+torch==2.8.0
 # Managed CPU providers and the GPU Qwen runtime both require this transformers pin.
-transformers==4.57.3
+transformers==5.0.0
 # FIX: was "accelerator==1.2.0" (wrong package name); correct package is "accelerate"
 accelerate==1.12.0
 edge-tts==7.2.8
