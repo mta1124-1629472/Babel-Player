@@ -104,13 +104,31 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        await client.DownloadSpeechAsync(request.Text, model, "alloy", request.OutputAudioPath, cancellationToken)
-            .ConfigureAwait(false);
-        var fileLength = new FileInfo(request.OutputAudioPath).Length;
+        try
+        {
+            await client.DownloadSpeechAsync(request.Text, model, "alloy", request.OutputAudioPath, cancellationToken)
+                .ConfigureAwait(false);
+            var fileLength = new FileInfo(request.OutputAudioPath).Length;
 
-        _log.Info($"[OpenAITTS] Generated segment audio: {request.OutputAudioPath} ({fileLength} bytes)");
+            _log.Info($"[OpenAITTS] Generated segment audio: {request.OutputAudioPath} ({fileLength} bytes)");
 
-        return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileLength, null);
+            return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileLength, null);
+        }
+        catch (Exception)
+        {
+            if (File.Exists(request.OutputAudioPath))
+            {
+                try
+                {
+                    File.Delete(request.OutputAudioPath);
+                }
+                catch
+                {
+                    // Best-effort cleanup
+                }
+            }
+            throw;
+        }
     }
 
     /// <summary>
