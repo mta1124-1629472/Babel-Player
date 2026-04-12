@@ -22,6 +22,6 @@ CHANGED=$(git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD 2>/dev/null
 if [[ -n "$CHANGED" ]]; then
     echo
     echo -e "${YELLOW}${BOLD}[post-merge] Project or dependency files changed. Consider running:${NC}"
-    echo -e "    ${BOLD}dotnet restore babel-player.sln${NC}"
+    echo -e "    ${BOLD}dotnet restore Babel-Player.sln${NC}"
     echo
 fi

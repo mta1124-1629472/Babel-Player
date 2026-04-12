@@ -24,12 +24,12 @@ defaults:
 
 jobs:
   debugger:
-    if: ${{ false }}
-    runs-on: 'ubuntu-latest'
+    if: ${{ vars.DEBUG_DISPATCH == 'true' }}
+    runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
+      contents: read
     steps:
-      - name: 'Print context for debugging'
+      - name: Print context for debugging
         env:
           DEBUG_event_name: '${{ github.event_name }}'
           DEBUG_event__action: '${{ github.event.action }}'
@@ -38,7 +38,7 @@ jobs:
           DEBUG_event__pull_request__author_association: '${{ github.event.pull_request.author_association }}'
           DEBUG_event__review__author_association: '${{ github.event.review.author_association }}'
           DEBUG_event: '${{ toJSON(github.event) }}'
-        run: |-
+        run: |
           env | grep '^DEBUG_'
 
   dispatch:
@@ -67,7 +67,7 @@ jobs:
       command: '${{ steps.extract_command.outputs.command }}'
       request: '${{ steps.extract_command.outputs.request }}'
       additional_context: '${{ steps.extract_command.outputs.additional_context }}'
-      issue_number: '${{ github.event.pull_request.number || github.event.issue.number }}'
+      issue_number: '${{ (github.event.pull_request.number || github.event.issue.number) + 0 }}'
     steps:
       - name: 'Extract command'
         id: 'extract_command'

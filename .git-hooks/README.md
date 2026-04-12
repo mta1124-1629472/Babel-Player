@@ -5,11 +5,13 @@
 This directory contains git hooks that enforce project conventions and run verification checks.
 
 **Activate with:**
+
 ```bash
 git config core.hooksPath .git-hooks
 ```
 
 **Deactivate (revert to default):**
+
 ```bash
 git config --unset core.hooksPath
 ```
