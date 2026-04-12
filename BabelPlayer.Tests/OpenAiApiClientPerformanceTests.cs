@@ -38,15 +38,29 @@ public class OpenAiApiClientPerformanceTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task TranscribeAudioAsync_PerformanceTest()
     {
         var tempFile = Path.GetTempFileName();
         try
         {
-            // Create a dummy large file to simulate I/O delay
-            byte[] data = new byte[1024 * 1024 * 200]; // 200 MB
-            new Random().NextBytes(data);
-            await File.WriteAllBytesAsync(tempFile, data);
+            // Create a dummy large file to simulate I/O delay without allocating the full payload in memory
+            const int totalSizeBytes = 1024 * 1024 * 200; // 200 MB
+            const int bufferSizeBytes = 1024 * 1024; // 1 MB
+            byte[] buffer = new byte[bufferSizeBytes];
+            var random = new Random();
+
+            await using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSizeBytes, useAsync: true))
+            {
+                int remaining = totalSizeBytes;
+                while (remaining > 0)
+                {
+                    int bytesToWrite = Math.Min(buffer.Length, remaining);
+                    random.NextBytes(buffer);
+                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesToWrite));
+                    remaining -= bytesToWrite;
+                }
+            }
 
             using var client = new OpenAiApiClient("test-key", new StubHttpMessageHandler());
 
