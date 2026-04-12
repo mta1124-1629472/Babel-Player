@@ -105,9 +105,29 @@ public sealed class OpenAiApiClient : IDisposable
             throw CreateApiException(response.StatusCode, payload);
         }
 
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var fileStream = System.IO.File.Create(outputPath);
-        await stream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
+        var tempPath = outputPath + ".tmp";
+        try
+        {
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using (var fileStream = System.IO.File.Create(tempPath))
+            {
+                await stream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
+            }
+            System.IO.File.Move(tempPath, outputPath, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                if (System.IO.File.Exists(tempPath))
+                    System.IO.File.Delete(tempPath);
+            }
+            catch
+            {
+                // Best-effort cleanup
+            }
+            throw;
+        }
     }
 
     public async Task<OpenAiTranscriptionPayload> TranscribeAudioAsync(

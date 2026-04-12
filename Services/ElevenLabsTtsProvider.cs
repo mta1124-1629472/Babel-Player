@@ -202,13 +202,32 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        await client.DownloadSpeechAsync(request.Text, DefaultVoiceId, request.OutputAudioPath, modelId, cancellationToken)
-            .ConfigureAwait(false);
-        var fileLength = new FileInfo(request.OutputAudioPath).Length;
+        try
+        {
+            await client.DownloadSpeechAsync(request.Text, DefaultVoiceId, request.OutputAudioPath, modelId, cancellationToken)
+                .ConfigureAwait(false);
+            var fileLength = new FileInfo(request.OutputAudioPath).Length;
 
-        _log.Info($"[ElevenLabsTTS] Segment audio written: {request.OutputAudioPath} ({fileLength} bytes)");
+            _log.Info($"[ElevenLabsTTS] Segment audio written: {request.OutputAudioPath} ({fileLength} bytes)");
 
-        return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileLength, null);
+            return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileLength, null);
+        }
+        catch (Exception)
+        {
+            if (File.Exists(request.OutputAudioPath))
+            {
+                try
+                {
+                    File.Delete(request.OutputAudioPath);
+                    _log.Warn($"[ElevenLabsTTS] Deleted partial file after failure: {request.OutputAudioPath}");
+                }
+                catch (Exception cleanupEx)
+                {
+                    _log.Error($"[ElevenLabsTTS] Failed to delete partial file {request.OutputAudioPath}: {cleanupEx.Message}");
+                }
+            }
+            throw;
+        }
     }
 
     // Map the VoiceName field (which holds the selected model/quality tier in Babel Player's
