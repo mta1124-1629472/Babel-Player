@@ -448,7 +448,6 @@ public sealed class ModelTests
     public void ProviderNames_AllConstantsAreNonEmpty()
     {
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.FasterWhisper));
-        Assert.False(string.IsNullOrWhiteSpace(ProviderNames.GoogleTranslateFree));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.EdgeTts));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Piper));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Nllb200));
@@ -473,7 +472,6 @@ public sealed class ModelTests
             ProviderNames.FasterWhisper,
             ProviderNames.OpenAiWhisperApi,
             ProviderNames.GoogleStt,
-            ProviderNames.GoogleTranslateFree,
             ProviderNames.Nllb200,
             ProviderNames.Deepl,
             ProviderNames.OpenAi,

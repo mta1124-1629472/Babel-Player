@@ -1089,11 +1089,11 @@ public sealed class SegmentInspectionTests
         playback.TranslationProvider = ProviderNames.OpenAi;
         playback.TranslationModel = "gpt-4o-mini";
 
-        playback.TranslationProvider = ProviderNames.GoogleTranslateFree;
+        playback.TranslationProvider = ProviderNames.Deepl;
 
-        Assert.Equal(ProviderNames.GoogleTranslateFree, playback.TranslationProvider);
+        Assert.Equal(ProviderNames.Deepl, playback.TranslationProvider);
         Assert.Equal("default", playback.TranslationModel);
-        Assert.Equal(ProviderNames.GoogleTranslateFree, playback.Coordinator.CurrentSettings.TranslationProvider);
+        Assert.Equal(ProviderNames.Deepl, playback.Coordinator.CurrentSettings.TranslationProvider);
         Assert.Equal("default", playback.Coordinator.CurrentSettings.TranslationModel);
     }
 

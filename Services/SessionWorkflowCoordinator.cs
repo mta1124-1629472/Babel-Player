@@ -875,7 +875,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         return [.. await _artifactReader.BuildWorkflowSegmentsAsync(CurrentSession)];
     }
 
-    // Stable segment ID derived from start time — must match the format written by GoogleTranslationProvider.
+    // Stable segment ID derived from start time — must match the format written by translation providers.
     // Python: f"segment_{start}" → e.g. "segment_0.0", "segment_3.68"
     internal static string SegmentId(double start) =>
         start == (int)start

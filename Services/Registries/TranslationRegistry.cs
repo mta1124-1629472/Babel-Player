@@ -110,15 +110,6 @@ public sealed class TranslationRegistry : ITranslationRegistry
         var providers = new List<ProviderDescriptor>
         {
             new(
-                ProviderNames.GoogleTranslateFree,
-                "Google Translate (Free — unreliable, web scraper)",
-                false,
-                null,
-                ["default"],
-                SupportedRuntimes: [InferenceRuntime.Cloud],
-                DefaultRuntime: InferenceRuntime.Cloud,
-                Notes: "Uses googletrans==4.0.0rc1 which scrapes Google's private endpoints. May break without warning when Google changes its API."),
-            new(
                 ProviderNames.Deepl,
                 "DeepL API",
                 true,
@@ -233,7 +224,6 @@ public sealed class TranslationRegistry : ITranslationRegistry
         {
             ProviderNames.Nllb200 => new NllbTranslationProvider(_log, settings.TranslationModel),
             ProviderNames.CTranslate2 => new CTranslate2TranslationProvider(_log, settings.TranslationModel),
-            ProviderNames.GoogleTranslateFree => new GoogleTranslationProvider(_log),
             ProviderNames.Deepl => new DeepLTranslationProvider(
                 _log,
                 keyStore?.GetKey(CredentialKeys.Deepl) ?? string.Empty),

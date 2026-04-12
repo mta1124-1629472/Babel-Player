@@ -157,7 +157,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(AvailableTranslationModels))]
     [NotifyPropertyChangedFor(nameof(SelectedTranslationModel))]
     [NotifyPropertyChangedFor(nameof(TranslationKeyStatus))]
-    private string _translationProvider = ProviderNames.GoogleTranslateFree;
+    private string _translationProvider = ProviderNames.Deepl;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedTranslationModel))]

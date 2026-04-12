@@ -11,7 +11,7 @@ faster-whisper==1.2.1
 # Translation
 ctranslate2==4.7.1
 sentencepiece==0.2.1
-googletrans==4.0.0rc1
+# REMOVED: googletrans==4.0.0rc1 (unreliable scraping provider with httpx conflicts)
 
 # TTS - Coqui XTTS
 tts==0.22.0

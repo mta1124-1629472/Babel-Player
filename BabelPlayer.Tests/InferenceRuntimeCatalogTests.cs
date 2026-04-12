@@ -78,7 +78,6 @@ public sealed class InferenceRuntimeCatalogTests
     [Theory]
     [InlineData(ProviderNames.Deepl, ComputeProfile.Cloud)]
     [InlineData(ProviderNames.OpenAi, ComputeProfile.Cloud)]
-    [InlineData(ProviderNames.GoogleTranslateFree, ComputeProfile.Cloud)]
     [InlineData(ProviderNames.GeminiTranslation, ComputeProfile.Cloud)]
     public void InferTranslationProfile_CloudProviders_ReturnCloud(string providerId, ComputeProfile expected)
     {
@@ -144,9 +143,9 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void DefaultTranslationProvider_Cloud_ReturnsGoogleTranslateFree()
+    public void DefaultTranslationProvider_Cloud_ReturnsDeepl()
     {
-        Assert.Equal(ProviderNames.GoogleTranslateFree, InferenceRuntimeCatalog.DefaultTranslationProvider(ComputeProfile.Cloud));
+        Assert.Equal(ProviderNames.Deepl, InferenceRuntimeCatalog.DefaultTranslationProvider(ComputeProfile.Cloud));
     }
 
     // ── DefaultTtsProvider ────────────────────────────────────────────────────
@@ -229,10 +228,10 @@ public sealed class InferenceRuntimeCatalogTests
     // ── NormalizeTranslationProvider ──────────────────────────────────────────
 
     [Fact]
-    public void NormalizeTranslationProvider_NullProvider_ReturnsCloudDefault()
+    public void NormalizeTranslationProvider_NullProvider_ReturnsDeepl()
     {
         var result = InferenceRuntimeCatalog.NormalizeTranslationProvider(ComputeProfile.Cloud, null);
-        Assert.Equal(ProviderNames.GoogleTranslateFree, result);
+        Assert.Equal(ProviderNames.Deepl, result);
     }
 
     [Fact]
@@ -247,13 +246,6 @@ public sealed class InferenceRuntimeCatalogTests
     {
         var result = InferenceRuntimeCatalog.NormalizeTranslationProvider(ComputeProfile.Cpu, ProviderNames.CTranslate2);
         Assert.Equal(ProviderNames.CTranslate2, result);
-    }
-
-    [Fact]
-    public void NormalizeTranslationProvider_CloudProfile_PreservesGoogleTranslateFree()
-    {
-        var result = InferenceRuntimeCatalog.NormalizeTranslationProvider(ComputeProfile.Cloud, ProviderNames.GoogleTranslateFree);
-        Assert.Equal(ProviderNames.GoogleTranslateFree, result);
     }
 
     [Fact]
@@ -400,7 +392,6 @@ public sealed class InferenceRuntimeCatalogTests
     [Theory]
     [InlineData(ProviderNames.Nllb200)]
     [InlineData(ProviderNames.CTranslate2)]
-    [InlineData(ProviderNames.GoogleTranslateFree)]
     [InlineData(ProviderNames.Deepl)]
     [InlineData(ProviderNames.OpenAi)]
     [InlineData(ProviderNames.GeminiTranslation)]

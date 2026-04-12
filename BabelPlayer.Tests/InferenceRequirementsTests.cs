@@ -198,7 +198,6 @@ public sealed class InferenceRequirementsTests
     [InlineData("transformers==5.0.0")]
     [InlineData("sentencepiece==0.2.1")]
     [InlineData("faster-whisper==1.2.1")]
-    [InlineData("googletrans==4.0.0rc1")]
     [InlineData("git+https://github.com/wenet-e2e/wespeaker.git@c92349a14d6b426808c4e09b8b12e076864dfc11")]
     [InlineData("s3prl==0.4.17")]
     public void CpuRequirements_ContainsPinnedCpuSubprocessDependencies(string expectedLine)
@@ -207,6 +206,15 @@ public sealed class InferenceRequirementsTests
         var lines = ReadRequirementsLines(requirementsPath);
 
         Assert.Contains(expectedLine, lines);
+    }
+
+    [Fact]
+    public void CpuRequirements_DoesNotContainGoogleTrans()
+    {
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
+        var lines = ReadRequirementsLines(requirementsPath);
+
+        Assert.DoesNotContain(lines, l => l.StartsWith("googletrans", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -231,7 +239,6 @@ public sealed class InferenceRequirementsTests
     [InlineData("Services/EdgeTtsProvider.cs")]
     [InlineData("Services/CTranslate2TranslationProvider.cs")]
     [InlineData("Services/FasterWhisperTranscriptionProvider.cs")]
-    [InlineData("Services/GoogleTranslationProvider.cs")]
     [InlineData("Services/NllbTranslationProvider.cs")]
     public void CpuManagedPythonSubprocessProviders_DoNotInlinePipInstall(string relativePath)
     {

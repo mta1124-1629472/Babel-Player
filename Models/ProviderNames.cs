@@ -17,7 +17,6 @@ public static class ProviderNames
     public const string GeminiTranscription   = "gemini-transcription";
 
     // ── Translation ──────────────────────────────────────────────────────
-    public const string GoogleTranslateFree   = "google-translate-free";
     public const string Nllb200               = "nllb-200";
     public const string CTranslate2           = "ctranslate2";
     public const string Deepl                 = "deepl";
