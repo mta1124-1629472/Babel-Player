@@ -92,8 +92,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             catch (Exception ex)
             {
                 _coordinator.Log.Warning($"Health poll failed: {ex.Message}");
-                BackendStatusText = "Poll error";
-                BackendStatusBrush = Brushes.Red;
+                BackendErrorDetail = $"Poll error: {ex.Message}";
+                UpdateBackendStatus();
             }
         };
         _healthTimer.Start();
@@ -166,16 +166,26 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         : "Not found";
 
     [RelayCommand]
-    private void RefreshDiagnostics()
+    private async Task RefreshDiagnostics()
     {
-        OnPropertyChanged(nameof(CpuInfo));
-        OnPropertyChanged(nameof(GpuInfo));
-        OnPropertyChanged(nameof(RamInfo));
-        OnPropertyChanged(nameof(InferenceModeInfo));
-        OnPropertyChanged(nameof(RuntimeWarmupInfo));
-        OnPropertyChanged(nameof(TranslationFallbackInfo));
-        OnPropertyChanged(nameof(PythonInfo));
-        OnPropertyChanged(nameof(FfmpegInfo));
+        try
+        {
+            var warmupData = await Task.Run(() => _coordinator.GatherBootstrapWarmupData());
+            _coordinator.ApplyBootstrapWarmupData(warmupData);
+
+            OnPropertyChanged(nameof(CpuInfo));
+            OnPropertyChanged(nameof(GpuInfo));
+            OnPropertyChanged(nameof(RamInfo));
+            OnPropertyChanged(nameof(InferenceModeInfo));
+            OnPropertyChanged(nameof(RuntimeWarmupInfo));
+            OnPropertyChanged(nameof(TranslationFallbackInfo));
+            OnPropertyChanged(nameof(PythonInfo));
+            OnPropertyChanged(nameof(FfmpegInfo));
+        }
+        catch (Exception ex)
+        {
+            _coordinator.Log.Warning($"Diagnostics refresh failed: {ex.Message}");
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanRestartBackend))]
@@ -196,18 +206,25 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
                 .EnsureStartedAsync(settings, ContainerizedStartupTrigger.Manual, ct)
                 .ConfigureAwait(true);
 
-            BackendStatusText = result == ContainerizedStartResult.AlreadyRunning
-                || result == ContainerizedStartResult.Started
-                ? "Ready"
-                : $"Status: {result}";
+            if (result == ContainerizedStartResult.AlreadyRunning || result == ContainerizedStartResult.Started)
+            {
+                BackendErrorDetail = null;
+            }
+            else
+            {
+                BackendErrorDetail = $"Unexpected result: {result}";
+            }
+            UpdateBackendStatus();
         }
         catch (OperationCanceledException)
         {
-            BackendStatusText = "Cancelled";
+            BackendErrorDetail = "Restart cancelled by user";
+            UpdateBackendStatus();
         }
         catch (Exception ex)
         {
-            BackendStatusText = $"Failed: {ex.Message}";
+            BackendErrorDetail = $"Restart failed: {ex.Message}";
+            UpdateBackendStatus();
         }
         finally
         {
@@ -511,6 +528,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             => Task.FromResult(ContainerizedStartResult.AlreadyRunning);
 
         public ContainerizedProbeResult GetCurrentStatus(AppSettings s)
-            => new(s?.EffectiveGpuServiceUrl ?? "N/A", ContainerizedProbeState.Unavailable, DateTimeOffset.UtcNow, "No inference manager.");
+            => new(s?.EffectiveGpuServiceUrl ?? "N/A", ContainerizedProbeState.Available, DateTimeOffset.UtcNow, "No inference manager.");
     }
 }
