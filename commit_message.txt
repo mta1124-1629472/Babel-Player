@@ -1,0 +1,6 @@
+🧹 [code health improvement] Add debug logging to empty catch block in AppLog.cs
+
+🎯 **What:** Modified `Services/AppLog.cs` to add basic `System.Diagnostics.Debug.WriteLine` logging to the empty catch block at line 82. Also added the same logging to the try/catch at line 66 that was ignoring exceptions.
+💡 **Why:** Adding logging ensures that any failures to write or drain log lines to the log file are reported out to the diagnostic output, aiding in debugging in case of permissions or locked file issues without disrupting the program or application flow. It prevents failures from silently disappearing.
+✅ **Verification:** Verified by running `dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj --filter "AppLog"`, `dotnet build Babel-Player.sln`, and `python3 scripts/check-architecture.py`. All passing.
+✨ **Result:** Better maintainability and observability for log write and drain operations.
