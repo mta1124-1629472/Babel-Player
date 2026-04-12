@@ -254,7 +254,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
         catch (Exception ex)
         {
-            _log.Warning($"Failed to recover stale host processes during dispose: {ex.Message}");
+            _log.Error("Failed to recover stale host processes during dispose.", ex);
             try
             {
                 if (_hostProcess is { HasExited: false })
@@ -262,7 +262,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             }
             catch (Exception killEx)
             {
-                _log.Warning($"Failed to kill tracked host process during dispose: {killEx.Message}");
+                _log.Error("Failed to kill tracked host process during dispose.", killEx);
             }
         }
     }
