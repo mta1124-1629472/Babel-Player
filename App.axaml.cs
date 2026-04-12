@@ -22,6 +22,8 @@ public partial class App : Application
     private AppLog? _startupLog;
     private SettingsService? _settingsService;
     private ApiKeyStore? _apiKeyStore;
+    private ManagedVenvHostManager? _primaryGpuManager;
+    private System.Threading.Timer? _statusDebounceTimer;
 
     // Resolved once at startup so crash handlers can reference it without
     // touching the AppLog instance (which may itself be in a bad state).
@@ -111,6 +113,7 @@ public partial class App : Application
             _sessionWorkflowCoordinator = DependencyLocator.CreateSessionCoordinator(
                 appLog, appSettings, perSessionStore, recentStore, _apiKeyStore, transportManager, 
                 appDataRoot, _startupLog, out var primaryGpuManager);
+            _primaryGpuManager = primaryGpuManager;
 
 
             desktop.Exit += OnDesktopExit;
@@ -133,45 +136,26 @@ public partial class App : Application
             // Debounce: create a new 150 ms one-shot timer on each line; swapping
             // it atomically disposes the previous pending update so rapid pip/uv
             // output doesn't flood the dispatcher queue.
-            System.Threading.Timer? statusDebounce = null;
             void PostStatus(string line)
             {
                 var captured = line;
                 var timer = new System.Threading.Timer(
                     _ => Dispatcher.UIThread.Post(() => coordinator.RuntimeWarmupStatusText = $"Setup: {captured}"),
                     null, 150, System.Threading.Timeout.Infinite);
-                System.Threading.Interlocked.Exchange(ref statusDebounce, timer)?.Dispose();
+                System.Threading.Interlocked.Exchange(ref _statusDebounceTimer, timer)?.Dispose();
             }
 
             // GPU venv — surface install progress (first-time and rebuilds).
-            if (primaryGpuManager is not null)
-                primaryGpuManager.BootstrapProgressCallback = PostStatus;
+            if (_primaryGpuManager is not null)
+                _primaryGpuManager.BootstrapProgressCallback = PostStatus;
 
             // CPU runtime installation is intentionally not triggered during startup.
             // Defer any first-time bootstrap/download until a user-initiated CPU
             // transcription/TTS workflow explicitly requests it.
 
-            // Run heavy startup probes in background and publish results on UI thread.
-            Task.Run(() => coordinator.GatherBootstrapWarmupData())
-                .ContinueWith(t =>
-                {
-                    if (t.IsCompletedSuccessfully)
-                    {
-                        Dispatcher.UIThread.Post(() => coordinator.ApplyBootstrapWarmupData(t.Result));
-                    }
-                    else if (t.Exception is not null)
-                    {
-                        _startupLog?.Error("Background bootstrap warmup failed.", t.Exception.Flatten());
-                    }
-                });
-
-            // Detect hardware in background; post result to UI thread when done.
-            Task.Run(() => HardwareSnapshot.Run())
-                .ContinueWith(t =>
-                {
-                    if (t.IsCompletedSuccessfully)
-                        Dispatcher.UIThread.Post(() => coordinator.HardwareSnapshot = t.Result);
-                });
+            coordinator.StartStartupWarmupTasks(
+                warmup => Dispatcher.UIThread.Post(() => coordinator.ApplyBootstrapWarmupData(warmup)),
+                hardware => Dispatcher.UIThread.Post(() => coordinator.HardwareSnapshot = hardware));
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -190,13 +174,11 @@ public partial class App : Application
         }
         finally
         {
+            _primaryGpuManager?.BootstrapProgressCallback = null;
+            System.Threading.Interlocked.Exchange(ref _statusDebounceTimer, null)?.Dispose();
             _sessionWorkflowCoordinator.Dispose();
             (_startupLog as IDisposable)?.Dispose();
-
-            // Force the process to exit cleanly. Without this, background threads
-            // (mpv event loop, debounce Task.Run continuations, bootstrap warmup)
-            // can keep the CLR alive indefinitely after the window has closed.
-            Environment.Exit(e.ApplicationExitCode);
+            _primaryGpuManager = null;
         }
     }
 

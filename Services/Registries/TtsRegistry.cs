@@ -197,7 +197,8 @@ public sealed class TtsRegistry : ITtsRegistry
                 ProviderNames.Qwen => new QwenContainerTtsProvider(
                     new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log, null, _requestLeaseTracker),
                     _log,
-                    new TtsReferenceExtractor(_log)),
+                    new TtsReferenceExtractor(_log),
+                    _audioProcessingService),
                 _ => throw new PipelineProviderException(
                     $"Containerized TTS provider '{providerId}' is not implemented. Select a supported provider.")
             };
@@ -212,7 +213,7 @@ public sealed class TtsRegistry : ITtsRegistry
             ProviderNames.GoogleCloudTts => new GoogleCloudTtsProvider(
                 _log, keyStore?.GetKey(CredentialKeys.GoogleAi) ?? string.Empty),
             ProviderNames.OpenAiTts => new OpenAiTtsProvider(
-                _log, keyStore?.GetKey(CredentialKeys.OpenAi) ?? string.Empty),
+                _log, keyStore?.GetKey(CredentialKeys.OpenAi) ?? string.Empty, audioProcessingService: _audioProcessingService),
             _ => throw new PipelineProviderException(
                 $"TTS provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

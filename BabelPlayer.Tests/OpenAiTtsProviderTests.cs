@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Linq;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Services;
@@ -130,15 +132,17 @@ public sealed class OpenAiTtsProviderTests : IDisposable
     // ── GenerateTtsAsync behavior ──────────────────────────────────────────────
 
     [Fact]
-    public async Task GenerateTtsAsync_ThrowsNotImplementedException()
+    public async Task GenerateTtsAsync_GeneratesCombinedAudioFromSegments()
     {
-        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient);
+        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient, new StubAudioProcessingService());
         var translationPath = WriteTranslationJson("Hello world");
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
-        var ex = await Assert.ThrowsAsync<NotImplementedException>(() =>
-            provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "tts-1")));
-        Assert.Contains("PLACEHOLDER", ex.Message, StringComparison.Ordinal);
+        var result = await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "tts-1"));
+
+        Assert.True(result.Success);
+        Assert.Equal(outputPath, result.AudioPath);
+        Assert.True(File.Exists(outputPath));
     }
 
     [Fact]
@@ -274,5 +278,17 @@ public sealed class OpenAiTtsProviderTests : IDisposable
                 onDispose();
             base.Dispose(disposing);
         }
+    }
+
+    private sealed class StubAudioProcessingService : IAudioProcessingService
+    {
+        public async Task CombineAudioSegmentsAsync(IReadOnlyList<string> segmentAudioPaths, string outputAudioPath, CancellationToken cancellationToken)
+        {
+            var bytes = segmentAudioPaths.SelectMany(File.ReadAllBytes).ToArray();
+            await File.WriteAllBytesAsync(outputAudioPath, bytes, cancellationToken);
+        }
+
+        public Task ExtractAudioClipAsync(string inputPath, string outputPath, double startTimeSeconds, double durationSeconds, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

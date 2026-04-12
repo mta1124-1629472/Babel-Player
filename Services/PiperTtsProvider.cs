@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Services.Credentials;
@@ -8,171 +9,113 @@ using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
-public sealed class PiperTtsProvider : PythonSubprocessServiceBase, ITtsProvider
+public sealed class PiperTtsProvider : PythonSubprocessServiceBase, ITtsProvider, IDisposable
 {
-    private readonly string _modelDir;
+    private const int WorkerCount = 2;
 
-    public PiperTtsProvider(AppLog log, string modelDir) : base(log)
+    private readonly string _modelDir;
+    private readonly SegmentedTtsComposer _composer;
+    private readonly Func<CancellationToken, Task> _ensureRuntimeReadyAsync;
+    private readonly PythonJsonWorkerPool<PiperWorkerRequest, PiperWorkerResponse> _workerPool;
+    private int _disposed;
+
+    public PiperTtsProvider(AppLog log, string modelDir)
+        : this(log, modelDir, new ManagedCpuRuntimeManager(log))
     {
-        _modelDir = modelDir;
     }
 
-    private const string PiperScript = @"
-import sys, json, os, subprocess, platform, shutil
+    internal PiperTtsProvider(
+        AppLog log,
+        string modelDir,
+        ManagedCpuRuntimeManager cpuRuntimeManager,
+        string? workerScriptPath = null,
+        SegmentedTtsComposer? composer = null)
+        : base(log, cpuRuntimeManager)
+    {
+        ArgumentNullException.ThrowIfNull(cpuRuntimeManager);
 
-if not shutil.which('piper'):
-    raise RuntimeError(
-        'piper CLI not found on PATH. '
-        'Install it from https://github.com/rhasspy/piper/releases '
-        'and ensure the piper executable is on your system PATH.')
+        _modelDir = modelDir;
+        _composer = composer ?? new SegmentedTtsComposer();
+        _ensureRuntimeReadyAsync = ct => EnsureManagedRuntimeReadyAsync(cpuRuntimeManager, ct);
+        _workerPool = CreateWorkerPool(log, workerScriptPath);
+    }
 
+    internal PiperTtsProvider(
+        AppLog log,
+        string modelDir,
+        string pythonPath,
+        string? workerScriptPath = null,
+        SegmentedTtsComposer? composer = null)
+        : base(log, pythonPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pythonPath);
 
-input_path = sys.argv[1]
-output_path = sys.argv[2]
-voice      = sys.argv[3]
-model_dir  = sys.argv[4]
+        _modelDir = modelDir;
+        _composer = composer ?? new SegmentedTtsComposer();
+        _ensureRuntimeReadyAsync = EnsurePythonExecutableReadyAsync;
+        _workerPool = CreateWorkerPool(log, workerScriptPath);
+    }
 
-def find_model(voice, model_dir):
-    search_dirs = []
-    if model_dir:
-        search_dirs.append(model_dir)
-    if platform.system() == 'Windows':
-        local = os.environ.get('LOCALAPPDATA', '')
-        search_dirs.append(os.path.join(local, 'piper', 'voices'))
-    else:
-        search_dirs.append(os.path.expanduser('~/.local/share/piper/voices'))
-    for d in search_dirs:
-        for name in [f'{voice}.onnx', os.path.join(voice, f'{voice}.onnx')]:
-            path = os.path.join(d, name)
-            if os.path.exists(path):
-                return path
-    return None
+    public int MaxConcurrency => WorkerCount;
 
-model_path = find_model(voice, model_dir)
-if model_path is None:
-    raise FileNotFoundError(
-        f'Piper voice model not found: {voice}. '
-        f'Download the .onnx file to %LOCALAPPDATA%\\piper\\voices\\ (Windows) '
-        f'or ~/.local/share/piper/voices/ (Linux/macOS).')
-
-with open(input_path, encoding='utf-8') as f:
-    data = json.load(f)
-
-text = ' '.join(
-    seg.get('translatedText', '')
-    for seg in data.get('segments', [])
-    if seg.get('translatedText', '').strip()
-)
-
-result = subprocess.run(
-    ['piper', '--model', model_path, '--output_file', output_path],
-    input=text, text=True, capture_output=True)
-if result.returncode != 0:
-    raise RuntimeError(f'Piper failed: {result.stderr}')
-print(f'Piper TTS generated: {output_path}')
-";
-
-    private const string PiperSegmentScript = @"
-import sys, os, subprocess, platform, shutil
-
-if not shutil.which('piper'):
-    raise RuntimeError(
-        'piper CLI not found on PATH. '
-        'Install it from https://github.com/rhasspy/piper/releases '
-        'and ensure the piper executable is on your system PATH.')
-
-
-output_path = sys.argv[1]
-voice      = sys.argv[2]
-model_dir  = sys.argv[3]
-text       = sys.stdin.read()
-
-def find_model(voice, model_dir):
-    search_dirs = []
-    if model_dir:
-        search_dirs.append(model_dir)
-    if platform.system() == 'Windows':
-        local = os.environ.get('LOCALAPPDATA', '')
-        search_dirs.append(os.path.join(local, 'piper', 'voices'))
-    else:
-        search_dirs.append(os.path.expanduser('~/.local/share/piper/voices'))
-    for d in search_dirs:
-        for name in [f'{voice}.onnx', os.path.join(voice, f'{voice}.onnx')]:
-            path = os.path.join(d, name)
-            if os.path.exists(path):
-                return path
-    return None
-
-model_path = find_model(voice, model_dir)
-if model_path is None:
-    raise FileNotFoundError(
-        f'Piper voice model not found: {voice}. '
-        f'Download the .onnx file to %LOCALAPPDATA%\\piper\\voices\\ (Windows) '
-        f'or ~/.local/share/piper/voices/ (Linux/macOS).')
-
-result = subprocess.run(
-    ['piper', '--model', model_path, '--output_file', output_path],
-    input=text, text=True, capture_output=True)
-if result.returncode != 0:
-    raise RuntimeError(f'Piper failed: {result.stderr}')
-print(f'Piper segment TTS generated: {output_path}')
-";
-
-    public async Task<TtsResult> GenerateTtsAsync(
+    public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(request.TranslationJsonPath))
-            throw new ArgumentException("Translation JSON path cannot be null or empty.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
-            throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.VoiceName))
-            throw new ArgumentException("Voice name cannot be null or empty.", nameof(request));
-        if (!File.Exists(request.TranslationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
+        ThrowIfDisposed();
+        ValidateCombinedRequest(request);
 
-        Log.Info($"Starting Piper TTS ({request.VoiceName}): {request.TranslationJsonPath} -> {request.OutputAudioPath}");
-
-        var result = await RunPythonScriptAsync(
-            PiperScript,
-            [request.TranslationJsonPath, request.OutputAudioPath, request.VoiceName, _modelDir],
-            "piper_tts",
+        return _composer.GenerateAsync(
+            request,
+            Log,
+            providerLabel: "Piper",
+            maxConcurrency: MaxConcurrency,
+            requestFactory: (segment, segmentAudioPath) =>
+            {
+                var voice = SegmentedTtsComposer.ResolveVoiceForSegment(request, segment);
+                var referenceAudioPath = ResolveReferenceAudioPath(request, segment.SpeakerId);
+                return new SingleSegmentTtsRequest(
+                    segment.TranslatedText!,
+                    segmentAudioPath,
+                    voice,
+                    SpeakerId: segment.SpeakerId,
+                    ReferenceAudioPath: referenceAudioPath,
+                    Language: request.Language,
+                    SourceVideoPath: request.SourceVideoPath);
+            },
+            generateSegmentAsync: GenerateSegmentTtsAsync,
             cancellationToken: cancellationToken);
-        ThrowIfFailed(result, "Piper TTS");
-
-        if (!File.Exists(request.OutputAudioPath))
-            throw new InvalidOperationException($"Piper TTS output file not created: {request.OutputAudioPath}");
-
-        Log.Info($"Piper TTS completed: {request.OutputAudioPath}");
-        return new TtsResult(true, request.OutputAudioPath, request.VoiceName, new FileInfo(request.OutputAudioPath).Length, null);
     }
 
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(request.Text))
-            throw new ArgumentException("Segment text cannot be empty", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
-            throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.VoiceName))
-            throw new ArgumentException("Voice name cannot be null or empty.", nameof(request));
+        ThrowIfDisposed();
+        ValidateSegmentRequest(request);
 
-        Log.Info($"Starting Piper segment TTS ({request.VoiceName}): {request.Text[..Math.Min(30, request.Text.Length)]}... -> {request.OutputAudioPath}");
+        Log.Info(
+            $"Starting Piper segment TTS ({request.VoiceName}): {request.Text[..Math.Min(30, request.Text.Length)]}... -> {request.OutputAudioPath}");
 
-        var result = await RunPythonScriptAsync(
-            PiperSegmentScript,
-            [request.OutputAudioPath, request.VoiceName, _modelDir],
-            "piper_tts_seg",
-            standardInput: request.Text,
-            cancellationToken: cancellationToken);
-        ThrowIfFailed(result, "Piper segment TTS");
+        var response = await _workerPool.ExecuteAsync(
+            new PiperWorkerRequest(
+                request.Text,
+                request.OutputAudioPath,
+                request.VoiceName,
+                request.Language),
+            cancellationToken).ConfigureAwait(false);
 
-        if (!File.Exists(request.OutputAudioPath))
-            throw new InvalidOperationException($"Piper segment TTS output file not created: {request.OutputAudioPath}");
+        if (string.IsNullOrWhiteSpace(response.OutputPath))
+            throw new InvalidOperationException("Piper worker returned an empty output path.");
+        if (!File.Exists(response.OutputPath))
+            throw new InvalidOperationException($"Piper segment TTS output file not created: {response.OutputPath}");
 
-        Log.Info($"Piper segment TTS completed: {request.OutputAudioPath}");
-        return new TtsResult(true, request.OutputAudioPath, request.VoiceName, new FileInfo(request.OutputAudioPath).Length, null);
+        var fileSize = response.FileSizeBytes > 0
+            ? response.FileSizeBytes
+            : new FileInfo(response.OutputPath).Length;
+
+        Log.Info($"Piper segment TTS completed: {response.OutputPath}");
+        return new TtsResult(true, response.OutputPath, response.Voice, fileSize, null);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
@@ -197,6 +140,129 @@ print(f'Piper segment TTS generated: {output_path}')
             Log.Info($"Voice {voice} requires download. Starting download...");
             return await new ModelDownloader(Log).DownloadPiperVoiceAsync(voice, settings.PiperModelDir, progress, ct);
         }
+
         return true;
     }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
+
+        _workerPool.Dispose();
+    }
+
+    private PythonJsonWorkerPool<PiperWorkerRequest, PiperWorkerResponse> CreateWorkerPool(
+        AppLog log,
+        string? workerScriptPath)
+    {
+        return new PythonJsonWorkerPool<PiperWorkerRequest, PiperWorkerResponse>(
+            log,
+            poolName: "Piper TTS",
+            pythonPath: PythonPath,
+            scriptPath: ResolveWorkerScriptPath(workerScriptPath),
+            workerCount: WorkerCount,
+            ensureRuntimeReadyAsync: _ensureRuntimeReadyAsync,
+            scriptArguments:
+            [
+                ModelDownloader.ResolvePiperModelDir(_modelDir),
+            ]);
+    }
+
+    private static string? ResolveReferenceAudioPath(TtsRequest request, string? speakerId)
+    {
+        if (string.IsNullOrWhiteSpace(speakerId) || request.SpeakerReferenceAudioPaths is null)
+            return null;
+
+        return request.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var path)
+            ? path
+            : null;
+    }
+
+    private static void ValidateCombinedRequest(TtsRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.TranslationJsonPath))
+            throw new ArgumentException("Translation JSON path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
+            throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.VoiceName))
+            throw new ArgumentException("Voice name cannot be null or empty.", nameof(request));
+        if (!File.Exists(request.TranslationJsonPath))
+            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
+    }
+
+    private static void ValidateSegmentRequest(SingleSegmentTtsRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text))
+            throw new ArgumentException("Segment text cannot be empty", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
+            throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.VoiceName))
+            throw new ArgumentException("Voice name cannot be null or empty.", nameof(request));
+    }
+
+    private static string ResolveWorkerScriptPath(string? configuredPath)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+            return configuredPath;
+
+        var directCandidate = Path.Combine(AppContext.BaseDirectory, "inference", "workers", "piper_worker.py");
+        if (File.Exists(directCandidate))
+            return directCandidate;
+
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "inference", "workers", "piper_worker.py");
+            if (File.Exists(candidate))
+                return candidate;
+            directory = directory.Parent;
+        }
+
+        return directCandidate;
+    }
+
+    private async Task EnsurePythonExecutableReadyAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(PythonPath) || !File.Exists(PythonPath))
+        {
+            throw new InvalidOperationException(
+                "Python subprocess runtime is not ready. A valid Python executable path must be provided.");
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private async Task EnsureManagedRuntimeReadyAsync(
+        ManagedCpuRuntimeManager cpuRuntimeManager,
+        CancellationToken cancellationToken)
+    {
+        await cpuRuntimeManager.EnsureInstalledAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if (cpuRuntimeManager.State != ManagedCpuState.Ready || !File.Exists(PythonPath))
+        {
+            var failureReason = cpuRuntimeManager.FailureReason
+                ?? $"Expected managed CPU Python at {PythonPath}.";
+            throw new InvalidOperationException(
+                $"Managed CPU runtime is not ready for subprocess providers. {failureReason}");
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
+    }
+
+    private sealed record PiperWorkerRequest(
+        [property: JsonPropertyName("text")] string Text,
+        [property: JsonPropertyName("output_path")] string OutputPath,
+        [property: JsonPropertyName("voice")] string Voice,
+        [property: JsonPropertyName("language")] string? Language);
+
+    private sealed record PiperWorkerResponse(
+        [property: JsonPropertyName("output_path")] string OutputPath,
+        [property: JsonPropertyName("voice")] string Voice,
+        [property: JsonPropertyName("file_size_bytes")] long FileSizeBytes);
 }
