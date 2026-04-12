@@ -34,7 +34,7 @@ public sealed class SessionWorkflowStageJsonConverter : JsonConverter<SessionWor
         var isDigitsOnly = true;
         foreach (var ch in trimmed)
         {
-            if (!char.IsDigit(ch))
+            if (ch < '0' || ch > '9')
             {
                 isDigitsOnly = false;
                 break;

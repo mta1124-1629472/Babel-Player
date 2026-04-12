@@ -2075,7 +2075,6 @@ partial void OnSourcePositionMsChanged(double value)
                 StatusText = string.IsNullOrWhiteSpace(_coordinator.RuntimeWarmupStatusText)
                     ? _coordinator.CurrentSession.StatusMessage
                     : _coordinator.RuntimeWarmupStatusText;
-                ClearStatusErrorDetail();
                 break;
             case nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics):
                 OnPropertyChanged(nameof(HasVsrPlaybackStatus));

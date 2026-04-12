@@ -512,10 +512,21 @@ public sealed partial class SessionWorkflowCoordinator
         AdvancePipelineAsync(progress, stageProgress: null, cancellationToken);
 
     /// <summary>
-    /// Advances the current session through any remaining pipeline stages (transcription, translation, and TTS) in order.
+    /// Advances the pipeline from the current session stage through transcription, optional diarization pause, translation, and TTS.
     /// </summary>
-    /// <param name="progress">Optional overall progress reporter receiving values from 0.0 to 1.0 for the combined operation.</param>
-    /// <param name="stageProgress">Optional per-stage progress reporter that receives detailed stage updates.</param>
+    /// <param name="progress">Optional combined progress reporter for the overall advance operation.</param>
+    /// <param name="stageProgress">Optional per-stage reporter that receives stage title/detail and per-stage progress updates.</param>
+    /// <param name="cancellationToken">Cancellation token observed throughout stage execution.</param>
+    /// <remarks>
+    /// Entry starts at <see cref="CurrentSession"/>.Stage. For multi-speaker sessions configured to pause for mapping,
+    /// this method may stop early at <see cref="SessionWorkflowStage.Diarized"/>. Otherwise it continues through
+    /// translation and TTS toward <see cref="SessionWorkflowStage.TtsGenerated"/>. Depending on cancellation or
+    /// prior stage state, possible return stages include <see cref="SessionWorkflowStage.Diarized"/>,
+    /// <see cref="SessionWorkflowStage.Transcribed"/>, <see cref="SessionWorkflowStage.Translated"/>, and
+    /// <see cref="SessionWorkflowStage.TtsGenerated"/>. State changes are persisted by the invoked stage methods
+    /// (for example via <see cref="SaveCurrentSession"/>). Cancellation is respected and propagated via
+    /// <paramref name="cancellationToken"/>.
+    /// </remarks>
     internal async Task AdvancePipelineAsync(
         IProgress<double>? progress = null,
         IProgress<PipelineStageUpdate>? stageProgress = null,

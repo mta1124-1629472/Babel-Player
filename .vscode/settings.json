@@ -55,6 +55,5 @@
         }
     ],
     "csharp-dev-tools.roslyn.projectOrSolutionFiles": [
-        "d:\\Dev\\Babel-Player\\Babel-Player.sln"
-    ]
-}
+        "${workspaceFolder}/Babel-Player.sln"
+    ]}
