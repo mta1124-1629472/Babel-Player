@@ -92,7 +92,8 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
     {
         _channel.Writer.TryComplete();
         _cts.Cancel();
-        try { _writerTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        try { _writerTask.Wait(TimeSpan.FromSeconds(2)); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"AppLog dispose wait failed: {ex}"); }
         _cts.Dispose();
     }
 
@@ -100,7 +101,8 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
     {
         _channel.Writer.TryComplete();
         _cts.Cancel();
-        try { await _writerTask.ConfigureAwait(false); } catch { }
+        try { await _writerTask.ConfigureAwait(false); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"AppLog async dispose failed: {ex}"); }
         _cts.Dispose();
     }
 
@@ -134,7 +136,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         foreach (var old in archives.Skip(MaxArchivedFiles))
         {
             try { File.Delete(old); }
-            catch { /* best-effort */ }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to delete old log archive '{old}': {ex}"); }
         }
     }
 }
