@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,47 +10,45 @@ namespace BabelPlayer.Tests;
 internal static class ProbeTestHelpers
 {
     /// <summary>
-    /// Forces the cached probe result for the given service URL to appear expired
-    /// so that the next call triggers a fresh background probe.
+    /// Back-dates the cached probe entry's <c>ExpiresAtUtc</c> by one minute so that the
+    /// next call to <see cref="ContainerizedServiceProbe.GetCurrentOrStartBackgroundProbe"/>
+    /// treats the result as stale and triggers a background refresh.
     /// </summary>
     public static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
     {
-        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
+        var field = typeof(ContainerizedServiceProbe)
+            .GetField("_entries", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("Could not locate _entries field on ContainerizedServiceProbe.");
 
-        var entriesField = typeof(ContainerizedServiceProbe).GetField(
-            "_entries",
-            BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new MissingMemberException(nameof(ContainerizedServiceProbe), "_entries");
+        var entriesObj = field.GetValue(probe)
+            ?? throw new InvalidOperationException("_entries field was null.");
+        var entries = (IDictionary)entriesObj;
 
-        var entries = (System.Collections.IDictionary)entriesField.GetValue(probe)!;
-        var entry = entries[normalizedUrl];
-        if (entry is null)
-            return;
-
-        var entryType = entry.GetType();
-        var gateProp = entryType.GetProperty(
-            "Gate",
-            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
-            ?? throw new MissingMemberException("ProbeEntry", "Gate");
-
-        var expiresAtUtcProp = entryType.GetProperty(
-            "ExpiresAtUtc",
-            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
-            ?? throw new MissingMemberException("ProbeEntry", "ExpiresAtUtc");
-
-        var gate = gateProp.GetValue(entry) as object
-            ?? throw new InvalidOperationException("ProbeEntry.Gate returned null.");
-
-        lock (gate)
+        // Normalize the URL the same way the probe does (OrdinalIgnoreCase comparer means
+        // the key lookup is case-insensitive, so we just need to find the matching key).
+        object? entry = null;
+        foreach (DictionaryEntry kv in entries)
         {
-            expiresAtUtcProp.SetValue(entry, DateTimeOffset.UtcNow - TimeSpan.FromMinutes(1));
+            if (string.Equals(kv.Key as string, serviceUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                entry = kv.Value;
+                break;
+            }
         }
+
+        if (entry is null)
+            return; // No cached entry yet — nothing to expire.
+
+        var expiresAtProp = entry.GetType()
+            .GetProperty("ExpiresAtUtc", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("Could not locate ExpiresAtUtc property on ProbeEntry.");
+
+        expiresAtProp.SetValue(entry, DateTimeOffset.UtcNow.AddMinutes(-1));
     }
 
     /// <summary>
-    /// Polls <paramref name="getCallCount"/> until its return value is at least
-    /// <paramref name="expectedMinimum"/>, or throws <see cref="TimeoutException"/>
-    /// when <paramref name="timeout"/> elapses.
+    /// Polls <paramref name="getCallCount"/> every 25 ms until the value reaches
+    /// <paramref name="expectedMinimum"/> or the optional <paramref name="timeout"/> elapses.
     /// </summary>
     public static async Task WaitForCallCountAsync(
         Func<int> getCallCount,
@@ -67,7 +66,6 @@ internal static class ProbeTestHelpers
         }
 
         throw new TimeoutException(
-            $"Timed out waiting for probe call count >= {expectedMinimum}. " +
-            $"Actual: {getCallCount()}");
+            $"Expected call count >= {expectedMinimum} but reached {getCallCount()} after timeout elapsed.");
     }
 }

@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -592,7 +593,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         int version,
         CancellationToken cancellationToken)
     {
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        void Apply()
         {
             if (version != _providerHealthRefreshVersion || cancellationToken.IsCancellationRequested)
                 return;
@@ -611,7 +612,18 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             ApplyReadinessStatus(ref _ttsKeyStatus, tts?.InlineStatus ?? string.Empty, nameof(TtsKeyStatus));
             AutoSpeakerDetectionStatus = diarization?.InlineStatus ?? "Manual speaker mapping is the default release flow.";
             OnPropertyChanged(nameof(HasAutoSpeakerDetectionStatus));
-        });
+        }
+
+        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
+        {
+            // Running in a headless/test context with no Avalonia event loop, or already
+            // on the UI thread — apply directly so the update is never lost.
+            Apply();
+        }
+        else
+        {
+            await Dispatcher.UIThread.InvokeAsync(Apply);
+        }
     }
 
     private ProviderHealthSnapshot BuildTranscriptionHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
