@@ -78,7 +78,7 @@ public sealed class ContainerizedInferenceClient
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(timeout);
-            return await ProbeHealthAsync(SharedProbeClient, NormalizeBaseUrl(serviceUrl), cts.Token);
+            return await ProbeHealthAsync(SharedProbeClient, NormalizeBaseUrl(serviceUrl), cts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

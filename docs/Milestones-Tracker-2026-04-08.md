@@ -2,7 +2,7 @@
 
 **Consolidated Implementation Plan: Codebase Health · Inference Performance · NeMo Provider Integrations**
 
-Category: Engineering Report | Author: Michael | Date: April 7, 2026 (revised April 8, 2026, Audited April 2026) | Status: Active
+Category: Engineering Report | Author: Michael | Date: April 7, 2026 (revised April 8, 2026) | Status: Active
 
 ---
 
@@ -189,7 +189,7 @@ Major structural changes that benefit from all prior stabilization. Estimated ef
 | Reuse HttpClient | ~10% (cloud) | ~4% | Trivial | None | 1 ✅ |
 | Eliminate double synthesis | ~50% | ~20% | Low | Low | 2 ✅ |
 | Provider-aware parallelism | ~30% (cloud) | ~10% | Very low | Low | 2 ✅ |
-| ~~Diarization registry fix~~ | — | — | ~~Low~~ | ~~Low~~ | ~~3~~ SKIP |
+| ~~Diarization registry fix~~ | — | — | ~~Low~~ | ~~Low~~ | ~~3~~ SKIP | ALREADY RESOLVED
 | NeMo diarization endpoint | — | — | Low-med | Low | 3 |
 | WeSpeaker endpoint | — | — | Low | Low | 3 |
 | NeMo + WeSpeaker C# providers | — | — | Low-med | Low | 3 |

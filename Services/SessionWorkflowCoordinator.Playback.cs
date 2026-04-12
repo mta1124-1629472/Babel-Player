@@ -741,7 +741,12 @@ public sealed partial class SessionWorkflowCoordinator
         {
             try
             {
-                Task.WhenAll(_pendingTtsTasks).Wait(TimeSpan.FromSeconds(2));
+                bool completed = Task.WhenAll(_pendingTtsTasks).Wait(TimeSpan.FromSeconds(2));
+                if (!completed)
+                {
+                    _log.Warning("TTS shutdown timed out — leaving in-flight TTS service alive to complete pending operations.");
+                    return;
+                }
             }
             catch
             {

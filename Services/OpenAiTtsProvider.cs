@@ -104,7 +104,8 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        await client.DownloadSpeechAsync(request.Text, model, "alloy", request.OutputAudioPath, cancellationToken);
+        await client.DownloadSpeechAsync(request.Text, model, "alloy", request.OutputAudioPath, cancellationToken)
+            .ConfigureAwait(false);
         var fileLength = new FileInfo(request.OutputAudioPath).Length;
 
         _log.Info($"[OpenAITTS] Generated segment audio: {request.OutputAudioPath} ({fileLength} bytes)");
