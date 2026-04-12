@@ -452,7 +452,8 @@ public sealed class ContainerizedInferenceClient
             }
             finally
             {
-                fs?.Dispose();
+                if (fs != null)
+                    await fs.DisposeAsync();
             }
         }
         catch (Exception ex)
