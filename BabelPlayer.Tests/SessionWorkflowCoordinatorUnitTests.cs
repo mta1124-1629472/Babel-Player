@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -51,7 +54,10 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     private SessionWorkflowCoordinator CreateCoordinator(
         AppSettings? settings = null,
         IContainerizedInferenceManager? containerizedInferenceManager = null,
-        IDiarizationRegistry? diarizationRegistry = null) =>
+        IDiarizationRegistry? diarizationRegistry = null,
+        ITtsRegistry? ttsRegistry = null,
+        IAudioProcessingService? audioProcessingService = null,
+        ContainerizedServiceProbe? containerizedProbe = null) =>
         new SessionWorkflowCoordinator(
             _ctx.Store,
             _ctx.Log,
@@ -60,9 +66,11 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             _ctx.RecentStore,
             new TranscriptionRegistry(_ctx.Log),
             new TranslationRegistry(_ctx.Log),
-            new TtsRegistry(_ctx.Log),
+            ttsRegistry ?? new TtsRegistry(_ctx.Log),
+            containerizedProbe: containerizedProbe,
             containerizedInferenceManager: containerizedInferenceManager,
-            diarizationRegistry: diarizationRegistry);
+            diarizationRegistry: diarizationRegistry,
+            audioProcessingService: audioProcessingService);
 
     private AppSettings CreateMatchingSettings() =>
         new()
@@ -706,6 +714,165 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
 
         Assert.NotNull(fakeTts.LastSegmentRequest);
         Assert.Equal(defaultRefPath, fakeTts.LastSegmentRequest!.ReferenceAudioPath);
+    }
+
+    [Fact]
+    public async Task GenerateTtsAsync_QwenProvider_UsesBatchEndpointAndPersistsSegmentOutputs()
+    {
+        var registerCalls = 0;
+        var batchCalls = 0;
+        var downloadCalls = 0;
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            var path = request.RequestUri?.AbsolutePath;
+            if (request.Method == HttpMethod.Post && path == "/tts/qwen/references")
+            {
+                registerCalls++;
+                return Task.FromResult(JsonResponse("""{"success":true,"reference_id":"ref-qwen-default"}"""));
+            }
+
+            if (request.Method == HttpMethod.Post && path == "/tts/qwen/batch")
+            {
+                batchCalls++;
+                return Task.FromResult(JsonResponse("""
+                {
+                  "success": true,
+                  "segments": [
+                    {
+                      "segment_id": "segment_0.0",
+                      "voice": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+                      "audio_path": "/tmp/qwen-segment-0.mp3",
+                      "file_size_bytes": 3
+                    },
+                    {
+                      "segment_id": "segment_2.0",
+                      "voice": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+                      "audio_path": "/tmp/qwen-segment-1.mp3",
+                      "file_size_bytes": 3
+                    }
+                  ]
+                }
+                """));
+            }
+
+            if (request.Method == HttpMethod.Get && path is not null && path.StartsWith("/tts/audio/", StringComparison.Ordinal))
+            {
+                downloadCalls++;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent([0x10, 0x20, 0x30]),
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent($"Unhandled request: {request.Method} {path}", Encoding.UTF8, "text/plain"),
+            });
+        });
+
+        var qwenProvider = new QwenContainerTtsProvider(
+            new ContainerizedInferenceClient(
+                "http://localhost:8000",
+                _ctx.Log,
+                new HttpClient(handler),
+                null),
+            _ctx.Log,
+            new TtsReferenceExtractor(_ctx.Log),
+            new FakeAudioProcessingService());
+        var settings = CreateMatchingSettings();
+        settings.TtsRuntime = InferenceRuntime.Containerized;
+        settings.TtsProfile = ComputeProfile.Gpu;
+        settings.TtsProvider = ProviderNames.Qwen;
+        settings.TtsVoice = "Qwen/Qwen3-TTS-12Hz-1.7B-Base";
+        settings.ContainerizedServiceUrl = "http://localhost:8000";
+
+        var coord = CreateCoordinator(
+            settings,
+            ttsRegistry: new FakeTtsRegistry(qwenProvider),
+            audioProcessingService: new FakeAudioProcessingService());
+        coord.Initialize();
+        var defaultRefPath = Path.Combine(_ctx.Dir, "qwen-default-ref.wav");
+        await File.WriteAllBytesAsync(defaultRefPath, [0x55, 0x66, 0x77]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranslationPath = CreateTranslationArtifactFile(
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_0.0",
+                    Start = 0.0,
+                    End = 2.0,
+                    Text = "hola",
+                    TranslatedText = "hello",
+                },
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_2.0",
+                    Start = 2.0,
+                    End = 4.0,
+                    Text = "mundo",
+                    TranslatedText = "world",
+                }),
+            IngestedMediaPath = CreateMediaFile(),
+            SpeakerReferenceAudioPaths = new Dictionary<string, string>
+            {
+                [QwenReferenceKeys.SingleSpeakerDefault] = defaultRefPath,
+            },
+        };
+
+        await coord.GenerateTtsAsync();
+
+        Assert.Equal(1, registerCalls);
+        Assert.Equal(1, batchCalls);
+        Assert.Equal(2, downloadCalls);
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coord.CurrentSession.Stage);
+        Assert.NotNull(coord.CurrentSession.TtsPath);
+        Assert.True(File.Exists(coord.CurrentSession.TtsPath));
+        Assert.NotNull(coord.CurrentSession.TtsSegmentAudioPaths);
+        Assert.Equal(2, coord.CurrentSession.TtsSegmentAudioPaths!.Count);
+        Assert.True(coord.CurrentSession.TtsSegmentAudioPaths.ContainsKey("segment_0.0"));
+        Assert.True(coord.CurrentSession.TtsSegmentAudioPaths.ContainsKey("segment_2.0"));
+    }
+
+    [Fact]
+    public async Task GenerateTtsAsync_NonQwenProvider_UsesPerSegmentGeneration()
+    {
+        var fakeTts = new FakeTtsProvider();
+        var coord = CreateCoordinator(
+            ttsRegistry: new FakeTtsRegistry(fakeTts),
+            audioProcessingService: new FakeAudioProcessingService());
+        coord.Initialize();
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranslationPath = CreateTranslationArtifactFile(
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_0.0",
+                    Start = 0.0,
+                    End = 2.0,
+                    Text = "hola",
+                    TranslatedText = "hello",
+                },
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_2.0",
+                    Start = 2.0,
+                    End = 4.0,
+                    Text = "mundo",
+                    TranslatedText = "world",
+                }),
+            TtsVoice = "global-voice",
+        };
+
+        await coord.GenerateTtsAsync();
+
+        Assert.Equal(2, fakeTts.GenerateSegmentCallCount);
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coord.CurrentSession.Stage);
+        Assert.NotNull(coord.CurrentSession.TtsPath);
+        Assert.True(File.Exists(coord.CurrentSession.TtsPath));
     }
 
     [Fact]
@@ -1493,6 +1660,27 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         return path;
     }
 
+    private string CreateTranslationArtifactFile(params TranslationSegmentArtifact[] segments)
+    {
+        var path = Path.Combine(_ctx.Dir, $"translation-{Guid.NewGuid():N}.json");
+        File.WriteAllText(
+            path,
+            ArtifactJson.SerializeTranslation(new TranslationArtifact
+            {
+                SourceLanguage = "es",
+                TargetLanguage = "en",
+                Segments = [.. segments],
+            }));
+        return path;
+    }
+
+    private string CreateMediaFile(string extension = ".mp4")
+    {
+        var path = Path.Combine(_ctx.Dir, $"media-{Guid.NewGuid():N}{extension}");
+        File.WriteAllBytes(path, [0x01, 0x02, 0x03]);
+        return path;
+    }
+
     private sealed class FakeTtsRegistry : ITtsRegistry
     {
         private readonly ITtsProvider _provider;
@@ -1544,21 +1732,47 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
 
     private sealed class FakeTtsProvider : ITtsProvider
     {
+        private int _generateSegmentCallCount;
+
         public TtsRequest? LastRequest { get; private set; }
         public SingleSegmentTtsRequest? LastSegmentRequest { get; private set; }
+        public int GenerateSegmentCallCount => _generateSegmentCallCount;
 
         public Task<TtsResult> GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken = default)
         {
             LastRequest = request;
+            File.WriteAllBytes(request.OutputAudioPath, [0x01]);
             return Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, 1, null));
         }
 
         public Task<TtsResult> GenerateSegmentTtsAsync(SingleSegmentTtsRequest request, CancellationToken cancellationToken = default)
         {
             LastSegmentRequest = request;
+            Interlocked.Increment(ref _generateSegmentCallCount);
+            var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
+            if (!string.IsNullOrWhiteSpace(outputDir))
+                Directory.CreateDirectory(outputDir);
+            File.WriteAllBytes(request.OutputAudioPath, [0x01]);
             return Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, 1, null));
         }
     }
+
+    private sealed class StubHttpMessageHandler(
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler = handler;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            _handler(request, cancellationToken);
+    }
+
+    private static HttpResponseMessage JsonResponse(string json) =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        };
 
     private sealed class FakeContainerizedInferenceManager : IContainerizedInferenceManager
     {
