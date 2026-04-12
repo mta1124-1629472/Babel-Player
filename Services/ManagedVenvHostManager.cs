@@ -168,7 +168,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
-        var scriptChangedSinceLastStart = IsScriptChangedSinceLastStart();
+        var scriptChangedSinceLastStart = await IsScriptChangedSinceLastStartAsync(cancellationToken);
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
 
@@ -1382,7 +1382,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"tts={capabilities.TtsReady}('{capabilities.TtsDetail ?? "<none>"}')";
     }
 
-    private bool IsScriptChangedSinceLastStart()
+    private async Task<bool> IsScriptChangedSinceLastStartAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -1392,7 +1392,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var depsMarkerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
             if (!File.Exists(depsMarkerPath))
                 return true;
-            var storedDepsHash = File.ReadAllText(depsMarkerPath).Trim();
+            var storedDepsHash = (await File.ReadAllTextAsync(depsMarkerPath, cancellationToken)).Trim();
             var currentDepsHash = ComputeBootstrapVersion(
                 _requirementsPathResolver(),
                 _constraintsPathResolver());
@@ -1403,7 +1403,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var scriptMarkerPath = Path.Combine(runtimeRoot, ".script-version");
             if (!File.Exists(scriptMarkerPath))
                 return true;
-            var storedScriptHash = File.ReadAllText(scriptMarkerPath).Trim();
+            var storedScriptHash = (await File.ReadAllTextAsync(scriptMarkerPath, cancellationToken)).Trim();
             var currentScriptHash = ComputeScriptVersion(_inferenceScriptResolver());
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
