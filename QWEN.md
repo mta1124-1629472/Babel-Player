@@ -16,7 +16,7 @@ Users load a video or audio file, generate timed transcripts (local AI or cloud 
 - Python inference subprocess (managed via bundled `uv.exe` — no manual Python install needed)
 - GPU (CUDA) and CPU compute paths with CPU/GPU/Cloud selectors per stage
 - Session-based workflow with auto-save/restore from `%LOCALAPPDATA%\BabelPlayer\state\`
-- ~650 xUnit integration tests
+- ~877 xUnit integration tests
 
 ## Tech Stack
 
@@ -59,7 +59,7 @@ Babel-Player/
 
 | File | Purpose |
 |---|---|
-| `Services/SessionWorkflowCoordinator.cs` | **Single owner** of all workflow/session state; all pipeline advancement through `AdvancePipelineAsync` |
+| `Services/SessionWorkflowCoordinator.cs` | **Single owner** of all workflow/session state; all pipeline advancement through coordinator entry points (`AdvancePipelineAsync`, `ContinuePipelineAsync`, `RunTtsOnlyAsync`) |
 | `ViewModels/EmbeddedPlaybackViewModel.cs` | Playback, preview, segment selection, dub mode, multi-speaker routing |
 | `Models/ProviderNames.cs` | All provider identifier constants (`ProviderNames.*`, `CredentialKeys.*`) |
 | `Models/ComputeProfile.cs` | CPU / GPU / Cloud enum |

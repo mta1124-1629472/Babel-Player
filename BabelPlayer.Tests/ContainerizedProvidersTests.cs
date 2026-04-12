@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
-using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -1336,40 +1335,11 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         return Task.FromResult(response);
     }
 
-    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
-    {
-        var entriesField = typeof(ContainerizedServiceProbe).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not find _entries field.");
+    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl) =>
+        ProbeTestHelpers.ExpireCachedProbeResult(probe, serviceUrl);
 
-        var entries = entriesField.GetValue(probe)
-            ?? throw new InvalidOperationException("ContainerizedServiceProbe entries cache was null.");
-
-        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
-        var tryGetValue = entries.GetType().GetMethod("TryGetValue")
-            ?? throw new InvalidOperationException("Could not find TryGetValue on probe cache.");
-
-        var tryGetArgs = new object?[] { normalizedUrl, null };
-        var found = (bool)(tryGetValue.Invoke(entries, tryGetArgs) ?? false);
-        if (!found)
-            throw new InvalidOperationException($"No cached probe entry found for {normalizedUrl}.");
-
-        var entry = tryGetArgs[1] ?? throw new InvalidOperationException("Probe cache entry was null.");
-        var expiresProperty = entry.GetType().GetProperty("ExpiresAtUtc")
-            ?? throw new InvalidOperationException("Could not find ExpiresAtUtc on probe cache entry.");
-        expiresProperty.SetValue(entry, DateTimeOffset.UtcNow.AddSeconds(-1));
-    }
-
-    private static async Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500)
-    {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (getCount() >= expectedMinimum)
-                return;
-
-            await Task.Delay(10);
-        }
-    }
+    private static Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500) =>
+        ProbeTestHelpers.WaitForCallCountAsync(getCount, expectedMinimum, timeoutMs);
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {

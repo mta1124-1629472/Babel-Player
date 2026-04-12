@@ -138,8 +138,9 @@ All provider strings in `Models/ProviderNames.cs` (`ProviderNames.*` and
 
 ### Stage progression runs through coordinator
 ViewModels must NOT call `TranscribeMediaAsync`, `TranslateTranscriptAsync`,
-or `GenerateTtsAsync` directly. All pipeline advancement through
-`SessionWorkflowCoordinator.AdvancePipelineAsync`.
+or `GenerateTtsAsync` directly. All pipeline advancement must go through
+`SessionWorkflowCoordinator` entry points such as
+`AdvancePipelineAsync`, `ContinuePipelineAsync`, or `RunTtsOnlyAsync`.
 
 ### Python/C# field names are explicit contracts
 Python emits snake_case or camelCase. C# must match with hardcoded strings or

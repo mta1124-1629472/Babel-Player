@@ -44,15 +44,16 @@ jobs:
 
   dispatch:
     # For PRs: only if not from a fork
-    # For issues: only on open/reopen
-    # For comments: only if user types @gemini-cli and is OWNER/MEMBER/COLLABORATOR
+    # For issues: only on open/reopen by OWNER/MEMBER/COLLABORATOR
+    # For comments: only if user types @qwen-code and is OWNER/MEMBER/COLLABORATOR
     if: |-
       (
         github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.fork == false
       ) || (
         github.event_name == 'issues' &&
-        contains(fromJSON('["opened", "reopened"]'), github.event.action)
+        contains(fromJSON('["opened", "reopened"]'), github.event.action) &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)
       ) || (
         github.event.sender.type == 'User' &&
         startsWith(github.event.comment.body || github.event.review.body || github.event.issue.body, '@qwen-code') &&
