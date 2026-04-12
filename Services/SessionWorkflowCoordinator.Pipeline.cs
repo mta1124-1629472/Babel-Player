@@ -138,21 +138,13 @@ public sealed partial class SessionWorkflowCoordinator
             TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
             TranscriptionModel = CurrentSettings.TranscriptionModel,
-            StatusMessage = $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
+            StatusMessage = ShouldPauseForSpeakerMapping()
+                ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for speaker mapping."
+                : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
         };
 
         _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
         SaveCurrentSession();
-
-        if (CurrentSession.MultiSpeakerEnabled && !string.IsNullOrEmpty(CurrentSettings.DiarizationProvider))
-        {
-            ReportStage(
-                stageContext,
-                "Transcript complete. Running diarization to assign speaker turns before translation and dubbing…",
-                progress01: 0,
-                isIndeterminate: true);
-            await ExecuteDiarizationAsync(CurrentSession.IngestedMediaPath!, transcriptPath, cancellationToken);
-        }
 
         ReportStage(
             stageContext,
@@ -520,16 +512,29 @@ public sealed partial class SessionWorkflowCoordinator
         AdvancePipelineAsync(progress, stageProgress: null, cancellationToken);
 
     /// <summary>
-    /// Advances the current session through any remaining pipeline stages (transcription, translation, and TTS) in order.
+    /// Advances the pipeline from the current session stage through transcription, optional diarization pause, translation, and TTS.
     /// </summary>
-    /// <param name="progress">Optional overall progress reporter receiving values from 0.0 to 1.0 for the combined operation.</param>
-    /// <param name="stageProgress">Optional per-stage progress reporter that receives detailed stage updates.</param>
+    /// <param name="progress">Optional combined progress reporter for the overall advance operation.</param>
+    /// <param name="stageProgress">Optional per-stage reporter that receives stage title/detail and per-stage progress updates.</param>
+    /// <param name="cancellationToken">Cancellation token observed throughout stage execution.</param>
+    /// <remarks>
+    /// Entry starts at <see cref="CurrentSession"/>.Stage. For multi-speaker sessions configured to pause for mapping,
+    /// this method may stop early at <see cref="SessionWorkflowStage.Diarized"/>. Otherwise it continues through
+    /// translation and TTS toward <see cref="SessionWorkflowStage.TtsGenerated"/>. Depending on cancellation or
+    /// prior stage state, possible return stages include <see cref="SessionWorkflowStage.Diarized"/>,
+    /// <see cref="SessionWorkflowStage.Transcribed"/>, <see cref="SessionWorkflowStage.Translated"/>, and
+    /// <see cref="SessionWorkflowStage.TtsGenerated"/>. State changes are persisted by the invoked stage methods
+    /// (for example via <see cref="SaveCurrentSession"/>). Cancellation is respected and propagated via
+    /// <paramref name="cancellationToken"/>.
+    /// </remarks>
     internal async Task AdvancePipelineAsync(
         IProgress<double>? progress = null,
         IProgress<PipelineStageUpdate>? stageProgress = null,
         CancellationToken cancellationToken = default)
     {
-        var remainingStages = GetRemainingPipelineStages(CurrentSession.Stage);
+        var pauseAfterDiarization = ShouldPauseForSpeakerMapping()
+            && CurrentSession.Stage < SessionWorkflowStage.Diarized;
+        var remainingStages = GetAdvancePipelineStages(CurrentSession.Stage, pauseAfterDiarization);
         var stage = CurrentSession.Stage;
 
         if (stage < SessionWorkflowStage.Transcribed)
@@ -538,6 +543,15 @@ public sealed partial class SessionWorkflowCoordinator
                 progress,
                 GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress),
                 cancellationToken);
+        }
+
+        stage = CurrentSession.Stage;
+        if (pauseAfterDiarization && stage < SessionWorkflowStage.Diarized)
+        {
+            await ExecuteDiarizationStageAsync(
+                GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress),
+                cancellationToken);
+            return;
         }
 
         stage = CurrentSession.Stage;
@@ -561,4 +575,144 @@ public sealed partial class SessionWorkflowCoordinator
                 cancellationToken);
         }
     }
+
+    /// <summary>
+    /// Continues pipeline execution after diarization by advancing through translation and TTS as needed.
+    /// </summary>
+    /// <param name="progress">Optional overall progress reporter for remaining continuation stages.</param>
+    /// <param name="cancellationToken">Cancellation token used to stop continuation before completion.</param>
+    /// <remarks>
+    /// Requires <see cref="CurrentSession"/>.Stage to be at least <see cref="SessionWorkflowStage.Diarized"/>.
+    /// Depending on the current stage, this operation may advance to <see cref="SessionWorkflowStage.Translated"/>
+    /// and then <see cref="SessionWorkflowStage.TtsGenerated"/>. Stage transitions persist via stage methods
+    /// that call <see cref="SaveCurrentSession"/> after successful completion.
+    /// </remarks>
+    public Task ContinuePipelineAsync(
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        ContinuePipelineAsync(progress, stageProgress: null, cancellationToken);
+
+    /// <summary>
+    /// Continues pipeline execution after diarization using stage-aware progress reporting.
+    /// </summary>
+    /// <param name="progress">Optional overall progress reporter for remaining continuation stages.</param>
+    /// <param name="stageProgress">Optional per-stage progress/status updates for translation and TTS stages.</param>
+    /// <param name="cancellationToken">Cancellation token used to stop continuation before completion.</param>
+    /// <remarks>
+    /// Entry requires stage <see cref="SessionWorkflowStage.Diarized"/> or later. This method advances the
+    /// session toward <see cref="SessionWorkflowStage.TtsGenerated"/> by running translation when below
+    /// <see cref="SessionWorkflowStage.Translated"/> and then running TTS when below
+    /// <see cref="SessionWorkflowStage.TtsGenerated"/>. Successful stage completions persist updates to
+    /// <see cref="CurrentSession"/>. Cancellation propagates via <paramref name="cancellationToken"/>.
+    /// </remarks>
+    internal async Task ContinuePipelineAsync(
+        IProgress<double>? progress = null,
+        IProgress<PipelineStageUpdate>? stageProgress = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (CurrentSession.Stage < SessionWorkflowStage.Diarized)
+            throw new InvalidOperationException("Speaker mapping is not ready yet. Run the pipeline through diarization first.");
+
+        var remainingStages = GetContinuationPipelineStages(CurrentSession.Stage);
+        var stage = CurrentSession.Stage;
+
+        if (stage < SessionWorkflowStage.Translated)
+        {
+            await TranslateTranscriptAsync(
+                progress,
+                null,
+                null,
+                GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                cancellationToken);
+        }
+
+        stage = CurrentSession.Stage;
+        if (stage < SessionWorkflowStage.TtsGenerated)
+        {
+            await GenerateTtsAsync(
+                progress,
+                null,
+                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Runs only the TTS stage for an already translated session.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter for TTS stage execution.</param>
+    /// <param name="voice">Optional voice override; when null the configured session/provider voice is used.</param>
+    /// <param name="cancellationToken">Cancellation token used to stop TTS generation before completion.</param>
+    /// <remarks>
+    /// Requires <see cref="CurrentSession"/>.Stage to be at least <see cref="SessionWorkflowStage.Translated"/>.
+    /// On success, advances and persists the session to <see cref="SessionWorkflowStage.TtsGenerated"/>.
+    /// </remarks>
+    public Task RunTtsOnlyAsync(
+        IProgress<double>? progress = null,
+        string? voice = null,
+        CancellationToken cancellationToken = default) =>
+        RunTtsOnlyAsync(progress, voice, stageProgress: null, cancellationToken);
+
+    /// <summary>
+    /// Runs only the TTS stage for an already translated session with stage-aware progress updates.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter for TTS stage execution.</param>
+    /// <param name="voice">Optional voice override; when null the configured session/provider voice is used.</param>
+    /// <param name="stageProgress">Optional stage progress updates describing TTS stage activity.</param>
+    /// <param name="cancellationToken">Cancellation token used to stop TTS generation before completion.</param>
+    /// <remarks>
+    /// Entry requires stage <see cref="SessionWorkflowStage.Translated"/> or later. This method executes only
+    /// TTS and advances toward terminal stage <see cref="SessionWorkflowStage.TtsGenerated"/>; persistence occurs
+    /// when TTS completes and updates <see cref="CurrentSession"/>. Cancellation propagates via
+    /// <paramref name="cancellationToken"/>.
+    /// </remarks>
+    internal async Task RunTtsOnlyAsync(
+        IProgress<double>? progress,
+        string? voice,
+        IProgress<PipelineStageUpdate>? stageProgress,
+        CancellationToken cancellationToken)
+    {
+        if (CurrentSession.Stage < SessionWorkflowStage.Translated)
+            throw new InvalidOperationException("No translation is available. Continue the pipeline through translation first.");
+
+        var remainingStages = GetContinuationPipelineStages(CurrentSession.Stage);
+        await GenerateTtsAsync(
+            progress,
+            voice,
+            GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+            cancellationToken);
+    }
+
+    private async Task ExecuteDiarizationStageAsync(
+        PipelineStageContext? stageContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
+            throw new InvalidOperationException("No ingested media is available for speaker mapping.");
+        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
+            throw new InvalidOperationException("No transcript is available for speaker mapping.");
+
+        ReportStage(
+            stageContext,
+            $"Running {CurrentSettings.DiarizationProvider} diarization to identify speakers before translation and dubbing…",
+            progress01: 0,
+            isIndeterminate: true);
+
+        var outcome = await ExecuteDiarizationAsync(
+            CurrentSession.IngestedMediaPath,
+            CurrentSession.TranscriptPath,
+            cancellationToken,
+            resultingStage: SessionWorkflowStage.Diarized,
+            statusMessage: "Speaker mapping ready. Assign voices, then continue.");
+
+        ReportStage(
+            stageContext,
+            $"Speaker mapping ready. Identified {outcome.SpeakerCount} speakers across {outcome.SegmentCount} segments.",
+            progress01: 1,
+            isIndeterminate: false);
+    }
+
+    private bool ShouldPauseForSpeakerMapping() =>
+        CurrentSession.MultiSpeakerEnabled
+        && !string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider);
 }

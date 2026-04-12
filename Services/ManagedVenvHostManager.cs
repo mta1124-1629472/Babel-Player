@@ -159,7 +159,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             var canReuseTrackedHost =
                 preflight.IsAvailable
-                || (IsTrackedHostProcessRunning() && (HasActiveLocalRequests() || IsTransientBusyHealthFailure(preflight.ErrorMessage)));
+                || HasActiveLocalRequests()
+                || (IsTrackedHostProcessRunning() && IsTransientBusyHealthFailure(preflight.ErrorMessage));
 
             if (canReuseTrackedHost)
             {
@@ -607,7 +608,6 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             catch (OperationCanceledException)
             {
                 _log.Warning("Managed GPU host recovery canceled while waiting for active requests to complete.");
-                recoveryToken?.Dispose();
                 throw;
             }
         }
@@ -1184,13 +1184,38 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         if (HasActiveLocalRequests())
             return true;
 
-        if (preflight.Busy)
+        if (HasHostReportedActiveWork(preflight))
             return true;
 
         if (!IsTrackedHostProcessRunning())
             return false;
 
         return IsTransientBusyHealthFailure(preflight.ErrorMessage);
+    }
+
+    private static bool HasHostReportedActiveWork(ContainerHealthStatus preflight)
+    {
+        if (preflight.Busy
+            || preflight.ActiveRequests > 0
+            || preflight.ActiveQwenRequests > 0
+            || preflight.ActiveDiarizationRequests > 0)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(preflight.BusyReason))
+            return true;
+
+        if (preflight.ProviderHealth is null)
+            return false;
+
+        foreach (var snapshot in preflight.ProviderHealth.Values)
+        {
+            if (snapshot is not null && IsProviderWarmupInProgress(snapshot))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1231,6 +1256,20 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             || error.Contains("timed out", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsProviderWarmupInProgress(ContainerProviderHealthSnapshot snapshot)
+    {
+        if (string.Equals(snapshot.State, "warming", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(snapshot.State, "refreshing", StringComparison.OrdinalIgnoreCase))
+        {
+            return !string.IsNullOrWhiteSpace(snapshot.Detail)
+                && !snapshot.Detail.Contains("failed", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return !string.IsNullOrWhiteSpace(snapshot.Detail)
+            && snapshot.Detail.Contains("in progress", StringComparison.OrdinalIgnoreCase)
+            && !snapshot.Detail.Contains("failed", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Builds a human-readable message explaining why a restart of the managed local GPU host is being deferred.
     /// </summary>
@@ -1247,10 +1286,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 $"Managed local GPU host is serving active requests at {serviceUrl}; deferring restart until those requests complete.";
         }
 
-        if (preflight.Busy)
+        if (HasHostReportedActiveWork(preflight))
         {
             var busyReason = string.IsNullOrWhiteSpace(preflight.BusyReason)
-                ? "the host reported active work"
+                ? BuildHostReportedBusyReason(preflight)
                 : preflight.BusyReason;
             return
                 $"Managed local GPU host is busy at {serviceUrl}; deferring restart while {busyReason}.";
@@ -1258,6 +1297,29 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         return
             $"Managed local GPU host is running at {serviceUrl} but did not answer the health probe within the stabilization window; deferring restart.";
+    }
+
+    private static string BuildHostReportedBusyReason(ContainerHealthStatus preflight)
+    {
+        if (preflight.ActiveRequests > 0)
+            return $"{preflight.ActiveRequests} request(s) are active";
+
+        if (preflight.ActiveQwenRequests > 0)
+            return $"qwen has {preflight.ActiveQwenRequests} active request(s)";
+
+        if (preflight.ActiveDiarizationRequests > 0)
+            return $"diarization has {preflight.ActiveDiarizationRequests} active request(s)";
+
+        if (preflight.ProviderHealth is not null)
+        {
+            foreach (var snapshot in preflight.ProviderHealth.Values)
+            {
+                if (snapshot is not null && IsProviderWarmupInProgress(snapshot))
+                    return snapshot.Detail ?? "provider warmup is in progress";
+            }
+        }
+
+        return "the host reported active work";
     }
 
     /// <summary>

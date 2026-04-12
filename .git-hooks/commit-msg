@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────
+# commit-msg — gentle commit message guidance
+#
+# Installed via:  git config core.hooksPath .git-hooks
+#
+# Rules:
+#   • Subject line ≤ 72 characters (warning)
+#   • Suggests against "Merge " prefix (warning)
+#   • Suggests against "WIP" / "wip" (warning)
+#   • PLACEHOLDER mention (warning)
+#
+# Nothing is blocked. These are warnings only.
+# ─────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+BOLD='\033[1m'
+
+MSG_FILE="$1"
+MSG=$(cat "$MSG_FILE")
+
+WARNINGS=0
+
+# ── Empty message ──────────────────────────────────────────
+if [[ -z "$(echo "$MSG" | tr -d '[:space:]')" ]]; then
+    echo -e "${RED}${BOLD}[commit-msg] Commit message is empty${NC}"
+    exit 1
+fi
+
+# ── Subject line length ────────────────────────────────────
+SUBJECT=$(echo "$MSG" | head -n 1)
+SUBJECT_LEN=${#SUBJECT}
+if [[ $SUBJECT_LEN -gt 72 ]]; then
+    echo -e "${YELLOW}[commit-msg] Subject line is ${SUBJECT_LEN} chars (try to keep ≤ 72)${NC}"
+    echo -e "  Subject: $SUBJECT"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
+# ── "Merge " prefix ────────────────────────────────────────
+if [[ "$SUBJECT" =~ ^Merge\  ]]; then
+    echo -e "${YELLOW}[commit-msg] Starts with 'Merge' — consider rebasing instead${NC}"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
+# ── WIP ────────────────────────────────────────────────────
+if echo "$SUBJECT" | grep -qi "wip"; then
+    echo -e "${YELLOW}[commit-msg] Contains 'WIP' — consider a draft PR instead${NC}"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
+# ── Placeholder ────────────────────────────────────────────
+if echo "$MSG" | grep -q "PLACEHOLDER"; then
+    echo -e "${YELLOW}[commit-msg] Contains 'PLACEHOLDER' — make sure it's intentional${NC}"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
+# ── Summary ────────────────────────────────────────────────
+if [[ $WARNINGS -gt 0 ]]; then
+    echo -e "${GREEN}[commit-msg] $WARNINGS warning(s) — proceeding anyway${NC}"
+fi
+
+exit 0

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Babel.Player.Models;
 using Babel.Player.Services;
 
@@ -71,10 +72,58 @@ public sealed class PerSessionSnapshotStoreTests : IDisposable
     public void SaveThenLoad_RoundTrips_Stage()
     {
         var snapshot = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow)
-            with { Stage = SessionWorkflowStage.Translated };
+            with
+            {
+                Stage = SessionWorkflowStage.Diarized,
+                DiarizationProvider = ProviderNames.NemoLocal,
+                SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+            };
         _store.Save(snapshot);
         var loaded = _store.Load(snapshot.SessionId)!;
-        Assert.Equal(SessionWorkflowStage.Translated, loaded.Stage);
+        Assert.Equal(SessionWorkflowStage.Diarized, loaded.Stage);
+    }
+
+    [Fact]
+    public void Save_WritesStageAsStringName()
+    {
+        var snapshot = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow)
+            with
+            {
+                Stage = SessionWorkflowStage.Diarized,
+                DiarizationProvider = ProviderNames.NemoLocal,
+                SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+            };
+
+        _store.Save(snapshot);
+        var path = Path.Combine(_sessionsRoot, snapshot.SessionId.ToString(), "snapshot.json");
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+
+        Assert.Equal("Diarized", doc.RootElement.GetProperty("Stage").GetString());
+    }
+
+    [Fact]
+    public void Load_LegacyNumericStageValue_IsAccepted()
+    {
+        var sessionId = Guid.NewGuid();
+        var sessionDir = Path.Combine(_sessionsRoot, sessionId.ToString());
+        Directory.CreateDirectory(sessionDir);
+        var now = DateTimeOffset.Parse("2025-01-15T12:00:00Z");
+        File.WriteAllText(
+            Path.Combine(sessionDir, "snapshot.json"),
+            $$"""
+              {
+                "SessionId": "{{sessionId}}",
+                "Stage": 3,
+                "CreatedAtUtc": "{{now:O}}",
+                "LastUpdatedAtUtc": "{{now:O}}",
+                "StatusMessage": "legacy"
+              }
+              """);
+
+        var loaded = _store.Load(sessionId);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(SessionWorkflowStage.Translated, loaded!.Stage);
     }
 
     [Fact]

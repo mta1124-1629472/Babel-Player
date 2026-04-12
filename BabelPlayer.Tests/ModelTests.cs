@@ -113,6 +113,7 @@ public sealed class ModelTests
     public void SessionWorkflowStage_TtsGeneratedIsHighest()
     {
         Assert.True((int)SessionWorkflowStage.TtsGenerated > (int)SessionWorkflowStage.Translated);
+        Assert.True((int)SessionWorkflowStage.TtsGenerated > (int)SessionWorkflowStage.Diarized);
         Assert.True((int)SessionWorkflowStage.TtsGenerated > (int)SessionWorkflowStage.Transcribed);
         Assert.True((int)SessionWorkflowStage.TtsGenerated > (int)SessionWorkflowStage.MediaLoaded);
         Assert.True((int)SessionWorkflowStage.TtsGenerated > (int)SessionWorkflowStage.Foundation);
@@ -123,8 +124,66 @@ public sealed class ModelTests
     {
         Assert.True(SessionWorkflowStage.Foundation < SessionWorkflowStage.MediaLoaded);
         Assert.True(SessionWorkflowStage.MediaLoaded < SessionWorkflowStage.Transcribed);
+        Assert.True(SessionWorkflowStage.Transcribed < SessionWorkflowStage.Diarized);
+        Assert.True(SessionWorkflowStage.Diarized < SessionWorkflowStage.Translated);
         Assert.True(SessionWorkflowStage.Transcribed < SessionWorkflowStage.Translated);
         Assert.True(SessionWorkflowStage.Translated < SessionWorkflowStage.TtsGenerated);
+    }
+
+    [Fact]
+    public void WorkflowSessionSnapshot_SerializesStageAsStringName()
+    {
+        var snapshot = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Diarized,
+        };
+
+        var json = JsonSerializer.Serialize(snapshot, _jsonOptions);
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.Equal("Diarized", doc.RootElement.GetProperty("Stage").GetString());
+    }
+
+    [Fact]
+    public void WorkflowSessionSnapshot_DeserializesLegacyNumericStageValue()
+    {
+        var now = DateTimeOffset.Parse("2025-01-15T12:00:00Z");
+        var json =
+            $$"""
+              {
+                "SessionId": "{{Guid.NewGuid()}}",
+                "Stage": 3,
+                "CreatedAtUtc": "{{now:O}}",
+                "LastUpdatedAtUtc": "{{now:O}}",
+                "StatusMessage": "legacy"
+              }
+              """;
+
+        var snapshot = JsonSerializer.Deserialize<WorkflowSessionSnapshot>(json, _jsonOptions);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(SessionWorkflowStage.Translated, snapshot!.Stage);
+    }
+
+    [Fact]
+    public void RecentSessionEntry_DeserializesLegacyNumericStageValue()
+    {
+        var now = DateTimeOffset.Parse("2025-01-15T12:00:00Z");
+        var json =
+            $$"""
+              {
+                "SessionId": "{{Guid.NewGuid()}}",
+                "SourceMediaPath": "/path/to/media.mp4",
+                "SourceMediaFileName": "media.mp4",
+                "Stage": 3,
+                "LastUpdatedAtUtc": "{{now:O}}"
+              }
+              """;
+
+        var entry = JsonSerializer.Deserialize<RecentSessionEntry>(json, _jsonOptions);
+
+        Assert.NotNull(entry);
+        Assert.Equal(SessionWorkflowStage.Translated, entry!.Stage);
     }
 
     // ── PipelineInvalidation enum ─────────────────────────────────────────────

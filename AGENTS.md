@@ -28,6 +28,12 @@ dotnet test Babel-Player.sln --filter "FullyQualifiedName~SessionWorkflowCoordin
 # Run tests with verbose output
 dotnet test Babel-Player.sln -v n
 
+# Run tests with coverage (uploads to Codacy if CODACY_PROJECT_TOKEN is set)
+.\scripts\run-coverage.ps1
+
+# Run coverage with specific filter
+.\scripts\run-coverage.ps1 -Filter "Category=Unit"
+
 # Run architecture linter (required after structural changes)
 python3 scripts/check-architecture.py
 
@@ -48,20 +54,44 @@ Tests are filtered by category. Core tests run in CI; full suite requires local 
 
 ---
 
+## Git Hooks
+
+The repository includes optional git hooks in `.git-hooks/` that automate verification:
+
+| Hook | When | What it runs |
+|---|---|---|
+| `pre-commit` | Before every commit | Architecture linter, Python syntax, C# build (if .cs files changed) |
+| `commit-msg` | Before every commit | Message format rules (length, no WIP, no "Merge ", PLACEHOLDER warnings) |
+| `pre-push` | Before every push | Full verification: `dotnet build`, `dotnet test` (core only), architecture linter, Python syntax |
+| `post-merge` | After pull/merge | Reminds you to `dotnet restore` if dependencies changed |
+
+**Activate:**
+```bash
+git config core.hooksPath .git-hooks
+```
+
+**Bypass a hook** (when you know what you're doing):
+```bash
+git commit --no-verify    # skip pre-commit + commit-msg
+git push --no-verify      # skip pre-push
+```
+
+CI runs the same checks independently — hooks are a developer convenience, not a gate.
+See `.git-hooks/README.md` for full documentation.
+
+---
+
 ## Code Style Guidelines
 
 ### General
-
 - **Target:** .NET 10 / C# 12+ with Avalonia 12
 - **Nullable:** Enabled. **ImplicitUsings:** Not enabled project-wide; keep or add required manual `using` directives for framework and other types.
 
 ### Formatting
-
 - Standard .NET conventions (K&R braces, 4-space indent)
 - No trailing whitespace, no extra blank lines at end of file
 
 ### Naming
-
 - **Classes/Methods/Properties:** PascalCase
 - **Private fields:** `_camelCase`
 - **Interfaces:** `I` prefix
@@ -69,18 +99,15 @@ Tests are filtered by category. Core tests run in CI; full suite requires local 
 - **Avoid:** Abbreviations beyond `Http` (use `HttpClient` for client types)
 
 ### Types
-
 - Prefer `record` for immutable DTOs
 - Use `required` keyword for required properties
 - Avoid `object`; use concrete types or generics
 
 ### Imports
-
 - No unused imports (linter catches this)
 - Group: System, third-party, project
 
 ### Error Handling
-
 - Throw specific exceptions (`ArgumentNullException`, `InvalidOperationException`)
 - `PipelineProviderException` for provider failures with context
 - `NotImplementedException` must include `PLACEHOLDER` message
@@ -106,34 +133,29 @@ Tests are filtered by category. Core tests run in CI; full suite requires local 
 ## Core Engineering Rules
 
 ### Provider identifiers are constants
-
 All provider strings in `Models/ProviderNames.cs` (`ProviderNames.*` and
 `CredentialKeys.*`). No inline literals in production code.
 
 ### Stage progression runs through coordinator
-
 ViewModels must NOT call `TranscribeMediaAsync`, `TranslateTranscriptAsync`,
-or `GenerateTtsAsync` directly. All pipeline advancement through
-`SessionWorkflowCoordinator.AdvancePipelineAsync`.
+or `GenerateTtsAsync` directly. All pipeline advancement must go through
+`SessionWorkflowCoordinator` entry points such as
+`AdvancePipelineAsync`, `ContinuePipelineAsync`, or `RunTtsOnlyAsync`.
 
 ### Python/C# field names are explicit contracts
-
 Python emits snake_case or camelCase. C# must match with hardcoded strings or
 `[JsonPropertyName]` attributes. Never rely on implicit .NET casing.
 
 ### Service interfaces are uniform
-
 Every AI inference service implements a provider interface.
 Method signatures uniform across providers — no provider-specific parameters.
 Configuration injected at construction time.
 
 ### Transport lifecycle managed by MediaTransportManager
-
 `LibMpvHeadlessTransport` and `LibMpvEmbeddedTransport` created/owned/disposed
 by `MediaTransportManager`. Use `GetOrCreate*` accessors.
 
 ### Git history is the archive
-
 Delete dead code. Use `git branch` for abandoned experiments, not comments.
 
 ---
@@ -148,7 +170,6 @@ Before calling work complete:
 - Record smoke note in `docs/smoke/` (filename: `milestone-XX-label.md`)
 
 ### Troubleshooting
-
 Locked file error: `taskkill /F /IM clrdbg.exe /IM dotnet.exe`
 
 When reporting build/test instability, run the standard diagnostic sequence:
