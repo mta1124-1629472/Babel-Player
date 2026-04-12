@@ -1228,8 +1228,8 @@ async def health_live():
         qwen_last_reference_prep_ms=qwen_metrics.get("last_reference_prep_ms"),
         qwen_last_warmup_ms=qwen_metrics.get("last_warmup_ms"),
         provider_health={
-            "qwen": _build_provider_health_snapshot("qwen"),
-            "nemo": _build_provider_health_snapshot("nemo"),
+            "qwen-tts": _build_provider_health_snapshot("qwen"),
+            "nemo-local": _build_provider_health_snapshot("nemo"),
         },
     )
 

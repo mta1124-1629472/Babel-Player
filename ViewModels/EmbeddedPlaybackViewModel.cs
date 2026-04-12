@@ -1624,9 +1624,7 @@ partial void OnSourcePositionMsChanged(double value)
 
         if (result.Invalidation != PipelineInvalidation.None)
             ResetInteractiveModes();
-        StatusText = string.IsNullOrWhiteSpace(_coordinator.RuntimeWarmupStatusText)
-            ? result.StatusMessage
-            : _coordinator.RuntimeWarmupStatusText;
+        StatusText = result.StatusMessage;
         ClearStatusErrorDetail();
 
         if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)

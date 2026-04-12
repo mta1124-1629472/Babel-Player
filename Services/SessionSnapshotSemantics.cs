@@ -250,7 +250,7 @@ public static class SessionSnapshotSemantics
         return normalizeProvider(runtime.Value, providerId);
     }
 
-    private static bool HasDiarizationMarker(WorkflowSessionSnapshot snapshot) =>
+    internal static bool HasDiarizationMarker(WorkflowSessionSnapshot snapshot) =>
         !string.IsNullOrWhiteSpace(snapshot.DiarizationProvider)
         && snapshot.SpeakersDetectedAtUtc.HasValue;
 }

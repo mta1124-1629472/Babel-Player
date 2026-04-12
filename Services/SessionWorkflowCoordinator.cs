@@ -1012,7 +1012,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         InferenceMode ResolvedInferenceMode);
 
     private static bool HasDiarizationMarker(WorkflowSessionSnapshot snapshot) =>
-        !string.IsNullOrWhiteSpace(snapshot.DiarizationProvider)
-        && snapshot.SpeakersDetectedAtUtc.HasValue;
+        SessionSnapshotSemantics.HasDiarizationMarker(snapshot);
 
 }
