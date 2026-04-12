@@ -346,7 +346,7 @@ public static class DependencyLocator
             requestLeaseTracker: requestLeaseTracker);
         primaryGpuManager = managedHostManager;
         var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
-        var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager, appLog);
+        var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
 
         var audioProcessingService = new FfmpegAudioProcessingService(appLog);
 
