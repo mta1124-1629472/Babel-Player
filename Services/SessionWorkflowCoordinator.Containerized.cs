@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using Babel.Player.Models;
 using Babel.Player.Services.Registries;
 
@@ -45,8 +47,23 @@ public sealed partial class SessionWorkflowCoordinator
             KeyStore,
             CurrentSettings.TtsProfile);
 
-    private void RequestContainerizedAutostartForSettings() =>
-        _containerizedInferenceManager?.RequestEnsureStarted(CurrentSettings, ContainerizedStartupTrigger.SettingsChanged);
+    private void RequestContainerizedAutostartForSettings()
+    {
+        if (!RequiresContainerizedRuntime())
+        {
+            RuntimeWarmupStatusText = null;
+            return;
+        }
+
+        if (_containerizedInferenceManager is null)
+            return;
+
+        RuntimeWarmupStatusText = $"{GetConfiguredGpuHostLabel()} start requested…";
+        BackgroundTaskObserver.Observe(
+            EnsureContainerizedAutostartForSettingsAsync(),
+            _log,
+            "GPU runtime settings autostart");
+    }
 
     private Task EnsureContainerizedExecutionRuntimeStartedAsync(
         InferenceRuntime runtime,
@@ -61,10 +78,15 @@ public sealed partial class SessionWorkflowCoordinator
         if (runtime != InferenceRuntime.Containerized || _containerizedInferenceManager is null)
             return;
 
+        RuntimeWarmupStatusText = string.IsNullOrWhiteSpace(stageLabel)
+            ? $"{GetConfiguredGpuHostLabel()} is starting…"
+            : $"{stageLabel}: {GetConfiguredGpuHostLabel().ToLowerInvariant()} is starting…";
         var result = await _containerizedInferenceManager.EnsureStartedAsync(
             CurrentSettings,
             ContainerizedStartupTrigger.Execution,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        RuntimeWarmupStatusText = result.Message;
+        await RefreshRuntimeWarmupStatusFromProbeAsync(forceRefresh: true, cancellationToken).ConfigureAwait(false);
 
         if (result.Attempted && !result.IsReady)
         {
@@ -82,7 +104,7 @@ public sealed partial class SessionWorkflowCoordinator
         await EnsureContainerizedExecutionRuntimeStartedAsync(
             CurrentSettings.TranslationRuntime,
             "Translation",
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         ProviderReadiness readiness;
         if (CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null)
@@ -90,7 +112,7 @@ public sealed partial class SessionWorkflowCoordinator
             var probeResult = await _containerizedProbe.WaitForProbeAsync(
                 CurrentSettings.EffectiveGpuServiceUrl,
                 forceRefresh: true,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var capabilityReady = probeResult.Capabilities?.IsReady(ContainerCapabilityStage.Translation) ?? false;
             var capabilityDetail = probeResult.Capabilities?.Detail(ContainerCapabilityStage.Translation) ?? "<none>";
@@ -102,6 +124,7 @@ public sealed partial class SessionWorkflowCoordinator
                 CurrentSettings,
                 probeResult,
                 ContainerCapabilityStage.Translation);
+            RuntimeWarmupStatusText = DescribeRuntimeWarmupStatus(probeResult);
         }
         else
         {
@@ -128,9 +151,131 @@ public sealed partial class SessionWorkflowCoordinator
                 progress,
                 cancellationToken,
                 CurrentSettings.TranslationProfile,
-                KeyStore))
+                KeyStore).ConfigureAwait(false))
         {
             throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranslationModel}'.");
         }
     }
+
+    private async Task EnsureContainerizedAutostartForSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        var manager = _containerizedInferenceManager;
+        if (manager is null)
+            return;
+
+        var expectedServiceUrl = CurrentSettings.EffectiveGpuServiceUrl;
+        var expectedRequiresContainerized = RequiresContainerizedRuntime();
+        if (!expectedRequiresContainerized)
+            return;
+
+        var result = await manager.EnsureStartedAsync(
+            CurrentSettings,
+            ContainerizedStartupTrigger.SettingsChanged,
+            cancellationToken).ConfigureAwait(false);
+
+        if (!ReferenceEquals(manager, _containerizedInferenceManager)
+            || !RequiresContainerizedRuntime()
+            || !string.Equals(CurrentSettings.EffectiveGpuServiceUrl, expectedServiceUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var message = result.Message;
+        Dispatcher.UIThread.Post(() => RuntimeWarmupStatusText = message);
+        await RefreshRuntimeWarmupStatusFromProbeAsync(forceRefresh: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RefreshRuntimeWarmupStatusFromProbeAsync(
+        bool forceRefresh,
+        CancellationToken cancellationToken = default)
+    {
+        if (_containerizedProbe is null || !RequiresContainerizedRuntime())
+            return;
+
+        var probeResult = await _containerizedProbe.WaitForProbeAsync(
+            CurrentSettings.EffectiveGpuServiceUrl,
+            forceRefresh: forceRefresh,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var statusText = DescribeRuntimeWarmupStatus(probeResult);
+        Dispatcher.UIThread.Post(() => RuntimeWarmupStatusText = statusText);
+    }
+
+    private string? DescribeRuntimeWarmupStatus(ContainerizedProbeResult probeResult)
+    {
+        var hostLabel = GetConfiguredGpuHostLabel();
+        if (probeResult.State == ContainerizedProbeState.Checking)
+            return $"{hostLabel} is starting…";
+
+        if (probeResult.State == ContainerizedProbeState.Unavailable)
+        {
+            return string.IsNullOrWhiteSpace(probeResult.ErrorDetail)
+                ? $"{hostLabel} is unavailable."
+                : $"{hostLabel} is unavailable: {probeResult.ErrorDetail}";
+        }
+
+        if (probeResult.IsStale)
+            return $"{hostLabel} status is cached while a fresh probe is running.";
+
+        var providerWarmup = FindActiveWarmupDetail(probeResult);
+        if (!string.IsNullOrWhiteSpace(providerWarmup))
+            return providerWarmup;
+
+        if (probeResult.Busy && !string.IsNullOrWhiteSpace(probeResult.BusyReason))
+            return $"{hostLabel} is busy: {probeResult.BusyReason}";
+
+        return $"{hostLabel} is ready.";
+    }
+
+    private string? FindActiveWarmupDetail(ContainerizedProbeResult probeResult)
+    {
+        foreach (var snapshot in EnumerateProviderHealth(probeResult))
+        {
+            var state = snapshot?.State;
+            if (snapshot is null
+                || string.IsNullOrWhiteSpace(snapshot.Detail)
+                || (!string.Equals(state, "warming", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(state, "refreshing", StringComparison.OrdinalIgnoreCase))
+                || snapshot.Detail.Contains("failed", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return snapshot.Detail;
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<ContainerProviderHealthSnapshot?> EnumerateProviderHealth(ContainerizedProbeResult probeResult)
+    {
+        if (probeResult.ProviderHealth is not null)
+        {
+            foreach (var snapshot in probeResult.ProviderHealth.Values)
+                yield return snapshot;
+        }
+
+        if (probeResult.Capabilities?.TtsProviderHealth is not null)
+        {
+            foreach (var snapshot in probeResult.Capabilities.TtsProviderHealth.Values)
+                yield return snapshot;
+        }
+
+        if (probeResult.Capabilities?.DiarizationProviderHealth is not null)
+        {
+            foreach (var snapshot in probeResult.Capabilities.DiarizationProviderHealth.Values)
+                yield return snapshot;
+        }
+    }
+
+    private bool RequiresContainerizedRuntime() =>
+        CurrentSettings.TranscriptionRuntime == InferenceRuntime.Containerized
+        || CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized
+        || CurrentSettings.TtsRuntime == InferenceRuntime.Containerized
+        || (CurrentSession.MultiSpeakerEnabled
+            && InferenceRuntimeCatalog.InferDiarizationRuntime(CurrentSettings.DiarizationProvider) == InferenceRuntime.Containerized);
+
+    private string GetConfiguredGpuHostLabel() =>
+        CurrentSettings.PreferredLocalGpuBackend == GpuHostBackend.ManagedVenv
+            ? "Managed local GPU host"
+            : "Docker GPU host";
 }

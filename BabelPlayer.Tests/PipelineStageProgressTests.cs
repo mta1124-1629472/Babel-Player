@@ -56,6 +56,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
             new FakeTtsRegistry(new FakeTtsProvider()));
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
+        coordinator.SetMultiSpeakerEnabled(false);
 
         List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
         await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
@@ -84,6 +85,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
         var coordinator = CreateCoordinator(settings, transcriptionRegistry, translationRegistry, ttsRegistry);
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
+        coordinator.SetMultiSpeakerEnabled(false);
         await coordinator.TranscribeMediaAsync();
         await coordinator.TranslateTranscriptAsync();
 
@@ -117,6 +119,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
             new FakeTtsRegistry(new FakeTtsProvider()));
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
+        coordinator.SetMultiSpeakerEnabled(false);
 
         List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
         await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
@@ -135,6 +138,78 @@ public sealed class PipelineStageProgressTests() : IDisposable
                       update.Progress01 > 0.25 &&
                       update.StageIndex == 2 &&
                       update.StageCount == 3);
+    }
+
+    [Fact]
+    public async Task AdvancePipelineAsync_MultiSpeakerRun_PausesAtDiarized_ThenContinueRunsTranslationAndDub()
+    {
+        var settings = CreateSettings();
+        var diarizationRegistry = new FakeDiarizationRegistry(
+            (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider(_ =>
+                new DiarizationResult(
+                    true,
+                    [
+                        new DiarizedSegment(0.0, 1.0, "spk_00"),
+                        new DiarizedSegment(1.0, 2.0, "spk_01"),
+                    ],
+                    2,
+                    null))));
+        var coordinator = CreateCoordinator(
+            settings,
+            new FakeTranscriptionRegistry(new FakeTranscriptionProvider()),
+            new FakeTranslationRegistry(new FakeTranslationProvider()),
+            new FakeTtsRegistry(new FakeTtsProvider()),
+            diarizationRegistry);
+        coordinator.Initialize();
+        coordinator.LoadMedia(_ctx.MediaPath);
+
+        List<SessionWorkflowCoordinator.PipelineStageUpdate> advanceUpdates = [];
+        await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(advanceUpdates));
+
+        Assert.Equal(SessionWorkflowStage.Diarized, coordinator.CurrentSession.Stage);
+        AssertStage(advanceUpdates, SessionWorkflowStage.Transcribed, 1, 2);
+        AssertStage(advanceUpdates, SessionWorkflowStage.Diarized, 2, 2);
+        Assert.DoesNotContain(advanceUpdates, update => update.TargetStage == SessionWorkflowStage.Translated);
+        Assert.DoesNotContain(advanceUpdates, update => update.TargetStage == SessionWorkflowStage.TtsGenerated);
+
+        List<SessionWorkflowCoordinator.PipelineStageUpdate> continuationUpdates = [];
+        await coordinator.ContinuePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(continuationUpdates));
+
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
+        AssertStage(continuationUpdates, SessionWorkflowStage.Translated, 1, 2);
+        AssertStage(continuationUpdates, SessionWorkflowStage.TtsGenerated, 2, 2);
+    }
+
+    [Fact]
+    public async Task RunTtsOnlyAsync_FromTranslatedSession_EmitsOnlyDubStage()
+    {
+        var settings = CreateSettings();
+        var coordinator = CreateCoordinator(
+            settings,
+            new FakeTranscriptionRegistry(new FakeTranscriptionProvider()),
+            new FakeTranslationRegistry(new FakeTranslationProvider()),
+            new FakeTtsRegistry(new FakeTtsProvider()));
+        coordinator.Initialize();
+        coordinator.LoadMedia(_ctx.MediaPath);
+        coordinator.SetMultiSpeakerEnabled(false);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync();
+
+        List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
+        await coordinator.RunTtsOnlyAsync(
+            progress: null,
+            voice: null,
+            stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates),
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
+        Assert.NotEmpty(updates);
+        Assert.All(updates, update =>
+        {
+            Assert.Equal(SessionWorkflowStage.TtsGenerated, update.TargetStage);
+            Assert.Equal(1, update.StageIndex);
+            Assert.Equal(1, update.StageCount);
+        });
     }
 
     [Fact]
@@ -184,7 +259,8 @@ public sealed class PipelineStageProgressTests() : IDisposable
         AppSettings settings,
         ITranscriptionRegistry transcriptionRegistry,
         ITranslationRegistry translationRegistry,
-        ITtsRegistry ttsRegistry)
+        ITtsRegistry ttsRegistry,
+        IDiarizationRegistry? diarizationRegistry = null)
     {
         var log = new AppLog(Path.Combine(_ctx.Dir, $"test-{Guid.NewGuid():N}.log"));
         var store = new SessionSnapshotStore(_ctx.StorePath, log);
@@ -205,7 +281,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
             keyStore: null,
             artifactReader: null,
             sessionSwitchService: null,
-            diarizationRegistry: FakeDiarizationFactory.CreateDefaultRegistry(),
+            diarizationRegistry: diarizationRegistry ?? FakeDiarizationFactory.CreateDefaultRegistry(),
             containerizedProbe: null,
             containerizedInferenceManager: null,
             audioProcessingService: new StubAudioProcessingService());

@@ -45,9 +45,18 @@ public static class SessionSnapshotSemantics
         if (stage >= SessionWorkflowStage.Translated
             && (string.IsNullOrEmpty(snapshot.TranslationPath) || !File.Exists(snapshot.TranslationPath)))
         {
-            stage = SessionWorkflowStage.Transcribed;
+            stage = HasDiarizationMarker(snapshot)
+                ? SessionWorkflowStage.Diarized
+                : SessionWorkflowStage.Transcribed;
             snapshot = ClearTranslationOutputs(snapshot);
             cleared.Add("translation");
+        }
+
+        if (stage == SessionWorkflowStage.Diarized && !HasDiarizationMarker(snapshot))
+        {
+            stage = SessionWorkflowStage.Transcribed;
+            snapshot = ClearDiarizationOutputs(snapshot);
+            cleared.Add("diarization");
         }
 
         if (stage >= SessionWorkflowStage.Transcribed
@@ -96,6 +105,7 @@ public static class SessionSnapshotSemantics
             SessionWorkflowStage.Foundation => PipelineInvalidation.None,
             SessionWorkflowStage.MediaLoaded => PipelineInvalidation.None,
             SessionWorkflowStage.Transcribed => transcriptionChanged ? PipelineInvalidation.Transcription : PipelineInvalidation.None,
+            SessionWorkflowStage.Diarized => transcriptionChanged ? PipelineInvalidation.Transcription : PipelineInvalidation.None,
             SessionWorkflowStage.Translated => transcriptionChanged
                 ? PipelineInvalidation.Transcription
                 : translationChanged
@@ -123,6 +133,12 @@ public static class SessionSnapshotSemantics
             && !string.IsNullOrWhiteSpace(snapshot.TranslationPath)
             && File.Exists(snapshot.TranslationPath))
             return SessionWorkflowStage.Translated;
+
+        if (snapshot.Stage >= SessionWorkflowStage.Diarized
+            && !string.IsNullOrWhiteSpace(snapshot.TranscriptPath)
+            && File.Exists(snapshot.TranscriptPath)
+            && HasDiarizationMarker(snapshot))
+            return SessionWorkflowStage.Diarized;
 
         if (snapshot.Stage >= SessionWorkflowStage.Transcribed
             && !string.IsNullOrWhiteSpace(snapshot.TranscriptPath)
@@ -187,8 +203,18 @@ public static class SessionSnapshotSemantics
             TranslationModel = null,
         };
 
-    public static WorkflowSessionSnapshot ClearTranscriptionOutputs(WorkflowSessionSnapshot snapshot) =>
+    public static WorkflowSessionSnapshot ClearDiarizationOutputs(WorkflowSessionSnapshot snapshot) =>
         ClearTranslationOutputs(snapshot) with
+        {
+            SpeakerVoiceAssignments = null,
+            SpeakerReferenceAudioPaths = null,
+            DefaultTtsVoiceFallback = null,
+            DiarizationProvider = null,
+            SpeakersDetectedAtUtc = null,
+        };
+
+    public static WorkflowSessionSnapshot ClearTranscriptionOutputs(WorkflowSessionSnapshot snapshot) =>
+        ClearDiarizationOutputs(snapshot) with
         {
             TranscriptPath = null,
             SourceLanguage = null,
@@ -223,4 +249,8 @@ public static class SessionSnapshotSemantics
 
         return normalizeProvider(runtime.Value, providerId);
     }
+
+    internal static bool HasDiarizationMarker(WorkflowSessionSnapshot snapshot) =>
+        !string.IsNullOrWhiteSpace(snapshot.DiarizationProvider)
+        && snapshot.SpeakersDetectedAtUtc.HasValue;
 }

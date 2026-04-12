@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -452,7 +453,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     public string TtsKeyStatus => _ttsKeyStatus;
     public ObservableCollection<ProviderHealthSnapshot> ProviderHealthSnapshots => _providerHealthSnapshots;
 
-    private sealed record ProviderDiagnosticsSelectionSnapshot(
+    internal sealed record ProviderDiagnosticsSelectionSnapshot(
         ComputeProfile TranscriptionRuntime,
         string TranscriptionProvider,
         string TranscriptionModel,
@@ -491,7 +492,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         QueueProviderHealthRefresh(snapshot, force);
     }
 
-    private ProviderDiagnosticsSelectionSnapshot CaptureProviderHealthSelectionSnapshot() =>
+    internal ProviderDiagnosticsSelectionSnapshot CaptureProviderHealthSelectionSnapshot() =>
         new(
             TranscriptionRuntime,
             TranscriptionProvider,
@@ -592,7 +593,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         int version,
         CancellationToken cancellationToken)
     {
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        void Apply()
         {
             if (version != _providerHealthRefreshVersion || cancellationToken.IsCancellationRequested)
                 return;
@@ -611,10 +612,29 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             ApplyReadinessStatus(ref _ttsKeyStatus, tts?.InlineStatus ?? string.Empty, nameof(TtsKeyStatus));
             AutoSpeakerDetectionStatus = diarization?.InlineStatus ?? "Manual speaker mapping is the default release flow.";
             OnPropertyChanged(nameof(HasAutoSpeakerDetectionStatus));
-        });
+        }
+
+        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
+        {
+            // Running in a headless/test context with no Avalonia event loop, or already
+            // on the UI thread — apply directly so the update is never lost.
+            Apply();
+        }
+        else
+        {
+            await Dispatcher.UIThread.InvokeAsync(Apply);
+        }
     }
 
-    private ProviderHealthSnapshot BuildTranscriptionHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
+    private static string GetRuntimeHostLabel(ComputeProfile runtime) => runtime switch
+    {
+        ComputeProfile.Gpu   => "Managed local GPU host",
+        ComputeProfile.Cpu   => "Managed local CPU runtime",
+        ComputeProfile.Cloud => "Cloud service",
+        _                    => "Managed local CPU runtime",
+    };
+
+    internal ProviderHealthSnapshot BuildTranscriptionHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
             section: "Transcription",
             providerId: snapshot.TranscriptionProvider,
@@ -632,7 +652,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             inlineStatusFactory: GetReadinessStatus,
             hostLabel: GetRuntimeHostLabel(snapshot.TranscriptionRuntime));
 
-    private ProviderHealthSnapshot BuildTranslationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
+    internal ProviderHealthSnapshot BuildTranslationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
             section: "Translation",
             providerId: snapshot.TranslationProvider,
@@ -650,7 +670,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             inlineStatusFactory: GetReadinessStatus,
             hostLabel: GetRuntimeHostLabel(snapshot.TranslationRuntime));
 
-    private ProviderHealthSnapshot BuildTtsHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
+    internal ProviderHealthSnapshot BuildTtsHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
             section: "TTS",
             providerId: snapshot.TtsProvider,
@@ -668,7 +688,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             inlineStatusFactory: GetReadinessStatus,
             hostLabel: GetRuntimeHostLabel(snapshot.TtsRuntime));
 
-    private ProviderHealthSnapshot BuildDiarizationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot)
+    internal ProviderHealthSnapshot BuildDiarizationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot)
     {
         var registry = _coordinator.DiarizationRegistry;
         if (registry is null)
@@ -708,19 +728,19 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             ProviderNames.Manual,
             "Manual speaker mapping",
             "Local",
-            "Disabled",
+            "Not configured",
             NormalizeDiagnosticText(inlineStatus),
-            "Manual speaker mapping — no provider selected",
+            "No diarization provider selected.",
             "No diarization provider selected.",
             string.Empty,
             IsReady: false,
             IsLive: false,
-            IsStale: true,
+            IsStale: false,
             CheckedAtText: DateTimeOffset.UtcNow.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture),
             History: AppendProviderHealthHistory(
                 $"Diarization|{ProviderNames.Manual}|Manual speaker mapping|Local",
                 DateTimeOffset.UtcNow,
-                "Disabled",
+                "Not configured",
                 "No diarization provider selected.",
                 isReady: false));
 
@@ -818,12 +838,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             History: history);
     }
 
-    // Defensive normalization for mojibake (UTF-8 bytes misinterpreted as Latin-1) in diagnostic text.
-    // These sequences occur due to upstream encoding mismatch in Python subprocess output or container logs:
-    //   "âš  " → "Warning: " (U+26A0 WARNING SIGN mangled)
-    //   "âœ"" → "ok"         (U+2713 CHECK MARK mangled)
-    //   "Â·"  → "|"         (U+00B7 MIDDLE DOT mangled)
-    // TODO: Fix upstream producer to emit properly decoded UTF-8 so this defensive layer can be removed.
     private static string NormalizeDiagnosticText(string text) =>
         string.IsNullOrWhiteSpace(text)
             ? text
@@ -963,13 +977,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             return queue.ToArray();
         }
     }
-
-    private static string GetRuntimeHostLabel(ComputeProfile runtime) => runtime switch
-    {
-        ComputeProfile.Gpu => "Managed local GPU host",
-        ComputeProfile.Cloud => "Cloud runtime",
-        _ => "Local CPU runtime",
-    };
 
     private bool UsesContainerizedRuntime(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         snapshot.TranscriptionRuntime == ComputeProfile.Gpu
@@ -2074,6 +2081,11 @@ partial void OnSourcePositionMsChanged(double value)
                 OnPropertyChanged(nameof(HwNpuLine));
                 OnPropertyChanged(nameof(HwLibsLine));
                 break;
+            case nameof(SessionWorkflowCoordinator.RuntimeWarmupStatusText):
+                StatusText = string.IsNullOrWhiteSpace(_coordinator.RuntimeWarmupStatusText)
+                    ? _coordinator.CurrentSession.StatusMessage
+                    : _coordinator.RuntimeWarmupStatusText;
+                break;
             case nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics):
                 OnPropertyChanged(nameof(HasVsrPlaybackStatus));
                 OnPropertyChanged(nameof(VsrPlaybackStatusText));
@@ -2388,10 +2400,20 @@ partial void OnSourcePositionMsChanged(double value)
             IsBusy = true;
             StatusText = "Running pipeline…";
             ClearStatusErrorDetail();
-            await _coordinator.AdvancePipelineAsync(
-                progress: null,
-                stageProgress: stageProgress,
-                cancellationToken: ct);
+            if (_coordinator.CurrentSession.Stage == SessionWorkflowStage.Diarized)
+            {
+                await _coordinator.ContinuePipelineAsync(
+                    progress: null,
+                    stageProgress: stageProgress,
+                    cancellationToken: ct);
+            }
+            else
+            {
+                await _coordinator.AdvancePipelineAsync(
+                    progress: null,
+                    stageProgress: stageProgress,
+                    cancellationToken: ct);
+            }
             ShowPipelineRefreshDetail("Loading segments and refreshing playback data…");
             StatusText = "Loading segments…";
             await RefreshSegmentsAsync();

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
-using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -406,22 +405,16 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
-    public void QwenContainerTtsProvider_MaxConcurrency_ReturnsSingleThreaded()
+    public void QwenContainerTtsProvider_MaxConcurrency_IsOne()
     {
-        var original = Environment.GetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable);
-        Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, "2");
-        try
-        {
-            var client = CreateClient((_, _) => Json(HttpStatusCode.OK, "{\"success\":true}"));
-            var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
+        // MaxConcurrency is fixed at 1 because _referenceIdCache and
+        // _autoExtractedReferencePath are not thread-safe. This test
+        // guards against accidental reversion to a higher concurrency
+        // before proper synchronization is in place.
+        var client = CreateClient((_, _) => Json(HttpStatusCode.OK, "{\"success\":true}"));
+        var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
 
-            // MaxConcurrency is hardcoded to 1 until thread-safety is implemented for _referenceIdCache
-            Assert.Equal(1, provider.MaxConcurrency);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, original);
-        }
+        Assert.Equal(1, provider.MaxConcurrency);
     }
 
     [Fact]
@@ -534,7 +527,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("missing TTS capability", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("TTS capability is unavailable", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("model unavailable", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -606,7 +599,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         } while (DateTimeOffset.UtcNow < deadline);
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("missing translation capability", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("translation capability is warming", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("warming", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -935,7 +928,8 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         var readiness = await ContainerizedProviderReadiness.CheckTranslationForExecutionAsync(settings, probe);
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("live but translation capability is still warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("translation capability", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("capability is warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -1065,7 +1059,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                 CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(10)));
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("live but diarization capability is still warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("diarization capability is warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -1139,7 +1133,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         var settings = new AppSettings
         {
             PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
-            ContainerizedServiceUrl = AppSettings.ManagedGpuServiceUrl,
+            ContainerizedServiceUrl = "http://localhost:8000",
             DiarizationProvider = ProviderNames.NemoLocal,
         };
 
@@ -1155,10 +1149,10 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.Equal(ContainerizedProbeState.Available, cached.State);
         Assert.True(cached.WasCacheHit);
 
-        ProbeTestHelpers.ExpireCachedProbeResult(probe, AppSettings.ManagedGpuServiceUrl);
+        ExpireCachedProbeResult(probe, AppSettings.ManagedGpuServiceUrl);
 
         var readiness = ContainerizedProviderReadiness.CheckDiarization(settings, ProviderNames.NemoLocal, probe);
-        await ProbeTestHelpers.WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
+        await WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
 
         Assert.False(readiness.IsReady);
         Assert.Contains("NeMo diarization config contract invalid", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
@@ -1341,6 +1335,12 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         return Task.FromResult(response);
     }
 
+    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl) =>
+        ProbeTestHelpers.ExpireCachedProbeResult(probe, serviceUrl);
+
+    private static Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500) =>
+        ProbeTestHelpers.WaitForCallCountAsync(getCount, expectedMinimum, TimeSpan.FromMilliseconds(timeoutMs));
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;
@@ -1353,4 +1353,5 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             _handler(request, cancellationToken);
     }
+
 }

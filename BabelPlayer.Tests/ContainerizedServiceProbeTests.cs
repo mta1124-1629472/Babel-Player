@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Services;
@@ -83,7 +82,7 @@ public sealed class ContainerizedServiceProbeTests
         Assert.Equal(ContainerizedProbeState.Available, first.State);
         Assert.False(first.IsStale);
 
-        ProbeTestHelpers.ExpireCachedProbeResult(probe, "http://localhost:8000");
+        ExpireCachedProbeResult(probe, "http://localhost:8000");
         var refresh = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000", forceRefresh: true);
         Assert.Equal(ContainerizedProbeState.Checking, refresh.State);
 
@@ -137,9 +136,9 @@ public sealed class ContainerizedServiceProbeTests
         Assert.Equal(ContainerizedProbeState.Available, first.State);
         Assert.False(first.IsStale);
 
-        ProbeTestHelpers.ExpireCachedProbeResult(probe, "http://localhost:8000");
+        ExpireCachedProbeResult(probe, "http://localhost:8000");
         var stale = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
-        await ProbeTestHelpers.WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
+        await WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
 
         Assert.Equal(ContainerizedProbeState.Available, stale.State);
         Assert.True(stale.IsStale);
@@ -656,4 +655,10 @@ public sealed class ContainerizedServiceProbeTests
 
         throw new Xunit.Sdk.XunitException("Probe cache was not populated within expected time.");
     }
+
+    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl) =>
+        ProbeTestHelpers.ExpireCachedProbeResult(probe, serviceUrl);
+
+    private static Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500) =>
+        ProbeTestHelpers.WaitForCallCountAsync(getCount, expectedMinimum, TimeSpan.FromMilliseconds(timeoutMs));
 }

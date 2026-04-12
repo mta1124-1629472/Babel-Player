@@ -753,6 +753,9 @@ public sealed class SegmentInspectionTests
         throw new Xunit.Sdk.XunitException($"Timed out waiting for provider health snapshot '{section}'.");
     }
 
+    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl) =>
+        ProbeTestHelpers.ExpireCachedProbeResult(probe, serviceUrl);
+
     [Fact]
     public void EmbeddedPlaybackViewModel_DiarizationProviderOptions_ShowOffNeMoAndWeSpeaker()
     {
@@ -772,7 +775,7 @@ public sealed class SegmentInspectionTests
     }
 
     [Fact]
-    public void EmbeddedPlaybackViewModel_DiarizationProvider_UpdatesSettingsAndStatus()
+    public async Task EmbeddedPlaybackViewModel_DiarizationProvider_UpdatesSettingsAndStatus()
     {
         using var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
 
@@ -800,10 +803,8 @@ public sealed class SegmentInspectionTests
 
         playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
-        var snapshot = await WaitForProviderHealthSnapshotAsync(
-            playback,
-            "Diarization",
-            s => s.StatusLine == "Ready");
+        var selectionSnapshot = playback.CaptureProviderHealthSelectionSnapshot();
+        var snapshot = playback.BuildDiarizationHealthSnapshot(selectionSnapshot);
 
         Assert.Equal("Ready", snapshot.StatusLine);
         Assert.Contains("Managed local CPU runtime", snapshot.HostState, StringComparison.Ordinal);

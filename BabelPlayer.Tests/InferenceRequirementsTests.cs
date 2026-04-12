@@ -159,6 +159,15 @@ public sealed class InferenceRequirementsTests
     }
 
     [Fact]
+    public void GpuRequirements_QwenPackage_IsPresent()
+    {
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "gpu-requirements.txt");
+        var lines = ReadRequirementsLines(requirementsPath);
+
+        Assert.Contains(lines, line => line.StartsWith("qwen-tts", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void InferenceMain_NemoDiarizationConfig_DeclaresCompleteStructuredContract()
     {
         var source = ReadProviderSource("inference/main.py");
@@ -170,9 +179,14 @@ public sealed class InferenceRequirementsTests
         Assert.Contains("config.diarizer.collar = NEMO_COLLAR", source, StringComparison.Ordinal);
         Assert.Contains("config.diarizer.ignore_overlap = NEMO_IGNORE_OVERLAP", source, StringComparison.Ordinal);
         Assert.Contains("setattr(config.diarizer.vad.parameters, key, value)", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.speaker_embeddings.window_length_in_sec", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.speaker_embeddings.shift_length_in_sec", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.speaker_embeddings.multiscale_weights", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.speaker_embeddings.scale_n", source, StringComparison.Ordinal);
         Assert.Contains("config.diarizer.speaker_embeddings.parameters.window_length_in_sec", source, StringComparison.Ordinal);
         Assert.Contains("config.diarizer.speaker_embeddings.parameters.shift_length_in_sec", source, StringComparison.Ordinal);
         Assert.Contains("config.diarizer.speaker_embeddings.parameters.multiscale_weights", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.speaker_embeddings.parameters.scale_n", source, StringComparison.Ordinal);
         Assert.Contains("NeMo diarization config contract invalid", source, StringComparison.Ordinal);
     }
 
@@ -181,7 +195,7 @@ public sealed class InferenceRequirementsTests
     [Theory]
     [InlineData("edge-tts==7.2.8")]
     [InlineData("ctranslate2==4.7.1")]
-    [InlineData("transformers==4.57.3")]
+    [InlineData("transformers==5.0.0")]
     [InlineData("sentencepiece==0.2.1")]
     [InlineData("faster-whisper==1.2.1")]
     [InlineData("googletrans==4.0.0rc1")]
@@ -202,6 +216,15 @@ public sealed class InferenceRequirementsTests
         var lines = ReadRequirementsLines(requirementsPath);
 
         Assert.DoesNotContain(lines, line => line.Contains("pyannote.audio", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void CpuRequirements_QwenPackage_IsNotPresent()
+    {
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
+        var lines = ReadRequirementsLines(requirementsPath);
+
+        Assert.DoesNotContain(lines, line => line.StartsWith("qwen-tts", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]

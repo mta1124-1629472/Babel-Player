@@ -229,8 +229,9 @@ public static class ContainerizedProviderReadiness
         // Do NOT retry for terminal failures ("warmup failed") or probe timeouts
         // ("Capabilities probe is still warming or failed") — both contain "failed".
         return detail is not null
-            && detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
-            && !detail.Contains("failed", StringComparison.OrdinalIgnoreCase);
+            && !detail.Contains("failed", StringComparison.OrdinalIgnoreCase)
+            && (detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("in progress", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -360,17 +361,23 @@ public static class ContainerizedProviderReadiness
         string? detail,
         bool isStale)
     {
-        var cachedPrefix = isStale ? " with a cached result" : string.Empty;
         if (string.IsNullOrWhiteSpace(detail))
-            return $"{hostLabel} is live{cachedPrefix} but {stageLabel} capability is not ready.";
-
-        if (detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
-            || detail.Contains("probe", StringComparison.OrdinalIgnoreCase))
         {
-            return $"{hostLabel} is live{cachedPrefix} but {stageLabel} capability is still warming (missing {stageLabel} capability): {detail}";
+            return isStale
+                ? $"{hostLabel} cached status indicates {stageLabel} capability is unavailable."
+                : $"{hostLabel} is live but {stageLabel} capability is unavailable.";
         }
 
-        return $"{hostLabel} is live{cachedPrefix} but missing {stageLabel} capability: {detail}";
+        if (isStale)
+            return $"{hostLabel} cached status indicates {stageLabel} capability is unavailable: {detail}";
+
+        if (IsActualWarmupDetail(detail))
+            return $"{hostLabel} is live but {stageLabel} capability is warming: {detail}";
+
+        if (detail.Contains("failed", StringComparison.OrdinalIgnoreCase))
+            return $"{hostLabel} is live but {stageLabel} capability failed: {detail}";
+
+        return $"{hostLabel} is live but {stageLabel} capability is unavailable: {detail}";
     }
 
     /// <summary>
@@ -394,12 +401,23 @@ public static class ContainerizedProviderReadiness
             _ => "diarization",
         };
 
-        var cachedPrefix = isStale ? " with a cached result" : string.Empty;
         if (string.IsNullOrWhiteSpace(detail))
-            return $"{hostLabel} is live{cachedPrefix} but {stageLabel} capability metadata is unavailable.";
+        {
+            return isStale
+                ? $"{hostLabel} cached status indicates {stageLabel} capability metadata is unavailable."
+                : $"{hostLabel} is live but {stageLabel} capability metadata is unavailable.";
+        }
 
-        return $"{hostLabel} is live{cachedPrefix} but {stageLabel} capability metadata could not be read: {detail}";
+        return isStale
+            ? $"{hostLabel} cached status indicates {stageLabel} capability metadata could not be read: {detail}"
+            : $"{hostLabel} is live but {stageLabel} capability metadata could not be read: {detail}";
     }
+
+    private static bool IsActualWarmupDetail(string detail) =>
+        detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
+        && !detail.Contains("failed", StringComparison.OrdinalIgnoreCase)
+        && !detail.Contains("probe", StringComparison.OrdinalIgnoreCase)
+        && !detail.Contains("cached", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Determines whether the requested capability stage is ready, optionally scoped to a specific provider for TTS or Diarization.

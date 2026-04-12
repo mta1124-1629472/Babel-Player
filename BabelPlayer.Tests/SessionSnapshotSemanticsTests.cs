@@ -94,6 +94,24 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
+    public void ResolveArtifactStage_Diarized_WithMarker_ReturnsDiarized()
+    {
+        var mediaPath = WriteFile("video.mp4");
+        var transcriptPath = WriteFile("transcript.json");
+        var now = DateTimeOffset.UtcNow;
+        var snap = WorkflowSessionSnapshot.CreateNew(now) with
+        {
+            Stage = SessionWorkflowStage.Diarized,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            DiarizationProvider = ProviderNames.NemoLocal,
+            SpeakersDetectedAtUtc = now,
+        };
+
+        Assert.Equal(SessionWorkflowStage.Diarized, SessionSnapshotSemantics.ResolveArtifactStage(snap));
+    }
+
+    [Fact]
     public void ResolveArtifactStage_TtsGenerated_WithAllFiles_ReturnsTtsGenerated()
     {
         var mediaPath = WriteFile("video.mp4");
@@ -200,6 +218,50 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         Assert.Contains("translation", result.ClearedArtifacts);
         Assert.Equal(SessionWorkflowStage.Transcribed, result.Snapshot.Stage);
         Assert.Null(result.Snapshot.TargetLanguage);
+    }
+
+    [Fact]
+    public void ValidateArtifacts_MissingTranslation_WithDiarizationMarker_DegradesToDiarized()
+    {
+        var mediaPath = WriteFile("video.mp4");
+        var transcriptPath = WriteFile("transcript.json");
+        var now = DateTimeOffset.UtcNow;
+        var snap = WorkflowSessionSnapshot.CreateNew(now) with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = Path.Combine(_dir, "missing-translation.json"),
+            TargetLanguage = "en",
+            DiarizationProvider = ProviderNames.NemoLocal,
+            SpeakersDetectedAtUtc = now,
+        };
+
+        var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
+
+        Assert.Contains("translation", result.ClearedArtifacts);
+        Assert.Equal(SessionWorkflowStage.Diarized, result.Snapshot.Stage);
+        Assert.Null(result.Snapshot.TargetLanguage);
+    }
+
+    [Fact]
+    public void ValidateArtifacts_DiarizedMissingMarker_DegradesToTranscribed()
+    {
+        var mediaPath = WriteFile("video.mp4");
+        var transcriptPath = WriteFile("transcript.json");
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Diarized,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            SpeakerVoiceAssignments = new() { ["spk_00"] = "voice-1" },
+        };
+
+        var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
+
+        Assert.Contains("diarization", result.ClearedArtifacts);
+        Assert.Equal(SessionWorkflowStage.Transcribed, result.Snapshot.Stage);
+        Assert.Null(result.Snapshot.SpeakerVoiceAssignments);
     }
 
     [Fact]

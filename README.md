@@ -1,11 +1,11 @@
 # Babel Player
 
-[![Sponsor](https://img.shields.io/github/sponsors/mta1124-1629472?label=Sponsor&logo=GitHub)](https://github.com/sponsors/mta1124-1629472)
-[![CI](https://github.com/mta1124-1629472/Babel-Player/actions/workflows/ci.yml/badge.svg)](https://github.com/mta1124-1629472/Babel-Player/actions/workflows/ci.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/mta1124-1629472/Babel-Player)](https://github.com/mta1124-1629472/Babel-Player/releases/latest)
+[![Sponsor](https://img.shields.io/github/sponsors/mta-babel?label=Sponsor&logo=GitHub)](https://github.com/sponsors/mta-babel)
+[![CI](https://github.com/Babelworks/Babel-Player/actions/workflows/ci.yml/badge.svg)](https://github.com/Babelworks/Babel-Player/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/Babelworks/Babel-Player)](https://github.com/Babelworks/Babel-Player/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)](#requirements)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
-[![License](https://img.shields.io/github/license/mta1124-1629472/Babel-Player)](LICENSE)
+[![License](https://img.shields.io/github/license/Babelworks/Babel-Player)](LICENSE)
 
 
 **Babel Player is a Windows desktop dubbing workstation**. Load source media, generate a timed transcript, translate the dialogue, produce a spoken dub, and preview the result in context. No external tools required.
@@ -18,7 +18,7 @@ source media → timed transcript → translated dialogue → spoken dubbed outp
 > Babel Player is built and maintained by a solo developer.
 > If you find it useful, consider sponsoring:
 >
-> [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/R5R01WOOYW)
+> [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/babel_player)
 
 ![Babel Player preview](Assets/preview.png)
 
@@ -193,7 +193,7 @@ Downloads are cached in `%LOCALAPPDATA%\BabelPlayer\runtime\`. The CPU runtime b
 
 ### Portable
 
-1. Download `Babel-Player-<version>-win-x64-portable.zip` from [GitHub Releases](https://github.com/mta1124-1629472/Babel-Player/releases/latest).
+1. Download `Babel-Player-<version>-win-x64-portable.zip` from [GitHub Releases](https://github.com/Babelworks/Babel-Player/releases/latest).
 2. Extract to a folder of your choice, e.g. `C:\Apps\BabelPlayer`.
 3. Run `BabelPlayer.exe`.
 
@@ -239,7 +239,7 @@ Sessions save automatically. Your session will appear in the recent sessions lis
 ## Source Build
 
 ```powershell
-git clone https://github.com/mta1124-1629472/Babel-Player.git
+git clone https://github.com/Babelworks/Babel-Player.git
 cd Babel-Player
 dotnet build
 dotnet run --project BabelPlayer.csproj

@@ -127,6 +127,7 @@ public partial class App : Application
                 logFilePath: _logFilePath);
 
             desktop.MainWindow = new MainWindow { DataContext = mainVm };
+            var coordinator = _sessionWorkflowCoordinator;
 
             // Wire live bootstrap progress into the status bar.
             // Debounce: create a new 150 ms one-shot timer on each line; swapping
@@ -137,7 +138,7 @@ public partial class App : Application
             {
                 var captured = line;
                 var timer = new System.Threading.Timer(
-                    _ => Dispatcher.UIThread.Post(() => mainVm.Playback.StatusText = $"Setup: {captured}"),
+                    _ => Dispatcher.UIThread.Post(() => coordinator.RuntimeWarmupStatusText = $"Setup: {captured}"),
                     null, 150, System.Threading.Timeout.Infinite);
                 System.Threading.Interlocked.Exchange(ref statusDebounce, timer)?.Dispose();
             }
@@ -151,7 +152,6 @@ public partial class App : Application
             // transcription/TTS workflow explicitly requests it.
 
             // Run heavy startup probes in background and publish results on UI thread.
-            var coordinator = _sessionWorkflowCoordinator;
             Task.Run(() => coordinator.GatherBootstrapWarmupData())
                 .ContinueWith(t =>
                 {

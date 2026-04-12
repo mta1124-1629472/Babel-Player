@@ -29,7 +29,7 @@ jobs:
       - name: Build
         run: dotnet build Babel-Player.sln --no-restore --configuration Release
 
-      - name: Run core tests only
+      - name: Run core tests with coverage
         run: >
           dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
           --no-build
@@ -37,6 +37,7 @@ jobs:
           --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation"
           --logger "trx;LogFileName=core-results.trx"
           --results-directory TestResults
+          --collect:"XPlat Code Coverage"
 
       - name: Upload test results
         if: failure()
@@ -45,3 +46,19 @@ jobs:
           name: core-test-results
           path: TestResults/core-results.trx
           retention-days: 3
+
+      - name: Upload coverage to Codacy
+        if: always()
+        env:
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+        run: |
+          if [ -z "${CODACY_PROJECT_TOKEN}" ]; then
+            echo "Skipping Codacy upload: CODACY_PROJECT_TOKEN is not set."
+            exit 0
+          fi
+
+           bash <(curl -Ls https://coverage.codacy.com/get.sh) report \
+             --language C# \
+             --coverage-reports TestResults/*/coverage.cobertura.xml \
+             --partial \
+             --project-token "$CODACY_PROJECT_TOKEN"

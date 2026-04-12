@@ -1202,7 +1202,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             _ctx.Settings.TtsVoice,
             _ctx.Settings.TargetLanguage));
 
-        Assert.Equal(1, manager.RequestCount);
+        Assert.True(SpinWait.SpinUntil(() => manager.EnsureCount == 1, TimeSpan.FromSeconds(2)));
+        Assert.Equal(0, manager.RequestCount);
         Assert.Equal(ContainerizedStartupTrigger.SettingsChanged, manager.LastRequestTrigger);
     }
 
@@ -1577,6 +1578,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             CancellationToken cancellationToken = default)
         {
             EnsureCount++;
+            LastRequestTrigger = trigger;
             return Task.FromResult(new ContainerizedStartResult(true, true, "started"));
         }
     }

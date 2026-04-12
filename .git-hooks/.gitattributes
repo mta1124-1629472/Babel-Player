@@ -1,0 +1,2 @@
+# Git hooks — always LF line endings (bash scripts)
+.git-hooks/* text eol=lf

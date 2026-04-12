@@ -29,8 +29,8 @@ public sealed class QwenContainerTtsProvider(
     private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
     private bool _disposed;
 
-    // TODO: If >1 concurrency is needed later, make GenerateSegmentTtsAsync and access to
-    // _referenceIdCache/_autoExtractedReferencePath thread-safe before reverting to QwenRuntimePolicy.ResolveMaxConcurrency().
+    // MaxConcurrency is kept at 1 because _referenceIdCache and _autoExtractedReferencePath
+    // are not thread-safe. Increase only after adding proper synchronization.
     public int MaxConcurrency => 1;
 
     /// <summary>
