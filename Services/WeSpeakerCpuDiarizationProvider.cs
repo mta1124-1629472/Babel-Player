@@ -58,7 +58,7 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
                 $"Managed CPU runtime is not ready for WeSpeaker: {_cpuRuntimeManager.FailureReason ?? "bootstrap failed"}");
         }
 
-        if (_cpuRuntimeManager.CheckNeedsBootstrapAsync().GetAwaiter().GetResult())
+        if (_cpuRuntimeManager.State != ManagedCpuState.Ready)
         {
             return new ProviderReadiness(
                 false,

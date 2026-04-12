@@ -51,7 +51,7 @@ public sealed class ManagedCpuRuntimeManager
     /// <summary>
     /// True when the CPU venv needs to be (re)installed — either missing or requirements changed.
     /// </summary>
-    public async Task<bool> CheckNeedsBootstrapAsync()
+    public async Task<bool> CheckNeedsBootstrapAsync(CancellationToken cancellationToken = default)
     {
         var pythonPath = GetPythonExecutablePath();
         if (!File.Exists(pythonPath))
@@ -61,13 +61,13 @@ public sealed class ManagedCpuRuntimeManager
             return true;
         try
         {
-            var stored = await File.ReadAllTextAsync(markerPath).ConfigureAwait(false);
+            var stored = await File.ReadAllTextAsync(markerPath, cancellationToken).ConfigureAwait(false);
             stored = stored.Trim();
             var requirementsPath = _requirementsPathResolver();
             if (!File.Exists(requirementsPath))
                 return true;
 
-            var hash = await ComputeMarkerHashAsync(requirementsPath).ConfigureAwait(false);
+            var hash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
             return !string.Equals(stored, hash, StringComparison.Ordinal);
         }
         catch
@@ -88,7 +88,7 @@ public sealed class ManagedCpuRuntimeManager
         Action<string>? onStatusLine = null,
         CancellationToken cancellationToken = default)
     {
-        if (!await CheckNeedsBootstrapAsync().ConfigureAwait(false))
+        if (!await CheckNeedsBootstrapAsync(cancellationToken).ConfigureAwait(false))
         {
             State = ManagedCpuState.Ready;
             _log.Info("CPU runtime: already installed and up to date.");
@@ -99,7 +99,7 @@ public sealed class ManagedCpuRuntimeManager
         try
         {
             // Re-check under lock in case a concurrent call already bootstrapped.
-            if (!await CheckNeedsBootstrapAsync().ConfigureAwait(false))
+            if (!await CheckNeedsBootstrapAsync(cancellationToken).ConfigureAwait(false))
             {
                 State = ManagedCpuState.Ready;
                 return;
@@ -190,7 +190,7 @@ public sealed class ManagedCpuRuntimeManager
             return;
         }
 
-        var markerHash = await ComputeMarkerHashAsync(requirementsPath).ConfigureAwait(false);
+        var markerHash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(
             markerPath,
             markerHash,
@@ -257,9 +257,9 @@ public sealed class ManagedCpuRuntimeManager
 
     // Marker format: "python:{version}\n{requirements_content}"
     // Including PythonVersion ensures a version upgrade invalidates the existing venv.
-    private async Task<string> ComputeMarkerHashAsync(string requirementsPath)
+    private async Task<string> ComputeMarkerHashAsync(string requirementsPath, CancellationToken cancellationToken = default)
     {
-        var fileContent = await File.ReadAllTextAsync(requirementsPath).ConfigureAwait(false);
+        var fileContent = await File.ReadAllTextAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
         var content = $"python:{PythonVersion}\n{fileContent}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
