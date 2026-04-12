@@ -827,11 +827,11 @@
                                     ToolTip.Tip="Skip to previous segment"
                                     AutomationProperties.Name="Skip to previous segment" />
                             <Button Classes="control-pill" Content="&#x23EA;&#xFE0E;"
-                                    Command="{Binding Playback.SkipBackwardCommand}"
-                                    IsEnabled="{Binding Playback.HasSegments}"
+                                    Command="{Binding Playback.RewindCommand}"
+                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                     Padding="8,6" FontSize="15"
-                                    ToolTip.Tip="Rewind"
-                                    AutomationProperties.Name="Rewind" />
+                                    ToolTip.Tip="Rewind 10 seconds"
+                                    AutomationProperties.Name="Rewind 10 seconds" />
                             <Button Command="{Binding Playback.PlayPauseSourceCommand}"
                                     IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                     Width="42" Height="42" Padding="0" Margin="3,0"
@@ -851,11 +851,11 @@
                                            VerticalAlignment="Center" />
                             </Button>
                             <Button Classes="control-pill" Content="&#x23E9;&#xFE0E;"
-                                    Command="{Binding Playback.SkipForwardCommand}"
-                                    IsEnabled="{Binding Playback.HasSegments}"
+                                    Command="{Binding Playback.FastForwardCommand}"
+                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                     Padding="8,6" FontSize="15"
-                                    ToolTip.Tip="Fast forward"
-                                    AutomationProperties.Name="Fast forward" />
+                                    ToolTip.Tip="Fast forward 10 seconds"
+                                    AutomationProperties.Name="Fast forward 10 seconds" />
                             <Button Classes="control-pill" Content="&#x23ED;&#xFE0E;"
                                     Command="{Binding Playback.SkipForwardCommand}"
                                     IsEnabled="{Binding Playback.HasSegments}"
