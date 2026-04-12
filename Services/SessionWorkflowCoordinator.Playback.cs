@@ -745,6 +745,8 @@ public sealed partial class SessionWorkflowCoordinator
                 if (!completed)
                 {
                     _log.Warning("TTS shutdown timed out — leaving in-flight TTS service alive to complete pending operations.");
+                    // Skip TTS service disposal but still clean up transport manager
+                    _transportManager.Dispose();
                     return;
                 }
             }

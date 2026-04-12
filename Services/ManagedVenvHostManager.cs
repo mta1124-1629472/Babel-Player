@@ -124,6 +124,30 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     }
 
     /// <summary>
+    /// Returns the current probe status for the managed local GPU host, or starts a background probe if none is in flight.
+    /// </summary>
+    /// <param name="settings">Application settings used to validate that the probe has been initialized.</param>
+    /// <returns>
+    /// A <see cref="ContainerizedProbeResult"/> describing the current host state, capabilities, and any error detail.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings"/> is null.</exception>
+    public ContainerizedProbeResult GetCurrentStatus(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (_probe is null)
+        {
+            return new ContainerizedProbeResult(
+                AppSettings.ManagedGpuServiceUrl,
+                ContainerizedProbeState.Unavailable,
+                DateTimeOffset.UtcNow,
+                "Managed host probe not initialized.");
+        }
+
+        return _probe.GetCurrentOrStartBackgroundProbe(AppSettings.ManagedGpuServiceUrl);
+    }
+
+    /// <summary>
     /// Orchestrates ensuring the managed local GPU host is running and ready, reusing an existing host, deferring restart when busy, or performing a restart/bootstrap as needed.
     /// </summary>
     /// <param name="settings">Application settings used to decide whether to attempt and how to start the managed GPU host.</param>

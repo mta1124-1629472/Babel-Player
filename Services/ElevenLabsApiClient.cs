@@ -70,11 +70,14 @@ public sealed class ElevenLabsApiClient : IDisposable
         };
         requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("audio/mpeg"));
 
-        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            .ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false);
         using var fileStream = System.IO.File.Create(outputPath);
-        await stream.CopyToAsync(fileStream, cancellationToken);
+        await stream.CopyToAsync(fileStream, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public void Dispose() => _httpClient.Dispose();

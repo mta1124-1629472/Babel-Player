@@ -1581,5 +1581,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             LastRequestTrigger = trigger;
             return Task.FromResult(new ContainerizedStartResult(true, true, "started"));
         }
+
+        public ContainerizedProbeResult GetCurrentStatus(AppSettings settings)
+            => new(settings.EffectiveContainerizedServiceUrl, ContainerizedProbeState.Unavailable, DateTimeOffset.UtcNow, "Fake manager.");
     }
 }

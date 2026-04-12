@@ -37,8 +37,9 @@ Following a comprehensive audit of the codebase, the following issues and opport
   - *Fix:* Refactor to use the `FireAndForgetAsync` extension method introduced in Phase 1.2, or return a `Task` that the caller gracefully ignores using the helper.
 
 ### 3. Missing Opportunities (unused language/framework features, better abstractions)
-- **Streaming Downloads for Cloud APIs:** While `ContainerizedInferenceClient` correctly uses `ReadAsStreamAsync` (Phase 1.5), the cloud API clients (`Services/OpenAiApiClient.cs` and `Services/ElevenLabsApiClient.cs`) still use `ReadAsByteArrayAsync`. This buffers entire audio responses in memory before writing to disk.
-  - *Fix:* Update both cloud API clients to use `ReadAsStreamAsync` piped to `File.Create` via `CopyToAsync`.
+- **Streaming Downloads for Cloud APIs:** ~~While `ContainerizedInferenceClient` correctly uses `ReadAsStreamAsync` (Phase 1.5), the cloud API clients (`Services/OpenAiApiClient.cs` and `Services/ElevenLabsApiClient.cs`) still use `ReadAsByteArrayAsync`. This buffers entire audio responses in memory before writing to disk.~~
+  - ~~*Fix:* Update both cloud API clients to use `ReadAsStreamAsync` piped to `File.Create` via `CopyToAsync`.~~
+  - *Status:* **Resolved.** `OpenAiApiClient.DownloadSpeechAsync` and `ElevenLabsApiClient.DownloadSpeechAsync` both use `HttpCompletionOption.ResponseHeadersRead`, `ReadAsStreamAsync`, and `CopyToAsync` to stream audio to disk without buffering the full response in memory.
 
 ### 4. Code Smells (dead code, duplication, excessive complexity, poor naming)
 - **God Object ViewModel:** `ViewModels/EmbeddedPlaybackViewModel.cs` is ~1200 lines long and handles playback controls, pipeline execution, provider selection, diarization, dub mode, and subtitle management.
@@ -84,7 +85,7 @@ Low-risk fixes that eliminate silent bugs and reduce risk before larger changes.
 - **Status:** **Resolved.** Explicit checks added to `SessionWorkflowCoordinator.Pipeline.cs`.
 
 ### 1.5 — Stream TTS Audio Downloads
-- **Status:** **Resolved.** Implemented for `ContainerizedInferenceClient.cs` (though cloud providers remain unoptimized; see Codebase Audit Findings).
+- **Status:** **Resolved.** Implemented for `ContainerizedInferenceClient.cs`, `OpenAiApiClient.cs`, and `ElevenLabsApiClient.cs` using `ReadAsStreamAsync` + `CopyToAsync`.
 
 ### 1.6 — Reuse HttpClient for Cloud Providers
 - **Status:** **Resolved.** `HttpClient` is now reused in cloud provider instances.
@@ -189,7 +190,7 @@ Major structural changes that benefit from all prior stabilization. Estimated ef
 | Reuse HttpClient | ~10% (cloud) | ~4% | Trivial | None | 1 ✅ |
 | Eliminate double synthesis | ~50% | ~20% | Low | Low | 2 ✅ |
 | Provider-aware parallelism | ~30% (cloud) | ~10% | Very low | Low | 2 ✅ |
-| ~~Diarization registry fix~~ | — | — | ~~Low~~ | ~~Low~~ | ~~3~~ SKIP | ALREADY RESOLVED
+| ~~Diarization registry fix~~ | — | — | ~~Low~~ | ~~Low~~ | ~~3~~ (already resolved) |
 | NeMo diarization endpoint | — | — | Low-med | Low | 3 |
 | WeSpeaker endpoint | — | — | Low | Low | 3 |
 | NeMo + WeSpeaker C# providers | — | — | Low-med | Low | 3 |

@@ -202,7 +202,8 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        await client.DownloadSpeechAsync(request.Text, DefaultVoiceId, request.OutputAudioPath, modelId, cancellationToken);
+        await client.DownloadSpeechAsync(request.Text, DefaultVoiceId, request.OutputAudioPath, modelId, cancellationToken)
+            .ConfigureAwait(false);
         var fileLength = new FileInfo(request.OutputAudioPath).Length;
 
         _log.Info($"[ElevenLabsTTS] Segment audio written: {request.OutputAudioPath} ({fileLength} bytes)");

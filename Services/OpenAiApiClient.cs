@@ -97,17 +97,17 @@ public sealed class OpenAiApiClient : IDisposable
         var json = JsonSerializer.Serialize(request, JsonOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "audio/speech") { Content = content };
-        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         
         if (!response.IsSuccessStatusCode)
         {
-            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             throw CreateApiException(response.StatusCode, payload);
         }
 
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var fileStream = System.IO.File.Create(outputPath);
-        await stream.CopyToAsync(fileStream, cancellationToken);
+        await stream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<OpenAiTranscriptionPayload> TranscribeAudioAsync(

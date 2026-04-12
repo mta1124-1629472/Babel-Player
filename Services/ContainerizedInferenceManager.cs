@@ -33,6 +33,7 @@ public interface IContainerizedInferenceManager
         AppSettings settings,
         ContainerizedStartupTrigger trigger,
         CancellationToken cancellationToken = default);
+    ContainerizedProbeResult GetCurrentStatus(AppSettings settings);
 }
 
 public sealed record ContainerComposeStartRequest(
@@ -122,6 +123,22 @@ public sealed class ContainerizedInferenceManager(
                     _inFlightStartTask = null;
             }
         }
+    }
+
+    public ContainerizedProbeResult GetCurrentStatus(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        
+        if (_probe is null)
+        {
+            return new ContainerizedProbeResult(
+                settings.EffectiveContainerizedServiceUrl,
+                ContainerizedProbeState.Unavailable,
+                DateTimeOffset.UtcNow,
+                "Container probe not initialized.");
+        }
+
+        return _probe.GetCurrentOrStartBackgroundProbe(settings.EffectiveContainerizedServiceUrl);
     }
 
     private async Task<ContainerizedStartResult> EnsureStartedCoreAsync(

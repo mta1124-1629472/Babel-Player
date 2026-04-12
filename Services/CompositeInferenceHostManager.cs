@@ -32,6 +32,11 @@ public sealed class CompositeInferenceHostManager : IContainerizedInferenceManag
         return SelectManager(settings).EnsureStartedAsync(settings, trigger, cancellationToken);
     }
 
+    public ContainerizedProbeResult GetCurrentStatus(AppSettings settings)
+    {
+        return SelectManager(settings).GetCurrentStatus(settings);
+    }
+
     public void Dispose()
     {
         try

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Styling;
@@ -27,6 +28,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private readonly Func<bool> _hdrDisplayStateProvider;
     private bool _isHdrDisplayActive;
     private CancellationTokenSource? _restartCts;
+    private readonly DispatcherTimer _healthTimer;
 
     public SettingsViewModel(
         SettingsService settingsService,
@@ -81,6 +83,16 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         ToggleSegmentPanelHotkey    = "S";
         ToggleDubModeHotkey         = "D";
         ToggleFullscreenHotkey      = "F11";
+
+        _healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _healthTimer.Tick += (_, _) =>
+        {
+            try { UpdateBackendStatus(); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Health poll failed: {ex.Message}"); }
+        };
+        _healthTimer.Start();
+        
+        UpdateBackendStatus();
     }
 
     // ── About ─────────────────────────────────────────────────────────────────
@@ -97,7 +109,71 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private string _backendStatusText = "Idle";
 
+    [ObservableProperty]
+    private string _backendStatusBrush = "Gray";
+
+    [ObservableProperty]
+    private string? _backendErrorDetail;
+
     public bool CanRestartBackend => !IsRestartingBackend;
+
+    private void UpdateBackendStatus()
+    {
+        if (IsRestartingBackend) return;
+
+        var status = _containerizedManager.GetCurrentStatus(_coordinator.CurrentSettings);
+        
+        BackendStatusText = status.State switch
+        {
+            ContainerizedProbeState.Available => "Ready",
+            ContainerizedProbeState.Unavailable => "Unavailable",
+            ContainerizedProbeState.Checking => "Checking\u2026",
+            _ => status.State.ToString()
+        };
+
+        if (status is { Busy: true, BusyReason: not null })
+        {
+            BackendStatusText = $"Busy: {status.BusyReason}";
+        }
+
+        BackendStatusBrush = status.State switch
+        {
+            ContainerizedProbeState.Available => "Green",
+            ContainerizedProbeState.Unavailable => "Red",
+            ContainerizedProbeState.Checking => "Orange",
+            _ => "Gray"
+        };
+
+        BackendErrorDetail = status.ErrorDetail;
+    }
+
+    // ── Diagnostics ───────────────────────────────────────────────────────────
+
+    public string CpuInfo => _coordinator.HardwareSnapshot.CpuLine;
+    public string GpuInfo => _coordinator.HardwareSnapshot.GpuLine;
+    public string RamInfo => _coordinator.HardwareSnapshot.RamLine;
+    public string InferenceModeInfo => _coordinator.BootstrapDiagnostics.InferenceLine;
+    public string RuntimeWarmupInfo => _coordinator.RuntimeWarmupStatusText ?? "No active warmup";
+    public string TranslationFallbackInfo => _coordinator.TranslationFallbackNote ?? "None";
+    public string PythonInfo => _coordinator.BootstrapDiagnostics.PythonAvailable
+        ? _coordinator.BootstrapDiagnostics.PythonPath ?? "Path unavailable"
+        : "Not found";
+    public string FfmpegInfo => _coordinator.BootstrapDiagnostics.FfmpegAvailable
+        ? _coordinator.BootstrapDiagnostics.FfmpegPath ?? "Path unavailable"
+        : "Not found";
+
+    [RelayCommand]
+    private void RefreshDiagnostics()
+    {
+        OnPropertyChanged(nameof(CpuInfo));
+        OnPropertyChanged(nameof(GpuInfo));
+        OnPropertyChanged(nameof(RamInfo));
+        OnPropertyChanged(nameof(InferenceModeInfo));
+        OnPropertyChanged(nameof(RuntimeWarmupInfo));
+        OnPropertyChanged(nameof(TranslationFallbackInfo));
+        OnPropertyChanged(nameof(PythonInfo));
+        OnPropertyChanged(nameof(FfmpegInfo));
+    }
 
     [RelayCommand(CanExecute = nameof(CanRestartBackend))]
     private async Task RestartBackend()
@@ -377,15 +453,31 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
-        _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
+        _healthTimer.Stop();
         _restartCts?.Cancel();
         _restartCts?.Dispose();
-        _restartCts = null;
+        _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
     }
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics))
+        if (e.PropertyName == nameof(SessionWorkflowCoordinator.RuntimeWarmupStatusText))
+            OnPropertyChanged(nameof(RuntimeWarmupInfo));
+        else if (e.PropertyName == nameof(SessionWorkflowCoordinator.TranslationFallbackNote))
+            OnPropertyChanged(nameof(TranslationFallbackInfo));
+        else if (e.PropertyName == nameof(SessionWorkflowCoordinator.HardwareSnapshot))
+        {
+            OnPropertyChanged(nameof(CpuInfo));
+            OnPropertyChanged(nameof(GpuInfo));
+            OnPropertyChanged(nameof(RamInfo));
+        }
+        else if (e.PropertyName == nameof(SessionWorkflowCoordinator.BootstrapDiagnostics))
+        {
+            OnPropertyChanged(nameof(InferenceModeInfo));
+            OnPropertyChanged(nameof(PythonInfo));
+            OnPropertyChanged(nameof(FfmpegInfo));
+        }
+        else if (e.PropertyName == nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics))
         {
             OnPropertyChanged(nameof(VsrSupportHintText));
             OnPropertyChanged(nameof(VsrRequestedStateText));
@@ -414,5 +506,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         public Task<ContainerizedStartResult> EnsureStartedAsync(
             AppSettings s, ContainerizedStartupTrigger t, CancellationToken ct = default)
             => Task.FromResult(ContainerizedStartResult.AlreadyRunning);
+
+        public ContainerizedProbeResult GetCurrentStatus(AppSettings s)
+            => new(string.Empty, ContainerizedProbeState.Unavailable, DateTimeOffset.UtcNow, "No inference manager.");
     }
 }
