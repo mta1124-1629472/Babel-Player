@@ -46,6 +46,7 @@ exclude:
   - fix-syntax.ps1
   - fix-tests.ps1
   - setup-qwen-coder.ps1
+  - codacy-cli
   - codacy-fixes.patch
   - AGENTS.md
   - CLAUDE.md
