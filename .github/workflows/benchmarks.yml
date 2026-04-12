@@ -20,6 +20,8 @@ jobs:
         with:
           lfs: false
           token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
 
       - name: Setup Python
         uses: actions/setup-python@v5
