@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────
-# commit-msg — enforce conventional commit message format
+# commit-msg — gentle commit message guidance
 #
 # Installed via:  git config core.hooksPath .git-hooks
 #
 # Rules:
-#   • Must not be empty
-#   • Subject line ≤ 72 characters
-#   • Must not start with "Merge " (use --no-ff or rebase instead)
-#   • Must not contain "WIP" or "wip" (use draft PRs instead)
-#   • If contains "PLACEHOLDER", warn that it should be resolved
+#   • Subject line ≤ 72 characters (warning)
+#   • Suggests against "Merge " prefix (warning)
+#   • Suggests against "WIP" / "wip" (warning)
+#   • PLACEHOLDER mention (warning)
+#
+# Nothing is blocked. These are warnings only.
 # ─────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -23,11 +24,11 @@ BOLD='\033[1m'
 MSG_FILE="$1"
 MSG=$(cat "$MSG_FILE")
 
-WARN=0
+WARNINGS=0
 
 # ── Empty message ──────────────────────────────────────────
 if [[ -z "$(echo "$MSG" | tr -d '[:space:]')" ]]; then
-    echo -e "${RED}${BOLD}[commit-msg] COMMIT BLOCKED: Commit message is empty${NC}"
+    echo -e "${RED}${BOLD}[commit-msg] Commit message is empty${NC}"
     exit 1
 fi
 
@@ -35,32 +36,32 @@ fi
 SUBJECT=$(echo "$MSG" | head -n 1)
 SUBJECT_LEN=${#SUBJECT}
 if [[ $SUBJECT_LEN -gt 72 ]]; then
-    echo -e "${RED}${BOLD}[commit-msg] COMMIT BLOCKED: Subject line is $SUBJECT_LEN chars (max 72)${NC}"
+    echo -e "${YELLOW}[commit-msg] Subject line is ${SUBJECT_LEN} chars (try to keep ≤ 72)${NC}"
     echo -e "  Subject: $SUBJECT"
-    exit 1
+    WARNINGS=$((WARNINGS + 1))
 fi
 
-# ── No "Merge " prefix ─────────────────────────────────────
+# ── "Merge " prefix ────────────────────────────────────────
 if [[ "$SUBJECT" =~ ^Merge\  ]]; then
-    echo -e "${YELLOW}${BOLD}[commit-msg] WARNING: Commit starts with 'Merge' — consider rebasing instead${NC}"
-    WARN=1
+    echo -e "${YELLOW}[commit-msg] Starts with 'Merge' — consider rebasing instead${NC}"
+    WARNINGS=$((WARNINGS + 1))
 fi
 
-# ── No WIP ─────────────────────────────────────────────────
+# ── WIP ────────────────────────────────────────────────────
 if echo "$SUBJECT" | grep -qi "wip"; then
-    echo -e "${RED}${BOLD}[commit-msg] COMMIT BLOCKED: Commit message contains 'WIP' — use draft PRs instead${NC}"
-    exit 1
+    echo -e "${YELLOW}[commit-msg] Contains 'WIP' — consider a draft PR instead${NC}"
+    WARNINGS=$((WARNINGS + 1))
 fi
 
-# ── Placeholder warning ────────────────────────────────────
+# ── Placeholder ────────────────────────────────────────────
 if echo "$MSG" | grep -q "PLACEHOLDER"; then
-    echo -e "${YELLOW}${BOLD}[commit-msg] WARNING: Commit message contains 'PLACEHOLDER' — ensure this is intentional${NC}"
-    WARN=1
+    echo -e "${YELLOW}[commit-msg] Contains 'PLACEHOLDER' — make sure it's intentional${NC}"
+    WARNINGS=$((WARNINGS + 1))
 fi
 
 # ── Summary ────────────────────────────────────────────────
-if [[ $WARN -gt 0 ]]; then
-    echo -e "${YELLOW}[commit-msg] Commit allowed with warnings${NC}"
+if [[ $WARNINGS -gt 0 ]]; then
+    echo -e "${GREEN}[commit-msg] $WARNINGS warning(s) — proceeding anyway${NC}"
 fi
 
 exit 0
