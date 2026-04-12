@@ -776,19 +776,12 @@ public sealed partial class SessionWorkflowCoordinator
     /// </summary>
     private void ScheduleSafeTtsDisposal()
     {
-        var ttsService = _ttsService;
-        if (ttsService is null) return;
+        if (_ttsService is not IDisposable disposable) return;
 
         Task.Run(() =>
         {
-            try
-            {
-                (ttsService as IDisposable)?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                _log.Warning($"Background TTS service disposal failed: {ex.Message}");
-            }
+            try { disposable.Dispose(); }
+            catch (Exception ex) { _log.Warning($"Background TTS service disposal failed: {ex.Message}"); }
         }).FireAndForgetAsync(_log, "TTS background disposal");
     }
 }

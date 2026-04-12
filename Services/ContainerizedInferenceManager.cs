@@ -174,7 +174,7 @@ public sealed class ContainerizedInferenceManager(
                 composeFilePath);
         }
 
-        ContainerizedStartResult readinessResult;
+        bool ready;
         if (_probe is not null)
         {
             var probeResult = await _probe.WaitForProbeAsync(
@@ -182,34 +182,15 @@ public sealed class ContainerizedInferenceManager(
                 forceRefresh: true,
                 waitTimeout: PostStartProbeTimeout,
                 cancellationToken);
-
-            readinessResult = probeResult.State == ContainerizedProbeState.Available
-                ? new ContainerizedStartResult(
-                    true,
-                    true,
-                    $"Started local containerized inference service from {composeFilePath}.",
-                    composeFilePath)
-                : new ContainerizedStartResult(
-                    true,
-                    false,
-                    $"Container start requested from {composeFilePath}, but the service is still warming up or unavailable.",
-                    composeFilePath);
+            ready = probeResult.State == ContainerizedProbeState.Available;
         }
         else
         {
             var health = await SafeCheckHealthAsync(serviceUrl, PostStartProbeTimeout, cancellationToken);
-            readinessResult = health.IsAvailable
-                ? new ContainerizedStartResult(
-                    true,
-                    true,
-                    $"Started local containerized inference service from {composeFilePath}.",
-                    composeFilePath)
-                : new ContainerizedStartResult(
-                    true,
-                    false,
-                    $"Container start requested from {composeFilePath}, but the service is still warming up or unavailable.",
-                    composeFilePath);
+            ready = health.IsAvailable;
         }
+
+        var readinessResult = MakeReadinessResult(ready, composeFilePath);
 
         _log.Info(
             $"Container autostart result: trigger={trigger}, ready={readinessResult.IsReady}, message={readinessResult.Message}");
@@ -276,6 +257,13 @@ public sealed class ContainerizedInferenceManager(
             return ContainerHealthStatus.Unavailable(serviceUrl, ex.Message);
         }
     }
+
+    private static ContainerizedStartResult MakeReadinessResult(bool ready, string composeFilePath) =>
+        new(true, ready,
+            ready
+                ? $"Started local containerized inference service from {composeFilePath}."
+                : $"Container start requested from {composeFilePath}, but the service is still warming up or unavailable.",
+            composeFilePath);
 
     private ContainerizedStartResult Skip(string message)
     {

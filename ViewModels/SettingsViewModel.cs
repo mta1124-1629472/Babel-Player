@@ -129,18 +129,15 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         var status = _containerizedManager.GetCurrentStatus(_coordinator.CurrentSettings);
         
-        BackendStatusText = status.State switch
-        {
-            ContainerizedProbeState.Available => "Ready",
-            ContainerizedProbeState.Unavailable => "Unavailable",
-            ContainerizedProbeState.Checking => "Checking\u2026",
-            _ => status.State.ToString()
-        };
-
-        if (status is { Busy: true, BusyReason: not null })
-        {
-            BackendStatusText = $"Busy: {status.BusyReason}";
-        }
+        BackendStatusText = status is { Busy: true, BusyReason: not null }
+            ? $"Busy: {status.BusyReason}"
+            : status.State switch
+            {
+                ContainerizedProbeState.Available => "Ready",
+                ContainerizedProbeState.Unavailable => "Unavailable",
+                ContainerizedProbeState.Checking => "Checking\u2026",
+                _ => status.State.ToString()
+            };
 
         BackendStatusBrush = status.State switch
         {
