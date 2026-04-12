@@ -744,10 +744,10 @@ public sealed partial class SessionWorkflowCoordinator
                 bool completed = Task.WhenAll(_pendingTtsTasks).Wait(TimeSpan.FromSeconds(2));
                 if (!completed)
                 {
-                    _log.Warning("TTS shutdown timed out — leaving in-flight TTS service alive to complete pending operations.");
-                    // Skip TTS service disposal but still clean up transport manager
-                    _transportManager.Dispose();
-                    return;
+                    _log.Warning("TTS shutdown timed out — scheduling background disposal of TTS service.");
+                    // Schedule background disposal so in-flight tasks can still finish but
+                    // HttpClient connections are eventually released.
+                    ScheduleSafeTtsDisposal();
                 }
             }
             catch
@@ -758,5 +758,27 @@ public sealed partial class SessionWorkflowCoordinator
 
         (_ttsService as IDisposable)?.Dispose();
         _transportManager.Dispose();
+    }
+
+    /// <summary>
+    /// Schedules a fire-and-forget disposal of the TTS service on a thread-pool thread
+    /// so that in-flight requests are not blocked by the calling Dispose context.
+    /// </summary>
+    private void ScheduleSafeTtsDisposal()
+    {
+        var ttsService = _ttsService;
+        if (ttsService is null) return;
+
+        Task.Run(() =>
+        {
+            try
+            {
+                (ttsService as IDisposable)?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _log.Warning($"Background TTS service disposal failed: {ex.Message}");
+            }
+        }).FireAndForgetAsync(_log, "TTS background disposal");
     }
 }

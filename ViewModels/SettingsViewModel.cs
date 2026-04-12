@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Styling;
 using Babel.Player.Models;
 using Babel.Player.Services;
@@ -88,7 +89,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _healthTimer.Tick += (_, _) =>
         {
             try { UpdateBackendStatus(); }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Health poll failed: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                _coordinator.Log.Warning($"Health poll failed: {ex.Message}");
+                BackendStatusText = "Poll error";
+                BackendStatusBrush = Brushes.Red;
+            }
         };
         _healthTimer.Start();
         
@@ -110,7 +116,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private string _backendStatusText = "Idle";
 
     [ObservableProperty]
-    private string _backendStatusBrush = "Gray";
+    private IBrush _backendStatusBrush = Brushes.Gray;
 
     [ObservableProperty]
     private string? _backendErrorDetail;
@@ -138,10 +144,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         BackendStatusBrush = status.State switch
         {
-            ContainerizedProbeState.Available => "Green",
-            ContainerizedProbeState.Unavailable => "Red",
-            ContainerizedProbeState.Checking => "Orange",
-            _ => "Gray"
+            ContainerizedProbeState.Available => Brushes.Green,
+            ContainerizedProbeState.Unavailable => Brushes.Red,
+            ContainerizedProbeState.Checking => Brushes.Orange,
+            _ => Brushes.Gray
         };
 
         BackendErrorDetail = status.ErrorDetail;

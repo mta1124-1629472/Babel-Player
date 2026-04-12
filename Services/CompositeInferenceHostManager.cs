@@ -34,6 +34,7 @@ public sealed class CompositeInferenceHostManager : IContainerizedInferenceManag
 
     public ContainerizedProbeResult GetCurrentStatus(AppSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
         return SelectManager(settings).GetCurrentStatus(settings);
     }
 
