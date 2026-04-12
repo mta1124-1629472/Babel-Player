@@ -63,7 +63,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
                 if (item is string line)
                 {
                     try { await File.AppendAllTextAsync(LogFilePath, line); }
-                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to write log line: {ex.Message}"); }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to write log line to '{LogFilePath}': {ex}"); }
                 }
                 else if (item is TaskCompletionSource<bool> tcs)
                 {
@@ -79,7 +79,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
             if (remaining is string line)
             {
                 try { File.AppendAllText(LogFilePath, line); }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to drain log line: {ex.Message}"); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to drain log line to '{LogFilePath}': {ex}"); }
             }
             else if (remaining is TaskCompletionSource<bool> tcs)
             {
