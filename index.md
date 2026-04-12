@@ -38,7 +38,11 @@ See the [Privacy Policy]({{ site.baseurl }}/privacy/) for full details.
 
 [**Download the latest release →**](https://github.com/Babelworks/Babel-Player/releases/latest)
 
-**Requirements:** Windows 10/11. Release bundles are self-contained (runtime included), so no separate .NET install is required. Building from source requires the .NET 10 SDK.
+## Requirements
+
+- **OS:** Windows 10/11 x64
+- **Release builds:** Self-contained — runtime included, no separate .NET install required
+- **Source builds:** .NET 10 SDK
 
 ---
 

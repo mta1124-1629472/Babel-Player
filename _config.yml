@@ -9,16 +9,59 @@ author: Babelworks
 github_username: Babelworks
 repository: Babelworks/Babel-Player
 
-# Navigation
-nav_links:
-  - title: GitHub
-    url: https://github.com/Babelworks/Babel-Player
-  - title: Releases
-    url: https://github.com/Babelworks/Babel-Player/releases/latest
-  - title: Privacy Policy
-    url: /Babel-Player/privacy/
-
 # Build settings
 markdown: kramdown
 plugins:
   - jekyll-seo-tag
+
+# Exclude all non-site repo content from the Pages build
+exclude:
+  - Babel-Player.sln
+  - BabelPlayer.csproj
+  - App.axaml
+  - App.axaml.cs
+  - AppIdentity.cs
+  - BuildInfo.cs
+  - Program.cs
+  - ViewLocator.cs
+  - app.manifest
+  - build_output.txt
+  - nuget.config
+  - opencode.json
+  - docker-compose.yml
+  - add-bootstrap-mocks.ps1
+  - dev.bat
+  - dev.sh
+  - fix-constructor.ps1
+  - fix-duplicates.ps1
+  - fix-syntax.ps1
+  - fix-tests.ps1
+  - setup-qwen-coder.ps1
+  - codacy-fixes.patch
+  - AGENTS.md
+  - CLAUDE.md
+  - GEMINI.md
+  - QWEN.md
+  - PLAN.md
+  - PRIVACY.md
+  - CONTRIBUTING.md
+  - gemini.md
+  - Assets/
+  - BabelPlayer.Tests/
+  - Converters/
+  - Models/
+  - Properties/
+  - Services/
+  - ViewModels/
+  - Views/
+  - docs/
+  - inference/
+  - installer/
+  - native/
+  - scripts/
+  - skills/
+  - tools/
+  - .vscode/
+  - .claude/
+  - .codacy/
+  - .codex/
