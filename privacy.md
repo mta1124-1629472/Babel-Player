@@ -40,7 +40,7 @@ The application will only access the internet for the following explicit user-in
 
 ## 4. Persistence
 
-- **Speaker Registry:** Character voice mappings are stored locally in `%LOCALAPPDATA%\Babel-Player\`. This data never leaves your machine.
+- **Speaker Registry:** Character voice mappings are stored locally in `%LOCALAPPDATA%\BabelPlayer\`. This data never leaves your machine.
 - **Media Metadata:** Subtitles and translation caches are stored next to your media files or in your local temp folder.
 
 ---
