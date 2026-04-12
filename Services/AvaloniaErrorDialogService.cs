@@ -154,7 +154,7 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
             try
             {
                 var dir = System.IO.Path.GetDirectoryName(logFilePath!);
-                if (dir != null)
+                if (dir != null && System.IO.Directory.Exists(dir))
                 {
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                     {

@@ -10,7 +10,7 @@ using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
-public sealed class NllbTranslationProvider : PythonSubprocessServiceBase, ITranslationProvider
+public class NllbTranslationProvider : PythonSubprocessServiceBase, ITranslationProvider
 {
     private readonly string _model;
 
