@@ -160,6 +160,7 @@ public sealed class ContainerizedProbeMetricsTests : IClassFixture<SessionWorkfl
         Assert.Equal(0, metrics.ConsecutiveFailures);
         Assert.Equal(0, metrics.SuccessRate);
         Assert.Equal(0, metrics.CacheHitRate);
+        Assert.Equal(0, metrics.AverageDurationMs);
         Assert.Null(metrics.LastError);
         Assert.Equal(DateTimeOffset.MinValue, metrics.LastProbeAtUtc);
         Assert.Equal(DateTimeOffset.MinValue, metrics.LastSuccessAtUtc);
