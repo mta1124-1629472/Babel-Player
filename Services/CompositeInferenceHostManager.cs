@@ -10,13 +10,16 @@ public sealed class CompositeInferenceHostManager : IContainerizedInferenceManag
 {
     private readonly ManagedVenvHostManager _managedHostManager;
     private readonly IContainerizedInferenceManager _dockerHostManager;
+    private readonly AppLog _log;
 
     public CompositeInferenceHostManager(
         ManagedVenvHostManager managedHostManager,
-        IContainerizedInferenceManager dockerHostManager)
+        IContainerizedInferenceManager dockerHostManager,
+        AppLog log)
     {
         _managedHostManager = managedHostManager;
         _dockerHostManager = dockerHostManager;
+        _log = log;
     }
 
     public void RequestEnsureStarted(AppSettings settings, ContainerizedStartupTrigger trigger)
@@ -44,8 +47,9 @@ public sealed class CompositeInferenceHostManager : IContainerizedInferenceManag
         {
             _managedHostManager.Dispose();
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Warning($"Failed to dispose managed host manager: {ex.Message}");
         }
 
         if (_dockerHostManager is IDisposable disposableDockerManager)
@@ -54,8 +58,9 @@ public sealed class CompositeInferenceHostManager : IContainerizedInferenceManag
             {
                 disposableDockerManager.Dispose();
             }
-            catch
+            catch (Exception ex)
             {
+                _log.Warning($"Failed to dispose docker host manager: {ex.Message}");
             }
         }
     }
