@@ -168,7 +168,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
-        var scriptChangedSinceLastStart = IsScriptChangedSinceLastStart();
+        var scriptChangedSinceLastStart = await IsScriptChangedSinceLastStartAsync(cancellationToken).ConfigureAwait(false);
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
 
@@ -301,7 +301,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"Managed GPU runtime paths: runtime_root={runtimeRoot}, venv_dir={venvDir}, python={pythonPath}, " +
             $"script={inferenceScriptPath}, requirements={requirementsPath}, constraints={constraintsPath}, uv={uvPath}, compute_type={computeType}");
 
-        var bootstrapVersion = ComputeBootstrapVersion(requirementsPath, constraintsPath);
+        var bootstrapVersion = await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath, cancellationToken).ConfigureAwait(false);
         var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
         var markerValue = File.Exists(markerPath) ? await File.ReadAllTextAsync(markerPath, cancellationToken) : null;
         var needsBootstrap = !File.Exists(pythonPath) || !string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal);
@@ -470,7 +470,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         // Record which script version is running so IsScriptChangedSinceLastStart can detect edits
         var scriptVersionPath = Path.Combine(runtimeRoot, ".script-version");
-        await File.WriteAllTextAsync(scriptVersionPath, ComputeScriptVersion(inferenceScriptPath), cancellationToken);
+        await File.WriteAllTextAsync(scriptVersionPath, await ComputeScriptVersionAsync(inferenceScriptPath, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
 
         _log.Info(
             $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={_postStartProbeTimeout.TotalSeconds}s");
@@ -1382,7 +1382,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"tts={capabilities.TtsReady}('{capabilities.TtsDetail ?? "<none>"}')";
     }
 
-    private bool IsScriptChangedSinceLastStart()
+    private async Task<bool> IsScriptChangedSinceLastStartAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -1392,10 +1392,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var depsMarkerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
             if (!File.Exists(depsMarkerPath))
                 return true;
-            var storedDepsHash = File.ReadAllText(depsMarkerPath).Trim();
-            var currentDepsHash = ComputeBootstrapVersion(
+            var storedDepsHash = (await File.ReadAllTextAsync(depsMarkerPath, cancellationToken).ConfigureAwait(false)).Trim();
+            var currentDepsHash = await ComputeBootstrapVersionAsync(
                 _requirementsPathResolver(),
-                _constraintsPathResolver());
+                _constraintsPathResolver(),
+                cancellationToken).ConfigureAwait(false);
             if (!string.Equals(storedDepsHash, currentDepsHash, StringComparison.Ordinal))
                 return true;
 
@@ -1403,8 +1404,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var scriptMarkerPath = Path.Combine(runtimeRoot, ".script-version");
             if (!File.Exists(scriptMarkerPath))
                 return true;
-            var storedScriptHash = File.ReadAllText(scriptMarkerPath).Trim();
-            var currentScriptHash = ComputeScriptVersion(_inferenceScriptResolver());
+            var storedScriptHash = (await File.ReadAllTextAsync(scriptMarkerPath, cancellationToken).ConfigureAwait(false)).Trim();
+            var currentScriptHash = await ComputeScriptVersionAsync(_inferenceScriptResolver(), cancellationToken).ConfigureAwait(false);
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
         catch
@@ -1413,22 +1414,23 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
-    private static string ComputeBootstrapVersion(
+    private static async Task<string> ComputeBootstrapVersionAsync(
         string requirementsPath,
-        string constraintsPath)
+        string constraintsPath,
+        CancellationToken cancellationToken = default)
     {
         var builder = new StringBuilder();
         builder.AppendLine(PythonVersion);
-        builder.AppendLine(File.ReadAllText(requirementsPath));
-        builder.AppendLine(File.ReadAllText(constraintsPath));
+        builder.AppendLine(await File.ReadAllTextAsync(requirementsPath, cancellationToken).ConfigureAwait(false));
+        builder.AppendLine(await File.ReadAllTextAsync(constraintsPath, cancellationToken).ConfigureAwait(false));
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(bytes);
     }
 
-    private static string ComputeScriptVersion(string inferenceScriptPath)
+    private static async Task<string> ComputeScriptVersionAsync(string inferenceScriptPath, CancellationToken cancellationToken = default)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath)));
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(await File.ReadAllTextAsync(inferenceScriptPath, cancellationToken).ConfigureAwait(false)));
         return Convert.ToHexString(bytes);
     }
 
