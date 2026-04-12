@@ -11,13 +11,15 @@ using Xunit.Abstractions;
 
 namespace BabelPlayer.Tests;
 
-public class OpenAiApiClientPerformanceTests
+public class OpenAiApiClientPerformanceTests : IClassFixture<SessionWorkflowTemplateFixture>
 {
     private readonly ITestOutputHelper _output;
+    private readonly SessionWorkflowTemplateFixture _fixture;
 
-    public OpenAiApiClientPerformanceTests(ITestOutputHelper output)
+    public OpenAiApiClientPerformanceTests(ITestOutputHelper output, SessionWorkflowTemplateFixture fixture)
     {
         _output = output;
+        _fixture = fixture;
     }
 
     private class StubHttpMessageHandler : HttpMessageHandler
@@ -37,16 +39,29 @@ public class OpenAiApiClientPerformanceTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "Benchmark - run in dedicated workflow")]
     public async Task TranscribeAudioAsync_PerformanceTest()
     {
         var tempFile = Path.GetTempFileName();
         try
         {
             // Create a dummy large file to simulate I/O delay
-            byte[] data = new byte[1024 * 1024 * 200]; // 200 MB
-            new Random().NextBytes(data);
-            await File.WriteAllBytesAsync(tempFile, data);
+            const int targetSizeMb = 200;
+            const int chunkSizeMb = 4;
+            const int chunkSizeBytes = chunkSizeMb * 1024 * 1024;
+            const int chunks = targetSizeMb / chunkSizeMb;
+
+            var random = new Random();
+            var buffer = new byte[chunkSizeBytes];
+
+            await using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 8192, useAsync: true))
+            {
+                for (int i = 0; i < chunks; i++)
+                {
+                    random.NextBytes(buffer);
+                    await fileStream.WriteAsync(buffer, 0, buffer.Length);
+                }
+            }
 
             using var client = new OpenAiApiClient("test-key", new StubHttpMessageHandler());
 
