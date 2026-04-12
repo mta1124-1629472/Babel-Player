@@ -900,17 +900,73 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
 
     private static string ComputeBootstrapVersion(string requirementsPath, string constraintsPath)
     {
-        var builder = new StringBuilder();
-        builder.AppendLine("3.12"); // PythonVersion constant from ManagedVenvHostManager
-        builder.AppendLine(File.ReadAllText(requirementsPath));
-        builder.AppendLine(File.ReadAllText(constraintsPath));
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
+        hash.AppendData(Encoding.UTF8.GetBytes("3.12" + Environment.NewLine)); // PythonVersion constant from ManagedVenvHostManager
+
+        using (var reqFs = new FileStream(requirementsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
+        using (var reqSr = new StreamReader(reqFs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+        {
+            AppendUtf8TextToHash(hash, reqSr);
+        }
+
+        hash.AppendData(Encoding.UTF8.GetBytes(Environment.NewLine));
+
+        using (var consFs = new FileStream(constraintsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
+        using (var consSr = new StreamReader(consFs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+        {
+            AppendUtf8TextToHash(hash, consSr);
+        }
+
+        hash.AppendData(Encoding.UTF8.GetBytes(Environment.NewLine));
+
+        return Convert.ToHexString(hash.GetHashAndReset());
     }
 
     private static string ComputeScriptVersion(string inferenceScriptPath)
     {
         using var fs = new FileStream(inferenceScriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan);
-        return Convert.ToHexString(SHA256.HashData(fs));
+        using var sr = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
+        return ComputeUtf8TextHash(sr);
+    }
+
+    private static string ComputeUtf8TextHash(TextReader reader)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        AppendUtf8TextToHash(hash, reader);
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    private static void AppendUtf8TextToHash(IncrementalHash hash, TextReader reader)
+    {
+        var encoder = Encoding.UTF8.GetEncoder();
+        var charBuffer = new char[4096];
+        var byteBuffer = new byte[Encoding.UTF8.GetMaxByteCount(charBuffer.Length)];
+
+        while (true)
+        {
+            var charsRead = reader.Read(charBuffer, 0, charBuffer.Length);
+            if (charsRead == 0)
+                break;
+
+            encoder.Convert(
+                charBuffer, 0, charsRead,
+                byteBuffer, 0, byteBuffer.Length,
+                flush: false,
+                out _, out var bytesUsed, out _);
+
+            if (bytesUsed > 0)
+                hash.AppendData(byteBuffer, 0, bytesUsed);
+        }
+
+        encoder.Convert(
+            Array.Empty<char>(), 0, 0,
+            byteBuffer, 0, byteBuffer.Length,
+            flush: true,
+            out _, out var finalBytesUsed, out _);
+
+        if (finalBytesUsed > 0)
+            hash.AppendData(byteBuffer, 0, finalBytesUsed);
     }
 
     private void PrepareBootstrappedRuntimeArtifacts() =>
