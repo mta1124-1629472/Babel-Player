@@ -141,7 +141,7 @@ public sealed class OpenAiApiClient : IDisposable
 
         using var content = new MultipartFormDataContent();
 
-        await using var stream = new System.IO.FileStream(audioFilePath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read, 4096, System.IO.FileOptions.Asynchronous | System.IO.FileOptions.SequentialScan);
+        var stream = new System.IO.FileStream(audioFilePath, new System.IO.FileStreamOptions { Mode = System.IO.FileMode.Open, Access = System.IO.FileAccess.Read, Share = System.IO.FileShare.Read, BufferSize = 4096, Options = System.IO.FileOptions.Asynchronous | System.IO.FileOptions.SequentialScan });
         var streamContent = new StreamContent(stream);
         streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         content.Add(streamContent, "file", System.IO.Path.GetFileName(audioFilePath));
