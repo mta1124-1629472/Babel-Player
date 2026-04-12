@@ -374,21 +374,122 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
-    public async Task QwenContainerTtsProvider_GenerateTtsAsync_ThrowsNotImplementedException()
+    public async Task QwenContainerTtsProvider_GenerateTtsAsync_CombinesGeneratedSegments()
     {
-        // Combined generation is now delegated to the coordinator; provider must throw.
-        var client = CreateClient((_, _) =>
-            Json(HttpStatusCode.OK, "{\"success\":true}"));
-        var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
+        var translationPath = Path.Combine(_ctx.Dir, "qwen-combined.json");
+        var outputPath = Path.Combine(_ctx.Dir, "qwen-combined.mp3");
+        var referencePath = Path.Combine(_ctx.Dir, "reference.wav");
+        await File.WriteAllTextAsync(
+            translationPath,
+            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\",\"speakerId\":\"speaker_0\"},{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"mundo\",\"translatedText\":\"world\",\"speakerId\":\"speaker_0\"}]}");
+        await File.WriteAllBytesAsync(referencePath, [0x01, 0x02, 0x03]);
+
+        var registrationCount = 0;
+        var batchCount = 0;
+        var downloadCount = 0;
+        var client = CreateClient(async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/references")
+            {
+                registrationCount++;
+                return await Json(HttpStatusCode.OK, "{\"success\":true,\"reference_id\":\"ref-123\"}");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/batch")
+            {
+                batchCount++;
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"qwen\",\"segments\":[{\"segment_id\":\"segment_0.0\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/segment-1.mp3\",\"file_size_bytes\":3},{\"segment_id\":\"segment_1.0\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/segment-2.mp3\",\"file_size_bytes\":3}]}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri is not null && request.RequestUri.AbsolutePath.StartsWith("/tts/audio/", StringComparison.Ordinal))
+            {
+                downloadCount++;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent([(byte)downloadCount, 0x55, 0xAA]),
+                };
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+        var provider = new QwenContainerTtsProvider(
+            client,
+            _ctx.Log,
+            new TtsReferenceExtractor(_ctx.Log),
+            new FakeAudioProcessingService());
         var request = new TtsRequest(
-            Path.Combine(_ctx.Dir, "dummy.json"),
-            Path.Combine(_ctx.Dir, "out.mp3"),
-            "Qwen/Qwen3-TTS-12Hz-1.7B-Base");
+            translationPath,
+            outputPath,
+            "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+            SpeakerReferenceAudioPaths: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["speaker_0"] = referencePath,
+            },
+            Language: "en");
 
-        var ex = await Assert.ThrowsAsync<NotImplementedException>(
-            () => provider.GenerateTtsAsync(request));
+        var result = await provider.GenerateTtsAsync(request);
 
-        Assert.Contains("PLACEHOLDER", ex.Message, StringComparison.Ordinal);
+        Assert.True(result.Success);
+        Assert.Equal(outputPath, result.AudioPath);
+        Assert.True(File.Exists(outputPath));
+        Assert.Equal(1, registrationCount);
+        Assert.Equal(1, batchCount);
+        Assert.Equal(2, downloadCount);
+    }
+
+    [Fact]
+    public async Task QwenContainerTtsProvider_GenerateSegmentsAsync_UsesBatchEndpoint()
+    {
+        var referencePath = Path.Combine(_ctx.Dir, "reference-batch.wav");
+        await File.WriteAllBytesAsync(referencePath, [0x01, 0x02, 0x03]);
+
+        var registrationCount = 0;
+        var batchCount = 0;
+        var downloadCount = 0;
+        var client = CreateClient(async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/references")
+            {
+                registrationCount++;
+                return await Json(HttpStatusCode.OK, "{\"success\":true,\"reference_id\":\"ref-batch\"}");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/batch")
+            {
+                batchCount++;
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"qwen\",\"segments\":[{\"segment_id\":\"segment_a\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/batch-a.mp3\",\"file_size_bytes\":3},{\"segment_id\":\"segment_b\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/batch-b.mp3\",\"file_size_bytes\":3}]}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri is not null && request.RequestUri.AbsolutePath.StartsWith("/tts/audio/", StringComparison.Ordinal))
+            {
+                downloadCount++;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent([(byte)downloadCount, 0x33, 0x44]),
+                };
+            }
+
+            return await Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
+        var outputA = Path.Combine(_ctx.Dir, "segment-a.mp3");
+        var outputB = Path.Combine(_ctx.Dir, "segment-b.mp3");
+        var generated = await provider.GenerateSegmentsAsync(
+            [
+                new QwenBatchSegmentRequest("segment_a", "hello", outputA, "Qwen/Qwen3-TTS-12Hz-1.7B-Base", "speaker_0", referencePath, "en"),
+                new QwenBatchSegmentRequest("segment_b", "world", outputB, "Qwen/Qwen3-TTS-12Hz-1.7B-Base", "speaker_0", referencePath, "en"),
+            ]);
+
+        Assert.Equal(1, registrationCount);
+        Assert.Equal(1, batchCount);
+        Assert.Equal(2, downloadCount);
+        Assert.Equal(outputA, generated["segment_a"]);
+        Assert.Equal(outputB, generated["segment_b"]);
+        Assert.True(File.Exists(outputA));
+        Assert.True(File.Exists(outputB));
     }
 
     [Fact]

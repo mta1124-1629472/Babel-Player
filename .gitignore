@@ -4,6 +4,8 @@
 *.userosscache
 *.sln.docstates
 *.rsuser
+**/__pycache__/ 
+**/*.pyc
 
 # Build output
 [Dd]ebug/
