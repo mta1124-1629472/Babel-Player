@@ -219,11 +219,11 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
                 try
                 {
                     File.Delete(request.OutputAudioPath);
-                    _log.Warn($"[ElevenLabsTTS] Deleted partial file after failure: {request.OutputAudioPath}");
+                    _log.Info($"[ElevenLabsTTS] Deleted partial file after failure: {request.OutputAudioPath}");
                 }
                 catch (Exception cleanupEx)
                 {
-                    _log.Error($"[ElevenLabsTTS] Failed to delete partial file {request.OutputAudioPath}: {cleanupEx.Message}");
+                    _log.Error($"[ElevenLabsTTS] Failed to delete partial file {request.OutputAudioPath}: {cleanupEx.Message}", cleanupEx);
                 }
             }
             throw;
