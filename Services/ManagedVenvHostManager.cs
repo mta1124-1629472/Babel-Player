@@ -252,15 +252,17 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 .GetAwaiter()
                 .GetResult();
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Error("Failed to recover stale host processes during dispose.", ex);
             try
             {
                 if (_hostProcess is { HasExited: false })
                     _hostProcess.Kill(entireProcessTree: true);
             }
-            catch
+            catch (Exception killEx)
             {
+                _log.Error("Failed to kill tracked host process during dispose.", killEx);
             }
         }
     }
@@ -650,7 +652,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 stoppedAny = true;
 
             await DeletePidFileIfPresentAsync(hostPidPath);
-            await WaitForVenvUnlockAsync(pythonPath, cancellationToken);
+            await WaitForVenvUnlockAsync(pythonPath, _log, cancellationToken);
             return stoppedAny;
         }
         finally
@@ -844,12 +846,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
-    private static async Task WaitForVenvUnlockAsync(string pythonPath, CancellationToken cancellationToken)
+    private static async Task WaitForVenvUnlockAsync(string pythonPath, AppLog log, CancellationToken cancellationToken)
     {
         if (!File.Exists(pythonPath))
             return;
 
         var start = Stopwatch.StartNew();
+        var loggedLock = false;
         while (start.Elapsed < VenvUnlockTimeout)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -862,11 +865,21 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                     FileShare.None);
                 return;
             }
-            catch (IOException)
+            catch (IOException ex)
             {
+                if (!loggedLock)
+                {
+                    log.Info($"Waiting for managed GPU runtime to unlock... ({ex.Message})");
+                    loggedLock = true;
+                }
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                if (!loggedLock)
+                {
+                    log.Info($"Waiting for managed GPU runtime to unlock... ({ex.Message})");
+                    loggedLock = true;
+                }
             }
 
             await Task.Delay(100, cancellationToken);
@@ -1425,74 +1438,29 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string requirementsPath,
         string constraintsPath)
     {
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-
-        // Replicate builder.AppendLine(PythonVersion): hash its UTF-8 bytes + newline
-        hash.AppendData(Encoding.UTF8.GetBytes(PythonVersion + Environment.NewLine));
+        var builder = new StringBuilder();
+        builder.AppendLine(PythonVersion);
 
         using (var reqFs = new FileStream(requirementsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
-        using (var reqSr = new StreamReader(reqFs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+        using (var reqSr = new StreamReader(reqFs))
         {
-            AppendUtf8TextToHash(hash, reqSr);
+            builder.AppendLine(reqSr.ReadToEnd());
         }
-
-        hash.AppendData(Encoding.UTF8.GetBytes(Environment.NewLine));
 
         using (var consFs = new FileStream(constraintsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
-        using (var consSr = new StreamReader(consFs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+        using (var consSr = new StreamReader(consFs))
         {
-            AppendUtf8TextToHash(hash, consSr);
+            builder.AppendLine(consSr.ReadToEnd());
         }
 
-        hash.AppendData(Encoding.UTF8.GetBytes(Environment.NewLine));
-
-        return Convert.ToHexString(hash.GetHashAndReset());
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
+        return Convert.ToHexString(bytes);
     }
 
     private static string ComputeScriptVersion(string inferenceScriptPath)
     {
         using var fs = new FileStream(inferenceScriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan);
-        using var sr = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
-        return ComputeUtf8TextHash(sr);
-    }
-
-    private static string ComputeUtf8TextHash(TextReader reader)
-    {
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        AppendUtf8TextToHash(hash, reader);
-        return Convert.ToHexString(hash.GetHashAndReset());
-    }
-
-    private static void AppendUtf8TextToHash(IncrementalHash hash, TextReader reader)
-    {
-        var encoder = Encoding.UTF8.GetEncoder();
-        var charBuffer = new char[4096];
-        var byteBuffer = new byte[Encoding.UTF8.GetMaxByteCount(charBuffer.Length)];
-
-        while (true)
-        {
-            var charsRead = reader.Read(charBuffer, 0, charBuffer.Length);
-            if (charsRead == 0)
-                break;
-
-            encoder.Convert(
-                charBuffer, 0, charsRead,
-                byteBuffer, 0, byteBuffer.Length,
-                flush: false,
-                out _, out var bytesUsed, out _);
-
-            if (bytesUsed > 0)
-                hash.AppendData(byteBuffer, 0, bytesUsed);
-        }
-
-        encoder.Convert(
-            Array.Empty<char>(), 0, 0,
-            byteBuffer, 0, byteBuffer.Length,
-            flush: true,
-            out _, out var finalBytesUsed, out _);
-
-        if (finalBytesUsed > 0)
-            hash.AppendData(byteBuffer, 0, finalBytesUsed);
+        return Convert.ToHexString(SHA256.HashData(fs));
     }
 
     private static string ResolveInferenceScriptPath() =>
