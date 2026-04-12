@@ -6,8 +6,15 @@ using Xunit;
 
 namespace BabelPlayer.Tests;
 
-public sealed class ContainerizedProbeMetricsTests
+public sealed class ContainerizedProbeMetricsTests : IClassFixture<SessionWorkflowTemplateFixture>
 {
+    private readonly SessionWorkflowTemplateFixture _fixture;
+
+    public ContainerizedProbeMetricsTests(SessionWorkflowTemplateFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
     [Fact]
     public void ServiceMetrics_InitialState_IsZero()
     {
