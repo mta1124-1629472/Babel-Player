@@ -4,8 +4,8 @@
 - Scope: `Diarized workflow pause/resume`, `managed GPU runtime honesty`, `status-bar warm-up surfacing`, `requirements split`
 
 ## Gate Summary
-- `dotnet build Babel-Player.sln`: passed
-- `dotnet test Babel-Player.sln`: passed (`877` passed, `0` failed)
+- `dotnet build babel-player.sln`: passed
+- `dotnet test babel-player.sln`: passed (`877` passed, `0` failed)
 - `python3 scripts/check-architecture.py`: passed
 - `python -m py_compile inference/main.py`: passed
 
@@ -42,7 +42,7 @@
 
 ## Evidence
 - Automated test run:
-  - `dotnet test Babel-Player.sln`
+  - `dotnet test babel-player.sln`
   - Result: `877` passed, `0` failed
 - Architecture check:
   - `python3 scripts/check-architecture.py`
