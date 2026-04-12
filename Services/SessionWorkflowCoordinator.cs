@@ -541,7 +541,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         };
     }
 
-    public void ResetPipelineToDiarized()
+    private void ResetPipelineToDiarized()
     {
         if (CurrentSession.Stage < SessionWorkflowStage.Diarized || !HasDiarizationMarker(CurrentSession))
             return;

@@ -159,13 +159,26 @@ public sealed partial class SessionWorkflowCoordinator
 
     private async Task EnsureContainerizedAutostartForSettingsAsync(CancellationToken cancellationToken = default)
     {
-        if (_containerizedInferenceManager is null)
+        var manager = _containerizedInferenceManager;
+        if (manager is null)
             return;
 
-        var result = await _containerizedInferenceManager.EnsureStartedAsync(
+        var expectedServiceUrl = CurrentSettings.EffectiveGpuServiceUrl;
+        var expectedRequiresContainerized = RequiresContainerizedRuntime();
+        if (!expectedRequiresContainerized)
+            return;
+
+        var result = await manager.EnsureStartedAsync(
             CurrentSettings,
             ContainerizedStartupTrigger.SettingsChanged,
             cancellationToken).ConfigureAwait(false);
+
+        if (!ReferenceEquals(manager, _containerizedInferenceManager)
+            || !RequiresContainerizedRuntime()
+            || !string.Equals(CurrentSettings.EffectiveGpuServiceUrl, expectedServiceUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
 
         var message = result.Message;
         Dispatcher.UIThread.Post(() => RuntimeWarmupStatusText = message);

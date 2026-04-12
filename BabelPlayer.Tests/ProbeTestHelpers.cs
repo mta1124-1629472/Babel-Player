@@ -52,5 +52,9 @@ internal static class ProbeTestHelpers
 
             await Task.Delay(10);
         }
+
+        var observed = getCount();
+        throw new TimeoutException(
+            $"Timed out waiting for call count. Expected at least {expectedMinimum}, observed {observed} after {timeoutMs}ms.");
     }
 }

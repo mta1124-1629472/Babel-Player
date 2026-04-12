@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -29,10 +30,29 @@ public sealed class SessionWorkflowStageJsonConverter : JsonConverter<SessionWor
         if (string.IsNullOrWhiteSpace(value))
             throw new JsonException($"{nameof(SessionWorkflowStage)} cannot be empty.");
 
-        if (Enum.TryParse<SessionWorkflowStage>(value, ignoreCase: true, out var parsed))
+        var trimmed = value.Trim();
+        var isDigitsOnly = true;
+        foreach (var ch in trimmed)
+        {
+            if (!char.IsDigit(ch))
+            {
+                isDigitsOnly = false;
+                break;
+            }
+        }
+
+        if (isDigitsOnly)
+        {
+            if (int.TryParse(trimmed, NumberStyles.None, CultureInfo.InvariantCulture, out var numericValue))
+                return ParseLegacyStageNumber(numericValue);
+
+            throw new JsonException($"Unknown legacy {nameof(SessionWorkflowStage)} numeric value '{trimmed}'.");
+        }
+
+        if (Enum.TryParse<SessionWorkflowStage>(trimmed, ignoreCase: true, out var parsed))
             return parsed;
 
-        throw new JsonException($"Unknown {nameof(SessionWorkflowStage)} value '{value}'.");
+        throw new JsonException($"Unknown {nameof(SessionWorkflowStage)} value '{trimmed}'.");
     }
 
     private static SessionWorkflowStage ParseLegacyStageNumber(int value) =>

@@ -4,7 +4,7 @@
 
 **Babel Player** is a Windows desktop dubbing workstation built with C# / .NET 10 and Avalonia 12. It transforms source media through a pipeline:
 
-```
+```text
 source media → timed transcript → translated dialogue → spoken dubbed output → in-context preview and refinement
 ```
 
@@ -16,7 +16,7 @@ Users load a video or audio file, generate timed transcripts (local AI or cloud 
 - Python inference subprocess (managed via bundled `uv.exe` — no manual Python install needed)
 - GPU (CUDA) and CPU compute paths with CPU/GPU/Cloud selectors per stage
 - Session-based workflow with auto-save/restore from `%LOCALAPPDATA%\BabelPlayer\state\`
-- ~877 xUnit integration tests
+- comprehensive xUnit integration test suite
 
 ## Tech Stack
 
@@ -33,7 +33,7 @@ Users load a video or audio file, generate timed transcripts (local AI or cloud 
 
 ## Directory Structure
 
-```
+```text
 Babel-Player/
 ├── Models/                    # Domain records, enums, compute profiles
 │   └── Artifacts/             # Session artifact types
@@ -114,7 +114,7 @@ python -m py_compile inference/main.py
 All provider strings live in `Models/ProviderNames.cs`. No inline literals in production code.
 
 ### Stage progression runs through coordinator
-ViewModels must NOT call `TranscribeMediaAsync`, `TranslateTranscriptAsync`, or `GenerateTtsAsync` directly. All pipeline advancement through `SessionWorkflowCoordinator.AdvancePipelineAsync`.
+ViewModels must NOT call `TranscribeMediaAsync`, `TranslateTranscriptAsync`, or `GenerateTtsAsync` directly. Pipeline actions must route through `SessionWorkflowCoordinator` entry points: `AdvancePipelineAsync` for normal progression, `ContinuePipelineAsync` to resume after `Diarized`, and `RunTtsOnlyAsync` when already `Translated`.
 
 ### Python/C# field names are explicit contracts
 Python emits snake_case or camelCase. C# must match with hardcoded strings or `[JsonPropertyName]` attributes. Never rely on implicit .NET casing. Segment IDs follow `segment_{start}` format (e.g., `segment_0.0`).

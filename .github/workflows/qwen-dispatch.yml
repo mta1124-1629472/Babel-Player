@@ -72,8 +72,7 @@ jobs:
     steps:
       - name: 'Mint identity token'
         id: 'mint_identity_token'
-        if: |-
-          ${{ vars.APP_ID }}
+        if: vars.APP_ID
         uses: 'actions/create-github-app-token@a8d616148505b5069dccd32f177bb87d7f39123b' # ratchet:actions/create-github-app-token@v2
         with:
           app-id: '${{ vars.APP_ID }}'
@@ -126,8 +125,7 @@ jobs:
 
   review:
     needs: 'dispatch'
-    if: |-
-      ${{ needs.dispatch.outputs.command == 'review' }}
+    if: needs.dispatch.outputs.command == 'review'
     uses: './.github/workflows/qwen-review.yml'
     permissions:
       contents: 'read'
@@ -140,8 +138,7 @@ jobs:
 
   triage:
     needs: 'dispatch'
-    if: |-
-      ${{ needs.dispatch.outputs.command == 'triage' }}
+    if: needs.dispatch.outputs.command == 'triage'
     uses: './.github/workflows/qwen-triage.yml'
     permissions:
       contents: 'read'
@@ -154,8 +151,7 @@ jobs:
 
   invoke:
     needs: 'dispatch'
-    if: |-
-      ${{ needs.dispatch.outputs.command == 'invoke' }}
+    if: needs.dispatch.outputs.command == 'invoke'
     uses: './.github/workflows/qwen-invoke.yml'
     permissions:
       contents: 'read'
@@ -172,8 +168,7 @@ jobs:
       - 'review'
       - 'triage'
       - 'invoke'
-    if: |-
-      ${{ always() && !cancelled() && (failure() || needs.dispatch.outputs.command == 'fallthrough') }}
+    if: ${{ always() && !cancelled() && (failure() || needs.dispatch.outputs.command == 'fallthrough') }}
     runs-on: 'ubuntu-latest'
     permissions:
       contents: 'read'
@@ -182,8 +177,7 @@ jobs:
     steps:
       - name: 'Mint identity token'
         id: 'mint_identity_token'
-        if: |-
-          ${{ vars.APP_ID }}
+        if: vars.APP_ID
         uses: 'actions/create-github-app-token@a8d616148505b5069dccd32f177bb87d7f39123b' # ratchet:actions/create-github-app-token@v2
         with:
           app-id: '${{ vars.APP_ID }}'

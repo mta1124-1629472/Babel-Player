@@ -452,7 +452,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     public string TtsKeyStatus => _ttsKeyStatus;
     public ObservableCollection<ProviderHealthSnapshot> ProviderHealthSnapshots => _providerHealthSnapshots;
 
-    private sealed record ProviderDiagnosticsSelectionSnapshot(
+    internal sealed record ProviderDiagnosticsSelectionSnapshot(
         ComputeProfile TranscriptionRuntime,
         string TranscriptionProvider,
         string TranscriptionModel,
@@ -491,7 +491,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         QueueProviderHealthRefresh(snapshot, force);
     }
 
-    private ProviderDiagnosticsSelectionSnapshot CaptureProviderHealthSelectionSnapshot() =>
+    internal ProviderDiagnosticsSelectionSnapshot CaptureProviderHealthSelectionSnapshot() =>
         new(
             TranscriptionRuntime,
             TranscriptionProvider,
@@ -622,7 +622,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         _                    => "Managed local CPU runtime",
     };
 
-    private ProviderHealthSnapshot BuildTranscriptionHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
+    internal ProviderHealthSnapshot BuildTranscriptionHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
             section: "Transcription",
             providerId: snapshot.TranscriptionProvider,
@@ -640,7 +640,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             inlineStatusFactory: GetReadinessStatus,
             hostLabel: GetRuntimeHostLabel(snapshot.TranscriptionRuntime));
 
-    private ProviderHealthSnapshot BuildTranslationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
+    internal ProviderHealthSnapshot BuildTranslationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
             section: "Translation",
             providerId: snapshot.TranslationProvider,
@@ -658,7 +658,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             inlineStatusFactory: GetReadinessStatus,
             hostLabel: GetRuntimeHostLabel(snapshot.TranslationRuntime));
 
-    private ProviderHealthSnapshot BuildTtsHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
+    internal ProviderHealthSnapshot BuildTtsHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
             section: "TTS",
             providerId: snapshot.TtsProvider,
@@ -676,7 +676,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             inlineStatusFactory: GetReadinessStatus,
             hostLabel: GetRuntimeHostLabel(snapshot.TtsRuntime));
 
-    private ProviderHealthSnapshot BuildDiarizationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot)
+    internal ProviderHealthSnapshot BuildDiarizationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot)
     {
         var registry = _coordinator.DiarizationRegistry;
         if (registry is null)
@@ -2072,11 +2072,10 @@ partial void OnSourcePositionMsChanged(double value)
                 OnPropertyChanged(nameof(HwLibsLine));
                 break;
             case nameof(SessionWorkflowCoordinator.RuntimeWarmupStatusText):
-                if (!string.IsNullOrWhiteSpace(_coordinator.RuntimeWarmupStatusText))
-                {
-                    StatusText = _coordinator.RuntimeWarmupStatusText;
-                    ClearStatusErrorDetail();
-                }
+                StatusText = string.IsNullOrWhiteSpace(_coordinator.RuntimeWarmupStatusText)
+                    ? _coordinator.CurrentSession.StatusMessage
+                    : _coordinator.RuntimeWarmupStatusText;
+                ClearStatusErrorDetail();
                 break;
             case nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics):
                 OnPropertyChanged(nameof(HasVsrPlaybackStatus));
@@ -2392,7 +2391,7 @@ partial void OnSourcePositionMsChanged(double value)
             IsBusy = true;
             StatusText = "Running pipeline…";
             ClearStatusErrorDetail();
-            if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Diarized)
+            if (_coordinator.CurrentSession.Stage == SessionWorkflowStage.Diarized)
             {
                 await _coordinator.ContinuePipelineAsync(
                     progress: null,

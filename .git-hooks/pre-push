@@ -24,6 +24,7 @@ BOLD='\033[1m'
 
 PASS=0
 FAIL=0
+SOLUTION_FILE="Babel-Player.sln"
 
 pass() { echo -e "  ${GREEN}✔${NC}  $1"; PASS=$((PASS+1)); }
 fail() { echo -e "  ${RED}✘${NC}  $1"; FAIL=$((FAIL+1)); }
@@ -35,7 +36,7 @@ echo
 # ── 1. dotnet build ────────────────────────────────────────
 if command -v dotnet &>/dev/null; then
     echo -e "  ${BOLD}[1/4] Building solution...${NC}"
-    if dotnet build babel-player.sln --configuration Release -v q 2>&1; then
+    if dotnet build "$SOLUTION_FILE" --configuration Release -v q 2>&1; then
         pass "dotnet build OK (Release)"
     else
         fail "dotnet build failed"
@@ -43,7 +44,7 @@ if command -v dotnet &>/dev/null; then
 
     # ── 2. dotnet test (core only) ─────────────────────────
     echo -e "  ${BOLD}[2/4] Running core tests...${NC}"
-    TEST_OUTPUT=$(dotnet test babel-player.sln \
+    TEST_OUTPUT=$(dotnet test "$SOLUTION_FILE" \
         --configuration Release \
         --no-build \
         --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation" \
@@ -76,7 +77,9 @@ fi
 if command -v python &>/dev/null || command -v python3 &>/dev/null; then
     echo -e "  ${BOLD}[4/4] Checking Python inference syntax...${NC}"
     PY_CMD="${PY_CMD:-python3}"
-    command -v python &>/dev/null && PY_CMD=python
+    if ! command -v "$PY_CMD" &>/dev/null && command -v python &>/dev/null; then
+        PY_CMD=python
+    fi
     if $PY_CMD -m py_compile inference/main.py 2>&1; then
         pass "Python inference syntax OK"
     else

@@ -14,19 +14,19 @@ dialogue → spoken dubbed output → in-context preview and refinement.
 
 ```bash
 # Build solution (required before tests)
-dotnet build babel-player.sln
+dotnet build Babel-Player.sln
 
 # Run all tests
-dotnet test babel-player.sln
+dotnet test Babel-Player.sln
 
 # Run a single test class
-dotnet test babel-player.sln --filter "FullyQualifiedName~SessionWorkflowCoordinatorUnitTests"
+dotnet test Babel-Player.sln --filter "FullyQualifiedName~SessionWorkflowCoordinatorUnitTests"
 
 # Run a single test method
-dotnet test babel-player.sln --filter "FullyQualifiedName~SessionWorkflowCoordinatorUnitTests.ShouldAdvanceToTranslationStage"
+dotnet test Babel-Player.sln --filter "FullyQualifiedName~SessionWorkflowCoordinatorUnitTests.ShouldAdvanceToTranslationStage"
 
 # Run tests with verbose output
-dotnet test babel-player.sln -v n
+dotnet test Babel-Player.sln -v n
 
 # Run tests with coverage (uploads to Codacy if CODACY_PROJECT_TOKEN is set)
 .\scripts\run-coverage.ps1
@@ -163,8 +163,8 @@ Delete dead code. Use `git branch` for abandoned experiments, not comments.
 ## Verification Expectations
 
 Before calling work complete:
-- Run `dotnet build babel-player.sln` for full consistency
-- Run relevant tests with `dotnet test babel-player.sln`
+- Run `dotnet build Babel-Player.sln` for full consistency
+- Run relevant tests with `dotnet test Babel-Player.sln`
 - Add/update tests when change is testable
 - Perform milestone's manual smoke path
 - Record smoke note in `docs/smoke/` (filename: `milestone-XX-label.md`)
@@ -173,8 +173,8 @@ Before calling work complete:
 Locked file error: `taskkill /F /IM clrdbg.exe /IM dotnet.exe`
 
 When reporting build/test instability, run the standard diagnostic sequence:
-1. `dotnet build babel-player.sln`
-2. `dotnet test babel-player.sln`
+1. `dotnet build Babel-Player.sln`
+2. `dotnet test Babel-Player.sln`
 3. `python3 scripts/check-architecture.py`
 4. `python -m py_compile inference/main.py`
 

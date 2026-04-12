@@ -68,6 +68,7 @@ if (-not $UploadOnly) {
         "--no-build",
         "--configuration", "Release",
         "--filter", $testFilter,
+        "--results-directory", $CoverageOutputPath,
         "--collect:`"XPlat Code Coverage`"",
         "--",
         "DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover",
@@ -82,8 +83,8 @@ if (-not $UploadOnly) {
 }
 
 # ── Find coverage report ───────────────────────────────────────
-$coverageDir = Join-Path $CoverageOutputPath "*"
-$coverageFiles = Get-ChildItem -Path $coverageDir -Filter "coverage.xml" -Recurse -ErrorAction SilentlyContinue
+$coverageFiles = @(Get-ChildItem -Path $CoverageOutputPath -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -in @("coverage.xml", "coverage.opencover.xml") })
 
 if (-not $coverageFiles -or $coverageFiles.Count -eq 0) {
     Write-Host "No coverage report found in $CoverageOutputPath" -ForegroundColor Red

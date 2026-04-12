@@ -565,11 +565,35 @@ public sealed partial class SessionWorkflowCoordinator
         }
     }
 
+    /// <summary>
+    /// Continues pipeline execution after diarization by advancing through translation and TTS as needed.
+    /// </summary>
+    /// <param name="progress">Optional overall progress reporter for remaining continuation stages.</param>
+    /// <param name="cancellationToken">Cancellation token used to stop continuation before completion.</param>
+    /// <remarks>
+    /// Requires <see cref="CurrentSession"/>.Stage to be at least <see cref="SessionWorkflowStage.Diarized"/>.
+    /// Depending on the current stage, this operation may advance to <see cref="SessionWorkflowStage.Translated"/>
+    /// and then <see cref="SessionWorkflowStage.TtsGenerated"/>. Stage transitions persist via stage methods
+    /// that call <see cref="SaveCurrentSession"/> after successful completion.
+    /// </remarks>
     public Task ContinuePipelineAsync(
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default) =>
         ContinuePipelineAsync(progress, stageProgress: null, cancellationToken);
 
+    /// <summary>
+    /// Continues pipeline execution after diarization using stage-aware progress reporting.
+    /// </summary>
+    /// <param name="progress">Optional overall progress reporter for remaining continuation stages.</param>
+    /// <param name="stageProgress">Optional per-stage progress/status updates for translation and TTS stages.</param>
+    /// <param name="cancellationToken">Cancellation token used to stop continuation before completion.</param>
+    /// <remarks>
+    /// Entry requires stage <see cref="SessionWorkflowStage.Diarized"/> or later. This method advances the
+    /// session toward <see cref="SessionWorkflowStage.TtsGenerated"/> by running translation when below
+    /// <see cref="SessionWorkflowStage.Translated"/> and then running TTS when below
+    /// <see cref="SessionWorkflowStage.TtsGenerated"/>. Successful stage completions persist updates to
+    /// <see cref="CurrentSession"/>. Cancellation propagates via <paramref name="cancellationToken"/>.
+    /// </remarks>
     internal async Task ContinuePipelineAsync(
         IProgress<double>? progress = null,
         IProgress<PipelineStageUpdate>? stageProgress = null,
@@ -602,12 +626,35 @@ public sealed partial class SessionWorkflowCoordinator
         }
     }
 
+    /// <summary>
+    /// Runs only the TTS stage for an already translated session.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter for TTS stage execution.</param>
+    /// <param name="voice">Optional voice override; when null the configured session/provider voice is used.</param>
+    /// <param name="cancellationToken">Cancellation token used to stop TTS generation before completion.</param>
+    /// <remarks>
+    /// Requires <see cref="CurrentSession"/>.Stage to be at least <see cref="SessionWorkflowStage.Translated"/>.
+    /// On success, advances and persists the session to <see cref="SessionWorkflowStage.TtsGenerated"/>.
+    /// </remarks>
     public Task RunTtsOnlyAsync(
         IProgress<double>? progress = null,
         string? voice = null,
         CancellationToken cancellationToken = default) =>
         RunTtsOnlyAsync(progress, voice, stageProgress: null, cancellationToken);
 
+    /// <summary>
+    /// Runs only the TTS stage for an already translated session with stage-aware progress updates.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter for TTS stage execution.</param>
+    /// <param name="voice">Optional voice override; when null the configured session/provider voice is used.</param>
+    /// <param name="stageProgress">Optional stage progress updates describing TTS stage activity.</param>
+    /// <param name="cancellationToken">Cancellation token used to stop TTS generation before completion.</param>
+    /// <remarks>
+    /// Entry requires stage <see cref="SessionWorkflowStage.Translated"/> or later. This method executes only
+    /// TTS and advances toward terminal stage <see cref="SessionWorkflowStage.TtsGenerated"/>; persistence occurs
+    /// when TTS completes and updates <see cref="CurrentSession"/>. Cancellation propagates via
+    /// <paramref name="cancellationToken"/>.
+    /// </remarks>
     internal async Task RunTtsOnlyAsync(
         IProgress<double>? progress,
         string? voice,
