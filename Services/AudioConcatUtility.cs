@@ -89,7 +89,7 @@ public static class AudioConcatUtility
             }
             catch (Exception ex)
             {
-                log?.Warning($"Failed to clean up temporary concat directory {concatListDir}: {ex}");
+                log?.Warning($"Failed to clean up temporary concat directory {concatListDir}: {ex.Message}");
             }
         }
     }
