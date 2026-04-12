@@ -26,12 +26,24 @@ internal static class ProbeTestHelpers
         if (entry is null)
             return;
 
-        var expiresAtUtcProp = entry.GetType().GetProperty(
+        var entryType = entry.GetType();
+        var gateProp = entryType.GetProperty(
+            "Gate",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new MissingMemberException("ProbeEntry", "Gate");
+
+        var expiresAtUtcProp = entryType.GetProperty(
             "ExpiresAtUtc",
             BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
             ?? throw new MissingMemberException("ProbeEntry", "ExpiresAtUtc");
 
-        expiresAtUtcProp.SetValue(entry, DateTimeOffset.UtcNow - TimeSpan.FromMinutes(1));
+        var gate = gateProp.GetValue(entry) as object
+            ?? throw new InvalidOperationException("ProbeEntry.Gate returned null.");
+
+        lock (gate)
+        {
+            expiresAtUtcProp.SetValue(entry, DateTimeOffset.UtcNow - TimeSpan.FromMinutes(1));
+        }
     }
 
     /// <summary>
