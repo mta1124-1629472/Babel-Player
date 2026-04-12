@@ -33,7 +33,7 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 /noconfig
 /unsafe+
 /checked-
-/nowarn:1701,1702,1701,1702
+/nowarn:1701,1702,1701,1702,8002
 /fullpaths
 /nostdlib+
 /errorreport:prompt
@@ -46,12 +46,12 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 /debug:portable
 /filealign:512
 /optimize-
-/out:obj/Debug/net10.0/BabelPlayer.dll
-/refout:obj/Debug/net10.0/refint/BabelPlayer.dll
+/out:obj\Debug\net10.0\BabelPlayer.dll
+/refout:obj\Debug\net10.0\refint\BabelPlayer.dll
 /target:winexe
 /warnaserror-
 /utf8output
-/win32icon:Assets/Icons/app.ico
+/win32icon:Assets\Icons\app.ico
 /win32manifest:app.manifest
 /deterministic+
 /langversion:14.0
@@ -219,7 +219,7 @@ Views/
  SettingsWindow.axaml.cs
 
 [metadataReferences]
-../../../../usr/lib/dotnet/packs/Microsoft.NETCore.App.Ref/10.0.4/ref/net10.0/
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.5/ref/net10.0/
  Microsoft.CSharp.dll
  Microsoft.VisualBasic.Core.dll
  Microsoft.VisualBasic.dll
@@ -426,14 +426,14 @@ Views/
  tmds.dbus.protocol/0.92.0/lib/net9.0/Tmds.DBus.Protocol.dll
 
 [analyzerReferences]
-../../../../usr/lib/dotnet/packs/Microsoft.NETCore.App.Ref/10.0.4/analyzers/dotnet/cs/
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.5/analyzers/dotnet/cs/
  Microsoft.Interop.ComInterfaceGenerator.dll
  Microsoft.Interop.JavaScript.JSImportGenerator.dll
  Microsoft.Interop.LibraryImportGenerator.dll
  Microsoft.Interop.SourceGeneration.dll
  System.Text.Json.SourceGeneration.dll
  System.Text.RegularExpressions.Generator.dll
-../../../../usr/lib/dotnet/sdk/10.0.104/Sdks/Microsoft.NET.Sdk/analyzers/
+<DOTNET>/sdk/10.0.201/Sdks/Microsoft.NET.Sdk/analyzers/
  Microsoft.CodeAnalysis.CSharp.NetAnalyzers.dll
  Microsoft.CodeAnalysis.NetAnalyzers.dll
 <NUGET>/avalonia/12.0.0/analyzers/dotnet/cs/
@@ -447,7 +447,7 @@ Views/
 <NUGET>/microsoft.extensions.logging.abstractions/8.0.0/analyzers/dotnet/roslyn4.4/cs/Microsoft.Extensions.Logging.Generators.dll
 
 [analyzerConfigFiles]
-../../../../usr/lib/dotnet/sdk/10.0.104/Sdks/Microsoft.NET.Sdk/analyzers/build/config/analysislevel_10_default.globalconfig
+<DOTNET>/sdk/10.0.201/Sdks/Microsoft.NET.Sdk/analyzers/build/config/analysislevel_10_default.globalconfig
 obj/Debug/net10.0/BabelPlayer.GeneratedMSBuildEditorConfig.editorconfig
 
 [additionalFiles]
