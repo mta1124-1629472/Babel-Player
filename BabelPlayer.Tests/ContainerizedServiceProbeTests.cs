@@ -660,5 +660,5 @@ public sealed class ContainerizedServiceProbeTests
         ProbeTestHelpers.ExpireCachedProbeResult(probe, serviceUrl);
 
     private static Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500) =>
-        ProbeTestHelpers.WaitForCallCountAsync(getCount, expectedMinimum, timeoutMs);
+        ProbeTestHelpers.WaitForCallCountAsync(getCount, expectedMinimum, TimeSpan.FromMilliseconds(timeoutMs));
 }

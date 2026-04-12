@@ -195,7 +195,7 @@ public sealed class InferenceRequirementsTests
     [Theory]
     [InlineData("edge-tts==7.2.8")]
     [InlineData("ctranslate2==4.7.1")]
-    [InlineData("transformers==4.57.3")]
+    [InlineData("transformers==5.0.0")]
     [InlineData("sentencepiece==0.2.1")]
     [InlineData("faster-whisper==1.2.1")]
     [InlineData("googletrans==4.0.0rc1")]

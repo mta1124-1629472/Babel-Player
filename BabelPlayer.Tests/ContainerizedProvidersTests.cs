@@ -1339,7 +1339,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         ProbeTestHelpers.ExpireCachedProbeResult(probe, serviceUrl);
 
     private static Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500) =>
-        ProbeTestHelpers.WaitForCallCountAsync(getCount, expectedMinimum, timeoutMs);
+        ProbeTestHelpers.WaitForCallCountAsync(getCount, expectedMinimum, TimeSpan.FromMilliseconds(timeoutMs));
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
