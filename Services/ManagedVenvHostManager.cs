@@ -252,15 +252,17 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 .GetAwaiter()
                 .GetResult();
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Error("Failed to recover stale host processes during dispose.", ex);
             try
             {
                 if (_hostProcess is { HasExited: false })
                     _hostProcess.Kill(entireProcessTree: true);
             }
-            catch
+            catch (Exception killEx)
             {
+                _log.Error("Failed to kill tracked host process during dispose.", killEx);
             }
         }
     }
@@ -650,7 +652,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 stoppedAny = true;
 
             await DeletePidFileIfPresentAsync(hostPidPath);
-            await WaitForVenvUnlockAsync(pythonPath, cancellationToken);
+            await WaitForVenvUnlockAsync(pythonPath, _log, cancellationToken);
             return stoppedAny;
         }
         finally
@@ -844,12 +846,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
-    private static async Task WaitForVenvUnlockAsync(string pythonPath, CancellationToken cancellationToken)
+    private static async Task WaitForVenvUnlockAsync(string pythonPath, AppLog log, CancellationToken cancellationToken)
     {
         if (!File.Exists(pythonPath))
             return;
 
         var start = Stopwatch.StartNew();
+        var loggedLock = false;
         while (start.Elapsed < VenvUnlockTimeout)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -862,11 +865,21 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                     FileShare.None);
                 return;
             }
-            catch (IOException)
+            catch (IOException ex)
             {
+                if (!loggedLock)
+                {
+                    log.Info($"Waiting for managed GPU runtime to unlock... ({ex.Message})");
+                    loggedLock = true;
+                }
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                if (!loggedLock)
+                {
+                    log.Info($"Waiting for managed GPU runtime to unlock... ({ex.Message})");
+                    loggedLock = true;
+                }
             }
 
             await Task.Delay(100, cancellationToken);
