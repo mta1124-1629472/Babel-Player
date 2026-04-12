@@ -108,7 +108,7 @@ public abstract class PythonSubprocessServiceBase
     /// secrets (env vars are not visible in process listings).
     /// </param>
     /// <param name="cancellationToken">Optional cancellation token.</param>
-    protected async Task<ScriptResult> RunPythonScriptAsync(
+    protected virtual async Task<ScriptResult> RunPythonScriptAsync(
         string scriptContent,
         IReadOnlyList<string>? arguments = null,
         string scriptPrefix = "script",
