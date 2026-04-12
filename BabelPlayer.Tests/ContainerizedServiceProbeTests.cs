@@ -246,7 +246,7 @@ public sealed class ContainerizedServiceProbeTests
                 Capabilities: new ContainerCapabilitiesSnapshot(true, null, true, null, true, null));
         });
 
-        await Assert.ThrowsAsync<TaskCanceledException>(async () =>
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await probe.WaitForProbeAsync(
                 "http://localhost:8000",
