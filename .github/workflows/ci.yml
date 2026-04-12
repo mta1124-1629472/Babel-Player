@@ -52,7 +52,13 @@ jobs:
         env:
           CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
         run: |
+          if [ -z "${CODACY_PROJECT_TOKEN}" ]; then
+            echo "Skipping Codacy upload: CODACY_PROJECT_TOKEN is not set."
+            exit 0
+          fi
+
           bash <(curl -Ls https://coverage.codacy.com/get.sh) report \
             --language C# \
             --coverage-reports BabelPlayer.Tests/TestResults/*/coverage.opencover.xml \
-            --partial
+            --partial \
+            --project-token "$CODACY_PROJECT_TOKEN"

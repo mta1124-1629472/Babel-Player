@@ -1,6 +1,7 @@
 {
     "github.copilot.chat.agent.autoFix": true,
     "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python.terminal.activateEnvironment": false,
     "tasks.tasks": [
         {
             "label": "build",
@@ -56,4 +57,5 @@
     ],
     "csharp-dev-tools.roslyn.projectOrSolutionFiles": [
         "${workspaceFolder}/Babel-Player.sln"
-    ]}
+    ]
+}

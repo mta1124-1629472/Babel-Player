@@ -39,14 +39,39 @@ jobs:
           GITHUB_REPOSITORY: '${{ github.repository }}'
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN || github.token }}'
         run: |-
+          set -euo pipefail
+
           echo '🔍 Discovering trusted issues explicitly requested for triage...'
-          CANDIDATES="$(gh issue list \
+
+          if ! command -v gh >/dev/null 2>&1; then
+            echo '❌ GitHub CLI (gh) is not available on this runner.' >&2
+            exit 1
+          fi
+
+          if ! command -v jq >/dev/null 2>&1; then
+            echo '❌ jq is not available on this runner.' >&2
+            exit 1
+          fi
+
+          if ! CANDIDATES="$(gh issue list \
             --state 'open' \
             --search 'label:"status/needs-triage"' \
             --json number,title,body,authorAssociation \
             --limit '100' \
-            --repo "${GITHUB_REPOSITORY}"
-          )"
+            --repo "${GITHUB_REPOSITORY}")"; then
+            echo '❌ Failed to query issues with gh issue list.' >&2
+            exit 1
+          fi
+
+          if [[ -z "${CANDIDATES}" ]]; then
+            echo '❌ gh issue list returned empty output.' >&2
+            exit 1
+          fi
+
+          if ! echo "${CANDIDATES}" | jq -e 'type == "array"' >/dev/null; then
+            echo '❌ gh issue list did not return a JSON array.' >&2
+            exit 1
+          fi
 
           ISSUES="$(echo "${CANDIDATES}" | jq '[
             .[]
