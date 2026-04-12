@@ -239,6 +239,12 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
         var responseLine = await worker.Process.StandardOutput.ReadLineAsync().WaitAsync(linkedCts.Token).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(responseLine))
         {
+            // If the process hasn't exited, kill it before reading stderr to prevent ReadToEndAsync from hanging
+            if (!worker.Process.HasExited)
+            {
+                try { worker.Process.Kill(entireProcessTree: true); } catch { /* Best effort */ }
+            }
+
             var stderr = await worker.Process.StandardError.ReadToEndAsync(linkedCts.Token).ConfigureAwait(false);
             throw new InvalidOperationException(
                 $"{_poolName} worker {worker.Index + 1} exited without a response. {stderr}".Trim());
