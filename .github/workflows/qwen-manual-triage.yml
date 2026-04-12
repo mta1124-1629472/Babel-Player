@@ -219,12 +219,17 @@ jobs:
                 continue;
               }
 
-              core.debug(`Setting labels on issue #${issueNumber} to ${labelsToSet.join(', ')} (${issue.explanation || 'no explanation'})`)
+              const issueNum = typeof issueNumber === 'string' ? parseInt(issueNumber, 10) : issueNumber;
+              if (isNaN(issueNum)) {
+                core.warning(`Skipping issue with invalid number: ${JSON.stringify(issue)}`);
+                continue;
+              }
+              core.debug(`Setting labels on issue #${issueNum} to ${labelsToSet.join(', ')} (${issue.explanation || 'no explanation'})`)
 
               await github.rest.issues.setLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: issueNumber,
+                issue_number: issueNum,
                 labels: labelsToSet,
               });
             }
