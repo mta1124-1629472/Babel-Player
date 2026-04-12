@@ -1,3 +1,3 @@
-YYYY-MM-DD - PythonJsonWorkerPool stderr read hangs
+2026-04-12 - PythonJsonWorkerPool stderr read hangs
 Learning: In `PythonJsonWorkerPool.cs`, when a worker fails to return a response (e.g. process exits unexpectedly or stops responding), reading from standard error using `ReadToEndAsync` can hang indefinitely if the process has not actually exited or hasn't closed its stderr stream. This masks errors and blocks the worker pool.
 Action: Wait for the process to exit using `WaitForExitAsync` with a timeout, or use a limited read like `ReadLineAsync` (or just kill the process before reading) to avoid hanging. Since we are in the failure path, the process is likely unrecoverable.
