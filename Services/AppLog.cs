@@ -63,7 +63,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
                 if (item is string line)
                 {
                     try { await File.AppendAllTextAsync(LogFilePath, line); }
-                    catch { /* best-effort: log writes are never fatal */ }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to write log: {ex.Message}"); }
                 }
                 else if (item is TaskCompletionSource<bool> tcs)
                 {
@@ -79,7 +79,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
             if (remaining is string line)
             {
                 try { File.AppendAllText(LogFilePath, line); }
-                catch { }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to drain log: {ex.Message}"); }
             }
             else if (remaining is TaskCompletionSource<bool> tcs)
             {
@@ -134,7 +134,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         foreach (var old in archives.Skip(MaxArchivedFiles))
         {
             try { File.Delete(old); }
-            catch { /* best-effort */ }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to delete old log archive: {ex.Message}"); }
         }
     }
 }
