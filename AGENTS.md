@@ -28,6 +28,12 @@ dotnet test babel-player.sln --filter "FullyQualifiedName~SessionWorkflowCoordin
 # Run tests with verbose output
 dotnet test babel-player.sln -v n
 
+# Run tests with coverage (uploads to Codacy if CODACY_PROJECT_TOKEN is set)
+.\scripts\run-coverage.ps1
+
+# Run coverage with specific filter
+.\scripts\run-coverage.ps1 -Filter "Category=Unit"
+
 # Run architecture linter (required after structural changes)
 python3 scripts/check-architecture.py
 
