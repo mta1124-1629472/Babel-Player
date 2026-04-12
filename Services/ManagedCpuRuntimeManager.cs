@@ -52,32 +52,52 @@ public sealed class ManagedCpuRuntimeManager
     /// True when the CPU venv needs to be (re)installed — either missing or requirements changed.
     /// </summary>
     private bool? _cachedNeedsBootstrap;
+    private readonly object _bootstrapCacheLock = new();
 
     public bool NeedsBootstrap
     {
         get
         {
-            if (_cachedNeedsBootstrap.HasValue)
-                return _cachedNeedsBootstrap.Value;
+            lock (_bootstrapCacheLock)
+            {
+                if (_cachedNeedsBootstrap.HasValue)
+                    return _cachedNeedsBootstrap.Value;
+            }
 
             var pythonPath = GetPythonExecutablePath();
             if (!File.Exists(pythonPath))
-                return (_cachedNeedsBootstrap = true).Value;
+            {
+                lock (_bootstrapCacheLock)
+                {
+                    _cachedNeedsBootstrap = true;
+                }
+                return true;
+            }
             var markerPath = GetBootstrapMarkerPath();
             if (!File.Exists(markerPath))
-                return (_cachedNeedsBootstrap = true).Value;
+            {
+                lock (_bootstrapCacheLock)
+                {
+                    _cachedNeedsBootstrap = true;
+                }
+                return true;
+            }
             try
             {
                 var stored = File.ReadAllText(markerPath).Trim();
                 var requirementsPath = _requirementsPathResolver();
                 var result = !File.Exists(requirementsPath)
                     || !string.Equals(stored, ComputeMarkerHash(requirementsPath), StringComparison.Ordinal);
-                _cachedNeedsBootstrap = result;
+                lock (_bootstrapCacheLock)
+                {
+                    _cachedNeedsBootstrap = result;
+                }
                 return result;
             }
             catch
             {
-                return (_cachedNeedsBootstrap = true).Value;
+                // Do not cache on transient I/O errors; a subsequent read may succeed.
+                return true;
             }
         }
     }
@@ -201,7 +221,10 @@ public sealed class ManagedCpuRuntimeManager
             ComputeMarkerHash(requirementsPath),
             cancellationToken);
 
-        _cachedNeedsBootstrap = false;
+        lock (_bootstrapCacheLock)
+        {
+            _cachedNeedsBootstrap = false;
+        }
 
         State = ManagedCpuState.Ready;
         FailureReason = null;
