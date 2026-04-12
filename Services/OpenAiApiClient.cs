@@ -77,31 +77,57 @@ public sealed class OpenAiApiClient : IDisposable
     }
 
     /// <summary>
-    /// Calls OpenAI speech synthesis endpoint and returns raw MP3 bytes.
+    /// Calls OpenAI speech synthesis endpoint and streams MP3 bytes to a file.
     /// </summary>
-    public async Task<byte[]> CreateSpeechAsync(
+    public async Task DownloadSpeechAsync(
         string inputText,
         string model,
-        string voice = "alloy",
+        string voice,
+        string outputPath,
         CancellationToken cancellationToken = default)
     {
         var request = new SpeechRequestDto
         {
             Model = model,
-            Voice = voice,
+            Voice = voice ?? "alloy",
             Input = inputText,
             Format = "mp3",
         };
 
         var json = JsonSerializer.Serialize(request, JsonOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("audio/speech", content, cancellationToken);
-        var payload = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "audio/speech") { Content = content };
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        
         if (!response.IsSuccessStatusCode)
-            throw CreateApiException(response.StatusCode, Encoding.UTF8.GetString(payload));
+        {
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            throw CreateApiException(response.StatusCode, payload);
+        }
 
-        return payload;
+        var tempPath = outputPath + ".tmp";
+        try
+        {
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using (var fileStream = System.IO.File.Create(tempPath))
+            {
+                await stream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
+            }
+            System.IO.File.Move(tempPath, outputPath, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                if (System.IO.File.Exists(tempPath))
+                    System.IO.File.Delete(tempPath);
+            }
+            catch
+            {
+                // Best-effort cleanup
+            }
+            throw;
+        }
     }
 
     public async Task<OpenAiTranscriptionPayload> TranscribeAudioAsync(

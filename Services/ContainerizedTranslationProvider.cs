@@ -16,7 +16,7 @@ namespace Babel.Player.Services;
 /// Bridges the file-path-based <see cref="ITranslationProvider"/> contract to the HTTP client.
 /// Passes the raw transcript JSON artifact directly to the service (no re-serialization).
 /// Writes a translation JSON artifact to <see cref="TranslationRequest.OutputJsonPath"/> in
-/// the same format produced by <see cref="GoogleTranslationProvider"/>.
+/// the same format produced by the legacy Google Translate provider.
 /// </summary>
 public sealed class ContainerizedTranslationProvider : ITranslationProvider
 {

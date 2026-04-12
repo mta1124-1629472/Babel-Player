@@ -34,6 +34,11 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        lfs: false
+        clean: true
+      env:
+        GIT_LFS_SKIP_SMUDGE: '1'
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:

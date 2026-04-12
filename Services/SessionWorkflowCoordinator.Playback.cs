@@ -723,6 +723,37 @@ public sealed partial class SessionWorkflowCoordinator
             _subscribedToSourceDiagnostics = false;
         }
 
+        // Wait for all in-flight TTS operations to complete before disposing the TTS service
+        // and the inference host — disposing the host while local TTS tasks are in-flight
+        // (e.g. Qwen against the managed host) can terminate the backend mid-request.
+        // On a clean exit both _ttsService, _containerizedInferenceManager, and _transportManager
+        // are disposed below.  On timeout, only _transportManager is disposed immediately;
+        // _ttsService is handed off to background disposal and inference-host disposal is skipped.
+        if (_pendingTtsTasks.Count > 0)
+        {
+            try
+            {
+                bool completed = Task.WhenAll(_pendingTtsTasks).Wait(TimeSpan.FromSeconds(2));
+                if (!completed)
+                {
+                    _log.Warning("TTS shutdown timed out — scheduling background disposal of TTS service.");
+                    // Schedule background disposal so in-flight tasks can still finish but
+                    // HttpClient connections are eventually released.
+                    ScheduleSafeTtsDisposal();
+
+                    // On timeout: dispose _transportManager (safe, no in-flight transport ops)
+                    // but skip inference-host disposal so the backend stays alive for still-running
+                    // local TTS tasks (e.g. Qwen against the managed host).
+                    _transportManager.Dispose();
+                    return;
+                }
+            }
+            catch
+            {
+                // Ignore exceptions during shutdown - tasks may have been canceled or failed.
+            }
+        }
+
         if (_containerizedInferenceManager is IDisposable disposableInferenceManager)
         {
             try
@@ -735,21 +766,22 @@ public sealed partial class SessionWorkflowCoordinator
             }
         }
 
-        // Wait for all in-flight TTS operations to complete before disposing the TTS service
-        // to avoid killing a shared HttpClient mid-request.
-        if (_pendingTtsTasks.Count > 0)
-        {
-            try
-            {
-                Task.WhenAll(_pendingTtsTasks).Wait();
-            }
-            catch
-            {
-                // Ignore exceptions during shutdown - tasks may have been canceled or failed.
-            }
-        }
-
         (_ttsService as IDisposable)?.Dispose();
         _transportManager.Dispose();
+    }
+
+    /// <summary>
+    /// Schedules a fire-and-forget disposal of the TTS service on a thread-pool thread
+    /// so that in-flight requests are not blocked by the calling Dispose context.
+    /// </summary>
+    private void ScheduleSafeTtsDisposal()
+    {
+        if (_ttsService is not IDisposable disposable) return;
+
+        Task.Run(() =>
+        {
+            try { disposable.Dispose(); }
+            catch (Exception ex) { _log.Warning($"Background TTS service disposal failed: {ex.Message}"); }
+        }).FireAndForgetAsync(_log, "TTS background disposal");
     }
 }

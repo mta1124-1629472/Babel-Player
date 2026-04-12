@@ -359,7 +359,6 @@ for i, arg in enumerate(sys.argv):
         Assert.Equal(expected, GetPythonPath(new PiperTtsProvider(log, Path.GetTempPath())));
         Assert.Equal(expected, GetPythonPath(new CTranslate2TranslationProvider(log, "nllb-200-distilled-600M")));
         Assert.Equal(expected, GetPythonPath(new FasterWhisperTranscriptionProvider(log)));
-        Assert.Equal(expected, GetPythonPath(new GoogleTranslationProvider(log)));
         Assert.Equal(expected, GetPythonPath(new NllbTranslationProvider(log, "nllb-200-distilled-600M")));
     }
 

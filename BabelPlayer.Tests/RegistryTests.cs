@@ -144,10 +144,10 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TranslationRegistry_GetAvailableProviders_ContainsGoogleTranslateFree()
+    public void TranslationRegistry_GetAvailableProviders_ContainsDeepl()
     {
         var providers = _translationRegistry.GetAvailableProviders();
-        Assert.Contains(providers, p => p.Id == ProviderNames.GoogleTranslateFree);
+        Assert.Contains(providers, p => p.Id == ProviderNames.Deepl);
     }
 
     [Fact]
@@ -182,10 +182,10 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TranslationRegistry_CreateProvider_GoogleTranslateFree_DoesNotThrow()
+    public void TranslationRegistry_CreateProvider_DeeplWithNoKey_ThrowsArgumentException()
     {
-        var provider = _translationRegistry.CreateProvider(ProviderNames.GoogleTranslateFree, new AppSettings(), null);
-        Assert.NotNull(provider);
+        Assert.Throws<ArgumentException>(() =>
+            _translationRegistry.CreateProvider(ProviderNames.Deepl, new AppSettings(), null));
     }
 
     [Fact]

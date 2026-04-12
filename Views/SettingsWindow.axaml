@@ -84,21 +84,29 @@
                         <Border Padding="10,8"
                                 Background="{DynamicResource ControlBackgroundBrush}"
                                 CornerRadius="8">
-                            <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
-                                <TextBlock Text="Backend status:"
-                                           VerticalAlignment="Center"
-                                           Opacity="0.75"
-                                           FontSize="12"/>
-                                <TextBlock Text="{Binding BackendStatusText}"
-                                           VerticalAlignment="Center"
-                                           FontSize="12"
-                                           FontWeight="Medium"/>
-                                <Button Content="&#x27F3; Restart"
-                                        Command="{Binding RestartBackendCommand}"
-                                        IsEnabled="{Binding CanRestartBackend}"
-                                        Padding="10,4"
-                                        FontSize="12"
-                                        ToolTip.Tip="Kill and restart the active GPU backend process (venv or Docker). Useful after changing providers or after a timeout."/>
+                            <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                                    <Ellipse Width="8" Height="8" Fill="{Binding BackendStatusBrush}"
+                                             VerticalAlignment="Center"
+                                             ToolTip.Tip="{Binding BackendStatusText}"/>
+                                    <TextBlock Text="Backend status:"
+                                               VerticalAlignment="Center"
+                                               Opacity="0.75"
+                                               FontSize="12"/>
+                                    <TextBlock Text="{Binding BackendStatusText}"
+                                               VerticalAlignment="Center"
+                                               FontSize="12"
+                                               FontWeight="Medium"/>
+                                    <Button Content="&#x27F3; Restart"
+                                            Command="{Binding RestartBackendCommand}"
+                                            IsEnabled="{Binding CanRestartBackend}"
+                                            Padding="10,4"
+                                            FontSize="12"
+                                            ToolTip.Tip="Kill and restart the active GPU backend process (venv or Docker). Useful after changing providers or after a timeout."/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding BackendErrorDetail}"
+                                           IsVisible="{Binding BackendErrorDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           FontSize="11" Foreground="{DynamicResource SystemErrorForeground}" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
 
@@ -396,6 +404,61 @@
                         </StackPanel>
                     </StackPanel>
                 </Grid>
+            </TabItem>
+
+            <!-- Diagnostics Tab -->
+            <TabItem Header="Diagnostics">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="20" Spacing="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Hardware Snapshot" FontWeight="SemiBold" FontSize="14"/>
+                            <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="CPU:" Opacity="0.65"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CpuInfo}"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU:" Opacity="0.65"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GpuInfo}"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="System RAM:" Opacity="0.65"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RamInfo}"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <Separator/>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Runtime Routing" FontWeight="SemiBold" FontSize="14"/>
+                            <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Inference Host:" Opacity="0.65"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding InferenceModeInfo}"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Warmup Status:" Opacity="0.65"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RuntimeWarmupInfo}"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="NMT Fallback:" Opacity="0.65"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TranslationFallbackInfo}"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <Separator/>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Environment" FontWeight="SemiBold" FontSize="14"/>
+                            <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto" RowSpacing="6">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Python Path:" Opacity="0.65"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding PythonInfo}" TextWrapping="Wrap" FontSize="11"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="ffmpeg Path:" Opacity="0.65"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FfmpegInfo}" TextWrapping="Wrap" FontSize="11"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <Button Content="Refresh Diagnostics"
+                                Command="{Binding RefreshDiagnosticsCommand}"
+                                HorizontalAlignment="Left"
+                                Margin="0,10,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
 

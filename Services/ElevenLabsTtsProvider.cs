@@ -197,17 +197,37 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
         _log.Info($"[ElevenLabsTTS] Generating segment audio: {request.Text[..Math.Min(30, request.Text.Length)]}... model={modelId}");
 
         var client = _clientLazy.Value;
-        var audioBytes = await client.TextToSpeechAsync(request.Text, DefaultVoiceId, modelId, cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        await File.WriteAllBytesAsync(request.OutputAudioPath, audioBytes, cancellationToken);
+        try
+        {
+            await client.DownloadSpeechAsync(request.Text, DefaultVoiceId, request.OutputAudioPath, modelId, cancellationToken)
+                .ConfigureAwait(false);
+            var fileLength = new FileInfo(request.OutputAudioPath).Length;
 
-        _log.Info($"[ElevenLabsTTS] Segment audio written: {request.OutputAudioPath} ({audioBytes.Length} bytes)");
+            _log.Info($"[ElevenLabsTTS] Segment audio written: {request.OutputAudioPath} ({fileLength} bytes)");
 
-        return new TtsResult(true, request.OutputAudioPath, request.VoiceName, audioBytes.Length, null);
+            return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileLength, null);
+        }
+        catch (Exception)
+        {
+            if (File.Exists(request.OutputAudioPath))
+            {
+                try
+                {
+                    File.Delete(request.OutputAudioPath);
+                    _log.Info($"[ElevenLabsTTS] Deleted partial file after failure: {request.OutputAudioPath}");
+                }
+                catch (Exception cleanupEx)
+                {
+                    _log.Error($"[ElevenLabsTTS] Failed to delete partial file {request.OutputAudioPath}: {cleanupEx.Message}", cleanupEx);
+                }
+            }
+            throw;
+        }
     }
 
     // Map the VoiceName field (which holds the selected model/quality tier in Babel Player's

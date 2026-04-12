@@ -373,7 +373,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             TtsPath = ttsPath,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
-            TranslationProvider = ProviderNames.GoogleTranslateFree,
+            TranslationProvider = ProviderNames.Deepl,
             TranslationModel = "default",
             TargetLanguage = "en",
             TtsProvider = ProviderNames.EdgeTts,
@@ -383,7 +383,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         {
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
-            TranslationProvider = ProviderNames.GoogleTranslateFree,
+            TranslationProvider = ProviderNames.Deepl,
             TranslationProfile = ComputeProfile.Cloud,
             TranslationModel = "default",
             TargetLanguage = "en",
@@ -407,7 +407,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             TtsPath = ttsPath,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
-            TranslationProvider = ProviderNames.GoogleTranslateFree,
+            TranslationProvider = ProviderNames.Deepl,
             TranslationModel = "default",
             TargetLanguage = "en",
             TtsProvider = ProviderNames.EdgeTts,
@@ -417,7 +417,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         {
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
-            TranslationProvider = ProviderNames.GoogleTranslateFree,
+            TranslationProvider = ProviderNames.Deepl,
             TranslationModel = "default",
             TargetLanguage = "fr", // different target language
             TtsProvider = ProviderNames.EdgeTts,
@@ -527,7 +527,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         {
             Stage = SessionWorkflowStage.Translated,
             TranscriptionProvider = ProviderNames.FasterWhisper,
-            TranslationProvider = ProviderNames.GoogleTranslateFree,
+            TranslationProvider = ProviderNames.Deepl,
             TtsProvider = ProviderNames.EdgeTts,
             SourceLanguage = "es",
             TargetLanguage = "en",
@@ -536,7 +536,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         var desc = SessionSnapshotSemantics.DescribeSessionProvenance(snap);
         Assert.Contains("Translated", desc);
         Assert.Contains(ProviderNames.FasterWhisper, desc);
-        Assert.Contains(ProviderNames.GoogleTranslateFree, desc);
+        Assert.Contains(ProviderNames.Deepl, desc);
         Assert.Contains("es", desc);
         Assert.Contains("en", desc);
     }

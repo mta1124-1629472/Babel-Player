@@ -99,17 +99,36 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
 
         var model = NormalizeModel(request.VoiceName);
         var client = _clientLazy.Value;
-        var audioBytes = await client.CreateSpeechAsync(request.Text, model, "alloy", cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        await File.WriteAllBytesAsync(request.OutputAudioPath, audioBytes, cancellationToken);
+        try
+        {
+            await client.DownloadSpeechAsync(request.Text, model, "alloy", request.OutputAudioPath, cancellationToken)
+                .ConfigureAwait(false);
+            var fileLength = new FileInfo(request.OutputAudioPath).Length;
 
-        _log.Info($"[OpenAITTS] Generated segment audio: {request.OutputAudioPath} ({audioBytes.Length} bytes)");
+            _log.Info($"[OpenAITTS] Generated segment audio: {request.OutputAudioPath} ({fileLength} bytes)");
 
-        return new TtsResult(true, request.OutputAudioPath, request.VoiceName, audioBytes.Length, null);
+            return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileLength, null);
+        }
+        catch (Exception)
+        {
+            if (File.Exists(request.OutputAudioPath))
+            {
+                try
+                {
+                    File.Delete(request.OutputAudioPath);
+                }
+                catch
+                {
+                    // Best-effort cleanup
+                }
+            }
+            throw;
+        }
     }
 
     /// <summary>

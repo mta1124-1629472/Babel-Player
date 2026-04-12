@@ -1054,12 +1054,13 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             ProviderNames.WeSpeakerLocal,
             probe,
             new ContainerizedProviderReadiness.ExecutionWaitOptions(
-                ExecutionProbeBudget: TimeSpan.FromMilliseconds(40),
-                CapabilityWarmupBudget: TimeSpan.FromMilliseconds(80),
-                CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(10)));
+                ExecutionProbeBudget: TimeSpan.FromMilliseconds(200),
+                CapabilityWarmupBudget: TimeSpan.FromMilliseconds(200),
+                CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(50)));
 
         Assert.False(readiness.IsReady);
-        Assert.Contains("diarization capability is warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        // Provider-specific detail "CPU fallback warming" is used instead of a generic capability message.
+        Assert.Contains("CPU fallback warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("start your managed local gpu host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 

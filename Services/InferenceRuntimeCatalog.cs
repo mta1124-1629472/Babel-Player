@@ -36,7 +36,6 @@ public static class InferenceRuntimeCatalog
     {
         ProviderNames.Deepl
             or ProviderNames.OpenAi
-            or ProviderNames.GoogleTranslateFree
             or ProviderNames.GeminiTranslation => ComputeProfile.Cloud,
         _ => ComputeProfile.Cpu,
     };
@@ -57,7 +56,7 @@ public static class InferenceRuntimeCatalog
     public static string DefaultTranslationProvider(ComputeProfile profile) => profile switch
     {
         ComputeProfile.Cpu or ComputeProfile.Gpu => ProviderNames.Nllb200,
-        _ => ProviderNames.GoogleTranslateFree,
+        _ => ProviderNames.Deepl,
     };
 
     public static string DefaultTtsProvider(ComputeProfile profile) => profile switch
@@ -163,7 +162,6 @@ public static class InferenceRuntimeCatalog
             ProviderNames.Deepl => ProviderNames.Deepl,
             ProviderNames.OpenAi => ProviderNames.OpenAi,
             ProviderNames.GeminiTranslation => ProviderNames.GeminiTranslation,
-            ProviderNames.GoogleTranslateFree => ProviderNames.GoogleTranslateFree,
             _ => DefaultTranslationProvider(profile),
         };
     }
@@ -343,7 +341,6 @@ public static class InferenceRuntimeCatalog
     {
         ProviderNames.Nllb200
             or ProviderNames.CTranslate2
-            or ProviderNames.GoogleTranslateFree
             or ProviderNames.Deepl
             or ProviderNames.OpenAi
             or ProviderNames.GeminiTranslation => true,

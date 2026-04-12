@@ -16,6 +16,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: false
+          clean: true
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
