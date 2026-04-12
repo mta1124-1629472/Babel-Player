@@ -49,7 +49,7 @@ public sealed class CompositeInferenceHostManager : IContainerizedInferenceManag
         }
         catch (Exception ex)
         {
-            _log.Warning($"Failed to dispose managed host manager: {ex.Message}");
+            _log.Error("Failed to dispose managed host manager.", ex);
         }
 
         if (_dockerHostManager is IDisposable disposableDockerManager)
@@ -60,7 +60,7 @@ public sealed class CompositeInferenceHostManager : IContainerizedInferenceManag
             }
             catch (Exception ex)
             {
-                _log.Warning($"Failed to dispose docker host manager: {ex.Message}");
+                _log.Error("Failed to dispose docker host manager.", ex);
             }
         }
     }
