@@ -1,0 +1,24 @@
+theme: jekyll-theme-cayman
+title: Babel Player
+description: Local-first video transcription, translation, and dubbing workstation for Windows
+url: "https://babelworks.github.io"
+baseurl: "/Babel-Player"
+
+# Site metadata
+author: Babelworks
+github_username: Babelworks
+repository: Babelworks/Babel-Player
+
+# Navigation
+nav_links:
+  - title: GitHub
+    url: https://github.com/Babelworks/Babel-Player
+  - title: Releases
+    url: https://github.com/Babelworks/Babel-Player/releases/latest
+  - title: Privacy Policy
+    url: /Babel-Player/privacy/
+
+# Build settings
+markdown: kramdown
+plugins:
+  - jekyll-seo-tag
