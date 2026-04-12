@@ -51,25 +51,52 @@ public sealed class ManagedCpuRuntimeManager
     /// <summary>
     /// True when the CPU venv needs to be (re)installed — either missing or requirements changed.
     /// </summary>
+    private bool? _cachedNeedsBootstrap;
+    private readonly object _bootstrapCacheLock = new();
+
     public bool NeedsBootstrap
     {
         get
         {
+            lock (_bootstrapCacheLock)
+            {
+                if (_cachedNeedsBootstrap.HasValue)
+                    return _cachedNeedsBootstrap.Value;
+            }
+
             var pythonPath = GetPythonExecutablePath();
             if (!File.Exists(pythonPath))
+            {
+                lock (_bootstrapCacheLock)
+                {
+                    _cachedNeedsBootstrap = true;
+                }
                 return true;
+            }
             var markerPath = GetBootstrapMarkerPath();
             if (!File.Exists(markerPath))
+            {
+                lock (_bootstrapCacheLock)
+                {
+                    _cachedNeedsBootstrap = true;
+                }
                 return true;
+            }
             try
             {
                 var stored = File.ReadAllText(markerPath).Trim();
                 var requirementsPath = _requirementsPathResolver();
-                return !File.Exists(requirementsPath)
+                var result = !File.Exists(requirementsPath)
                     || !string.Equals(stored, ComputeMarkerHash(requirementsPath), StringComparison.Ordinal);
+                lock (_bootstrapCacheLock)
+                {
+                    _cachedNeedsBootstrap = result;
+                }
+                return result;
             }
             catch
             {
+                // Do not cache on transient I/O errors; a subsequent read may succeed.
                 return true;
             }
         }
@@ -193,6 +220,11 @@ public sealed class ManagedCpuRuntimeManager
             markerPath,
             ComputeMarkerHash(requirementsPath),
             cancellationToken);
+
+        lock (_bootstrapCacheLock)
+        {
+            _cachedNeedsBootstrap = false;
+        }
 
         State = ManagedCpuState.Ready;
         FailureReason = null;
