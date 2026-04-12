@@ -181,8 +181,8 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             entry.InFlightTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout, entry.Cts.Token);
             _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background, forceRefresh={forceRefresh}");
             
-            // Fire-and-forget with proper exception handling to prevent resource leaks
-            ObserveCompletionWithFaultHandling(normalizedUrl, entry, entry.InFlightTask);
+            // Fire-and-forget; FireAndForgetAsync routes unhandled exceptions to the log.
+            ObserveCompletionAsync(normalizedUrl, entry, entry.InFlightTask).FireAndForgetAsync(_log, "Containerized probe observer");
             var staleCachedAvailable = !forceRefresh ? GetStaleAvailableResult(entry) : null;
             if (staleCachedAvailable is not null)
             {
@@ -271,22 +271,6 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
  
         _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning Checking state.");
         return Checking(normalizedUrl);
-    }
-
-    private async void ObserveCompletionWithFaultHandling(
-        string normalizedUrl,
-        ProbeEntry entry,
-        Task<ContainerizedProbeResult> task)
-    {
-        try
-        {
-            await ObserveCompletionAsync(normalizedUrl, entry, task).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            // This prevents unobserved task exceptions and ensures logging
-            _log.Error($"Container probe observer fault: url={normalizedUrl}, error={ex.Message}", ex);
-        }
     }
 
     /// <summary>

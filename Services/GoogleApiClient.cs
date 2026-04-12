@@ -38,7 +38,7 @@ public sealed class GoogleApiClient : IDisposable
         _apiKey = apiKey.Trim();
         _httpClient = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: true);
         _httpClient.BaseAddress = new Uri(TtsBaseUrl);
-        _httpClient.Timeout = TimeSpan.FromSeconds(30);
+        _httpClient.Timeout = TimeSpan.FromMinutes(2);
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("BabelPlayer/1.0");
     }
@@ -98,17 +98,14 @@ public sealed class GoogleApiClient : IDisposable
         string languageCode,
         CancellationToken cancellationToken = default)
     {
-        using var speechClient = new HttpClient { BaseAddress = new Uri(SpeechBaseUrl), Timeout = TimeSpan.FromMinutes(2) };
-        speechClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        speechClient.DefaultRequestHeaders.UserAgent.ParseAdd("BabelPlayer/1.0");
-
         var payload = new GoogleRecognizeRequest(
             new GoogleRecognizeConfig("LINEAR16", 16000, string.IsNullOrWhiteSpace(languageCode) ? "en-US" : languageCode),
             new GoogleRecognizeAudio(Convert.ToBase64String(audioBytes)));
 
         var json = JsonSerializer.Serialize(payload, JsonOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var response = await speechClient.PostAsync($"speech:recognize?key={Uri.EscapeDataString(_apiKey)}", content, cancellationToken);
+        var url = $"{SpeechBaseUrl}speech:recognize?key={Uri.EscapeDataString(_apiKey)}";
+        using var response = await _httpClient.PostAsync(url, content, cancellationToken);
         return await ReadJsonAsync<GoogleSpeechRecognizeInfo>(response, cancellationToken);
     }
 

@@ -77,31 +77,37 @@ public sealed class OpenAiApiClient : IDisposable
     }
 
     /// <summary>
-    /// Calls OpenAI speech synthesis endpoint and returns raw MP3 bytes.
+    /// Calls OpenAI speech synthesis endpoint and streams MP3 bytes to a file.
     /// </summary>
-    public async Task<byte[]> CreateSpeechAsync(
+    public async Task DownloadSpeechAsync(
         string inputText,
         string model,
-        string voice = "alloy",
+        string voice,
+        string outputPath,
         CancellationToken cancellationToken = default)
     {
         var request = new SpeechRequestDto
         {
             Model = model,
-            Voice = voice,
+            Voice = voice ?? "alloy",
             Input = inputText,
             Format = "mp3",
         };
 
         var json = JsonSerializer.Serialize(request, JsonOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("audio/speech", content, cancellationToken);
-        var payload = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "audio/speech") { Content = content };
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        
         if (!response.IsSuccessStatusCode)
-            throw CreateApiException(response.StatusCode, Encoding.UTF8.GetString(payload));
+        {
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw CreateApiException(response.StatusCode, payload);
+        }
 
-        return payload;
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var fileStream = System.IO.File.Create(outputPath);
+        await stream.CopyToAsync(fileStream, cancellationToken);
     }
 
     public async Task<OpenAiTranscriptionPayload> TranscribeAudioAsync(

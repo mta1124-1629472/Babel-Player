@@ -67,6 +67,8 @@ public sealed class ContainerizedInferenceClient
         CancellationToken cancellationToken = default) =>
         ProbeHealthAsync(_httpClient, _inferenceServiceUrl, cancellationToken);
 
+    private static readonly HttpClient SharedProbeClient = new() { Timeout = Timeout.InfiniteTimeSpan };
+
     public static async Task<ContainerHealthStatus> CheckHealthAsync(
         string serviceUrl,
         TimeSpan timeout,
@@ -74,8 +76,9 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
-            using var http = new HttpClient { Timeout = timeout };
-            return await ProbeHealthAsync(http, NormalizeBaseUrl(serviceUrl), cancellationToken);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(timeout);
+            return await ProbeHealthAsync(SharedProbeClient, NormalizeBaseUrl(serviceUrl), cts.Token);
         }
         catch (Exception ex)
         {
@@ -92,8 +95,8 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(timeoutSeconds) };
-            return ProbeHealthAsync(http, NormalizeBaseUrl(serviceUrl), CancellationToken.None)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+            return ProbeHealthAsync(SharedProbeClient, NormalizeBaseUrl(serviceUrl), cts.Token)
                 .GetAwaiter()
                 .GetResult();
         }

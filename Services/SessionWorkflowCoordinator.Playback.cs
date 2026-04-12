@@ -741,7 +741,7 @@ public sealed partial class SessionWorkflowCoordinator
         {
             try
             {
-                Task.WhenAll(_pendingTtsTasks).Wait();
+                Task.WhenAll(_pendingTtsTasks).Wait(TimeSpan.FromSeconds(2));
             }
             catch
             {

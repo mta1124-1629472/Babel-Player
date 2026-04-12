@@ -48,11 +48,12 @@ public sealed class ElevenLabsApiClient : IDisposable
     /// <summary>
     /// Generates speech for <paramref name="text"/> using the given <paramref name="voiceId"/>
     /// (ElevenLabs character voice ID) and <paramref name="modelId"/> (quality tier, e.g.
-    /// <c>eleven_multilingual_v2</c>). Returns raw MP3 bytes.
+    /// <c>eleven_multilingual_v2</c>). Streams raw MP3 bytes to the specified path.
     /// </summary>
-    public async Task<byte[]> TextToSpeechAsync(
+    public async Task DownloadSpeechAsync(
         string text,
         string voiceId,
+        string outputPath,
         string modelId = "eleven_multilingual_v2",
         CancellationToken cancellationToken = default)
     {
@@ -63,15 +64,17 @@ public sealed class ElevenLabsApiClient : IDisposable
             "application/json");
 
         // Explicitly request MP3 to receive binary audio data.
-        var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"text-to-speech/{voiceId}")
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"text-to-speech/{voiceId}")
         {
             Content = content
         };
         requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("audio/mpeg"));
 
-        using var response = await _httpClient.SendAsync(requestMessage, cancellationToken);
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var fileStream = System.IO.File.Create(outputPath);
+        await stream.CopyToAsync(fileStream, cancellationToken);
     }
 
     public void Dispose() => _httpClient.Dispose();
