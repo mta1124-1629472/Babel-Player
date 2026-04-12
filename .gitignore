@@ -95,7 +95,6 @@ build_output.txt
 dist/
 publish/
 tasks.json
-skills/
 
 # Generated benchmark outputs
 # docs/benchmarks/ (results remain in git, but ignore temp or lock files if any)
