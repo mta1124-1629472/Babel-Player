@@ -70,6 +70,11 @@ public sealed class ContainerizedInferenceClient
 
     private static readonly HttpClient SharedProbeClient = new() { Timeout = Timeout.InfiniteTimeSpan };
 
+    private const int AsyncStreamBufferSize = 4096;
+
+    private static FileStream OpenReadAsyncFileStream(string path) =>
+        new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, AsyncStreamBufferSize, useAsync: true);
+
     public static async Task<ContainerHealthStatus> CheckHealthAsync(
         string serviceUrl,
         TimeSpan timeout,
@@ -138,7 +143,7 @@ public sealed class ContainerizedInferenceClient
             _log.Info($"Transcribing with containerized service: {audioFilePath}");
 
             using var content = new MultipartFormDataContent();
-            using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+            using var fileStream = OpenReadAsyncFileStream(audioFilePath);
             content.Add(new StreamContent(fileStream), "file", Path.GetFileName(audioFilePath));
             content.Add(new StringContent(modelName), "model");
             if (language != null)
@@ -324,7 +329,7 @@ public sealed class ContainerizedInferenceClient
             _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
 
             using var content = new MultipartFormDataContent();
-            using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+            using var fileStream = OpenReadAsyncFileStream(audioFilePath);
             content.Add(new StreamContent(fileStream), "audio", Path.GetFileName(audioFilePath));
             if (minSpeakers.HasValue)
                 content.Add(new StringContent(minSpeakers.Value.ToString()), "min_speakers");
@@ -375,7 +380,7 @@ public sealed class ContainerizedInferenceClient
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(speakerId), "speaker_id");
 
-        await using var fs = new FileStream(referenceAudioPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+        await using var fs = OpenReadAsyncFileStream(referenceAudioPath);
         content.Add(new StreamContent(fs), "file", Path.GetFileName(referenceAudioPath));
 
         using var response = await _httpClient.PostAsync(
@@ -435,7 +440,7 @@ public sealed class ContainerizedInferenceClient
                 {
                     if (!File.Exists(referenceAudioPath))
                         throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
-                    fs = new FileStream(referenceAudioPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+                    fs = OpenReadAsyncFileStream(referenceAudioPath);
                     content.Add(new StreamContent(fs), "reference_file", Path.GetFileName(referenceAudioPath));
                 }
 
@@ -452,7 +457,8 @@ public sealed class ContainerizedInferenceClient
             }
             finally
             {
-                fs?.Dispose();
+                if (fs != null)
+                    await fs.DisposeAsync();
             }
         }
         catch (Exception ex)
