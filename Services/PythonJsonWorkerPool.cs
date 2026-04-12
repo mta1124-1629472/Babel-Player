@@ -239,9 +239,39 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
         var responseLine = await worker.Process.StandardOutput.ReadLineAsync().WaitAsync(linkedCts.Token).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(responseLine))
         {
-            var stderr = await worker.Process.StandardError.ReadToEndAsync(linkedCts.Token).ConfigureAwait(false);
+            var killAttempted = false;
+            // If the process hasn't exited, kill it before reading stderr to prevent ReadToEndAsync from hanging
+            if (!worker.Process.HasExited)
+            {
+                killAttempted = true;
+                try { worker.Process.Kill(entireProcessTree: true); } catch { /* Best effort */ }
+            }
+
+            using var stderrCts = CancellationTokenSource.CreateLinkedTokenSource(linkedCts.Token);
+            stderrCts.CancelAfter(TimeSpan.FromSeconds(2));
+
+            try
+            {
+                await worker.Process.WaitForExitAsync(stderrCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Continue with partial/empty stderr if process did not exit in time.
+            }
+
+            string stderr;
+            try
+            {
+                stderr = await worker.Process.StandardError.ReadToEndAsync(stderrCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                stderr = "stderr read timed out.";
+            }
+
+            var killDetails = killAttempted ? " (kill attempted)." : ".";
             throw new InvalidOperationException(
-                $"{_poolName} worker {worker.Index + 1} exited without a response. {stderr}".Trim());
+                $"{_poolName} worker {worker.Index + 1} failed to produce a response{killDetails} {stderr}".Trim());
         }
 
         var envelope = JsonSerializer.Deserialize<WorkerResponseEnvelope<TResponse>>(responseLine, JsonOptions)
