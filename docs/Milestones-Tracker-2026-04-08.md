@@ -12,7 +12,7 @@ Babel-Player is a local-first multilingual video dubbing application. Stack: C# 
 
 ### Architecture Notes (verified April 8, 2026)
 
-- **No Docker containers for inference.** All local providers (faster-whisper, NLLB/CTranslate2, Qwen TTS, NeMo diarization) run as endpoints in a single FastAPI process inside a managed `.venv`. The old milestone tracker incorrectly described these as separate Docker containers.
+- **Default local inference does not require Docker.** All local providers (faster-whisper, NLLB/CTranslate2, Qwen TTS, NeMo diarization) run as endpoints in a single FastAPI process inside a managed `.venv`. Docker remains an advanced optional backend for GPU inference (see `docs/containers.md` and `ContainerizedInferenceManager`); it is not required for the default CPU or managed-GPU paths.
 - **`nemo-toolkit[asr]==2.7.2`** is already installed in the GPU `.venv` and verified working with `torch 2.8.0` and Python 3.12.
 - **Multi-speaker voice cloning is fully implemented.** `SessionWorkflowCoordinator.TtsReference.cs` extracts per-speaker reference clips via `/speakers/extract-reference`. `QwenContainerTtsProvider` resolves `reference_id` per segment. The diarization → speaker extraction → per-speaker TTS chain is complete and tested.
 - **XTTS v2 is being removed** in a parallel cleanup effort. All XTTS references are legacy.

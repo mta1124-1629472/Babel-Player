@@ -723,20 +723,12 @@ public sealed partial class SessionWorkflowCoordinator
             _subscribedToSourceDiagnostics = false;
         }
 
-        if (_containerizedInferenceManager is IDisposable disposableInferenceManager)
-        {
-            try
-            {
-                disposableInferenceManager.Dispose();
-            }
-            catch (Exception ex)
-            {
-                _log.Warning($"Failed to dispose containerized inference manager on shutdown: {ex.Message}");
-            }
-        }
-
         // Wait for all in-flight TTS operations to complete before disposing the TTS service
-        // to avoid killing a shared HttpClient mid-request.
+        // and the inference host — disposing the host while local TTS tasks are in-flight
+        // (e.g. Qwen against the managed host) can terminate the backend mid-request.
+        // On a clean exit both _ttsService, _containerizedInferenceManager, and _transportManager
+        // are disposed below.  On timeout, only _transportManager is disposed immediately;
+        // _ttsService is handed off to background disposal and inference-host disposal is skipped.
         if (_pendingTtsTasks.Count > 0)
         {
             try
@@ -748,11 +740,29 @@ public sealed partial class SessionWorkflowCoordinator
                     // Schedule background disposal so in-flight tasks can still finish but
                     // HttpClient connections are eventually released.
                     ScheduleSafeTtsDisposal();
+
+                    // On timeout: dispose _transportManager (safe, no in-flight transport ops)
+                    // but skip inference-host disposal so the backend stays alive for still-running
+                    // local TTS tasks (e.g. Qwen against the managed host).
+                    _transportManager.Dispose();
+                    return;
                 }
             }
             catch
             {
                 // Ignore exceptions during shutdown - tasks may have been canceled or failed.
+            }
+        }
+
+        if (_containerizedInferenceManager is IDisposable disposableInferenceManager)
+        {
+            try
+            {
+                disposableInferenceManager.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _log.Warning($"Failed to dispose containerized inference manager on shutdown: {ex.Message}");
             }
         }
 

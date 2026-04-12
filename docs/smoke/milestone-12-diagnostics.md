@@ -13,7 +13,7 @@ The system now provides a live visual indicator of the inference server's health
 
 ## What Was Verified
 * [x] **Live Health Polling**: `DispatcherTimer` in `SettingsViewModel` pulls health status every 2 seconds.
-* [x] **Visual Indicator**: Sidebar status dot transitions from gray (Unavailable) to yellow (Starting/Warming) to green (Available) / red (Failed).
+* [x] **Visual Indicator**: Sidebar status dot transitions from red (Unavailable) to orange (Checking) to green (Available). Any other/unknown state falls back to gray.
 * [x] **Diagnostics Tab**: Correctly displays CPU/GPU/RAM info from `HardwareSnapshot`.
 * [x] **Python/Ffmpeg Visibility**: Correctly displays versions and bootstrap state in the UI.
 * [x] **Runtime Visibility**: Correctly displays VSR and HDR diagnostics.

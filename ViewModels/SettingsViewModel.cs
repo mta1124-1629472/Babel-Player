@@ -514,6 +514,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             => Task.FromResult(ContainerizedStartResult.AlreadyRunning);
 
         public ContainerizedProbeResult GetCurrentStatus(AppSettings s)
-            => new(string.Empty, ContainerizedProbeState.Unavailable, DateTimeOffset.UtcNow, "No inference manager.");
+            => new(s?.EffectiveGpuServiceUrl ?? "N/A", ContainerizedProbeState.Unavailable, DateTimeOffset.UtcNow, "No inference manager.");
     }
 }
