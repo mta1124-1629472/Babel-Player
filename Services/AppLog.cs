@@ -63,7 +63,11 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
                 if (item is string line)
                 {
                     try { await File.AppendAllTextAsync(LogFilePath, line); }
-                    catch { /* best-effort: log writes are never fatal */ }
+                    catch (Exception ex)
+                    {
+                        // best-effort: log writes are never fatal, but surface failure for triage
+                        Console.Error.WriteLine($"AppLog write failed: {ex}");
+                    }
                 }
                 else if (item is TaskCompletionSource<bool> tcs)
                 {
@@ -79,7 +83,11 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
             if (remaining is string line)
             {
                 try { File.AppendAllText(LogFilePath, line); }
-                catch { }
+                catch (Exception ex)
+                {
+                    // best-effort: log writes are never fatal, but surface failure for triage
+                    Console.Error.WriteLine($"AppLog write failed: {ex}");
+                }
             }
             else if (remaining is TaskCompletionSource<bool> tcs)
             {
@@ -134,7 +142,11 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         foreach (var old in archives.Skip(MaxArchivedFiles))
         {
             try { File.Delete(old); }
-            catch { /* best-effort */ }
+            catch (Exception ex)
+            {
+                // best-effort: archive cleanup failures are non-fatal, but surface for triage
+                Console.Error.WriteLine($"AppLog archive cleanup failed for '{old}': {ex}");
+            }
         }
     }
 }

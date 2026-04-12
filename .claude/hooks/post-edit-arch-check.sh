@@ -11,7 +11,14 @@ print(d.get('tool_input', {}).get('file_path', ''))
 
 case "$FILE_PATH" in
   *.cs|*.csproj)
-    cd "$CLAUDE_PROJECT_DIR"
+    if [ -z "$CLAUDE_PROJECT_DIR" ]; then
+      echo "[arch-check] ERROR: CLAUDE_PROJECT_DIR is not set (file: $FILE_PATH)" >&2
+      exit 1
+    fi
+    if ! cd "$CLAUDE_PROJECT_DIR"; then
+      echo "[arch-check] ERROR: Failed to cd to CLAUDE_PROJECT_DIR=$CLAUDE_PROJECT_DIR (file: $FILE_PATH)" >&2
+      exit 1
+    fi
     echo "[arch-check] $FILE_PATH changed — running architecture linter..."
     python3 scripts/check-architecture.py
     ;;
