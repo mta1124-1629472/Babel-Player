@@ -780,7 +780,6 @@ public sealed class SegmentInspectionTests
         using var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
 
         playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
-        await Task.Delay(50);
 
         Assert.Equal(ProviderNames.WeSpeakerLocal, playback.Coordinator.CurrentSettings.DiarizationProvider);
         Assert.Equal(ProviderNames.WeSpeakerLocal, playback.DiarizationProvider);

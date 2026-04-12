@@ -84,7 +84,7 @@ public sealed partial class SessionWorkflowCoordinator
         var result = await _containerizedInferenceManager.EnsureStartedAsync(
             CurrentSettings,
             ContainerizedStartupTrigger.Execution,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         RuntimeWarmupStatusText = result.Message;
         await RefreshRuntimeWarmupStatusFromProbeAsync(forceRefresh: true, cancellationToken).ConfigureAwait(false);
 
@@ -104,7 +104,7 @@ public sealed partial class SessionWorkflowCoordinator
         await EnsureContainerizedExecutionRuntimeStartedAsync(
             CurrentSettings.TranslationRuntime,
             "Translation",
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         ProviderReadiness readiness;
         if (CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null)
@@ -112,7 +112,7 @@ public sealed partial class SessionWorkflowCoordinator
             var probeResult = await _containerizedProbe.WaitForProbeAsync(
                 CurrentSettings.EffectiveGpuServiceUrl,
                 forceRefresh: true,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var capabilityReady = probeResult.Capabilities?.IsReady(ContainerCapabilityStage.Translation) ?? false;
             var capabilityDetail = probeResult.Capabilities?.Detail(ContainerCapabilityStage.Translation) ?? "<none>";
@@ -151,7 +151,7 @@ public sealed partial class SessionWorkflowCoordinator
                 progress,
                 cancellationToken,
                 CurrentSettings.TranslationProfile,
-                KeyStore))
+                KeyStore).ConfigureAwait(false))
         {
             throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranslationModel}'.");
         }

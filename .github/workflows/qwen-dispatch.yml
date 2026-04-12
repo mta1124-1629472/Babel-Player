@@ -100,6 +100,8 @@ jobs:
             }
 
       - name: 'Acknowledge request'
+        if: |-
+          ${{ steps.extract_command.outputs.command != 'fallthrough' && steps.extract_command.outputs.request != '' && startsWith(steps.extract_command.outputs.request, '@qwen-code') }}
         env:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN || github.token }}'
           ISSUE_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
@@ -135,6 +137,7 @@ jobs:
       pull-requests: 'write'
     with:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
+      issue_number: '${{ needs.dispatch.outputs.issue_number }}'
     secrets: 'inherit'
 
   invoke:

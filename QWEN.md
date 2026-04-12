@@ -24,7 +24,7 @@ Users load a video or audio file, generate timed transcripts (local AI or cloud 
 |---|---|
 | **UI Framework** | Avalonia 12.0 (Fluent theme, Inter font) |
 | **MVVM** | CommunityToolkit.Mvvm 8.4.2 |
-| **Runtime** | .NET 10.0, C# 12+, nullable enabled, implicit usings |
+| **Runtime** | .NET 10.0, C# 12+, nullable enabled |
 | **Native media** | libmpv-2.dll (P/Invoke, GPU-accelerated video) |
 | **Media processing** | ffmpeg.exe (bundled) |
 | **Python management** | uv.exe (bundled, auto-bootstraps venv) |
@@ -73,6 +73,7 @@ Babel-Player/
 ## Building and Running
 
 ### Build
+
 ```powershell
 dotnet build babel-player.sln          # Full build (includes restore)
 dotnet build babel-player.sln --no-restore  # Fast build (skip restore)
@@ -81,6 +82,7 @@ dotnet run --project BabelPlayer.csproj # Launch the app
 ```
 
 ### Test
+
 ```powershell
 dotnet test babel-player.sln                          # All tests
 dotnet test babel-player.sln --filter "ClassName~SessionWorkflowCoordinatorUnitTests"  # Single test class
@@ -91,12 +93,14 @@ dotnet test babel-player.sln -v n                     # Verbose output
 **Test categories:** `Integration`, `RequiresPython`, `RequiresFfmpeg`, `RequiresExternalTranslation`
 
 ### Lint / Verify
+
 ```powershell
 python3 scripts/check-architecture.py    # Architecture linter (required after structural changes)
 python -m py_compile inference/main.py   # Verify Python inference code
 ```
 
 ### Full verification sequence
+
 ```powershell
 dotnet build babel-player.sln
 dotnet test babel-player.sln
@@ -105,6 +109,7 @@ python -m py_compile inference/main.py
 ```
 
 ### Troubleshooting
+
 - **Locked file error:** `taskkill /F /IM clrdbg.exe /IM dotnet.exe`
 - **Always run the full diagnostic sequence** before reporting issues
 
@@ -162,7 +167,7 @@ Every AI inference service implements a provider interface with uniform method s
 | **Transcription** | Faster-Whisper | Faster-Whisper | OpenAI Whisper, Google STT, Gemini |
 | **Translation** | CTranslate2, NLLB-200 | CTranslate2, NLLB-200 | DeepL, OpenAI, Gemini, Google Translate |
 | **TTS** | Piper | Qwen3-TTS, XTTS v2 | Edge TTS, ElevenLabs, Google Cloud, OpenAI |
-| **Diarization** | Pyannote | — | — |
+| **Diarization** | Manual, NemoLocal (`NemoDiarizationAlias`), WeSpeakerLocal (`WeSpeakerDiarizationAlias`) | Manual, NemoLocal, WeSpeakerLocal | — |
 
 ## Development Conventions
 

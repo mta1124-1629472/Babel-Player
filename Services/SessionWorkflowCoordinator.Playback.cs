@@ -22,8 +22,14 @@ public sealed partial class SessionWorkflowCoordinator
     /// Runs diarization on the current session's ingested media and merges detected speaker assignments into the transcript
     /// and optional translation, updating session state on success.
     /// </summary>
+    /// <remarks>
+    /// Entry stage: the session must be at or beyond <see cref="SessionWorkflowStage.Transcribed"/>.
+    /// Exit stage: advances to <see cref="SessionWorkflowStage.Diarized"/> unless the session is already at or beyond
+    /// <see cref="SessionWorkflowStage.Translated"/>, in which case the existing stage is preserved.
+    /// Session state changes are persisted via <c>SaveCurrentSession()</c>.
+    /// </remarks>
     /// <param name="cancellationToken">Token to cancel the diarization operation.</param>
-    /// <returns>`true` if speaker assignments were changed in the transcript or translation, `false` otherwise.</returns>
+    /// <returns><see langword="true"/> if speaker assignments were changed in the transcript or translation; <see langword="false"/> otherwise.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the session is not at or beyond the Transcribed stage, when required session paths are missing or empty,
     /// or when no diarization provider is selected.
@@ -63,13 +69,28 @@ public sealed partial class SessionWorkflowCoordinator
     }
 
     /// <summary>
-    /// Executes speaker diarization for the specified audio file and merges detected speaker assignments into the transcript and optional translation artifacts.
+    /// Executes speaker diarization for the specified audio file and merges detected speaker assignments into the transcript
+    /// and optional translation artifacts, then advances and persists session state.
     /// </summary>
+    /// <remarks>
+    /// Entry stage: the session must already be at or beyond <see cref="SessionWorkflowStage.Transcribed"/> — callers are
+    /// responsible for enforcing this precondition before invoking this method.
+    /// Exit stage: defaults to <see cref="SessionWorkflowStage.Diarized"/> (or preserves the current stage when it is
+    /// already at or beyond <see cref="SessionWorkflowStage.Translated"/>); supplying <paramref name="resultingStage"/>
+    /// overrides this default entirely.
+    /// Session state changes are persisted by <c>SaveCurrentSession()</c> before this method returns.
+    /// </remarks>
     /// <param name="audioPath">Filesystem path to the source audio to diarize.</param>
     /// <param name="transcriptPath">Filesystem path to the transcript file to update with diarization speaker IDs.</param>
     /// <param name="ct">Cancellation token to cancel the operation.</param>
+    /// <param name="resultingStage">
+    /// Optional stage to assign to the session after successful diarization.
+    /// When <see langword="null"/>, the exit stage is computed automatically (see remarks).
+    /// </param>
+    /// <param name="statusMessage">Optional status message to record on the session; a context-appropriate default is used when <see langword="null"/>.</param>
     /// <returns>
-    /// A <see cref="DiarizationExecutionOutcome"/> containing whether speaker assignments were applied to transcript/translation, the detected speaker count, and the diarized segment count.
+    /// A <see cref="DiarizationExecutionOutcome"/> containing whether speaker assignments were applied to transcript/translation,
+    /// the detected speaker count, and the diarized segment count.
     /// </returns>
     private async Task<DiarizationExecutionOutcome> ExecuteDiarizationAsync(
         string audioPath,
