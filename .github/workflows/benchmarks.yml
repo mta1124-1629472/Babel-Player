@@ -18,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Need write access to commit the updated leaderboard
+          lfs: false
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
