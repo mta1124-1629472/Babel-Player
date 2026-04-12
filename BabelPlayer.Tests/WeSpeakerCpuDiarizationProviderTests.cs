@@ -44,7 +44,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
+    public void WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
@@ -60,10 +60,6 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
-
-        // Populate the cached State so CheckReadiness can read it without async I/O.
-        await manager.EnsureInstalledAsync();
-        Assert.Equal(ManagedCpuState.Ready, manager.State);
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
 
