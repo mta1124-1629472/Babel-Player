@@ -1,0 +1,34 @@
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout without LFS — libmpv-2.dll (115 MB) is not needed for agent work
+      # and the repo has exceeded its LFS budget, which aborts checkout entirely.
+      - name: Checkout (no LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      # Remove generated files that cause untracked-file conflicts on reruns
+      - name: Clean generated artifacts
+        run: rm -rf .claude BabelPlayer.Tests/Pipe || true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore babel-player.sln
