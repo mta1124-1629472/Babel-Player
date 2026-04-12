@@ -9,17 +9,24 @@ namespace Babel.Player.Services.Credentials;
 /// <summary>
 /// A credential provider that stores encrypted keys in a JSON file.
 /// On Windows, it uses DPAPI (CurrentUser) for protection.
-/// On other platforms, it uses base64 obfuscation.
+/// On other platforms, it uses AES-256-GCM.
 /// </summary>
 public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
 {
     private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
     private readonly string _filePath;
 
-    public string StorageProviderName => OperatingSystem.IsWindows() ? "Local File (DPAPI Encrypted)" : "Local File (Obfuscated)";
+    public string StorageProviderName => OperatingSystem.IsWindows() ? "Local File (DPAPI Encrypted)" : "Local File (AES-256-GCM Encrypted)";
+
+    private static readonly byte[] _salt = Encoding.UTF8.GetBytes("BabelPlayer_SecureSalt_2024");
+
+    private static byte[] DeriveKey()
+    {
+        var password = Encoding.UTF8.GetBytes(Environment.MachineName + Environment.UserName);
+        return System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(password, _salt, 100000, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
+    }
 
     public FileSystemCredentialProvider(string filePath)
-
     {
         _filePath = filePath;
         var dir = Path.GetDirectoryName(filePath);
@@ -108,7 +115,22 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
                 data, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
             return Convert.ToBase64String(encrypted);
         }
-        return Convert.ToBase64String(data);
+
+        var key = DeriveKey();
+        var nonce = new byte[12];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(nonce);
+        var tag = new byte[16];
+        var ciphertext = new byte[data.Length];
+
+        using var aesGcm = new System.Security.Cryptography.AesGcm(key, tag.Length);
+        aesGcm.Encrypt(nonce, data, ciphertext, tag);
+
+        var result = new byte[nonce.Length + tag.Length + ciphertext.Length];
+        Buffer.BlockCopy(nonce, 0, result, 0, nonce.Length);
+        Buffer.BlockCopy(tag, 0, result, nonce.Length, tag.Length);
+        Buffer.BlockCopy(ciphertext, 0, result, nonce.Length + tag.Length, ciphertext.Length);
+
+        return Convert.ToBase64String(result);
     }
 
     private static string Unprotect(string stored)
@@ -122,7 +144,22 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
                     bytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
                 return Encoding.UTF8.GetString(decrypted);
             }
-            return Encoding.UTF8.GetString(bytes);
+
+            if (bytes.Length < 12 + 16) return "";
+            var key = DeriveKey();
+            var nonce = new byte[12];
+            var tag = new byte[16];
+            var ciphertext = new byte[bytes.Length - 12 - 16];
+
+            Buffer.BlockCopy(bytes, 0, nonce, 0, nonce.Length);
+            Buffer.BlockCopy(bytes, nonce.Length, tag, 0, tag.Length);
+            Buffer.BlockCopy(bytes, nonce.Length + tag.Length, ciphertext, 0, ciphertext.Length);
+
+            var plaintext = new byte[ciphertext.Length];
+            using var aesGcm = new System.Security.Cryptography.AesGcm(key, tag.Length);
+            aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
+
+            return Encoding.UTF8.GetString(plaintext);
         }
         catch
         {
