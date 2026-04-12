@@ -33,7 +33,7 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 /noconfig
 /unsafe-
 /checked-
-/nowarn:1701,1702,1701,1702
+/nowarn:1701,1702,1701,1702,8002
 /fullpaths
 /nostdlib+
 /errorreport:prompt
@@ -46,8 +46,8 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 /debug:portable
 /filealign:512
 /optimize-
-/out:obj/Debug/net10.0/BabelPlayer.Tests.dll
-/refout:obj/Debug/net10.0/refint/BabelPlayer.Tests.dll
+/out:obj\Debug\net10.0\BabelPlayer.Tests.dll
+/refout:obj\Debug\net10.0\refint\BabelPlayer.Tests.dll
 /target:exe
 /warnaserror-
 /utf8output
@@ -57,12 +57,12 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 
 [sourceFiles]
 <NUGET>/microsoft.net.test.sdk/18.4.0/build/net8.0/Microsoft.NET.Test.Sdk.Program.cs
- @folderNames=..,..,..,.nuget,packages,microsoft.net.test.sdk,18.4.0,build,net8.0
 ApiKeyStoreTests.cs
 ApiKeyValidationServiceTests.cs
 AppLogTests.cs
 AppSettingsTests.cs
 ArtifactContractTests.cs
+artifacts/verification/obj/Debug/net10.0/BabelPlayer.Tests.GlobalUsings.g.cs
 BenchmarkCliTests.cs
 BenchmarkOrchestratorTests.cs
 BenchmarkResultWriterTests.cs
@@ -117,7 +117,8 @@ WerComputerTests.cs
 WeSpeakerCpuDiarizationProviderTests.cs
 
 [metadataReferences]
-../../../../../usr/lib/dotnet/packs/Microsoft.NETCore.App.Ref/10.0.4/ref/net10.0/
+../obj/Debug/net10.0/ref/BabelPlayer.dll
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.5/ref/net10.0/
  Microsoft.CSharp.dll
  Microsoft.VisualBasic.Core.dll
  Microsoft.VisualBasic.dll
@@ -285,7 +286,6 @@ WeSpeakerCpuDiarizationProviderTests.cs
  System.Xml.XPath.dll
  System.Xml.XPath.XDocument.dll
  WindowsBase.dll
-../obj/Debug/net10.0/ref/BabelPlayer.dll
 <NUGET>/
  avalonia.desktop/12.0.0/lib/net10.0/Avalonia.Desktop.dll
  avalonia.fonts.inter/12.0.0/lib/net10.0/Avalonia.Fonts.Inter.dll
@@ -340,14 +340,14 @@ WeSpeakerCpuDiarizationProviderTests.cs
  xunit.extensibility.execution/2.9.3/lib/netstandard1.1/xunit.execution.dotnet.dll
 
 [analyzerReferences]
-../../../../../usr/lib/dotnet/packs/Microsoft.NETCore.App.Ref/10.0.4/analyzers/dotnet/cs/
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.5/analyzers/dotnet/cs/
  Microsoft.Interop.ComInterfaceGenerator.dll
  Microsoft.Interop.JavaScript.JSImportGenerator.dll
  Microsoft.Interop.LibraryImportGenerator.dll
  Microsoft.Interop.SourceGeneration.dll
  System.Text.Json.SourceGeneration.dll
  System.Text.RegularExpressions.Generator.dll
-../../../../../usr/lib/dotnet/sdk/10.0.104/Sdks/Microsoft.NET.Sdk/analyzers/
+<DOTNET>/sdk/10.0.201/Sdks/Microsoft.NET.Sdk/analyzers/
  Microsoft.CodeAnalysis.CSharp.NetAnalyzers.dll
  Microsoft.CodeAnalysis.NetAnalyzers.dll
 <NUGET>/avalonia/12.0.0/analyzers/dotnet/cs/
@@ -365,5 +365,5 @@ WeSpeakerCpuDiarizationProviderTests.cs
   xunit.analyzers.fixes.dll
 
 [analyzerConfigFiles]
-../../../../../usr/lib/dotnet/sdk/10.0.104/Sdks/Microsoft.NET.Sdk/analyzers/build/config/analysislevel_10_default.globalconfig
+<DOTNET>/sdk/10.0.201/Sdks/Microsoft.NET.Sdk/analyzers/build/config/analysislevel_10_default.globalconfig
 obj/Debug/net10.0/BabelPlayer.Tests.GeneratedMSBuildEditorConfig.editorconfig
