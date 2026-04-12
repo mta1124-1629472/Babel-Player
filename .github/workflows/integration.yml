@@ -18,6 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: false
+          clean: true
         env:
           GIT_LFS_SKIP_SMUDGE: '1'
 

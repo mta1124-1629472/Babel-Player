@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: false
+          clean: true
           token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GIT_LFS_SKIP_SMUDGE: '1'
