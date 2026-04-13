@@ -171,14 +171,17 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
 
     private void SaveRaw(Dictionary<string, string> keys)
     {
+        var dir = Path.GetDirectoryName(_filePath) ?? "";
+        var tempPath = Path.Combine(dir, Path.GetRandomFileName());
         try
         {
             var json = JsonSerializer.Serialize(keys, _jsonOptions);
-            File.WriteAllText(_filePath, json, Encoding.UTF8);
+            File.WriteAllText(tempPath, json, Encoding.UTF8);
+            File.Move(tempPath, _filePath, overwrite: true);
         }
         catch
         {
-            // Silently fail for now, same as original implementation
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
         }
     }
 

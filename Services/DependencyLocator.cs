@@ -33,7 +33,6 @@ public static class DependencyLocator
         if (ProbePythonCandidate(managedGpuPython, requirePip: true))
             return managedGpuPython;
 
-
         var candidates = new[]
         {
             Path.Combine(appDir, "python.exe"),
@@ -209,9 +208,6 @@ public static class DependencyLocator
         return null;
     }
 
-    /// <summary>
-    /// Get the file extensions to try when resolving an executable name on the current platform.
-    /// </summary>
     /// <summary>
     /// Get the list of filename extensions to try when resolving an executable name on the current platform.
     /// </summary>
