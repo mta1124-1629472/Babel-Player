@@ -705,7 +705,9 @@ public sealed partial class SessionWorkflowCoordinator
     /// </remarks>
     public void Dispose()
     {
+        RequestShutdown();
         FlushPendingSave();
+        WaitForOwnedBackgroundOperations(TimeSpan.FromSeconds(5));
 
         // Unsubscribe segment events before disposing the transport manager.
         if (_subscribedToSegmentEvents)
@@ -745,6 +747,7 @@ public sealed partial class SessionWorkflowCoordinator
                     // but skip inference-host disposal so the backend stays alive for still-running
                     // local TTS tasks (e.g. Qwen against the managed host).
                     _transportManager.Dispose();
+                    _shutdownCts.Dispose();
                     return;
                 }
             }
@@ -768,6 +771,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         (_ttsService as IDisposable)?.Dispose();
         _transportManager.Dispose();
+        _shutdownCts.Dispose();
     }
 
     /// <summary>
