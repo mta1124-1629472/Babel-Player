@@ -40,7 +40,7 @@ public class OpenAiApiClientPerformanceTests : IClassFixture<SessionWorkflowTemp
     }
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "ManualBenchmark")]
     public async Task TranscribeAudioAsync_PerformanceTest()
     {
         var tempDir = _fixture.CreateCaseDirectory(nameof(TranscribeAudioAsync_PerformanceTest));

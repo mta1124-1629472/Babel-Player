@@ -73,28 +73,39 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
                 }
                 return stored;
             }
-            catch (IOException) { /* fall through to generate a new secret */ }
-            catch (UnauthorizedAccessException) { /* fall through to generate a new secret */ }
+            catch (IOException ex)
+            {
+                throw new InvalidOperationException($"Failed to read install secret from '{secretPath}': {ex.Message}", ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new InvalidOperationException($"Access denied reading install secret from '{secretPath}': {ex.Message}", ex);
+            }
         }
 
         var newSecret = new byte[32];
         System.Security.Cryptography.RandomNumberGenerator.Fill(newSecret);
 
+        var secretDir = Path.GetDirectoryName(secretPath) ?? "";
+        var tempPath = Path.Combine(secretDir, Path.GetRandomFileName());
+
         if (OperatingSystem.IsWindows())
         {
             var protectedSecret = System.Security.Cryptography.ProtectedData.Protect(
                 newSecret, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-            File.WriteAllBytes(secretPath, protectedSecret);
+            File.WriteAllBytes(tempPath, protectedSecret);
         }
         else
         {
-            File.WriteAllBytes(secretPath, newSecret);
+            File.WriteAllBytes(tempPath, newSecret);
             try
             {
-                File.SetUnixFileMode(secretPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                File.SetUnixFileMode(tempPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
             catch { /* best-effort permission restriction */ }
         }
+
+        File.Move(tempPath, secretPath, overwrite: false);
 
         return newSecret;
     }
