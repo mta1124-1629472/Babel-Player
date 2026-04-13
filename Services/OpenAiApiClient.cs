@@ -98,7 +98,7 @@ public sealed class OpenAiApiClient : IDisposable
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "audio/speech") { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        
+
         if (!response.IsSuccessStatusCode)
         {
             var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -141,7 +141,7 @@ public sealed class OpenAiApiClient : IDisposable
 
         using var content = new MultipartFormDataContent();
 
-        var stream = System.IO.File.OpenRead(audioFilePath);
+        using var stream = new System.IO.FileStream(audioFilePath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read, 4096, true);
         var streamContent = new StreamContent(stream);
         streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         content.Add(streamContent, "file", System.IO.Path.GetFileName(audioFilePath));
