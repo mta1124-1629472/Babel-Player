@@ -65,12 +65,25 @@ public partial class DevLogViewModel : ObservableObject, IDisposable
     {
         var dir = Path.GetDirectoryName(_log.LogFilePath);
         if (dir is not null && Directory.Exists(dir))
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            try
             {
-                FileName = "explorer.exe",
-                Arguments = $"\"{dir}\"",
-                UseShellExecute = false,
-            });
+                var explorerPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                    "explorer.exe");
+                var startInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = explorerPath,
+                    UseShellExecute = false,
+                };
+                startInfo.ArgumentList.Add(dir);
+                System.Diagnostics.Process.Start(startInfo);
+            }
+            catch (Exception ex)
+            {
+                _log.Warning($"Failed to open log folder: {ex.Message}");
+            }
+        }
     }
 
     partial void OnFilterTextChanged(string value) => Refresh();
