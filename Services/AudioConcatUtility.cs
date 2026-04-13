@@ -13,8 +13,8 @@ public static class AudioConcatUtility
     public static async Task CombineAudioSegmentsAsync(
         IReadOnlyList<string> segmentAudioPaths,
         string outputAudioPath,
-        CancellationToken cancellationToken = default,
-        AppLog? log = null)
+        AppLog? log = null,
+        CancellationToken cancellationToken = default)
     {
         if (segmentAudioPaths.Count == 0)
             throw new InvalidOperationException("Cannot combine zero segment audio files.");
@@ -84,22 +84,22 @@ public static class AudioConcatUtility
         {
             try
             {
-                if (Directory.Exists(concatListDir))
-                    Directory.Delete(concatListDir, recursive: true);
-            }
-            catch (Exception ex)
-            {
-                log?.Warning($"Failed to clean up temporary concat directory {concatListDir}: {ex.Message}");
-            }
-
-            try
-            {
                 if (File.Exists(concatListPath))
                     File.Delete(concatListPath);
             }
             catch (Exception ex)
             {
-                log?.Warning($"Failed to clean up temporary concat list file {concatListPath}: {ex.Message}");
+                log?.Warning($"Failed to clean up temporary concat list file {concatListPath}: {ex}");
+            }
+
+            try
+            {
+                if (Directory.Exists(concatListDir))
+                    Directory.Delete(concatListDir, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                log?.Warning($"Failed to clean up temporary concat directory {concatListDir}: {ex}");
             }
         }
     }

@@ -138,6 +138,6 @@ public sealed class SegmentedTtsComposer
             return;
         }
 
-        await AudioConcatUtility.CombineAudioSegmentsAsync(segmentAudioPaths, outputAudioPath, cancellationToken, log);
+        await AudioConcatUtility.CombineAudioSegmentsAsync(segmentAudioPaths, outputAudioPath, log, cancellationToken);
     }
 }
