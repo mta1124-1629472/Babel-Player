@@ -118,8 +118,13 @@ public sealed class ManagedCpuRuntimeManager
     /// </summary>
     public string RuntimeRoot => _cpuRuntimeRoot;
 
-    public string GetPythonExecutablePath() =>
-        Path.Combine(RuntimeRoot, ".venv", "Scripts", "python.exe");
+    public string GetPythonExecutablePath()
+    {
+        var venvDir = Path.Combine(RuntimeRoot, ".venv");
+        return OperatingSystem.IsWindows()
+            ? Path.Combine(venvDir, "Scripts", "python.exe")
+            : Path.Combine(venvDir, "bin", "python");
+    }
 
     public string GetBootstrapMarkerPath() =>
         Path.Combine(RuntimeRoot, ".cpu-bootstrap-version");
