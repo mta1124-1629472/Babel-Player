@@ -256,15 +256,41 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 .GetAwaiter()
                 .GetResult();
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Warning($"Managed GPU host graceful shutdown failed during Dispose(): {ex.Message}. Attempting forceful termination.");
             try
             {
-                if (_hostProcess is { HasExited: false })
+                if (_hostProcess is { HasExited: false } process)
+                {
+                    var pid = process.Id;
+                    _log.Warning($"Forcefully terminating managed GPU host process pid={pid}.");
                     _hostProcess.Kill(entireProcessTree: true);
+                }
             }
-            catch
+            catch (Exception killEx)
             {
+                var processInfo = "unknown";
+                try
+                {
+                    if (_hostProcess is not null)
+                    {
+                        processInfo = _hostProcess.HasExited
+                            ? $"pid={_hostProcess.Id} (exited)"
+                            : $"pid={_hostProcess.Id} (running)";
+                    }
+                }
+                catch
+                {
+                    processInfo = "inaccessible";
+                }
+
+                _log.Error($"Failed to forcefully terminate managed GPU host process ({processInfo}) during Dispose(): {killEx.Message}", killEx);
+                State = ManagedHostState.Failed;
+                FailureReason = $"Host process cleanup failed: {killEx.Message}";
+                // Rethrow to surface the failure to callers
+                throw new InvalidOperationException(
+                    $"Failed to terminate managed GPU host process during cleanup. Process may be orphaned: {killEx.Message}", killEx);
             }
         }
     }

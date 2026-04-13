@@ -48,10 +48,31 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
-        Directory.CreateDirectory(Path.Combine(runtimeRoot, ".venv", "Scripts"));
 
-        var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
+        // Create platform-appropriate venv structure
+        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var scriptsDir = isWindows ? "Scripts" : "bin";
+        var pythonExe = isWindows ? "python.exe" : "python";
+        Directory.CreateDirectory(Path.Combine(runtimeRoot, ".venv", scriptsDir));
+
+        var pythonPath = Path.Combine(runtimeRoot, ".venv", scriptsDir, pythonExe);
         File.WriteAllBytes(pythonPath, Array.Empty<byte>());
+
+        // On Unix, set executable bit so GetPythonExecutablePath() finds it
+        if (!isWindows)
+        {
+            try
+            {
+                System.IO.File.SetUnixFileMode(pythonPath,
+                    System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
+                    System.IO.UnixFileMode.GroupRead | System.IO.UnixFileMode.GroupExecute |
+                    System.IO.UnixFileMode.OtherRead | System.IO.UnixFileMode.OtherExecute);
+            }
+            catch
+            {
+                // If setting permissions fails, the test may fail but that's acceptable
+            }
+        }
 
         var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
         File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));

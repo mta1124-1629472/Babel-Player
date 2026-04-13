@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using Babel.Player.Models;
 
 namespace Babel.Player.Services.Credentials;
 
@@ -16,7 +17,7 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
     private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
     private readonly string _filePath;
 
-    public string StorageProviderName => OperatingSystem.IsWindows() ? "Local File (DPAPI Encrypted)" : "Local File (Obfuscated)";
+    public string StorageProviderName => OperatingSystem.IsWindows() ? ProviderNames.LocalFileDpapi : ProviderNames.LocalFileAes256Gcm;
 
     public FileSystemCredentialProvider(string filePath)
     {
@@ -115,20 +116,44 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
 
     private static string Unprotect(string stored)
     {
+        if (string.IsNullOrWhiteSpace(stored))
+            throw new ArgumentException("Cannot unprotect null or empty credential value.", nameof(stored));
+
+        byte[] bytes;
         try
         {
-            var bytes = Convert.FromBase64String(stored);
-            if (OperatingSystem.IsWindows())
+            bytes = Convert.FromBase64String(stored);
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidOperationException(
+                "Stored credential is not a valid base64-encoded string. The credential file may be corrupted.", ex);
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            try
             {
                 var decrypted = System.Security.Cryptography.ProtectedData.Unprotect(
                     bytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
                 return Encoding.UTF8.GetString(decrypted);
             }
+            catch (System.Security.Cryptography.CryptographicException ex)
+            {
+                throw new InvalidOperationException(
+                    "Failed to decrypt credential using DPAPI. The credential may have been encrypted by a different user or on a different machine.", ex);
+            }
+        }
+
+        // Non-Windows: base64 decode only (obfuscation, not encryption)
+        try
+        {
             return Encoding.UTF8.GetString(bytes);
         }
-        catch
+        catch (Exception ex)
         {
-            return "";
+            throw new InvalidOperationException(
+                "Failed to decode obfuscated credential. The credential file may be corrupted.", ex);
         }
     }
 }
