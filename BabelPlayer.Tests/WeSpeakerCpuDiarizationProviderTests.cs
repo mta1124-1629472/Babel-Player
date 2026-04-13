@@ -48,18 +48,19 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
-        Directory.CreateDirectory(Path.Combine(runtimeRoot, ".venv", "Scripts"));
-
-        var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
-        File.WriteAllBytes(pythonPath, Array.Empty<byte>());
-
-        var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
-        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));
 
         var manager = new ManagedCpuRuntimeManager(
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
+
+        // The manager defines GetPythonExecutablePath(), we must ensure *that* path exists
+        var pythonPath = manager.GetPythonExecutablePath();
+        Directory.CreateDirectory(Path.GetDirectoryName(pythonPath)!);
+        File.WriteAllBytes(pythonPath, Array.Empty<byte>());
+
+        var markerPath = manager.GetBootstrapMarkerPath();
+        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
 
