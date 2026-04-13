@@ -51,7 +51,12 @@
       "Bash(coderabbit auth:*)",
       "Bash(echo \"EXIT: $?\")",
       "Skill(commit-commands:commit)",
-      "Skill(commit-commands:commit:*)"
+      "Skill(commit-commands:commit:*)",
+      "Bash(curl -fsSL * | bash)",
+      "Bash(apt-get update)",
+      "Bash(apt-get install *)",
+      "Bash(pip install *)",
+      "Bash(dotnet restore *)"
     ]
   }
 }

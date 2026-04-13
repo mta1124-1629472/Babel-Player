@@ -19,7 +19,6 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
     public string StorageProviderName => OperatingSystem.IsWindows() ? "Local File (DPAPI Encrypted)" : "Local File (Obfuscated)";
 
     public FileSystemCredentialProvider(string filePath)
-
     {
         _filePath = filePath;
         var dir = Path.GetDirectoryName(filePath);
@@ -108,6 +107,9 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
                 data, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
             return Convert.ToBase64String(encrypted);
         }
+        // WARNING: Non-Windows platforms use base64 encoding (NOT encryption).
+        // This is a known security tradeoff. Secrets are stored as obfuscated base64, not encrypted.
+        // TODO: Implement AES-256-GCM or integrate with platform secret stores (macOS Keychain, Linux Secret Service).
         return Convert.ToBase64String(data);
     }
 

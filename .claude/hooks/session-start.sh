@@ -30,7 +30,10 @@ fi
 
 # ── Install Python dependencies ────────────────────────────────────────────────
 echo "[session-start] Installing Python dependencies..."
-pip install -q faster-whisper edge-tts googletrans
+pip install -q faster-whisper edge-tts
+if [ "${INSTALL_DEV_DEPS:-}" = "true" ]; then
+  pip install -q googletrans
+fi
 
 # ── Restore NuGet packages ─────────────────────────────────────────────────────
 echo "[session-start] Restoring NuGet packages..."
