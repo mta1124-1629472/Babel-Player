@@ -63,6 +63,12 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
 
+        // The provider checks manager.State which defaults to NotInstalled.
+        // We need to simulate the bootstrap check so the manager sets its state.
+        await manager.CheckNeedsBootstrapAsync();
+        // Wait, CheckNeedsBootstrapAsync doesn't change state. EnsureInstalledAsync does.
+        await manager.EnsureInstalledAsync();
+
         var readiness = provider.CheckReadiness(new AppSettings(), null);
 
         Assert.True(readiness.IsReady);
