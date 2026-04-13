@@ -29,8 +29,8 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
     private static readonly byte[] _pbkdf2Salt = Encoding.UTF8.GetBytes("BabelPlayer_SecureSalt_2024");
 
     public string StorageProviderName => OperatingSystem.IsWindows()
-        ? ProviderNames.LocalFileDpapi
-        : ProviderNames.LocalFileAes256Gcm;
+        ? StorageProviderNames.LocalFileDpapi
+        : StorageProviderNames.LocalFileAes256Gcm;
 
     public FileSystemCredentialProvider(string filePath)
     {
