@@ -49,9 +49,11 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
-        Directory.CreateDirectory(Path.Combine(runtimeRoot, ".venv", "Scripts"));
+        var pythonPath = OperatingSystem.IsWindows()
+            ? Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe")
+            : Path.Combine(runtimeRoot, ".venv", "bin", "python");
 
-        var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(pythonPath)!);
         File.WriteAllBytes(pythonPath, Array.Empty<byte>());
 
         var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");

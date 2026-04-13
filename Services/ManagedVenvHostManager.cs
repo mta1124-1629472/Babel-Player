@@ -245,7 +245,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         try
         {
             var runtimeRoot = _runtimeRootResolver();
-            var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
+            var venvDir = Path.Combine(runtimeRoot, ".venv");
+            var pythonPath = OperatingSystem.IsWindows()
+                ? Path.Combine(venvDir, "Scripts", "python.exe")
+                : Path.Combine(venvDir, "bin", "python");
             var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
 
             RecoverStaleHostProcessesAsync(
@@ -300,7 +303,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         var runtimeRoot = _runtimeRootResolver();
         var venvDir = Path.Combine(runtimeRoot, ".venv");
-        var pythonPath = Path.Combine(venvDir, "Scripts", "python.exe");
+        var pythonPath = OperatingSystem.IsWindows()
+            ? Path.Combine(venvDir, "Scripts", "python.exe")
+            : Path.Combine(venvDir, "bin", "python");
         var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
         Directory.CreateDirectory(runtimeRoot);
         _log.Info(
