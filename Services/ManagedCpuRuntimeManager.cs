@@ -18,7 +18,7 @@ public enum ManagedCpuState
 
 public sealed class ManagedCpuRuntimeManager
 {
-    private const string PythonVersion = "3.11.6";
+    internal const string PythonVersion = "3.11.6";
     private static readonly SemaphoreSlim InstallGate = new(1, 1);
 
     private readonly AppLog _log;
@@ -119,8 +119,13 @@ public sealed class ManagedCpuRuntimeManager
     /// </summary>
     public string RuntimeRoot => _cpuRuntimeRoot;
 
-    public string GetPythonExecutablePath() =>
-        Path.Combine(RuntimeRoot, ".venv", "Scripts", "python.exe");
+    public string GetPythonExecutablePath()
+    {
+        var venvDir = Path.Combine(RuntimeRoot, ".venv");
+        return OperatingSystem.IsWindows()
+            ? Path.Combine(venvDir, "Scripts", "python.exe")
+            : Path.Combine(venvDir, "bin", "python");
+    }
 
     public string GetBootstrapMarkerPath() =>
         Path.Combine(RuntimeRoot, ".cpu-bootstrap-version");
