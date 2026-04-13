@@ -160,7 +160,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
                 false,
                 "PyTorch is installed, but torch.cuda.is_available() returned false.")));
 
-        PrepareBootstrappedRuntimeArtifacts();
+        await PrepareBootstrappedRuntimeArtifactsAsync();
 
         var result = await manager.EnsureStartedAsync(
             new AppSettings
@@ -214,7 +214,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
                 return File.WriteAllTextAsync(hostPidPath, "12345", token);
             });
 
-        PrepareBootstrappedRuntimeArtifacts();
+        await PrepareBootstrappedRuntimeArtifactsAsync();
 
         var result = await manager.EnsureStartedAsync(
             new AppSettings
@@ -273,7 +273,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             hostProcessStarter: (_, _, _, hostPidPath, token) =>
                 File.WriteAllTextAsync(hostPidPath, "12345", token));
 
-        PrepareBootstrappedRuntimeArtifacts();
+        await PrepareBootstrappedRuntimeArtifactsAsync();
 
         var result = await manager.EnsureStartedAsync(
             new AppSettings
@@ -321,7 +321,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
                 File.WriteAllTextAsync(hostPidPath, "12345", token),
             postStartProbeTimeout: TimeSpan.FromMilliseconds(60));
 
-        PrepareBootstrappedRuntimeArtifacts();
+        await PrepareBootstrappedRuntimeArtifactsAsync();
 
         var result = await manager.EnsureStartedAsync(
             new AppSettings
@@ -374,7 +374,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             hostProcessStarter: (_, _, _, hostPidPath, token) =>
                 File.WriteAllTextAsync(hostPidPath, "12345", token));
 
-        PrepareRuntimeArtifacts(writeBootstrapMarker: false);
+        await PrepareRuntimeArtifactsAsync(writeBootstrapMarker: false);
 
         var result = await manager.EnsureStartedAsync(
             new AppSettings
@@ -426,7 +426,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             hostProcessStarter: (_, _, _, hostPidPath, token) =>
                 File.WriteAllTextAsync(hostPidPath, "12345", token));
 
-        PrepareBootstrappedRuntimeArtifacts();
+        await PrepareBootstrappedRuntimeArtifactsAsync();
 
         var result = await manager.EnsureStartedAsync(
             new AppSettings
@@ -477,7 +477,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             hostProcessStarter: (_, _, _, hostPidPath, token) =>
                 File.WriteAllTextAsync(hostPidPath, "12345", token));
 
-        PrepareRuntimeArtifacts(writeBootstrapMarker: false);
+        await PrepareRuntimeArtifactsAsync(writeBootstrapMarker: false);
         File.WriteAllText(Path.Combine(_dir, "managed-host.pid"), staleProcess.Id.ToString());
         SetTrackedHostProcess(manager, staleProcess);
 
@@ -530,7 +530,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
                 return File.WriteAllTextAsync(hostPidPath, "12345", token);
             });
 
-        PrepareBootstrappedRuntimeArtifacts();
+        await PrepareBootstrappedRuntimeArtifactsAsync();
         SetTrackedHostProcess(manager, staleProcess);
 
         var result = await manager.EnsureStartedAsync(
@@ -579,7 +579,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
                 return File.WriteAllTextAsync(hostPidPath, "12345", token);
             });
 
-        PrepareBootstrappedRuntimeArtifacts();
+        await PrepareBootstrappedRuntimeArtifactsAsync();
         SetTrackedHostProcess(manager, trackedProcess);
 
         var result = await manager.EnsureStartedAsync(
@@ -632,7 +632,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             },
             requestLeaseTracker: requestLeaseTracker);
 
-        PrepareBootstrappedRuntimeArtifacts();
+        await PrepareBootstrappedRuntimeArtifactsAsync();
         SetTrackedHostProcess(manager, trackedProcess);
 
         var result = await manager.EnsureStartedAsync(
@@ -683,7 +683,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             hostProcessStarter: (_, _, _, hostPidPath, token) =>
                 File.WriteAllTextAsync(hostPidPath, "12345", token));
 
-        PrepareBootstrappedRuntimeArtifacts();
+        await PrepareBootstrappedRuntimeArtifactsAsync();
         File.WriteAllText(Path.Combine(_dir, "managed-host.pid"), "999999");
 
         var result = await manager.EnsureStartedAsync(
@@ -753,7 +753,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
             bootstrapRunner: (_, _, _, _, _, _) => throw new InvalidOperationException("Process 'uv venv --clear' failed with exit code 2: already exists"));
 
-        PrepareRuntimeArtifacts(writeBootstrapMarker: false);
+        await PrepareRuntimeArtifactsAsync(writeBootstrapMarker: false);
 
         var result = await manager.EnsureStartedAsync(
             new AppSettings
@@ -786,7 +786,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             bootstrapRunner: (_, _, _, _, _, _) => throw new InvalidOperationException(
                 "Process 'uv venv --clear' failed with exit code 2: failed to remove directory '\\\\?\\C:\\test\\.venv\\Scripts': Access is denied. (os error 5)"));
 
-        PrepareRuntimeArtifacts(writeBootstrapMarker: false);
+        await PrepareRuntimeArtifactsAsync(writeBootstrapMarker: false);
 
         var result = await manager.EnsureStartedAsync(
             new AppSettings
@@ -816,7 +816,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             constraintsPathResolver: () => Path.Combine(_dir, "gpu-constraints.txt"),
             bootstrapRunner: (_, _, _, _, _, _) => throw new InvalidOperationException("Process 'uv venv --clear' failed with exit code 2: stale venv"));
 
-        PrepareRuntimeArtifacts(writeBootstrapMarker: false);
+        await PrepareRuntimeArtifactsAsync(writeBootstrapMarker: false);
 
         manager.RequestEnsureStarted(
             new AppSettings
@@ -914,8 +914,8 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         return Convert.ToHexString(bytes);
     }
 
-    private void PrepareBootstrappedRuntimeArtifacts() =>
-        PrepareRuntimeArtifactsAsync(writeBootstrapMarker: true).GetAwaiter().GetResult();
+    private async Task PrepareBootstrappedRuntimeArtifactsAsync() =>
+        await PrepareRuntimeArtifactsAsync(writeBootstrapMarker: true);
 
     private async Task PrepareRuntimeArtifactsAsync(bool writeBootstrapMarker)
     {

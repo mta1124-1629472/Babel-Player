@@ -1408,6 +1408,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var currentScriptHash = await ComputeScriptVersionAsync(_inferenceScriptResolver(), cancellationToken);
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch
         {
             return false; // can't determine — assume unchanged to avoid spurious restarts
