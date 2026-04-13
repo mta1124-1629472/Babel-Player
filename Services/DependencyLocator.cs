@@ -367,4 +367,3 @@ public static class DependencyLocator
             audioProcessingService: audioProcessingService);
     }
 }
-
