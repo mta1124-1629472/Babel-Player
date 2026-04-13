@@ -51,35 +51,28 @@ public sealed class ManagedCpuRuntimeManager
     /// <summary>
     /// True when the CPU venv needs to be (re)installed — either missing or requirements changed.
     /// </summary>
-    public bool NeedsBootstrap
+    public async Task<bool> CheckNeedsBootstrapAsync(CancellationToken cancellationToken = default)
     {
-        get
+        var pythonPath = GetPythonExecutablePath();
+        if (!File.Exists(pythonPath))
+            return true;
+        var markerPath = GetBootstrapMarkerPath();
+        if (!File.Exists(markerPath))
+            return true;
+        try
         {
-            var pythonPath = GetPythonExecutablePath();
-            if (!File.Exists(pythonPath))
+            var stored = await File.ReadAllTextAsync(markerPath, cancellationToken).ConfigureAwait(false);
+            stored = stored.Trim();
+            var requirementsPath = _requirementsPathResolver();
+            if (!File.Exists(requirementsPath))
                 return true;
-            var markerPath = GetBootstrapMarkerPath();
-            if (!File.Exists(markerPath))
-                return true;
-            try
-            {
-                var stored = File.ReadAllText(markerPath).Trim();
-                var requirementsPath = _requirementsPathResolver();
-                return !File.Exists(requirementsPath)
-                    || !string.Equals(stored, ComputeMarkerHash(requirementsPath), StringComparison.Ordinal);
-            }
-            catch (FileNotFoundException ex)
-            {
-                throw new InvalidOperationException($"CPU runtime bootstrap marker or requirements file not found: {ex.Message}", ex);
-            }
-            catch (IOException ex)
-            {
-                throw new InvalidOperationException($"CPU runtime file I/O error during readiness check: {ex.Message}", ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                throw new InvalidOperationException($"CPU runtime access denied during readiness check: {ex.Message}", ex);
-            }
+
+            var hash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
+            return !string.Equals(stored, hash, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return true;
         }
     }
 
@@ -95,7 +88,7 @@ public sealed class ManagedCpuRuntimeManager
         Action<string>? onStatusLine = null,
         CancellationToken cancellationToken = default)
     {
-        if (!NeedsBootstrap)
+        if (!await CheckNeedsBootstrapAsync(cancellationToken).ConfigureAwait(false))
         {
             State = ManagedCpuState.Ready;
             _log.Info("CPU runtime: already installed and up to date.");
@@ -106,7 +99,7 @@ public sealed class ManagedCpuRuntimeManager
         try
         {
             // Re-check under lock in case a concurrent call already bootstrapped.
-            if (!NeedsBootstrap)
+            if (!await CheckNeedsBootstrapAsync(cancellationToken).ConfigureAwait(false))
             {
                 State = ManagedCpuState.Ready;
                 return;
@@ -201,9 +194,10 @@ public sealed class ManagedCpuRuntimeManager
             return;
         }
 
+        var markerHash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(
             markerPath,
-            ComputeMarkerHash(requirementsPath),
+            markerHash,
             cancellationToken);
 
         State = ManagedCpuState.Ready;
@@ -267,9 +261,10 @@ public sealed class ManagedCpuRuntimeManager
 
     // Marker format: "python:{version}\n{requirements_content}"
     // Including PythonVersion ensures a version upgrade invalidates the existing venv.
-    private string ComputeMarkerHash(string requirementsPath)
+    private async Task<string> ComputeMarkerHashAsync(string requirementsPath, CancellationToken cancellationToken = default)
     {
-        var content = $"python:{PythonVersion}\n{File.ReadAllText(requirementsPath)}";
+        var fileContent = await File.ReadAllTextAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
+        var content = $"python:{PythonVersion}\n{fileContent}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
     }
