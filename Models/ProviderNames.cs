@@ -7,6 +7,9 @@ namespace Babel.Player.Models;
 /// </summary>
 public static class ProviderNames
 {
+    public const string LocalFileDpapi = "Local File (DPAPI Encrypted)";
+    public const string LocalFileAes256Gcm = "Local File (AES-256-GCM Encrypted)";
+
     // ── Containerized inference service (all stages) ─────────────────────────
     public const string ContainerizedService = "containerized";
 
