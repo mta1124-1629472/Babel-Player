@@ -441,11 +441,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         try
         {
             const string kofiUrl = "https://ko-fi.com/R5R01WOOYW";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = kofiUrl,
-                UseShellExecute = true
-            });
+            FileOpener.OpenUrl(kofiUrl);
         }
         catch (Exception ex)
         {
@@ -459,11 +455,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         try
         {
             const string sponsorsUrl = "https://github.com/sponsors/mta1124-1629472";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = sponsorsUrl,
-                UseShellExecute = true
-            });
+            FileOpener.OpenUrl(sponsorsUrl);
         }
         catch (Exception ex)
         {
