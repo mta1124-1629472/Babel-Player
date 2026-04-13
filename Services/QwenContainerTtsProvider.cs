@@ -333,7 +333,7 @@ public sealed class QwenContainerTtsProvider(
             return;
         }
 
-        await AudioConcatUtility.CombineAudioSegmentsAsync(segmentAudioPaths, outputAudioPath, cancellationToken);
+        await AudioConcatUtility.CombineAudioSegmentsAsync(segmentAudioPaths, outputAudioPath, cancellationToken, _log);
     }
 
     private static string ResolveVoiceForSegment(TranslationSegmentArtifact segment, TtsRequest request)
