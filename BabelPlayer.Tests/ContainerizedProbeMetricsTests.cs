@@ -8,11 +8,8 @@ namespace BabelPlayer.Tests;
 
 public sealed class ContainerizedProbeMetricsTests : IClassFixture<SessionWorkflowTemplateFixture>
 {
-    private readonly SessionWorkflowTemplateFixture _fixture;
-
     public ContainerizedProbeMetricsTests(SessionWorkflowTemplateFixture fixture)
     {
-        _fixture = fixture;
     }
 
     [Fact]
