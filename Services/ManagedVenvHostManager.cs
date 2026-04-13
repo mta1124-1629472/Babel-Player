@@ -168,13 +168,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
-        var scriptChangedSinceLastStart = IsScriptChangedSinceLastStart();
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
 
         // Only check if script changed when preflight shows host is available (avoids expensive I/O on cold starts)
         var scriptChangedSinceLastStart = preflight.IsAvailable
-            ? await IsScriptChangedSinceLastStartAsync(cancellationToken)
+            ? IsScriptChangedSinceLastStart()
             : false;
 
         if (preflight.IsAvailable && !scriptChangedSinceLastStart)
@@ -263,6 +262,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
         catch (Exception ex)
         {
+            _log.Warning($"Managed GPU host graceful shutdown failed during Dispose(): {ex.Message}. Attempting forceful termination.");
             try
             {
                 if (_hostProcess is { HasExited: false } process)
@@ -270,9 +270,31 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                     var pid = process.Id;
                     _log.Warning($"Forcefully terminating managed GPU host process pid={pid}.");
                     _hostProcess.Kill(entireProcessTree: true);
+                }
             }
-            catch
+            catch (Exception killEx)
             {
+                var processInfo = "unknown";
+                try
+                {
+                    if (_hostProcess is not null)
+                    {
+                        processInfo = _hostProcess.HasExited
+                            ? $"pid={_hostProcess.Id} (exited)"
+                            : $"pid={_hostProcess.Id} (running)";
+                    }
+                }
+                catch
+                {
+                    processInfo = "inaccessible";
+                }
+
+                _log.Error($"Failed to forcefully terminate managed GPU host process ({processInfo}) during Dispose(): {killEx.Message}", killEx);
+                State = ManagedHostState.Failed;
+                FailureReason = $"Host process cleanup failed: {killEx.Message}";
+                // Rethrow to surface the failure to callers
+                throw new InvalidOperationException(
+                    $"Failed to terminate managed GPU host process during cleanup. Process may be orphaned: {killEx.Message}", killEx);
             }
         }
     }
@@ -316,7 +338,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"Managed GPU runtime paths: runtime_root={runtimeRoot}, venv_dir={venvDir}, python={pythonPath}, " +
             $"script={inferenceScriptPath}, requirements={requirementsPath}, constraints={constraintsPath}, uv={uvPath}, compute_type={computeType}");
 
-        var bootstrapVersion = await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath, cancellationToken);
+        var bootstrapVersion = await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath);
         var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
         var markerValue = File.Exists(markerPath) ? await File.ReadAllTextAsync(markerPath, cancellationToken) : null;
         var needsBootstrap = !File.Exists(pythonPath) || !string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal);
@@ -1424,10 +1446,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             if (!File.Exists(depsMarkerPath))
                 return true;
             var storedDepsHash = File.ReadAllText(depsMarkerPath).Trim();
-            var currentDepsHash = ComputeBootstrapVersion(
-                _requirementsPathResolver(),
-                _constraintsPathResolver(),
-                cancellationToken);
+            var depsBuilder = new StringBuilder();
+            depsBuilder.AppendLine(PythonVersion);
+            depsBuilder.AppendLine(File.ReadAllText(_requirementsPathResolver()));
+            depsBuilder.AppendLine(File.ReadAllText(_constraintsPathResolver()));
+            var currentDepsHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(depsBuilder.ToString())));
             if (!string.Equals(storedDepsHash, currentDepsHash, StringComparison.Ordinal))
                 return true;
 
