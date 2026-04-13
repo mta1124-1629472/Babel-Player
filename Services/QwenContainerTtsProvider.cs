@@ -19,11 +19,13 @@ namespace Babel.Player.Services;
 public sealed class QwenContainerTtsProvider(
     ContainerizedInferenceClient client,
     AppLog log,
-    TtsReferenceExtractor extractor) : ITtsProvider, IAsyncDisposable
+    TtsReferenceExtractor extractor,
+    IAudioProcessingService? audioProcessingService = null) : ITtsProvider, IAsyncDisposable
 {
     private readonly ContainerizedInferenceClient _client = client;
     private readonly AppLog _log = log;
     private readonly TtsReferenceExtractor _extractor = extractor;
+    private readonly IAudioProcessingService? _audioProcessingService = audioProcessingService;
 
     private string? _autoExtractedReferencePath;
     private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
@@ -86,16 +88,63 @@ public sealed class QwenContainerTtsProvider(
         return result with { AudioPath = request.OutputAudioPath };
     }
 
-    /// <summary>
-    /// Generates combined TTS audio for the provided TtsRequest and produces a single output audio result.
-    /// </summary>
-    /// <returns>The TtsResult describing the produced output audio path and related metadata.</returns>
-    /// <exception cref="NotImplementedException">Always thrown: combined generation is now handled by the coordinator.</exception>
     public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
+        CancellationToken cancellationToken = default) =>
+        GenerateCombinedTtsAsync(request, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<string, string>> GenerateSegmentsAsync(
+        IReadOnlyList<QwenBatchSegmentRequest> requests,
+        IProgress<(int Completed, int Total)>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException("PLACEHOLDER: Combined generation is now handled by the coordinator.");
+        if (requests.Count == 0)
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+
+        var outputPaths = new Dictionary<string, string>(StringComparer.Ordinal);
+        var completed = 0;
+
+        foreach (var group in requests.GroupBy(request => ResolveModel(request.VoiceName), StringComparer.Ordinal))
+        {
+            var batchPayload = new List<QwenBatchSegmentPayload>(group.Count());
+            foreach (var request in group)
+            {
+                var referenceAudioPath = await ResolveBatchReferenceAudioAsync(request, cancellationToken);
+                if (string.IsNullOrWhiteSpace(referenceAudioPath))
+                {
+                    throw new InvalidOperationException(
+                        $"Qwen3-TTS requires reference audio for segment '{request.SegmentId}'.");
+                }
+
+                var speakerId = request.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault;
+                var referenceId = await EnsureReferenceRegisteredAsync(referenceAudioPath, speakerId, cancellationToken)
+                    ?? throw new InvalidOperationException(
+                        $"Qwen3-TTS reference registration failed for segment '{request.SegmentId}'.");
+
+                batchPayload.Add(new QwenBatchSegmentPayload(
+                    request.SegmentId,
+                    request.Text,
+                    ResolveLanguage(request.Language),
+                    referenceId));
+            }
+
+            var results = await _client.QwenBatchAsync(group.Key, batchPayload, cancellationToken);
+            foreach (var result in results)
+            {
+                var request = group.First(segment => string.Equals(segment.SegmentId, result.SegmentId, StringComparison.Ordinal));
+                if (!result.Result.Success)
+                    throw new InvalidOperationException($"Qwen batch synthesis failed for segment '{result.SegmentId}'.");
+
+                await DownloadToOutputPathAsync(result.Result.AudioPath, request.OutputAudioPath, cancellationToken);
+                outputPaths[result.SegmentId] = request.OutputAudioPath;
+                progress?.Report((++completed, requests.Count));
+            }
+        }
+
+        if (outputPaths.Count != requests.Count)
+            throw new InvalidOperationException("Qwen batch synthesis did not return every requested segment.");
+
+        return outputPaths;
     }
 
     /// <summary>
@@ -179,6 +228,77 @@ public sealed class QwenContainerTtsProvider(
             errorMessage.Contains("reference_id", StringComparison.OrdinalIgnoreCase) ||
             errorMessage.Contains("not found", StringComparison.OrdinalIgnoreCase));
 
+    private async Task<TtsResult> GenerateCombinedTtsAsync(
+        TtsRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.TranslationJsonPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.OutputAudioPath);
+
+        var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
+        var candidateSegments = translation.Segments?
+            .Where(segment => !string.IsNullOrWhiteSpace(segment.Id) && !string.IsNullOrWhiteSpace(segment.TranslatedText))
+            .ToList()
+            ?? [];
+
+        if (candidateSegments.Count == 0)
+            throw new InvalidOperationException($"No valid segments with translated text found in {request.TranslationJsonPath}");
+
+        var batchRequests = candidateSegments
+            .Select(segment => new QwenBatchSegmentRequest(
+                segment.Id!,
+                segment.TranslatedText!,
+                Path.Combine(Path.GetTempPath(), $"qwen-batch-{Guid.NewGuid():N}-{SanitizeFileComponent(segment.Id!)}.mp3"),
+                ResolveVoiceForSegment(segment, request),
+                segment.SpeakerId,
+                ResolveReferenceAudioForSegment(segment, request),
+                request.Language,
+                request.SourceVideoPath))
+            .ToList();
+
+        try
+        {
+            var generatedPaths = await GenerateSegmentsAsync(batchRequests, request.SegmentProgress, cancellationToken);
+            var orderedPaths = candidateSegments
+                .Select(segment => generatedPaths[segment.Id!])
+                .ToList();
+            await CombineSegmentsAsync(orderedPaths, request.OutputAudioPath, cancellationToken);
+
+            if (!File.Exists(request.OutputAudioPath))
+                throw new InvalidOperationException($"Combined audio file was not created at {request.OutputAudioPath}");
+
+            var fileSize = new FileInfo(request.OutputAudioPath).Length;
+            return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileSize, null);
+        }
+        finally
+        {
+            foreach (var batchRequest in batchRequests)
+            {
+                try
+                {
+                    if (File.Exists(batchRequest.OutputAudioPath))
+                        File.Delete(batchRequest.OutputAudioPath);
+                }
+                catch
+                {
+                }
+            }
+        }
+    }
+
+    private async Task<string?> ResolveBatchReferenceAudioAsync(
+        QwenBatchSegmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ReferenceAudioPath))
+            return request.ReferenceAudioPath;
+
+        if (!string.IsNullOrWhiteSpace(request.SourceVideoPath))
+            return await EnsureAutoExtractedReferenceAsync(request.SourceVideoPath, cancellationToken);
+
+        return null;
+    }
+
     private async Task<string?> EnsureAutoExtractedReferenceAsync(string sourceVideoPath, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
@@ -200,6 +320,20 @@ public sealed class QwenContainerTtsProvider(
             Directory.CreateDirectory(outputDir);
 
         await _client.DownloadTtsAudioAsync(filename, localOutputPath, ct);
+    }
+
+    private async Task CombineSegmentsAsync(
+        IReadOnlyList<string> segmentAudioPaths,
+        string outputAudioPath,
+        CancellationToken cancellationToken)
+    {
+        if (_audioProcessingService is not null)
+        {
+            await _audioProcessingService.CombineAudioSegmentsAsync(segmentAudioPaths, outputAudioPath, cancellationToken);
+            return;
+        }
+
+        await AudioConcatUtility.CombineAudioSegmentsAsync(segmentAudioPaths, outputAudioPath, _log, cancellationToken);
     }
 
     private static string ResolveVoiceForSegment(TranslationSegmentArtifact segment, TtsRequest request)

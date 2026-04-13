@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
 using Xunit;
@@ -44,7 +45,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     }
 
     [Fact]
-    public void WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
+    public async Task WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
@@ -56,12 +57,14 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         File.WriteAllBytes(pythonPath, Array.Empty<byte>());
 
         var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
-        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));
+        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath, ManagedCpuRuntimeManager.PythonVersion));
 
         var manager = new ManagedCpuRuntimeManager(
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
+
+        await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
 
@@ -74,7 +77,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     private static string FindInferenceDirectory()
     {
         var outputDir = Path.Combine(AppContext.BaseDirectory, "inference");
-        if (Directory.Exists(outputDir))
+        if (Directory.Exists(outputDir) && File.Exists(Path.Combine(outputDir, "requirements.txt")))
             return outputDir;
 
         var dir = AppContext.BaseDirectory;
@@ -93,9 +96,9 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         throw new InvalidOperationException($"Could not locate inference directory from {AppContext.BaseDirectory}.");
     }
 
-    private static string ComputeMarkerHash(string requirementsPath)
+    private static string ComputeMarkerHash(string requirementsPath, string pythonVersion)
     {
-        var content = $"python:3.11.6\n{File.ReadAllText(requirementsPath)}";
+        var content = $"python:{pythonVersion}\n{File.ReadAllText(requirementsPath)}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
     }

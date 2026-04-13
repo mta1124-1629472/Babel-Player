@@ -282,6 +282,32 @@ class TtsResponse(BaseModel):
     error_message: Optional[str] = None
 
 
+class QwenBatchSegmentRequest(BaseModel):
+    segment_id: str
+    text: str
+    language: Optional[str] = None
+    reference_id: str
+
+
+class QwenBatchRequest(BaseModel):
+    model: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+    segments: list[QwenBatchSegmentRequest]
+
+
+class QwenBatchSegmentResponse(BaseModel):
+    segment_id: str
+    voice: str
+    audio_path: str
+    file_size_bytes: int
+
+
+class QwenBatchResponse(BaseModel):
+    success: bool
+    voice: str
+    segments: list[QwenBatchSegmentResponse]
+    error_message: Optional[str] = None
+
+
 class QwenReferenceResponse(BaseModel):
     success: bool
     reference_id: Optional[str] = None
@@ -2096,6 +2122,113 @@ async def qwen_segment(
             background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
         if out_path.exists():
             background_tasks.add_task(lambda p=out_path: p.unlink(missing_ok=True))
+        raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        if waiter_counted and _qwen_segment_waiters > 0:
+            _qwen_segment_waiters -= 1
+
+
+@app.post("/tts/qwen/batch", response_model=QwenBatchResponse)
+async def qwen_batch(
+    request: QwenBatchRequest,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    await _ensure_provider_health_primitives()
+    semaphore = _qwen_segment_semaphore
+    if semaphore is None:
+        raise HTTPException(status_code=500, detail="Qwen3-TTS execution semaphore was not initialized")
+
+    if not request.segments:
+        raise HTTPException(status_code=400, detail="segments cannot be empty")
+
+    global _qwen_segment_waiters
+    qwen_request_started = perf_counter()
+    _qwen_segment_waiters += 1
+    queue_wait_ms: Optional[float] = None
+    generation_ms_total = 0.0
+    qwen_queue_depth = _qwen_segment_waiters
+    waiter_counted = True
+    response_segments: list[QwenBatchSegmentResponse] = []
+
+    try:
+        async with semaphore:
+            queue_wait_ms = (perf_counter() - qwen_request_started) * 1000.0
+            _qwen_segment_waiters = max(0, _qwen_segment_waiters - 1)
+            waiter_counted = False
+            qwen_queue_depth = _qwen_segment_waiters
+            _update_provider_health_metrics(
+                "qwen",
+                max_concurrency=_qwen_max_concurrency,
+                queue_depth=qwen_queue_depth,
+                last_queue_wait_ms=round(queue_wait_ms, 2),
+            )
+
+            tts = await _ensure_qwen_model_ready(request.model)
+            for segment in request.segments:
+                if not segment.text.strip():
+                    raise HTTPException(status_code=400, detail=f"segment '{segment.segment_id}' text cannot be empty")
+
+                ref_entry = qwen_reference_registry.get(segment.reference_id)
+                if ref_entry is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"segment '{segment.segment_id}' has invalid reference_id '{segment.reference_id}'")
+
+                out_path = TEMP_DIR / f"qwen_{uuid4().hex}.wav"
+                lang = (segment.language or "english").strip().lower()
+                generation_started = perf_counter()
+
+                def _synth_and_write_batch() -> None:
+                    import soundfile as sf
+                    wavs, sample_rate = tts.generate_voice_clone(
+                        text=segment.text,
+                        language=lang,
+                        ref_audio=ref_entry["path"],
+                        x_vector_only_mode=True,
+                        non_streaming_mode=True,
+                    )
+                    sf.write(str(out_path), wavs[0], sample_rate, subtype="PCM_16")
+
+                await asyncio.to_thread(_synth_and_write_batch)
+                generation_ms_total += (perf_counter() - generation_started) * 1000.0
+                response_segments.append(
+                    QwenBatchSegmentResponse(
+                        segment_id=segment.segment_id,
+                        voice=request.model,
+                        audio_path=str(out_path),
+                        file_size_bytes=out_path.stat().st_size,
+                    )
+                )
+
+            total_ms = (perf_counter() - qwen_request_started) * 1000.0
+            _update_provider_health_metrics(
+                "qwen",
+                max_concurrency=_qwen_max_concurrency,
+                queue_depth=qwen_queue_depth,
+                last_queue_wait_ms=round(queue_wait_ms or 0.0, 2),
+                last_generation_ms=round(generation_ms_total, 2),
+                last_segment_ms=round(total_ms, 2),
+            )
+            logger.info(
+                "Qwen3-TTS batch timing: queue_wait_ms=%.1f generation_ms=%.1f total_ms=%.1f segments=%s queue_depth=%s max_concurrency=%s",
+                queue_wait_ms or 0.0,
+                generation_ms_total,
+                total_ms,
+                len(response_segments),
+                qwen_queue_depth,
+                _qwen_max_concurrency,
+            )
+            return QwenBatchResponse(
+                success=True,
+                voice=request.model,
+                segments=response_segments,
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Qwen3-TTS batch failed: {exc}", exc_info=True)
+        for segment in response_segments:
+            background_tasks.add_task(lambda p=Path(segment.audio_path): p.unlink(missing_ok=True))
         raise HTTPException(status_code=400, detail=str(exc))
     finally:
         if waiter_counted and _qwen_segment_waiters > 0:

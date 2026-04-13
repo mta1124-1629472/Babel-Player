@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -107,6 +108,11 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    private static FileStream OpenReadWithAsyncOptions(string filePath)
+    {
+        return new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+    }
+
     /// <summary>
     /// Transcribes an audio file using the containerized inference service.
     /// </summary>
@@ -137,7 +143,7 @@ public sealed class ContainerizedInferenceClient
             _log.Info($"Transcribing with containerized service: {audioFilePath}");
 
             using var content = new MultipartFormDataContent();
-            using var fileStream = File.OpenRead(audioFilePath);
+            await using var fileStream = OpenReadWithAsyncOptions(audioFilePath);
             content.Add(new StreamContent(fileStream), "file", Path.GetFileName(audioFilePath));
             content.Add(new StringContent(modelName), "model");
             if (language != null)
@@ -323,7 +329,7 @@ public sealed class ContainerizedInferenceClient
             _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
 
             using var content = new MultipartFormDataContent();
-            using var fileStream = File.OpenRead(audioFilePath);
+            await using var fileStream = OpenReadWithAsyncOptions(audioFilePath);
             content.Add(new StreamContent(fileStream), "audio", Path.GetFileName(audioFilePath));
             if (minSpeakers.HasValue)
                 content.Add(new StringContent(minSpeakers.Value.ToString()), "min_speakers");
@@ -374,7 +380,7 @@ public sealed class ContainerizedInferenceClient
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(speakerId), "speaker_id");
 
-        await using var fs = File.OpenRead(referenceAudioPath);
+        await using var fs = OpenReadWithAsyncOptions(referenceAudioPath);
         content.Add(new StreamContent(fs), "file", Path.GetFileName(referenceAudioPath));
 
         using var response = await _httpClient.PostAsync(
@@ -434,7 +440,7 @@ public sealed class ContainerizedInferenceClient
                 {
                     if (!File.Exists(referenceAudioPath))
                         throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
-                    fs = File.OpenRead(referenceAudioPath);
+                    fs = OpenReadWithAsyncOptions(referenceAudioPath);
                     content.Add(new StreamContent(fs), "reference_file", Path.GetFileName(referenceAudioPath));
                 }
 
@@ -451,13 +457,65 @@ public sealed class ContainerizedInferenceClient
             }
             finally
             {
-                fs?.Dispose();
+                if (fs != null)
+                    await fs.DisposeAsync();
             }
         }
         catch (Exception ex)
         {
             _log.Error($"Qwen TTS segment synthesis failed: {ex.Message}", ex);
             return new TtsResult(false, "", string.IsNullOrWhiteSpace(model) ? "Qwen/Qwen3-TTS-12Hz-1.7B-Base" : model, 0, ex.Message);
+        }
+    }
+
+    public async Task<IReadOnlyList<QwenBatchSegmentResult>> QwenBatchAsync(
+        string model,
+        IReadOnlyList<QwenBatchSegmentPayload> segments,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var lease = AcquireLease(ContainerizedRequestKind.Qwen);
+
+            var payload = new QwenBatchRequestPayloadDto(
+                string.IsNullOrWhiteSpace(model) ? "Qwen/Qwen3-TTS-12Hz-1.7B-Base" : model,
+                segments.Select(segment => new QwenBatchSegmentPayloadDto(
+                    segment.SegmentId,
+                    segment.Text,
+                    segment.Language,
+                    segment.ReferenceId)).ToList());
+
+            using var content = new StringContent(
+                JsonSerializer.Serialize(payload, JsonOptions),
+                Encoding.UTF8,
+                "application/json");
+
+            using var response = await _httpClient.PostAsync(
+                $"{_inferenceServiceUrl}/tts/qwen/batch",
+                content,
+                cancellationToken);
+
+            var result = await DeserializeResponseAsync<QwenBatchResponseDto>(response, cancellationToken);
+            if (!result.Success)
+                throw new InvalidOperationException($"Qwen TTS batch error: {result.ErrorMessage}");
+
+            return result.Segments?
+                .Where(segment => !string.IsNullOrWhiteSpace(segment.SegmentId))
+                .Select(segment => new QwenBatchSegmentResult(
+                    segment.SegmentId!,
+                    new TtsResult(
+                        true,
+                        segment.AudioPath ?? string.Empty,
+                        segment.Voice ?? model,
+                        segment.FileSizeBytes,
+                        null)))
+                .ToList()
+                ?? [];
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Qwen TTS batch synthesis failed: {ex.Message}", ex);
+            return [];
         }
     }
 
@@ -829,6 +887,43 @@ public sealed class ContainerizedInferenceClient
         public string? ErrorMessage { get; set; }
     }
 
+    private sealed record QwenBatchRequestPayloadDto(
+        [property: JsonPropertyName("model")] string Model,
+        [property: JsonPropertyName("segments")] List<QwenBatchSegmentPayloadDto> Segments);
+
+    private sealed record QwenBatchSegmentPayloadDto(
+        [property: JsonPropertyName("segment_id")] string SegmentId,
+        [property: JsonPropertyName("text")] string Text,
+        [property: JsonPropertyName("language")] string? Language,
+        [property: JsonPropertyName("reference_id")] string ReferenceId);
+
+    private sealed class QwenBatchResponseDto
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("segments")]
+        public List<QwenBatchSegmentResponseDto>? Segments { get; set; }
+
+        [JsonPropertyName("error_message")]
+        public string? ErrorMessage { get; set; }
+    }
+
+    private sealed class QwenBatchSegmentResponseDto
+    {
+        [JsonPropertyName("segment_id")]
+        public string? SegmentId { get; set; }
+
+        [JsonPropertyName("voice")]
+        public string? Voice { get; set; }
+
+        [JsonPropertyName("audio_path")]
+        public string? AudioPath { get; set; }
+
+        [JsonPropertyName("file_size_bytes")]
+        public long FileSizeBytes { get; set; }
+    }
+
     private sealed class DiarizationApiResponseDto
     {
         [JsonPropertyName("success")]
@@ -1052,6 +1147,16 @@ public sealed class ContainerizedInferenceClient
         _requestLeaseTracker?.Acquire(kind);
 
 }
+
+public sealed record QwenBatchSegmentPayload(
+    string SegmentId,
+    string Text,
+    string? Language,
+    string ReferenceId);
+
+public sealed record QwenBatchSegmentResult(
+    string SegmentId,
+    TtsResult Result);
 
 public enum ContainerCapabilityStage
 {

@@ -775,6 +775,15 @@ public sealed class SegmentInspectionTests
     }
 
     [Fact]
+    public void EmbeddedPlaybackViewModel_ComposesPipelineAndSpeakerRoutingViewModels()
+    {
+        using var playback = CreatePlaybackVm();
+
+        Assert.NotNull(playback.Pipeline);
+        Assert.NotNull(playback.SpeakerRouting);
+    }
+
+    [Fact]
     public async Task EmbeddedPlaybackViewModel_DiarizationProvider_UpdatesSettingsAndStatus()
     {
         using var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
