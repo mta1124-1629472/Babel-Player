@@ -131,7 +131,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
             translationUpdates,
             update => !update.IsIndeterminate &&
                       Math.Abs(update.Progress01 - 0.25) < 0.001 &&
-                      update.Detail.Contains("Preparing translation model", StringComparison.OrdinalIgnoreCase));
+                      update.Detail.Contains("Preparing translation model", StringComparison.Ordinal));
         Assert.Contains(
             translationUpdates,
             update => !update.IsIndeterminate &&
