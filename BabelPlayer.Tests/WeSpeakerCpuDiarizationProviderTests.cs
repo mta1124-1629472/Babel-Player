@@ -44,7 +44,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     }
 
     [Fact]
-    public void WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
+    public async Task WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
@@ -60,6 +60,9 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
+
+        // Transition the manager to Ready state, normally done by EnsureInstalledAsync which checks the marker.
+        await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
 
@@ -94,7 +97,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     private static string ComputeMarkerHash(string requirementsPath)
     {
         var content = $"python:3.11.6\n{File.ReadAllText(requirementsPath)}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
     }
 }

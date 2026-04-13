@@ -88,7 +88,7 @@ public sealed class SegmentedTtsComposer
             if (orderedPaths.Count != candidateSegments.Count)
                 throw new InvalidOperationException("Combined TTS is missing one or more synthesized segment clips.");
 
-            await CombineSegmentsAsync(orderedPaths, request.OutputAudioPath, cancellationToken);
+            await CombineSegmentsAsync(orderedPaths, request.OutputAudioPath, log, cancellationToken);
 
             if (!File.Exists(request.OutputAudioPath))
                 throw new InvalidOperationException($"Combined audio file was not created at {request.OutputAudioPath}");
@@ -129,6 +129,7 @@ public sealed class SegmentedTtsComposer
     private async Task CombineSegmentsAsync(
         IReadOnlyList<string> segmentAudioPaths,
         string outputAudioPath,
+        AppLog log,
         CancellationToken cancellationToken)
     {
         if (_audioProcessingService is not null)
@@ -137,6 +138,6 @@ public sealed class SegmentedTtsComposer
             return;
         }
 
-        await AudioConcatUtility.CombineAudioSegmentsAsync(segmentAudioPaths, outputAudioPath, cancellationToken);
+        await AudioConcatUtility.CombineAudioSegmentsAsync(segmentAudioPaths, outputAudioPath, log, cancellationToken);
     }
 }

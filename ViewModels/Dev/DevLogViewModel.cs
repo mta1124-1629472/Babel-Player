@@ -67,8 +67,9 @@ public partial class DevLogViewModel : ObservableObject, IDisposable
         if (dir is not null && Directory.Exists(dir))
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
-                FileName = dir,
-                UseShellExecute = true,
+                FileName = "explorer.exe",
+                Arguments = $"\"{dir}\"",
+                UseShellExecute = false,
             });
     }
 

@@ -907,8 +907,11 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
     }
 
-    private static string ComputeScriptVersion(string inferenceScriptPath) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath))));
+    private static string ComputeScriptVersion(string inferenceScriptPath)
+    {
+        using var fs = new FileStream(inferenceScriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan);
+        return Convert.ToHexString(SHA256.HashData(fs));
+    }
 
     private void PrepareBootstrappedRuntimeArtifacts() =>
         PrepareRuntimeArtifacts(writeBootstrapMarker: true);
@@ -924,6 +927,11 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         File.WriteAllText(constraintsPath, "torch==2.8.0");
         Directory.CreateDirectory(Path.Combine(_dir, ".venv", "Scripts"));
         File.WriteAllText(Path.Combine(_dir, ".venv", "Scripts", "python.exe"), "");
+        if (!OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(Path.Combine(_dir, ".venv", "bin"));
+            File.WriteAllText(Path.Combine(_dir, ".venv", "bin", "python"), "");
+        }
         if (writeBootstrapMarker)
         {
             File.WriteAllText(
