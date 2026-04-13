@@ -143,7 +143,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
             }
             else
             {
-                await AudioConcatUtility.CombineAudioSegmentsAsync(segmentPaths, request.OutputAudioPath, cancellationToken);
+                await AudioConcatUtility.CombineAudioSegmentsAsync(segmentPaths, request.OutputAudioPath, _log, cancellationToken);
             }
 
             if (!File.Exists(request.OutputAudioPath))

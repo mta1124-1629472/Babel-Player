@@ -154,9 +154,13 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
             try
             {
                 var dir = System.IO.Path.GetDirectoryName(logFilePath!);
-                if (dir != null)
+                if (dir != null && System.IO.Directory.Exists(dir))
                 {
                     FileOpener.OpenFolder(dir);
+                }
+                else
+                {
+                    _log.Warning($"Cannot open log folder. The path does not exist or is null: {dir}");
                 }
             }
             catch (Exception ex)
