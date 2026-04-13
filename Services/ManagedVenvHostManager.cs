@@ -1430,7 +1430,15 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
     private static async Task<string> ComputeScriptVersionAsync(string inferenceScriptPath, CancellationToken cancellationToken = default)
     {
-        await using var stream = File.OpenRead(inferenceScriptPath);
+        await using var stream = new FileStream(
+            inferenceScriptPath,
+            new FileStreamOptions
+            {
+                Mode = FileMode.Open,
+                Access = FileAccess.Read,
+                Share = FileShare.Read,
+                Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+            });
         var bytes = await SHA256.HashDataAsync(stream, cancellationToken);
         return Convert.ToHexString(bytes);
     }
