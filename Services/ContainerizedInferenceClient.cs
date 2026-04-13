@@ -108,6 +108,11 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    private static FileStream OpenReadAsync(string filePath)
+    {
+        return new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+    }
+
     /// <summary>
     /// Transcribes an audio file using the containerized inference service.
     /// </summary>
@@ -375,7 +380,7 @@ public sealed class ContainerizedInferenceClient
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(speakerId), "speaker_id");
 
-        await using var fs = File.OpenRead(referenceAudioPath);
+        await using var fs = new FileStream(referenceAudioPath, new FileStreamOptions { Mode = FileMode.Open, Access = FileAccess.Read, Share = FileShare.Read, BufferSize = 4096, Options = FileOptions.Asynchronous | FileOptions.SequentialScan });
         content.Add(new StreamContent(fs), "file", Path.GetFileName(referenceAudioPath));
 
         using var response = await _httpClient.PostAsync(

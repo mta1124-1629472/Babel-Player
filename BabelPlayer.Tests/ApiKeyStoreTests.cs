@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text;
+using System.Text.Json;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 
@@ -64,5 +67,40 @@ public sealed class ApiKeyStoreTests : IDisposable
         _ = new ApiKeyStore(new FileSystemCredentialProvider(currentPath), legacyPath);
 
         Assert.False(File.Exists(legacyPath));
+    }
+
+    [Fact]
+    public void FileSystemCredentialProvider_ReadsLegacyBase64PlaintextEntry()
+    {
+        // Simulate a credential file written by the pre-AES-GCM implementation,
+        // where the stored value was simply base64(UTF-8 plaintext).
+        var filePath = Path.Combine(_dir, "legacy-compat", "api-keys.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+
+        var legacyEncoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("my-legacy-api-key"));
+        var json = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            [CredentialKeys.OpenAi] = legacyEncoded
+        });
+        File.WriteAllText(filePath, json, Encoding.UTF8);
+
+        var provider = new FileSystemCredentialProvider(filePath);
+
+        Assert.Equal("my-legacy-api-key", provider.GetKey(CredentialKeys.OpenAi));
+    }
+
+    [Fact]
+    public void FileSystemCredentialProvider_InstallKey_IsStableAcrossInstances()
+    {
+        // Two separate provider instances pointing at the same directory should
+        // encrypt/decrypt with the same per-install secret.
+        var filePath = Path.Combine(_dir, "install-key-stability", "api-keys.json");
+
+        var providerA = new FileSystemCredentialProvider(filePath);
+        providerA.SetKey(CredentialKeys.OpenAi, "stable-key-test");
+
+        // A brand-new instance shares the install key file → must read the same value.
+        var providerB = new FileSystemCredentialProvider(filePath);
+        Assert.Equal("stable-key-test", providerB.GetKey(CredentialKeys.OpenAi));
     }
 }
