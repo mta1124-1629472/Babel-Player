@@ -11,13 +11,15 @@ using Xunit.Abstractions;
 
 namespace BabelPlayer.Tests;
 
-public class OpenAiApiClientPerformanceTests
+public class OpenAiApiClientPerformanceTests : IClassFixture<SessionWorkflowTemplateFixture>
 {
     private readonly ITestOutputHelper _output;
+    private readonly SessionWorkflowTemplateFixture _fixture;
 
-    public OpenAiApiClientPerformanceTests(ITestOutputHelper output)
+    public OpenAiApiClientPerformanceTests(ITestOutputHelper output, SessionWorkflowTemplateFixture fixture)
     {
         _output = output;
+        _fixture = fixture;
     }
 
     private class StubHttpMessageHandler : HttpMessageHandler
@@ -37,17 +39,31 @@ public class OpenAiApiClientPerformanceTests
         }
     }
 
-    [Trait("Category", "Integration")]
-    [Fact]
+    [Fact(Skip = "Benchmark - run in dedicated workflow")]
+    [Trait("Category", "Benchmark")]
     public async Task TranscribeAudioAsync_PerformanceTest()
     {
-        var tempFile = Path.GetTempFileName();
+        var tempDir = _fixture.CreateCaseDirectory(nameof(TranscribeAudioAsync_PerformanceTest));
+        var tempFile = Path.Combine(tempDir, "perf_dummy_audio.tmp");
         try
         {
-            // Keep the payload modest so this opt-in benchmark does not consume excessive memory or I/O.
-            byte[] data = new byte[1024 * 1024 * 5]; // 5 MB
-            new Random().NextBytes(data);
-            await File.WriteAllBytesAsync(tempFile, data);
+            // Create a dummy large file to simulate I/O delay without allocating the full payload in memory
+            const int totalSizeBytes = 1024 * 1024 * 200; // 200 MB
+            const int bufferSizeBytes = 1024 * 1024; // 1 MB
+            byte[] buffer = new byte[bufferSizeBytes];
+            var random = Random.Shared;
+
+            await using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSizeBytes, useAsync: true))
+            {
+                int remaining = totalSizeBytes;
+                while (remaining > 0)
+                {
+                    int bytesToWrite = Math.Min(buffer.Length, remaining);
+                    random.NextBytes(buffer);
+                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesToWrite));
+                    remaining -= bytesToWrite;
+                }
+            }
 
             using var client = new OpenAiApiClient("test-key", new StubHttpMessageHandler());
 
@@ -55,7 +71,7 @@ public class OpenAiApiClientPerformanceTests
             await client.TranscribeAudioAsync(tempFile, "whisper-1");
 
             var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 5; i++)
             {
                 await client.TranscribeAudioAsync(tempFile, "whisper-1");
             }

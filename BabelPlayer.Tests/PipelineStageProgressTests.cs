@@ -285,7 +285,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
             containerizedProbe: null,
             containerizedInferenceManager: null,
             audioProcessingService: new StubAudioProcessingService());
-
     }
 
     private static AppSettings CreateSettings() =>

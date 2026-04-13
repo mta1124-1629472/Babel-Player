@@ -158,9 +158,8 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
                 {
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                     {
-                        FileName = "explorer.exe",
-                        Arguments = $"\"{dir}\"",
-                        UseShellExecute = false,
+                        FileName = dir,
+                        UseShellExecute = true,
                     });
                 }
             }
