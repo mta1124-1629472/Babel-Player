@@ -65,6 +65,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
+        await manager.EnsureInstalledAsync();
 
         var readiness = provider.CheckReadiness(new AppSettings(), null);
 
