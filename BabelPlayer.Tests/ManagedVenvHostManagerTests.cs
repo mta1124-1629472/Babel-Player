@@ -898,20 +898,24 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         string errorMessage = "offline") =>
         (serviceUrl, _, _) => Task.FromResult(ContainerHealthStatus.Unavailable(serviceUrl, errorMessage));
 
-    private static string ComputeBootstrapVersion(string requirementsPath, string constraintsPath)
+    private static async Task<string> ComputeBootstrapVersionAsync(string requirementsPath, string constraintsPath)
     {
         var builder = new StringBuilder();
         builder.AppendLine("3.12"); // PythonVersion constant from ManagedVenvHostManager
-        builder.AppendLine(File.ReadAllText(requirementsPath));
-        builder.AppendLine(File.ReadAllText(constraintsPath));
+        builder.AppendLine(await File.ReadAllTextAsync(requirementsPath));
+        builder.AppendLine(await File.ReadAllTextAsync(constraintsPath));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
     }
 
-    private static string ComputeScriptVersion(string inferenceScriptPath) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath))));
+    private static async Task<string> ComputeScriptVersionAsync(string inferenceScriptPath)
+    {
+        await using var stream = File.OpenRead(inferenceScriptPath);
+        var bytes = await SHA256.HashDataAsync(stream);
+        return Convert.ToHexString(bytes);
+    }
 
     private void PrepareBootstrappedRuntimeArtifacts() =>
-        PrepareRuntimeArtifacts(writeBootstrapMarker: true);
+        PrepareRuntimeArtifactsAsync(writeBootstrapMarker: true).GetAwaiter().GetResult();
 
     private void PrepareRuntimeArtifacts(bool writeBootstrapMarker)
     {
@@ -926,12 +930,12 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         File.WriteAllText(Path.Combine(_dir, ".venv", "Scripts", "python.exe"), "");
         if (writeBootstrapMarker)
         {
-            File.WriteAllText(
+            await File.WriteAllTextAsync(
                 Path.Combine(_dir, ".bootstrap-version"),
-                ComputeBootstrapVersion(requirementsPath, constraintsPath));
-            File.WriteAllText(
+                await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath));
+            await File.WriteAllTextAsync(
                 Path.Combine(_dir, ".script-version"),
-                ComputeScriptVersion(scriptPath));
+                await ComputeScriptVersionAsync(scriptPath));
         }
         else
         {
