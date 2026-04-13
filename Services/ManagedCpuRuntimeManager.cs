@@ -18,7 +18,7 @@ public enum ManagedCpuState
 
 public sealed class ManagedCpuRuntimeManager
 {
-    internal const string PythonVersion = "3.11.6";
+    private const string PythonVersion = "3.11.6";
     private static readonly SemaphoreSlim InstallGate = new(1, 1);
 
     private readonly AppLog _log;
@@ -69,6 +69,14 @@ public sealed class ManagedCpuRuntimeManager
 
             var hash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
             return !string.Equals(stored, hash, StringComparison.Ordinal);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (TaskCanceledException)
+        {
+            throw;
         }
         catch
         {
