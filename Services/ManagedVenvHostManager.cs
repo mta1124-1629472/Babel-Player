@@ -476,8 +476,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         // Record which script version is running so IsScriptChangedSinceLastStart can detect edits
         var scriptVersionPath = Path.Combine(runtimeRoot, ".script-version");
-        var scriptVersion = ComputeScriptVersion(inferenceScriptPath);
-        await File.WriteAllTextAsync(scriptVersionPath, scriptVersion, cancellationToken);
+        await File.WriteAllTextAsync(scriptVersionPath, ComputeScriptVersion(inferenceScriptPath), cancellationToken);
 
         _log.Info(
             $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={_postStartProbeTimeout.TotalSeconds}s");
@@ -680,9 +679,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             trackedProcess = _hostProcess is { HasExited: false } ? _hostProcess : null;
         }
-        catch (Exception ex)
+        catch
         {
-            _log.Warning($"Failed to check if tracked host process is running during stop: {ex.Message}");
             trackedProcess = null;
         }
 
@@ -787,9 +785,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 return false;
             pid = process.Id;
         }
-        catch (Exception ex)
+        catch
         {
-            _log.Warning($"Failed to get process ID or exit status while stopping process: {ex.Message}");
             return false;
         }
 
@@ -893,9 +890,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return !string.IsNullOrWhiteSpace(processPath)
                 && string.Equals(processPath, pythonPath, StringComparison.OrdinalIgnoreCase);
         }
-        catch (Exception)
+        catch
         {
-            // Can't use _log here because IsManagedPythonProcess is static, but we can swallow safely as it's a diagnostic method
             return false;
         }
     }
@@ -1268,9 +1264,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             return _hostProcess is { HasExited: false };
         }
-        catch (Exception ex)
+        catch
         {
-            _log.Warning($"Failed to check if tracked host process is running: {ex.Message}");
             return false;
         }
     }
@@ -1370,9 +1365,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             if (_hostProcess is { HasExited: true } hostProcess)
                 detail = $"managed host exited before readiness probe completed with exit code {hostProcess.ExitCode}";
         }
-        catch (Exception ex)
+        catch
         {
-            _log.Warning($"Failed to get managed host process exit code: {ex.Message}");
         }
 
         return $"Managed local GPU host failed to become ready at {AppSettings.ManagedGpuServiceUrl}: {detail}";
@@ -1419,9 +1413,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var currentScriptHash = ComputeScriptVersion(_inferenceScriptResolver());
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
-        catch (Exception ex)
+        catch
         {
-            _log.Warning($"Failed to check if managed GPU host script changed: {ex.Message}");
             return false; // can't determine — assume unchanged to avoid spurious restarts
         }
     }
