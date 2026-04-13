@@ -108,7 +108,7 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
-    private static FileStream OpenReadWithAsyncOptions(string filePath)
+    private static FileStream OpenReadAsync(string filePath)
     {
         return new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
     }
