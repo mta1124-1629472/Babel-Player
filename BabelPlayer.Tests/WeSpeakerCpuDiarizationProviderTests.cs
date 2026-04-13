@@ -1,7 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
+using System.Security.Cryptography;
+using System.Text;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
 using Xunit;
@@ -48,24 +49,40 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
 
+        // Create platform-appropriate venv structure
+        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var scriptsDir = isWindows ? "Scripts" : "bin";
+        var pythonExe = isWindows ? "python.exe" : "python";
+        Directory.CreateDirectory(Path.Combine(runtimeRoot, ".venv", scriptsDir));
+
+        var pythonPath = Path.Combine(runtimeRoot, ".venv", scriptsDir, pythonExe);
+        File.WriteAllBytes(pythonPath, Array.Empty<byte>());
+
+        // On Unix, set executable bit so GetPythonExecutablePath() finds it
+        if (!isWindows)
+        {
+            try
+            {
+                System.IO.File.SetUnixFileMode(pythonPath,
+                    System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
+                    System.IO.UnixFileMode.GroupRead | System.IO.UnixFileMode.GroupExecute |
+                    System.IO.UnixFileMode.OtherRead | System.IO.UnixFileMode.OtherExecute);
+            }
+            catch
+            {
+                // If setting permissions fails, the test may fail but that's acceptable
+            }
+        }
+
+        var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
+        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));
+
         var manager = new ManagedCpuRuntimeManager(
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
 
-        // The manager defines GetPythonExecutablePath(), we must ensure *that* path exists
-        var pythonPath = manager.GetPythonExecutablePath();
-        Directory.CreateDirectory(Path.GetDirectoryName(pythonPath)!);
-        File.WriteAllBytes(pythonPath, Array.Empty<byte>());
-
-        var markerPath = manager.GetBootstrapMarkerPath();
-        File.WriteAllText(markerPath, manager.ComputeMarkerHash(requirementsPath));
-
-        // Drive EnsureInstalledAsync so the manager transitions to Ready without running bootstrap.
-        await manager.EnsureInstalledAsync();
-
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
-        await manager.EnsureInstalledAsync();
 
         // The provider checks manager.State which defaults to NotInstalled.
         // We need to simulate the bootstrap check so the manager sets its state.
@@ -100,5 +117,12 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         }
 
         throw new InvalidOperationException($"Could not locate inference directory from {AppContext.BaseDirectory}.");
+    }
+
+    private static string ComputeMarkerHash(string requirementsPath)
+    {
+        var content = $"python:3.11.6\n{File.ReadAllText(requirementsPath)}";
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
+        return Convert.ToHexString(bytes);
     }
 }

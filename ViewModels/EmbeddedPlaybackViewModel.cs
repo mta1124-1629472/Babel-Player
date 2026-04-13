@@ -2262,37 +2262,6 @@ partial void OnSourcePositionMsChanged(double value)
     }
 
     [RelayCommand]
-    private void Rewind()
-    {
-        var player = _coordinator.SourceMediaPlayer;
-        if (player == null)
-        {
-            _coordinator.Log.Info("Rewind blocked: source player not ready.");
-            return;
-        }
-        double currentPositionMs = player.CurrentTime * 1000.0;
-        double newPositionMs = Math.Max(0, currentPositionMs - 10_000);
-        player.Seek((long)newPositionMs);
-    }
-
-    [RelayCommand]
-    private void FastForward()
-    {
-        var player = _coordinator.SourceMediaPlayer;
-        if (player == null)
-        {
-            _coordinator.Log.Info("FastForward blocked: source player not ready.");
-            return;
-        }
-        double currentPositionMs = player.CurrentTime * 1000.0;
-        double durationMs = player.Duration * 1000.0;
-        double newPositionMs = durationMs > 0
-            ? Math.Min(durationMs, currentPositionMs + 10_000)
-            : currentPositionMs + 10_000;
-        player.Seek((long)newPositionMs);
-    }
-
-    [RelayCommand]
     private void ToggleMute()
     {
         if (IsMuted)

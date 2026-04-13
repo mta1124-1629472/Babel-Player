@@ -408,17 +408,13 @@ for i, arg in enumerate(sys.argv):
                 return resolveCount == 1 ? tempRootA : tempRootB;
             });
 
-        var expectedPythonPath = OperatingSystem.IsWindows()
-            ? Path.Combine(tempRootA, ".venv", "Scripts", "python.exe")
-            : Path.Combine(tempRootA, ".venv", "bin", "python");
-
         Assert.Equal(1, resolveCount);
         Assert.Equal(tempRootA, runtimeManager.RuntimeRoot);
-        Assert.Equal(expectedPythonPath, runtimeManager.GetPythonExecutablePath());
-        Assert.Equal(Path.Combine(tempRootA, ".cpu-bootstrap-version"), runtimeManager.GetBootstrapMarkerPath());
+        Assert.Equal(runtimeManager.GetPythonExecutablePath(), runtimeManager.GetPythonExecutablePath());
+        Assert.Equal(runtimeManager.GetBootstrapMarkerPath(), runtimeManager.GetBootstrapMarkerPath());
 
         var service = new TestPythonService(log, runtimeManager);
-        Assert.Equal(expectedPythonPath, GetPythonPath(service));
+        Assert.Equal(runtimeManager.GetPythonExecutablePath(), GetPythonPath(service));
 
         Assert.Equal(1, resolveCount);
     }

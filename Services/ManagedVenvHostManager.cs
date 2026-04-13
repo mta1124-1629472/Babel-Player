@@ -168,13 +168,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
+        var scriptChangedSinceLastStart = await IsScriptChangedSinceLastStartAsync(cancellationToken);
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
-
-        // Only check if script changed when preflight shows host is available (avoids expensive I/O on cold starts)
-        var scriptChangedSinceLastStart = preflight.IsAvailable
-            ? IsScriptChangedSinceLastStart()
-            : false;
 
         if (preflight.IsAvailable && !scriptChangedSinceLastStart)
         {
@@ -245,10 +241,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         try
         {
             var runtimeRoot = _runtimeRootResolver();
-            var venvDir = Path.Combine(runtimeRoot, ".venv");
-            var pythonPath = OperatingSystem.IsWindows()
-                ? Path.Combine(venvDir, "Scripts", "python.exe")
-                : Path.Combine(venvDir, "bin", "python");
+            var pythonPath = Path.Combine(
+                runtimeRoot,
+                ".venv",
+                System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "Scripts" : "bin",
+                System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "python.exe" : "python");
             var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
 
             RecoverStaleHostProcessesAsync(
@@ -261,15 +258,39 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
         catch (Exception ex)
         {
-            _log.Error("ManagedVenvHostManager.Dispose() failed to recover stale host processes", ex);
+            _log.Warning($"Managed GPU host graceful shutdown failed during Dispose(): {ex.Message}. Attempting forceful termination.");
             try
             {
-                if (_hostProcess is { HasExited: false })
+                if (_hostProcess is { HasExited: false } process)
+                {
+                    var pid = process.Id;
+                    _log.Warning($"Forcefully terminating managed GPU host process pid={pid}.");
                     _hostProcess.Kill(entireProcessTree: true);
+                }
             }
             catch (Exception killEx)
             {
-                _log.Error("ManagedVenvHostManager.Dispose() failed to kill tracked host process", killEx);
+                var processInfo = "unknown";
+                try
+                {
+                    if (_hostProcess is not null)
+                    {
+                        processInfo = _hostProcess.HasExited
+                            ? $"pid={_hostProcess.Id} (exited)"
+                            : $"pid={_hostProcess.Id} (running)";
+                    }
+                }
+                catch
+                {
+                    processInfo = "inaccessible";
+                }
+
+                _log.Error($"Failed to forcefully terminate managed GPU host process ({processInfo}) during Dispose(): {killEx.Message}", killEx);
+                State = ManagedHostState.Failed;
+                FailureReason = $"Host process cleanup failed: {killEx.Message}";
+                // Rethrow to surface the failure to callers
+                throw new InvalidOperationException(
+                    $"Failed to terminate managed GPU host process during cleanup. Process may be orphaned: {killEx.Message}", killEx);
             }
         }
     }
@@ -303,16 +324,17 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         var runtimeRoot = _runtimeRootResolver();
         var venvDir = Path.Combine(runtimeRoot, ".venv");
-        var pythonPath = OperatingSystem.IsWindows()
-            ? Path.Combine(venvDir, "Scripts", "python.exe")
-            : Path.Combine(venvDir, "bin", "python");
+        var pythonPath = Path.Combine(
+            venvDir,
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "Scripts" : "bin",
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "python.exe" : "python");
         var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
         Directory.CreateDirectory(runtimeRoot);
         _log.Info(
             $"Managed GPU runtime paths: runtime_root={runtimeRoot}, venv_dir={venvDir}, python={pythonPath}, " +
             $"script={inferenceScriptPath}, requirements={requirementsPath}, constraints={constraintsPath}, uv={uvPath}, compute_type={computeType}");
 
-        var bootstrapVersion = await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath, cancellationToken).ConfigureAwait(false);
+        var bootstrapVersion = await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath, cancellationToken);
         var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
         var markerValue = File.Exists(markerPath) ? await File.ReadAllTextAsync(markerPath, cancellationToken) : null;
         var needsBootstrap = !File.Exists(pythonPath) || !string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal);
@@ -481,7 +503,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         // Record which script version is running so IsScriptChangedSinceLastStart can detect edits
         var scriptVersionPath = Path.Combine(runtimeRoot, ".script-version");
-        await File.WriteAllTextAsync(scriptVersionPath, ComputeScriptVersion(inferenceScriptPath), cancellationToken);
+        await File.WriteAllTextAsync(scriptVersionPath, await ComputeScriptVersionAsync(inferenceScriptPath, cancellationToken), cancellationToken);
 
         _log.Info(
             $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={_postStartProbeTimeout.TotalSeconds}s");
@@ -1393,7 +1415,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"tts={capabilities.TtsReady}('{capabilities.TtsDetail ?? "<none>"}')";
     }
 
-    private bool IsScriptChangedSinceLastStart()
+    private async Task<bool> IsScriptChangedSinceLastStartAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -1403,10 +1425,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var depsMarkerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
             if (!File.Exists(depsMarkerPath))
                 return true;
-            var storedDepsHash = File.ReadAllText(depsMarkerPath).Trim();
-            var currentDepsHash = ComputeBootstrapVersion(
+            var storedDepsHash = (await File.ReadAllTextAsync(depsMarkerPath, cancellationToken)).Trim();
+            var currentDepsHash = await ComputeBootstrapVersionAsync(
                 _requirementsPathResolver(),
-                _constraintsPathResolver());
+                _constraintsPathResolver(),
+                cancellationToken);
             if (!string.Equals(storedDepsHash, currentDepsHash, StringComparison.Ordinal))
                 return true;
 
@@ -1414,32 +1437,47 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var scriptMarkerPath = Path.Combine(runtimeRoot, ".script-version");
             if (!File.Exists(scriptMarkerPath))
                 return true;
-            var storedScriptHash = File.ReadAllText(scriptMarkerPath).Trim();
-            var currentScriptHash = ComputeScriptVersion(_inferenceScriptResolver());
+            var storedScriptHash = (await File.ReadAllTextAsync(scriptMarkerPath, cancellationToken)).Trim();
+            var currentScriptHash = await ComputeScriptVersionAsync(_inferenceScriptResolver(), cancellationToken);
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
-        catch
+        catch (OperationCanceledException)
         {
-            return false; // can't determine — assume unchanged to avoid spurious restarts
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Failed to detect script/dependency changes: {ex.Message}");
+            return true; // treat detection failures as "changed" to force restart
         }
     }
 
-    private static string ComputeBootstrapVersion(
+    private static async Task<string> ComputeBootstrapVersionAsync(
         string requirementsPath,
-        string constraintsPath)
+        string constraintsPath,
+        CancellationToken cancellationToken = default)
     {
         var builder = new StringBuilder();
         builder.AppendLine(PythonVersion);
-        builder.AppendLine(File.ReadAllText(requirementsPath));
-        builder.AppendLine(File.ReadAllText(constraintsPath));
+        builder.AppendLine(await File.ReadAllTextAsync(requirementsPath, cancellationToken));
+        builder.AppendLine(await File.ReadAllTextAsync(constraintsPath, cancellationToken));
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(bytes);
     }
 
-    private static string ComputeScriptVersion(string inferenceScriptPath)
+    private static async Task<string> ComputeScriptVersionAsync(string inferenceScriptPath, CancellationToken cancellationToken = default)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath)));
+        await using var stream = new FileStream(
+            inferenceScriptPath,
+            new FileStreamOptions
+            {
+                Mode = FileMode.Open,
+                Access = FileAccess.Read,
+                Share = FileShare.Read,
+                Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+            });
+        var bytes = await SHA256.HashDataAsync(stream, cancellationToken);
         return Convert.ToHexString(bytes);
     }
 

@@ -239,67 +239,39 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
         var responseLine = await worker.Process.StandardOutput.ReadLineAsync().WaitAsync(linkedCts.Token).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(responseLine))
         {
-            const int workerShutdownTimeoutMs = 2000;
-            const int stderrReadTimeoutMs = 2000;
-
-            // If the process hasn't exited, kill it before reading stderr to avoid waiting indefinitely
-            // for the worker to terminate and close its stderr pipe.
             var killAttempted = false;
+            // If the process hasn't exited, kill it before reading stderr to prevent ReadToEndAsync from hanging
             if (!worker.Process.HasExited)
             {
                 killAttempted = true;
-                try
-                {
-                    worker.Process.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                    // Best effort.
-                }
+                try { worker.Process.Kill(entireProcessTree: true); } catch { /* Best effort */ }
             }
+
+            using var stderrCts = CancellationTokenSource.CreateLinkedTokenSource(linkedCts.Token);
+            stderrCts.CancelAfter(TimeSpan.FromSeconds(2));
 
             try
             {
-                await worker.Process.WaitForExitAsync(linkedCts.Token)
-                    .WaitAsync(TimeSpan.FromMilliseconds(workerShutdownTimeoutMs), linkedCts.Token)
-                    .ConfigureAwait(false);
+                await worker.Process.WaitForExitAsync(stderrCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                throw;
-            }
-            catch (TimeoutException)
-            {
-                // Best effort: continue and bound stderr reading below.
-            }
-            catch
-            {
-                // Best effort.
+                // Continue with partial/empty stderr if process did not exit in time.
             }
 
             string stderr;
             try
             {
-                stderr = await worker.Process.StandardError.ReadToEndAsync(linkedCts.Token)
-                    .WaitAsync(TimeSpan.FromMilliseconds(stderrReadTimeoutMs), linkedCts.Token)
-                    .ConfigureAwait(false);
+                stderr = await worker.Process.StandardError.ReadToEndAsync(stderrCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                throw;
-            }
-            catch (TimeoutException)
-            {
-                stderr = "Timed out while reading worker stderr.";
-            }
-            catch (Exception ex)
-            {
-                stderr = $"Failed to read worker stderr: {ex.Message}";
+                stderr = "stderr read timed out.";
             }
 
-            var killSuffix = killAttempted ? " (kill attempted)." : ".";
+            var killDetails = killAttempted ? " (kill attempted)." : ".";
             throw new InvalidOperationException(
-                $"{_poolName} worker {worker.Index + 1} failed to produce a response{killSuffix} {stderr}".Trim());
+                $"{_poolName} worker {worker.Index + 1} failed to produce a response{killDetails} {stderr}".Trim());
         }
 
         var envelope = JsonSerializer.Deserialize<WorkerResponseEnvelope<TResponse>>(responseLine, JsonOptions)
