@@ -1,0 +1,11 @@
+--- Services/ManagedVenvHostManager.cs
++++ Services/ManagedVenvHostManager.cs
+@@ -1438,8 +1438,6 @@
+         }
+         catch (Exception ex)
+         {
+-            _log.Warning($"Failed to check if managed GPU host script changed: {ex.Message}");
+-        {
+             _log.Warning($"Failed to check if managed GPU host script changed: {ex.Message}");
+             return false; // can't determine — assume unchanged to avoid spurious restarts
+         }

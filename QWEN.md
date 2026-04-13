@@ -75,8 +75,8 @@ Babel-Player/
 ### Build
 
 ```powershell
-dotnet build babel-player.sln          # Full build (includes restore)
-dotnet build babel-player.sln --no-restore  # Fast build (skip restore)
+dotnet build Babel-Player.sln          # Full build (includes restore)
+dotnet build Babel-Player.sln --no-restore  # Fast build (skip restore)
 dotnet run -c Dev                      # Dev build (no optimizations, full debug)
 dotnet run --project BabelPlayer.csproj # Launch the app
 ```
@@ -84,10 +84,10 @@ dotnet run --project BabelPlayer.csproj # Launch the app
 ### Test
 
 ```powershell
-dotnet test babel-player.sln                          # All tests
-dotnet test babel-player.sln --filter "ClassName~SessionWorkflowCoordinatorUnitTests"  # Single test class
-dotnet test babel-player.sln --filter "ClassName~MethodName"                            # Single test method
-dotnet test babel-player.sln -v n                     # Verbose output
+dotnet test Babel-Player.sln                          # All tests
+dotnet test Babel-Player.sln --filter "ClassName~SessionWorkflowCoordinatorUnitTests"  # Single test class
+dotnet test Babel-Player.sln --filter "ClassName~MethodName"                            # Single test method
+dotnet test Babel-Player.sln -v n                     # Verbose output
 ```
 
 **Test categories:** `Integration`, `RequiresPython`, `RequiresFfmpeg`, `RequiresExternalTranslation`
@@ -102,8 +102,8 @@ python -m py_compile inference/main.py   # Verify Python inference code
 ### Full verification sequence
 
 ```powershell
-dotnet build babel-player.sln
-dotnet test babel-player.sln
+dotnet build Babel-Player.sln
+dotnet test Babel-Player.sln
 python3 scripts/check-architecture.py
 python -m py_compile inference/main.py
 ```
