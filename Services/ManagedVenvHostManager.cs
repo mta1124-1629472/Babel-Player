@@ -256,15 +256,17 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 .GetAwaiter()
                 .GetResult();
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Warning($"Failed to recover stale host processes during dispose: {ex.Message}");
             try
             {
                 if (_hostProcess is { HasExited: false })
                     _hostProcess.Kill(entireProcessTree: true);
             }
-            catch
+            catch (Exception innerEx)
             {
+                _log.Warning($"Failed to kill tracked host process during dispose: {innerEx.Message}");
             }
         }
     }
@@ -678,8 +680,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             trackedProcess = _hostProcess is { HasExited: false } ? _hostProcess : null;
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Warning($"Failed to check if tracked host process is running during stop: {ex.Message}");
             trackedProcess = null;
         }
 
@@ -784,8 +787,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 return false;
             pid = process.Id;
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Warning($"Failed to get process ID or exit status while stopping process: {ex.Message}");
             return false;
         }
 
@@ -900,8 +904,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return !string.IsNullOrWhiteSpace(processPath)
                 && string.Equals(processPath, pythonPath, StringComparison.OrdinalIgnoreCase);
         }
-        catch
+        catch (Exception)
         {
+            // Can't use _log here because IsManagedPythonProcess is static, but we can swallow safely as it's a diagnostic method
             return false;
         }
     }
@@ -1274,8 +1279,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             return _hostProcess is { HasExited: false };
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Warning($"Failed to check if tracked host process is running: {ex.Message}");
             return false;
         }
     }
@@ -1375,8 +1381,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             if (_hostProcess is { HasExited: true } hostProcess)
                 detail = $"managed host exited before readiness probe completed with exit code {hostProcess.ExitCode}";
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Warning($"Failed to get managed host process exit code: {ex.Message}");
         }
 
         return $"Managed local GPU host failed to become ready at {AppSettings.ManagedGpuServiceUrl}: {detail}";
@@ -1432,8 +1439,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Warning($"Failed to check if managed GPU host script changed: {ex.Message}");
             return false; // can't determine — assume unchanged to avoid spurious restarts
         }
     }
