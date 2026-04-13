@@ -13,6 +13,7 @@ public static class AudioConcatUtility
     public static async Task CombineAudioSegmentsAsync(
         IReadOnlyList<string> segmentAudioPaths,
         string outputAudioPath,
+        AppLog? log,
         CancellationToken cancellationToken)
     {
         if (segmentAudioPaths.Count == 0)
@@ -86,8 +87,9 @@ public static class AudioConcatUtility
                 if (Directory.Exists(concatListDir))
                     Directory.Delete(concatListDir, recursive: true);
             }
-            catch
+            catch (Exception ex)
             {
+                log?.Warning($"Failed to clean up temporary concat directory {concatListDir}: {ex.Message}");
             }
         }
     }
