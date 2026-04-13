@@ -93,7 +93,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
 
     private static string ComputeMarkerHash(string requirementsPath)
     {
-        var content = $"python:3.11.6\n{File.ReadAllText(requirementsPath)}";
+        var content = $"python:{ManagedCpuRuntimeManager.PythonVersion}\n{File.ReadAllText(requirementsPath)}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
     }
