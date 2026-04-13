@@ -11,6 +11,7 @@ using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CoordinatorOptions = Babel.Player.Models.CoordinatorOptions;
 
 namespace Babel.Player.Services;
 
@@ -109,93 +110,81 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public ApiKeyStore? KeyStore { get; private set; }
 
+    /// <summary>
+    /// Creates a <see cref="SessionWorkflowCoordinator"/> with an explicit transport manager.
+    /// Use this overload in production via <see cref="DependencyLocator"/>.
+    /// </summary>
     public SessionWorkflowCoordinator(
         SessionSnapshotStore store,
         AppLog log,
         AppSettings settings,
-        PerSessionSnapshotStore perSessionStore,
-        RecentSessionsStore recentStore,
-        ITranscriptionRegistry transcriptionRegistry,
-        ITranslationRegistry translationRegistry,
-        ITtsRegistry ttsRegistry,
-        IMediaTransport? segmentPlayer,
-        IMediaTransport? sourcePlayer,
-        ApiKeyStore? keyStore = null)
-        : this(
-            store,
-            log,
-            settings,
-            perSessionStore,
-            recentStore,
-            transcriptionRegistry,
-            translationRegistry,
-            ttsRegistry,
-            transportManager: null,
-            segmentPlayer: segmentPlayer,
-            sourcePlayer: sourcePlayer,
-            keyStore: keyStore)
+        IMediaTransportManager transportManager,
+        RegistryBundle registries,
+        CoordinatorOptions? options = null)
     {
-    }
+        options ??= CoordinatorOptions.Empty;
 
-    public SessionWorkflowCoordinator(
-        SessionSnapshotStore store,
-        AppLog log,
-        AppSettings settings,
-        PerSessionSnapshotStore perSessionStore,
-        RecentSessionsStore recentStore,
-        ITranscriptionRegistry transcriptionRegistry,
-        ITranslationRegistry translationRegistry,
-        ITtsRegistry ttsRegistry,
-        IMediaTransportManager? transportManager = null,
-        IMediaTransport? segmentPlayer = null,
-        IMediaTransport? sourcePlayer = null,
-        ApiKeyStore? keyStore = null,
-        SessionArtifactReader? artifactReader = null,
-        SessionSwitchService? sessionSwitchService = null,
-        IDiarizationRegistry? diarizationRegistry = null,
-        ContainerizedServiceProbe? containerizedProbe = null,
-        IContainerizedInferenceManager? containerizedInferenceManager = null,
-        IAudioProcessingService? audioProcessingService = null)
-
-    {
         _store = store;
         _log = log;
-        _perSessionStore = perSessionStore;
-        _recentStore = recentStore;
-        _containerizedProbe = containerizedProbe;
-        _containerizedInferenceManager = containerizedInferenceManager;
-        _audioProcessingService = audioProcessingService;
-        _artifactReader = artifactReader ?? new SessionArtifactReader();
-        _sessionSwitchService = sessionSwitchService ?? new SessionSwitchService(perSessionStore, recentStore, log);
+        _perSessionStore = registries.PerSessionStore;
+        _recentStore = registries.RecentStore;
+        _containerizedProbe = options.ContainerizedProbe;
+        _containerizedInferenceManager = options.ContainerizedInferenceManager;
+        _audioProcessingService = options.AudioProcessingService;
+        _artifactReader = options.ArtifactReader ?? new SessionArtifactReader();
+        _sessionSwitchService = options.SessionSwitchService
+            ?? new SessionSwitchService(registries.PerSessionStore, registries.RecentStore, log);
 
         _cpuRuntimeManager = new ManagedCpuRuntimeManager(log);
-        TranscriptionRegistry = transcriptionRegistry;
-        TranslationRegistry = translationRegistry;
-        TtsRegistry = ttsRegistry;
-        DiarizationRegistry = diarizationRegistry;
+        TranscriptionRegistry = registries.TranscriptionRegistry;
+        TranslationRegistry = registries.TranslationRegistry;
+        TtsRegistry = registries.TtsRegistry;
+        DiarizationRegistry = options.DiarizationRegistry;
         CurrentSettings = settings;
-        KeyStore = keyStore;
-        _transportManager = transportManager ?? new MediaTransportManager(
-            segmentPlayer,
-            sourcePlayer,
-            videoOptionsFactory: () => new VideoPlaybackOptions(
-                HwdecMode:      settings.VideoHwdec,
-                GpuApi:         settings.VideoGpuApi,
-                UseGpuNext:     settings.VideoUseGpuNext,
-                VsrEnabled:     settings.VideoVsrEnabled,
-                HdrEnabled:     settings.VideoHdrEnabled,
-                AllowHdrPassthrough: settings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
-                ToneMapping:    settings.VideoToneMapping,
-                TargetPeak:     settings.VideoTargetPeak,
-                HdrComputePeak: settings.VideoHdrComputePeak),
-            log: log);
+        KeyStore = options.KeyStore;
+        _transportManager = transportManager;
 
-        // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) => StopTtsPlayback();
         _segmentErrorHandler = (_, ex) => StopTtsPlayback();
         _vsrDiagnosticChangedHandler = RecordVsrDiagnosticSnapshot;
 
         RefreshVideoEnhancementDiagnostics();
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SessionWorkflowCoordinator"/> without a pre-built transport manager,
+    /// constructing a default <see cref="MediaTransportManager"/> from optional segment/source players.
+    /// Convenience overload for tests and minimal-host scenarios.
+    /// </summary>
+    public SessionWorkflowCoordinator(
+        SessionSnapshotStore store,
+        AppLog log,
+        AppSettings settings,
+        RegistryBundle registries,
+        CoordinatorOptions? options = null,
+        IMediaTransport? segmentPlayer = null,
+        IMediaTransport? sourcePlayer = null)
+        : this(
+            store,
+            log,
+            settings,
+            new MediaTransportManager(
+                segmentPlayer,
+                sourcePlayer,
+                videoOptionsFactory: () => new VideoPlaybackOptions(
+                    HwdecMode:           settings.VideoHwdec,
+                    GpuApi:              settings.VideoGpuApi,
+                    UseGpuNext:          settings.VideoUseGpuNext,
+                    VsrEnabled:          settings.VideoVsrEnabled,
+                    HdrEnabled:          settings.VideoHdrEnabled,
+                    AllowHdrPassthrough: settings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
+                    ToneMapping:         settings.VideoToneMapping,
+                    TargetPeak:          settings.VideoTargetPeak,
+                    HdrComputePeak:      settings.VideoHdrComputePeak),
+                log: log),
+            registries,
+            options)
+    {
     }
 
     public string StateFilePath => _store.StateFilePath;

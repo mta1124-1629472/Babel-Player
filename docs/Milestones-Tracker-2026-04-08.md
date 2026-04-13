@@ -1,3 +1,5 @@
+> **Retired April 13, 2026.** Consolidated into `docs/Engineering-Plan.md`. This file is kept for history only.
+
 # Babel-Player — Engineering Milestone Tracker
 
 **Consolidated Implementation Plan: Codebase Health · Inference Performance · NeMo Provider Integrations**
@@ -104,36 +106,36 @@ Direct inference time reductions with minimal architectural change. Estimated ef
 
 ---
 
-## Phase 3: Diarization Provider Overhaul (Still Open)
+## Phase 3: Diarization Provider Overhaul ✅
 
-Replace pyannote with NeMo ClusteringDiarizer (GPU) and WeSpeaker (CPU fallback). Eliminate HuggingFace token friction. Fix two UI gaps found during wiring audit. 
+Replace pyannote with NeMo ClusteringDiarizer (GPU) and WeSpeaker (CPU fallback). Eliminate HuggingFace token friction. Fix two UI gaps found during wiring audit.
 
 ### 3.1 — Python: Replace pyannote `/diarize` with NeMo ClusteringDiarizer
-- **Status:** **Still Open.** 
+- **Status:** **Resolved.** Verified April 13, 2026. `/diarize` calls `_run_nemo_diarization()` → `ClusteringDiarizer` exclusively. Zero pyannote imports anywhere in `inference/`.
 
 ### 3.2 — Python: Add WeSpeaker `/diarize/wespeaker` Endpoint
-- **Status:** **Still Open.**
+- **Status:** **Resolved.** Endpoint exists and returns HTTP 410 Gone — correctly deprecated in favour of the managed CPU runtime.
 
 ### 3.3 — Python: Update `/capabilities`
-- **Status:** **Still Open.**
+- **Status:** **Resolved.** Capabilities endpoint reflects current provider set.
 
 ### 3.4 — C#: Add NeMo and WeSpeaker Diarization Providers
-- **Status:** **Still Open.**
+- **Status:** **Resolved.** `NemoContainerizedDiarizationProvider` and `WeSpeakerCpuDiarizationProvider` both registered in `DiarizationRegistry`. `WeSpeakerContainerizedDiarizationProvider` (GPU/container variant) deleted April 13, 2026 — was unregistered dead code.
 
 ### 3.5 — Remove pyannote + HuggingFace Token Cleanup
-- **Status:** **Still Open.**
+- **Status:** **Resolved.** Verified April 13, 2026. Zero pyannote or HF_TOKEN references in `inference/requirements.txt` or `inference/main.py`.
 
 ### 3.6 — UI Wiring Audit → DONE
 - **Status:** **Resolved.**
 
 ### 3.7 — UI: Replace Diarization CheckBox with Provider ComboBox
-- **Status:** **Still Open** (Flagged in April 2026 Audit).
+- **Status:** **Resolved.** ComboBox exists in `MainWindow.axaml`.
 
 ### 3.8 — UI: Add Standalone "Re-diarize" Command
-- **Status:** **Still Open** (Flagged in April 2026 Audit).
+- **Status:** **Resolved.** `RunDiarizationOnlyCommand` exists.
 
 ### 3.9 — UI: Show SpeakerId in Segment Row Template
-- **Status:** **Still Open** (Flagged in April 2026 Audit).
+- **Status:** **Resolved.** Colored badge with `SpeakerIdToShortLabelConverter`.
 
 ---
 
@@ -150,10 +152,10 @@ Add Parakeet-TDT-0.6B-v3 as a high-performance ASR option for European languages
 Process lifecycle improvements for the only two subprocess-based providers. Estimated effort: 3–5 days.
 
 ### 5.1 — Batch Python Scripts for Edge TTS and Piper
-- **Status:** **Still Open.**
+- **Status:** **Superseded by 5.2.** Worker pool stdin/stdout JSON-RPC achieves the same goal without separate batch scripts.
 
 ### 5.2 — Persistent Python Worker Pool
-- **Status:** **Still Open.**
+- **Status:** **Resolved.** `PythonJsonWorkerPool.cs` implemented with Edge TTS and Piper workers. Stderr reading hardened April 13, 2026 (bounded line-by-line read replaces `ReadToEndAsync`).
 
 ---
 
@@ -162,19 +164,19 @@ Process lifecycle improvements for the only two subprocess-based providers. Esti
 Major structural changes that benefit from all prior stabilization. Estimated effort: 4–8 weeks total, can be staggered.
 
 ### 6.1 — Decompose EmbeddedPlaybackViewModel
-- **Status:** **Still Open** (Flagged in April 2026 Audit).
+- **Status:** **Partial.** `EmbeddedPlaybackPipelineViewModel.cs` and `EmbeddedPlaybackSpeakerRoutingViewModel.cs` were created in Part 4, but `EmbeddedPlaybackViewModel.cs` was not reduced — it is currently **2,473 lines**. Logic was added alongside the sub-VMs rather than moved into them. Finishing this decomposition is Tier 2 in the revised execution order.
 
 ### 6.2 — Streaming Pipeline with Inter-Stage Overlap
-- **Status:** **Still Open** (Flagged in April 2026 Audit).
+- **Status:** **Still Open.** `SessionWorkflowCoordinator.Pipeline.cs` is fully sequential async/await. Zero `System.Threading.Channels` usage. The Part 4 "staged, partial" claim was not reflected in the actual code as of April 13, 2026.
 
 ### 6.3 — Server-Side Batching for Qwen TTS
-- **Status:** **Still Open** (Flagged in April 2026 Audit).
+- **Status:** **Resolved.** `/tts/qwen/batch` endpoint live.
 
 ### 6.4 — Constructor Overload Cleanup
-- **Status:** **Still Open** (Flagged in April 2026 Audit).
+- **Status:** **Still Open.** Constructor has **18 parameters** (8 required, 10 optional). No `CoordinatorOptions` record exists. This is Tier 1 in the revised execution order — do before Parakeet or streaming.
 
 ### 6.5 — Clean Shutdown (Replace Environment.Exit)
-- **Status:** **Still Open** (Flagged in April 2026 Audit).
+- **Status:** **Resolved.** Part 4 (staged).
 
 ---
 

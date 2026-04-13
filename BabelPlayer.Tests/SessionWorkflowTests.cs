@@ -45,28 +45,28 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
 
-        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
-        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
-        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
         diarizationRegistry ??= new FakeDiarizationRegistry(
             (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider()),
             (ProviderNames.WeSpeakerLocal, "WeSpeaker", new FakeDiarizationProvider()));
-        var audioProcessingService = new FfmpegAudioProcessingService(log);
 
-        return new SessionWorkflowCoordinator(
-            store,
-            log,
-            settings,
+        var registries = new Babel.Player.Models.RegistryBundle(
             perSessionStore,
             recentStore,
-            transcriptionRegistry,
-            translationRegistry,
-            ttsRegistry,
-            diarizationRegistry: diarizationRegistry,
-            containerizedProbe: containerizedProbe,
+            new Babel.Player.Services.Registries.TranscriptionRegistry(log),
+            new Babel.Player.Services.Registries.TranslationRegistry(log),
+            new Babel.Player.Services.Registries.TtsRegistry(log));
+
+        var options = new Babel.Player.Models.CoordinatorOptions
+        {
+            DiarizationRegistry    = diarizationRegistry,
+            ContainerizedProbe     = containerizedProbe,
+            AudioProcessingService = new FfmpegAudioProcessingService(log),
+        };
+
+        return new SessionWorkflowCoordinator(
+            store, log, settings, registries, options,
             segmentPlayer: segmentPlayer,
-            sourcePlayer: sourcePlayer,
-            audioProcessingService: audioProcessingService);
+            sourcePlayer: sourcePlayer);
     }
 
     private static SessionWorkflowCoordinator CreateCoordinator(
@@ -473,26 +473,21 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
 
-        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
-        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
-        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        diarizationRegistry ??= FakeDiarizationFactory.CreateDefaultRegistry();
-        var audioProcessingService = new FfmpegAudioProcessingService(log);
-
+        var registries = new Babel.Player.Models.RegistryBundle(
+            perSessionStore, recentStore,
+            new Babel.Player.Services.Registries.TranscriptionRegistry(log),
+            new Babel.Player.Services.Registries.TranslationRegistry(log),
+            new Babel.Player.Services.Registries.TtsRegistry(log));
+        var options = new Babel.Player.Models.CoordinatorOptions
+        {
+            DiarizationRegistry    = diarizationRegistry ?? FakeDiarizationFactory.CreateDefaultRegistry(),
+            ContainerizedProbe     = containerizedProbe,
+            AudioProcessingService = new FfmpegAudioProcessingService(log),
+        };
         return new SessionWorkflowCoordinator(
-            store,
-            log,
-            settings,
-            perSessionStore,
-            recentStore,
-            transcriptionRegistry,
-            translationRegistry,
-            ttsRegistry,
-            diarizationRegistry: diarizationRegistry,
-            containerizedProbe: containerizedProbe,
+            store, log, settings, registries, options,
             segmentPlayer: segmentPlayer,
-            sourcePlayer: sourcePlayer,
-            audioProcessingService: audioProcessingService);
+            sourcePlayer: sourcePlayer);
     }
 
     private static SessionWorkflowCoordinator CreateCoordinator(
@@ -663,26 +658,21 @@ public sealed class SegmentInspectionTests
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
 
-        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
-        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
-        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        diarizationRegistry ??= FakeDiarizationFactory.CreateDefaultRegistry();
-        var audioProcessingService = new FfmpegAudioProcessingService(log);
-
+        var registries = new Babel.Player.Models.RegistryBundle(
+            perSessionStore, recentStore,
+            new Babel.Player.Services.Registries.TranscriptionRegistry(log),
+            new Babel.Player.Services.Registries.TranslationRegistry(log),
+            new Babel.Player.Services.Registries.TtsRegistry(log));
+        var options = new Babel.Player.Models.CoordinatorOptions
+        {
+            DiarizationRegistry    = diarizationRegistry ?? FakeDiarizationFactory.CreateDefaultRegistry(),
+            ContainerizedProbe     = containerizedProbe,
+            AudioProcessingService = new FfmpegAudioProcessingService(log),
+        };
         return new SessionWorkflowCoordinator(
-            store,
-            log,
-            settings,
-            perSessionStore,
-            recentStore,
-            transcriptionRegistry,
-            translationRegistry,
-            ttsRegistry,
-            diarizationRegistry: diarizationRegistry,
-            containerizedProbe: containerizedProbe,
+            store, log, settings, registries, options,
             segmentPlayer: segmentPlayer,
-            sourcePlayer: sourcePlayer,
-            audioProcessingService: audioProcessingService);
+            sourcePlayer: sourcePlayer);
     }
 
     private static SessionWorkflowCoordinator CreateCoordinator(
