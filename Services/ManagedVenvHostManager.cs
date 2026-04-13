@@ -168,13 +168,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
-        var scriptChangedSinceLastStart = await IsScriptChangedSinceLastStartAsync(cancellationToken);
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
 
         // Only check if script changed when preflight shows host is available (avoids expensive I/O on cold starts)
         var scriptChangedSinceLastStart = preflight.IsAvailable
-            ? IsScriptChangedSinceLastStart()
+            ? await IsScriptChangedSinceLastStartAsync(cancellationToken)
             : false;
 
         if (preflight.IsAvailable && !scriptChangedSinceLastStart)

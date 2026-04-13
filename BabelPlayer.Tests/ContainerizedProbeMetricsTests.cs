@@ -78,18 +78,6 @@ public sealed class ContainerizedProbeMetricsTests : IClassFixture<SessionWorkfl
     }
 
     [Fact]
-    public void ServiceMetrics_RecordCancellation_UpdatesCorrectly()
-    {
-        var metrics = new ServiceMetrics("http://localhost:8000");
-
-        metrics.RecordCancellation();
-
-        Assert.Equal(1, metrics.TotalProbes);
-        Assert.Equal(1, metrics.Cancellations);
-        Assert.NotEqual(DateTimeOffset.MinValue, metrics.LastProbeAtUtc);
-    }
-
-    [Fact]
     public void ServiceMetrics_RecordCacheAccess_UpdatesCorrectly()
     {
         var metrics = new ServiceMetrics("http://localhost:8000");

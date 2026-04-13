@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
@@ -47,15 +49,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
-        var pythonPath = OperatingSystem.IsWindows()
-            ? Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe")
-            : Path.Combine(runtimeRoot, ".venv", "bin", "python");
-
-        Directory.CreateDirectory(Path.GetDirectoryName(pythonPath)!);
-        File.WriteAllBytes(pythonPath, Array.Empty<byte>());
-
-        var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
-        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath, ManagedCpuRuntimeManager.PythonVersion));
+        Directory.CreateDirectory(runtimeRoot);
 
         var manager = new ManagedCpuRuntimeManager(
             _log,
@@ -68,13 +62,14 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         File.WriteAllBytes(pythonPath, Array.Empty<byte>());
 
         var markerPath = manager.GetBootstrapMarkerPath();
-        File.WriteAllText(markerPath, manager.ComputeMarkerHash(requirementsPath));
+        var requirementsContent = await File.ReadAllTextAsync(requirementsPath);
+        var markerContent = $"python:{ManagedCpuRuntimeManager.PythonVersion}\n{requirementsContent}";
+        File.WriteAllText(markerPath, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(markerContent))));
 
         // Drive EnsureInstalledAsync so the manager transitions to Ready without running bootstrap.
         await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
-        await manager.EnsureInstalledAsync();
 
         var readiness = provider.CheckReadiness(new AppSettings(), null);
 
