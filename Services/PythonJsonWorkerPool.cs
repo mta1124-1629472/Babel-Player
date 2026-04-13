@@ -327,18 +327,18 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
             if (!worker.Process.HasExited)
                 worker.Process.Kill(entireProcessTree: true);
         }
-        catch
+        catch (Exception ex)
         {
-            // Best effort.
+            _log.Info($"Failed to kill {_poolName} worker {worker.Index + 1}: {ex.Message}");
         }
 
         try
         {
             worker.Process.Dispose();
         }
-        catch
+        catch (Exception ex)
         {
-            // Best effort.
+            _log.Info($"Failed to dispose {_poolName} worker {worker.Index + 1}: {ex.Message}");
         }
 
         _log.Info($"Disposed {_poolName} worker {worker.Index + 1}: {reason}.");
