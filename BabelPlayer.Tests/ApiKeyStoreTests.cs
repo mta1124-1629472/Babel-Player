@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 
@@ -102,5 +104,44 @@ public sealed class ApiKeyStoreTests : IDisposable
         // A brand-new instance shares the install key file → must read the same value.
         var providerB = new FileSystemCredentialProvider(filePath);
         Assert.Equal("stable-key-test", providerB.GetKey(CredentialKeys.OpenAi));
+    }
+
+    [Fact]
+    public async Task FileSystemCredentialProvider_InstallKey_IsStableUnderConcurrentFirstUse()
+    {
+        // Multiple instances racing to initialize/read/write the install secret must all
+        // ultimately see the same decrypted value.
+        const int concurrency = 6;
+        var filePath = Path.Combine(_dir, "install-key-concurrent", "api-keys.json");
+        var dir = Path.GetDirectoryName(filePath)!;
+        Directory.CreateDirectory(dir);
+
+        // Write the key using one provider first so all concurrent readers have a value.
+        var seeder = new FileSystemCredentialProvider(filePath);
+        seeder.SetKey(CredentialKeys.OpenAi, "stable-key-test");
+
+        var barrier = new Barrier(concurrency);
+        var results = new string[concurrency];
+
+        var tasks = new Task[concurrency];
+        for (int i = 0; i < concurrency; i++)
+        {
+            var index = i;
+            tasks[index] = Task.Run(() =>
+            {
+                // All tasks start simultaneously.
+                barrier.SignalAndWait();
+                var provider = new FileSystemCredentialProvider(filePath);
+                results[index] = provider.GetKey(CredentialKeys.OpenAi);
+            });
+        }
+
+        await Task.WhenAll(tasks);
+
+        foreach (var value in results)
+            Assert.Equal("stable-key-test", value);
+
+        // Clean up the test directory created above.
+        try { Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
     }
 }

@@ -1460,8 +1460,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
     private static string ComputeScriptVersion(string inferenceScriptPath)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath)));
-        return Convert.ToHexString(bytes);
+        using var fs = new FileStream(inferenceScriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan);
+        return Convert.ToHexString(SHA256.HashData(fs));
     }
 
     private static string ResolveInferenceScriptPath() =>
