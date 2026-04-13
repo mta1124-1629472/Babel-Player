@@ -168,9 +168,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
-        var scriptChangedSinceLastStart = await IsScriptChangedSinceLastStartAsync(cancellationToken);
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
+
+        // Only check if script changed when preflight shows host is available (avoids expensive I/O on cold starts)
+        var scriptChangedSinceLastStart = preflight.IsAvailable
+            ? await IsScriptChangedSinceLastStartAsync(cancellationToken)
+            : false;
 
         if (preflight.IsAvailable && !scriptChangedSinceLastStart)
         {
@@ -470,7 +474,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         // Record which script version is running so IsScriptChangedSinceLastStart can detect edits
         var scriptVersionPath = Path.Combine(runtimeRoot, ".script-version");
-        await File.WriteAllTextAsync(scriptVersionPath, await ComputeScriptVersionAsync(inferenceScriptPath, cancellationToken), cancellationToken);
+        var scriptVersion = await ComputeScriptVersionAsync(inferenceScriptPath, cancellationToken);
+        await File.WriteAllTextAsync(scriptVersionPath, scriptVersion, cancellationToken);
 
         _log.Info(
             $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={_postStartProbeTimeout.TotalSeconds}s");
@@ -1422,6 +1427,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var storedScriptHash = (await scriptSr.ReadToEndAsync(cancellationToken)).Trim();
             var currentScriptHash = await ComputeScriptVersionAsync(_inferenceScriptResolver(), cancellationToken);
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
