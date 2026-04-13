@@ -254,9 +254,17 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
             var legacyBytes = Convert.FromBase64String(stored);
             if (OperatingSystem.IsWindows())
             {
-                var decrypted = System.Security.Cryptography.ProtectedData.Unprotect(
-                    legacyBytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-                return Encoding.UTF8.GetString(decrypted);
+                try
+                {
+                    var decrypted = System.Security.Cryptography.ProtectedData.Unprotect(
+                        legacyBytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                    return Encoding.UTF8.GetString(decrypted);
+                }
+                catch (System.Security.Cryptography.CryptographicException)
+                {
+                    // Legacy base64 plaintext (created on Linux/macOS) — fall back to plaintext decode.
+                    return Encoding.UTF8.GetString(legacyBytes);
+                }
             }
             return Encoding.UTF8.GetString(legacyBytes);
         }

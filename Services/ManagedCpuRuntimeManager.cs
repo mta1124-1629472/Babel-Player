@@ -70,6 +70,14 @@ public sealed class ManagedCpuRuntimeManager
             var hash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
             return !string.Equals(stored, hash, StringComparison.Ordinal);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (TaskCanceledException)
+        {
+            throw;
+        }
         catch
         {
             return true;
