@@ -78,6 +78,32 @@ public sealed class ContainerizedProbeMetricsTests : IClassFixture<SessionWorkfl
     }
 
     [Fact]
+    public void ServiceMetrics_RecordCancellation_UpdatesCorrectly()
+    {
+        var metrics = new ServiceMetrics("http://localhost:8000");
+
+        metrics.RecordCancellation();
+
+        Assert.Equal(1, metrics.TotalProbes);
+        Assert.Equal(1, metrics.Cancellations);
+        Assert.NotEqual(DateTimeOffset.MinValue, metrics.LastProbeAtUtc);
+    }
+
+    [Fact]
+    public void ServiceMetrics_RecordCacheAccess_UpdatesCorrectly()
+    {
+        var metrics = new ServiceMetrics("http://localhost:8000");
+
+        metrics.RecordCacheAccess(wasHit: true);
+        metrics.RecordCacheAccess(wasHit: false);
+
+        Assert.Equal(0, metrics.TotalProbes); // Cache access alone doesn't count as a probe
+        Assert.Equal(1, metrics.CacheHits);
+        Assert.Equal(1, metrics.CacheMisses);
+        Assert.Equal(50, metrics.CacheHitRate);
+    }
+
+    [Fact]
     public void ServiceMetrics_ConsecutiveFailures_ResetsOnSuccess()
     {
         var metrics = new ServiceMetrics("http://localhost:8000");
@@ -154,13 +180,13 @@ public sealed class ContainerizedProbeMetricsTests : IClassFixture<SessionWorkfl
         Assert.Equal(0, metrics.CacheMisses);
         Assert.Equal(0, metrics.Cancellations);
         Assert.Equal(0, metrics.TotalDurationMs);
-        Assert.Equal(0, metrics.ConsecutiveFailures);
         Assert.Equal(0, metrics.SuccessRate);
         Assert.Equal(0, metrics.CacheHitRate);
         Assert.Equal(0, metrics.AverageDurationMs);
-        Assert.Null(metrics.LastError);
         Assert.Equal(DateTimeOffset.MinValue, metrics.LastProbeAtUtc);
         Assert.Equal(DateTimeOffset.MinValue, metrics.LastSuccessAtUtc);
+        Assert.Null(metrics.LastError);
+        Assert.Equal(0, metrics.ConsecutiveFailures);
     }
 
     [Fact]
