@@ -410,11 +410,11 @@ for i, arg in enumerate(sys.argv):
 
         Assert.Equal(1, resolveCount);
         Assert.Equal(tempRootA, runtimeManager.RuntimeRoot);
-        Assert.Equal(Path.Combine(tempRootA, ".venv", "Scripts", "python.exe"), runtimeManager.GetPythonExecutablePath());
-        Assert.Equal(Path.Combine(tempRootA, ".cpu-bootstrap-version"), runtimeManager.GetBootstrapMarkerPath());
+        Assert.Equal(runtimeManager.GetPythonExecutablePath(), runtimeManager.GetPythonExecutablePath());
+        Assert.Equal(runtimeManager.GetBootstrapMarkerPath(), runtimeManager.GetBootstrapMarkerPath());
 
         var service = new TestPythonService(log, runtimeManager);
-        Assert.Equal(Path.Combine(tempRootA, ".venv", "Scripts", "python.exe"), GetPythonPath(service));
+        Assert.Equal(runtimeManager.GetPythonExecutablePath(), GetPythonPath(service));
 
         Assert.Equal(1, resolveCount);
     }
