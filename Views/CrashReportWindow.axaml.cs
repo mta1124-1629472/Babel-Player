@@ -74,18 +74,7 @@ public partial class CrashReportWindow : Window
         {
             var folder = Path.GetDirectoryName(_logFilePath);
             if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
-            {
-                var explorerPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-                    "explorer.exe");
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = explorerPath,
-                    UseShellExecute = false
-                };
-                startInfo.ArgumentList.Add(folder);
-                Process.Start(startInfo);
-            }
+                Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = $"\"{folder}\"", UseShellExecute = false });
         }
         catch
         {
