@@ -928,11 +928,6 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         File.WriteAllText(constraintsPath, "torch==2.8.0");
         Directory.CreateDirectory(Path.Combine(_dir, ".venv", "Scripts"));
         File.WriteAllText(Path.Combine(_dir, ".venv", "Scripts", "python.exe"), "");
-        if (!OperatingSystem.IsWindows())
-        {
-            Directory.CreateDirectory(Path.Combine(_dir, ".venv", "bin"));
-            File.WriteAllText(Path.Combine(_dir, ".venv", "bin", "python"), "");
-        }
         if (writeBootstrapMarker)
         {
             await File.WriteAllTextAsync(

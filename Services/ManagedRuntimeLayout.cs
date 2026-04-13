@@ -21,13 +21,8 @@ public static class ManagedRuntimeLayout
     public static string GetVenvDirectory() =>
         Path.Combine(GetRuntimeRoot(), ".venv");
 
-    public static string GetManagedPythonPath()
-    {
-        var venvDir = GetVenvDirectory();
-        return OperatingSystem.IsWindows()
-            ? Path.Combine(venvDir, "Scripts", "python.exe")
-            : Path.Combine(venvDir, "bin", "python");
-    }
+    public static string GetManagedPythonPath() =>
+        Path.Combine(GetVenvDirectory(), "Scripts", "python.exe");
 
     public static string GetBootstrapMarkerPath() =>
         Path.Combine(GetRuntimeRoot(), ".bootstrap-version");
@@ -52,13 +47,8 @@ public static class ManagedRuntimeLayout
     public static string GetCpuVenvDirectory() =>
         Path.Combine(GetCpuRuntimeRoot(), ".venv");
 
-    public static string GetCpuPythonPath()
-    {
-        var venvDir = GetCpuVenvDirectory();
-        return OperatingSystem.IsWindows()
-            ? Path.Combine(venvDir, "Scripts", "python.exe")
-            : Path.Combine(venvDir, "bin", "python");
-    }
+    public static string GetCpuPythonPath() =>
+        Path.Combine(GetCpuVenvDirectory(), "Scripts", "python.exe");
 
     public static string GetCpuBootstrapMarkerPath() =>
         Path.Combine(GetCpuRuntimeRoot(), ".cpu-bootstrap-version");

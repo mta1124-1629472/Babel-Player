@@ -1,17 +1,6 @@
 namespace Babel.Player.Models;
 
 /// <summary>
-/// Display name constants for credential storage provider implementations.
-/// These are user-facing strings describing how credentials are stored at rest;
-/// they are not pipeline provider IDs and must not be used as such.
-/// </summary>
-public static class StorageProviderNames
-{
-    public const string LocalFileDpapi      = "Local File (DPAPI Encrypted)";
-    public const string LocalFileAes256Gcm  = "Local File (AES-256-GCM Encrypted)";
-}
-
-/// <summary>
 /// String constants for all provider identifiers used across the pipeline.
 /// All provider string comparisons and switch expressions must reference these
 /// constants rather than inline literals to prevent typos and enable safe renaming.

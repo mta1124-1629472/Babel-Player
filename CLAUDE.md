@@ -3,10 +3,10 @@
 ## Commands
 
 ```bash
-dotnet clean Babel-Player.sln
-dotnet build Babel-Player.sln             # Full build (includes restore)
-dotnet build Babel-Player.sln --no-restore # Fast build (skip restore)
-dotnet test Babel-Player.sln             # Run all tests
+dotnet clean babel-player.sln
+dotnet build babel-player.sln             # Full build (includes restore)
+dotnet build babel-player.sln --no-restore # Fast build (skip restore)
+dotnet test babel-player.sln             # Run all tests
 dotnet run --project BabelPlayer.csproj   # Launch the app
 python3 scripts/check-architecture.py    # Architecture linter
 ```
@@ -122,8 +122,8 @@ Babel-Player/
 ## Testing
 
 ```bash
-dotnet test Babel-Player.sln             # All tests
-dotnet test Babel-Player.sln --filter "ClassName=SessionWorkflowTests"
+dotnet test babel-player.sln             # All tests
+dotnet test babel-player.sln --filter "ClassName=SessionWorkflowTests"
 ```
 
 - 22 integration tests in `BabelPlayer.Tests/SessionWorkflowTests.cs`
