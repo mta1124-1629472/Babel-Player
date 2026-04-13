@@ -2149,6 +2149,26 @@ partial void OnSourcePositionMsChanged(double value)
     }
 
     [RelayCommand]
+    private void Rewind()
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null) return;
+        double newPositionMs = Math.Max(0, SourcePositionMs - 10_000);
+        player.Seek((long)newPositionMs);
+    }
+
+    [RelayCommand]
+    private void FastForward()
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null) return;
+        double newPositionMs = SourceDurationMs > 0
+            ? Math.Min(SourceDurationMs, SourcePositionMs + 10_000)
+            : SourcePositionMs + 10_000;
+        player.Seek((long)newPositionMs);
+    }
+
+    [RelayCommand]
     private async Task PlayPauseSourceAsync()
     {
         var player = _coordinator.SourceMediaPlayer;
@@ -2206,6 +2226,39 @@ partial void OnSourcePositionMsChanged(double value)
         var currentSec = SourcePositionMs / 1000.0;
         var next = FindNextSegmentStartingAfter(currentSec + 0.1);
         if (next != null) _ = SeekAndPlayAsync(next);
+    }
+
+    private async Task SeekSourceByAsync(double deltaMs)
+    {
+        if (!IsSourceMediaLoaded) return;
+
+        if (_coordinator.SourceMediaPlayer == null)
+        {
+            await PlayPauseSourceAsync();
+        }
+
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null) return;
+
+        double newPositionMs = deltaMs < 0
+            ? Math.Max(0, SourcePositionMs + deltaMs)
+            : SourceDurationMs > 0
+                ? Math.Min(SourceDurationMs, SourcePositionMs + deltaMs)
+                : SourcePositionMs + deltaMs;
+
+        player.Seek((long)newPositionMs);
+    }
+
+    [RelayCommand]
+    private async Task Rewind()
+    {
+        await SeekSourceByAsync(-10_000);
+    }
+
+    [RelayCommand]
+    private async Task FastForward()
+    {
+        await SeekSourceByAsync(10_000);
     }
 
     [RelayCommand]
