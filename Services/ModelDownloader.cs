@@ -124,12 +124,14 @@ except Exception as e:
             var psi = new ProcessStartInfo
             {
                 FileName = pythonPath,
-                Arguments = $"\"{scriptPath}\" \"{repoId}\"",
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+
+            psi.ArgumentList.Add(scriptPath);
+            psi.ArgumentList.Add(repoId);
 
             using var proc = Process.Start(psi);
             if (proc == null) return false;
