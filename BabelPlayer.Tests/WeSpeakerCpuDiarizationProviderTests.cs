@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
 using Xunit;
@@ -60,6 +61,8 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
+
+        await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
         await manager.EnsureInstalledAsync();
