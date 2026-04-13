@@ -24,8 +24,15 @@ export PATH="$PATH:$HOME/.dotnet"
 # ── Install ffmpeg ─────────────────────────────────────────────────────────────
 if ! command -v ffmpeg &>/dev/null; then
   echo "[session-start] Installing ffmpeg..."
-  apt-get update -q
-  apt-get install -y -q ffmpeg
+  if command -v apt-get &>/dev/null && [ "$EUID" -eq 0 -o -n "$(command -v sudo)" ]; then
+    if apt-get update -q && apt-get install -y -q ffmpeg; then
+      echo "[session-start] ffmpeg installed successfully."
+    else
+      echo "[session-start] WARNING: ffmpeg installation failed, but continuing. Some features may be limited."
+    fi
+  else
+    echo "[session-start] WARNING: apt-get not available or insufficient permissions to install ffmpeg. Skipping."
+  fi
 fi
 
 # ── Install Python dependencies ────────────────────────────────────────────────
