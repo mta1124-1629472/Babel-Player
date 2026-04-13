@@ -75,6 +75,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private bool _isSourceMediaLoaded;
 
     [ObservableProperty]
+    private bool _isSourceSeekCapable;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PlayPauseSourceLabel))]
     private bool _isSourcePaused = true;
 
@@ -2119,6 +2122,7 @@ partial void OnSourcePositionMsChanged(double value)
                 {
                     _lastKnownSourceMediaPath = newPath;
                     IsSourcePaused = true;
+                    IsSourceSeekCapable = false;
                     _lastDubbedSegment = null;
                     _isUpdatingActiveSegment = true;
                     SelectedSegment = null;
@@ -2154,6 +2158,7 @@ partial void OnSourcePositionMsChanged(double value)
             if (string.IsNullOrEmpty(ingestedPath)) return;
             player = _coordinator.GetOrCreateSourcePlayer();
             player.Load(ingestedPath);
+            IsSourceSeekCapable = true;
         }
 
         if (IsSourcePaused)
@@ -2207,8 +2212,13 @@ partial void OnSourcePositionMsChanged(double value)
     private void Rewind()
     {
         var player = _coordinator.SourceMediaPlayer;
-        if (player == null) return;
-        double newPositionMs = Math.Max(0, SourcePositionMs - 10_000);
+        if (player == null)
+        {
+            _coordinator.Log.Info("Rewind blocked: source player not ready.");
+            return;
+        }
+        double currentPositionMs = player.CurrentTime * 1000.0;
+        double newPositionMs = Math.Max(0, currentPositionMs - 10_000);
         player.Seek((long)newPositionMs);
     }
 
@@ -2216,10 +2226,16 @@ partial void OnSourcePositionMsChanged(double value)
     private void FastForward()
     {
         var player = _coordinator.SourceMediaPlayer;
-        if (player == null) return;
-        double newPositionMs = SourceDurationMs > 0
-            ? Math.Min(SourceDurationMs, SourcePositionMs + 10_000)
-            : SourcePositionMs + 10_000;
+        if (player == null)
+        {
+            _coordinator.Log.Info("FastForward blocked: source player not ready.");
+            return;
+        }
+        double currentPositionMs = player.CurrentTime * 1000.0;
+        double durationMs = player.Duration * 1000.0;
+        double newPositionMs = durationMs > 0
+            ? Math.Min(durationMs, currentPositionMs + 10_000)
+            : currentPositionMs + 10_000;
         player.Seek((long)newPositionMs);
     }
 
