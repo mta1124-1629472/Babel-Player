@@ -72,7 +72,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     private static string FindInferenceDirectory()
     {
         var outputDir = Path.Combine(AppContext.BaseDirectory, "inference");
-        if (Directory.Exists(outputDir))
+        if (Directory.Exists(outputDir) && File.Exists(Path.Combine(outputDir, "requirements.txt")))
             return outputDir;
 
         var dir = AppContext.BaseDirectory;
