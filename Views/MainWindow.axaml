@@ -828,7 +828,7 @@
                                     AutomationProperties.Name="Skip to previous segment" />
                             <Button Classes="control-pill" Content="&#x23EA;&#xFE0E;"
                                     Command="{Binding Playback.RewindCommand}"
-                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                    IsEnabled="{Binding Playback.IsSourceSeekCapable}"
                                     Padding="8,6" FontSize="15"
                                     ToolTip.Tip="Rewind 10 seconds"
                                     AutomationProperties.Name="Rewind 10 seconds" />
@@ -852,7 +852,7 @@
                             </Button>
                             <Button Classes="control-pill" Content="&#x23E9;&#xFE0E;"
                                     Command="{Binding Playback.FastForwardCommand}"
-                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                    IsEnabled="{Binding Playback.IsSourceSeekCapable}"
                                     Padding="8,6" FontSize="15"
                                     ToolTip.Tip="Fast forward 10 seconds"
                                     AutomationProperties.Name="Fast forward 10 seconds" />
