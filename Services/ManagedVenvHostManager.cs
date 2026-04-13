@@ -168,7 +168,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
-        var scriptChangedSinceLastStart = await IsScriptChangedSinceLastStartAsync(cancellationToken);
+        var scriptChangedSinceLastStart = IsScriptChangedSinceLastStart();
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
 
@@ -303,7 +303,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"Managed GPU runtime paths: runtime_root={runtimeRoot}, venv_dir={venvDir}, python={pythonPath}, " +
             $"script={inferenceScriptPath}, requirements={requirementsPath}, constraints={constraintsPath}, uv={uvPath}, compute_type={computeType}");
 
-        var bootstrapVersion = await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath, cancellationToken);
+        var bootstrapVersion = ComputeBootstrapVersion(requirementsPath, constraintsPath);
         var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
         var markerValue = File.Exists(markerPath) ? await File.ReadAllTextAsync(markerPath, cancellationToken) : null;
         var needsBootstrap = !File.Exists(pythonPath) || !string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal);
@@ -472,7 +472,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         // Record which script version is running so IsScriptChangedSinceLastStart can detect edits
         var scriptVersionPath = Path.Combine(runtimeRoot, ".script-version");
-        await File.WriteAllTextAsync(scriptVersionPath, await ComputeScriptVersionAsync(inferenceScriptPath, cancellationToken), cancellationToken);
+        await File.WriteAllTextAsync(scriptVersionPath, ComputeScriptVersion(inferenceScriptPath), cancellationToken);
 
         _log.Info(
             $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={_postStartProbeTimeout.TotalSeconds}s");
@@ -652,7 +652,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 stoppedAny = true;
 
             await DeletePidFileIfPresentAsync(hostPidPath);
-            await WaitForVenvUnlockAsync(pythonPath, _log, cancellationToken);
+            await WaitForVenvUnlockAsync(pythonPath, cancellationToken);
             return stoppedAny;
         }
         finally
@@ -846,13 +846,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
-    private static async Task WaitForVenvUnlockAsync(string pythonPath, AppLog log, CancellationToken cancellationToken)
+    private static async Task WaitForVenvUnlockAsync(string pythonPath, CancellationToken cancellationToken)
     {
         if (!File.Exists(pythonPath))
             return;
 
         var start = Stopwatch.StartNew();
-        var loggedLock = false;
         while (start.Elapsed < VenvUnlockTimeout)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -865,21 +864,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                     FileShare.None);
                 return;
             }
-            catch (IOException ex)
+            catch (IOException)
             {
-                if (!loggedLock)
-                {
-                    log.Info($"Waiting for managed GPU runtime to unlock... ({ex.Message})");
-                    loggedLock = true;
-                }
             }
-            catch (UnauthorizedAccessException ex)
+            catch (UnauthorizedAccessException)
             {
-                if (!loggedLock)
-                {
-                    log.Info($"Waiting for managed GPU runtime to unlock... ({ex.Message})");
-                    loggedLock = true;
-                }
             }
 
             await Task.Delay(100, cancellationToken);
@@ -1395,7 +1384,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"tts={capabilities.TtsReady}('{capabilities.TtsDetail ?? "<none>"}')";
     }
 
-    private async Task<bool> IsScriptChangedSinceLastStartAsync(CancellationToken cancellationToken)
+    private bool IsScriptChangedSinceLastStart()
     {
         try
         {
@@ -1405,13 +1394,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var depsMarkerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
             if (!File.Exists(depsMarkerPath))
                 return true;
-            using var depsFs = new FileStream(depsMarkerPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 128, FileOptions.SequentialScan);
-            using var depsSr = new StreamReader(depsFs);
-            var storedDepsHash = (await depsSr.ReadToEndAsync(cancellationToken)).Trim();
-            var currentDepsHash = await ComputeBootstrapVersionAsync(
+            var storedDepsHash = File.ReadAllText(depsMarkerPath).Trim();
+            var currentDepsHash = ComputeBootstrapVersion(
                 _requirementsPathResolver(),
-                _constraintsPathResolver(),
-                cancellationToken);
+                _constraintsPathResolver());
             if (!string.Equals(storedDepsHash, currentDepsHash, StringComparison.Ordinal))
                 return true;
 
@@ -1419,10 +1405,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var scriptMarkerPath = Path.Combine(runtimeRoot, ".script-version");
             if (!File.Exists(scriptMarkerPath))
                 return true;
-            using var scriptFs = new FileStream(scriptMarkerPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 128, FileOptions.SequentialScan);
-            using var scriptSr = new StreamReader(scriptFs);
-            var storedScriptHash = (await scriptSr.ReadToEndAsync(cancellationToken)).Trim();
-            var currentScriptHash = await ComputeScriptVersionAsync(_inferenceScriptResolver(), cancellationToken);
+            var storedScriptHash = File.ReadAllText(scriptMarkerPath).Trim();
+            var currentScriptHash = ComputeScriptVersion(_inferenceScriptResolver());
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
         catch
@@ -1431,34 +1415,23 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
-    private static async Task<string> ComputeBootstrapVersionAsync(
+    private static string ComputeBootstrapVersion(
         string requirementsPath,
-        string constraintsPath,
-        CancellationToken cancellationToken)
+        string constraintsPath)
     {
         var builder = new StringBuilder();
         builder.AppendLine(PythonVersion);
-
-        using (var reqFs = new FileStream(requirementsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
-        using (var reqSr = new StreamReader(reqFs))
-        {
-            builder.AppendLine(await reqSr.ReadToEndAsync(cancellationToken));
-        }
-
-        using (var consFs = new FileStream(constraintsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
-        using (var consSr = new StreamReader(consFs))
-        {
-            builder.AppendLine(await consSr.ReadToEndAsync(cancellationToken));
-        }
+        builder.AppendLine(File.ReadAllText(requirementsPath));
+        builder.AppendLine(File.ReadAllText(constraintsPath));
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(bytes);
     }
 
-    private static async Task<string> ComputeScriptVersionAsync(string inferenceScriptPath, CancellationToken cancellationToken)
+    private static string ComputeScriptVersion(string inferenceScriptPath)
     {
-        using var fs = new FileStream(inferenceScriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan);
-        return Convert.ToHexString(SHA256.HashData(fs));
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath)));
+        return Convert.ToHexString(bytes);
     }
 
     private static string ResolveInferenceScriptPath() =>
