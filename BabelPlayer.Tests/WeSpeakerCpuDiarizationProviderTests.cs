@@ -44,7 +44,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     }
 
     [Fact]
-    public void WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
+    public async Task WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
@@ -60,6 +60,9 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
+
+        // Transition the manager to Ready state, normally done by EnsureInstalledAsync which checks the marker.
+        await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
 
