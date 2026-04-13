@@ -111,7 +111,6 @@ tasks.json
 .Benchmarks/
 .codex/tasks
 *.lscache
-.claude/settings.local.json
 
 
 # External binaries

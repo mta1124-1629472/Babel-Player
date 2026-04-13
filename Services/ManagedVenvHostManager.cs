@@ -252,17 +252,15 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 .GetAwaiter()
                 .GetResult();
         }
-        catch (Exception ex)
+        catch
         {
-            _log?.Warning($"Failed to recover or kill stale host process during disposal: {ex.Message}");
             try
             {
                 if (_hostProcess is { HasExited: false })
                     _hostProcess.Kill(entireProcessTree: true);
             }
-            catch (Exception killEx)
+            catch
             {
-                _log?.Warning($"Failed to kill stale host process (Id={_hostProcess?.Id}) during disposal: {killEx.Message}");
             }
         }
     }

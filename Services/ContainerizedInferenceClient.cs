@@ -108,6 +108,11 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    private static FileStream OpenReadAsync(string filePath)
+    {
+        return new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+    }
+
     /// <summary>
     /// Transcribes an audio file using the containerized inference service.
     /// </summary>
