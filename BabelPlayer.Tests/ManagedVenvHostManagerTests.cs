@@ -917,7 +917,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
     private void PrepareBootstrappedRuntimeArtifacts() =>
         PrepareRuntimeArtifactsAsync(writeBootstrapMarker: true).GetAwaiter().GetResult();
 
-    private void PrepareRuntimeArtifacts(bool writeBootstrapMarker)
+    private async Task PrepareRuntimeArtifactsAsync(bool writeBootstrapMarker)
     {
         File.WriteAllText(Path.Combine(_dir, "uv.exe"), "");
         var scriptPath = Path.Combine(_dir, "main.py");
