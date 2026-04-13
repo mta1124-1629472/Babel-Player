@@ -266,25 +266,15 @@ public sealed class PipelineStageProgressTests() : IDisposable
         var store = new SessionSnapshotStore(_ctx.StorePath, log);
         var perSessionStore = new PerSessionSnapshotStore(_ctx.PerSessionDir, log);
         var recentStore = new RecentSessionsStore(_ctx.RecentPath, log);
-        return new SessionWorkflowCoordinator(
-            store,
-            log,
-            settings,
-            perSessionStore,
-            recentStore,
-            transcriptionRegistry,
-            translationRegistry,
-            ttsRegistry,
-            transportManager: null,
-            segmentPlayer: null,
-            sourcePlayer: null,
-            keyStore: null,
-            artifactReader: null,
-            sessionSwitchService: null,
-            diarizationRegistry: diarizationRegistry ?? FakeDiarizationFactory.CreateDefaultRegistry(),
-            containerizedProbe: null,
-            containerizedInferenceManager: null,
-            audioProcessingService: new StubAudioProcessingService());
+        var registries = new Babel.Player.Models.RegistryBundle(
+            perSessionStore, recentStore,
+            transcriptionRegistry, translationRegistry, ttsRegistry);
+        var options = new Babel.Player.Models.CoordinatorOptions
+        {
+            DiarizationRegistry    = diarizationRegistry ?? FakeDiarizationFactory.CreateDefaultRegistry(),
+            AudioProcessingService = new StubAudioProcessingService(),
+        };
+        return new SessionWorkflowCoordinator(store, log, settings, registries, options);
     }
 
     private static AppSettings CreateSettings() =>

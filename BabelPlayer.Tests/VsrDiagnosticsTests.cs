@@ -305,15 +305,12 @@ public sealed class VsrDiagnosticsTests : IDisposable
         var store = new SessionSnapshotStore(_storePath, _log);
         var perSessionStore = new PerSessionSnapshotStore(_perSessionDir, _log);
         var recentStore = new RecentSessionsStore(_recentPath, _log);
-        return new SessionWorkflowCoordinator(
-            store,
-            _log,
-            settings,
-            perSessionStore,
-            recentStore,
+        var registries = new Babel.Player.Models.RegistryBundle(
+            perSessionStore, recentStore,
             new FakeTranscriptionRegistry(new FakeTranscriptionProvider()),
             new FakeTranslationRegistry(new FakeTranslationProvider()),
             new FakeTtsRegistry(new FakeTtsProvider()));
+        return new SessionWorkflowCoordinator(store, _log, settings, registries);
     }
 
     private static AppSettings CreateSettings() =>
