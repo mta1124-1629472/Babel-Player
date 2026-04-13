@@ -1403,7 +1403,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var depsMarkerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
             if (!File.Exists(depsMarkerPath))
                 return true;
-var storedDepsHash = (await File.ReadAllTextAsync(depsMarkerPath, cancellationToken)).Trim();
+            using var depsFs = new FileStream(depsMarkerPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 128, FileOptions.SequentialScan);
+            using var depsSr = new StreamReader(depsFs);
+            var storedDepsHash = (await depsSr.ReadToEndAsync(cancellationToken)).Trim();
             var currentDepsHash = await ComputeBootstrapVersionAsync(
                 _requirementsPathResolver(),
                 _constraintsPathResolver(),
@@ -1415,7 +1417,9 @@ var storedDepsHash = (await File.ReadAllTextAsync(depsMarkerPath, cancellationTo
             var scriptMarkerPath = Path.Combine(runtimeRoot, ".script-version");
             if (!File.Exists(scriptMarkerPath))
                 return true;
-var storedScriptHash = (await File.ReadAllTextAsync(scriptMarkerPath, cancellationToken)).Trim();
+            using var scriptFs = new FileStream(scriptMarkerPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 128, FileOptions.SequentialScan);
+            using var scriptSr = new StreamReader(scriptFs);
+            var storedScriptHash = (await scriptSr.ReadToEndAsync(cancellationToken)).Trim();
             var currentScriptHash = await ComputeScriptVersionAsync(_inferenceScriptResolver(), cancellationToken);
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
@@ -1425,15 +1429,25 @@ var storedScriptHash = (await File.ReadAllTextAsync(scriptMarkerPath, cancellati
         }
     }
 
-private static async Task<string> ComputeBootstrapVersionAsync(
+    private static async Task<string> ComputeBootstrapVersionAsync(
         string requirementsPath,
         string constraintsPath,
         CancellationToken cancellationToken)
     {
         var builder = new StringBuilder();
         builder.AppendLine(PythonVersion);
-builder.AppendLine(await File.ReadAllTextAsync(requirementsPath, cancellationToken));
-        builder.AppendLine(await File.ReadAllTextAsync(constraintsPath, cancellationToken));
+
+        using (var reqFs = new FileStream(requirementsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
+        using (var reqSr = new StreamReader(reqFs))
+        {
+            builder.AppendLine(await reqSr.ReadToEndAsync(cancellationToken));
+        }
+
+        using (var consFs = new FileStream(constraintsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
+        using (var consSr = new StreamReader(consFs))
+        {
+            builder.AppendLine(await consSr.ReadToEndAsync(cancellationToken));
+        }
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(bytes);
@@ -1441,8 +1455,8 @@ builder.AppendLine(await File.ReadAllTextAsync(requirementsPath, cancellationTok
 
     private static async Task<string> ComputeScriptVersionAsync(string inferenceScriptPath, CancellationToken cancellationToken)
     {
-var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(await File.ReadAllTextAsync(inferenceScriptPath, cancellationToken)));
-        return Convert.ToHexString(bytes);
+        using var fs = new FileStream(inferenceScriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan);
+        return Convert.ToHexString(SHA256.HashData(fs));
     }
 
     private static string ResolveInferenceScriptPath() =>
