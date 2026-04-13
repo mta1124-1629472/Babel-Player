@@ -68,9 +68,17 @@ public sealed class ManagedCpuRuntimeManager
                 return !File.Exists(requirementsPath)
                     || !string.Equals(stored, ComputeMarkerHash(requirementsPath), StringComparison.Ordinal);
             }
-            catch
+            catch (FileNotFoundException ex)
             {
-                return true;
+                throw new InvalidOperationException($"CPU runtime bootstrap marker or requirements file not found: {ex.Message}", ex);
+            }
+            catch (IOException ex)
+            {
+                throw new InvalidOperationException($"CPU runtime file I/O error during readiness check: {ex.Message}", ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new InvalidOperationException($"CPU runtime access denied during readiness check: {ex.Message}", ex);
             }
         }
     }
@@ -119,7 +127,11 @@ public sealed class ManagedCpuRuntimeManager
     public string RuntimeRoot => _cpuRuntimeRoot;
 
     public string GetPythonExecutablePath() =>
-        Path.Combine(RuntimeRoot, ".venv", "Scripts", "python.exe");
+        Path.Combine(
+            RuntimeRoot,
+            ".venv",
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "Scripts" : "bin",
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "python.exe" : "python");
 
     public string GetBootstrapMarkerPath() =>
         Path.Combine(RuntimeRoot, ".cpu-bootstrap-version");

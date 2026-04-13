@@ -138,7 +138,7 @@ public sealed class ContainerizedInferenceClient
             _log.Info($"Transcribing with containerized service: {audioFilePath}");
 
             using var content = new MultipartFormDataContent();
-            using var fileStream = File.OpenRead(audioFilePath);
+            await using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
             content.Add(new StreamContent(fileStream), "file", Path.GetFileName(audioFilePath));
             content.Add(new StringContent(modelName), "model");
             if (language != null)
@@ -324,7 +324,7 @@ public sealed class ContainerizedInferenceClient
             _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
 
             using var content = new MultipartFormDataContent();
-            using var fileStream = File.OpenRead(audioFilePath);
+            await using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
             content.Add(new StreamContent(fileStream), "audio", Path.GetFileName(audioFilePath));
             if (minSpeakers.HasValue)
                 content.Add(new StringContent(minSpeakers.Value.ToString()), "min_speakers");
@@ -435,7 +435,7 @@ public sealed class ContainerizedInferenceClient
                 {
                     if (!File.Exists(referenceAudioPath))
                         throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
-                    fs = File.OpenRead(referenceAudioPath);
+                    fs = new FileStream(referenceAudioPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
                     content.Add(new StreamContent(fs), "reference_file", Path.GetFileName(referenceAudioPath));
                 }
 
@@ -452,7 +452,8 @@ public sealed class ContainerizedInferenceClient
             }
             finally
             {
-                fs?.Dispose();
+                if (fs is not null)
+                    await fs.DisposeAsync();
             }
         }
         catch (Exception ex)

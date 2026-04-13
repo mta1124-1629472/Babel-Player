@@ -241,7 +241,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         try
         {
             var runtimeRoot = _runtimeRootResolver();
-            var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
+            var pythonPath = Path.Combine(
+                runtimeRoot,
+                ".venv",
+                System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "Scripts" : "bin",
+                System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "python.exe" : "python");
             var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
 
             RecoverStaleHostProcessesAsync(
@@ -294,7 +298,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         var runtimeRoot = _runtimeRootResolver();
         var venvDir = Path.Combine(runtimeRoot, ".venv");
-        var pythonPath = Path.Combine(venvDir, "Scripts", "python.exe");
+        var pythonPath = Path.Combine(
+            venvDir,
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "Scripts" : "bin",
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "python.exe" : "python");
         var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
         Directory.CreateDirectory(runtimeRoot);
         _log.Info(
@@ -1412,9 +1419,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
-            return false; // can't determine — assume unchanged to avoid spurious restarts
+            _log.Warning($"Failed to detect script/dependency changes: {ex.Message}");
+            return true; // treat detection failures as "changed" to force restart
         }
     }
 

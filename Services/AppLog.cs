@@ -92,7 +92,18 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
     {
         _channel.Writer.TryComplete();
         _cts.Cancel();
-        try { _writerTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        try
+        {
+            _writerTask.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (OperationCanceledException) { }
+        catch (TaskCanceledException) { }
+        catch (Exception ex)
+        {
+            // Log or rethrow non-cancellation exceptions
+            try { File.AppendAllText(LogFilePath, $"{DateTimeOffset.UtcNow:O} [ERROR] Dispose failed: {ex}{Environment.NewLine}"); }
+            catch { }
+        }
         _cts.Dispose();
     }
 
@@ -100,7 +111,18 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
     {
         _channel.Writer.TryComplete();
         _cts.Cancel();
-        try { await _writerTask.ConfigureAwait(false); } catch { }
+        try
+        {
+            await _writerTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { }
+        catch (TaskCanceledException) { }
+        catch (Exception ex)
+        {
+            // Log or rethrow non-cancellation exceptions
+            try { await File.AppendAllTextAsync(LogFilePath, $"{DateTimeOffset.UtcNow:O} [ERROR] DisposeAsync failed: {ex}{Environment.NewLine}"); }
+            catch { }
+        }
         _cts.Dispose();
     }
 
