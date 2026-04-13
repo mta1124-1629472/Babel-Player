@@ -168,13 +168,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
-        var scriptChangedSinceLastStart = IsScriptChangedSinceLastStart();
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
 
         // Only check if script changed when preflight shows host is available (avoids expensive I/O on cold starts)
         var scriptChangedSinceLastStart = preflight.IsAvailable
-            ? await IsScriptChangedSinceLastStartAsync(cancellationToken)
+            ? IsScriptChangedSinceLastStart()
             : false;
 
         if (preflight.IsAvailable && !scriptChangedSinceLastStart)
@@ -477,7 +476,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         // Record which script version is running so IsScriptChangedSinceLastStart can detect edits
         var scriptVersionPath = Path.Combine(runtimeRoot, ".script-version");
-        var scriptVersion = await ComputeScriptVersionAsync(inferenceScriptPath, cancellationToken);
+        var scriptVersion = ComputeScriptVersion(inferenceScriptPath);
         await File.WriteAllTextAsync(scriptVersionPath, scriptVersion, cancellationToken);
 
         _log.Info(
@@ -1419,10 +1418,6 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var storedScriptHash = File.ReadAllText(scriptMarkerPath).Trim();
             var currentScriptHash = ComputeScriptVersion(_inferenceScriptResolver());
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
         }
         catch (Exception ex)
         {
