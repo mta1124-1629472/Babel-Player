@@ -13,11 +13,6 @@ jobs:
   copilot-setup-steps:
     runs-on: ubuntu-latest
 
-    env:
-      # Prevent Git LFS smudge during both setup and Copilot's own auto-checkout.
-      # libmpv-2.dll (115 MB) exceeds the repo's LFS budget and is not needed for agent work.
-      GIT_LFS_SKIP_SMUDGE: 1
-
     steps:
       # Checkout without LFS — libmpv-2.dll (115 MB) is not needed for agent work
       # and the repo has exceeded its LFS budget, which aborts checkout entirely.
