@@ -836,6 +836,7 @@
                                     IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                     Width="42" Height="42" Padding="0" Margin="3,0"
                                     CornerRadius="21" Background="{DynamicResource ButtonBackgroundBrush}"
+                                    ToolTip.Tip="Play / Pause (Space)"
                                     AutomationProperties.Name="Play or pause">
                                 <Button.Styles>
                                     <Style Selector="Button:pointerover /template/ ContentPresenter">
@@ -987,6 +988,7 @@
                     </Grid>
                 </Border>
 
+                <Panel Grid.Row="1">
                 <!-- Segment list -->
                 <ListBox Grid.Row="1" x:Name="SegmentList"
                          ItemsSource="{Binding Playback.Segments}"
@@ -1068,6 +1070,17 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+
+                <StackPanel IsVisible="{Binding !Playback.HasSegments}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="4">
+                    <TextBlock Text="No segments yet" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                    <TextBlock Text="Open media and run the pipeline to generate segments."
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+                </Panel>
 
             </Grid>
         </Border>
