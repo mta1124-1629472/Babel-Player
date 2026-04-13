@@ -1,8 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
 using Xunit;
@@ -44,7 +42,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     }
 
     [Fact]
-    public void WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
+    public async Task WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
@@ -60,7 +58,10 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         File.WriteAllBytes(pythonPath, Array.Empty<byte>());
 
         var markerPath = manager.GetBootstrapMarkerPath();
-        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));
+        File.WriteAllText(markerPath, await manager.ComputeMarkerHashAsync(requirementsPath));
+
+        // Drive EnsureInstalledAsync so the manager transitions to Ready without running bootstrap.
+        await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
 
@@ -90,12 +91,5 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         }
 
         throw new InvalidOperationException($"Could not locate inference directory from {AppContext.BaseDirectory}.");
-    }
-
-    private static string ComputeMarkerHash(string requirementsPath)
-    {
-        var content = $"python:3.11.6\n{File.ReadAllText(requirementsPath)}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
-        return Convert.ToHexString(bytes);
     }
 }

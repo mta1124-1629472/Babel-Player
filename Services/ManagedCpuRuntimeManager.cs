@@ -257,7 +257,7 @@ public sealed class ManagedCpuRuntimeManager
 
     // Marker format: "python:{version}\n{requirements_content}"
     // Including PythonVersion ensures a version upgrade invalidates the existing venv.
-    private async Task<string> ComputeMarkerHashAsync(string requirementsPath, CancellationToken cancellationToken = default)
+    public async Task<string> ComputeMarkerHashAsync(string requirementsPath, CancellationToken cancellationToken = default)
     {
         var fileContent = await File.ReadAllTextAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
         var content = $"python:{PythonVersion}\n{fileContent}";
