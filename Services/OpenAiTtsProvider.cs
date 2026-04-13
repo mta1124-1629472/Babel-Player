@@ -26,6 +26,7 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     private readonly AppLog _log;
     private readonly string _apiKey;
     private readonly Lazy<OpenAiApiClient> _clientLazy;
+    private readonly SegmentedTtsComposer _composer;
 
     /// <summary>
     /// Initializes a new OpenAiTtsProvider that generates speech via OpenAI and defers creation of the API client until it is first needed.
@@ -36,11 +37,13 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     public OpenAiTtsProvider(
         AppLog log,
         string apiKey,
-        Func<OpenAiApiClient>? clientFactory = null)
+        Func<OpenAiApiClient>? clientFactory = null,
+        IAudioProcessingService? audioProcessingService = null)
     {
         _log = log;
         _apiKey = apiKey;
         _clientLazy = new Lazy<OpenAiApiClient>(clientFactory ?? (() => new OpenAiApiClient(_apiKey)), LazyThreadSafetyMode.ExecutionAndPublication);
+        _composer = new SegmentedTtsComposer(audioProcessingService);
     }
 
     /// <summary>
@@ -60,20 +63,23 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
         return ProviderReadiness.Ready;
     }
 
-    /// <summary>
-    /// Combined TTS generation is not implemented in this provider.
-    /// Use <see cref="GenerateSegmentTtsAsync"/> for per-segment synthesis;
-    /// the coordinator is responsible for stitching segments into a combined file.
-    /// </summary>
-    /// <param name="request">Not used.</param>
-    /// <param name="cancellationToken">Not used.</param>
-    /// <exception cref="NotImplementedException">Always thrown. Combined generation is delegated to the coordinator.</exception>
     public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException("PLACEHOLDER: Combined generation is now handled by the coordinator.");
-    }
+        CancellationToken cancellationToken = default) =>
+        _composer.GenerateAsync(
+            request,
+            _log,
+            "OpenAI TTS",
+            MaxConcurrency,
+            (segment, outputPath) => new SingleSegmentTtsRequest(
+                segment.TranslatedText!,
+                outputPath,
+                SegmentedTtsComposer.ResolveVoiceForSegment(request, segment),
+                segment.SpeakerId,
+                Language: request.Language,
+                SourceVideoPath: request.SourceVideoPath),
+            GenerateSegmentTtsAsync,
+            cancellationToken);
 
     /// <summary>
     /// Generates speech audio for a single text segment and writes the resulting audio file to the specified output path.

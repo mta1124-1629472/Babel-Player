@@ -273,6 +273,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         _logFilePath = logFilePath;
         _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
         _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
+        Pipeline = new EmbeddedPlaybackPipelineViewModel(this, coordinator);
+        SpeakerRouting = new EmbeddedPlaybackSpeakerRoutingViewModel(this, coordinator);
         BuildProviderCaches();
         RebuildDiarizationProviderOptions();
         SyncProviderModelFieldsFromSettings();
@@ -289,6 +291,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     }
 
     public SessionWorkflowCoordinator Coordinator => _coordinator;
+    public EmbeddedPlaybackPipelineViewModel Pipeline { get; }
+    public EmbeddedPlaybackSpeakerRoutingViewModel SpeakerRouting { get; }
 
     public PlaybackState PlaybackState => _coordinator.PlaybackState;
 
@@ -452,6 +456,15 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     public string TtsKeyStatus => _ttsKeyStatus;
     public ObservableCollection<ProviderHealthSnapshot> ProviderHealthSnapshots => _providerHealthSnapshots;
+
+    internal void ApplyPipelineStageUpdate(SessionWorkflowCoordinator.PipelineStageUpdate update) =>
+        Pipeline.ApplyStageUpdate(update);
+
+    internal void ShowPipelineRefreshDetail(string detail) =>
+        Pipeline.ShowRefreshDetail(detail);
+
+    internal void ResetPipelineProgressState() =>
+        Pipeline.ResetProgressState();
 
     internal sealed record ProviderDiagnosticsSelectionSnapshot(
         ComputeProfile TranscriptionRuntime,
@@ -1001,7 +1014,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private static bool IsStartingStatus(string status) =>
         status.StartsWith('⏳');
 
-    private string ResolveDiarizationProviderLabel()
+    internal string ResolveDiarizationProviderLabel()
     {
         if (string.IsNullOrWhiteSpace(DiarizationProvider))
             return "speaker";
@@ -1023,13 +1036,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(propertyName);
     }
 
-    private void ClearStatusErrorDetail()
+    internal void ClearStatusErrorDetail()
     {
         StatusErrorTitle = null;
         StatusErrorDetail = null;
     }
 
-    private void SetStatusErrorDetail(string title, Exception ex)
+    internal void SetStatusErrorDetail(string title, Exception ex)
     {
         StatusErrorTitle = title;
         StatusErrorDetail = ex.ToString();
@@ -1650,7 +1663,7 @@ partial void OnSourcePositionMsChanged(double value)
         }
     }
 
-    private void ResetInteractiveModes()
+    internal void ResetInteractiveModes()
     {
         if (IsSubtitleModeOn)
             IsSubtitleModeOn = false;
@@ -1941,7 +1954,7 @@ partial void OnSourcePositionMsChanged(double value)
         bool selectedSpeakerInvalid() => string.IsNullOrWhiteSpace(SelectedSpeakerId) || !SpeakerIds.Contains(SelectedSpeakerId);
     }
 
-    private void UpdateSelectedSpeakerDetails(string? speakerId)
+    internal void UpdateSelectedSpeakerDetails(string? speakerId)
     {
         if (string.IsNullOrWhiteSpace(speakerId))
         {
@@ -2191,6 +2204,26 @@ partial void OnSourcePositionMsChanged(double value)
     }
 
     [RelayCommand]
+    private void Rewind()
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null) return;
+        double newPositionMs = Math.Max(0, SourcePositionMs - 10_000);
+        player.Seek((long)newPositionMs);
+    }
+
+    [RelayCommand]
+    private void FastForward()
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null) return;
+        double newPositionMs = SourceDurationMs > 0
+            ? Math.Min(SourceDurationMs, SourcePositionMs + 10_000)
+            : SourcePositionMs + 10_000;
+        player.Seek((long)newPositionMs);
+    }
+
+    [RelayCommand]
     private void ToggleMute()
     {
         if (IsMuted)
@@ -2335,174 +2368,17 @@ partial void OnSourcePositionMsChanged(double value)
         StatusText = "Playback stopped.";
     }
 
-    internal void ApplyPipelineStageUpdate(SessionWorkflowCoordinator.PipelineStageUpdate update)
-    {
-        PipelineStageTitle = $"Stage {update.StageIndex} of {update.StageCount}: {update.Title}";
-        PipelineStageDetail = update.Detail;
-        PipelineProgressPercent = update.Progress01;
-        IsPipelineProgressIndeterminate = update.IsIndeterminate;
-        IsPipelineProgressVisible = true;
-    }
-
-    internal void ShowPipelineRefreshDetail(string detail)
-    {
-        if (!IsPipelineProgressVisible)
-            return;
-
-        PipelineStageDetail = detail;
-        PipelineProgressPercent = 1.0;
-        IsPipelineProgressIndeterminate = true;
-    }
-
-    internal void ResetPipelineProgressState()
-    {
-        PipelineStageTitle = string.Empty;
-        PipelineStageDetail = string.Empty;
-        PipelineProgressPercent = 0;
-        IsPipelineProgressIndeterminate = false;
-        IsPipelineProgressVisible = false;
-    }
-
-    private CancellationTokenSource? _pipelineCts;
-    private CancellationTokenSource? _diarizationCts;
+    [RelayCommand]
+    private void CancelPipeline() => Pipeline.Cancel();
 
     [RelayCommand]
-    private void CancelPipeline()
-    {
-        if (_pipelineCts != null)
-        {
-            _pipelineCts.Cancel();
-            StatusText = "Canceling pipeline...";
-            ResetPipelineProgressState();
-            ClearStatusErrorDetail();
-        }
-    }
+    private Task RunPipelineAsync() => Pipeline.RunAsync();
 
     [RelayCommand]
-    private async Task RunPipelineAsync()
-    {
-        var diag = _coordinator.BootstrapDiagnostics;
-        if (!diag.AllDependenciesAvailable)
-        {
-            StatusText = $"⚠ {diag.DiagnosticSummary}";
-            ClearStatusErrorDetail();
-            return;
-        }
-
-        _pipelineCts?.Cancel();
-        _pipelineCts = new CancellationTokenSource();
-        var ct = _pipelineCts.Token;
-        ResetPipelineProgressState();
-        var stageProgress = new Progress<SessionWorkflowCoordinator.PipelineStageUpdate>(ApplyPipelineStageUpdate);
-
-        try
-        {
-            IsBusy = true;
-            StatusText = "Running pipeline…";
-            ClearStatusErrorDetail();
-            if (_coordinator.CurrentSession.Stage == SessionWorkflowStage.Diarized)
-            {
-                await _coordinator.ContinuePipelineAsync(
-                    progress: null,
-                    stageProgress: stageProgress,
-                    cancellationToken: ct);
-            }
-            else
-            {
-                await _coordinator.AdvancePipelineAsync(
-                    progress: null,
-                    stageProgress: stageProgress,
-                    cancellationToken: ct);
-            }
-            ShowPipelineRefreshDetail("Loading segments and refreshing playback data…");
-            StatusText = "Loading segments…";
-            await RefreshSegmentsAsync();
-            StatusText = _coordinator.CurrentSession.StatusMessage;
-            ClearStatusErrorDetail();
-        }
-        catch (OperationCanceledException)
-        {
-            StatusText = "Pipeline cancelled.";
-            ClearStatusErrorDetail();
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"Pipeline failed: {ex.Message}";
-            SetStatusErrorDetail("Pipeline failed", ex);
-        }
-        finally
-        {
-            IsBusy = false;
-            ResetPipelineProgressState();
-            _pipelineCts?.Dispose();
-            _pipelineCts = null;
-        }
-    }
-
-    [RelayCommand]
-    private void ClearPipeline()
-    {
-        _coordinator.ClearPipeline();
-        Segments.Clear();
-        HasSegments = false;
-        ResetInteractiveModes();
-        StatusText = "Pipeline cleared. Ready to run fresh.";
-        ClearStatusErrorDetail();
-    }
+    private void ClearPipeline() => Pipeline.Clear();
 
     [RelayCommand(CanExecute = nameof(CanRunDiarizationOnly))]
-    private async Task RunDiarizationOnlyAsync()
-    {
-        _diarizationCts?.Cancel();
-        _diarizationCts?.Dispose();
-        _diarizationCts = new CancellationTokenSource();
-        var ct = _diarizationCts.Token;
-
-        try
-        {
-            IsBusy = true;
-            StatusText = $"Running {ResolveDiarizationProviderLabel()} diarization…";
-            ClearStatusErrorDetail();
-
-            var hadTranslatableOutput = _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Translated;
-            var speakerAssignmentsChanged = await _coordinator.RunDiarizationAsync(ct);
-            string completionStatus;
-
-            if (speakerAssignmentsChanged && hadTranslatableOutput)
-            {
-                _coordinator.ResetPipelineToTranslated();
-                completionStatus = "Diarization updated speaker assignments. TTS output was reset to translated state.";
-            }
-            else if (speakerAssignmentsChanged)
-            {
-                completionStatus = "Diarization updated speaker assignments.";
-            }
-            else
-            {
-                completionStatus = "Diarization complete. Speaker assignments were unchanged.";
-            }
-
-            await RefreshSegmentsAsync();
-            StatusText = completionStatus;
-            ClearStatusErrorDetail();
-        }
-        catch (OperationCanceledException)
-        {
-            StatusText = "Re-diarize cancelled.";
-            ClearStatusErrorDetail();
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"Re-diarize failed: {ex.Message}";
-            SetStatusErrorDetail("Re-diarize failed", ex);
-        }
-        finally
-        {
-            IsBusy = false;
-            _diarizationCts?.Dispose();
-            _diarizationCts = null;
-        }
-    }
+    private Task RunDiarizationOnlyAsync() => Pipeline.RunDiarizationOnlyAsync();
 
     [RelayCommand]
     private async Task RegenerateTranslationAsync(WorkflowSegmentState? segment)
@@ -2544,56 +2420,22 @@ partial void OnSourcePositionMsChanged(double value)
     }
 
     [RelayCommand]
-    private async Task AssignSelectedSpeakerVoiceAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SelectedSpeakerId) || string.IsNullOrWhiteSpace(TtsModelOrVoice))
-            return;
-
-        _coordinator.SetSpeakerVoiceAssignment(SelectedSpeakerId, TtsModelOrVoice);
-        StatusText = $"Assigned {TtsModelOrVoice} to {SelectedSpeakerId}.";
-        UpdateSelectedSpeakerDetails(SelectedSpeakerId);
-        await RefreshSegmentsAsync();
-    }
+    private Task AssignSelectedSpeakerVoiceAsync() => SpeakerRouting.AssignSelectedSpeakerVoiceAsync();
 
     [RelayCommand]
-    private async Task ClearSelectedSpeakerVoiceAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SelectedSpeakerId))
-            return;
+    private Task ClearSelectedSpeakerVoiceAsync() => SpeakerRouting.ClearSelectedSpeakerVoiceAsync();
 
-        _coordinator.RemoveSpeakerVoiceAssignment(SelectedSpeakerId);
-        StatusText = $"Cleared voice assignment for {SelectedSpeakerId}.";
-        UpdateSelectedSpeakerDetails(SelectedSpeakerId);
-        await RefreshSegmentsAsync();
-    }
-
-    public async Task SetReferenceAudioForSelectedSpeaker(string path)
-    {
-        if (string.IsNullOrWhiteSpace(SelectedSpeakerId) || string.IsNullOrWhiteSpace(path))
-            return;
-
-        _coordinator.SetSpeakerReferenceAudioPath(SelectedSpeakerId, path);
-        StatusText = $"Set reference audio for {SelectedSpeakerId}.";
-        UpdateSelectedSpeakerDetails(SelectedSpeakerId);
-        await RefreshSegmentsAsync();
-    }
+    public Task SetReferenceAudioForSelectedSpeaker(string path) =>
+        SpeakerRouting.SetReferenceAudioForSelectedSpeakerAsync(path);
 
     [RelayCommand]
-    private async Task ClearSelectedSpeakerReferenceAudioAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SelectedSpeakerId))
-            return;
-
-        _coordinator.RemoveSpeakerReferenceAudioPath(SelectedSpeakerId);
-        StatusText = $"Cleared reference audio for {SelectedSpeakerId}.";
-        UpdateSelectedSpeakerDetails(SelectedSpeakerId);
-        await RefreshSegmentsAsync();
-    }
+    private Task ClearSelectedSpeakerReferenceAudioAsync() => SpeakerRouting.ClearSelectedSpeakerReferenceAudioAsync();
 
     public void Dispose()
     {
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
         _coordinator.SettingsModified -= OnCoordinatorSettingsModified;
+        Pipeline.Dispose();
 
         if (_positionTimer is not null)
         {
