@@ -6,8 +6,11 @@ using System.Runtime.InteropServices;
 namespace Babel.Player.Services;
 
 /// <summary>
-/// Provides secure methods to open folders and URLs without using shell execution,
-/// mitigating potential arbitrary code execution vulnerabilities.
+/// Provides methods to open folders and URLs using platform-appropriate mechanisms.
+/// Folder opening avoids shell execution on Windows by launching <c>explorer.exe</c> directly,
+/// and URL opening validates absolute <c>http</c>/<c>https</c> URLs before invoking the
+/// platform handler. On Windows, validated web URLs are passed to shell execution so the
+/// registered default browser can be resolved safely.
 /// </summary>
 public static class FileOpener
 {
