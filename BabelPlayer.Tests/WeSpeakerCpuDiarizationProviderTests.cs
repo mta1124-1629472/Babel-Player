@@ -1,8 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
+using System.Threading.Tasks;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
 using Xunit;
@@ -48,23 +47,25 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
-        Directory.CreateDirectory(Path.Combine(runtimeRoot, ".venv", "Scripts"));
-
-        var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
-        File.WriteAllBytes(pythonPath, Array.Empty<byte>());
-
-        var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
-        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));
 
         var manager = new ManagedCpuRuntimeManager(
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
 
-        // Transition the manager to Ready state, normally done by EnsureInstalledAsync which checks the marker.
+        // The manager defines GetPythonExecutablePath(), we must ensure *that* path exists
+        var pythonPath = manager.GetPythonExecutablePath();
+        Directory.CreateDirectory(Path.GetDirectoryName(pythonPath)!);
+        File.WriteAllBytes(pythonPath, Array.Empty<byte>());
+
+        var markerPath = manager.GetBootstrapMarkerPath();
+        File.WriteAllText(markerPath, manager.ComputeMarkerHash(requirementsPath));
+
+        // Drive EnsureInstalledAsync so the manager transitions to Ready without running bootstrap.
         await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
+        await manager.EnsureInstalledAsync();
 
         var readiness = provider.CheckReadiness(new AppSettings(), null);
 
@@ -92,12 +93,5 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         }
 
         throw new InvalidOperationException($"Could not locate inference directory from {AppContext.BaseDirectory}.");
-    }
-
-    private static string ComputeMarkerHash(string requirementsPath)
-    {
-        var content = $"python:3.11.6\n{File.ReadAllText(requirementsPath)}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
-        return Convert.ToHexString(bytes);
     }
 }

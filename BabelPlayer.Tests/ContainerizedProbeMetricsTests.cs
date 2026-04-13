@@ -6,8 +6,12 @@ using Xunit;
 
 namespace BabelPlayer.Tests;
 
-public sealed class ContainerizedProbeMetricsTests
+public sealed class ContainerizedProbeMetricsTests : IClassFixture<SessionWorkflowTemplateFixture>
 {
+    public ContainerizedProbeMetricsTests(SessionWorkflowTemplateFixture fixture)
+    {
+    }
+
     [Fact]
     public void ServiceMetrics_InitialState_IsZero()
     {
@@ -125,6 +129,37 @@ public sealed class ContainerizedProbeMetricsTests
         // (100 + 200) / 2 = 150
         Assert.Equal(150, metrics.AverageDurationMs);
         Assert.Equal(3, metrics.TotalProbes);
+    }
+
+    [Fact]
+    public void ServiceMetrics_RecordCancellation_UpdatesCorrectly()
+    {
+        var metrics = new ServiceMetrics("http://localhost:8000");
+
+        metrics.RecordCancellation();
+
+        Assert.Equal(1, metrics.TotalProbes);
+        Assert.Equal(1, metrics.Cancellations);
+        Assert.Equal(0, metrics.SuccessfulProbes);
+        Assert.Equal(0, metrics.FailedProbes);
+        Assert.Equal(0, metrics.CacheHits);
+        Assert.Equal(0, metrics.CacheMisses);
+        Assert.NotEqual(DateTimeOffset.MinValue, metrics.LastProbeAtUtc);
+        Assert.Equal(DateTimeOffset.MinValue, metrics.LastSuccessAtUtc);
+    }
+
+    [Fact]
+    public void ServiceMetrics_RecordCacheAccess_DoesNotIncrementTotalProbes()
+    {
+        var metrics = new ServiceMetrics("http://localhost:8000");
+
+        metrics.RecordCacheAccess(wasHit: true);
+        metrics.RecordCacheAccess(wasHit: false);
+
+        Assert.Equal(0, metrics.TotalProbes);
+        Assert.Equal(1, metrics.CacheHits);
+        Assert.Equal(1, metrics.CacheMisses);
+        Assert.Equal(50, metrics.CacheHitRate);
     }
 
     [Fact]
