@@ -168,9 +168,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
-        var scriptChangedSinceLastStart = IsScriptChangedSinceLastStart();
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
+
+        // Only check if script changed when preflight shows host is available (avoids expensive I/O on cold starts)
+        var scriptChangedSinceLastStart = preflight.IsAvailable
+            ? IsScriptChangedSinceLastStart()
+            : false;
 
         if (preflight.IsAvailable && !scriptChangedSinceLastStart)
         {
@@ -241,7 +245,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         try
         {
             var runtimeRoot = _runtimeRootResolver();
-            var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
+            var venvDir = Path.Combine(runtimeRoot, ".venv");
+            var pythonPath = OperatingSystem.IsWindows()
+                ? Path.Combine(venvDir, "Scripts", "python.exe")
+                : Path.Combine(venvDir, "bin", "python");
             var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
 
             RecoverStaleHostProcessesAsync(
@@ -252,15 +259,17 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 .GetAwaiter()
                 .GetResult();
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Error("ManagedVenvHostManager.Dispose() failed to recover stale host processes", ex);
             try
             {
                 if (_hostProcess is { HasExited: false })
                     _hostProcess.Kill(entireProcessTree: true);
             }
-            catch
+            catch (Exception killEx)
             {
+                _log.Error("ManagedVenvHostManager.Dispose() failed to kill tracked host process", killEx);
             }
         }
     }
@@ -294,7 +303,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         var runtimeRoot = _runtimeRootResolver();
         var venvDir = Path.Combine(runtimeRoot, ".venv");
-        var pythonPath = Path.Combine(venvDir, "Scripts", "python.exe");
+        var pythonPath = OperatingSystem.IsWindows()
+            ? Path.Combine(venvDir, "Scripts", "python.exe")
+            : Path.Combine(venvDir, "bin", "python");
         var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
         Directory.CreateDirectory(runtimeRoot);
         _log.Info(
