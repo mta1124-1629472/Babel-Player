@@ -97,7 +97,6 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
             _writerTask.Wait(TimeSpan.FromSeconds(2));
         }
         catch (OperationCanceledException) { }
-        catch (TaskCanceledException) { }
         catch (Exception ex)
         {
             // Log or rethrow non-cancellation exceptions
@@ -116,7 +115,6 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
             await _writerTask.ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
-        catch (TaskCanceledException) { }
         catch (Exception ex)
         {
             // Log or rethrow non-cancellation exceptions
