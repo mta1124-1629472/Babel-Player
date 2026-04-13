@@ -1,8 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
@@ -64,6 +62,15 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
 
+        // The manager defines GetPythonExecutablePath(), we must ensure *that* path exists
+        var pythonPath = manager.GetPythonExecutablePath();
+        Directory.CreateDirectory(Path.GetDirectoryName(pythonPath)!);
+        File.WriteAllBytes(pythonPath, Array.Empty<byte>());
+
+        var markerPath = manager.GetBootstrapMarkerPath();
+        File.WriteAllText(markerPath, manager.ComputeMarkerHash(requirementsPath));
+
+        // Drive EnsureInstalledAsync so the manager transitions to Ready without running bootstrap.
         await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
@@ -95,12 +102,5 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         }
 
         throw new InvalidOperationException($"Could not locate inference directory from {AppContext.BaseDirectory}.");
-    }
-
-    private static string ComputeMarkerHash(string requirementsPath, string pythonVersion)
-    {
-        var content = $"python:{pythonVersion}\n{File.ReadAllText(requirementsPath)}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
-        return Convert.ToHexString(bytes);
     }
 }
