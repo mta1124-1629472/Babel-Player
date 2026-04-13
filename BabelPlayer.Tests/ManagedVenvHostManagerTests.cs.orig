@@ -904,10 +904,10 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         builder.AppendLine("3.12"); // PythonVersion constant from ManagedVenvHostManager
         using (var reqFs = new FileStream(requirementsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
         using (var reqSr = new StreamReader(reqFs))
-            builder.AppendLine(reqSr.ReadToEnd());
+            builder.AppendLine(await reqSr.ReadToEndAsync());
         using (var consFs = new FileStream(constraintsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
         using (var consSr = new StreamReader(consFs))
-            builder.AppendLine(consSr.ReadToEnd());
+            builder.AppendLine(await consSr.ReadToEndAsync());
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
     }
 

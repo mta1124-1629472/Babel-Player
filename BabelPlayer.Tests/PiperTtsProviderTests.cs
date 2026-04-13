@@ -195,7 +195,11 @@ public sealed class PiperTtsProviderTests : IDisposable
         Assert.True(second.Success);
         Assert.Equal(new FileInfo(outputPath1).Length, first.FileSizeBytes);
         Assert.Equal(new FileInfo(outputPath2).Length, second.FileSizeBytes);
-        Assert.Single(ReadNonEmptyLines(fakePiper.WorkerStartLogPath));
+        // Pool starts provider.MaxConcurrency workers eagerly; no new workers should be
+        // spawned beyond the initial pool for sequential requests.
+        var workerStarts = ReadNonEmptyLines(fakePiper.WorkerStartLogPath);
+        Assert.True(workerStarts.Length <= provider.MaxConcurrency,
+            $"Expected at most {provider.MaxConcurrency} worker starts but got {workerStarts.Length}");
         Assert.Equal(2, ReadNonEmptyLines(fakePiper.CliLogPath).Length);
         Assert.Contains("Hello from Piper", File.ReadAllText(outputPath1));
         Assert.Contains("Second request", File.ReadAllText(outputPath2));
