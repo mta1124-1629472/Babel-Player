@@ -62,8 +62,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
             requirementsPathResolver: () => requirementsPath);
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
-        manager.RequestEnsureInstalled();
-        await Task.Delay(500);
+        await manager.EnsureInstalledAsync();
 
         var readiness = provider.CheckReadiness(new AppSettings(), null);
 
