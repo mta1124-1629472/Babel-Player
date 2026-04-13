@@ -282,7 +282,7 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
             {
                 using var stderrTimeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(stderrReadTimeoutMs));
                 using var linkedStderrCts = CancellationTokenSource.CreateLinkedTokenSource(linkedCts.Token, stderrTimeoutCts.Token);
-                stderr = await worker.Process.StandardError.ReadToEndAsync(linkedStderrCts.Token)
+                stderr = await ReadBoundedStderrAsync(worker.Process.StandardError, linkedStderrCts.Token)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (linkedCts.IsCancellationRequested)
@@ -315,6 +315,52 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
             throw new InvalidOperationException($"{_poolName} worker returned success without a payload.");
 
         workItem.Completion.TrySetResult(envelope.Payload);
+    }
+
+    /// <summary>
+    /// Reads stderr from a worker process up to a fixed line and character budget.
+    /// Using ReadToEndAsync risks large allocations and poor cancellation granularity
+    /// when the process has dumped substantial output (e.g. model crash traceback) before
+    /// dying. Reading line-by-line lets the cancellation token fire between reads, and
+    /// discarding lines beyond the cap bounds worst-case allocation.
+    /// </summary>
+    private static async Task<string> ReadBoundedStderrAsync(
+        StreamReader stderr,
+        CancellationToken cancellationToken,
+        int maxLines = 50,
+        int maxTotalChars = 4096)
+    {
+        var builder = new System.Text.StringBuilder();
+        var linesRead = 0;
+        var truncated = false;
+
+        while (linesRead < maxLines && builder.Length < maxTotalChars)
+        {
+            var line = await stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            if (line is null)
+                break;
+
+            if (builder.Length > 0)
+                builder.Append('\n');
+            builder.Append(line);
+            linesRead++;
+        }
+
+        // Drain the pipe without capturing, so the OS pipe buffer doesn't
+        // block the process from exiting. The cancellation token keeps this bounded.
+        if (!stderr.EndOfStream)
+        {
+            truncated = true;
+            while (await stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false) is not null)
+            {
+                // discard
+            }
+        }
+
+        if (truncated)
+            builder.Append($"\n[... stderr truncated after {linesRead} lines ...]");
+
+        return builder.ToString();
     }
 
     private void DisposeWorker(WorkerState? worker, string reason)
