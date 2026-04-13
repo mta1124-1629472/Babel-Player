@@ -2223,6 +2223,39 @@ partial void OnSourcePositionMsChanged(double value)
         if (next != null) _ = SeekAndPlayAsync(next);
     }
 
+    private async Task SeekSourceByAsync(double deltaMs)
+    {
+        if (!IsSourceMediaLoaded) return;
+
+        if (_coordinator.SourceMediaPlayer == null)
+        {
+            await PlayPauseSourceAsync();
+        }
+
+        var player = _coordinator.SourceMediaPlayer;
+        if (player == null) return;
+
+        double newPositionMs = deltaMs < 0
+            ? Math.Max(0, SourcePositionMs + deltaMs)
+            : SourceDurationMs > 0
+                ? Math.Min(SourceDurationMs, SourcePositionMs + deltaMs)
+                : SourcePositionMs + deltaMs;
+
+        player.Seek((long)newPositionMs);
+    }
+
+    [RelayCommand]
+    private async Task Rewind()
+    {
+        await SeekSourceByAsync(-10_000);
+    }
+
+    [RelayCommand]
+    private async Task FastForward()
+    {
+        await SeekSourceByAsync(10_000);
+    }
+
     [RelayCommand]
     private void ToggleMute()
     {
