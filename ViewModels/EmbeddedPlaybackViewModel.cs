@@ -75,6 +75,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private bool _isSourceMediaLoaded;
 
     [ObservableProperty]
+    private bool _isSourceSeekCapable;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PlayPauseSourceLabel))]
     private bool _isSourcePaused = true;
 
@@ -2119,6 +2122,7 @@ partial void OnSourcePositionMsChanged(double value)
                 {
                     _lastKnownSourceMediaPath = newPath;
                     IsSourcePaused = true;
+                    IsSourceSeekCapable = false;
                     _lastDubbedSegment = null;
                     _isUpdatingActiveSegment = true;
                     SelectedSegment = null;
@@ -2154,6 +2158,7 @@ partial void OnSourcePositionMsChanged(double value)
             if (string.IsNullOrEmpty(ingestedPath)) return;
             player = _coordinator.GetOrCreateSourcePlayer();
             player.Load(ingestedPath);
+            IsSourceSeekCapable = true;
         }
 
         if (IsSourcePaused)

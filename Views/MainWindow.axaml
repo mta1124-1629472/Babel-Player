@@ -828,7 +828,9 @@
                             <Button Classes="control-pill" Content="&#x23EA;&#xFE0E;"
                                     Command="{Binding Playback.SkipBackwardCommand}"
                                     IsEnabled="{Binding Playback.HasSegments}"
-                                    Padding="8,6" FontSize="15" />
+                                    Padding="8,6" FontSize="15"
+                                    ToolTip.Tip="Skip to previous segment"
+                                    AutomationProperties.Name="Skip back" />
                             <Button Command="{Binding Playback.PlayPauseSourceCommand}"
                                     IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
                                     Width="42" Height="42" Padding="0" Margin="3,0"
@@ -851,6 +853,7 @@
                                     Command="{Binding Playback.SkipForwardCommand}"
                                     IsEnabled="{Binding Playback.HasSegments}"
                                     Padding="8,6" FontSize="15"
+                                    ToolTip.Tip="Skip to next segment"
                                     AutomationProperties.Name="Skip forward" />
                             <Button Classes="control-pill" Content="&#x23ED;&#xFE0E;"
                                     Command="{Binding Playback.SkipForwardCommand}"
