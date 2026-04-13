@@ -907,11 +907,8 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
     }
 
-    private static string ComputeScriptVersion(string inferenceScriptPath)
-    {
-        using var fs = new FileStream(inferenceScriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan);
-        return Convert.ToHexString(SHA256.HashData(fs));
-    }
+    private static string ComputeScriptVersion(string inferenceScriptPath) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(inferenceScriptPath))));
 
     private void PrepareBootstrappedRuntimeArtifacts() =>
         PrepareRuntimeArtifacts(writeBootstrapMarker: true);
