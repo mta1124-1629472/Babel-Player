@@ -51,54 +51,28 @@ public sealed class ManagedCpuRuntimeManager
     /// <summary>
     /// True when the CPU venv needs to be (re)installed — either missing or requirements changed.
     /// </summary>
-    private bool? _cachedNeedsBootstrap;
-    private readonly object _bootstrapCacheLock = new();
-
-    public bool NeedsBootstrap
+    public async Task<bool> CheckNeedsBootstrapAsync(CancellationToken cancellationToken = default)
     {
-        get
+        var pythonPath = GetPythonExecutablePath();
+        if (!File.Exists(pythonPath))
+            return true;
+        var markerPath = GetBootstrapMarkerPath();
+        if (!File.Exists(markerPath))
+            return true;
+        try
         {
-            lock (_bootstrapCacheLock)
-            {
-                if (_cachedNeedsBootstrap.HasValue)
-                    return _cachedNeedsBootstrap.Value;
-            }
+            var stored = await File.ReadAllTextAsync(markerPath, cancellationToken).ConfigureAwait(false);
+            stored = stored.Trim();
+            var requirementsPath = _requirementsPathResolver();
+            if (!File.Exists(requirementsPath))
+                return true;
 
-            var pythonPath = GetPythonExecutablePath();
-            if (!File.Exists(pythonPath))
-            {
-                lock (_bootstrapCacheLock)
-                {
-                    _cachedNeedsBootstrap = true;
-                }
-                return true;
-            }
-            var markerPath = GetBootstrapMarkerPath();
-            if (!File.Exists(markerPath))
-            {
-                lock (_bootstrapCacheLock)
-                {
-                    _cachedNeedsBootstrap = true;
-                }
-                return true;
-            }
-            try
-            {
-                var stored = File.ReadAllText(markerPath).Trim();
-                var requirementsPath = _requirementsPathResolver();
-                var result = !File.Exists(requirementsPath)
-                    || !string.Equals(stored, ComputeMarkerHash(requirementsPath), StringComparison.Ordinal);
-                lock (_bootstrapCacheLock)
-                {
-                    _cachedNeedsBootstrap = result;
-                }
-                return result;
-            }
-            catch
-            {
-                // Do not cache on transient I/O errors; a subsequent read may succeed.
-                return true;
-            }
+            var hash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
+            return !string.Equals(stored, hash, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return true;
         }
     }
 
@@ -114,7 +88,7 @@ public sealed class ManagedCpuRuntimeManager
         Action<string>? onStatusLine = null,
         CancellationToken cancellationToken = default)
     {
-        if (!NeedsBootstrap)
+        if (!await CheckNeedsBootstrapAsync(cancellationToken).ConfigureAwait(false))
         {
             State = ManagedCpuState.Ready;
             _log.Info("CPU runtime: already installed and up to date.");
@@ -125,7 +99,7 @@ public sealed class ManagedCpuRuntimeManager
         try
         {
             // Re-check under lock in case a concurrent call already bootstrapped.
-            if (!NeedsBootstrap)
+            if (!await CheckNeedsBootstrapAsync(cancellationToken).ConfigureAwait(false))
             {
                 State = ManagedCpuState.Ready;
                 return;
@@ -216,15 +190,11 @@ public sealed class ManagedCpuRuntimeManager
             return;
         }
 
+        var markerHash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(
             markerPath,
-            ComputeMarkerHash(requirementsPath),
+            markerHash,
             cancellationToken);
-
-        lock (_bootstrapCacheLock)
-        {
-            _cachedNeedsBootstrap = false;
-        }
 
         State = ManagedCpuState.Ready;
         FailureReason = null;
@@ -287,9 +257,10 @@ public sealed class ManagedCpuRuntimeManager
 
     // Marker format: "python:{version}\n{requirements_content}"
     // Including PythonVersion ensures a version upgrade invalidates the existing venv.
-    private string ComputeMarkerHash(string requirementsPath)
+    private async Task<string> ComputeMarkerHashAsync(string requirementsPath, CancellationToken cancellationToken = default)
     {
-        var content = $"python:{PythonVersion}\n{File.ReadAllText(requirementsPath)}";
+        var fileContent = await File.ReadAllTextAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
+        var content = $"python:{PythonVersion}\n{fileContent}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
     }
