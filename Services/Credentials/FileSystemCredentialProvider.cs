@@ -80,23 +80,42 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
         var newSecret = new byte[32];
         System.Security.Cryptography.RandomNumberGenerator.Fill(newSecret);
 
-        if (OperatingSystem.IsWindows())
+        try
         {
-            var protectedSecret = System.Security.Cryptography.ProtectedData.Protect(
-                newSecret, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-            File.WriteAllBytes(secretPath, protectedSecret);
-        }
-        else
-        {
-            File.WriteAllBytes(secretPath, newSecret);
-            try
+            if (OperatingSystem.IsWindows())
             {
-                File.SetUnixFileMode(secretPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                var protectedSecret = System.Security.Cryptography.ProtectedData.Protect(
+                    newSecret, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                using var stream = new FileStream(secretPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                stream.Write(protectedSecret, 0, protectedSecret.Length);
             }
-            catch { /* best-effort permission restriction */ }
-        }
+            else
+            {
+                using (var stream = new FileStream(secretPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    stream.Write(newSecret, 0, newSecret.Length);
+                }
 
-        return newSecret;
+                try
+                {
+                    File.SetUnixFileMode(secretPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
+                catch { /* best-effort permission restriction */ }
+            }
+
+            return newSecret;
+        }
+        catch (IOException) when (File.Exists(secretPath))
+        {
+            var persistedSecret = File.ReadAllBytes(secretPath);
+            if (OperatingSystem.IsWindows())
+            {
+                return System.Security.Cryptography.ProtectedData.Unprotect(
+                    persistedSecret, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            }
+
+            return persistedSecret;
+        }
     }
 
     public bool HasKey(string provider)
