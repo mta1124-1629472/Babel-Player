@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
 using Xunit;
@@ -55,13 +54,14 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         File.WriteAllBytes(pythonPath, Array.Empty<byte>());
 
         var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
-        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath, ManagedCpuRuntimeManager.PythonVersion));
+        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));
 
         var manager = new ManagedCpuRuntimeManager(
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
             requirementsPathResolver: () => requirementsPath);
 
+        // Transition the manager to Ready state, normally done by EnsureInstalledAsync which checks the marker.
         await manager.EnsureInstalledAsync();
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
@@ -75,7 +75,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     private static string FindInferenceDirectory()
     {
         var outputDir = Path.Combine(AppContext.BaseDirectory, "inference");
-        if (Directory.Exists(outputDir) && File.Exists(Path.Combine(outputDir, "requirements.txt")))
+        if (Directory.Exists(outputDir))
             return outputDir;
 
         var dir = AppContext.BaseDirectory;
@@ -94,9 +94,9 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         throw new InvalidOperationException($"Could not locate inference directory from {AppContext.BaseDirectory}.");
     }
 
-    private static string ComputeMarkerHash(string requirementsPath, string pythonVersion)
+    private static string ComputeMarkerHash(string requirementsPath)
     {
-        var content = $"python:{pythonVersion}\n{File.ReadAllText(requirementsPath)}";
+        var content = $"python:3.11.6\n{File.ReadAllText(requirementsPath)}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
     }

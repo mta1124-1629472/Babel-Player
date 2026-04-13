@@ -18,7 +18,7 @@ public enum ManagedCpuState
 
 public sealed class ManagedCpuRuntimeManager
 {
-    internal const string PythonVersion = "3.11.6";
+    private const string PythonVersion = "3.11.6";
     private static readonly SemaphoreSlim InstallGate = new(1, 1);
 
     private readonly AppLog _log;
