@@ -329,7 +329,7 @@ public sealed class ContainerizedInferenceClient
             _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
 
             using var content = new MultipartFormDataContent();
-            await using var fileStream = OpenReadAsync(audioFilePath);
+            using var fileStream = OpenReadAsync(audioFilePath);
             content.Add(new StreamContent(fileStream), "audio", Path.GetFileName(audioFilePath));
             if (minSpeakers.HasValue)
                 content.Add(new StringContent(minSpeakers.Value.ToString()), "min_speakers");

@@ -54,7 +54,8 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         File.WriteAllBytes(pythonPath, Array.Empty<byte>());
 
         var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
-        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));
+        // Using reflection to dynamically read PythonVersion const
+        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath, GetManagedCpuRuntimeManagerPythonVersion()));
 
         var manager = new ManagedCpuRuntimeManager(
             _log,
@@ -91,10 +92,17 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         throw new InvalidOperationException($"Could not locate inference directory from {AppContext.BaseDirectory}.");
     }
 
-    private static string ComputeMarkerHash(string requirementsPath)
+    private static string ComputeMarkerHash(string requirementsPath, string pythonVersion)
     {
-        var content = $"python:3.11.6\n{File.ReadAllText(requirementsPath)}";
+        var content = $"python:{pythonVersion}\n{File.ReadAllText(requirementsPath)}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
+    }
+
+    private static string GetManagedCpuRuntimeManagerPythonVersion()
+    {
+        var field = typeof(ManagedCpuRuntimeManager).GetField("PythonVersion", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        if (field == null) throw new InvalidOperationException("Could not find PythonVersion field on ManagedCpuRuntimeManager.");
+        return (string)field.GetValue(null)!;
     }
 }
