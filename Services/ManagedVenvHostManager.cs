@@ -168,13 +168,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             return Skip("Managed GPU host skipped because Docker backend is selected.");
 
         var serviceUrl = AppSettings.ManagedGpuServiceUrl;
+        var scriptChangedSinceLastStart = IsScriptChangedSinceLastStart();
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         preflight = await StabilizeTrackedHostHealthAsync(serviceUrl, preflight, cancellationToken);
-
-        // Only check if script changed when preflight shows host is available (avoids expensive I/O on cold starts)
-        var scriptChangedSinceLastStart = preflight.IsAvailable
-            ? IsScriptChangedSinceLastStart()
-            : false;
 
         if (preflight.IsAvailable && !scriptChangedSinceLastStart)
         {
@@ -338,7 +334,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"Managed GPU runtime paths: runtime_root={runtimeRoot}, venv_dir={venvDir}, python={pythonPath}, " +
             $"script={inferenceScriptPath}, requirements={requirementsPath}, constraints={constraintsPath}, uv={uvPath}, compute_type={computeType}");
 
-        var bootstrapVersion = await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath);
+        var bootstrapVersion = ComputeBootstrapVersion(requirementsPath, constraintsPath);
         var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
         var markerValue = File.Exists(markerPath) ? await File.ReadAllTextAsync(markerPath, cancellationToken) : null;
         var needsBootstrap = !File.Exists(pythonPath) || !string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal);
@@ -1445,12 +1441,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var depsMarkerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
             if (!File.Exists(depsMarkerPath))
                 return true;
-            var storedDepsHash = File.ReadAllText(depsMarkerPath).Trim();
-            var depsBuilder = new StringBuilder();
-            depsBuilder.AppendLine(PythonVersion);
-            depsBuilder.AppendLine(File.ReadAllText(_requirementsPathResolver()));
-            depsBuilder.AppendLine(File.ReadAllText(_constraintsPathResolver()));
-            var currentDepsHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(depsBuilder.ToString())));
+            var storedDepsHash = ReadMarkerFile(depsMarkerPath);
+            var currentDepsHash = ComputeBootstrapVersion(
+                _requirementsPathResolver(),
+                _constraintsPathResolver());
             if (!string.Equals(storedDepsHash, currentDepsHash, StringComparison.Ordinal))
                 return true;
 
@@ -1458,7 +1452,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             var scriptMarkerPath = Path.Combine(runtimeRoot, ".script-version");
             if (!File.Exists(scriptMarkerPath))
                 return true;
-            var storedScriptHash = File.ReadAllText(scriptMarkerPath).Trim();
+            var storedScriptHash = ReadMarkerFile(scriptMarkerPath);
             var currentScriptHash = ComputeScriptVersion(_inferenceScriptResolver());
             return !string.Equals(storedScriptHash, currentScriptHash, StringComparison.Ordinal);
         }
@@ -1468,14 +1462,31 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
-    private static async Task<string> ComputeBootstrapVersionAsync(
+    private static string ReadMarkerFile(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 128, FileOptions.SequentialScan);
+        using var sr = new StreamReader(fs);
+        return sr.ReadToEnd().Trim();
+    }
+
+    private static string ComputeBootstrapVersion(
         string requirementsPath,
         string constraintsPath)
     {
         var builder = new StringBuilder();
         builder.AppendLine(PythonVersion);
-        builder.AppendLine(File.ReadAllText(requirementsPath));
-        builder.AppendLine(File.ReadAllText(constraintsPath));
+
+        using (var reqFs = new FileStream(requirementsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
+        using (var reqSr = new StreamReader(reqFs))
+        {
+            builder.AppendLine(reqSr.ReadToEnd());
+        }
+
+        using (var consFs = new FileStream(constraintsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan))
+        using (var consSr = new StreamReader(consFs))
+        {
+            builder.AppendLine(consSr.ReadToEnd());
+        }
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(bytes);
