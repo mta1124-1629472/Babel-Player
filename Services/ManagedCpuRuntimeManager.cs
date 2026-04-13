@@ -255,7 +255,7 @@ public sealed class ManagedCpuRuntimeManager
 
     // Marker format: "python:{version}\n{requirements_content}"
     // Including PythonVersion ensures a version upgrade invalidates the existing venv.
-    private string ComputeMarkerHash(string requirementsPath)
+    public string ComputeMarkerHash(string requirementsPath)
     {
         var content = $"python:{PythonVersion}\n{File.ReadAllText(requirementsPath)}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
