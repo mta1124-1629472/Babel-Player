@@ -350,16 +350,21 @@ Babel-Player/
 ├── BabelPlayer.Tests/       # xUnit integration tests (~650 tests)
 ├── inference/               # Python inference server (FastAPI + Faster-Whisper + TTS + diarization)
 ├── scripts/                 # Architecture linter and development tooling
-│   ├── docs/                 # User & Dev Documentation (contains benchmarks)
-│   ├── inference/            # Python inference server (FastAPI + Faster-Whisper + TTS + diarization)
-│   ├── scripts/              # Architecture linter and development tooling
-│   ├── tools/                # Bundled tooling (uv.exe, ffmpeg placed at publish time)
-│   ├── native/win-x64/       # libmpv-2.dll (native video playback)
-│   └── BabelPlayer.Tests/    # xUnit integration tests (contains test assets)
-└── [Metadata]
-    ├── AGENTS.md / CLAUDE.md / gemini.md
-    ├── .gitignore / PLAN.md
-    └── LICENSE
+├── docs/
+│   ├── architecture.md      # Structural map and ownership rules
+│   ├── PLAN.md              # Milestone plans (index)
+│   ├── context/             # Extra agent context (Gemini, Qwen, …)
+│   ├── history/smoke/       # Milestone smoke / gate evidence
+│   └── benchmarks/          # Transcription benchmark runs + leaderboard
+├── native/win-x64/          # libmpv-2.dll (fetched; see README setup)
+├── installer/               # Inno Setup script
+├── site/                    # GitHub Pages (jekyll)
+├── AGENTS.md                # Operating rules (read before non-trivial changes)
+├── CLAUDE.md                # Claude / Cursor-oriented project context
+├── CONTRIBUTING.md
+├── README.md
+├── LICENSE
+└── BabelPlayer.csproj
 ```
 
 Key files:
@@ -382,10 +387,12 @@ Read these first:
 
 - [AGENTS.md](AGENTS.md) — operating rules and non-negotiables
 - [CLAUDE.md](CLAUDE.md) — context and instructions for Claude
-- [gemini.md](gemini.md) — context and instructions for Gemini
-- [PLAN.md](PLAN.md) — milestone order and gates
+- [docs/context/GEMINI.md](docs/context/GEMINI.md) — context for Gemini-oriented assistants
+- [docs/context/QWEN.md](docs/context/QWEN.md) — context for Qwen Coder–style setups
+- [docs/PLAN.md](docs/PLAN.md) — milestone order and gates
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow and scope discipline
 - [docs/architecture.md](docs/architecture.md) — structural map and ownership rules
+- [docs/privacy-policy.md](docs/privacy-policy.md) — privacy policy (published copy also on GitHub Pages)
 
 Minimum verification before opening a PR:
 

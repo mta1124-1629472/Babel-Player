@@ -1,6 +1,6 @@
 # Copilot Instructions for Babel Player
 
-Before non-trivial work, read `AGENTS.md`, `PLAN.md`, and `docs/architecture.md`. If you touch milestone-specific behavior, also check the relevant smoke note in `docs/smoke/`.
+Before non-trivial work, read `AGENTS.md`, `docs/PLAN.md`, and `docs/architecture.md`. If you touch milestone-specific behavior, also check the relevant smoke note in `docs/history/smoke/`.
 
 ## Build, test, and lint commands
 
@@ -61,7 +61,7 @@ Test categories used in this repo:
 - Use `InferenceRuntimeCatalog` for provider/profile/runtime normalization instead of duplicating compute-selection logic in UI or service code.
 - Missing capability/readiness should surface as a truthful blocked state with remediation, not a fake-ready UI path. If you add a fallback, it must be explicit in status/logging.
 - Keep storage and identity names consistent by context: product branding is `Babel Player`, the repo is `Babel-Player`, and persisted app paths/identifiers use `BabelPlayer`.
-- This repo is milestone-driven. Avoid broad refactors, speculative extension points, or “future-proof” abstractions unless they directly support the current milestone in `PLAN.md`.
+- This repo is milestone-driven. Avoid broad refactors, speculative extension points, or “future-proof” abstractions unless they directly support the current milestone in `docs/PLAN.md`.
 - For benchmark or hardware-routing work, capture the machine/runtime environment first and keep comparisons hardware-specific. Existing repo instructions expect an `Environment Snapshot` section and hardware-profile tokens such as `int8_8c16t_32g` in benchmark matrices.
 
 ## MCP server setup guidance

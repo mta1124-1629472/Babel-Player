@@ -13,7 +13,7 @@ This repo should not drift into a shell-first, framework-first, or abstraction-f
 
 Read:
 
-- `PLAN.md` for milestone order and gates
+- `docs/PLAN.md` for milestone order and gates
 - `docs/architecture.md` for the current structural map and major boundaries
 - `AGENTS.md` for repo behavior rules
 - any milestone-specific docs relevant to the area you are touching
@@ -101,7 +101,7 @@ A good smoke note says:
 
 ### Smoke note conventions
 
-Store milestone smoke notes under `docs/smoke/` using this naming pattern:
+Store milestone smoke notes under `docs/history/smoke/` using this naming pattern:
 
 - `milestone-01-foundation.md`
 - `milestone-02-headless-libmpv.md`
@@ -131,7 +131,7 @@ If any gate item remains unverified, the smoke note must not say `complete`.
 
 ### Smoke note location
 
-Store milestone smoke notes under `docs/smoke/` using milestone-based filenames.
+Store milestone smoke notes under `docs/history/smoke/` using milestone-based filenames.
 Avoid root-level smoke-note files and avoid separate completion-note files unless there is a specific reason they add information not already present in the smoke note.
 
 Example:
