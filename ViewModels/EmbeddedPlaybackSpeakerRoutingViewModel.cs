@@ -85,8 +85,8 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
             IsMultiSpeakerEnabled = true;
             RebuildDiarizationProviderOptions();
             DiarizationProvider = NormalizeDiarizationProviderSelection(_coordinator.CurrentSettings.DiarizationProvider);
-            DiarizationMinSpeakers = _coordinator.CurrentSettings.DiarizationMinSpeakers;
-            DiarizationMaxSpeakers = _coordinator.CurrentSettings.DiarizationMaxSpeakers;
+            DiarizationMinSpeakers = null;
+            DiarizationMaxSpeakers = null;
             DefaultTtsVoiceFallback = _coordinator.CurrentSession.DefaultTtsVoiceFallback ?? string.Empty;
             RebuildSpeakerIds(_parent.Preview.Segments, _parent.Preview.SelectedSegment?.SpeakerId);
         }
@@ -209,6 +209,8 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
         }
 
         _coordinator.CurrentSettings.DiarizationProvider = normalized;
+        _coordinator.CurrentSettings.DiarizationMinSpeakers = null;
+        _coordinator.CurrentSettings.DiarizationMaxSpeakers = null;
         _coordinator.NotifySettingsModified();
         _parent.RefreshProviderHealthDiagnostics();
         _parent.Pipeline.NotifySessionStateChanged();

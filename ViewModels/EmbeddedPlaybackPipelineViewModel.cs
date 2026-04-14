@@ -1,4 +1,7 @@
 using System;
+using System.Diagnostics;
+using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -10,6 +13,7 @@ namespace Babel.Player.ViewModels;
 
 public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, IDisposable
 {
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
     private readonly EmbeddedPlaybackViewModel _parent;
     private readonly SessionWorkflowCoordinator _coordinator;
     private CancellationTokenSource? _pipelineCts;
@@ -151,12 +155,40 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
 
         try
         {
+            var totalStopwatch = Stopwatch.StartNew();
             _parent.IsBusy = true;
             _parent.StatusText = $"Running {_parent.ResolveDiarizationProviderLabel()} diarization…";
             _parent.ClearStatusErrorDetail();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H27",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
+                message: "RunDiarizationOnlyAsync started",
+                data: new
+                {
+                    provider = _parent.SpeakerRouting.DiarizationProvider,
+                    stage = _coordinator.CurrentSession.Stage.ToString(),
+                    managedThreadId = Environment.CurrentManagedThreadId,
+                    syncContext = SynchronizationContext.Current?.GetType().FullName,
+                });
+            // #endregion
 
             var hadTranslatableOutput = _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Translated;
             var speakerAssignmentsChanged = await _coordinator.RunDiarizationAsync(cancellationToken);
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H27",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
+                message: "RunDiarizationAsync returned to ViewModel",
+                data: new
+                {
+                    speakerAssignmentsChanged,
+                    hadTranslatableOutput,
+                    stage = _coordinator.CurrentSession.Stage.ToString(),
+                });
+            // #endregion
             string completionStatus;
 
             if (speakerAssignmentsChanged && hadTranslatableOutput)
@@ -173,9 +205,47 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
                 completionStatus = "Diarization complete. Speaker assignments were unchanged.";
             }
 
+            var refreshStopwatch = Stopwatch.StartNew();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H27",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
+                message: "Starting preview refresh after diarization",
+                data: new
+                {
+                    stage = _coordinator.CurrentSession.Stage.ToString(),
+                });
+            // #endregion
             await _parent.Preview.RefreshSegmentsAsync();
+            refreshStopwatch.Stop();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H27",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
+                message: "Completed preview refresh after diarization",
+                data: new
+                {
+                    elapsedMs = refreshStopwatch.ElapsedMilliseconds,
+                    segmentCount = _parent.Preview.Segments.Count,
+                });
+            // #endregion
             _parent.StatusText = completionStatus;
             _parent.ClearStatusErrorDetail();
+            totalStopwatch.Stop();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H27",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
+                message: "RunDiarizationOnlyAsync completed successfully",
+                data: new
+                {
+                    totalElapsedMs = totalStopwatch.ElapsedMilliseconds,
+                    completionStatus,
+                });
+            // #endregion
         }
         catch (OperationCanceledException)
         {
@@ -190,9 +260,62 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
         finally
         {
             _parent.IsBusy = false;
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H27",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
+                message: "RunDiarizationOnlyAsync finally executed",
+                data: new
+                {
+                    isBusy = _parent.IsBusy,
+                    managedThreadId = Environment.CurrentManagedThreadId,
+                });
+            // #endregion
             _diarizationCts?.Dispose();
             _diarizationCts = null;
         }
+    }
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
     }
 
     public void NotifyBusyStateChanged()

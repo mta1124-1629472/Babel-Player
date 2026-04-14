@@ -22,7 +22,7 @@ except Exception:
 
 command = str(data.get("command", "") or "")
 normalized = command.strip().lower()
-
+wait 
 rules = [
     (r"\brm\s+-rf\b", "Potential recursive delete"),
     (r"\bmkfs(\.\w+)?\b", "Potential filesystem formatting"),

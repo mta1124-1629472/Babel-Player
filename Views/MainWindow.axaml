@@ -305,25 +305,6 @@
                                  </ComboBox>
                              </StackPanel>
 
-                             <!-- Controls that only apply when a provider is selected -->
-                             <StackPanel Spacing="5"
-                                         IsVisible="{Binding Playback.SpeakerRouting.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
-                                    <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                                    Value="{Binding Playback.SpeakerRouting.DiarizationMinSpeakers, Mode=TwoWay}"
-                                                    Minimum="1" Maximum="20"
-                                                    Width="80"
-                                                    ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Max Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
-                                    <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                                    Value="{Binding Playback.SpeakerRouting.DiarizationMaxSpeakers, Mode=TwoWay}"
-                                                    Minimum="1" Maximum="20"
-                                                    Width="80"
-                                                    ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
-                                </Grid>
-                           </StackPanel>
-
                              <!-- Status -->
                              <TextBlock Text="{Binding Playback.SpeakerRouting.AutoSpeakerDetectionStatus}"
                                         FontSize="11"
@@ -363,7 +344,7 @@
                                                 IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
                                  </Grid>
 
-                                 <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
                                      <Button Grid.Row="0" Grid.Column="0"
                                              Command="{Binding Playback.SpeakerRouting.AssignSelectedSpeakerVoiceCommand}"
                                              IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
@@ -387,10 +368,18 @@
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="4"
-                                             Click="OnBrowseReferenceClipClick"
-                                             Content="Browse ref clip" />
+                                            CornerRadius="4"
+                                            Content="Use selected segment" />
                                      <Button Grid.Row="1" Grid.Column="1"
+                                            IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
+                                            IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
+                                            HorizontalAlignment="Stretch"
+                                            Padding="0,7" FontSize="12"
+                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                            CornerRadius="4"
+                                            Click="OnBrowseReferenceClipClick"
+                                            Content="Browse ref clip" />
+                                    <Button Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                              Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerReferenceAudioCommand}"
                                              IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
                                              IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"

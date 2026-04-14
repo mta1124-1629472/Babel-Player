@@ -235,6 +235,33 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
                         : result.Stderr[^1000..],
                 });
             // #endregion
+            // #region agent log
+            foreach (var stderrLine in result.Stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(stderrLine);
+                    if (doc.RootElement.TryGetProperty("timing", out var timingName)
+                        && doc.RootElement.TryGetProperty("value", out var timingValue))
+                    {
+                        WriteDebugLog(
+                            runId: "initial",
+                            hypothesisId: "H12",
+                            location: "WeSpeakerCpuDiarizationProvider.cs:DiarizeAsync",
+                            message: "WeSpeaker timing marker",
+                            data: new
+                            {
+                                timing = timingName.GetString(),
+                                seconds = timingValue.GetDouble(),
+                            });
+                    }
+                }
+                catch
+                {
+                    // Non-JSON stderr lines are expected from upstream libraries.
+                }
+            }
+            // #endregion
 
             if (result.ExitCode != 0)
             {

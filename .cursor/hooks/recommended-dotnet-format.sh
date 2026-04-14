@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+and we#!/usr/bin/env bash
 set -euo pipefail
 
 payload="$(cat)"
