@@ -255,7 +255,9 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
     internal void ApplyStageUpdate(SessionWorkflowCoordinator.PipelineStageUpdate update)
     {
         PipelineStageTitle = $"Stage {update.StageIndex} of {update.StageCount}: {update.Title}";
-        PipelineStageDetail = update.Detail;
+        PipelineStageDetail = string.IsNullOrWhiteSpace(update.StreamingStatus)
+            ? update.Detail
+            : $"{update.Detail} {update.StreamingStatus}";
         PipelineProgressPercent = update.Progress01;
         IsPipelineProgressIndeterminate = update.IsIndeterminate;
         IsPipelineProgressVisible = true;

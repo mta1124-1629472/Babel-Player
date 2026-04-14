@@ -230,11 +230,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             }
 
             string statusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
-                ? "Resumed session with TTS. Dubbing complete."
+                    ? "Resumed session with TTS. Dubbing complete."
                 : validated.Stage >= SessionWorkflowStage.Translated
                     ? "Resumed session with translation. Ready for TTS/dubbing."
-                    : validated.Stage >= SessionWorkflowStage.Diarized
-                        ? "Resumed session after speaker mapping. Assign voices, then continue."
+                : validated.Stage >= SessionWorkflowStage.Diarized
+                    ? "Resumed session with speaker mapping. Ready to resume translation/TTS."
                     : validated.Stage >= SessionWorkflowStage.Transcribed
                         ? "Resumed session with transcript. Ready for translation."
                         : validated.Stage >= SessionWorkflowStage.MediaLoaded
@@ -255,11 +255,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             SessionSource = validated.Stage != snapshot.Stage
                 ? $"Resumed session (stage downgraded from {snapshot.Stage} to {validated.Stage}: missing artifacts)."
                 : validated.Stage >= SessionWorkflowStage.TtsGenerated
-                    ? "Resumed session with TTS."
-                    : validated.Stage >= SessionWorkflowStage.Translated
-                        ? "Resumed session with translation."
-                        : validated.Stage >= SessionWorkflowStage.Diarized
-                            ? "Resumed session awaiting speaker mapping."
+                ? "Resumed session with TTS."
+                : validated.Stage >= SessionWorkflowStage.Translated
+                    ? "Resumed session with translation."
+                    : validated.Stage >= SessionWorkflowStage.Diarized
+                        ? "Resumed session with speaker mapping."
                         : validated.Stage >= SessionWorkflowStage.Transcribed
                             ? "Resumed session with transcript."
                             : "Resumed the saved foundation session.";
@@ -376,10 +376,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     ? "Restored prior TTS. Ready for playback."
                     : validated.Stage >= SessionWorkflowStage.Translated
                         ? "Restored translation. Ready for TTS/dubbing."
-                        : validated.Stage >= SessionWorkflowStage.Diarized
-                            ? "Restored speaker mapping state. Assign voices, then continue."
-                        : validated.Stage >= SessionWorkflowStage.Transcribed
-                            ? "Restored transcript. Ready for translation."
+                    : validated.Stage >= SessionWorkflowStage.Diarized
+                        ? "Restored speaker mapping state. Ready to resume translation/TTS."
+                    : validated.Stage >= SessionWorkflowStage.Transcribed
+                        ? "Restored transcript. Ready for translation."
                     : "Media loaded. Ready for transcription.",
             };
             _log.Info($"Restored cached session for: {sourceMediaPath} (stage: {CurrentSession.Stage})");
@@ -546,7 +546,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             TranslationModel = null,
             TtsRuntime = null,
             TtsProvider = null,
-            StatusMessage = "Pipeline reset to speaker mapping state."
+            StatusMessage = "Pipeline reset to speaker-mapped state."
         };
     }
 
@@ -651,7 +651,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         {
             PipelineInvalidation.Transcription => "Transcription settings changed — pipeline reset to media-loaded state.",
             PipelineInvalidation.Translation => HasDiarizationMarker(CurrentSession)
-                ? "Translation settings changed — pipeline reset to speaker mapping state."
+                ? "Translation settings changed — pipeline reset to speaker-mapped state."
                 : "Translation settings changed — pipeline reset to transcript state.",
             PipelineInvalidation.Tts => "TTS settings changed — pipeline reset to translation state.",
             _ => "Pipeline settings updated."
@@ -911,11 +911,11 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 ? "Restored session with TTS. Ready for playback."
                 : validated.Stage >= SessionWorkflowStage.Translated
                     ? "Restored session with translation. Ready for TTS/dubbing."
-                    : validated.Stage >= SessionWorkflowStage.Diarized
-                        ? "Restored session after speaker mapping. Assign voices, then continue."
+                : validated.Stage >= SessionWorkflowStage.Diarized
+                    ? "Restored session with speaker mapping. Ready to resume translation/TTS."
                     : validated.Stage >= SessionWorkflowStage.Transcribed
                         ? "Restored session with transcript. Ready for translation."
-                        : validated.Stage >= SessionWorkflowStage.MediaLoaded
+                    : validated.Stage >= SessionWorkflowStage.MediaLoaded
                             ? "Restored session with media. Ready for transcription."
                             : "Restored foundation session.",
         };

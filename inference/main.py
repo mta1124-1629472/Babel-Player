@@ -26,7 +26,7 @@ from uuid import uuid4
 import numpy as np
 import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 # Configure logging
@@ -1855,6 +1855,101 @@ async def transcribe(
         logger.error(f"Transcription failed: {exc}", exc_info=True)
         if temp_audio_path:
             background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/transcribe/stream")
+async def transcribe_stream(
+    file: UploadFile = File(...),
+    model: str = Form("base"),
+    language: Optional[str] = Form(None),
+    cpu_compute_type: str = Form("int8"),
+    cpu_threads: int = Form(0),
+    num_workers: int = Form(1),
+):
+    temp_audio_path = None
+    try:
+        temp_audio_path = TEMP_DIR / f"audio_stream_{uuid4().hex}.wav"
+        contents = await file.read()
+        temp_audio_path.write_bytes(contents)
+        whisper = load_whisper_model(model, cpu_compute_type=cpu_compute_type, cpu_threads=cpu_threads, num_workers=num_workers)
+        segments_gen, info = whisper.transcribe(
+            str(temp_audio_path), language=language or None, word_timestamps=True)
+
+        def _sample_ram_mb() -> float:
+            try:
+                import psutil
+                return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+            except Exception:
+                return -1.0
+
+        def _sample_vram_mb() -> float:
+            try:
+                import pynvml
+                pynvml.nvmlInit()
+                try:
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                    info_obj = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                    return info_obj.used / (1024 * 1024)
+                finally:
+                    pynvml.nvmlShutdown()
+            except Exception:
+                return -1.0
+
+        ram_before = _sample_ram_mb()
+        vram_before = _sample_vram_mb()
+
+        async def _generate():
+            try:
+                yield json.dumps({
+                    "type": "metadata",
+                    "language": info.language or "unknown",
+                    "language_probability": info.language_probability or 0.0,
+                }, ensure_ascii=False) + "\n"
+
+                segment_count = 0
+                for seg in segments_gen:
+                    text = (seg.text or "").strip()
+                    if not text:
+                        continue
+
+                    payload = {
+                        "type": "segment",
+                        "segment": {
+                            "start": seg.start,
+                            "end": seg.end,
+                            "text": text,
+                            "words": [
+                                {
+                                    "text": word.word,
+                                    "start": word.start,
+                                    "end": word.end,
+                                }
+                                for word in (seg.words or [])
+                            ],
+                        },
+                    }
+                    yield json.dumps(payload, ensure_ascii=False) + "\n"
+                    segment_count += 1
+                    await asyncio.sleep(0)
+
+                ram_after = _sample_ram_mb()
+                vram_after = _sample_vram_mb()
+                yield json.dumps({
+                    "type": "complete",
+                    "segment_count": segment_count,
+                    "peak_ram_mb": max(ram_before, ram_after),
+                    "peak_vram_mb": max(vram_before, vram_after),
+                }, ensure_ascii=False) + "\n"
+            finally:
+                if temp_audio_path:
+                    temp_audio_path.unlink(missing_ok=True)
+
+        return StreamingResponse(_generate(), media_type="application/x-ndjson")
+    except Exception as exc:
+        logger.error(f"Streaming transcription failed: {exc}", exc_info=True)
+        if temp_audio_path:
+            temp_audio_path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

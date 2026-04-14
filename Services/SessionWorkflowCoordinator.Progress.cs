@@ -13,7 +13,8 @@ public sealed partial class SessionWorkflowCoordinator
         string Title,
         string Detail,
         double Progress01,
-        bool IsIndeterminate);
+        bool IsIndeterminate,
+        string? StreamingStatus = null);
 
     internal readonly record struct PipelineStageContext(
         int StageIndex,
@@ -24,18 +25,14 @@ public sealed partial class SessionWorkflowCoordinator
 
     private static IReadOnlyList<SessionWorkflowStage> GetAdvancePipelineStages(
         SessionWorkflowStage currentStage,
-        bool pauseAfterDiarization)
+        bool shouldRunDiarization)
     {
-        var stages = new List<SessionWorkflowStage>(capacity: pauseAfterDiarization ? 2 : 3);
+        var stages = new List<SessionWorkflowStage>(capacity: shouldRunDiarization ? 4 : 3);
         if (currentStage < SessionWorkflowStage.Transcribed)
             stages.Add(SessionWorkflowStage.Transcribed);
 
-        if (pauseAfterDiarization)
-        {
-            if (currentStage < SessionWorkflowStage.Diarized)
-                stages.Add(SessionWorkflowStage.Diarized);
-            return stages;
-        }
+        if (shouldRunDiarization && currentStage < SessionWorkflowStage.Diarized)
+            stages.Add(SessionWorkflowStage.Diarized);
 
         if (currentStage < SessionWorkflowStage.Translated)
             stages.Add(SessionWorkflowStage.Translated);
@@ -96,7 +93,8 @@ public sealed partial class SessionWorkflowCoordinator
         PipelineStageContext? context,
         string detail,
         double progress01,
-        bool isIndeterminate)
+        bool isIndeterminate,
+        string? streamingStatus = null)
     {
         if (context is not { } stageContext || stageContext.Reporter is null)
             return;
@@ -112,7 +110,8 @@ public sealed partial class SessionWorkflowCoordinator
                 stageContext.Title,
                 detail,
                 clampedProgress,
-                isIndeterminate));
+                isIndeterminate,
+                streamingStatus));
     }
 
     private static IProgress<double>? CreateStageDownloadProgress(
