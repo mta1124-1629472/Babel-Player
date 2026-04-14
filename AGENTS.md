@@ -6,5 +6,4 @@
 ## Learned Workspace Facts
 - This workspace uses a project transcript store under the standard Cursor project transcripts location.
 - The codebase actively uses both managed CPU and managed GPU inference flows for diarization/transcription debugging.
-- Continual-learning hook state under `.cursor/hooks/state/` is local-only (not in Git); regenerate from hooks if needed.
 - The repository no longer uses Git LFS; LFS-related hook assumptions are outdated here.

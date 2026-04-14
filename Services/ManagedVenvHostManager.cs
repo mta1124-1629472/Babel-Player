@@ -280,7 +280,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var computeType = ManagedHostComputeTypePolicy.ResolveLaunchComputeType(hardware, ComputeProfile.Gpu);
         var uvPath = _uvResolver();
         if (string.IsNullOrWhiteSpace(uvPath))
-            return Fail("uv.exe was not found. Bundle tools\\win-x64\\uv.exe or install uv on PATH.");
+            return Fail($"uv.exe was not found. Bundle tools\\{WindowsPackagingPaths.NativeRidFolder}\\uv.exe or install uv on PATH.");
 
         var inferenceScriptPath = _inferenceScriptResolver();
         var requirementsPath = _requirementsPathResolver();

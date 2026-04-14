@@ -1,0 +1,28 @@
+<Project>
+  <!-- Default: PowerShell 7 (same as README / CI). Override if pwsh is not on PATH, e.g. -p:BabelWinFetchCommand="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\fetch-win-native-deps.ps1&quot;" -->
+  <PropertyGroup>
+    <BabelWinFetchCommand Condition="'$(BabelWinFetchCommand)' == ''">pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\fetch-win-native-deps.ps1&quot;</BabelWinFetchCommand>
+    <_BabelProcArch>$([System.Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE'))</_BabelProcArch>
+    <!-- Match native layout to RID when set (cross-compile), else host processor. -->
+    <BabelWinNativeSubdir Condition="'$(RuntimeIdentifier)' == 'win-arm64'">win-arm64</BabelWinNativeSubdir>
+    <BabelWinNativeSubdir Condition="'$(RuntimeIdentifier)' == 'win-x64'">win-x64</BabelWinNativeSubdir>
+    <BabelWinNativeSubdir Condition="'$(BabelWinNativeSubdir)' == '' and '$(_BabelProcArch)' == 'ARM64'">win-arm64</BabelWinNativeSubdir>
+    <BabelWinNativeSubdir Condition="'$(BabelWinNativeSubdir)' == ''">win-x64</BabelWinNativeSubdir>
+    <!-- Fetch script must match subdir when host arch differs (e.g. win-arm64 publish on AMD64). -->
+    <BabelWinFetchExtraArgs Condition="'$(BabelWinNativeSubdir)' == 'win-arm64' and '$(_BabelProcArch)' != 'ARM64'">-Architecture Arm64</BabelWinFetchExtraArgs>
+    <BabelWinFetchExtraArgs Condition="'$(BabelWinNativeSubdir)' == 'win-x64' and '$(_BabelProcArch)' == 'ARM64'">-Architecture X64</BabelWinFetchExtraArgs>
+  </PropertyGroup>
+
+  <!-- Auto-download libmpv + uv on Windows when missing (too large for Git). Runs before output staging. Set SkipFetchWinNativeDeps=true to disable (offline CI, etc.). -->
+  <Target Name="FetchWinNativeDepsIfNeeded"
+          BeforeTargets="AssignTargetPaths"
+          Condition="'$(OS)' == 'Windows_NT'
+                     and '$(SkipFetchWinNativeDeps)' != 'true'
+                     and (!Exists('$(MSBuildThisFileDirectory)native\$(BabelWinNativeSubdir)\libmpv-2.dll')
+                          or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe'))">
+    <Exec Command="$(BabelWinFetchCommand) $(BabelWinFetchExtraArgs)"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          StandardOutputImportance="high"
+          StandardErrorImportance="high" />
+  </Target>
+</Project>

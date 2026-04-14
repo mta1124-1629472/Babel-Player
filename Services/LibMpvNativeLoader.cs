@@ -73,10 +73,11 @@ internal static class LibMpvNativeLoader
 
         // Walk ancestors (bin/Debug/net10.0 → repo root, or publish folder parents).
         var depth = 0;
+        var rid = WindowsPackagingPaths.NativeRidFolder;
         for (var dir = baseDir; !string.IsNullOrEmpty(dir) && depth < 14; depth++)
         {
             foreach (var name in s_preferredNames)
-                yield return Path.Combine(dir, "native", "win-x64", name);
+                yield return Path.Combine(dir, "native", rid, name);
 
             var parent = Directory.GetParent(dir);
             dir = parent?.FullName ?? string.Empty;
@@ -85,7 +86,7 @@ internal static class LibMpvNativeLoader
         foreach (var name in s_preferredNames)
         {
             yield return Path.Combine(baseDir, name);
-            yield return Path.Combine(baseDir, "native", "win-x64", name);
+            yield return Path.Combine(baseDir, "native", rid, name);
         }
     }
 }

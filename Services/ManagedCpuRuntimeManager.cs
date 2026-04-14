@@ -290,7 +290,7 @@ public sealed class ManagedCpuRuntimeManager
         if (string.IsNullOrWhiteSpace(uvPath))
         {
             SetFailedState(
-                "uv.exe was not found. Bundle tools\\win-x64\\uv.exe or install uv on PATH.",
+                $"uv.exe was not found. Bundle tools\\{WindowsPackagingPaths.NativeRidFolder}\\uv.exe or install uv on PATH.",
                 needsBootstrap: true);
             return;
         }

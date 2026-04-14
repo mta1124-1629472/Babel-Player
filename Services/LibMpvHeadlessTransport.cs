@@ -59,7 +59,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         {
             throw new DllNotFoundException(
                 "libmpv DLL could not be loaded. On Windows, run `pwsh ./scripts/fetch-win-native-deps.ps1` " +
-                "from the repo root, rebuild, and ensure `native/win-x64/libmpv-2.dll` exists or is copied to the output directory.");
+                $"from the repo root, rebuild, and ensure `native/{WindowsPackagingPaths.NativeRidFolder}/libmpv-2.dll` exists or is copied to the output directory.");
         }
 
         // Load function pointers
