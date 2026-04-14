@@ -61,7 +61,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel vm)
         {
             _playbackPropertyChangedHandler = OnPlaybackPropertyChanged;
-            vm.Playback.PropertyChanged += _playbackPropertyChangedHandler;
+            vm.Playback.Preview.PropertyChanged += _playbackPropertyChangedHandler;
             _coordinatorPropertyChangedHandler = OnCoordinatorPropertyChanged;
             vm.Coordinator.PropertyChanged += _coordinatorPropertyChangedHandler;
 
@@ -113,7 +113,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel vm)
         {
             if (_playbackPropertyChangedHandler is not null)
-                vm.Playback.PropertyChanged -= _playbackPropertyChangedHandler;
+                vm.Playback.Preview.PropertyChanged -= _playbackPropertyChangedHandler;
             if (_coordinatorPropertyChangedHandler is not null)
                 vm.Coordinator.PropertyChanged -= _coordinatorPropertyChangedHandler;
 
@@ -146,27 +146,27 @@ public partial class MainWindow : Window
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
     {
         if (DataContext is MainWindowViewModel vm)
-            vm.Playback.NotifyControlsActivity();
+            vm.Playback.Preview.NotifyControlsActivity();
     }
 
     private void OnVideoNativePointerActivity(object? sender, EventArgs e)
     {
         if (DataContext is MainWindowViewModel vm)
-            vm.Playback.NotifyControlsActivity();
+            vm.Playback.Preview.NotifyControlsActivity();
     }
 
     private void OnPlaybackPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
         {
-            case nameof(EmbeddedPlaybackViewModel.SelectedSegment):
-                var item = (sender as EmbeddedPlaybackViewModel)?.SelectedSegment;
+            case nameof(EmbeddedPlaybackPreviewViewModel.SelectedSegment):
+                var item = (sender as EmbeddedPlaybackPreviewViewModel)?.SelectedSegment;
                 if (item != null)
                     this.FindControl<ListBox>("SegmentList")?.ScrollIntoView(item);
                 break;
-            case nameof(EmbeddedPlaybackViewModel.IsFullscreen):
+            case nameof(EmbeddedPlaybackPreviewViewModel.IsFullscreen):
                 if (DataContext is MainWindowViewModel vm)
-                    WindowState = vm.Playback.IsFullscreen ? WindowState.FullScreen : WindowState.Normal;
+                    WindowState = vm.Playback.Preview.IsFullscreen ? WindowState.FullScreen : WindowState.Normal;
                 break;
         }
     }
@@ -180,9 +180,9 @@ public partial class MainWindow : Window
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key == Key.Escape && DataContext is MainWindowViewModel vm && vm.Playback.IsFullscreen)
+        if (e.Key == Key.Escape && DataContext is MainWindowViewModel vm && vm.Playback.Preview.IsFullscreen)
         {
-            vm.Playback.IsFullscreen = false;
+            vm.Playback.Preview.IsFullscreen = false;
             e.Handled = true;
         }
     }
@@ -291,16 +291,16 @@ public partial class MainWindow : Window
     /// <remarks>
     /// If the window's DataContext is not a MainWindowViewModel or there is no selected speaker id, the method returns without action.
     /// If the user cancels the file picker or the chosen file has no local path, the method returns without assigning a reference clip.
-    /// When a valid file is selected, the view model's playback is updated via SetReferenceAudioForSelectedSpeaker(path).
+    /// When a valid file is selected, the selected speaker routing entry is updated with that reference clip.
     /// </remarks>
     public async void OnBrowseReferenceClipClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;
-        if (string.IsNullOrWhiteSpace(vm.Playback.SelectedSpeakerId)) return;
+        if (string.IsNullOrWhiteSpace(vm.Playback.SpeakerRouting.SelectedSpeakerId)) return;
 
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = $"Select reference clip for {vm.Playback.SelectedSpeakerId}",
+            Title = $"Select reference clip for {vm.Playback.SpeakerRouting.SelectedSpeakerId}",
             AllowMultiple = false,
             FileTypeFilter =
             [
@@ -313,7 +313,7 @@ public partial class MainWindow : Window
         var path = files[0].TryGetLocalPath();
         if (string.IsNullOrEmpty(path)) return;
 
-        await vm.Playback.SetReferenceAudioForSelectedSpeaker(path);
+        await vm.Playback.SpeakerRouting.SetReferenceAudioForSelectedSpeakerAsync(path);
     }
 
     /// <summary>
@@ -329,7 +329,7 @@ public partial class MainWindow : Window
         if (DataContext is not MainWindowViewModel vm)
             return;
 
-        if (!vm.Playback.HasSegments)
+        if (!vm.Playback.Preview.HasSegments)
         {
             vm.Playback.StatusText = "No segments available to export.";
             return;
@@ -354,7 +354,7 @@ public partial class MainWindow : Window
         if (file is null)
             return;
 
-        var srt = SrtGenerator.Generate(vm.Playback.Segments);
+        var srt = SrtGenerator.Generate(vm.Playback.Preview.Segments);
 
         try
         {
@@ -433,8 +433,8 @@ public partial class MainWindow : Window
             return;
 
         _embeddedTransport.Load(request.IngestedMediaPath);
-        vm.Playback.ReapplySubtitlesIfActive();
-        vm.Playback.IsSourcePaused = !request.AutoPlay;
+        vm.Playback.Preview.ReapplySubtitlesIfActive();
+        vm.Playback.Preview.IsSourcePaused = !request.AutoPlay;
         if (request.AutoPlay)
             _embeddedTransport.Play();
     }

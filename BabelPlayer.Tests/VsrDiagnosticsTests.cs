@@ -310,7 +310,8 @@ public sealed class VsrDiagnosticsTests : IDisposable
             new FakeTranscriptionRegistry(new FakeTranscriptionProvider()),
             new FakeTranslationRegistry(new FakeTranslationProvider()),
             new FakeTtsRegistry(new FakeTtsProvider()));
-        return new SessionWorkflowCoordinator(store, _log, settings, registries);
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(store, _log, settings);
+        return new SessionWorkflowCoordinator(coreServices, registries);
     }
 
     private static AppSettings CreateSettings() =>

@@ -224,11 +224,11 @@ public sealed class PipelineStageProgressTests() : IDisposable
         coordinator.Initialize();
         var playback = new EmbeddedPlaybackViewModel(coordinator);
 
-        Assert.Equal("🎙 Dub", EmbeddedPlaybackViewModel.DubModeLabel);
-        playback.IsDubModeOn = true;
-        Assert.Equal("🎙 Dub", EmbeddedPlaybackViewModel.DubModeLabel);
+        Assert.Equal("🎙 Dub", playback.Preview.DubModeLabel);
+        playback.Preview.IsDubModeOn = true;
+        Assert.Equal("🎙 Dub", playback.Preview.DubModeLabel);
 
-        playback.ApplyPipelineStageUpdate(
+        playback.Pipeline.ApplyStageUpdate(
             new SessionWorkflowCoordinator.PipelineStageUpdate(
                 2,
                 3,
@@ -238,21 +238,21 @@ public sealed class PipelineStageProgressTests() : IDisposable
                 0.45,
                 false));
 
-        Assert.True(playback.IsPipelineProgressVisible);
-        Assert.Equal("Stage 2 of 3: Translation", playback.PipelineStageTitle);
-        Assert.Contains("language routing", playback.PipelineStageDetail, StringComparison.Ordinal);
-        Assert.False(playback.IsPipelineProgressIndeterminate);
-        Assert.Equal(0.45, playback.PipelineProgressPercent, 3);
-        Assert.Contains("45", playback.PipelineProgressStatusLine, StringComparison.Ordinal);
+        Assert.True(playback.Pipeline.IsPipelineProgressVisible);
+        Assert.Equal("Stage 2 of 3: Translation", playback.Pipeline.PipelineStageTitle);
+        Assert.Contains("language routing", playback.Pipeline.PipelineStageDetail, StringComparison.Ordinal);
+        Assert.False(playback.Pipeline.IsPipelineProgressIndeterminate);
+        Assert.Equal(0.45, playback.Pipeline.PipelineProgressPercent, 3);
+        Assert.Contains("45", playback.Pipeline.PipelineProgressStatusLine, StringComparison.Ordinal);
 
-        playback.ShowPipelineRefreshDetail("Loading segments and refreshing playback data…");
-        Assert.Equal("Loading segments and refreshing playback data…", playback.PipelineStageDetail);
-        Assert.True(playback.IsPipelineProgressIndeterminate);
+        playback.Pipeline.ShowRefreshDetail("Loading segments and refreshing playback data…");
+        Assert.Equal("Loading segments and refreshing playback data…", playback.Pipeline.PipelineStageDetail);
+        Assert.True(playback.Pipeline.IsPipelineProgressIndeterminate);
 
-        playback.ResetPipelineProgressState();
-        Assert.False(playback.IsPipelineProgressVisible);
-        Assert.Equal(string.Empty, playback.PipelineStageTitle);
-        Assert.Equal(string.Empty, playback.PipelineStageDetail);
+        playback.Pipeline.ResetProgressState();
+        Assert.False(playback.Pipeline.IsPipelineProgressVisible);
+        Assert.Equal(string.Empty, playback.Pipeline.PipelineStageTitle);
+        Assert.Equal(string.Empty, playback.Pipeline.PipelineStageDetail);
     }
 
     private SessionWorkflowCoordinator CreateCoordinator(
@@ -274,7 +274,8 @@ public sealed class PipelineStageProgressTests() : IDisposable
             DiarizationRegistry    = diarizationRegistry ?? FakeDiarizationFactory.CreateDefaultRegistry(),
             AudioProcessingService = new StubAudioProcessingService(),
         };
-        return new SessionWorkflowCoordinator(store, log, settings, registries, options);
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(store, log, settings);
+        return new SessionWorkflowCoordinator(coreServices, registries, options);
     }
 
     private static AppSettings CreateSettings() =>

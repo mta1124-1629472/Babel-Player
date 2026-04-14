@@ -21,7 +21,7 @@
              ═══════════════════════════════════════════════════ -->
 <Border Grid.Column="0" Width="260" Background="{DynamicResource PanelBackgroundBrush}"
         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
-        IsVisible="{Binding Playback.IsSegmentPaneVisible}">
+        IsVisible="{Binding Playback.Preview.IsSegmentPaneVisible}">
     <Border.Resources>
         <!-- Shadow the Application ThemeDictionary for all panel descendants.
              These values apply in both Light and Dark mode — the panel is always dark. -->
@@ -44,7 +44,7 @@
                                  Padding="8,4" FontSize="11"
                                  Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                  CornerRadius="4"
-                                 Command="{Binding Playback.ClearPipelineCommand}"
+                                 Command="{Binding Playback.Pipeline.ClearPipelineCommand}"
                                  ToolTip.Tip="Clear pipeline and start fresh">
                             <StackPanel Orientation="Horizontal" Spacing="4">
                                 <TextBlock Text="🗑" FontSize="10" />
@@ -285,14 +285,14 @@
 
                              <!-- Multi-speaker toggle -->
                              <CheckBox Content="Enable multi-speaker routing"
-                                       IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
+                                       IsChecked="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled, Mode=TwoWay}"
                                        Foreground="{DynamicResource PrimaryTextBrush}" />
 
                              <StackPanel Spacing="5">
                                  <TextBlock Text="Diarization Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                 <ComboBox ItemsSource="{Binding Playback.DiarizationProviderOptions}"
-                                           SelectedItem="{Binding Playback.DiarizationProvider, Mode=TwoWay}"
-                                           IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
+                                 <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.DiarizationProviderOptions}"
+                                           SelectedItem="{Binding Playback.SpeakerRouting.DiarizationProvider, Mode=TwoWay}"
+                                           IsEnabled="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled}"
                                            HorizontalAlignment="Stretch" FontSize="12"
                                            Background="{DynamicResource ControlBackgroundBrush}"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
@@ -307,43 +307,43 @@
 
                              <!-- Controls that only apply when a provider is selected -->
                              <StackPanel Spacing="5"
-                                         IsVisible="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
-                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
-                                     <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                                    Value="{Binding Playback.DiarizationMinSpeakers, Mode=TwoWay}"
+                                         IsVisible="{Binding Playback.SpeakerRouting.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
+                                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                                    Value="{Binding Playback.SpeakerRouting.DiarizationMinSpeakers, Mode=TwoWay}"
                                                     Minimum="1" Maximum="20"
                                                     Width="80"
                                                     ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
-                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Max Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
-                                     <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                                    Value="{Binding Playback.DiarizationMaxSpeakers, Mode=TwoWay}"
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Max Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
+                                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                                    Value="{Binding Playback.SpeakerRouting.DiarizationMaxSpeakers, Mode=TwoWay}"
                                                     Minimum="1" Maximum="20"
                                                     Width="80"
                                                     ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
-                                 </Grid>
-                            </StackPanel>
+                                </Grid>
+                           </StackPanel>
 
                              <!-- Status -->
-                             <TextBlock Text="{Binding Playback.AutoSpeakerDetectionStatus}"
+                             <TextBlock Text="{Binding Playback.SpeakerRouting.AutoSpeakerDetectionStatus}"
                                         FontSize="11"
                                         Foreground="{DynamicResource StatusTextBrush}"
-                                        IsVisible="{Binding Playback.HasAutoSpeakerDetectionStatus}"
+                                        IsVisible="{Binding Playback.SpeakerRouting.HasAutoSpeakerDetectionStatus}"
                                         TextWrapping="Wrap" />
 
                              <!-- Per-speaker voice / reference clip assignment -->
                              <StackPanel Spacing="5"
-                                         IsVisible="{Binding Playback.IsMultiSpeakerEnabled}">
+                                         IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled}">
 
                                  <!-- Hint shown when multi-speaker is on but no speaker IDs have been detected yet -->
                                  <TextBlock Text="Transcribe with a diarization provider selected to assign speaker IDs."
                                             FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
-                                            IsVisible="{Binding Playback.IsMultiSpeakerNoSpeakersYet}" />
+                                            IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerNoSpeakersYet}" />
 
                                  <TextBlock Text="Speaker" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                 <ComboBox ItemsSource="{Binding Playback.SpeakerIds}"
-                                           SelectedItem="{Binding Playback.SelectedSpeakerId, Mode=TwoWay}"
-                                           IsEnabled="{Binding Playback.HasSpeakers}"
+                                 <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.SpeakerIds}"
+                                           SelectedItem="{Binding Playback.SpeakerRouting.SelectedSpeakerId, Mode=TwoWay}"
+                                           IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
                                            HorizontalAlignment="Stretch" FontSize="12"
                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                            BorderBrush="{DynamicResource BorderBrush}" />
@@ -351,30 +351,30 @@
                                  <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="8">
                                      <TextBlock Grid.Row="0" Grid.Column="0" Text="Voice" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
                                      <TextBlock Grid.Row="0" Grid.Column="1"
-                                                Text="{Binding Playback.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
+                                                Text="{Binding Playback.SpeakerRouting.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
                                                 FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
 
                                      <!-- Ref audio row only meaningful for voice-cloning providers (Qwen) -->
                                      <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}"
-                                                IsVisible="{Binding Playback.IsTtsCloningProvider}" />
+                                                IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
                                      <TextBlock Grid.Row="1" Grid.Column="1"
-                                                Text="{Binding Playback.SelectedSpeakerReferenceAudioPath, TargetNullValue='—'}"
+                                                Text="{Binding Playback.SpeakerRouting.SelectedSpeakerReferenceAudioPath, TargetNullValue='—'}"
                                                 FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap"
-                                                IsVisible="{Binding Playback.IsTtsCloningProvider}" />
+                                                IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
                                  </Grid>
 
                                  <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
                                      <Button Grid.Row="0" Grid.Column="0"
-                                             Command="{Binding Playback.AssignSelectedSpeakerVoiceCommand}"
-                                             IsEnabled="{Binding Playback.HasSpeakers}"
+                                             Command="{Binding Playback.SpeakerRouting.AssignSelectedSpeakerVoiceCommand}"
+                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                              CornerRadius="4"
                                              Content="Use current voice" />
                                      <Button Grid.Row="0" Grid.Column="1"
-                                             Command="{Binding Playback.ClearSelectedSpeakerVoiceCommand}"
-                                             IsEnabled="{Binding Playback.HasSpeakers}"
+                                             Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerVoiceCommand}"
+                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
@@ -382,8 +382,8 @@
                                              Content="Clear speaker voice" />
                                      <!-- Ref clip buttons — only for voice-cloning providers -->
                                      <Button Grid.Row="1" Grid.Column="0"
-                                             IsEnabled="{Binding Playback.HasSpeakers}"
-                                             IsVisible="{Binding Playback.IsTtsCloningProvider}"
+                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
+                                             IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
@@ -391,9 +391,9 @@
                                              Click="OnBrowseReferenceClipClick"
                                              Content="Browse ref clip" />
                                      <Button Grid.Row="1" Grid.Column="1"
-                                             Command="{Binding Playback.ClearSelectedSpeakerReferenceAudioCommand}"
-                                             IsEnabled="{Binding Playback.HasSpeakers}"
-                                             IsVisible="{Binding Playback.IsTtsCloningProvider}"
+                                             Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerReferenceAudioCommand}"
+                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
+                                             IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
@@ -405,7 +405,7 @@
                                  <StackPanel Spacing="4">
                                      <TextBlock Text="Fallback voice" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"
                                                 ToolTip.Tip="Voice/model used for any speaker that has no explicit assignment. Leave blank to use the active TTS voice." />
-                                     <TextBox Text="{Binding Playback.DefaultTtsVoiceFallback, Mode=TwoWay}"
+                                     <TextBox Text="{Binding Playback.SpeakerRouting.DefaultTtsVoiceFallback, Mode=TwoWay}"
                                               PlaceholderText="same as active TTS voice"
                                               FontSize="12" Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderBrush="{DynamicResource BorderBrush}" />
                                  </StackPanel>
@@ -546,18 +546,18 @@
                             BorderThickness="0,1,0,0"
                             Padding="16,14,16,16">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="{Binding Playback.PipelineStageDetail}"
+                            <TextBlock Text="{Binding Playback.Pipeline.PipelineStageDetail}"
                                        FontSize="11"
                                        Foreground="{DynamicResource PrimaryTextBrush}"
                                        TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding Playback.PipelineProgressStatusLine}"
+                            <TextBlock Text="{Binding Playback.Pipeline.PipelineProgressStatusLine}"
                                        FontSize="10"
                                        Foreground="{DynamicResource StatusTextBrush}"
                                        TextWrapping="Wrap" />
                             <ProgressBar Minimum="0"
                                          Maximum="1"
-                                         Value="{Binding Playback.PipelineProgressPercent}"
-                                         IsIndeterminate="{Binding Playback.IsPipelineProgressIndeterminate}"
+                                         Value="{Binding Playback.Pipeline.PipelineProgressPercent}"
+                                         IsIndeterminate="{Binding Playback.Pipeline.IsPipelineProgressIndeterminate}"
                                          Height="8"
                                          Foreground="{DynamicResource AccentSecondaryBrush}"
                                          Background="{DynamicResource ProgressBackgroundBrush}"
@@ -574,8 +574,8 @@
                                         FontWeight="SemiBold"
                                         Foreground="White"
                                         CornerRadius="8"
-                                        Command="{Binding Playback.RunPipelineCommand}"
-                                        IsEnabled="{Binding Playback.CanRunPipeline}">
+                                        Command="{Binding Playback.Pipeline.RunPipelineCommand}"
+                                        IsEnabled="{Binding Playback.Pipeline.CanRunPipeline}">
                                     <Button.Content>
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <TextBlock Text="▶" VerticalAlignment="Center" />
@@ -625,7 +625,7 @@
                                         Background="{DynamicResource DestructiveBrush}"
                                         Foreground="White"
                                         CornerRadius="8"
-                                        Command="{Binding Playback.CancelPipelineCommand}"
+                                        Command="{Binding Playback.Pipeline.CancelPipelineCommand}"
                                         IsVisible="{Binding Playback.IsBusy}">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <TextBlock Text="⏹" VerticalAlignment="Center" />
@@ -645,8 +645,8 @@
                                     BorderBrush="{DynamicResource BorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
-                                    Command="{Binding Playback.RunDiarizationOnlyCommand}"
-                                    IsEnabled="{Binding Playback.CanRunDiarizationOnly}">
+                                    Command="{Binding Playback.Pipeline.RunDiarizationOnlyCommand}"
+                                    IsEnabled="{Binding Playback.Pipeline.CanRunDiarizationOnly}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <TextBlock Text="↻" VerticalAlignment="Center" />
                                     <TextBlock Text="Re-diarize" VerticalAlignment="Center" />
@@ -723,20 +723,20 @@
 
             <!-- Scrub bar -->
             <Border Grid.Row="2" Padding="12,5"
-                    IsVisible="{Binding Playback.IsControlsVisible}">
+                    IsVisible="{Binding Playback.Preview.IsControlsVisible}">
                 <Grid ColumnDefinitions="40,*,40">
                      <TextBlock Grid.Column="0"
-                                Text="{Binding Playback.SourcePositionFormatted}"
+                                Text="{Binding Playback.Preview.SourcePositionFormatted}"
                                 FontSize="11" Foreground="{DynamicResource VideoOverlaySubtextBrush}"
                                 VerticalAlignment="Center" />
                     <Slider Grid.Column="1"
                             Minimum="0"
-                            Maximum="{Binding Playback.SourceDurationMs}"
-                            Value="{Binding Playback.SourcePositionMs, Mode=TwoWay}"
-                            IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                            Maximum="{Binding Playback.Preview.SourceDurationMs}"
+                            Value="{Binding Playback.Preview.SourcePositionMs, Mode=TwoWay}"
+                            IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                             VerticalAlignment="Center" />
                      <TextBlock Grid.Column="2"
-                                Text="{Binding Playback.SourceDurationFormatted}"
+                                Text="{Binding Playback.Preview.SourceDurationFormatted}"
                                 FontSize="11" Foreground="{DynamicResource VideoOverlaySubtextBrush}"
                                 VerticalAlignment="Center" TextAlignment="Right" />
                 </Grid>
@@ -744,7 +744,7 @@
 
             <!-- Controls bar -->
             <Border Grid.Row="3" Padding="12,9"
-                    IsVisible="{Binding Playback.IsControlsVisible}">
+                    IsVisible="{Binding Playback.Preview.IsControlsVisible}">
                 <Border.Styles>
                     <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
                     <Style Selector="Button.dev-pill">
@@ -778,37 +778,37 @@
                                 Click="OnOpenMediaClick"
                                 ToolTip.Tip="Open media"
                                 AutomationProperties.Name="Open media" />
-                        <Button Content="{Binding Playback.SubtitleToggleLabel}"
+                        <Button Content="{Binding Playback.Preview.SubtitleToggleLabel}"
                                 Classes="control-pill"
-                                Command="{Binding Playback.ToggleSubtitlesCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}"
+                                Command="{Binding Playback.Preview.ToggleSubtitlesCommand}"
+                                IsEnabled="{Binding Playback.Preview.HasSegments}"
                                 Padding="6,5" FontSize="14"
                                 Background="Transparent"
                                 ToolTip.Tip="Toggle subtitles (CC)"
                                 AutomationProperties.Name="Toggle subtitles" />
-                        <Button Content="{Binding Playback.DubModeLabel}"
+                        <Button Content="{Binding Playback.Preview.DubModeLabel}"
                                 Classes="control-pill"
-                                Classes.active="{Binding Playback.IsDubModeOn}"
-                                Command="{Binding Playback.ToggleDubModeCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}"
+                                Classes.active="{Binding Playback.Preview.IsDubModeOn}"
+                                Command="{Binding Playback.Preview.ToggleDubModeCommand}"
+                                IsEnabled="{Binding Playback.Preview.HasSegments}"
                                 Padding="6,5" FontSize="14"
                                 Background="Transparent"
                                 ToolTip.Tip="Toggle Dub Mode"
                                 AutomationProperties.Name="Toggle Dub Mode" />
 
                         <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="4,0,0,0"
-                                    IsVisible="{Binding Playback.IsDubModeOn}">
+                                    IsVisible="{Binding Playback.Preview.IsDubModeOn}">
                             <TextBlock Text="Duck" FontSize="10" Foreground="#8A88A8" VerticalAlignment="Center" />
                             <Slider x:Name="DuckingSlider"
                                     Width="60"
                                     Orientation="Horizontal"
                                     Minimum="-30"
                                     Maximum="0"
-                                    Value="{Binding Playback.AudioDuckingDb, Mode=TwoWay}"
-                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                    Value="{Binding Playback.Preview.AudioDuckingDb, Mode=TwoWay}"
+                                    IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                     VerticalAlignment="Center"
                                     ToolTip.Tip="Audio Ducking (dB)" />
-                            <TextBlock Text="{Binding Playback.AudioDuckingLabel}"
+                            <TextBlock Text="{Binding Playback.Preview.AudioDuckingLabel}"
                                        FontSize="10"
                                        Foreground="#8A88A8"
                                        VerticalAlignment="Center"
@@ -821,19 +821,19 @@
                             VerticalAlignment="Center" HorizontalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="1">
                             <Button Classes="control-pill" Content="&#x23EE;&#xFE0E;"
-                                    Command="{Binding Playback.SkipBackwardCommand}"
-                                    IsEnabled="{Binding Playback.HasSegments}"
+                                    Command="{Binding Playback.Preview.SkipBackwardCommand}"
+                                    IsEnabled="{Binding Playback.Preview.HasSegments}"
                                     Padding="8,6" FontSize="15"
                                     ToolTip.Tip="Skip to previous segment"
                                     AutomationProperties.Name="Skip to previous segment" />
                             <Button Classes="control-pill" Content="&#x23EA;&#xFE0E;"
-                                    Command="{Binding Playback.RewindCommand}"
-                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                    Command="{Binding Playback.Preview.RewindCommand}"
+                                    IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                     Padding="8,6" FontSize="15"
                                     ToolTip.Tip="Rewind 10 seconds"
                                     AutomationProperties.Name="Rewind 10 seconds" />
-                            <Button Command="{Binding Playback.PlayPauseSourceCommand}"
-                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                            <Button Command="{Binding Playback.Preview.PlayPauseSourceCommand}"
+                                    IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                     Width="42" Height="42" Padding="0" Margin="3,0"
                                     CornerRadius="21" Background="{DynamicResource ButtonBackgroundBrush}"
                                     ToolTip.Tip="Play / Pause (Space)"
@@ -846,20 +846,20 @@
                                         <Setter Property="Background" Value="#252545" />
                                     </Style>
                                 </Button.Styles>
-                                <TextBlock Text="{Binding Playback.PlayPauseSourceLabel}"
+                                <TextBlock Text="{Binding Playback.Preview.PlayPauseSourceLabel}"
                                            FontSize="15"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center" />
                             </Button>
                             <Button Classes="control-pill" Content="&#x23E9;&#xFE0E;"
-                                    Command="{Binding Playback.FastForwardCommand}"
-                                    IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                    Command="{Binding Playback.Preview.FastForwardCommand}"
+                                    IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                     Padding="8,6" FontSize="15"
                                     ToolTip.Tip="Fast forward 10 seconds"
                                     AutomationProperties.Name="Fast forward 10 seconds" />
                             <Button Classes="control-pill" Content="&#x23ED;&#xFE0E;"
-                                    Command="{Binding Playback.SkipForwardCommand}"
-                                    IsEnabled="{Binding Playback.HasSegments}"
+                                    Command="{Binding Playback.Preview.SkipForwardCommand}"
+                                    IsEnabled="{Binding Playback.Preview.HasSegments}"
                                     Padding="8,6" FontSize="15"
                                     ToolTip.Tip="Skip to next segment"
                                     AutomationProperties.Name="Skip to next segment" />
@@ -870,9 +870,9 @@
                     <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2"
                                 VerticalAlignment="Center" HorizontalAlignment="Right">
                         <Button Classes="control-pill" x:Name="MuteButton"
-                                Content="{Binding Playback.VolumeIconLabel}"
-                                Command="{Binding Playback.ToggleMuteCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                Content="{Binding Playback.Preview.VolumeIconLabel}"
+                                Command="{Binding Playback.Preview.ToggleMuteCommand}"
+                                IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                 Padding="6,5" FontSize="14"
                                 ToolTip.Tip="Mute / Unmute"
                                 AutomationProperties.Name="Toggle Mute" />
@@ -881,21 +881,21 @@
                                 Orientation="Horizontal"
                                 Minimum="0"
                                 Maximum="1"
-                                Value="{Binding Playback.SourceVolume, Mode=TwoWay}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                Value="{Binding Playback.Preview.SourceVolume, Mode=TwoWay}"
+                                IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                 VerticalAlignment="Center"
                                 Margin="2,0,4,0"
                                 ToolTip.Tip="Volume" />
 
                         <Button Classes="control-pill" Content="&#x25EB;&#xFE0E;"
-                                Command="{Binding Playback.ToggleSegmentPaneCommand}"
+                                Command="{Binding Playback.Preview.ToggleSegmentPaneCommand}"
                                 Padding="8,6" FontSize="14"
                                 ToolTip.Tip="Toggle side panes"
                                 AutomationProperties.Name="Toggle side panes" />
 
                         <Button Classes="control-pill" Content="&#x26F6;"
-                                Command="{Binding Playback.ToggleFullscreenCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                Command="{Binding Playback.Preview.ToggleFullscreenCommand}"
+                                IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                 Padding="6,5" FontSize="14"
                                 ToolTip.Tip="Toggle fullscreen"
                                 AutomationProperties.Name="Toggle fullscreen" />
@@ -947,7 +947,7 @@
              ═══════════════════════════════════════════════════ -->
         <Border Grid.Column="2" Width="280" Background="{DynamicResource PanelBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
-                IsVisible="{Binding Playback.IsSegmentPaneVisible}">
+                IsVisible="{Binding Playback.Preview.IsSegmentPaneVisible}">
             <Grid RowDefinitions="Auto,*">
 
                 <!-- Header -->
@@ -959,7 +959,7 @@
                                    VerticalAlignment="Center" />
                         <TextBlock Grid.Column="1" FontSize="11" Foreground="#565672"
                                     VerticalAlignment="Center" Margin="0,0,10,0"
-                                    Text="{Binding Playback.Segments.Count, StringFormat='{}{0} Items'}" />
+                                    Text="{Binding Playback.Preview.Segments.Count, StringFormat='{}{0} Items'}" />
 
                         <Button Grid.Column="2"
                                 Click="OnExportCaptionsClick"
@@ -973,7 +973,7 @@
                         </Button>
 
                         <Button Grid.Column="3"
-                                Command="{Binding Playback.RefreshSegmentsCommand}"
+                                Command="{Binding Playback.Preview.RefreshSegmentsCommand}"
                                 Background="Transparent" Padding="6,2"
                                 Foreground="#A0A0B0" ToolTip.Tip="Refresh segments data">
                             <TextBlock Text="↻" FontSize="16" />
@@ -991,8 +991,8 @@
                 <Panel Grid.Row="1">
                 <!-- Segment list -->
                 <ListBox Grid.Row="1" x:Name="SegmentList"
-                         ItemsSource="{Binding Playback.Segments}"
-                         SelectedItem="{Binding Playback.SelectedSegment}"
+                         ItemsSource="{Binding Playback.Preview.Segments}"
+                         SelectedItem="{Binding Playback.Preview.SelectedSegment}"
                          Background="Transparent"
                          BorderThickness="0"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -1071,7 +1071,7 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <StackPanel IsVisible="{Binding !Playback.HasSegments}"
+                <StackPanel IsVisible="{Binding !Playback.Preview.HasSegments}"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Spacing="4">

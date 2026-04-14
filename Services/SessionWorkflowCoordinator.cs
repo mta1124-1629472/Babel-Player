@@ -11,6 +11,7 @@ using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CoordinatorCoreServices = Babel.Player.Models.CoordinatorCoreServices;
 using CoordinatorOptions = Babel.Player.Models.CoordinatorOptions;
 
 namespace Babel.Player.Services;
@@ -115,17 +116,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Use this overload in production via <see cref="DependencyLocator"/>.
     /// </summary>
     public SessionWorkflowCoordinator(
-        SessionSnapshotStore store,
-        AppLog log,
-        AppSettings settings,
+        CoordinatorCoreServices coreServices,
         IMediaTransportManager transportManager,
         RegistryBundle registries,
         CoordinatorOptions? options = null)
     {
         options ??= CoordinatorOptions.Empty;
 
-        _store = store;
-        _log = log;
+        _store = coreServices.Store;
+        _log = coreServices.Log;
         _perSessionStore = registries.PerSessionStore;
         _recentStore = registries.RecentStore;
         _containerizedProbe = options.ContainerizedProbe;
@@ -133,14 +132,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _audioProcessingService = options.AudioProcessingService;
         _artifactReader = options.ArtifactReader ?? new SessionArtifactReader();
         _sessionSwitchService = options.SessionSwitchService
-            ?? new SessionSwitchService(registries.PerSessionStore, registries.RecentStore, log);
+            ?? new SessionSwitchService(registries.PerSessionStore, registries.RecentStore, _log);
 
-        _cpuRuntimeManager = new ManagedCpuRuntimeManager(log);
+        _cpuRuntimeManager = new ManagedCpuRuntimeManager(_log);
         TranscriptionRegistry = registries.TranscriptionRegistry;
         TranslationRegistry = registries.TranslationRegistry;
         TtsRegistry = registries.TtsRegistry;
         DiarizationRegistry = options.DiarizationRegistry;
-        CurrentSettings = settings;
+        CurrentSettings = coreServices.Settings;
         KeyStore = options.KeyStore;
         _transportManager = transportManager;
 
@@ -157,31 +156,27 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Convenience overload for tests and minimal-host scenarios.
     /// </summary>
     public SessionWorkflowCoordinator(
-        SessionSnapshotStore store,
-        AppLog log,
-        AppSettings settings,
+        CoordinatorCoreServices coreServices,
         RegistryBundle registries,
         CoordinatorOptions? options = null,
         IMediaTransport? segmentPlayer = null,
         IMediaTransport? sourcePlayer = null)
         : this(
-            store,
-            log,
-            settings,
+            coreServices,
             new MediaTransportManager(
                 segmentPlayer,
                 sourcePlayer,
                 videoOptionsFactory: () => new VideoPlaybackOptions(
-                    HwdecMode:           settings.VideoHwdec,
-                    GpuApi:              settings.VideoGpuApi,
-                    UseGpuNext:          settings.VideoUseGpuNext,
-                    VsrEnabled:          settings.VideoVsrEnabled,
-                    HdrEnabled:          settings.VideoHdrEnabled,
-                    AllowHdrPassthrough: settings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
-                    ToneMapping:         settings.VideoToneMapping,
-                    TargetPeak:          settings.VideoTargetPeak,
-                    HdrComputePeak:      settings.VideoHdrComputePeak),
-                log: log),
+                    HwdecMode:           coreServices.Settings.VideoHwdec,
+                    GpuApi:              coreServices.Settings.VideoGpuApi,
+                    UseGpuNext:          coreServices.Settings.VideoUseGpuNext,
+                    VsrEnabled:          coreServices.Settings.VideoVsrEnabled,
+                    HdrEnabled:          coreServices.Settings.VideoHdrEnabled,
+                    AllowHdrPassthrough: coreServices.Settings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
+                    ToneMapping:         coreServices.Settings.VideoToneMapping,
+                    TargetPeak:          coreServices.Settings.VideoTargetPeak,
+                    HdrComputePeak:      coreServices.Settings.VideoHdrComputePeak),
+                log: coreServices.Log),
             registries,
             options)
     {
