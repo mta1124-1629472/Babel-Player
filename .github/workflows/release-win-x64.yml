@@ -129,6 +129,8 @@ jobs:
           $inferenceFiles = @(
             "inference/main.py",
             "inference/requirements.txt",
+            "inference/cpu-requirements.txt",
+            "inference/cpu-constraints.txt",
             "inference/gpu-requirements.txt",
             "inference/gpu-constraints.txt"
           )

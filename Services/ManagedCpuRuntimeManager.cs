@@ -657,6 +657,8 @@ print(json.dumps(payload))
             await stderrTask.ConfigureAwait(false));
     }
 
+    // Marker format includes PythonVersion plus labeled requirements/constraints bodies so
+    // upgrades and manifest edits invalidate the venv consistently with tests.
     private string ComputeMarkerHash(string requirementsPath, string constraintsPath)
     {
         var requirementsContent = File.ReadAllText(requirementsPath);
