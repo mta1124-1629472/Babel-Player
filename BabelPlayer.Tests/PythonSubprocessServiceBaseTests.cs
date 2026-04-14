@@ -371,14 +371,17 @@ for i, arg in enumerate(sys.argv):
         var tempRoot = Path.Combine(Path.GetTempPath(), $"cpu-runtime-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);
 
-        var requirementsPath = Path.Combine(tempRoot, "requirements.txt");
+        var requirementsPath = Path.Combine(tempRoot, "cpu-requirements.txt");
+        var constraintsPath = Path.Combine(tempRoot, "cpu-constraints.txt");
         await File.WriteAllTextAsync(requirementsPath, "edge-tts==7.2.8");
+        await File.WriteAllTextAsync(constraintsPath, "edge-tts==7.2.8");
 
         var runtimeManager = new ManagedCpuRuntimeManager(
             log,
             uvResolver: () => null,
             cpuRuntimeRootResolver: () => tempRoot,
-            requirementsPathResolver: () => requirementsPath);
+            requirementsPathResolver: () => requirementsPath,
+            constraintsPathResolver: () => constraintsPath);
 
         var pythonPath = runtimeManager.GetPythonExecutablePath();
         var service = new TestPythonService(log, pythonPath, runtimeManager);

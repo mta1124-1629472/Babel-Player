@@ -84,6 +84,10 @@ This pass intentionally fixes the managed inference stack as a coordinated syste
 
 The automated verification in this environment is strong enough to confirm the code paths, host-health semantics, and runtime ownership split. It does not substitute for a real app-shell smoke with actual provider startup and media execution.
 
+Managed CPU runtime dependency manifests now live at `inference/cpu-requirements.txt` and `inference/cpu-constraints.txt`. If stale validation state persists across updates, clear `%LOCALAPPDATA%/BabelPlayer/runtime/managed-cpu/.cpu-runtime-validation.json` and `.cpu-bootstrap-version` before re-running bootstrap.
+
+`ManagedCpuRuntimeManager` hashes both CPU files when evaluating `.cpu-bootstrap-version`, so any content change in either file automatically forces a re-bootstrap on the next managed CPU runtime startup.
+
 ## Conclusion
 
 

@@ -251,6 +251,20 @@ public sealed class InferenceRequirementsTests
         Assert.DoesNotContain(lines, line => line.Contains("pyannote.audio", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void CpuConstraints_UsesKnownStablePinnedVersions()
+    {
+        var constraintsPath = Path.Combine(FindInferenceDirectory(), "cpu-constraints.txt");
+        var lines = ReadRequirementsLines(constraintsPath);
+
+        Assert.Contains("torch==2.5.1", lines);
+        Assert.Contains("torchaudio==2.5.1", lines);
+        Assert.Contains("onnxruntime==1.19.2", lines);
+        Assert.Contains("transformers==4.46.3", lines);
+        Assert.Contains("silero-vad==5.1.0", lines);
+        Assert.Contains("openai-whisper==20240930", lines);
+    }
+
     [Theory]
     [InlineData("Services/EdgeTtsProvider.cs")]
     [InlineData("Services/CTranslate2TranslationProvider.cs")]
