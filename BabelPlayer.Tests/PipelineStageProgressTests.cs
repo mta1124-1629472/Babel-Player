@@ -587,5 +587,14 @@ public sealed class PipelineStageProgressTests() : IDisposable
             File.WriteAllText(outputPath, "fake extracted clip");
             return Task.CompletedTask;
         }
+
+        public Task ExtractFullAudioAsync(string inputPath, string outputPath, CancellationToken cancellationToken)
+        {
+            var outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            File.WriteAllText(outputPath, "fake full audio");
+            return Task.CompletedTask;
+        }
     }
 }

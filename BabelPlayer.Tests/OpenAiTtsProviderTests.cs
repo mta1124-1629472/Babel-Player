@@ -290,5 +290,8 @@ public sealed class OpenAiTtsProviderTests : IDisposable
 
         public Task ExtractAudioClipAsync(string inputPath, string outputPath, double startTimeSeconds, double durationSeconds, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+
+        public Task ExtractFullAudioAsync(string inputPath, string outputPath, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

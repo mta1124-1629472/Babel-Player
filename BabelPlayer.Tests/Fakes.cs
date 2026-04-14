@@ -203,4 +203,11 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         await File.WriteAllBytesAsync(outputPath, [0xCC, 0xDD], cancellationToken);
     }
+
+    public async Task ExtractFullAudioAsync(string inputPath, string outputPath, CancellationToken cancellationToken)
+    {
+        var dir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        await File.WriteAllBytesAsync(outputPath, [0xEE, 0xFF], cancellationToken);
+    }
 }

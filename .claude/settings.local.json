@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile inference/main.py)",
+      "Bash(taskkill /F /PID 19180)",
+      "Bash(taskkill //F //PID 19180)",
+      "Bash(git stash:*)",
+      "Bash(python scripts/check-architecture.py)"
+    ]
+  }
+}

@@ -93,6 +93,8 @@ public sealed partial class SessionWorkflowCoordinator
     /// A <see cref="DiarizationExecutionOutcome"/> containing whether speaker assignments were applied to transcript/translation,
     /// the detected speaker count, and the diarized segment count.
     /// </returns>
+    private static readonly string[] VideoExtensions = [".mp4", ".avi", ".mkv", ".mov"];
+
     private async Task<DiarizationExecutionOutcome> ExecuteDiarizationAsync(
         string audioPath,
         string transcriptPath,
@@ -112,96 +114,132 @@ public sealed partial class SessionWorkflowCoordinator
             CurrentSettings.DiarizationMinSpeakers,
             CurrentSettings.DiarizationMaxSpeakers);
 
-        ProviderReadiness readiness;
-        IDiarizationProvider provider;
+        // Extract audio from video files — diarization providers cannot decode video containers.
+        var effectiveAudioPath = audioPath;
+        string? tempExtractedAudio = null;
+        var extension = Path.GetExtension(audioPath).ToLowerInvariant();
 
-        if (usesContainerizedRuntime)
+        if (Array.Exists(VideoExtensions, ext => ext == extension))
         {
-            readiness = ContainerizedProbe is not null
-                ? await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
-                        CurrentSettings,
-                        CurrentSettings.DiarizationProvider,
-                        ContainerizedProbe,
-                        ct)
-                    .ConfigureAwait(false)
-                : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+            if (_audioProcessingService is null)
+                throw new PipelineProviderException(
+                    "Cannot diarize video files without audio processing support (ffmpeg).");
 
-            if (!readiness.IsReady)
+            tempExtractedAudio = Path.Combine(Path.GetTempPath(), $"diar_{Guid.NewGuid():N}.wav");
+            _log.Info($"Extracting audio from video for diarization: {audioPath} → {tempExtractedAudio}");
+            await _audioProcessingService.ExtractFullAudioAsync(audioPath, tempExtractedAudio, ct)
+                .ConfigureAwait(false);
+            effectiveAudioPath = tempExtractedAudio;
+        }
+
+        try
+        {
+            ProviderReadiness readiness;
+            IDiarizationProvider provider;
+
+            if (usesContainerizedRuntime)
             {
-                var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
-                _log.Warning($"Diarization skipped: {blockingReason}");
-                throw new PipelineProviderException(blockingReason);
+                readiness = ContainerizedProbe is not null
+                    ? await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
+                            CurrentSettings,
+                            CurrentSettings.DiarizationProvider,
+                            ContainerizedProbe,
+                            ct)
+                        .ConfigureAwait(false)
+                    : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+
+                if (!readiness.IsReady)
+                {
+                    var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
+                    _log.Warning($"Diarization skipped: {blockingReason}");
+                    throw new PipelineProviderException(blockingReason);
+                }
+
+                provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+            }
+            else
+            {
+                provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+                await provider.EnsureReadyAsync(CurrentSettings, ct: ct).ConfigureAwait(false);
+                readiness = provider.CheckReadiness(CurrentSettings, KeyStore);
+
+                if (!readiness.IsReady)
+                {
+                    var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
+                    _log.Warning($"Diarization skipped: {blockingReason}");
+                    throw new PipelineProviderException(blockingReason);
+                }
             }
 
-            provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
-        }
-        else
-        {
-            provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
-            await provider.EnsureReadyAsync(CurrentSettings, ct: ct).ConfigureAwait(false);
-            readiness = provider.CheckReadiness(CurrentSettings, KeyStore);
+            var request = new DiarizationRequest(
+                SourceAudioPath:  effectiveAudioPath,
+                MinSpeakers:      CurrentSettings.DiarizationMinSpeakers,
+                MaxSpeakers:      CurrentSettings.DiarizationMaxSpeakers);
 
-            if (!readiness.IsReady)
+            _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={effectiveAudioPath}, " +
+                      $"minSpeakers={CurrentSettings.DiarizationMinSpeakers?.ToString() ?? "auto"}, " +
+                      $"maxSpeakers={CurrentSettings.DiarizationMaxSpeakers?.ToString() ?? "auto"}");
+
+            var result = await provider.DiarizeAsync(request, ct);
+
+            if (!result.Success)
             {
-                var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
-                _log.Warning($"Diarization skipped: {blockingReason}");
-                throw new PipelineProviderException(blockingReason);
+                _log.Warning($"Diarization failed: {result.ErrorMessage}");
+                throw new InvalidOperationException(result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
+            }
+
+            var transcriptChanged = await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
+            var translationChanged = false;
+
+            if (!string.IsNullOrWhiteSpace(CurrentSession.TranslationPath) &&
+                File.Exists(CurrentSession.TranslationPath))
+            {
+                translationChanged = await MergeSpeakerIdsIntoTranslationAsync(
+                    transcriptPath,
+                    CurrentSession.TranslationPath,
+                    ct);
+            }
+
+            var nextStage = resultingStage ?? (
+                CurrentSession.Stage >= SessionWorkflowStage.Translated
+                    ? CurrentSession.Stage
+                    : SessionWorkflowStage.Diarized);
+            var nextStatusMessage = statusMessage ?? (
+                nextStage >= SessionWorkflowStage.Translated
+                    ? "Diarization complete. Speaker assignments updated."
+                    : "Speaker mapping ready. Assign voices, then continue.");
+
+            CurrentSession = CurrentSession with
+            {
+                Stage = nextStage,
+                DiarizationProvider = CurrentSettings.DiarizationProvider,
+                SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+                StatusMessage = nextStatusMessage,
+            };
+            SaveCurrentSession();
+
+            _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
+
+            return new DiarizationExecutionOutcome(
+                SpeakerAssignmentsChanged: transcriptChanged || translationChanged,
+                SpeakerCount: result.SpeakerCount,
+                SegmentCount: result.Segments.Count);
+        }
+        finally
+        {
+            if (tempExtractedAudio is not null)
+            {
+                try
+                {
+                    if (File.Exists(tempExtractedAudio))
+                        File.Delete(tempExtractedAudio);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning($"Failed to clean up temp diarization audio: {ex.Message}");
+                }
             }
         }
-
-        var request = new DiarizationRequest(
-            SourceAudioPath:  audioPath,
-            MinSpeakers:      CurrentSettings.DiarizationMinSpeakers,
-            MaxSpeakers:      CurrentSettings.DiarizationMaxSpeakers);
-
-        _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={audioPath}, " +
-                  $"minSpeakers={CurrentSettings.DiarizationMinSpeakers?.ToString() ?? "auto"}, " +
-                  $"maxSpeakers={CurrentSettings.DiarizationMaxSpeakers?.ToString() ?? "auto"}");
-
-        var result = await provider.DiarizeAsync(request, ct);
-
-        if (!result.Success)
-        {
-            _log.Warning($"Diarization failed: {result.ErrorMessage}");
-            throw new InvalidOperationException(result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
-        }
-
-        var transcriptChanged = await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
-        var translationChanged = false;
-
-        if (!string.IsNullOrWhiteSpace(CurrentSession.TranslationPath) &&
-            File.Exists(CurrentSession.TranslationPath))
-        {
-            translationChanged = await MergeSpeakerIdsIntoTranslationAsync(
-                transcriptPath,
-                CurrentSession.TranslationPath,
-                ct);
-        }
-
-        var nextStage = resultingStage ?? (
-            CurrentSession.Stage >= SessionWorkflowStage.Translated
-                ? CurrentSession.Stage
-                : SessionWorkflowStage.Diarized);
-        var nextStatusMessage = statusMessage ?? (
-            nextStage >= SessionWorkflowStage.Translated
-                ? "Diarization complete. Speaker assignments updated."
-                : "Speaker mapping ready. Assign voices, then continue.");
-
-        CurrentSession = CurrentSession with
-        {
-            Stage = nextStage,
-            DiarizationProvider = CurrentSettings.DiarizationProvider,
-            SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
-            StatusMessage = nextStatusMessage,
-        };
-        SaveCurrentSession();
-
-        _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
-
-        return new DiarizationExecutionOutcome(
-            SpeakerAssignmentsChanged: transcriptChanged || translationChanged,
-            SpeakerCount: result.SpeakerCount,
-            SegmentCount: result.Segments.Count);
     }
 
     private void ValidateDiarizationSpeakerBounds(int? minSpeakers, int? maxSpeakers)

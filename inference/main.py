@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from time import perf_counter
 from pathlib import Path
 from datetime import datetime, timezone
@@ -1741,22 +1742,60 @@ async def translate(
 # Diarization
 # ============================================================================
 
+
+def _ensure_wav_audio(audio_path: Path) -> Path:
+    """Convert non-WAV audio/video to 16 kHz mono WAV for NeMo compatibility."""
+    if audio_path.suffix.lower() == ".wav":
+        return audio_path
+    wav_path = audio_path.with_suffix(".wav")
+    proc = subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-i", str(audio_path),
+            "-vn",
+            "-acodec", "pcm_s16le",
+            "-ar", "16000",
+            "-ac", "1",
+            str(wav_path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg audio conversion failed: {proc.stderr[-500:]}")
+    audio_path.unlink(missing_ok=True)
+    return wav_path
+
+
+def _deferred_cleanup_temp(path: Path) -> None:
+    """Retry-based temp file cleanup for Windows file-locking resilience."""
+    for attempt in range(3):
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except PermissionError:
+            if attempt < 2:
+                time.sleep(0.5)
+    logger.warning("Could not delete temp file after retries: %s", path)
+
+
 @app.post("/diarize", response_model=DiarizationResponse)
 async def diarize(
     audio: UploadFile = File(...),
     min_speakers: Optional[int] = Form(None),
     max_speakers: Optional[int] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Perform speaker diarization on uploaded audio and return a structured diarization response.
-    
+
     Parameters:
         min_speakers (Optional[int]): Minimum number of speakers to detect; used as a hint when provided.
         max_speakers (Optional[int]): Maximum number of speakers to detect; used as a hint when provided.
-    
+
     Returns:
         DiarizationResponse: Object containing the list of diarization segments and the detected speaker count.
-    
+
     Raises:
         HTTPException: If diarization fails or the uploaded audio cannot be processed.
     """
@@ -1765,22 +1804,24 @@ async def diarize(
     try:
         temp_audio_path = _stage_audio_upload_to_temp(audio, "diar")
         temp_audio_path.write_bytes(await audio.read())
+        temp_audio_path = _ensure_wav_audio(temp_audio_path)
         segments, speaker_count = await asyncio.to_thread(
             _run_nemo_diarization,
             temp_audio_path,
             min_speakers,
             max_speakers,
         )
-        return _build_diarization_response(segments, speaker_count)
+        response = _build_diarization_response(segments, speaker_count)
+        background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
+        return response
 
     except HTTPException:
         raise
     except Exception as exc:
         logger.error(f"Diarization failed: {exc}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(exc))
-    finally:
         if temp_audio_path:
-            temp_audio_path.unlink(missing_ok=True)
+            background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/diarize/wespeaker", response_model=DiarizationResponse)

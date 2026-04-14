@@ -35,4 +35,15 @@ public interface IAudioProcessingService
         double startTimeSeconds,
         double durationSeconds,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Extracts the full audio track from a media file as a 16 kHz mono WAV.
+    /// </summary>
+    /// <param name="inputPath">Source media path (video or audio).</param>
+    /// <param name="outputPath">Target WAV path.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task ExtractFullAudioAsync(
+        string inputPath,
+        string outputPath,
+        CancellationToken cancellationToken);
 }
