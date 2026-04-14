@@ -35,6 +35,9 @@ public partial class SpeakerReferenceWizardWindow : Window
             return;
         }
 
+        if (!item.ReferenceActionsEnabled)
+            return;
+
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = $"Select reference clip for {item.SpeakerId}",
@@ -75,6 +78,9 @@ public partial class SpeakerReferenceWizardWindow : Window
             return;
         }
 
+        if (!item.ReferenceActionsEnabled)
+            return;
+
         var firstAttempt = await vm.UseSelectedSegmentAsync(item, allowSpeakerMismatch: false);
         if (firstAttempt.Status != UseSelectedSegmentStatus.RequiresSpeakerMismatchConfirmation)
             return;
@@ -96,7 +102,32 @@ public partial class SpeakerReferenceWizardWindow : Window
             return;
         }
 
+        if (!item.ReferenceActionsEnabled)
+            return;
+
         await vm.AutoPickAnotherCommand.ExecuteAsync(item);
+    }
+
+    private void OnUseActiveTtsVoiceClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not SpeakerReferenceWizardViewModel vm ||
+            sender is not Button { Tag: SpeakerReferenceDraftItem item })
+        {
+            return;
+        }
+
+        vm.UseActiveTtsVoiceForSpeaker(item);
+    }
+
+    private void OnClearVoiceClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not SpeakerReferenceWizardViewModel vm ||
+            sender is not Button { Tag: SpeakerReferenceDraftItem item })
+        {
+            return;
+        }
+
+        vm.ClearDraftVoiceForSpeaker(item);
     }
 
     private async void OnFinishClick(object? sender, RoutedEventArgs e)

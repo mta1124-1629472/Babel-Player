@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         x:Class="Babel.Player.Views.SpeakerReferenceWizardWindow"
         x:DataType="vm:SpeakerReferenceWizardViewModel"
-        Title="Speaker Reference Setup"
+        Title="Speaker setup wizard"
         Width="940"
         Height="680"
         MinWidth="820"
@@ -17,8 +17,8 @@
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="18">
         <StackPanel Grid.Row="0" Spacing="6">
-            <TextBlock Text="Speaker Reference Setup" FontSize="20" FontWeight="SemiBold" />
-            <TextBlock Text="Review every detected speaker. Changes stay in draft mode until you choose Finish."
+            <TextBlock Text="Speaker setup wizard" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="Configure per-speaker voice and (for Qwen) reference clips. Changes stay in draft mode until you choose Finish."
                        FontSize="12"
                        Opacity="0.75"
                        TextWrapping="Wrap" />
@@ -56,49 +56,71 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="model:SpeakerReferenceDraftItem">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,10">
-                                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto" RowSpacing="6" ColumnSpacing="12">
+                                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto" RowSpacing="6" ColumnSpacing="12">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding SpeakerId}" FontWeight="SemiBold" FontSize="13" />
                                     <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding LastActionLabel}" Opacity="0.75" />
                                     <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding ConfidenceTier}" FontWeight="SemiBold" />
 
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Clip" Opacity="0.7" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Voice" Opacity="0.7" />
                                     <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
-                                               Text="{Binding EffectiveReferencePath, TargetNullValue='—'}"
-                                               TextWrapping="Wrap"
-                                               FontFamily="Consolas,monospace"
-                                               FontSize="11" />
-
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Reason" Opacity="0.7" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
-                                               Text="{Binding ConfidenceReasonSummary}"
+                                               Text="{Binding EffectiveAssignedVoice, TargetNullValue='—'}"
                                                TextWrapping="Wrap"
                                                FontSize="11" />
 
-                                    <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
-                                          ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
-                                        <Button Grid.Column="0"
-                                                Tag="{Binding}"
+                                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+                                                Orientation="Horizontal" Spacing="8">
+                                        <Button Tag="{Binding}"
                                                 Click="OnKeepAutoClick"
                                                 Content="Keep auto"
                                                 Padding="8,6" />
-                                        <Button Grid.Column="1"
+                                        <Button Tag="{Binding}"
+                                                Click="OnUseActiveTtsVoiceClick"
+                                                Content="Use active TTS voice"
+                                                Padding="8,6" />
+                                        <Button Tag="{Binding}"
+                                                Click="OnClearVoiceClick"
+                                                Content="Clear voice"
+                                                Padding="8,6" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Clip" Opacity="0.7"
+                                               IsVisible="{Binding ReferenceActionsEnabled}" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                                               Text="{Binding EffectiveReferencePath, TargetNullValue='—'}"
+                                               TextWrapping="Wrap"
+                                               FontFamily="Consolas,monospace"
+                                               FontSize="11"
+                                               IsVisible="{Binding ReferenceActionsEnabled}" />
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Reason" Opacity="0.7"
+                                               IsVisible="{Binding ReferenceActionsEnabled}" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2"
+                                               Text="{Binding ConfidenceReasonSummary}"
+                                               TextWrapping="Wrap"
+                                               FontSize="11"
+                                               IsVisible="{Binding ReferenceActionsEnabled}" />
+
+                                    <Grid Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                                          ColumnDefinitions="*,*,*" ColumnSpacing="8"
+                                          IsVisible="{Binding ReferenceActionsEnabled}">
+                                        <Button Grid.Column="0"
                                                 Tag="{Binding}"
                                                 Click="OnBrowseFileClick"
                                                 Content="Browse file"
                                                 Padding="8,6" />
-                                        <Button Grid.Column="2"
+                                        <Button Grid.Column="1"
                                                 Tag="{Binding}"
                                                 Click="OnUseSelectedSegmentClick"
                                                 Content="Use selected segment"
                                                 Padding="8,6" />
-                                        <Button Grid.Column="3"
+                                        <Button Grid.Column="2"
                                                 Tag="{Binding}"
                                                 Click="OnAutoPickAnotherClick"
                                                 Content="Auto-pick another"
                                                 Padding="8,6" />
                                     </Grid>
 
-                                    <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3"
                                                Text="{Binding InlineError}"
                                                Foreground="{DynamicResource DestructiveBrush}"
                                                FontSize="11"
@@ -114,7 +136,7 @@
 
         <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" Margin="0,12,0,0" ColumnSpacing="8">
             <TextBlock Grid.Column="0"
-                       Text="Finish applies only changed speaker mappings. Cancel discards all draft edits."
+                       Text="Finish applies only changed voice and reference mappings. Cancel discards all draft edits."
                        VerticalAlignment="Center"
                        Opacity="0.75"
                        TextWrapping="Wrap" />
