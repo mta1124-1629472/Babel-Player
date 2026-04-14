@@ -51,11 +51,14 @@ public static class DependencyLocator
     public static string? FindUv()
     {
         var appDir = AppContext.BaseDirectory;
+        var rid = WindowsPackagingPaths.NativeRidFolder;
         var candidates = new[]
         {
             Path.Combine(appDir, "uv.exe"),
             Path.Combine(appDir, "tools", "uv.exe"),
+            Path.Combine(appDir, "tools", rid, "uv.exe"),
             Path.Combine(appDir, "tools", "win-x64", "uv.exe"),
+            Path.Combine(appDir, "tools", "win-arm64", "uv.exe"),
             "uv",
         };
         return Probe(candidates, "--version");

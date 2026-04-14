@@ -28,10 +28,15 @@
     <ProjectReference Include="..\BabelPlayer.csproj" />
   </ItemGroup>
 
-  <!-- Copy libmpv DLL to output directory when present (fetched via scripts/fetch-win-native-deps.ps1) -->
-  <ItemGroup Condition="Exists('..\native\win-x64\libmpv-2.dll')">
-    <None Include="..\native\win-x64\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+  <!-- Staged after optional FetchWinNativeDepsIfNeeded (../Directory.Build.targets) so first build after clone works. -->
+  <Target Name="IncludeLibMpvForTests" BeforeTargets="AssignTargetPaths" AfterTargets="FetchWinNativeDepsIfNeeded" Condition="'$(OS)' == 'Windows_NT'">
+    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\native\win-x64\libmpv-2.dll')">
+      <None Include="$(MSBuildProjectDirectory)\..\native\win-x64\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\native\win-arm64\libmpv-2.dll')">
+      <None Include="$(MSBuildProjectDirectory)\..\native\win-arm64\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
   <!-- Copy test media to output directory (optional — file may not be committed) -->
   <ItemGroup Condition="Exists('Assets\test-assets\video\sample.mp4')">

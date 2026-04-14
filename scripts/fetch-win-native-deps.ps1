@@ -5,12 +5,19 @@
 
 .DESCRIPTION
   - libmpv-2.dll: pinned zhongfly/mpv-winbuild libmpv dev archive (GitHub Releases)
-  - uv.exe: latest astral-sh/uv Windows x86_64 zip
+  - uv.exe: astral-sh/uv Windows zip (x86_64 or aarch64)
   - ffmpeg.exe: optional; pinned GyanD codexffmpeg build (same source as release workflow)
+
+  On ARM64 Windows, artifacts go under native/win-arm64 and tools/win-arm64.
+  On x64 Windows, under native/win-x64 and tools/win-x64.
+
+  Override architecture with -Architecture for CI (e.g. fetch ARM64 deps on an AMD64 runner).
 
  Run from repo root or any directory; paths are resolved relative to this script.
 #>
 param(
+    [ValidateSet("Auto", "X64", "Arm64")]
+    [string] $Architecture = "Auto",
     [switch] $IncludeFfmpeg,
     [string] $FfmpegVersion = $env:FFMPEG_VERSION
 )
@@ -18,18 +25,47 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Get-TargetArchitecture {
+    if ($Architecture -ne "Auto") {
+        return $Architecture
+    }
+    $p = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
+    switch ($p) {
+        "Arm64" { return "Arm64" }
+        "X64" { return "X64" }
+        default {
+            throw "Unsupported process architecture for this script: $p (expected Arm64 or X64)."
+        }
+    }
+}
+
+$targetArch = Get-TargetArchitecture
+$rid = if ($targetArch -eq "Arm64") { "win-arm64" } else { "win-x64" }
+
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$NativeDir = Join-Path $RepoRoot "native/win-x64"
-$ToolsDir = Join-Path $RepoRoot "tools/win-x64"
+$NativeDir = Join-Path $RepoRoot "native/$rid"
+$ToolsDir = Join-Path $RepoRoot "tools/$rid"
 
 New-Item -ItemType Directory -Force -Path $NativeDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ToolsDir | Out-Null
 
 # Portable 7-Zip CLI (extracts .7z libmpv archives on clean Windows runners).
 $SevenZipRemote = "https://www.7-zip.org/a/7zr.exe"
-# Pinned libmpv dev package (contains libmpv-2.dll). Update only after validation.
-$LibmpvDevArchiveUrl = "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-04-13-da4789c/mpv-dev-x86_64-v3-20260413-git-da4789c.7z"
-$UvZipUrl = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
+
+# Pinned libmpv dev packages (contain libmpv-2.dll). Update only after validation.
+$LibmpvDevArchiveUrl = if ($targetArch -eq "Arm64") {
+    "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-04-14-da4789c/mpv-dev-aarch64-20260414-git-da4789c.7z"
+} else {
+    "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-04-13-da4789c/mpv-dev-x86_64-v3-20260413-git-da4789c.7z"
+}
+
+$UvZipUrl = if ($targetArch -eq "Arm64") {
+    "https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-pc-windows-msvc.zip"
+} else {
+    "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
+}
+
+Write-Host "fetch-win-native-deps: architecture=$targetArch rid=$rid"
 
 $scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("babel-fetch-" + [Guid]::NewGuid().ToString("n"))
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
