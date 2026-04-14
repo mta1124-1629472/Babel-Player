@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,26 +19,50 @@ public enum ManagedCpuState
     Failed,
 }
 
+internal sealed record ManagedCpuRuntimeValidationRecord
+{
+    public required string MarkerHash { get; init; }
+
+    public required bool IsValid { get; init; }
+
+    public string? FailureReason { get; init; }
+
+    public Dictionary<string, string?> PackageVersions { get; init; } = [];
+}
+
+internal sealed record ManagedCpuRuntimeInspection(
+    ManagedCpuState State,
+    bool NeedsBootstrap,
+    string? Detail,
+    ManagedCpuRuntimeValidationRecord? ValidationRecord = null);
+
 public sealed class ManagedCpuRuntimeManager
 {
     private const string PythonVersion = "3.11.6";
     private static readonly SemaphoreSlim InstallGate = new(1, 1);
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+    };
 
     private readonly AppLog _log;
     private readonly Func<string?> _uvResolver;
     private readonly string _cpuRuntimeRoot;
     private readonly Func<string> _requirementsPathResolver;
+    private readonly Func<string> _constraintsPathResolver;
 
     public ManagedCpuRuntimeManager(
         AppLog log,
         Func<string?>? uvResolver = null,
         Func<string>? cpuRuntimeRootResolver = null,
-        Func<string>? requirementsPathResolver = null)
+        Func<string>? requirementsPathResolver = null,
+        Func<string>? constraintsPathResolver = null)
     {
         _log = log;
         _uvResolver = uvResolver ?? DependencyLocator.FindUv;
         _cpuRuntimeRoot = (cpuRuntimeRootResolver ?? ManagedRuntimeLayout.GetCpuRuntimeRoot)();
         _requirementsPathResolver = requirementsPathResolver ?? ResolveCpuRequirementsPath;
+        _constraintsPathResolver = constraintsPathResolver ?? ResolveCpuConstraintsPath;
     }
 
     public ManagedCpuState State { get; private set; } = ManagedCpuState.NotInstalled;
@@ -49,68 +76,24 @@ public sealed class ManagedCpuRuntimeManager
     public string BootstrapStatusLine { get; private set; } = string.Empty;
 
     /// <summary>
-    /// True when the CPU venv needs to be (re)installed — either missing or requirements changed.
+    /// True when the CPU venv needs to be (re)installed — either missing, stale, or never validated.
     /// </summary>
     private bool? _cachedNeedsBootstrap;
     private readonly object _bootstrapCacheLock = new();
 
-    public async Task<bool> CheckNeedsBootstrapAsync(CancellationToken cancellationToken = default)
+    public Task<bool> CheckNeedsBootstrapAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         lock (_bootstrapCacheLock)
         {
             if (_cachedNeedsBootstrap.HasValue)
-                return _cachedNeedsBootstrap.Value;
+                return Task.FromResult(_cachedNeedsBootstrap.Value);
         }
 
-        var pythonPath = GetPythonExecutablePath();
-        if (!File.Exists(pythonPath))
-        {
-            lock (_bootstrapCacheLock)
-            {
-                _cachedNeedsBootstrap = true;
-            }
-            return true;
-        }
-        var markerPath = GetBootstrapMarkerPath();
-        if (!File.Exists(markerPath))
-        {
-            lock (_bootstrapCacheLock)
-            {
-                _cachedNeedsBootstrap = true;
-            }
-            return true;
-        }
-        try
-        {
-            var stored = await File.ReadAllTextAsync(markerPath, cancellationToken).ConfigureAwait(false);
-            stored = stored.Trim();
-            var requirementsPath = _requirementsPathResolver();
-            if (!File.Exists(requirementsPath))
-            {
-                lock (_bootstrapCacheLock)
-                {
-                    _cachedNeedsBootstrap = true;
-                }
-                return true;
-            }
-
-            var hash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
-            var result = !string.Equals(stored, hash, StringComparison.Ordinal);
-            lock (_bootstrapCacheLock)
-            {
-                _cachedNeedsBootstrap = result;
-            }
-            return result;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            // Do not cache on transient I/O errors; a subsequent read may succeed.
-            return true;
-        }
+        var inspection = InspectRuntimeState();
+        CacheNeedsBootstrap(inspection.NeedsBootstrap);
+        return Task.FromResult(inspection.NeedsBootstrap);
     }
 
     public void RequestEnsureInstalled(Action<string>? onStatusLine = null)
@@ -125,10 +108,11 @@ public sealed class ManagedCpuRuntimeManager
         Action<string>? onStatusLine = null,
         CancellationToken cancellationToken = default)
     {
-        if (!await CheckNeedsBootstrapAsync(cancellationToken).ConfigureAwait(false))
+        var inspection = InspectRuntimeState();
+        CacheNeedsBootstrap(inspection.NeedsBootstrap);
+        if (!inspection.NeedsBootstrap)
         {
-            State = ManagedCpuState.Ready;
-            _log.Info("CPU runtime: already installed and up to date.");
+            ApplyInspection(inspection, logReadyState: true);
             return;
         }
 
@@ -136,9 +120,11 @@ public sealed class ManagedCpuRuntimeManager
         try
         {
             // Re-check under lock in case a concurrent call already bootstrapped.
-            if (!await CheckNeedsBootstrapAsync(cancellationToken).ConfigureAwait(false))
+            inspection = InspectRuntimeState();
+            CacheNeedsBootstrap(inspection.NeedsBootstrap);
+            if (!inspection.NeedsBootstrap)
             {
-                State = ManagedCpuState.Ready;
+                ApplyInspection(inspection, logReadyState: true);
                 return;
             }
 
@@ -166,6 +152,129 @@ public sealed class ManagedCpuRuntimeManager
     public string GetBootstrapMarkerPath() =>
         Path.Combine(RuntimeRoot, ".cpu-bootstrap-version");
 
+    public string GetValidationRecordPath() =>
+        Path.Combine(RuntimeRoot, ".cpu-runtime-validation.json");
+
+    internal ManagedCpuRuntimeInspection InspectRuntimeState()
+    {
+        var requirementsPath = _requirementsPathResolver();
+        if (!File.Exists(requirementsPath))
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.Failed,
+                NeedsBootstrap: false,
+                $"CPU requirements file not found: {requirementsPath}");
+        }
+
+        var constraintsPath = _constraintsPathResolver();
+        if (!File.Exists(constraintsPath))
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.Failed,
+                NeedsBootstrap: false,
+                $"CPU constraints file not found: {constraintsPath}");
+        }
+
+        var pythonPath = GetPythonExecutablePath();
+        if (!File.Exists(pythonPath))
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.NotInstalled,
+                NeedsBootstrap: true,
+                "Managed CPU runtime is not installed.");
+        }
+
+        var markerPath = GetBootstrapMarkerPath();
+        if (!File.Exists(markerPath))
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.NotInstalled,
+                NeedsBootstrap: true,
+                "Managed CPU runtime bootstrap marker is missing.");
+        }
+
+        string expectedHash;
+        try
+        {
+            expectedHash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        }
+        catch (Exception ex)
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.Failed,
+                NeedsBootstrap: false,
+                $"Failed to compute managed CPU runtime marker hash: {ex.Message}");
+        }
+
+        string storedHash;
+        try
+        {
+            storedHash = File.ReadAllText(markerPath).Trim();
+        }
+        catch (Exception)
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.NotInstalled,
+                NeedsBootstrap: true,
+                "Managed CPU runtime bootstrap marker could not be read.");
+        }
+
+        if (!string.Equals(storedHash, expectedHash, StringComparison.Ordinal))
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.NotInstalled,
+                NeedsBootstrap: true,
+                "Managed CPU runtime dependencies changed and require reinstall.");
+        }
+
+        var validationPath = GetValidationRecordPath();
+        if (!File.Exists(validationPath))
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.NotInstalled,
+                NeedsBootstrap: true,
+                "Managed CPU runtime has not been validated yet.");
+        }
+
+        ManagedCpuRuntimeValidationRecord? validationRecord;
+        try
+        {
+            validationRecord = JsonSerializer.Deserialize<ManagedCpuRuntimeValidationRecord>(
+                File.ReadAllText(validationPath),
+                JsonOptions);
+        }
+        catch (Exception)
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.NotInstalled,
+                NeedsBootstrap: true,
+                "Managed CPU runtime validation record is unreadable.");
+        }
+
+        if (validationRecord is null || !string.Equals(validationRecord.MarkerHash, expectedHash, StringComparison.Ordinal))
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.NotInstalled,
+                NeedsBootstrap: true,
+                "Managed CPU runtime validation record is stale.");
+        }
+
+        if (!validationRecord.IsValid)
+        {
+            return new ManagedCpuRuntimeInspection(
+                ManagedCpuState.Failed,
+                NeedsBootstrap: false,
+                validationRecord.FailureReason ?? "Managed CPU runtime validation failed.",
+                validationRecord);
+        }
+
+        return new ManagedCpuRuntimeInspection(
+            ManagedCpuState.Ready,
+            NeedsBootstrap: false,
+            "Managed CPU runtime validated and ready.",
+            validationRecord);
+    }
+
     private async Task RunBootstrapAsync(
         Action<string>? onStatusLine,
         CancellationToken cancellationToken)
@@ -173,14 +282,27 @@ public sealed class ManagedCpuRuntimeManager
         var uvPath = _uvResolver();
         if (string.IsNullOrWhiteSpace(uvPath))
         {
-            Fail("uv.exe was not found. Bundle tools\\win-x64\\uv.exe or install uv on PATH.");
+            SetFailedState(
+                "uv.exe was not found. Bundle tools\\win-x64\\uv.exe or install uv on PATH.",
+                needsBootstrap: true);
             return;
         }
 
         var requirementsPath = _requirementsPathResolver();
         if (!File.Exists(requirementsPath))
         {
-            Fail($"CPU requirements file not found: {requirementsPath}");
+            SetFailedState(
+                $"CPU requirements file not found: {requirementsPath}",
+                needsBootstrap: false);
+            return;
+        }
+
+        var constraintsPath = _constraintsPathResolver();
+        if (!File.Exists(constraintsPath))
+        {
+            SetFailedState(
+                $"CPU constraints file not found: {constraintsPath}",
+                needsBootstrap: false);
             return;
         }
 
@@ -191,24 +313,26 @@ public sealed class ManagedCpuRuntimeManager
         Directory.CreateDirectory(runtimeRoot);
 
         State = ManagedCpuState.Installing;
+        FailureReason = null;
+        BootstrapStatusLine = "Installing managed CPU runtime...";
+        onStatusLine?.Invoke(BootstrapStatusLine);
+
         _log.Info(
-            $"CPU runtime bootstrap starting: venv={venvDir}, requirements={requirementsPath}, uv={uvPath}");
+            $"CPU runtime bootstrap starting: venv={venvDir}, requirements={requirementsPath}, constraints={constraintsPath}, uv={uvPath}");
 
         try
         {
-            // Step 1: create venv with pinned Python version.
             await RunProcessAsync(
                 uvPath,
                 Path.GetDirectoryName(venvDir) ?? AppContext.BaseDirectory,
                 cancellationToken,
-                null,   // venv creation is fast — no need to surface each line
+                null,
                 "venv",
                 "--clear",
                 "--python",
                 PythonVersion,
                 venvDir);
 
-            // Step 2: install CPU packages — stream output for live progress.
             await RunProcessAsync(
                 uvPath,
                 AppContext.BaseDirectory,
@@ -223,35 +347,230 @@ public sealed class ManagedCpuRuntimeManager
                 "--python",
                 pythonPath,
                 "-r",
-                requirementsPath);
+                requirementsPath,
+                "-c",
+                constraintsPath);
         }
         catch (InvalidOperationException ex)
         {
-            Fail($"CPU runtime bootstrap failed: {ex.Message}");
+            SetFailedState(
+                $"CPU runtime bootstrap failed: {ex.Message}",
+                needsBootstrap: true,
+                bootstrapStatusLine: "Managed CPU runtime bootstrap failed.");
             return;
         }
 
-        var markerHash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
-        await File.WriteAllTextAsync(
-            markerPath,
-            markerHash,
-            cancellationToken);
+        var markerHash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        await File.WriteAllTextAsync(markerPath, markerHash, cancellationToken).ConfigureAwait(false);
 
-        lock (_bootstrapCacheLock)
+        BootstrapStatusLine = "Validating managed CPU runtime imports...";
+        onStatusLine?.Invoke(BootstrapStatusLine);
+
+        ManagedCpuRuntimeValidationRecord validationRecord;
+        try
         {
-            _cachedNeedsBootstrap = false;
+            validationRecord = await ValidateInstalledRuntimeAsync(markerHash, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            validationRecord = new ManagedCpuRuntimeValidationRecord
+            {
+                MarkerHash = markerHash,
+                IsValid = false,
+                FailureReason = $"CPU runtime validation failed unexpectedly: {ex.Message}",
+            };
         }
 
+        await PersistValidationRecordAsync(validationRecord, cancellationToken).ConfigureAwait(false);
+
+        if (!validationRecord.IsValid)
+        {
+            var formattedVersions = FormatPackageVersions(validationRecord.PackageVersions);
+            if (!string.IsNullOrWhiteSpace(formattedVersions))
+                _log.Warning($"Managed CPU runtime package versions at validation failure: {formattedVersions}");
+
+            SetFailedState(
+                validationRecord.FailureReason ?? "Managed CPU runtime validation failed.",
+                needsBootstrap: false,
+                bootstrapStatusLine: "Managed CPU runtime validation failed.");
+            return;
+        }
+
+        CacheNeedsBootstrap(false);
         State = ManagedCpuState.Ready;
         FailureReason = null;
-        _log.Info($"CPU runtime bootstrap completed at {venvDir}.");
+        BootstrapStatusLine = "Managed CPU runtime validated and ready.";
+        _log.Info($"CPU runtime bootstrap completed and validated at {venvDir}.");
     }
 
-    private void Fail(string message)
+    private void ApplyInspection(ManagedCpuRuntimeInspection inspection, bool logReadyState)
+    {
+        State = inspection.State;
+        FailureReason = inspection.State == ManagedCpuState.Failed ? inspection.Detail : null;
+        BootstrapStatusLine = inspection.State switch
+        {
+            ManagedCpuState.Ready => "Managed CPU runtime validated and ready.",
+            ManagedCpuState.Failed => "Managed CPU runtime validation failed.",
+            ManagedCpuState.Installing => "Installing managed CPU runtime...",
+            _ => "Managed CPU runtime bootstrap required.",
+        };
+
+        if (inspection.State == ManagedCpuState.Ready)
+        {
+            if (logReadyState)
+                _log.Info("CPU runtime: already installed and validated.");
+            return;
+        }
+
+        if (inspection.State == ManagedCpuState.Failed && !string.IsNullOrWhiteSpace(inspection.Detail))
+        {
+            _log.Warning($"Managed CPU runtime remains unavailable: {inspection.Detail}");
+        }
+    }
+
+    private void SetFailedState(
+        string message,
+        bool needsBootstrap,
+        string? bootstrapStatusLine = null)
     {
         State = ManagedCpuState.Failed;
         FailureReason = message;
+        BootstrapStatusLine = bootstrapStatusLine ?? "Managed CPU runtime validation failed.";
+        CacheNeedsBootstrap(needsBootstrap);
         _log.Warning(message);
+    }
+
+    private void CacheNeedsBootstrap(bool needsBootstrap)
+    {
+        lock (_bootstrapCacheLock)
+        {
+            _cachedNeedsBootstrap = needsBootstrap;
+        }
+    }
+
+    private async Task PersistValidationRecordAsync(
+        ManagedCpuRuntimeValidationRecord validationRecord,
+        CancellationToken cancellationToken)
+    {
+        var validationPath = GetValidationRecordPath();
+        var payload = JsonSerializer.Serialize(validationRecord, JsonOptions);
+        await File.WriteAllTextAsync(validationPath, payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ManagedCpuRuntimeValidationRecord> ValidateInstalledRuntimeAsync(
+        string markerHash,
+        CancellationToken cancellationToken)
+    {
+        const string validationScript = """
+import json
+import traceback
+from importlib import metadata
+
+payload = {
+    "success": False,
+    "message": None,
+    "error": None,
+    "traceback": None,
+    "packages": {},
+}
+
+for package_name in [
+    "torch",
+    "torchaudio",
+    "wespeaker",
+    "onnxruntime",
+    "openai-whisper",
+    "peft",
+]:
+    try:
+        payload["packages"][package_name] = metadata.version(package_name)
+    except Exception:
+        payload["packages"][package_name] = None
+
+try:
+    import torch
+    import torchaudio
+    import wespeaker
+
+    payload["packages"]["torch"] = getattr(torch, "__version__", payload["packages"]["torch"])
+    payload["packages"]["torchaudio"] = getattr(torchaudio, "__version__", payload["packages"]["torchaudio"])
+    payload["packages"]["wespeaker"] = getattr(wespeaker, "__version__", payload["packages"]["wespeaker"])
+    payload["success"] = True
+    payload["message"] = "Managed CPU runtime imports validated."
+except Exception as exc:
+    payload["error"] = f"{type(exc).__name__}: {exc}"
+    payload["traceback"] = traceback.format_exc()
+
+print(json.dumps(payload))
+""";
+
+        var pythonPath = GetPythonExecutablePath();
+        var result = await RunProcessCaptureAsync(
+                pythonPath,
+                AppContext.BaseDirectory,
+                cancellationToken,
+                "-c",
+                validationScript)
+            .ConfigureAwait(false);
+
+        if (result.ExitCode != 0)
+        {
+            return new ManagedCpuRuntimeValidationRecord
+            {
+                MarkerHash = markerHash,
+                IsValid = false,
+                FailureReason = $"CPU runtime validation failed: {result.Stderr.Trim()}",
+            };
+        }
+
+        ManagedCpuValidationProbePayload? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<ManagedCpuValidationProbePayload>(result.Stdout, JsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            return new ManagedCpuRuntimeValidationRecord
+            {
+                MarkerHash = markerHash,
+                IsValid = false,
+                FailureReason = $"CPU runtime validation produced unreadable output: {ex.Message}",
+            };
+        }
+
+        if (payload is null)
+        {
+            return new ManagedCpuRuntimeValidationRecord
+            {
+                MarkerHash = markerHash,
+                IsValid = false,
+                FailureReason = "CPU runtime validation returned no payload.",
+            };
+        }
+
+        if (!payload.Success)
+        {
+            var failureReason = payload.Error ?? payload.Message ?? "Managed CPU runtime validation failed.";
+            if (!string.IsNullOrWhiteSpace(payload.Traceback))
+                _log.Warning(payload.Traceback.Trim());
+
+            return new ManagedCpuRuntimeValidationRecord
+            {
+                MarkerHash = markerHash,
+                IsValid = false,
+                FailureReason = $"CPU runtime validation failed: {failureReason}",
+                PackageVersions = payload.Packages,
+            };
+        }
+
+        _log.Info($"Managed CPU runtime validated with packages: {FormatPackageVersions(payload.Packages)}");
+        return new ManagedCpuRuntimeValidationRecord
+        {
+            MarkerHash = markerHash,
+            IsValid = true,
+            FailureReason = null,
+            PackageVersions = payload.Packages,
+        };
     }
 
     private async Task RunProcessAsync(
@@ -301,16 +620,87 @@ public sealed class ManagedCpuRuntimeManager
             _log.Info(stderr.Trim());
     }
 
-    // Marker format: "python:{version}\n{requirements_content}"
-    // Including PythonVersion ensures a version upgrade invalidates the existing venv.
-    private async Task<string> ComputeMarkerHashAsync(string requirementsPath, CancellationToken cancellationToken = default)
+    private async Task<ManagedCpuProcessCapture> RunProcessCaptureAsync(
+        string fileName,
+        string workingDirectory,
+        CancellationToken cancellationToken,
+        params string[] arguments)
     {
-        var fileContent = await File.ReadAllTextAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
-        var content = $"python:{PythonVersion}\n{fileContent}";
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        foreach (var argument in arguments)
+            psi.ArgumentList.Add(argument);
+
+        _log.Info(
+            $"Running CPU runtime capture process: file={fileName}, args={string.Join(' ', arguments)}");
+
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+
+        return new ManagedCpuProcessCapture(
+            process.ExitCode,
+            await stdoutTask.ConfigureAwait(false),
+            await stderrTask.ConfigureAwait(false));
+    }
+
+    private string ComputeMarkerHash(string requirementsPath, string constraintsPath)
+    {
+        var requirementsContent = File.ReadAllText(requirementsPath);
+        var constraintsContent = File.ReadAllText(constraintsPath);
+        var content = $"python:{PythonVersion}\n[requirements]\n{requirementsContent}\n[constraints]\n{constraintsContent}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
     }
 
+    private static string FormatPackageVersions(IReadOnlyDictionary<string, string?> packageVersions)
+    {
+        var entries = new List<string>();
+        foreach (var (packageName, version) in packageVersions)
+        {
+            entries.Add(string.IsNullOrWhiteSpace(version)
+                ? $"{packageName}=missing"
+                : $"{packageName}={version}");
+        }
+
+        return string.Join(", ", entries);
+    }
+
+    private sealed record ManagedCpuProcessCapture(int ExitCode, string Stdout, string Stderr);
+
+    private sealed record ManagedCpuValidationProbePayload
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; init; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; init; }
+
+        [JsonPropertyName("error")]
+        public string? Error { get; init; }
+
+        [JsonPropertyName("traceback")]
+        public string? Traceback { get; init; }
+
+        [JsonPropertyName("packages")]
+        public Dictionary<string, string?> Packages { get; init; } = [];
+    }
+
     private static string ResolveCpuRequirementsPath() =>
-        Path.Combine(AppContext.BaseDirectory, "inference", "requirements.txt");
+        Path.Combine(AppContext.BaseDirectory, "inference", "cpu-requirements.txt");
+
+    private static string ResolveCpuConstraintsPath() =>
+        Path.Combine(AppContext.BaseDirectory, "inference", "cpu-constraints.txt");
 }

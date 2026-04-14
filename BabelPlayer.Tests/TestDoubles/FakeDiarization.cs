@@ -14,6 +14,7 @@ namespace BabelPlayer.Tests;
 public sealed class FakeDiarizationProvider : IDiarizationProvider
 {
     private readonly Func<DiarizationRequest, DiarizationResult> _resultFactory;
+    private readonly Func<AppSettings, ProviderReadiness, ProviderReadiness>? _ensureReadyCallback;
 
     /// <summary>
     /// Initializes a test fake diarization provider that produces configurable diarization results and exposes mutable readiness.
@@ -22,21 +23,25 @@ public sealed class FakeDiarizationProvider : IDiarizationProvider
     /// <param name="readiness">Initial provider readiness; if null, defaults to ready with no message.</param>
     public FakeDiarizationProvider(
         Func<DiarizationRequest, DiarizationResult>? resultFactory = null,
-        ProviderReadiness? readiness = null)
+        ProviderReadiness? readiness = null,
+        Func<AppSettings, ProviderReadiness, ProviderReadiness>? ensureReadyCallback = null)
     {
         _resultFactory = resultFactory ?? (_ => new DiarizationResult(true, [], 0, null));
         Readiness = readiness ?? new ProviderReadiness(true, null);
+        _ensureReadyCallback = ensureReadyCallback;
     }
 
     public ProviderReadiness Readiness { get; set; }
 
     public DiarizationRequest? LastRequest { get; private set; }
 
+    public int EnsureReadyCallCount { get; private set; }
+
     /// <summary>
-/// Gets the current readiness state of the provider.
-/// </summary>
-/// <returns>The provider's current <see cref="ProviderReadiness"/>.</returns>
-public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore) => Readiness;
+    /// Gets the current readiness state of the provider.
+    /// </summary>
+    /// <returns>The provider's current <see cref="ProviderReadiness"/>.</returns>
+    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore) => Readiness;
 
     /// <summary>
     /// Ensures the provider is ready and reports completion progress when provided.
@@ -49,6 +54,10 @@ public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keySt
     {
         if (ct.IsCancellationRequested)
             return Task.FromCanceled<bool>(ct);
+
+        EnsureReadyCallCount++;
+        if (_ensureReadyCallback is not null)
+            Readiness = _ensureReadyCallback(settings, Readiness);
 
         progress?.Report(1.0);
         return Task.FromResult(Readiness.IsReady);
@@ -70,14 +79,19 @@ public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keySt
     }
 }
 
-public sealed class FakeDiarizationRegistry(
-    params (string ProviderId, string DisplayName, IDiarizationProvider Provider)[] providers)
-    : IDiarizationRegistry
+public sealed class FakeDiarizationRegistry : IDiarizationRegistry
 {
-    private readonly IReadOnlyDictionary<string, (ProviderDescriptor Descriptor, IDiarizationProvider Provider)> _providers =
-        providers.ToDictionary(
-            entry => entry.ProviderId,
-            entry => (
+    private readonly IReadOnlyDictionary<string, (ProviderDescriptor Descriptor, IDiarizationProvider Provider)> _providers;
+
+    public FakeDiarizationRegistry()
+    {
+        _providers = new Dictionary<string, (ProviderDescriptor Descriptor, IDiarizationProvider Provider)>(StringComparer.Ordinal);
+    }
+
+    public FakeDiarizationRegistry(
+        params (string ProviderId, string DisplayName, IDiarizationProvider Provider)[] providers)
+        : this(
+            providers.Select(entry => (
                 new ProviderDescriptor(
                     entry.ProviderId,
                     entry.DisplayName,
@@ -88,14 +102,24 @@ public sealed class FakeDiarizationRegistry(
                     DefaultRuntime: InferenceRuntime.Containerized,
                     IsImplemented: true,
                     Notes: null),
-                entry.Provider),
+                entry.Provider)).ToArray())
+    {
+    }
+
+    public FakeDiarizationRegistry(
+        params (ProviderDescriptor Descriptor, IDiarizationProvider Provider)[] providers)
+    {
+        _providers = providers.ToDictionary(
+            entry => entry.Descriptor.Id,
+            entry => entry,
             StringComparer.Ordinal);
+    }
 
     /// <summary>
-        /// Enumerates provider descriptors available in the registry.
-        /// </summary>
-        /// <returns>A read-only list of provider descriptors registered with the registry.</returns>
-        public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
+    /// Enumerates provider descriptors available in the registry.
+    /// </summary>
+    /// <returns>A read-only list of provider descriptors registered with the registry.</returns>
+    public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
         [.. _providers.Values.Select(entry => entry.Descriptor)];
 
     /// <summary>

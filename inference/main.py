@@ -657,6 +657,15 @@ def _check_nemo_import_viability() -> tuple[bool, str]:
     return True, "NeMo import dependencies available"
 
 
+def _require_config_attr(config_node, attr_name: str, display_name: str):
+    try:
+        return getattr(config_node, attr_name)
+    except Exception as exc:
+        raise RuntimeError(
+            f"{display_name} missing from {type(config_node).__name__}: {exc}"
+        ) from exc
+
+
 def _check_nemo_diarization_contract() -> tuple[bool, str]:
     """
     Check the NeMo diarization config contract without constructing the diarizer.
@@ -672,27 +681,59 @@ def _check_nemo_diarization_contract() -> tuple[bool, str]:
             None,
         )
         _ = (
-            config.device,
-            config.sample_rate,
-            config.verbose,
-            config.batch_size,
-            config.num_workers,
-            config.diarizer.collar,
-            config.diarizer.ignore_overlap,
-            config.diarizer.vad.model_path,
-            config.diarizer.vad.parameters.window_length_in_sec,
-            config.diarizer.vad.parameters.shift_length_in_sec,
-            config.diarizer.speaker_embeddings.model_path,
-            config.diarizer.speaker_embeddings.window_length_in_sec,
-            config.diarizer.speaker_embeddings.shift_length_in_sec,
-            config.diarizer.speaker_embeddings.multiscale_weights,
-            config.diarizer.speaker_embeddings.scale_n,
-            config.diarizer.speaker_embeddings.parameters.window_length_in_sec,
-            config.diarizer.speaker_embeddings.parameters.shift_length_in_sec,
-            config.diarizer.speaker_embeddings.parameters.multiscale_weights,
-            config.diarizer.speaker_embeddings.parameters.scale_n,
-            config.diarizer.clustering.parameters.oracle_num_speakers,
-            config.diarizer.clustering.parameters.max_num_speakers,
+            _require_config_attr(config, "device", "device"),
+            _require_config_attr(config, "sample_rate", "sample_rate"),
+            _require_config_attr(config, "verbose", "verbose"),
+            _require_config_attr(config, "batch_size", "batch_size"),
+            _require_config_attr(config, "num_workers", "num_workers"),
+            _require_config_attr(config.diarizer, "collar", "diarizer.collar"),
+            _require_config_attr(config.diarizer, "ignore_overlap", "diarizer.ignore_overlap"),
+            _require_config_attr(config.diarizer.vad, "model_path", "diarizer.vad.model_path"),
+            _require_config_attr(
+                config.diarizer.vad.parameters,
+                "window_length_in_sec",
+                "diarizer.vad.parameters.window_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.vad.parameters,
+                "shift_length_in_sec",
+                "diarizer.vad.parameters.shift_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings,
+                "model_path",
+                "diarizer.speaker_embeddings.model_path",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "window_length_in_sec",
+                "diarizer.speaker_embeddings.parameters.window_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "shift_length_in_sec",
+                "diarizer.speaker_embeddings.parameters.shift_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "multiscale_weights",
+                "diarizer.speaker_embeddings.parameters.multiscale_weights",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "save_embeddings",
+                "diarizer.speaker_embeddings.parameters.save_embeddings",
+            ),
+            _require_config_attr(
+                config.diarizer.clustering.parameters,
+                "oracle_num_speakers",
+                "diarizer.clustering.parameters.oracle_num_speakers",
+            ),
+            _require_config_attr(
+                config.diarizer.clustering.parameters,
+                "max_num_speakers",
+                "diarizer.clustering.parameters.max_num_speakers",
+            ),
         )
     except Exception as exc:
         return False, f"NeMo diarization config contract invalid: {exc}"
@@ -1046,14 +1087,9 @@ def _build_nemo_diarization_config(
         setattr(config.diarizer.vad.parameters, key, value)
 
     config.diarizer.speaker_embeddings.model_path = NEMO_SPEAKER_EMBEDDING_MODEL
-    config.diarizer.speaker_embeddings.window_length_in_sec = NEMO_SPEAKER_WINDOW_LENGTHS
-    config.diarizer.speaker_embeddings.shift_length_in_sec = NEMO_SPEAKER_SHIFT_LENGTHS
-    config.diarizer.speaker_embeddings.multiscale_weights = NEMO_SPEAKER_MULTISCALE_WEIGHTS
-    config.diarizer.speaker_embeddings.scale_n = len(NEMO_SPEAKER_WINDOW_LENGTHS)
     config.diarizer.speaker_embeddings.parameters.window_length_in_sec = NEMO_SPEAKER_WINDOW_LENGTHS
     config.diarizer.speaker_embeddings.parameters.shift_length_in_sec = NEMO_SPEAKER_SHIFT_LENGTHS
     config.diarizer.speaker_embeddings.parameters.multiscale_weights = NEMO_SPEAKER_MULTISCALE_WEIGHTS
-    config.diarizer.speaker_embeddings.parameters.scale_n = len(NEMO_SPEAKER_WINDOW_LENGTHS)
     config.diarizer.speaker_embeddings.parameters.save_embeddings = False
 
     config.diarizer.clustering.parameters.oracle_num_speakers = clustering_parameters["oracle_num_speakers"]

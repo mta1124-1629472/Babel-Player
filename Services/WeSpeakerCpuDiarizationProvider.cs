@@ -51,14 +51,16 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     /// <returns>A <see cref="ProviderReadiness"/> that is Ready when the managed CPU runtime is available; otherwise not ready with a diagnostic message explaining whether the runtime failed or still requires bootstrapping.</returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
-        if (_cpuRuntimeManager.State == ManagedCpuState.Failed)
+        var inspection = _cpuRuntimeManager.InspectRuntimeState();
+
+        if (inspection.State == ManagedCpuState.Failed)
         {
             return new ProviderReadiness(
                 false,
-                $"Managed CPU runtime is not ready for WeSpeaker: {_cpuRuntimeManager.FailureReason ?? "bootstrap failed"}");
+                $"Managed CPU runtime is not ready for WeSpeaker: {inspection.Detail ?? "bootstrap failed"}");
         }
 
-        if (_cpuRuntimeManager.State != ManagedCpuState.Ready)
+        if (inspection.State != ManagedCpuState.Ready)
         {
             return new ProviderReadiness(
                 false,

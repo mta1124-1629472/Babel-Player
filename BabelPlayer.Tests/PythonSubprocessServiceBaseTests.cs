@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Services;
@@ -419,6 +420,118 @@ for i, arg in enumerate(sys.argv):
         Assert.Equal(1, resolveCount);
     }
 
+    [Fact]
+    public async Task ManagedCpuRuntimeManager_CheckNeedsBootstrapAsync_ReturnsTrue_WhenEitherManifestChanges()
+    {
+        using var log = new AppLog(_tempLogPath);
+
+        var runtimeRoot = Path.Combine(Path.GetTempPath(), $"cpu-runtime-hash-{Guid.NewGuid():N}");
+        var manifestRoot = Path.Combine(Path.GetTempPath(), $"cpu-runtime-manifests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(runtimeRoot);
+        Directory.CreateDirectory(manifestRoot);
+
+        var isWindows = OperatingSystem.IsWindows();
+        var scriptsDir = isWindows ? "Scripts" : "bin";
+        var pythonExe = isWindows ? "python.exe" : "python";
+        Directory.CreateDirectory(Path.Combine(runtimeRoot, ".venv", scriptsDir));
+        File.WriteAllBytes(Path.Combine(runtimeRoot, ".venv", scriptsDir, pythonExe), Array.Empty<byte>());
+
+        var requirementsPath = Path.Combine(manifestRoot, "cpu-requirements.txt");
+        var constraintsPath = Path.Combine(manifestRoot, "cpu-constraints.txt");
+        await File.WriteAllTextAsync(requirementsPath, "edge-tts\n");
+        await File.WriteAllTextAsync(constraintsPath, "edge-tts==7.2.8\n");
+
+        var manager = new ManagedCpuRuntimeManager(
+            log,
+            cpuRuntimeRootResolver: () => runtimeRoot,
+            requirementsPathResolver: () => requirementsPath,
+            constraintsPathResolver: () => constraintsPath);
+
+        var hash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        await File.WriteAllTextAsync(manager.GetBootstrapMarkerPath(), hash);
+        await File.WriteAllTextAsync(
+            manager.GetValidationRecordPath(),
+            JsonSerializer.Serialize(new ManagedCpuRuntimeValidationRecord
+            {
+                MarkerHash = hash,
+                IsValid = true,
+                FailureReason = null,
+            }));
+
+        Assert.False(await manager.CheckNeedsBootstrapAsync());
+
+        await File.WriteAllTextAsync(constraintsPath, "edge-tts==7.2.9\n");
+        var constraintsChangedManager = new ManagedCpuRuntimeManager(
+            log,
+            cpuRuntimeRootResolver: () => runtimeRoot,
+            requirementsPathResolver: () => requirementsPath,
+            constraintsPathResolver: () => constraintsPath);
+        Assert.True(await constraintsChangedManager.CheckNeedsBootstrapAsync());
+
+        await File.WriteAllTextAsync(constraintsPath, "edge-tts==7.2.8\n");
+        var resetHash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        await File.WriteAllTextAsync(constraintsChangedManager.GetBootstrapMarkerPath(), resetHash);
+        await File.WriteAllTextAsync(
+            constraintsChangedManager.GetValidationRecordPath(),
+            JsonSerializer.Serialize(new ManagedCpuRuntimeValidationRecord
+            {
+                MarkerHash = resetHash,
+                IsValid = true,
+                FailureReason = null,
+            }));
+        await File.WriteAllTextAsync(requirementsPath, "edge-tts\nrequests\n");
+
+        var requirementsChangedManager = new ManagedCpuRuntimeManager(
+            log,
+            cpuRuntimeRootResolver: () => runtimeRoot,
+            requirementsPathResolver: () => requirementsPath,
+            constraintsPathResolver: () => constraintsPath);
+        Assert.True(await requirementsChangedManager.CheckNeedsBootstrapAsync());
+
+        try { Directory.Delete(runtimeRoot, recursive: true); } catch { }
+        try { Directory.Delete(manifestRoot, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public async Task ManagedCpuRuntimeManager_EnsureInstalledAsync_FailsValidationAndPersistsReason()
+    {
+        var uvPath = DependencyLocator.FindUv();
+        if (uvPath is null)
+            return;
+
+        using var log = new AppLog(_tempLogPath);
+
+        var runtimeRoot = Path.Combine(Path.GetTempPath(), $"cpu-runtime-validate-{Guid.NewGuid():N}");
+        var manifestRoot = Path.Combine(Path.GetTempPath(), $"cpu-runtime-validate-manifests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(manifestRoot);
+
+        var requirementsPath = Path.Combine(manifestRoot, "cpu-requirements.txt");
+        var constraintsPath = Path.Combine(manifestRoot, "cpu-constraints.txt");
+        await File.WriteAllTextAsync(requirementsPath, "edge-tts\n");
+        await File.WriteAllTextAsync(constraintsPath, "edge-tts==7.2.8\n");
+
+        var manager = new ManagedCpuRuntimeManager(
+            log,
+            uvResolver: () => uvPath,
+            cpuRuntimeRootResolver: () => runtimeRoot,
+            requirementsPathResolver: () => requirementsPath,
+            constraintsPathResolver: () => constraintsPath);
+
+        await manager.EnsureInstalledAsync();
+
+        Assert.Equal(ManagedCpuState.Failed, manager.State);
+        Assert.Contains("validation failed", manager.FailureReason, StringComparison.OrdinalIgnoreCase);
+
+        var validationRecord = JsonSerializer.Deserialize<ManagedCpuRuntimeValidationRecord>(
+            await File.ReadAllTextAsync(manager.GetValidationRecordPath()));
+        Assert.NotNull(validationRecord);
+        Assert.False(validationRecord!.IsValid);
+        Assert.Contains("ModuleNotFoundError", validationRecord.FailureReason, StringComparison.OrdinalIgnoreCase);
+
+        try { Directory.Delete(runtimeRoot, recursive: true); } catch { }
+        try { Directory.Delete(manifestRoot, recursive: true); } catch { }
+    }
+
     private static string GetPythonPath(object provider)
     {
         var field = typeof(PythonSubprocessServiceBase).GetField(
@@ -429,5 +542,12 @@ for i, arg in enumerate(sys.argv):
 
         Assert.NotNull(field);
         return Assert.IsType<string>(field!.GetValue(provider));
+    }
+
+    private static string ComputeMarkerHash(string requirementsPath, string constraintsPath)
+    {
+        var content = $"python:3.11.6\n[requirements]\n{File.ReadAllText(requirementsPath)}\n[constraints]\n{File.ReadAllText(constraintsPath)}";
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content));
+        return Convert.ToHexString(bytes);
     }
 }

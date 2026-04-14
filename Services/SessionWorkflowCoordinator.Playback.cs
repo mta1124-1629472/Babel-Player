@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Registries;
 
 namespace Babel.Player.Services;
 
@@ -107,26 +108,46 @@ public sealed partial class SessionWorkflowCoordinator
             .FirstOrDefault(provider => string.Equals(provider.Id, CurrentSettings.DiarizationProvider, StringComparison.Ordinal));
         var usesContainerizedRuntime = providerDescriptor?.EffectiveDefaultRuntime == InferenceRuntime.Containerized;
 
-        var readiness = usesContainerizedRuntime && ContainerizedProbe is not null
-            ? await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
-                    CurrentSettings,
-                    CurrentSettings.DiarizationProvider,
-                    ContainerizedProbe,
-                    ct)
-                .ConfigureAwait(false)
-            : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
-        if (!readiness.IsReady)
-        {
-            var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
-            _log.Warning($"Diarization skipped: {blockingReason}");
-            throw new PipelineProviderException(blockingReason);
-        }
-
         ValidateDiarizationSpeakerBounds(
             CurrentSettings.DiarizationMinSpeakers,
             CurrentSettings.DiarizationMaxSpeakers);
 
-        var provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+        ProviderReadiness readiness;
+        IDiarizationProvider provider;
+
+        if (usesContainerizedRuntime)
+        {
+            readiness = ContainerizedProbe is not null
+                ? await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
+                        CurrentSettings,
+                        CurrentSettings.DiarizationProvider,
+                        ContainerizedProbe,
+                        ct)
+                    .ConfigureAwait(false)
+                : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+
+            if (!readiness.IsReady)
+            {
+                var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
+                _log.Warning($"Diarization skipped: {blockingReason}");
+                throw new PipelineProviderException(blockingReason);
+            }
+
+            provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+        }
+        else
+        {
+            provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+            await provider.EnsureReadyAsync(CurrentSettings, ct: ct).ConfigureAwait(false);
+            readiness = provider.CheckReadiness(CurrentSettings, KeyStore);
+
+            if (!readiness.IsReady)
+            {
+                var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
+                _log.Warning($"Diarization skipped: {blockingReason}");
+                throw new PipelineProviderException(blockingReason);
+            }
+        }
 
         var request = new DiarizationRequest(
             SourceAudioPath:  audioPath,
