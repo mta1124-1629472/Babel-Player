@@ -165,11 +165,17 @@ public sealed class ContainerizedServiceProbeTests
         var result = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
         Assert.Equal(ContainerizedProbeState.Checking, result.State);
 
-        // Wait for the background probe to complete
-        await Task.Delay(500);
+        // Wait for the background probe to complete using polling instead of a fixed delay
+        ContainerizedProbeResult cachedResult = result;
+        for (int i = 0; i < 40; i++)
+        {
+            await Task.Delay(25);
+            cachedResult = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
+            if (cachedResult.State != ContainerizedProbeState.Checking)
+                break;
+        }
 
         // Verify the exception was handled and cached as unavailable
-        var cachedResult = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
         Assert.Equal(ContainerizedProbeState.Unavailable, cachedResult.State);
         Assert.Contains("Simulated probe failure", cachedResult.ErrorDetail);
         Assert.True(exceptionThrown);

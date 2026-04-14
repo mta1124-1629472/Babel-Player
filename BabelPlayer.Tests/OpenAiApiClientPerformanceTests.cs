@@ -11,13 +11,15 @@ using Xunit.Abstractions;
 
 namespace BabelPlayer.Tests;
 
-public class OpenAiApiClientPerformanceTests
+public class OpenAiApiClientPerformanceTests : IClassFixture<SessionWorkflowTemplateFixture>
 {
     private readonly ITestOutputHelper _output;
+    private readonly SessionWorkflowTemplateFixture _fixture;
 
-    public OpenAiApiClientPerformanceTests(ITestOutputHelper output)
+    public OpenAiApiClientPerformanceTests(ITestOutputHelper output, SessionWorkflowTemplateFixture fixture)
     {
         _output = output;
+        _fixture = fixture;
     }
 
     private class StubHttpMessageHandler : HttpMessageHandler
@@ -37,15 +39,16 @@ public class OpenAiApiClientPerformanceTests
         }
     }
 
-    [Trait("Category", "Integration")]
     [Fact]
+    [Trait("Category", "ManualBenchmark")]
     public async Task TranscribeAudioAsync_PerformanceTest()
     {
-        var tempFile = Path.GetTempFileName();
+        var tempDir = _fixture.CreateCaseDirectory(nameof(TranscribeAudioAsync_PerformanceTest));
+        var tempFile = Path.Combine(tempDir, "perf_dummy_audio.tmp");
         try
         {
-            // Keep the payload modest so this opt-in benchmark does not consume excessive memory or I/O.
-            byte[] data = new byte[1024 * 1024 * 5]; // 5 MB
+            // Create a dummy file to verify streaming behavior
+            byte[] data = new byte[1024 * 1024]; // 1 MB
             new Random().NextBytes(data);
             await File.WriteAllBytesAsync(tempFile, data);
 
@@ -55,7 +58,7 @@ public class OpenAiApiClientPerformanceTests
             await client.TranscribeAudioAsync(tempFile, "whisper-1");
 
             var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 5; i++)
             {
                 await client.TranscribeAudioAsync(tempFile, "whisper-1");
             }

@@ -156,12 +156,7 @@ public sealed class AvaloniaErrorDialogService : IErrorDialogService
                 var dir = System.IO.Path.GetDirectoryName(logFilePath!);
                 if (dir != null)
                 {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "explorer.exe",
-                        Arguments = $"\"{dir}\"",
-                        UseShellExecute = false,
-                    });
+                    FileOpener.OpenFolder(dir);
                 }
             }
             catch (Exception ex)

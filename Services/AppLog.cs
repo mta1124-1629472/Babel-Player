@@ -63,7 +63,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
                 if (item is string line)
                 {
                     try { await File.AppendAllTextAsync(LogFilePath, line); }
-                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to write log \'{LogFilePath}\': {ex}"); }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to write log line to '{LogFilePath}': {ex}"); }
                 }
                 else if (item is TaskCompletionSource<bool> tcs)
                 {
@@ -79,7 +79,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
             if (remaining is string line)
             {
                 try { File.AppendAllText(LogFilePath, line); }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to drain log \'{LogFilePath}\': {ex}"); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to drain log line to '{LogFilePath}': {ex}"); }
             }
             else if (remaining is TaskCompletionSource<bool> tcs)
             {
@@ -92,8 +92,17 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
     {
         _channel.Writer.TryComplete();
         _cts.Cancel();
-        try { _writerTask.Wait(TimeSpan.FromSeconds(2)); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"AppLog dispose wait failed: {ex}"); }
+        try
+        {
+            _writerTask.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            // Log or rethrow non-cancellation exceptions
+            try { File.AppendAllText(LogFilePath, $"{DateTimeOffset.UtcNow:O} [ERROR] Dispose failed: {ex}{Environment.NewLine}"); }
+            catch { }
+        }
         _cts.Dispose();
     }
 
@@ -101,8 +110,17 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
     {
         _channel.Writer.TryComplete();
         _cts.Cancel();
-        try { await _writerTask.ConfigureAwait(false); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"AppLog async dispose failed: {ex}"); }
+        try
+        {
+            await _writerTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            // Log or rethrow non-cancellation exceptions
+            try { await File.AppendAllTextAsync(LogFilePath, $"{DateTimeOffset.UtcNow:O} [ERROR] DisposeAsync failed: {ex}{Environment.NewLine}"); }
+            catch { }
+        }
         _cts.Dispose();
     }
 
@@ -136,7 +154,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         foreach (var old in archives.Skip(MaxArchivedFiles))
         {
             try { File.Delete(old); }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to delete old log archive '{old}': {ex}"); }
+            catch { /* best-effort */ }
         }
     }
 }

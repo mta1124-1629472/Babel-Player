@@ -51,27 +51,64 @@ public sealed class ManagedCpuRuntimeManager
     /// <summary>
     /// True when the CPU venv needs to be (re)installed — either missing or requirements changed.
     /// </summary>
+    private bool? _cachedNeedsBootstrap;
+    private readonly object _bootstrapCacheLock = new();
+
     public async Task<bool> CheckNeedsBootstrapAsync(CancellationToken cancellationToken = default)
     {
+        lock (_bootstrapCacheLock)
+        {
+            if (_cachedNeedsBootstrap.HasValue)
+                return _cachedNeedsBootstrap.Value;
+        }
+
         var pythonPath = GetPythonExecutablePath();
         if (!File.Exists(pythonPath))
+        {
+            lock (_bootstrapCacheLock)
+            {
+                _cachedNeedsBootstrap = true;
+            }
             return true;
+        }
         var markerPath = GetBootstrapMarkerPath();
         if (!File.Exists(markerPath))
+        {
+            lock (_bootstrapCacheLock)
+            {
+                _cachedNeedsBootstrap = true;
+            }
             return true;
+        }
         try
         {
             var stored = await File.ReadAllTextAsync(markerPath, cancellationToken).ConfigureAwait(false);
             stored = stored.Trim();
             var requirementsPath = _requirementsPathResolver();
             if (!File.Exists(requirementsPath))
+            {
+                lock (_bootstrapCacheLock)
+                {
+                    _cachedNeedsBootstrap = true;
+                }
                 return true;
+            }
 
             var hash = await ComputeMarkerHashAsync(requirementsPath, cancellationToken).ConfigureAwait(false);
-            return !string.Equals(stored, hash, StringComparison.Ordinal);
+            var result = !string.Equals(stored, hash, StringComparison.Ordinal);
+            lock (_bootstrapCacheLock)
+            {
+                _cachedNeedsBootstrap = result;
+            }
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
+            // Do not cache on transient I/O errors; a subsequent read may succeed.
             return true;
         }
     }
@@ -119,13 +156,12 @@ public sealed class ManagedCpuRuntimeManager
     /// </summary>
     public string RuntimeRoot => _cpuRuntimeRoot;
 
-    public string GetPythonExecutablePath()
-    {
-        var venvDir = Path.Combine(RuntimeRoot, ".venv");
-        return OperatingSystem.IsWindows()
-            ? Path.Combine(venvDir, "Scripts", "python.exe")
-            : Path.Combine(venvDir, "bin", "python");
-    }
+    public string GetPythonExecutablePath() =>
+        Path.Combine(
+            RuntimeRoot,
+            ".venv",
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "Scripts" : "bin",
+            System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "python.exe" : "python");
 
     public string GetBootstrapMarkerPath() =>
         Path.Combine(RuntimeRoot, ".cpu-bootstrap-version");
@@ -200,6 +236,11 @@ public sealed class ManagedCpuRuntimeManager
             markerPath,
             markerHash,
             cancellationToken);
+
+        lock (_bootstrapCacheLock)
+        {
+            _cachedNeedsBootstrap = false;
+        }
 
         State = ManagedCpuState.Ready;
         FailureReason = null;

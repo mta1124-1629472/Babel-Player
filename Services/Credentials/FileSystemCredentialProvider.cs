@@ -29,8 +29,8 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
     private static readonly byte[] _pbkdf2Salt = Encoding.UTF8.GetBytes("BabelPlayer_SecureSalt_2024");
 
     public string StorageProviderName => OperatingSystem.IsWindows()
-        ? StorageProviderNames.LocalFileDpapi
-        : StorageProviderNames.LocalFileAes256Gcm;
+        ? ProviderNames.LocalFileDpapi
+        : ProviderNames.LocalFileAes256Gcm;
 
     public FileSystemCredentialProvider(string filePath)
     {
@@ -73,49 +73,41 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
                 }
                 return stored;
             }
-            catch (IOException) { /* fall through to generate a new secret */ }
-            catch (UnauthorizedAccessException) { /* fall through to generate a new secret */ }
+            catch (IOException ex)
+            {
+                throw new InvalidOperationException($"Failed to read install secret from '{secretPath}': {ex.Message}", ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new InvalidOperationException($"Access denied reading install secret from '{secretPath}': {ex.Message}", ex);
+            }
         }
 
         var newSecret = new byte[32];
         System.Security.Cryptography.RandomNumberGenerator.Fill(newSecret);
 
-        try
+        var secretDir = Path.GetDirectoryName(secretPath) ?? "";
+        var tempPath = Path.Combine(secretDir, Path.GetRandomFileName());
+
+        if (OperatingSystem.IsWindows())
         {
-            if (OperatingSystem.IsWindows())
-            {
-                var protectedSecret = System.Security.Cryptography.ProtectedData.Protect(
-                    newSecret, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-                using var stream = new FileStream(secretPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                stream.Write(protectedSecret, 0, protectedSecret.Length);
-            }
-            else
-            {
-                using (var stream = new FileStream(secretPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                {
-                    stream.Write(newSecret, 0, newSecret.Length);
-                }
-
-                try
-                {
-                    File.SetUnixFileMode(secretPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-                }
-                catch { /* best-effort permission restriction */ }
-            }
-
-            return newSecret;
+            var protectedSecret = System.Security.Cryptography.ProtectedData.Protect(
+                newSecret, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            File.WriteAllBytes(tempPath, protectedSecret);
         }
-        catch (IOException) when (File.Exists(secretPath))
+        else
         {
-            var persistedSecret = File.ReadAllBytes(secretPath);
-            if (OperatingSystem.IsWindows())
+            File.WriteAllBytes(tempPath, newSecret);
+            try
             {
-                return System.Security.Cryptography.ProtectedData.Unprotect(
-                    persistedSecret, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                File.SetUnixFileMode(tempPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
-
-            return persistedSecret;
+            catch { /* best-effort permission restriction */ }
         }
+
+        File.Move(tempPath, secretPath, overwrite: false);
+
+        return newSecret;
     }
 
     public bool HasKey(string provider)
@@ -179,14 +171,17 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
 
     private void SaveRaw(Dictionary<string, string> keys)
     {
+        var dir = Path.GetDirectoryName(_filePath) ?? "";
+        var tempPath = Path.Combine(dir, Path.GetRandomFileName());
         try
         {
             var json = JsonSerializer.Serialize(keys, _jsonOptions);
-            File.WriteAllText(_filePath, json, Encoding.UTF8);
+            File.WriteAllText(tempPath, json, Encoding.UTF8);
+            File.Move(tempPath, _filePath, overwrite: true);
         }
         catch
         {
-            // Silently fail for now, same as original implementation
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
         }
     }
 
@@ -219,6 +214,9 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
 
     private string Unprotect(string stored)
     {
+        if (string.IsNullOrWhiteSpace(stored))
+            throw new ArgumentException("Cannot unprotect null or empty credential value.", nameof(stored));
+
         try
         {
             if (stored.StartsWith(V1Prefix, StringComparison.Ordinal))
@@ -249,20 +247,32 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
                 return Encoding.UTF8.GetString(plaintext);
             }
 
-            // Legacy format: base64(plaintext) on non-Windows, or base64(DPAPI) on Windows,
-            // written by the pre-v1 implementation.
+            // Legacy format: base64(plaintext), written by the pre-v1 implementation.
+            // On Windows, attempt DPAPI unwrap first in case the file was written on a
+            // machine that had an intermediate version with DPAPI-wrapped legacy entries.
+            // Fall back to plain base64 decode on CryptographicException so we remain
+            // compatible with the most common case: plaintext base64 on any platform.
             var legacyBytes = Convert.FromBase64String(stored);
             if (OperatingSystem.IsWindows())
             {
-                var decrypted = System.Security.Cryptography.ProtectedData.Unprotect(
-                    legacyBytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-                return Encoding.UTF8.GetString(decrypted);
+                try
+                {
+                    var decrypted = System.Security.Cryptography.ProtectedData.Unprotect(
+                        legacyBytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                    return Encoding.UTF8.GetString(decrypted);
+                }
+                catch (System.Security.Cryptography.CryptographicException)
+                {
+                    // Not a DPAPI blob — credential was written as plain base64 by the
+                    // pre-v1 implementation. Fall through to the plaintext decode below.
+                }
             }
             return Encoding.UTF8.GetString(legacyBytes);
         }
-        catch
+        catch (Exception ex)
         {
-            return "";
+            throw new InvalidOperationException(
+                "Failed to decode obfuscated credential. The credential file may be corrupted.", ex);
         }
     }
 }

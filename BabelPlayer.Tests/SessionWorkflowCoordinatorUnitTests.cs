@@ -57,20 +57,26 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         IDiarizationRegistry? diarizationRegistry = null,
         ITtsRegistry? ttsRegistry = null,
         IAudioProcessingService? audioProcessingService = null,
-        ContainerizedServiceProbe? containerizedProbe = null) =>
-        new SessionWorkflowCoordinator(
-            _ctx.Store,
-            _ctx.Log,
-            settings ?? _ctx.Settings,
-            _ctx.PerSessionStore,
-            _ctx.RecentStore,
+        ContainerizedServiceProbe? containerizedProbe = null)
+    {
+        var registries = new Babel.Player.Models.RegistryBundle(
+            _ctx.PerSessionStore, _ctx.RecentStore,
             new TranscriptionRegistry(_ctx.Log),
             new TranslationRegistry(_ctx.Log),
-            ttsRegistry ?? new TtsRegistry(_ctx.Log),
-            containerizedProbe: containerizedProbe,
-            containerizedInferenceManager: containerizedInferenceManager,
-            diarizationRegistry: diarizationRegistry,
-            audioProcessingService: audioProcessingService);
+            ttsRegistry ?? new TtsRegistry(_ctx.Log));
+        var options = new Babel.Player.Models.CoordinatorOptions
+        {
+            ContainerizedProbe          = containerizedProbe,
+            ContainerizedInferenceManager = containerizedInferenceManager,
+            DiarizationRegistry         = diarizationRegistry,
+            AudioProcessingService      = audioProcessingService,
+        };
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(
+            _ctx.Store,
+            _ctx.Log,
+            settings ?? _ctx.Settings);
+        return new SessionWorkflowCoordinator(coreServices, registries, options);
+    }
 
     private AppSettings CreateMatchingSettings() =>
         new()
@@ -568,15 +574,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     {
         var fakeTts = new FakeTtsProvider();
         var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
-        var coord = new SessionWorkflowCoordinator(
-            _ctx.Store,
-            _ctx.Log,
-            _ctx.Settings,
-            _ctx.PerSessionStore,
-            _ctx.RecentStore,
-            new TranscriptionRegistry(_ctx.Log),
-            new TranslationRegistry(_ctx.Log),
-            fakeTtsRegistry);
+        var coord = CreateCoordinator(ttsRegistry: fakeTtsRegistry);
         coord.Initialize();
 
         var translationPath = CreateTempFile("""
@@ -617,15 +615,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     {
         var fakeTts = new FakeTtsProvider();
         var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
-        var coord = new SessionWorkflowCoordinator(
-            _ctx.Store,
-            _ctx.Log,
-            _ctx.Settings,
-            _ctx.PerSessionStore,
-            _ctx.RecentStore,
-            new TranscriptionRegistry(_ctx.Log),
-            new TranslationRegistry(_ctx.Log),
-            fakeTtsRegistry);
+        var coord = CreateCoordinator(ttsRegistry: fakeTtsRegistry);
         coord.Initialize();
 
         var translationPath = CreateTempFile("""
@@ -669,15 +659,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         var settings = CreateMatchingSettings();
         settings.TtsProvider = ProviderNames.Qwen;
 
-        var coord = new SessionWorkflowCoordinator(
-            _ctx.Store,
-            _ctx.Log,
-            settings,
-            _ctx.PerSessionStore,
-            _ctx.RecentStore,
-            new TranscriptionRegistry(_ctx.Log),
-            new TranslationRegistry(_ctx.Log),
-            fakeTtsRegistry);
+        var coord = CreateCoordinator(settings: settings, ttsRegistry: fakeTtsRegistry);
         coord.Initialize();
 
         var translationPath = CreateTempFile("""

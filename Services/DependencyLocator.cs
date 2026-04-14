@@ -7,6 +7,8 @@ using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
+using CoordinatorOptions = Babel.Player.Models.CoordinatorOptions;
+using RegistryBundle = Babel.Player.Models.RegistryBundle;
 
 namespace Babel.Player.Services;
 
@@ -32,7 +34,6 @@ public static class DependencyLocator
         var managedGpuPython = ManagedRuntimeLayout.GetManagedPythonPath();
         if (ProbePythonCandidate(managedGpuPython, requirePip: true))
             return managedGpuPython;
-
 
         var candidates = new[]
         {
@@ -210,9 +211,6 @@ public static class DependencyLocator
     }
 
     /// <summary>
-    /// Get the file extensions to try when resolving an executable name on the current platform.
-    /// </summary>
-    /// <summary>
     /// Get the list of filename extensions to try when resolving an executable name on the current platform.
     /// </summary>
     /// <returns>An array of extensions to append when searching for executables. On Windows the list is parsed from the PATHEXT environment variable (entries start with a dot and an empty string is included); if PATHEXT is missing returns { ".exe", ".cmd", ".bat", "" }. On non-Windows returns an array containing only the empty string.</returns>
@@ -346,7 +344,7 @@ public static class DependencyLocator
             requestLeaseTracker: requestLeaseTracker);
         primaryGpuManager = managedHostManager;
         var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
-        var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
+        var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager, appLog);
 
         var audioProcessingService = new FfmpegAudioProcessingService(appLog);
 
@@ -358,12 +356,23 @@ public static class DependencyLocator
         var snapshotStore = new SessionSnapshotStore(
             Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
         
-        return new SessionWorkflowCoordinator(
-            snapshotStore, appLog, appSettings, perSessionStore, recentStore, 
-            transcriptionRegistry, translationRegistry, ttsRegistry, 
-            transportManager: transportManager, keyStore: apiKeyStore, 
-            diarizationRegistry: diarizationRegistry,
-            containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager,
-            audioProcessingService: audioProcessingService);
+        var registries = new RegistryBundle(
+            perSessionStore,
+            recentStore,
+            transcriptionRegistry,
+            translationRegistry,
+            ttsRegistry);
+
+        var options = new CoordinatorOptions
+        {
+            KeyStore                    = apiKeyStore,
+            DiarizationRegistry         = diarizationRegistry,
+            ContainerizedProbe          = containerizedProbe,
+            ContainerizedInferenceManager = containerizedManager,
+            AudioProcessingService      = audioProcessingService,
+        };
+
+        var coreServices = new CoordinatorCoreServices(snapshotStore, appLog, appSettings);
+        return new SessionWorkflowCoordinator(coreServices, transportManager, registries, options);
     }
 }

@@ -63,14 +63,16 @@ public partial class DevLogViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void OpenLogsFolder()
     {
-        var dir = Path.GetDirectoryName(_log.LogFilePath);
-        if (dir is not null && Directory.Exists(dir))
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "explorer.exe",
-                Arguments = $"\"{dir}\"",
-                UseShellExecute = false,
-            });
+        try
+        {
+            var dir = Path.GetDirectoryName(_log.LogFilePath);
+            if (dir is not null)
+                FileOpener.OpenFolder(dir);
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Failed to open logs folder: {ex.Message}", ex);
+        }
     }
 
     partial void OnFilterTextChanged(string value) => Refresh();

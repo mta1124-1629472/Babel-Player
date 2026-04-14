@@ -98,17 +98,16 @@ public sealed class SessionWorkflowTemplateFixture : IAsyncDisposable
         var ttsRegistry = new FakeTtsRegistry();
         var diarizationRegistry = FakeDiarizationFactory.CreateDefaultRegistry();
         var audioProcessing = new FakeAudioProcessingService();
-        var coordinator = new SessionWorkflowCoordinator(
-            store, 
-            log, 
-            settings, 
-            perSessionStore, 
-            recentStore, 
-            transcriptionRegistry, 
-            translationRegistry, 
-            ttsRegistry,
-            diarizationRegistry: diarizationRegistry,
-            audioProcessingService: audioProcessing);
+        var registries = new Babel.Player.Models.RegistryBundle(
+            perSessionStore, recentStore,
+            transcriptionRegistry, translationRegistry, ttsRegistry);
+        var options = new Babel.Player.Models.CoordinatorOptions
+        {
+            DiarizationRegistry    = diarizationRegistry,
+            AudioProcessingService = audioProcessing,
+        };
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(store, log, settings);
+        var coordinator = new SessionWorkflowCoordinator(coreServices, registries, options);
 
         coordinator.Initialize();
 
