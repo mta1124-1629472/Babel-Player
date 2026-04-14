@@ -39,7 +39,8 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         IMediaTransport? sourcePlayer = null,
         Babel.Player.Services.Settings.AppSettings? settings = null,
         Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null,
-        ContainerizedServiceProbe? containerizedProbe = null)
+        ContainerizedServiceProbe? containerizedProbe = null,
+        bool useRealProviderRegistries = false)
     {
         settings ??= new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
@@ -49,18 +50,27 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
             (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider()),
             (ProviderNames.WeSpeakerLocal, "WeSpeaker", new FakeDiarizationProvider()));
 
-        var registries = new Babel.Player.Models.RegistryBundle(
-            perSessionStore,
-            recentStore,
-            new Babel.Player.Services.Registries.TranscriptionRegistry(log),
-            new Babel.Player.Services.Registries.TranslationRegistry(log),
-            new Babel.Player.Services.Registries.TtsRegistry(log));
+        var registries = useRealProviderRegistries
+            ? new Babel.Player.Models.RegistryBundle(
+                perSessionStore,
+                recentStore,
+                new Babel.Player.Services.Registries.TranscriptionRegistry(log),
+                new Babel.Player.Services.Registries.TranslationRegistry(log),
+                new Babel.Player.Services.Registries.TtsRegistry(log))
+            : new Babel.Player.Models.RegistryBundle(
+                perSessionStore,
+                recentStore,
+                new FakeTranscriptionRegistry(),
+                new FakeTranslationRegistry(),
+                new FakeTtsRegistry());
 
         var options = new Babel.Player.Models.CoordinatorOptions
         {
             DiarizationRegistry    = diarizationRegistry,
             ContainerizedProbe     = containerizedProbe,
-            AudioProcessingService = new FfmpegAudioProcessingService(log),
+            AudioProcessingService = useRealProviderRegistries
+                ? new FfmpegAudioProcessingService(log)
+                : new FakeAudioProcessingService(),
         };
         var coreServices = new Babel.Player.Models.CoordinatorCoreServices(store, log, settings);
 
@@ -76,8 +86,9 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         string caseDir,
         Babel.Player.Services.Settings.AppSettings settings,
         Babel.Player.Services.Registries.IDiarizationRegistry diarizationRegistry,
-        ContainerizedServiceProbe? containerizedProbe = null) =>
-        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry, containerizedProbe);
+        ContainerizedServiceProbe? containerizedProbe = null,
+        bool useRealProviderRegistries = false) =>
+        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry, containerizedProbe, useRealProviderRegistries);
 
     private async Task<TestContext> OpenCaseFromTemplateAsync(string templateName, string caseName)
     {
@@ -95,13 +106,13 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         return new TestContext(coordinator, store, log, caseDir);
     }
 
-    private TestContext CreateFreshCase(string caseName)
+    private TestContext CreateFreshCase(string caseName, bool useRealProviderRegistries = false)
     {
         var caseDir = _fixture.CreateCaseDirectory(caseName);
         var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
         var log = new AppLog(Path.Combine(caseDir, "case.log"));
         var store = new SessionSnapshotStore(stateFilePath, log);
-        var coordinator = CreateCoordinator(store, log, caseDir);
+        var coordinator = CreateCoordinator(store, log, caseDir, useRealProviderRegistries: useRealProviderRegistries);
         coordinator.Initialize();
 
         return new TestContext(coordinator, store, log, caseDir);
@@ -255,11 +266,11 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
 
     [Fact]
     [Trait("Category", "Integration")]
-    [Trait("Category", "RequiresFfmpeg")]
-    [Trait("Category", "RequiresPython")]
     public async Task EndToEndPipeline_SmokeTest()
     {
-        var ctx = CreateFreshCase(nameof(EndToEndPipeline_SmokeTest));
+        // Uses fake provider registries (same as template cases) so the full stage chain is
+        // exercised without Hugging Face / local model downloads. For live Whisper + NLLB, run manually.
+        var ctx = CreateFreshCase(nameof(EndToEndPipeline_SmokeTest), useRealProviderRegistries: false);
 
         ctx.Coordinator.LoadMedia(_fixture.TestMediaPath);
         await ctx.Coordinator.TranscribeMediaAsync();

@@ -120,32 +120,28 @@ public sealed class FakeTranslationProvider : ITranslationProvider
 
     public async Task<TranslationResult> TranslateSingleSegmentAsync(SingleSegmentTranslationRequest request, CancellationToken ct = default)
     {
-        var resultSegments = new List<TranslatedSegment>
+        var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, ct);
+        foreach (var segment in translation.Segments ?? [])
         {
-            new(0.0, 2.0, "Hello world.", "[Translated: Hello world.]")
-        };
+            if (segment.Id == request.SegmentId)
+                segment.TranslatedText = $"{request.SourceText} (en)";
+        }
 
-        var result = new TranslationResult(true, resultSegments, request.SourceLanguage, request.TargetLanguage, null);
-        
-        var json = JsonSerializer.Serialize(new
-        {
-            success = true,
-            segments = resultSegments.Select(s => new
-            {
-                id = $"segment_{s.StartSeconds:G}",
-                startSeconds = s.StartSeconds,
-                endSeconds = s.EndSeconds,
-                text = s.Text,
-                translatedText = s.TranslatedText,
-                speakerId = s.SpeakerId
-            }),
-            sourceLanguage = request.SourceLanguage,
-            targetLanguage = request.TargetLanguage,
-            errorMessage = (string?)null
-        });
-
+        var json = ArtifactJson.SerializeTranslation(translation);
         await File.WriteAllTextAsync(request.OutputJsonPath, json, ct);
-        return result;
+
+        return new TranslationResult(
+            true,
+            (translation.Segments ?? [])
+                .Select(segment => new TranslatedSegment(
+                    segment.Start,
+                    segment.End,
+                    segment.Text ?? string.Empty,
+                    segment.TranslatedText ?? string.Empty))
+                .ToList(),
+            translation.SourceLanguage ?? request.SourceLanguage,
+            translation.TargetLanguage ?? request.TargetLanguage,
+            null);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) => new(true, "Ready");

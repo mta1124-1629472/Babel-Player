@@ -38,7 +38,7 @@ Babel Player is a cross-platform desktop dubbing/localization app built with:
 - **C# / .NET 10.0** + **Avalonia 12.0 RC1** (Fluent theme)
 - **libmpv** (native C library, P/Invoke) for media playback
 - **CommunityToolkit.MVVM 8.2.1** for observable properties
-- **Python subprocesses** for AI inference (Faster-Whisper, googletrans, edge-tts)
+- **Python subprocesses** for AI inference (Faster-Whisper, CTranslate2/NLLB, edge-tts)
 - **xUnit 2.9.3** + coverlet for testing
 
 Core workflow chain: `source media → ingest → transcribe → translate → TTS → preview → persist`
@@ -99,7 +99,7 @@ Babel-Player/
 | `LibMpvHeadlessTransport` | Headless libmpv (`vo=null`, `ao=null`); used for TTS segment audio playback |
 | `LibMpvEmbeddedTransport` | GPU-accelerated libmpv (`vo=gpu`, `wid`); renders video to native HWND |
 | `TranscriptionService` | Subprocess → Faster-Whisper; auto-detects source language; returns timed segments |
-| `TranslationService` | Subprocess → googletrans; supports full-transcript and single-segment regeneration |
+| `TranslationService` | Subprocess → NLLB/CTranslate2; supports full-transcript and single-segment regeneration |
 | `TtsService` | Subprocess → edge-tts; generates MP3 per segment; supports single-segment regeneration |
 | `SrtGenerator` | Static utility; converts segment list to SRT; prefers translated text, falls back to source |
 

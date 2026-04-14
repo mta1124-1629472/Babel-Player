@@ -40,7 +40,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install faster-whisper googletrans==3.1.0a0 edge_tts
+          pip install -r inference/cpu-requirements.txt -c inference/cpu-constraints.txt
 
       - name: Restore
         run: dotnet restore Babel-Player.sln

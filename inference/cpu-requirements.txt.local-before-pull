@@ -1,0 +1,39 @@
+-c cpu-constraints.txt
+
+# Core inference dependencies
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+
+# Transcription
+faster-whisper
+openai-whisper
+
+# Translation
+ctranslate2
+sentencepiece
+googletrans
+
+# TTS
+tts
+edge-tts
+
+# Audio utilities shared with managed CPU providers
+soundfile
+
+# Diarization
+git+https://github.com/wenet-e2e/wespeaker.git@c92349a14d6b426808c4e09b8b12e076864dfc11
+s3prl
+silero-vad
+onnxruntime
+
+# Shared ML
+torch
+torchaudio
+transformers
+accelerate
+
+# Utilities
+numpy
+requests
