@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,6 +16,48 @@ namespace Babel.Player.Services;
 public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingService
 {
     private readonly AppLog _log = log;
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
+    }
 
     public async Task CombineAudioSegmentsAsync(
         IReadOnlyList<string> segmentAudioPaths,
@@ -188,6 +231,19 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         string outputPath,
         CancellationToken cancellationToken)
     {
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H5",
+            location: "FfmpegAudioProcessingService.cs:ExtractFullAudioAsync",
+            message: "Starting full audio extraction for diarization",
+            data: new
+            {
+                inputPath,
+                outputPath,
+            });
+        // #endregion
+
         var ffmpegPath = DependencyLocator.FindFfmpeg()
             ?? throw new InvalidOperationException("ffmpeg not found. Audio extraction requires ffmpeg.");
 
@@ -240,6 +296,24 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         {
             throw new InvalidOperationException($"ffmpeg full audio extraction failed with exit code {proc.ExitCode}: {stderr}");
         }
+
+        var outputFileInfo = new FileInfo(outputPath);
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H5",
+            location: "FfmpegAudioProcessingService.cs:ExtractFullAudioAsync",
+            message: "Completed full audio extraction for diarization",
+            data: new
+            {
+                inputPath,
+                outputPath,
+                outputBytes = outputFileInfo.Exists ? outputFileInfo.Length : 0,
+                ffmpegStderrTail = stderr.Length <= 1500
+                    ? stderr
+                    : stderr.Substring(stderr.Length - 1500),
+            });
+        // #endregion
     }
 
     private static string EscapeConcatListPath(string path) =>

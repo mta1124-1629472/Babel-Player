@@ -15,12 +15,15 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
+import wave
 from time import perf_counter
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
+import numpy as np
 import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
@@ -98,8 +101,21 @@ _nemo_restore_meta_patch_applied = False
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
 TEMP_DIR.mkdir(exist_ok=True)
-DEBUG_LOG_PATH = Path("/home/ander/projects/Babel-Player/.cursor/debug-b0c5b4.log")
-DEBUG_SESSION_ID = "b0c5b4"
+
+def _resolve_debug_log_path() -> Path:
+    env_path = os.environ.get("BABEL_DEBUG_LOG_PATH")
+    if env_path:
+        return Path(env_path)
+
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "Babel-Player.sln").exists():
+            return candidate / "debug-f76224.log"
+
+    return Path.cwd() / "debug-f76224.log"
+
+
+DEBUG_LOG_PATH = _resolve_debug_log_path()
+DEBUG_SESSION_ID = "f76224"
 NEMO_DIARIZATION_DEFAULT_PROVIDER = "nemo"
 NEMO_VAD_MODEL = "vad_multilingual_marblenet"
 NEMO_SPEAKER_EMBEDDING_MODEL = "titanet_large"
@@ -115,12 +131,12 @@ NEMO_VAD_PARAMETERS = {
     "window_length_in_sec": 0.15,
     "shift_length_in_sec": 0.01,
     "smoothing": "median",
-    "overlap": 0.875,
-    "onset": 0.4,
-    "offset": 0.7,
-    "pad_onset": 0.05,
-    "pad_offset": -0.1,
-    "min_duration_on": 0.2,
+    "overlap": 0.5,
+    "onset": 0.1,
+    "offset": 0.1,
+    "pad_onset": 0.1,
+    "pad_offset": 0.0,
+    "min_duration_on": 0.0,
     "min_duration_off": 0.2,
     "filter_speech_first": True,
 }
@@ -1333,6 +1349,20 @@ def _run_nemo_diarization(
         work_dir = Path(work_dir_name)
         out_dir = work_dir / "out"
         manifest_path = work_dir / "manifest.json"
+        signal_stats = _measure_wav_signal_stats(audio_path)
+        # region agent log
+        _write_debug_log(
+            run_id="initial",
+            hypothesis_id="H7",
+            location="inference/main.py:_run_nemo_diarization",
+            message="Measured WAV signal stats before NeMo diarization",
+            data={
+                "audio_path": str(audio_path),
+                "signal_stats": signal_stats,
+                "vad_parameters": NEMO_VAD_PARAMETERS,
+            },
+        )
+        # endregion
 
         manifest_entry = {
             "audio_filepath": str(audio_path),
@@ -1347,6 +1377,18 @@ def _run_nemo_diarization(
             manifest_entry["num_speakers"] = min_speakers
 
         manifest_path.write_text(json.dumps(manifest_entry) + "\n", encoding="utf-8")
+        # region agent log
+        _write_debug_log(
+            run_id="initial",
+            hypothesis_id="H6",
+            location="inference/main.py:_run_nemo_diarization",
+            message="Wrote NeMo manifest entry for diarization",
+            data={
+                "manifest_path": str(manifest_path),
+                "manifest_entry": manifest_entry,
+            },
+        )
+        # endregion
         config = _build_nemo_diarization_config(
             manifest_path,
             out_dir,
@@ -1363,8 +1405,52 @@ def _run_nemo_diarization(
                 exc,
                 exc_info=True,
             )
+            # region agent log
+            _write_debug_log(
+                run_id="initial",
+                hypothesis_id="H6",
+                location="inference/main.py:_run_nemo_diarization",
+                message="NeMo diarizer initialization raised exception",
+                data={
+                    "exception_type": type(exc).__name__,
+                    "error": str(exc),
+                    "traceback": traceback.format_exc(),
+                },
+            )
+            # endregion
             raise
-        diarizer.diarize()
+        try:
+            # region agent log
+            _write_debug_log(
+                run_id="initial",
+                hypothesis_id="H6",
+                location="inference/main.py:_run_nemo_diarization",
+                message="Invoking NeMo diarizer.diarize()",
+                data={
+                    "audio_path": str(audio_path),
+                    "out_dir": str(out_dir),
+                },
+            )
+            # endregion
+            diarizer.diarize()
+        except Exception as exc:
+            # region agent log
+            _write_debug_log(
+                run_id="initial",
+                hypothesis_id="H6",
+                location="inference/main.py:_run_nemo_diarization",
+                message="NeMo diarizer.diarize() raised exception",
+                data={
+                    "exception_type": type(exc).__name__,
+                    "error": str(exc),
+                    "traceback": traceback.format_exc(),
+                    "audio_path": str(audio_path),
+                    "audio_exists": audio_path.exists(),
+                    "audio_size_bytes": audio_path.stat().st_size if audio_path.exists() else 0,
+                },
+            )
+            # endregion
+            raise
 
         rttm_files = sorted(out_dir.rglob("*.rttm"))
         if not rttm_files:
@@ -1801,6 +1887,53 @@ def _ensure_wav_audio(audio_path: Path) -> Path:
         raise RuntimeError(f"ffmpeg audio conversion failed: {proc.stderr[-500:]}")
     audio_path.unlink(missing_ok=True)
     return wav_path
+
+
+def _measure_wav_signal_stats(audio_path: Path) -> dict[str, float | int]:
+    with wave.open(str(audio_path), "rb") as wav_reader:
+        sample_width = wav_reader.getsampwidth()
+        frame_count = wav_reader.getnframes()
+        channel_count = wav_reader.getnchannels()
+        sample_rate = wav_reader.getframerate()
+        raw = wav_reader.readframes(frame_count)
+
+    if sample_width != 2 or frame_count <= 0:
+        return {
+            "sample_width_bytes": sample_width,
+            "frame_count": frame_count,
+            "channel_count": channel_count,
+            "sample_rate_hz": sample_rate,
+            "peak_abs": 0.0,
+            "rms": 0.0,
+            "non_silent_ratio": 0.0,
+        }
+
+    samples = np.frombuffer(raw, dtype=np.int16)
+    if samples.size == 0:
+        return {
+            "sample_width_bytes": sample_width,
+            "frame_count": frame_count,
+            "channel_count": channel_count,
+            "sample_rate_hz": sample_rate,
+            "peak_abs": 0.0,
+            "rms": 0.0,
+            "non_silent_ratio": 0.0,
+        }
+
+    normalized = samples.astype(np.float32) / 32768.0
+    peak_abs = float(np.max(np.abs(normalized)))
+    rms = float(np.sqrt(np.mean(np.square(normalized))))
+    non_silent_ratio = float(np.mean(np.abs(normalized) > 0.01))
+
+    return {
+        "sample_width_bytes": sample_width,
+        "frame_count": frame_count,
+        "channel_count": channel_count,
+        "sample_rate_hz": sample_rate,
+        "peak_abs": peak_abs,
+        "rms": rms,
+        "non_silent_ratio": non_silent_ratio,
+    }
 
 
 def _deferred_cleanup_temp(path: Path) -> None:

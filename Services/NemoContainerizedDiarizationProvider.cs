@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -17,6 +18,48 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _probe;
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
+    }
 
     /// <summary>
     /// Initializes a new instance of <c>NemoContainerizedDiarizationProvider</c>.
@@ -67,6 +110,20 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
             ProviderNames.NemoLocal,
             _probe,
             ct).ConfigureAwait(false);
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H3",
+            location: "NemoContainerizedDiarizationProvider.cs:EnsureReadyAsync",
+            message: "Nemo containerized execution readiness result",
+            data: new
+            {
+                readinessIsReady = readiness.IsReady,
+                readinessBlockingReason = readiness.BlockingReason,
+                provider = ProviderNames.NemoLocal,
+                serviceUrl = settings.EffectiveGpuServiceUrl,
+            });
+        // #endregion
         progress?.Report(1.0);
         return readiness.IsReady;
     }
@@ -86,12 +143,27 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
         _log.Info($"[NemoContainerizedDiarization] Diarizing: {request.SourceAudioPath}");
-        return await _client.DiarizeAsync(
+        var result = await _client.DiarizeAsync(
                 request.SourceAudioPath,
                 ProviderNames.NemoDiarizationAlias,
                 request.MinSpeakers,
                 request.MaxSpeakers,
                 ct)
             .ConfigureAwait(false);
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H4",
+            location: "NemoContainerizedDiarizationProvider.cs:DiarizeAsync",
+            message: "Nemo provider received diarization response from containerized client",
+            data: new
+            {
+                success = result.Success,
+                speakerCount = result.SpeakerCount,
+                segmentCount = result.Segments.Count,
+                errorMessage = result.ErrorMessage,
+            });
+        // #endregion
+        return result;
     }
 }

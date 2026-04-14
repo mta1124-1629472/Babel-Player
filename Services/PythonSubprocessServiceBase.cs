@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,6 +25,7 @@ public abstract class PythonSubprocessServiceBase
 {
     private const int ProcessTerminationRetryAttempts = 3;
     private static readonly TimeSpan ProcessTerminationTimeout = TimeSpan.FromSeconds(2);
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
 
     protected readonly AppLog Log;
     protected readonly string PythonPath;
@@ -124,8 +126,37 @@ public abstract class PythonSubprocessServiceBase
 
         // Honour cancellation before triggering the (potentially expensive) bootstrap.
         cancellationToken.ThrowIfCancellationRequested();
+        var runtimeReadyStopwatch = Stopwatch.StartNew();
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H10",
+            location: "PythonSubprocessServiceBase.cs:RunPythonScriptAsync",
+            message: "RunPythonScriptAsync started",
+            data: new
+            {
+                scriptPrefix,
+                argumentCount = arguments?.Count ?? 0,
+                hasManagedCpuRuntime = _cpuRuntimeManager is not null,
+            });
+        // #endregion
 
         await EnsurePythonRuntimeReadyAsync(cancellationToken).ConfigureAwait(false);
+        runtimeReadyStopwatch.Stop();
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H10",
+            location: "PythonSubprocessServiceBase.cs:RunPythonScriptAsync",
+            message: "RunPythonScriptAsync runtime readiness completed",
+            data: new
+            {
+                scriptPrefix,
+                readyState = _cpuRuntimeManager?.State.ToString() ?? "n/a",
+                failureReason = _cpuRuntimeManager?.FailureReason,
+                readinessElapsedMs = runtimeReadyStopwatch.ElapsedMilliseconds,
+            });
+        // #endregion
 
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
 
@@ -149,6 +180,20 @@ public abstract class PythonSubprocessServiceBase
                 foreach (var (key, value) in environmentVariables)
                     psi.Environment[key] = value;
 
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H11",
+                location: "PythonSubprocessServiceBase.cs:RunPythonScriptAsync",
+                message: "Launching Python subprocess",
+                data: new
+                {
+                    scriptPrefix,
+                    pythonPath = PythonPath,
+                    scriptPath,
+                    argumentCount = arguments?.Count ?? 0,
+                });
+            // #endregion
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException($"Failed to start Python process ({scriptPrefix}).");
 
@@ -207,6 +252,21 @@ public abstract class PythonSubprocessServiceBase
 
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H11",
+                location: "PythonSubprocessServiceBase.cs:RunPythonScriptAsync",
+                message: "Python subprocess completed",
+                data: new
+                {
+                    scriptPrefix,
+                    exitCode = proc.ExitCode,
+                    elapsedMs = sw.ElapsedMilliseconds,
+                    stdoutLength = stdout.Length,
+                    stderrLength = stderr.Length,
+                });
+            // #endregion
 
             return new ScriptResult(proc.ExitCode, stdout, stderr, sw.ElapsedMilliseconds);
         }
@@ -284,5 +344,46 @@ public abstract class PythonSubprocessServiceBase
             Log.Error($"{operationName} failed (exit {result.ExitCode})", new Exception(result.Stderr));
             throw new InvalidOperationException($"{operationName} failed: {result.Stderr}");
         }
+    }
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
     }
 }

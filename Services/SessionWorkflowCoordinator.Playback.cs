@@ -14,13 +14,13 @@ namespace Babel.Player.Services;
 public sealed partial class SessionWorkflowCoordinator
 {
     private static readonly JsonSerializerOptions DebugJsonOptions = new(JsonSerializerDefaults.Web);
-    private const string DebugLogPath = "/home/ander/projects/Babel-Player/.cursor/debug-b0c5b4.log";
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
 
     private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
     {
         var payload = new
         {
-            sessionId = "b0c5b4",
+            sessionId = "f76224",
             runId,
             hypothesisId,
             location,
@@ -38,6 +38,23 @@ public sealed partial class SessionWorkflowCoordinator
         {
             // Swallow debug log failures.
         }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
     }
 
     // ── Diarization ──────────────────────────────────────────────────────
@@ -191,6 +208,22 @@ public sealed partial class SessionWorkflowCoordinator
                             ct)
                         .ConfigureAwait(false)
                     : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+
+                // #region agent log
+                WriteDebugLog(
+                    runId: "initial",
+                    hypothesisId: "H3",
+                    location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
+                    message: "Containerized diarization readiness gate evaluated",
+                    data: new
+                    {
+                        provider = CurrentSettings.DiarizationProvider,
+                        readinessIsReady = readiness.IsReady,
+                        readinessBlockingReason = readiness.BlockingReason,
+                        hasContainerizedProbe = ContainerizedProbe is not null,
+                        effectiveGpuServiceUrl = CurrentSettings.EffectiveGpuServiceUrl,
+                    });
+                // #endregion
 
                 if (!readiness.IsReady)
                 {

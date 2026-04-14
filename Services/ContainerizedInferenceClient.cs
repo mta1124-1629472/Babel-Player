@@ -19,7 +19,7 @@ public sealed class ContainerizedInferenceClient
     private readonly string _inferenceServiceUrl;
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = false };
-    private const string DebugLogPath = "/home/ander/projects/Babel-Player/.cursor/debug-b0c5b4.log";
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
 
     /// <summary>
     /// Initializes a new ContainerizedInferenceClient for the specified inference service URL and logger, using a default HttpClient and no request lease tracker.
@@ -1176,7 +1176,7 @@ public sealed class ContainerizedInferenceClient
     {
         var payload = new
         {
-            sessionId = "b0c5b4",
+            sessionId = "f76224",
             runId,
             hypothesisId,
             location,
@@ -1194,6 +1194,23 @@ public sealed class ContainerizedInferenceClient
         {
             // Swallow debug log failures.
         }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
     }
 
 }
