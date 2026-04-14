@@ -110,7 +110,6 @@ tasks.json
 .kilo/
 .windsurf/
 .Benchmarks/
-.codex/tasks
 *.lscache
 
 
@@ -125,3 +124,36 @@ scripts/run-local-release-dry-run.ps1
 .vscode/settings.json
 .qwen/
 gha-creds-*.json
+
+# --- Local-only / scratch (not required to build or release; keep untracked) ---
+.claude/settings.local.json
+.cursor/hooks/state/
+
+# Personal IDE notes
+.jules/
+
+# OpenClaw skill copies (optional; restore from marketplace or a private fork)
+/skills/
+
+# Codex local task queue
+.codex/tasks/
+
+# Merge / editor backup files
+*.orig
+
+# Repo-root scratch and one-off maintenance scripts
+/pr_description.md
+/patch.diff
+/patch2.diff
+/patch3.diff
+/opencode.json
+/test_ignore.sh
+/gemini.md
+/fix-constructor.ps1
+/fix-duplicates.ps1
+/fix-syntax.ps1
+/fix-tests.ps1
+/fix_conflicts.py
+/fix_merge_conflict.sh
+/add-bootstrap-mocks.ps1
+/setup-qwen-coder.ps1
