@@ -12,6 +12,10 @@ on:
       - "AGENTS.md"
       - "CLAUDE.md"
       - "CONTRIBUTING.md"
+      - "docs/PLAN.md"
+      - "docs/history/**"
+      - "docs/context/**"
+      - "docs/privacy-policy.md"
       - ".github/workflows/architecture.yml"
   pull_request:
     branches: [main]
@@ -24,6 +28,10 @@ on:
       - "AGENTS.md"
       - "CLAUDE.md"
       - "CONTRIBUTING.md"
+      - "docs/PLAN.md"
+      - "docs/history/**"
+      - "docs/context/**"
+      - "docs/privacy-policy.md"
       - ".github/workflows/architecture.yml"
   workflow_dispatch:
 

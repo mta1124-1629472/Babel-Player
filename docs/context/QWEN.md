@@ -46,7 +46,7 @@ Babel-Player/
 ├── BabelPlayer.Tests/         # xUnit integration tests
 ├── inference/                 # Python inference server (FastAPI)
 ├── scripts/                   # Architecture linter, dev tooling
-├── docs/                      # Architecture, smoke notes, benchmarks
+├── docs/                      # Architecture, benchmarks, history/smoke notes
 ├── native/win-x64/            # libmpv-2.dll
 ├── tools/win-x64/             # ffmpeg.exe, uv.exe
 ├── installer/                 # Inno Setup installer scripts
@@ -67,7 +67,7 @@ Babel-Player/
 | `Services/MediaTransportManager.cs` | Owns `LibMpvHeadlessTransport` and `LibMpvEmbeddedTransport` lifecycle |
 | `inference/main.py` | Python inference HTTP server (transcription, translation, TTS, diarization) |
 | `scripts/check-architecture.py` | Architecture linter (enforces structural rules) |
-| `PLAN.md` | 13-milestone roadmap with gates |
+| `docs/PLAN.md` | Milestone roadmap and gates (index) |
 | `AGENTS.md` | Operating rules and non-negotiables |
 
 ## Building and Running
@@ -174,7 +174,7 @@ Every AI inference service implements a provider interface with uniform method s
 - **Work one milestone at a time** — no downstream scope starts until current milestone is verified
 - **Truthful behavior only** — no fake buttons, silent fallbacks, or disguised incomplete implementation
 - **Git history is the archive** — delete dead code; use branches for abandoned experiments
-- **Smoke notes required** — store in `docs/smoke/milestone-XX-label.md` with status: `complete`, `partial`, or `failed`
+- **Smoke notes required** — store in `docs/history/smoke/milestone-XX-label.md` with status: `complete`, `partial`, or `failed`
 - **Refactors only when they unblock current milestone or reduce real complexity** — not for aesthetic purity
 - **UI work should serve the core workflow** — not prestige polish before the loop is real
 - **Do not push to main without explicit instruction**

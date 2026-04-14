@@ -58,7 +58,7 @@ Pain points:
 **Proof points:**
 - Working demo video showing the full pipeline end-to-end on local hardware
 - GitHub repo with actual code, not a landing page
-- Milestone tracking is public (PLAN.md in repo) — shows the project is serious and structured
+- Milestone tracking is public (`docs/PLAN.md` in repo) — shows the project is serious and structured
 - AGPL-3.0 license — no corporate bait-and-switch risk
 
 ---
@@ -102,7 +102,7 @@ Zero paid budget means every channel requires time investment. Prioritized by ex
 The repo is the product page for this audience. Before posting anywhere:
 - README must have a demo GIF or video embedded at the top
 - README must clearly state: what it does, what runs locally, what the hardware requirements are, how to install
-- PLAN.md being public is a differentiator — mention it
+- `docs/PLAN.md` being public is a differentiator — mention it
 - Issues should have `good first issue` labels so contributors have an entry point
 
 **Effort:** Medium (README rewrite if needed; labeling issues is low effort)
