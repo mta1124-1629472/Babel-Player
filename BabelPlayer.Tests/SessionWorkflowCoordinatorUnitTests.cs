@@ -1053,6 +1053,53 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         Assert.Contains("host is warming", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task RunDiarizationAsync_LocalProvider_BootstrapsBeforeReadinessGate()
+    {
+        var fakeProvider = new FakeDiarizationProvider(
+            _ => new DiarizationResult(
+                true,
+                [new DiarizedSegment(0.0, 1.0, "spk_01")],
+                1,
+                null),
+            readiness: new ProviderReadiness(false, "Managed CPU runtime is not bootstrapped for WeSpeaker yet."),
+            ensureReadyCallback: (_, _) => ProviderReadiness.Ready);
+        var fakeRegistry = new FakeDiarizationRegistry((
+            new ProviderDescriptor(
+                ProviderNames.WeSpeakerLocal,
+                "WeSpeaker",
+                RequiresApiKey: false,
+                CredentialKey: null,
+                SupportedModels: [],
+                SupportedRuntimes: [InferenceRuntime.Local],
+                DefaultRuntime: InferenceRuntime.Local,
+                IsImplemented: true,
+                Notes: "Uses the managed CPU WeSpeaker provider."),
+            (IDiarizationProvider)fakeProvider));
+        var settings = CreateMatchingSettings();
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
+
+        var coord = CreateCoordinator(settings, diarizationRegistry: fakeRegistry);
+        coord.Initialize();
+
+        var transcriptPath = CreateTempFile("""{"language":"es","segments":[{"start":0.0,"end":1.0,"text":"hola"}]}""");
+        var mediaPath = CreateTempFile("audio");
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
+
+        var changed = await coord.RunDiarizationAsync();
+
+        Assert.True(changed);
+        Assert.Equal(1, fakeProvider.EnsureReadyCallCount);
+        Assert.NotNull(fakeProvider.LastRequest);
+        Assert.Equal(mediaPath, fakeProvider.LastRequest!.SourceAudioPath);
+    }
+
     // ── CheckSettingsInvalidation ─────────────────────────────────────────────
 
     [Fact]
