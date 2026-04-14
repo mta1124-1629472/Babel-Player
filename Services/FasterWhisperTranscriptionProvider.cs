@@ -16,6 +16,7 @@ namespace Babel.Player.Services;
 public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessServiceBase, ITranscriptionProvider, IBenchmarkableProvider
 {
     public string ProviderId => ProviderNames.FasterWhisper;
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
 
     public FasterWhisperTranscriptionProvider(AppLog log) : base(log) { }
 
@@ -101,6 +102,7 @@ public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessService
             // model has already been validated against the whitelist by ProviderCapability before this call
             var script = $@"
 import sys, json
+from time import perf_counter
 
 # ── Memory sampling helpers (Step 3: VRAM/RAM instrumentation) ──────────────
 def _sample_ram_mb():
@@ -127,13 +129,19 @@ from faster_whisper import WhisperModel
 
 model_name = '{modelNameLiteral}'
 print('CPU transcription runtime: compute_type={cpuComputeTypeLiteral}, cpu_threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, num_workers={numWorkers}')
+t0 = perf_counter()
 model = WhisperModel({whisperCtorArgs})
+t1 = perf_counter()
+print(json.dumps({{'timing':'model_load_s','value': round(t1 - t0, 3)}}), file=sys.stderr)
 
 # Sample baseline memory after model load, before inference
 ram_before = _sample_ram_mb()
 vram_before = _sample_vram_mb()
 
+t2 = perf_counter()
 segments, info = model.transcribe(sys.argv[1])
+t3 = perf_counter()
+print(json.dumps({{'timing':'transcribe_s','value': round(t3 - t2, 3)}}), file=sys.stderr)
 
 # Sample peak memory immediately after inference completes
 ram_after  = _sample_ram_mb()
@@ -170,6 +178,23 @@ print('Transcription complete')
                 [inputPath, request.OutputJsonPath],
                 "transcribe",
                 cancellationToken: cancellationToken);
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H13",
+                location: "FasterWhisperTranscriptionProvider.cs:TranscribeAsync",
+                message: "FasterWhisper subprocess completed",
+                data: new
+                {
+                    elapsedMs = result.ElapsedMs,
+                    exitCode = result.ExitCode,
+                    stdoutLength = result.Stdout.Length,
+                    stderrLength = result.Stderr.Length,
+                    stderrTail = result.Stderr.Length <= 1000
+                        ? result.Stderr
+                        : result.Stderr[^1000..],
+                });
+            // #endregion
             ThrowIfFailed(result, "Transcription");
 
             Log.Info($"Transcription completed: {request.OutputJsonPath}");
@@ -243,5 +268,46 @@ print('Transcription complete')
         Log.Warning($"CPU compute type '{requested}' requires AVX-512F which is not available on this CPU. " +
                     $"Downgrading to '{effective}' for this run. Change in Settings > Transcription to suppress this warning.");
         return effective;
+    }
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
     }
 }

@@ -24,13 +24,13 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     };
 
     private readonly ManagedCpuRuntimeManager _cpuRuntimeManager;
-    private const string DebugLogPath = "/home/ander/projects/Babel-Player/.cursor/debug-b0c5b4.log";
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
 
     private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
     {
         var payload = new
         {
-            sessionId = "b0c5b4",
+            sessionId = "f76224",
             runId,
             hypothesisId,
             location,
@@ -48,6 +48,23 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
         {
             // Swallow debug log failures.
         }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
     }
 
     /// <summary>
@@ -201,6 +218,23 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
                 [request.SourceAudioPath],
                 "wespeaker_diarize",
                 cancellationToken: ct).ConfigureAwait(false);
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H12",
+                location: "WeSpeakerCpuDiarizationProvider.cs:DiarizeAsync",
+                message: "WeSpeaker subprocess completed",
+                data: new
+                {
+                    elapsedMs = result.ElapsedMs,
+                    exitCode = result.ExitCode,
+                    stdoutLength = result.Stdout.Length,
+                    stderrLength = result.Stderr.Length,
+                    stderrTail = result.Stderr.Length <= 1000
+                        ? result.Stderr
+                        : result.Stderr[^1000..],
+                });
+            // #endregion
 
             if (result.ExitCode != 0)
             {
@@ -280,6 +314,7 @@ import json
 import sys
 import traceback
 import io
+import time
 from contextlib import redirect_stdout
 
 import wespeaker
@@ -354,9 +389,15 @@ def main():
     _patch_wespeaker_subsegment()
     captured_stdout = io.StringIO()
     with redirect_stdout(captured_stdout):
+        t0 = time.perf_counter()
         model = wespeaker.load_model("english")
+        t1 = time.perf_counter()
         model.set_device("cpu")
+        t2 = time.perf_counter()
         raw_result = model.diarize(audio_path)
+        t3 = time.perf_counter()
+    print(json.dumps({"timing": "load_model_s", "value": round(t1 - t0, 3)}), file=sys.stderr)
+    print(json.dumps({"timing": "diarize_s", "value": round(t3 - t2, 3)}), file=sys.stderr)
 
     diagnostic_output = captured_stdout.getvalue().strip()
     if diagnostic_output:

@@ -39,6 +39,7 @@ internal sealed record ManagedCpuRuntimeInspection(
 public sealed class ManagedCpuRuntimeManager
 {
     private const string PythonVersion = "3.11.6";
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
     private static readonly SemaphoreSlim InstallGate = new(1, 1);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -108,11 +109,39 @@ public sealed class ManagedCpuRuntimeManager
         Action<string>? onStatusLine = null,
         CancellationToken cancellationToken = default)
     {
+        var ensureInstalledStopwatch = Stopwatch.StartNew();
         var inspection = InspectRuntimeState();
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H8",
+            location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
+            message: "EnsureInstalledAsync initial inspection",
+            data: new
+            {
+                inspectedState = inspection.State.ToString(),
+                needsBootstrap = inspection.NeedsBootstrap,
+                detail = inspection.Detail,
+            });
+        // #endregion
         CacheNeedsBootstrap(inspection.NeedsBootstrap);
         if (!inspection.NeedsBootstrap)
         {
             ApplyInspection(inspection, logReadyState: true);
+            ensureInstalledStopwatch.Stop();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H8",
+                location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
+                message: "EnsureInstalledAsync returned without bootstrap",
+                data: new
+                {
+                    state = State.ToString(),
+                    failureReason = FailureReason,
+                    elapsedMs = ensureInstalledStopwatch.ElapsedMilliseconds,
+                });
+            // #endregion
             return;
         }
 
@@ -125,15 +154,62 @@ public sealed class ManagedCpuRuntimeManager
             if (!inspection.NeedsBootstrap)
             {
                 ApplyInspection(inspection, logReadyState: true);
+                ensureInstalledStopwatch.Stop();
+                // #region agent log
+                WriteDebugLog(
+                    runId: "initial",
+                    hypothesisId: "H9",
+                    location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
+                    message: "EnsureInstalledAsync lock recheck found runtime already bootstrapped",
+                    data: new
+                    {
+                        inspectedState = inspection.State.ToString(),
+                        needsBootstrap = inspection.NeedsBootstrap,
+                        detail = inspection.Detail,
+                        elapsedMs = ensureInstalledStopwatch.ElapsedMilliseconds,
+                    });
+                // #endregion
                 return;
             }
 
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H9",
+                location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
+                message: "EnsureInstalledAsync entering RunBootstrapAsync",
+                data: new
+                {
+                    inspectedState = inspection.State.ToString(),
+                    needsBootstrap = inspection.NeedsBootstrap,
+                    detail = inspection.Detail,
+                });
+            // #endregion
             await RunBootstrapAsync(onStatusLine, cancellationToken);
         }
         finally
         {
             InstallGate.Release();
         }
+
+        ensureInstalledStopwatch.Stop();
+        var finalInspection = InspectRuntimeState();
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H8",
+            location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
+            message: "EnsureInstalledAsync completed after bootstrap path",
+            data: new
+            {
+                state = State.ToString(),
+                failureReason = FailureReason,
+                finalInspectedState = finalInspection.State.ToString(),
+                finalNeedsBootstrap = finalInspection.NeedsBootstrap,
+                finalDetail = finalInspection.Detail,
+                elapsedMs = ensureInstalledStopwatch.ElapsedMilliseconds,
+            });
+        // #endregion
     }
 
     /// <summary>
@@ -344,6 +420,23 @@ public sealed class ManagedCpuRuntimeManager
                 },
                 "pip",
                 "install",
+                "--python",
+                pythonPath,
+                "setuptools==80.9.0",
+                "wheel");
+
+            await RunProcessAsync(
+                uvPath,
+                AppContext.BaseDirectory,
+                cancellationToken,
+                line =>
+                {
+                    BootstrapStatusLine = line;
+                    onStatusLine?.Invoke(line);
+                },
+                "pip",
+                "install",
+                "--no-build-isolation",
                 "--python",
                 pythonPath,
                 "-r",
@@ -706,4 +799,45 @@ print(json.dumps(payload))
 
     private static string ResolveCpuConstraintsPath() =>
         Path.Combine(AppContext.BaseDirectory, "inference", "cpu-constraints.txt");
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
+    }
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
 }
