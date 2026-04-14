@@ -199,3 +199,43 @@ Boundaries:
 - **Naming:** `milestone-01-foundation.md`, lowercase, hyphen-separated
 - **Status:** `complete`, `partial`, or `failed` (no "mostly done", "substantially complete")
 - **Required sections:** Metadata, Gate Summary, What Was Verified, What Was Not Verified, Evidence, Notes, Conclusion, Deferred Items
+
+---
+
+## Cursor Cloud specific instructions
+
+### Environment
+
+- **.NET 10 SDK** is installed at `/usr/share/dotnet` via the official `dotnet-install.sh` script. The `dotnet` binary is symlinked at `/usr/local/bin/dotnet`; `DOTNET_ROOT=/usr/share/dotnet` is set in `~/.bashrc`.
+- **Python 3.12** is available as `python3`; a `python` → `python3` symlink exists at `/usr/local/bin/python` (some tests resolve `python` not `python3`).
+- **ffmpeg** is available system-wide.
+- This is a **Windows-targeted desktop app** (Avalonia + libmpv). The GUI cannot launch on the Linux cloud VM (no display, no libmpv `.so`), but the full build, test, and lint suite runs headlessly.
+
+### Build / Test / Lint
+
+Standard commands from the "Build, Test, and Lint Commands" section above all work. Quick reference:
+
+```bash
+dotnet build Babel-Player.sln
+dotnet test Babel-Player.sln
+python3 scripts/check-architecture.py
+python3 -m py_compile inference/main.py
+```
+
+### Expected test failures (3 of ~910)
+
+These tests fail on the Linux cloud VM and are **not bugs**:
+
+| Test | Reason |
+|------|--------|
+| `EndToEndPipeline_SmokeTest` | Requires `uv.exe` (Windows-only bundled tool) for managed Python venv |
+| `RegenerateSegmentTranslation_ActuallyWritesNewTextToSegment` | Requires downloading NLLB-200 translation model (~600 MB+) |
+| `TranslateTranscriptAsync_NoSourceLangParam_UsesSessionLanguage` | Same NLLB model download requirement |
+
+All other 907 tests pass consistently.
+
+### Gotchas
+
+- The app targets `net10.0` (.NET 10) which may require the preview/latest SDK channel. The update script installs it automatically.
+- `OutputType=WinExe` in the `.csproj` means `dotnet run` will fail on Linux (no GUI). Use `dotnet build` and `dotnet test` for validation.
+- The `.git-hooks/` directory referenced in AGENTS.md does not exist in the repo; git hooks are not active.
