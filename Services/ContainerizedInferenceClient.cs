@@ -182,6 +182,67 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
+    /// Transcribes an audio file using the Parakeet TDT model via the containerized inference service (<c>/transcribe/parakeet</c>).
+    /// </summary>
+    /// <param name="audioFilePath">Path to the audio file to transcribe; must exist.</param>
+    /// <param name="language">Optional language hint (informational; Parakeet is English-only).</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A <see cref="TranscriptionResult"/> with Success=true and populated segments on success; otherwise Success=false and ErrorMessage populated.</returns>
+    public async Task<TranscriptionResult> TranscribeParakeetAsync(
+        string audioFilePath,
+        string? language = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var lease = AcquireLease(ContainerizedRequestKind.Transcription);
+
+            if (!File.Exists(audioFilePath))
+                throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
+
+            _log.Info($"Transcribing with Parakeet: {audioFilePath}");
+
+            using var content = new MultipartFormDataContent();
+            await using var fileStream = new FileStream(
+                audioFilePath, FileMode.Open, FileAccess.Read,
+                FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
+            content.Add(new StreamContent(fileStream), "file", Path.GetFileName(audioFilePath));
+            if (language != null)
+                content.Add(new StringContent(language), "language");
+
+            using var response = await _httpClient.PostAsync(
+                $"{_inferenceServiceUrl}/transcribe/parakeet",
+                content,
+                cancellationToken);
+
+            var result = await DeserializeResponseAsync<TranscriptionApiResponseDto>(response, cancellationToken);
+            if (!result.Success)
+                throw new InvalidOperationException($"Parakeet transcription error: {result.ErrorMessage}");
+
+            var segments = new List<TranscriptSegment>();
+            foreach (var seg in result.Segments ?? [])
+            {
+                if (!string.IsNullOrWhiteSpace(seg.Text))
+                    segments.Add(new TranscriptSegment(seg.Start, seg.End, seg.Text));
+            }
+
+            _log.Info($"Parakeet transcription complete: {segments.Count} segments");
+
+            return new TranscriptionResult(
+                true,
+                segments,
+                result.Language ?? "en",
+                result.LanguageProbability,
+                null);
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Parakeet transcription failed: {ex.Message}", ex);
+            return new TranscriptionResult(false, [], "en", 0.0, ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Translates a serialized transcript from a source language into a target language using the specified model.
     /// </summary>
     /// <param name="transcriptJson">JSON-serialized transcript to translate (expected format produced by the transcription endpoint).</param>
