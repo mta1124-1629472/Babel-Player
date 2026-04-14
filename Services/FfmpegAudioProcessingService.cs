@@ -183,6 +183,65 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         }
     }
 
+    public async Task ExtractFullAudioAsync(
+        string inputPath,
+        string outputPath,
+        CancellationToken cancellationToken)
+    {
+        var ffmpegPath = DependencyLocator.FindFfmpeg()
+            ?? throw new InvalidOperationException("ffmpeg not found. Audio extraction requires ffmpeg.");
+
+        var outputDir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDir))
+            Directory.CreateDirectory(outputDir);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffmpegPath,
+            RedirectStandardOutput = false,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        psi.ArgumentList.Add("-y");
+        psi.ArgumentList.Add("-i");
+        psi.ArgumentList.Add(inputPath);
+        psi.ArgumentList.Add("-vn");
+        psi.ArgumentList.Add("-acodec");
+        psi.ArgumentList.Add("pcm_s16le");
+        psi.ArgumentList.Add("-ar");
+        psi.ArgumentList.Add("16000");
+        psi.ArgumentList.Add("-ac");
+        psi.ArgumentList.Add("1");
+        psi.ArgumentList.Add(outputPath);
+
+        using var proc = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start ffmpeg for full audio extraction.");
+
+        using var registration = cancellationToken.Register(() =>
+        {
+            try
+            {
+                if (!proc.HasExited)
+                    proc.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+                // Best-effort termination
+            }
+        });
+
+        var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
+        await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
+
+        if (proc.ExitCode != 0 || !File.Exists(outputPath))
+        {
+            throw new InvalidOperationException($"ffmpeg full audio extraction failed with exit code {proc.ExitCode}: {stderr}");
+        }
+    }
+
     private static string EscapeConcatListPath(string path) =>
         path.Replace("\\", "/", StringComparison.Ordinal)
             .Replace("'", "'\\''", StringComparison.Ordinal);
