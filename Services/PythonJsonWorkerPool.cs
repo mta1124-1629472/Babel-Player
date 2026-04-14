@@ -300,9 +300,9 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
                 stderr = $"Failed to read worker stderr: {ex.Message}";
             }
 
-            var killSuffix = killAttempted ? " (kill attempted)." : ".";
+            var killSuffix = killAttempted ? " (kill attempted)" : "";
             throw new InvalidOperationException(
-                $"{_poolName} worker {worker.Index + 1} exited without a response. {stderr}".Trim());
+                $"{_poolName} worker {worker.Index + 1} exited without a response{killSuffix}. {stderr}".Trim());
         }
 
         var envelope = JsonSerializer.Deserialize<WorkerResponseEnvelope<TResponse>>(responseLine, JsonOptions)
@@ -348,7 +348,8 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
 
         // Drain the pipe without capturing, so the OS pipe buffer doesn't
         // block the process from exiting. The cancellation token keeps this bounded.
-        if (!stderr.EndOfStream)
+        string? nextLine = await stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+        if (nextLine is not null)
         {
             truncated = true;
             while (await stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false) is not null)
