@@ -448,9 +448,18 @@ public sealed class RegistryTests : IDisposable
     {
         var providers = _transcriptionRegistry.GetAvailableProviders(ComputeProfile.Gpu);
 
-        Assert.Equal(2, providers.Count);
-        Assert.Contains(providers, p => p.Id == ProviderNames.FasterWhisper);
-        Assert.Contains(providers, p => p.Id == ProviderNames.Parakeet);
+        // GPU profile: only containerized (managed local GPU / Docker) transcription backends.
+        var expectedIds = new HashSet<string>(StringComparer.Ordinal)
+        {
+            ProviderNames.FasterWhisper,
+            ProviderNames.Parakeet,
+        };
+        Assert.Equal(expectedIds, providers.Select(p => p.Id).ToHashSet(StringComparer.Ordinal));
+        Assert.All(providers, p =>
+        {
+            Assert.Equal(InferenceRuntime.Containerized, p.EffectiveDefaultRuntime);
+            Assert.Equal(InferenceRuntime.Containerized, Assert.Single(p.EffectiveSupportedRuntimes));
+        });
     }
 
     [Fact]
