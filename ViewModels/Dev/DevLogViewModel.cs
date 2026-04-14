@@ -66,12 +66,8 @@ public partial class DevLogViewModel : ObservableObject, IDisposable
         try
         {
             var dir = Path.GetDirectoryName(_log.LogFilePath);
-            if (dir is not null && Directory.Exists(dir))
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = dir,
-                    UseShellExecute = true,
-                });
+            if (dir is not null)
+                FileOpener.OpenFolder(dir);
         }
         catch (Exception ex)
         {

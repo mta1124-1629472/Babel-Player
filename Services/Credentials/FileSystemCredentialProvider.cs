@@ -68,10 +68,21 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
                 var stored = File.ReadAllBytes(secretPath);
                 if (OperatingSystem.IsWindows())
                 {
-                    return System.Security.Cryptography.ProtectedData.Unprotect(
+                    var unprotected = System.Security.Cryptography.ProtectedData.Unprotect(
                         stored, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                    if (unprotected.Length < 16)
+                        throw new System.Security.Cryptography.CryptographicException("Decrypted secret is too short; file may be corrupt.");
+                    return unprotected;
                 }
+                if (stored.Length < 16)
+                    throw new System.Security.Cryptography.CryptographicException("Stored secret is too short; file may be corrupt.");
                 return stored;
+            }
+            catch (System.Security.Cryptography.CryptographicException)
+            {
+                // Secret file is corrupt or was DPAPI-protected by a different user/machine.
+                // Delete it and fall through to regenerate a fresh secret.
+                try { File.Delete(secretPath); } catch { /* best-effort */ }
             }
             catch (IOException ex)
             {
