@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using Avalonia;
 using Avalonia.Controls;
@@ -73,12 +72,12 @@ public partial class CrashReportWindow : Window
         try
         {
             var folder = Path.GetDirectoryName(_logFilePath);
-            if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
-                Process.Start(new ProcessStartInfo { FileName = folder, UseShellExecute = true });
+            if (!string.IsNullOrWhiteSpace(folder))
+                Babel.Player.Services.FileOpener.OpenFolder(folder);
         }
         catch
         {
-            // Explorer/Finder unavailable — ignore.
+            // Opener unavailable — ignore.
         }
     }
 
