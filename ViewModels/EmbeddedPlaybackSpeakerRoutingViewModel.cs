@@ -26,6 +26,7 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
+    [NotifyPropertyChangedFor(nameof(CanReviewSpeakerReferences))]
     private bool _isMultiSpeakerEnabled;
 
     [ObservableProperty]
@@ -43,6 +44,7 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSpeakers))]
     [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
+    [NotifyPropertyChangedFor(nameof(CanReviewSpeakerReferences))]
     private ObservableCollection<string> _speakerIds = new();
 
     [ObservableProperty]
@@ -73,6 +75,7 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
     public bool HasAutoSpeakerDetectionStatus => !string.IsNullOrWhiteSpace(AutoSpeakerDetectionStatus);
     public bool IsMultiSpeakerNoSpeakersYet => IsMultiSpeakerEnabled && !HasSpeakers;
     public bool IsTtsCloningProvider => string.Equals(_parent.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal);
+    public bool CanReviewSpeakerReferences => IsMultiSpeakerEnabled && HasSpeakers && IsTtsCloningProvider;
 
     internal void SyncFromSettings()
     {
@@ -98,7 +101,11 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
 
     internal void SetAutoSpeakerDetectionStatus(string status) => AutoSpeakerDetectionStatus = status;
 
-    internal void NotifyTtsProviderChanged() => OnPropertyChanged(nameof(IsTtsCloningProvider));
+    internal void NotifyTtsProviderChanged()
+    {
+        OnPropertyChanged(nameof(IsTtsCloningProvider));
+        OnPropertyChanged(nameof(CanReviewSpeakerReferences));
+    }
 
     internal void RebuildSpeakerIds(IEnumerable<WorkflowSegmentState> segments, string? preferredSpeakerId = null)
     {

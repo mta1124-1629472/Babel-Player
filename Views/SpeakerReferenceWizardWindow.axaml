@@ -1,0 +1,131 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Babel.Player.ViewModels"
+        xmlns:model="using:Babel.Player.Models"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="Babel.Player.Views.SpeakerReferenceWizardWindow"
+        x:DataType="vm:SpeakerReferenceWizardViewModel"
+        Title="Speaker Reference Setup"
+        Width="940"
+        Height="680"
+        MinWidth="820"
+        MinHeight="560"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="18">
+        <StackPanel Grid.Row="0" Spacing="6">
+            <TextBlock Text="Speaker Reference Setup" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="Review every detected speaker. Changes stay in draft mode until you choose Finish."
+                       FontSize="12"
+                       Opacity="0.75"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*" Margin="0,12,0,10" ColumnSpacing="10">
+            <Border Grid.Column="0" Background="{DynamicResource PositiveBrush}" CornerRadius="8" Padding="10,5">
+                <TextBlock Text="{Binding GoodCount, StringFormat='Good: {0}'}" FontSize="12" />
+            </Border>
+            <Border Grid.Column="1" Background="{DynamicResource InfoBrush}" CornerRadius="8" Padding="10,5">
+                <TextBlock Text="{Binding ReviewCount, StringFormat='Review: {0}'}" FontSize="12" />
+            </Border>
+            <Border Grid.Column="2" Background="{DynamicResource DestructiveBrush}" CornerRadius="8" Padding="10,5">
+                <TextBlock Text="{Binding PoorCount, StringFormat='Poor: {0}'}" FontSize="12" />
+            </Border>
+            <CheckBox Grid.Column="3"
+                      IsChecked="{Binding ShowLowConfidenceOnly, Mode=TwoWay}"
+                      Content="Show low confidence only"
+                      VerticalAlignment="Center" />
+            <Button Grid.Column="4"
+                    Command="{Binding ResetAllCommand}"
+                    Content="Reset all drafts"
+                    Padding="10,6" />
+            <TextBlock Grid.Column="5"
+                       Text="{Binding StatusText}"
+                       VerticalAlignment="Center"
+                       TextAlignment="Right"
+                       TextWrapping="Wrap"
+                       Opacity="0.8" />
+        </Grid>
+
+        <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding VisibleDraftItems}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="model:SpeakerReferenceDraftItem">
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,10">
+                                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto" RowSpacing="6" ColumnSpacing="12">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding SpeakerId}" FontWeight="SemiBold" FontSize="13" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding LastActionLabel}" Opacity="0.75" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding ConfidenceTier}" FontWeight="SemiBold" />
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Clip" Opacity="0.7" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                                               Text="{Binding EffectiveReferencePath, TargetNullValue='—'}"
+                                               TextWrapping="Wrap"
+                                               FontFamily="Consolas,monospace"
+                                               FontSize="11" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Reason" Opacity="0.7" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                                               Text="{Binding ConfidenceReasonSummary}"
+                                               TextWrapping="Wrap"
+                                               FontSize="11" />
+
+                                    <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+                                          ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                                        <Button Grid.Column="0"
+                                                Tag="{Binding}"
+                                                Click="OnKeepAutoClick"
+                                                Content="Keep auto"
+                                                Padding="8,6" />
+                                        <Button Grid.Column="1"
+                                                Tag="{Binding}"
+                                                Click="OnBrowseFileClick"
+                                                Content="Browse file"
+                                                Padding="8,6" />
+                                        <Button Grid.Column="2"
+                                                Tag="{Binding}"
+                                                Click="OnUseSelectedSegmentClick"
+                                                Content="Use selected segment"
+                                                Padding="8,6" />
+                                        <Button Grid.Column="3"
+                                                Tag="{Binding}"
+                                                Click="OnAutoPickAnotherClick"
+                                                Content="Auto-pick another"
+                                                Padding="8,6" />
+                                    </Grid>
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
+                                               Text="{Binding InlineError}"
+                                               Foreground="{DynamicResource DestructiveBrush}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               IsVisible="{Binding HasInlineError}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" Margin="0,12,0,0" ColumnSpacing="8">
+            <TextBlock Grid.Column="0"
+                       Text="Finish applies only changed speaker mappings. Cancel discards all draft edits."
+                       VerticalAlignment="Center"
+                       Opacity="0.75"
+                       TextWrapping="Wrap" />
+            <Button Grid.Column="1"
+                    Click="OnCancelClick"
+                    Content="Cancel"
+                    Padding="14,8" />
+            <Button Grid.Column="2"
+                    Click="OnFinishClick"
+                    Content="Finish"
+                    Padding="14,8" />
+        </Grid>
+    </Grid>
+</Window>
