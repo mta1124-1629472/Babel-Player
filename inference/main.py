@@ -153,10 +153,8 @@ def _write_debug_log(run_id: str, hypothesis_id: str, location: str, message: st
         "timestamp": int(time.time() * 1000),
     }
     try:
-        # region agent log
-        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as log_file:
-            log_file.write(json.dumps(payload, ensure_ascii=True) + "\n")
-        # endregion
+        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload) + "\n")
     except Exception:
         pass
 
@@ -1327,21 +1325,6 @@ def _run_nemo_diarization(
     Raises:
         RuntimeError: If NeMo produces no RTTM output file.
     """
-    # region agent log
-    _write_debug_log(
-        run_id="initial",
-        hypothesis_id="H4",
-        location="inference/main.py:_run_nemo_diarization",
-        message="Starting NeMo diarization worker",
-        data={
-            "audio_path": str(audio_path),
-            "audio_exists": audio_path.exists(),
-            "min_speakers": min_speakers,
-            "max_speakers": max_speakers,
-            "temp_dir": str(TEMP_DIR),
-        },
-    )
-    # endregion
     _apply_nemo_meta_tensor_restore_patch()
     import nemo.collections.asr as nemo_asr
     import nemo.collections.asr.parts.utils.vad_utils as nemo_vad_utils
@@ -1358,34 +1341,12 @@ def _run_nemo_diarization(
 
         nemo_vad_utils.tqdm = _quiet_tqdm
         nemo_vad_utils._babel_tqdm_patched = True
-        # region agent log
-        _write_debug_log(
-            run_id="initial",
-            hypothesis_id="H14",
-            location="inference/main.py:_run_nemo_diarization",
-            message="Applied NeMo VAD tqdm quiet patch",
-            data={"module": "nemo.collections.asr.parts.utils.vad_utils"},
-        )
-        # endregion
 
     with tempfile.TemporaryDirectory(dir=TEMP_DIR, prefix="nemo_diar_") as work_dir_name:
         work_dir = Path(work_dir_name)
         out_dir = work_dir / "out"
         manifest_path = work_dir / "manifest.json"
         signal_stats = _measure_wav_signal_stats(audio_path)
-        # region agent log
-        _write_debug_log(
-            run_id="initial",
-            hypothesis_id="H7",
-            location="inference/main.py:_run_nemo_diarization",
-            message="Measured WAV signal stats before NeMo diarization",
-            data={
-                "audio_path": str(audio_path),
-                "signal_stats": signal_stats,
-                "vad_parameters": NEMO_VAD_PARAMETERS,
-            },
-        )
-        # endregion
 
         manifest_entry = {
             "audio_filepath": str(audio_path),
@@ -1400,38 +1361,12 @@ def _run_nemo_diarization(
             manifest_entry["num_speakers"] = min_speakers
 
         manifest_path.write_text(json.dumps(manifest_entry) + "\n", encoding="utf-8")
-        # region agent log
-        _write_debug_log(
-            run_id="initial",
-            hypothesis_id="H6",
-            location="inference/main.py:_run_nemo_diarization",
-            message="Wrote NeMo manifest entry for diarization",
-            data={
-                "manifest_path": str(manifest_path),
-                "manifest_entry": manifest_entry,
-            },
-        )
-        # endregion
         config = _build_nemo_diarization_config(
             manifest_path,
             out_dir,
             min_speakers,
             max_speakers,
         )
-        # region agent log
-        _write_debug_log(
-            run_id="initial",
-            hypothesis_id="H20",
-            location="inference/main.py:_run_nemo_diarization",
-            message="Built NeMo clustering config for diarization run",
-            data={
-                "oracle_num_speakers": bool(config.diarizer.clustering.parameters.oracle_num_speakers),
-                "max_num_speakers": int(config.diarizer.clustering.parameters.max_num_speakers),
-                "vad_model": str(config.diarizer.vad.model_path),
-                "speaker_embedding_model": str(config.diarizer.speaker_embeddings.model_path),
-            },
-        )
-        # endregion
 
         try:
             with _nemo_diarizer_construction_lock:
@@ -1442,65 +1377,12 @@ def _run_nemo_diarization(
                 exc,
                 exc_info=True,
             )
-            # region agent log
-            _write_debug_log(
-                run_id="initial",
-                hypothesis_id="H6",
-                location="inference/main.py:_run_nemo_diarization",
-                message="NeMo diarizer initialization raised exception",
-                data={
-                    "exception_type": type(exc).__name__,
-                    "error": str(exc),
-                    "traceback": traceback.format_exc(),
-                },
-            )
-            # endregion
             raise
         try:
-            # region agent log
-            _write_debug_log(
-                run_id="initial",
-                hypothesis_id="H6",
-                location="inference/main.py:_run_nemo_diarization",
-                message="Invoking NeMo diarizer.diarize()",
-                data={
-                    "audio_path": str(audio_path),
-                    "out_dir": str(out_dir),
-                },
-            )
-            # endregion
             diarize_started = time.perf_counter()
             diarizer.diarize()
             diarize_elapsed = time.perf_counter() - diarize_started
-            # region agent log
-            _write_debug_log(
-                run_id="initial",
-                hypothesis_id="H20",
-                location="inference/main.py:_run_nemo_diarization",
-                message="NeMo diarizer.diarize() completed",
-                data={
-                    "elapsed_s": round(diarize_elapsed, 3),
-                    "out_dir": str(out_dir),
-                },
-            )
-            # endregion
         except Exception as exc:
-            # region agent log
-            _write_debug_log(
-                run_id="initial",
-                hypothesis_id="H6",
-                location="inference/main.py:_run_nemo_diarization",
-                message="NeMo diarizer.diarize() raised exception",
-                data={
-                    "exception_type": type(exc).__name__,
-                    "error": str(exc),
-                    "traceback": traceback.format_exc(),
-                    "audio_path": str(audio_path),
-                    "audio_exists": audio_path.exists(),
-                    "audio_size_bytes": audio_path.stat().st_size if audio_path.exists() else 0,
-                },
-            )
-            # endregion
             raise
 
         rttm_files = sorted(out_dir.rglob("*.rttm"))
@@ -1512,19 +1394,6 @@ def _run_nemo_diarization(
             parts = line.split()
             if len(parts) >= 8 and parts[0] == "SPEAKER":
                 raw_labels.append(parts[7].strip())
-        # region agent log
-        _write_debug_log(
-            run_id="initial",
-            hypothesis_id="H21",
-            location="inference/main.py:_run_nemo_diarization",
-            message="Parsed NeMo RTTM raw speaker labels",
-            data={
-                "rttm_path": str(rttm_path),
-                "raw_label_count": len(raw_labels),
-                "unique_raw_labels": sorted(set(raw_labels)),
-            },
-        )
-        # endregion
 
         return _parse_rttm_file(rttm_path)
 
@@ -2041,49 +1910,9 @@ async def diarize(
     _validate_diarization_speaker_bounds(min_speakers, max_speakers)
     temp_audio_path: Optional[Path] = None
     try:
-        # region agent log
-        _write_debug_log(
-            run_id="initial",
-            hypothesis_id="H3",
-            location="inference/main.py:diarize",
-            message="Received diarization HTTP request",
-            data={
-                "filename": audio.filename,
-                "min_speakers": min_speakers,
-                "max_speakers": max_speakers,
-                "temp_dir": str(TEMP_DIR),
-            },
-        )
-        # endregion
         temp_audio_path = _stage_audio_upload_to_temp(audio, "diar")
         temp_audio_path.write_bytes(await audio.read())
-        # region agent log
-        _write_debug_log(
-            run_id="initial",
-            hypothesis_id="H3",
-            location="inference/main.py:diarize",
-            message="Staged uploaded diarization audio file",
-            data={
-                "staged_path": str(temp_audio_path),
-                "exists": temp_audio_path.exists(),
-                "suffix": temp_audio_path.suffix,
-            },
-        )
-        # endregion
         temp_audio_path = _ensure_wav_audio(temp_audio_path)
-        # region agent log
-        _write_debug_log(
-            run_id="initial",
-            hypothesis_id="H4",
-            location="inference/main.py:diarize",
-            message="Prepared WAV file for NeMo diarization",
-            data={
-                "wav_path": str(temp_audio_path),
-                "exists": temp_audio_path.exists(),
-                "suffix": temp_audio_path.suffix,
-            },
-        )
-        # endregion
         segments, speaker_count = await asyncio.to_thread(
             _run_nemo_diarization,
             temp_audio_path,
@@ -2098,20 +1927,6 @@ async def diarize(
         raise
     except Exception as exc:
         logger.error(f"Diarization failed: {exc}", exc_info=True)
-        # region agent log
-        _write_debug_log(
-            run_id="initial",
-            hypothesis_id="H4",
-            location="inference/main.py:diarize",
-            message="Diarization endpoint raised exception",
-            data={
-                "exception_type": type(exc).__name__,
-                "error": str(exc),
-                "temp_audio_path": str(temp_audio_path) if temp_audio_path else None,
-                "temp_audio_exists": temp_audio_path.exists() if temp_audio_path else False,
-            },
-        )
-        # endregion
         if temp_audio_path:
             background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
         raise HTTPException(status_code=400, detail=str(exc))

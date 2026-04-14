@@ -127,36 +127,9 @@ public abstract class PythonSubprocessServiceBase
         // Honour cancellation before triggering the (potentially expensive) bootstrap.
         cancellationToken.ThrowIfCancellationRequested();
         var runtimeReadyStopwatch = Stopwatch.StartNew();
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H10",
-            location: "PythonSubprocessServiceBase.cs:RunPythonScriptAsync",
-            message: "RunPythonScriptAsync started",
-            data: new
-            {
-                scriptPrefix,
-                argumentCount = arguments?.Count ?? 0,
-                hasManagedCpuRuntime = _cpuRuntimeManager is not null,
-            });
-        // #endregion
 
         await EnsurePythonRuntimeReadyAsync(cancellationToken).ConfigureAwait(false);
         runtimeReadyStopwatch.Stop();
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H10",
-            location: "PythonSubprocessServiceBase.cs:RunPythonScriptAsync",
-            message: "RunPythonScriptAsync runtime readiness completed",
-            data: new
-            {
-                scriptPrefix,
-                readyState = _cpuRuntimeManager?.State.ToString() ?? "n/a",
-                failureReason = _cpuRuntimeManager?.FailureReason,
-                readinessElapsedMs = runtimeReadyStopwatch.ElapsedMilliseconds,
-            });
-        // #endregion
 
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
 
@@ -180,20 +153,6 @@ public abstract class PythonSubprocessServiceBase
                 foreach (var (key, value) in environmentVariables)
                     psi.Environment[key] = value;
 
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H11",
-                location: "PythonSubprocessServiceBase.cs:RunPythonScriptAsync",
-                message: "Launching Python subprocess",
-                data: new
-                {
-                    scriptPrefix,
-                    pythonPath = PythonPath,
-                    scriptPath,
-                    argumentCount = arguments?.Count ?? 0,
-                });
-            // #endregion
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException($"Failed to start Python process ({scriptPrefix}).");
 
@@ -252,21 +211,6 @@ public abstract class PythonSubprocessServiceBase
 
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H11",
-                location: "PythonSubprocessServiceBase.cs:RunPythonScriptAsync",
-                message: "Python subprocess completed",
-                data: new
-                {
-                    scriptPrefix,
-                    exitCode = proc.ExitCode,
-                    elapsedMs = sw.ElapsedMilliseconds,
-                    stdoutLength = stdout.Length,
-                    stderrLength = stderr.Length,
-                });
-            // #endregion
 
             return new ScriptResult(proc.ExitCode, stdout, stderr, sw.ElapsedMilliseconds);
         }

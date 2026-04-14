@@ -114,6 +114,133 @@
                                         TextWrapping="Wrap" />
                         </StackPanel>
 
+                        <!-- DIARIZATION / SPEAKERS -->
+                        <StackPanel Spacing="10">
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <TextBlock Text="DIARIZATION / SPEAKERS" FontSize="10"
+                                           Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                            </Border>
+
+                            <!-- Multi-speaker toggle -->
+                            <CheckBox Content="Enable multi-speaker routing"
+                                      IsChecked="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled, Mode=TwoWay}"
+                                      Foreground="{DynamicResource PrimaryTextBrush}" />
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Diarization Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.DiarizationProviderOptions}"
+                                          SelectedItem="{Binding Playback.SpeakerRouting.DiarizationProvider, Mode=TwoWay}"
+                                          IsEnabled="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="{DynamicResource ControlBackgroundBrush}"
+                                          Foreground="{DynamicResource PrimaryTextBrush}"
+                                          BorderBrush="{DynamicResource BorderBrush}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Converter={StaticResource DiarizationProviderDisplayConverter}}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Status -->
+                            <TextBlock Text="{Binding Playback.SpeakerRouting.AutoSpeakerDetectionStatus}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource StatusTextBrush}"
+                                       IsVisible="{Binding Playback.SpeakerRouting.HasAutoSpeakerDetectionStatus}"
+                                       TextWrapping="Wrap" />
+
+                            <!-- Per-speaker voice / reference clip assignment -->
+                            <StackPanel Spacing="5"
+                                        IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled}">
+
+                                <!-- Hint shown when multi-speaker is on but no speaker IDs have been detected yet -->
+                                <TextBlock Text="Transcribe with a diarization provider selected to assign speaker IDs."
+                                           FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
+                                           IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerNoSpeakersYet}" />
+
+                                <TextBlock Text="Speaker" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.SpeakerIds}"
+                                          SelectedItem="{Binding Playback.SpeakerRouting.SelectedSpeakerId, Mode=TwoWay}"
+                                          IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                          BorderBrush="{DynamicResource BorderBrush}" />
+
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="8">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Voice" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1"
+                                               Text="{Binding Playback.SpeakerRouting.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
+                                               FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+
+                                    <!-- Ref audio row only meaningful for voice-cloning providers (Qwen) -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}"
+                                               IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1"
+                                               Text="{Binding Playback.SpeakerRouting.SelectedSpeakerReferenceAudioPath, TargetNullValue='—'}"
+                                               FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap"
+                                               IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
+                                </Grid>
+
+                               <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+                                    <Button Grid.Row="0" Grid.Column="0"
+                                            Command="{Binding Playback.SpeakerRouting.AssignSelectedSpeakerVoiceCommand}"
+                                            IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
+                                            HorizontalAlignment="Stretch"
+                                            Padding="0,7" FontSize="12"
+                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                            CornerRadius="4"
+                                            Content="Use current voice" />
+                                    <Button Grid.Row="0" Grid.Column="1"
+                                            Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerVoiceCommand}"
+                                            IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
+                                            HorizontalAlignment="Stretch"
+                                            Padding="0,7" FontSize="12"
+                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                            CornerRadius="4"
+                                            Content="Clear speaker voice" />
+                                    <!-- Ref clip buttons — only for voice-cloning providers -->
+                                    <Button Grid.Row="1" Grid.Column="0"
+                                            IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
+                                            IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
+                                            HorizontalAlignment="Stretch"
+                                            Padding="0,7" FontSize="12"
+                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                            CornerRadius="4"
+                                            Click="OnBrowseReferenceClipClick"
+                                            Content="Browse ref clip" />
+                                    <Button Grid.Row="1" Grid.Column="1"
+                                            Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerReferenceAudioCommand}"
+                                            IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
+                                            IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
+                                            HorizontalAlignment="Stretch"
+                                            Padding="0,7" FontSize="12"
+                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                            CornerRadius="4"
+                                            Content="Clear speaker ref" />
+                               </Grid>
+                               <Button IsEnabled="{Binding Playback.SpeakerRouting.CanReviewSpeakerReferences}"
+                                       IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
+                                       HorizontalAlignment="Stretch"
+                                       Padding="0,7" FontSize="12"
+                                       Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                       CornerRadius="4"
+                                       Click="OnReviewSpeakerReferencesClick"
+                                       Content="Review speaker references..." />
+
+                                <!-- Fallback voice used when a speaker has no explicit assignment -->
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Fallback voice" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"
+                                               ToolTip.Tip="Voice/model used for any speaker that has no explicit assignment. Leave blank to use the active TTS voice." />
+                                    <TextBox Text="{Binding Playback.SpeakerRouting.DefaultTtsVoiceFallback, Mode=TwoWay}"
+                                             PlaceholderText="same as active TTS voice"
+                                             FontSize="12" Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderBrush="{DynamicResource BorderBrush}" />
+                                </StackPanel>
+
+                           </StackPanel>
+
+                       </StackPanel>
+
                         <!-- TRANSLATION -->
                         <StackPanel Spacing="10">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
@@ -274,133 +401,6 @@
                                                 FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
                                  </Border>
                              </Grid>
-                        </StackPanel>
-
-                         <!-- DIARIZATION / SPEAKERS -->
-                         <StackPanel Spacing="10">
-                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                 <TextBlock Text="DIARIZATION / SPEAKERS" FontSize="10"
-                                            Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
-                             </Border>
-
-                             <!-- Multi-speaker toggle -->
-                             <CheckBox Content="Enable multi-speaker routing"
-                                       IsChecked="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled, Mode=TwoWay}"
-                                       Foreground="{DynamicResource PrimaryTextBrush}" />
-
-                             <StackPanel Spacing="5">
-                                 <TextBlock Text="Diarization Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                 <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.DiarizationProviderOptions}"
-                                           SelectedItem="{Binding Playback.SpeakerRouting.DiarizationProvider, Mode=TwoWay}"
-                                           IsEnabled="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled}"
-                                           HorizontalAlignment="Stretch" FontSize="12"
-                                           Background="{DynamicResource ControlBackgroundBrush}"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           BorderBrush="{DynamicResource BorderBrush}">
-                                     <ComboBox.ItemTemplate>
-                                         <DataTemplate>
-                                             <TextBlock Text="{Binding Converter={StaticResource DiarizationProviderDisplayConverter}}" />
-                                         </DataTemplate>
-                                     </ComboBox.ItemTemplate>
-                                 </ComboBox>
-                             </StackPanel>
-
-                             <!-- Status -->
-                             <TextBlock Text="{Binding Playback.SpeakerRouting.AutoSpeakerDetectionStatus}"
-                                        FontSize="11"
-                                        Foreground="{DynamicResource StatusTextBrush}"
-                                        IsVisible="{Binding Playback.SpeakerRouting.HasAutoSpeakerDetectionStatus}"
-                                        TextWrapping="Wrap" />
-
-                             <!-- Per-speaker voice / reference clip assignment -->
-                             <StackPanel Spacing="5"
-                                         IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled}">
-
-                                 <!-- Hint shown when multi-speaker is on but no speaker IDs have been detected yet -->
-                                 <TextBlock Text="Transcribe with a diarization provider selected to assign speaker IDs."
-                                            FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
-                                            IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerNoSpeakersYet}" />
-
-                                 <TextBlock Text="Speaker" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                 <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.SpeakerIds}"
-                                           SelectedItem="{Binding Playback.SpeakerRouting.SelectedSpeakerId, Mode=TwoWay}"
-                                           IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                           HorizontalAlignment="Stretch" FontSize="12"
-                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                           BorderBrush="{DynamicResource BorderBrush}" />
-
-                                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="8">
-                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Voice" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                     <TextBlock Grid.Row="0" Grid.Column="1"
-                                                Text="{Binding Playback.SpeakerRouting.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
-                                                FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
-
-                                     <!-- Ref audio row only meaningful for voice-cloning providers (Qwen) -->
-                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}"
-                                                IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
-                                     <TextBlock Grid.Row="1" Grid.Column="1"
-                                                Text="{Binding Playback.SpeakerRouting.SelectedSpeakerReferenceAudioPath, TargetNullValue='—'}"
-                                                FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap"
-                                                IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
-                                 </Grid>
-
-                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
-                                     <Button Grid.Row="0" Grid.Column="0"
-                                             Command="{Binding Playback.SpeakerRouting.AssignSelectedSpeakerVoiceCommand}"
-                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                             HorizontalAlignment="Stretch"
-                                             Padding="0,7" FontSize="12"
-                                             Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="4"
-                                             Content="Use current voice" />
-                                     <Button Grid.Row="0" Grid.Column="1"
-                                             Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerVoiceCommand}"
-                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                             HorizontalAlignment="Stretch"
-                                             Padding="0,7" FontSize="12"
-                                             Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="4"
-                                             Content="Clear speaker voice" />
-                                     <!-- Ref clip buttons — only for voice-cloning providers -->
-                                     <Button Grid.Row="1" Grid.Column="0"
-                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                             IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
-                                             HorizontalAlignment="Stretch"
-                                             Padding="0,7" FontSize="12"
-                                             Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="4"
-                                             Click="OnBrowseReferenceClipClick"
-                                             Content="Browse ref clip" />
-                                     <Button Grid.Row="1" Grid.Column="1"
-                                             Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerReferenceAudioCommand}"
-                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                             IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
-                                             HorizontalAlignment="Stretch"
-                                             Padding="0,7" FontSize="12"
-                                             Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="4"
-                                             Content="Clear speaker ref" />
-                                </Grid>
-                                <Button IsEnabled="{Binding Playback.SpeakerRouting.CanReviewSpeakerReferences}"
-                                        IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
-                                        HorizontalAlignment="Stretch"
-                                        Padding="0,7" FontSize="12"
-                                        Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                        CornerRadius="4"
-                                        Click="OnReviewSpeakerReferencesClick"
-                                        Content="Review speaker references..." />
-
-                                 <!-- Fallback voice used when a speaker has no explicit assignment -->
-                                 <StackPanel Spacing="4">
-                                     <TextBlock Text="Fallback voice" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"
-                                                ToolTip.Tip="Voice/model used for any speaker that has no explicit assignment. Leave blank to use the active TTS voice." />
-                                     <TextBox Text="{Binding Playback.SpeakerRouting.DefaultTtsVoiceFallback, Mode=TwoWay}"
-                                              PlaceholderText="same as active TTS voice"
-                                              FontSize="12" Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderBrush="{DynamicResource BorderBrush}" />
-                                 </StackPanel>
-
-                            </StackPanel>
-
                         </StackPanel>
 
                         <!-- ACTIVE CONFIGURATION -->

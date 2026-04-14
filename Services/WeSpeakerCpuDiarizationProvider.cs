@@ -94,19 +94,6 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
         var inspection = _cpuRuntimeManager.InspectRuntimeState();
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H2",
-            location: "WeSpeakerCpuDiarizationProvider.cs:CheckReadiness",
-            message: "Managed CPU inspection during WeSpeaker readiness check",
-            data: new
-            {
-                state = inspection.State.ToString(),
-                needsBootstrap = inspection.NeedsBootstrap,
-                detail = inspection.Detail,
-            });
-        // #endregion
 
         if (inspection.State == ManagedCpuState.Failed)
         {
@@ -140,40 +127,11 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
         try
         {
             var beforeInspection = _cpuRuntimeManager.InspectRuntimeState();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H1",
-                location: "WeSpeakerCpuDiarizationProvider.cs:EnsureReadyAsync",
-                message: "WeSpeaker EnsureReadyAsync starting runtime inspection",
-                data: new
-                {
-                    state = beforeInspection.State.ToString(),
-                    needsBootstrap = beforeInspection.NeedsBootstrap,
-                    detail = beforeInspection.Detail,
-                });
-            // #endregion
 
             await _cpuRuntimeManager.EnsureInstalledAsync(cancellationToken: ct).ConfigureAwait(false);
             progress?.Report(1.0);
             var isReady = _cpuRuntimeManager.State == ManagedCpuState.Ready;
             var afterInspection = _cpuRuntimeManager.InspectRuntimeState();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H1",
-                location: "WeSpeakerCpuDiarizationProvider.cs:EnsureReadyAsync",
-                message: "WeSpeaker EnsureReadyAsync completed runtime inspection",
-                data: new
-                {
-                    managerState = _cpuRuntimeManager.State.ToString(),
-                    returnedIsReady = isReady,
-                    inspectedState = afterInspection.State.ToString(),
-                    needsBootstrap = afterInspection.NeedsBootstrap,
-                    detail = afterInspection.Detail,
-                    failureReason = _cpuRuntimeManager.FailureReason,
-                });
-            // #endregion
             return isReady;
         }
         catch (OperationCanceledException)
@@ -218,50 +176,6 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
                 [request.SourceAudioPath],
                 "wespeaker_diarize",
                 cancellationToken: ct).ConfigureAwait(false);
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H12",
-                location: "WeSpeakerCpuDiarizationProvider.cs:DiarizeAsync",
-                message: "WeSpeaker subprocess completed",
-                data: new
-                {
-                    elapsedMs = result.ElapsedMs,
-                    exitCode = result.ExitCode,
-                    stdoutLength = result.Stdout.Length,
-                    stderrLength = result.Stderr.Length,
-                    stderrTail = result.Stderr.Length <= 1000
-                        ? result.Stderr
-                        : result.Stderr[^1000..],
-                });
-            // #endregion
-            // #region agent log
-            foreach (var stderrLine in result.Stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                try
-                {
-                    using var doc = JsonDocument.Parse(stderrLine);
-                    if (doc.RootElement.TryGetProperty("timing", out var timingName)
-                        && doc.RootElement.TryGetProperty("value", out var timingValue))
-                    {
-                        WriteDebugLog(
-                            runId: "initial",
-                            hypothesisId: "H12",
-                            location: "WeSpeakerCpuDiarizationProvider.cs:DiarizeAsync",
-                            message: "WeSpeaker timing marker",
-                            data: new
-                            {
-                                timing = timingName.GetString(),
-                                seconds = timingValue.GetDouble(),
-                            });
-                    }
-                }
-                catch
-                {
-                    // Non-JSON stderr lines are expected from upstream libraries.
-                }
-            }
-            // #endregion
 
             if (result.ExitCode != 0)
             {

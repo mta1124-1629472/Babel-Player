@@ -231,18 +231,6 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         string outputPath,
         CancellationToken cancellationToken)
     {
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H5",
-            location: "FfmpegAudioProcessingService.cs:ExtractFullAudioAsync",
-            message: "Starting full audio extraction for diarization",
-            data: new
-            {
-                inputPath,
-                outputPath,
-            });
-        // #endregion
 
         var ffmpegPath = DependencyLocator.FindFfmpeg()
             ?? throw new InvalidOperationException("ffmpeg not found. Audio extraction requires ffmpeg.");
@@ -298,22 +286,6 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         }
 
         var outputFileInfo = new FileInfo(outputPath);
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H5",
-            location: "FfmpegAudioProcessingService.cs:ExtractFullAudioAsync",
-            message: "Completed full audio extraction for diarization",
-            data: new
-            {
-                inputPath,
-                outputPath,
-                outputBytes = outputFileInfo.Exists ? outputFileInfo.Length : 0,
-                ffmpegStderrTail = stderr.Length <= 1500
-                    ? stderr
-                    : stderr.Substring(stderr.Length - 1500),
-            });
-        // #endregion
     }
 
     private static string EscapeConcatListPath(string path) =>
