@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -12,6 +13,33 @@ namespace Babel.Player.Services;
 
 public sealed partial class SessionWorkflowCoordinator
 {
+    private static readonly JsonSerializerOptions DebugJsonOptions = new(JsonSerializerDefaults.Web);
+    private const string DebugLogPath = "/home/ander/projects/Babel-Player/.cursor/debug-b0c5b4.log";
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "b0c5b4",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload, DebugJsonOptions);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
     // ── Diarization ──────────────────────────────────────────────────────
 
     private readonly record struct DiarizationExecutionOutcome(
@@ -137,6 +165,22 @@ public sealed partial class SessionWorkflowCoordinator
             ProviderReadiness readiness;
             IDiarizationProvider provider;
 
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H1",
+                location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
+                message: "Resolved diarization runtime selection",
+                data: new
+                {
+                    provider = CurrentSettings.DiarizationProvider,
+                    usesContainerizedRuntime,
+                    audioPath = effectiveAudioPath,
+                    minSpeakers = CurrentSettings.DiarizationMinSpeakers,
+                    maxSpeakers = CurrentSettings.DiarizationMaxSpeakers,
+                });
+            // #endregion
+
             if (usesContainerizedRuntime)
             {
                 readiness = ContainerizedProbe is not null
@@ -160,8 +204,24 @@ public sealed partial class SessionWorkflowCoordinator
             else
             {
                 provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
-                await provider.EnsureReadyAsync(CurrentSettings, ct: ct).ConfigureAwait(false);
+                var ensuredReady = await provider.EnsureReadyAsync(CurrentSettings, ct: ct).ConfigureAwait(false);
                 readiness = provider.CheckReadiness(CurrentSettings, KeyStore);
+
+                // #region agent log
+                WriteDebugLog(
+                    runId: "initial",
+                    hypothesisId: "H2",
+                    location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
+                    message: "Local diarization provider readiness after EnsureReadyAsync",
+                    data: new
+                    {
+                        provider = CurrentSettings.DiarizationProvider,
+                        providerType = provider.GetType().FullName,
+                        ensuredReady,
+                        readinessIsReady = readiness.IsReady,
+                        readinessBlockingReason = readiness.BlockingReason,
+                    });
+                // #endregion
 
                 if (!readiness.IsReady)
                 {
@@ -185,6 +245,18 @@ public sealed partial class SessionWorkflowCoordinator
             if (!result.Success)
             {
                 _log.Warning($"Diarization failed: {result.ErrorMessage}");
+                // #region agent log
+                WriteDebugLog(
+                    runId: "initial",
+                    hypothesisId: "H4",
+                    location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
+                    message: "Provider returned unsuccessful diarization result",
+                    data: new
+                    {
+                        provider = CurrentSettings.DiarizationProvider,
+                        errorMessage = result.ErrorMessage,
+                    });
+                // #endregion
                 throw new InvalidOperationException(result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
             }
 
