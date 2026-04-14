@@ -42,6 +42,10 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         Assert.Contains("wespeaker.load_model(\"english\")", script, StringComparison.Ordinal);
         Assert.Contains("set_device(\"cpu\")", script, StringComparison.Ordinal);
         Assert.Contains("diarize(audio_path)", script, StringComparison.Ordinal);
+        Assert.Contains("_patch_wespeaker_subsegment()", script, StringComparison.Ordinal);
+        Assert.Contains("fbank = fbank.squeeze(0)", script, StringComparison.Ordinal);
+        Assert.Contains("with redirect_stdout(captured_stdout):", script, StringComparison.Ordinal);
+        Assert.Contains("print(diagnostic_output, file=sys.stderr)", script, StringComparison.Ordinal);
     }
 
     [Fact]

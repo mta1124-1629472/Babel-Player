@@ -255,6 +255,8 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
 
     [Fact]
     [Trait("Category", "Integration")]
+    [Trait("Category", "RequiresFfmpeg")]
+    [Trait("Category", "RequiresPython")]
     public async Task EndToEndPipeline_SmokeTest()
     {
         var ctx = CreateFreshCase(nameof(EndToEndPipeline_SmokeTest));

@@ -8,6 +8,7 @@ openai-whisper==20250625
 peft==0.18.1
 requests==2.33.0
 s3prl==0.4.17
+scikit-learn==1.7.2
 sentencepiece==0.2.1
 silero-vad==6.2.1
 soundfile==0.12.1
