@@ -4,7 +4,7 @@
 import argparse
 import asyncio
 from collections import deque
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 import importlib.util
 import json
 import logging
@@ -92,6 +92,7 @@ _active_diarization_request_count = 0
 _flash_attn_available: bool | None = None
 _qwen_max_concurrency = 1
 _nemo_diarizer_construction_lock = threading.Lock()
+_nemo_restore_meta_patch_applied = False
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -120,6 +121,176 @@ NEMO_VAD_PARAMETERS = {
     "min_duration_off": 0.2,
     "filter_speech_first": True,
 }
+
+
+def _normalize_torch_device(map_location):
+    if map_location is None:
+        return torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    if isinstance(map_location, torch.device):
+        return map_location
+    return torch.device(map_location)
+
+
+def _module_has_meta_tensors(module: torch.nn.Module) -> bool:
+    for parameter in module.parameters(recurse=True):
+        if getattr(parameter, "is_meta", False):
+            return True
+    for buffer in module.buffers(recurse=True):
+        if getattr(buffer, "is_meta", False):
+            return True
+    return False
+
+
+def _move_module_for_restore(instance: torch.nn.Module, map_location):
+    normalized_map_location = _normalize_torch_device(map_location)
+    try:
+        return instance.to(normalized_map_location)
+    except NotImplementedError as exc:
+        if "meta tensor" not in str(exc).lower() or not _module_has_meta_tensors(instance):
+            raise
+
+        logger.warning(
+            "Applying NeMo meta-tensor restore compatibility fallback for %s on %s",
+            type(instance).__name__,
+            normalized_map_location,
+        )
+        return instance.to_empty(device=normalized_map_location)
+
+
+def _load_config_and_state_dict_with_meta_tensor_fallback(
+    connector_module,
+    connector,
+    calling_cls,
+    restore_path: str,
+    override_config_path=None,
+    map_location=None,
+    strict: bool = True,
+    return_config: bool = False,
+    trainer=None,
+):
+    cwd = os.getcwd()
+    normalized_map_location = _normalize_torch_device(map_location)
+    app_state = connector_module.AppState()
+
+    use_extracted_dir = connector.model_extracted_dir is not None and os.path.isdir(connector.model_extracted_dir)
+    if use_extracted_dir:
+        connector_module.logging.info(
+            f"Restoration will occur within pre-extracted directory : `{connector.model_extracted_dir}`."
+        )
+
+    dir_context = nullcontext(connector.model_extracted_dir) if use_extracted_dir else tempfile.TemporaryDirectory()
+    with dir_context as tmpdir:
+        try:
+            if not use_extracted_dir:
+                filter_fn = None
+                if return_config:
+                    filter_fn = lambda name: ".yaml" in name
+                members = connector._filtered_tar_info(restore_path, filter_fn=filter_fn)
+                connector._unpack_nemo_file(path2file=restore_path, out_folder=tmpdir, members=members)
+
+            os.chdir(tmpdir)
+            if override_config_path is None:
+                config_yaml = connector.model_config_yaml
+            else:
+                config_yaml = override_config_path
+
+            if not isinstance(config_yaml, (connector_module.OmegaConf, connector_module.DictConfig)):
+                conf = connector_module.OmegaConf.load(config_yaml)
+            else:
+                conf = config_yaml
+                if override_config_path is not None:
+                    conf = connector_module.OmegaConf.to_container(conf, resolve=True)
+                    conf = connector_module.OmegaConf.create(conf)
+
+            if "model" in conf:
+                conf = conf.model
+
+            if return_config:
+                return conf
+
+            if app_state.model_parallel_size is not None and app_state.model_parallel_size > 1:
+                model_weights = connector._inject_model_parallel_rank_for_ckpt(tmpdir, connector.model_weights_ckpt)
+            else:
+                model_weights = os.path.join(tmpdir, connector.model_weights_ckpt)
+
+            connector_module.OmegaConf.set_struct(conf, True)
+            os.chdir(cwd)
+            calling_cls._set_model_restore_state(is_being_restored=True, folder=tmpdir)
+            instance = calling_cls.from_config_dict(config=conf, trainer=trainer)
+            instance = _move_module_for_restore(instance, normalized_map_location)
+
+            if app_state.model_parallel_size is not None and app_state.model_parallel_size > 1:
+                model_weights = connector._inject_model_parallel_rank_for_ckpt(tmpdir, connector.model_weights_ckpt)
+            state_dict = connector._load_state_dict_from_disk(model_weights, map_location=normalized_map_location)
+        finally:
+            os.chdir(cwd)
+
+    return conf, instance, state_dict
+
+
+def _apply_nemo_meta_tensor_restore_patch() -> None:
+    global _nemo_restore_meta_patch_applied
+    if _nemo_restore_meta_patch_applied:
+        return
+
+    import nemo.core.connectors.save_restore_connector as save_restore_connector_module
+
+    original_load_config_and_state_dict = (
+        save_restore_connector_module.SaveRestoreConnector.load_config_and_state_dict
+    )
+
+    if getattr(original_load_config_and_state_dict, "__babel_meta_tensor_patch__", False):
+        _nemo_restore_meta_patch_applied = True
+        return
+
+    def _patched_load_config_and_state_dict(
+        self,
+        calling_cls,
+        restore_path: str,
+        override_config_path=None,
+        map_location=None,
+        strict: bool = True,
+        return_config: bool = False,
+        trainer=None,
+        validate_access_integrity: bool = True,
+    ):
+        try:
+            return original_load_config_and_state_dict(
+                self,
+                calling_cls,
+                restore_path,
+                override_config_path,
+                map_location,
+                strict,
+                return_config,
+                trainer,
+                validate_access_integrity,
+            )
+        except NotImplementedError as exc:
+            if "meta tensor" not in str(exc).lower():
+                raise
+
+            logger.warning(
+                "NeMo restore hit Torch meta-tensor move incompatibility for %s; retrying with to_empty fallback.",
+                restore_path,
+            )
+            return _load_config_and_state_dict_with_meta_tensor_fallback(
+                save_restore_connector_module,
+                self,
+                calling_cls,
+                restore_path,
+                override_config_path,
+                map_location,
+                strict,
+                return_config,
+                trainer,
+            )
+
+    _patched_load_config_and_state_dict.__babel_meta_tensor_patch__ = True
+    save_restore_connector_module.SaveRestoreConnector.load_config_and_state_dict = (
+        _patched_load_config_and_state_dict
+    )
+    _nemo_restore_meta_patch_applied = True
 
 FLORES = {
     # Latin-script European
@@ -651,10 +822,20 @@ def _check_nemo_import_viability() -> tuple[bool, str]:
         import nemo.collections.asr  # noqa: F401
         import lightning.pytorch  # noqa: F401
         import omegaconf  # noqa: F401
+        _apply_nemo_meta_tensor_restore_patch()
     except Exception as exc:
         return False, f"NeMo import failed: {exc}"
 
     return True, "NeMo import dependencies available"
+
+
+def _require_config_attr(config_node, attr_name: str, display_name: str):
+    try:
+        return getattr(config_node, attr_name)
+    except Exception as exc:
+        raise RuntimeError(
+            f"{display_name} missing from {type(config_node).__name__}: {exc}"
+        ) from exc
 
 
 def _check_nemo_diarization_contract() -> tuple[bool, str]:
@@ -672,27 +853,59 @@ def _check_nemo_diarization_contract() -> tuple[bool, str]:
             None,
         )
         _ = (
-            config.device,
-            config.sample_rate,
-            config.verbose,
-            config.batch_size,
-            config.num_workers,
-            config.diarizer.collar,
-            config.diarizer.ignore_overlap,
-            config.diarizer.vad.model_path,
-            config.diarizer.vad.parameters.window_length_in_sec,
-            config.diarizer.vad.parameters.shift_length_in_sec,
-            config.diarizer.speaker_embeddings.model_path,
-            config.diarizer.speaker_embeddings.window_length_in_sec,
-            config.diarizer.speaker_embeddings.shift_length_in_sec,
-            config.diarizer.speaker_embeddings.multiscale_weights,
-            config.diarizer.speaker_embeddings.scale_n,
-            config.diarizer.speaker_embeddings.parameters.window_length_in_sec,
-            config.diarizer.speaker_embeddings.parameters.shift_length_in_sec,
-            config.diarizer.speaker_embeddings.parameters.multiscale_weights,
-            config.diarizer.speaker_embeddings.parameters.scale_n,
-            config.diarizer.clustering.parameters.oracle_num_speakers,
-            config.diarizer.clustering.parameters.max_num_speakers,
+            _require_config_attr(config, "device", "device"),
+            _require_config_attr(config, "sample_rate", "sample_rate"),
+            _require_config_attr(config, "verbose", "verbose"),
+            _require_config_attr(config, "batch_size", "batch_size"),
+            _require_config_attr(config, "num_workers", "num_workers"),
+            _require_config_attr(config.diarizer, "collar", "diarizer.collar"),
+            _require_config_attr(config.diarizer, "ignore_overlap", "diarizer.ignore_overlap"),
+            _require_config_attr(config.diarizer.vad, "model_path", "diarizer.vad.model_path"),
+            _require_config_attr(
+                config.diarizer.vad.parameters,
+                "window_length_in_sec",
+                "diarizer.vad.parameters.window_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.vad.parameters,
+                "shift_length_in_sec",
+                "diarizer.vad.parameters.shift_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings,
+                "model_path",
+                "diarizer.speaker_embeddings.model_path",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "window_length_in_sec",
+                "diarizer.speaker_embeddings.parameters.window_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "shift_length_in_sec",
+                "diarizer.speaker_embeddings.parameters.shift_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "multiscale_weights",
+                "diarizer.speaker_embeddings.parameters.multiscale_weights",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "save_embeddings",
+                "diarizer.speaker_embeddings.parameters.save_embeddings",
+            ),
+            _require_config_attr(
+                config.diarizer.clustering.parameters,
+                "oracle_num_speakers",
+                "diarizer.clustering.parameters.oracle_num_speakers",
+            ),
+            _require_config_attr(
+                config.diarizer.clustering.parameters,
+                "max_num_speakers",
+                "diarizer.clustering.parameters.max_num_speakers",
+            ),
         )
     except Exception as exc:
         return False, f"NeMo diarization config contract invalid: {exc}"
@@ -704,6 +917,7 @@ def _check_nemo_diarizer_construction() -> tuple[bool, str]:
     if _find_module("nemo.collections.asr") is None:
         return False, "Missing diarization dependency: nemo.collections.asr"
 
+    _apply_nemo_meta_tensor_restore_patch()
     import nemo.collections.asr as nemo_asr
 
     with tempfile.TemporaryDirectory(dir=TEMP_DIR, prefix="nemo_probe_") as work_dir_name:
@@ -1046,14 +1260,9 @@ def _build_nemo_diarization_config(
         setattr(config.diarizer.vad.parameters, key, value)
 
     config.diarizer.speaker_embeddings.model_path = NEMO_SPEAKER_EMBEDDING_MODEL
-    config.diarizer.speaker_embeddings.window_length_in_sec = NEMO_SPEAKER_WINDOW_LENGTHS
-    config.diarizer.speaker_embeddings.shift_length_in_sec = NEMO_SPEAKER_SHIFT_LENGTHS
-    config.diarizer.speaker_embeddings.multiscale_weights = NEMO_SPEAKER_MULTISCALE_WEIGHTS
-    config.diarizer.speaker_embeddings.scale_n = len(NEMO_SPEAKER_WINDOW_LENGTHS)
     config.diarizer.speaker_embeddings.parameters.window_length_in_sec = NEMO_SPEAKER_WINDOW_LENGTHS
     config.diarizer.speaker_embeddings.parameters.shift_length_in_sec = NEMO_SPEAKER_SHIFT_LENGTHS
     config.diarizer.speaker_embeddings.parameters.multiscale_weights = NEMO_SPEAKER_MULTISCALE_WEIGHTS
-    config.diarizer.speaker_embeddings.parameters.scale_n = len(NEMO_SPEAKER_WINDOW_LENGTHS)
     config.diarizer.speaker_embeddings.parameters.save_embeddings = False
 
     config.diarizer.clustering.parameters.oracle_num_speakers = clustering_parameters["oracle_num_speakers"]
@@ -1080,6 +1289,7 @@ def _run_nemo_diarization(
     Raises:
         RuntimeError: If NeMo produces no RTTM output file.
     """
+    _apply_nemo_meta_tensor_restore_patch()
     import nemo.collections.asr as nemo_asr
 
     with tempfile.TemporaryDirectory(dir=TEMP_DIR, prefix="nemo_diar_") as work_dir_name:
@@ -1112,7 +1322,7 @@ def _run_nemo_diarization(
                 diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
         except Exception as exc:
             logger.error(
-                "NeMo config contract mismatch during ClusteringDiarizer initialization: %s",
+                "NeMo diarizer initialization failed: %s",
                 exc,
                 exc_info=True,
             )

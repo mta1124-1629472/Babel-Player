@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
 using Xunit;
@@ -41,12 +42,17 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         Assert.Contains("wespeaker.load_model(\"english\")", script, StringComparison.Ordinal);
         Assert.Contains("set_device(\"cpu\")", script, StringComparison.Ordinal);
         Assert.Contains("diarize(audio_path)", script, StringComparison.Ordinal);
+        Assert.Contains("_patch_wespeaker_subsegment()", script, StringComparison.Ordinal);
+        Assert.Contains("fbank = fbank.squeeze(0)", script, StringComparison.Ordinal);
+        Assert.Contains("with redirect_stdout(captured_stdout):", script, StringComparison.Ordinal);
+        Assert.Contains("print(diagnostic_output, file=sys.stderr)", script, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesManagedCpuRuntimeBootstrapState()
+    public void WeSpeakerCpuDiarizationProvider_CheckReadiness_UsesValidatedManagedCpuRuntimeState()
     {
-        var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "cpu-requirements.txt");
+        var constraintsPath = Path.Combine(FindInferenceDirectory(), "cpu-constraints.txt");
         var runtimeRoot = Path.Combine(_dir, "cpu-runtime");
 
         // Create platform-appropriate venv structure
@@ -75,23 +81,24 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         }
 
         var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
-        File.WriteAllText(markerPath, ComputeMarkerHash(requirementsPath));
+        var markerHash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        File.WriteAllText(markerPath, markerHash);
+        File.WriteAllText(
+            Path.Combine(runtimeRoot, ".cpu-runtime-validation.json"),
+            JsonSerializer.Serialize(new ManagedCpuRuntimeValidationRecord
+            {
+                MarkerHash = markerHash,
+                IsValid = true,
+                FailureReason = null,
+            }));
 
         var manager = new ManagedCpuRuntimeManager(
             _log,
             cpuRuntimeRootResolver: () => runtimeRoot,
-            requirementsPathResolver: () => requirementsPath);
-
-        // Transition the manager to Ready state, normally done by EnsureInstalledAsync which checks the marker.
-        await manager.EnsureInstalledAsync();
+            requirementsPathResolver: () => requirementsPath,
+            constraintsPathResolver: () => constraintsPath);
 
         var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
-
-        // The provider checks manager.State which defaults to NotInstalled.
-        // We need to simulate the bootstrap check so the manager sets its state.
-        await manager.CheckNeedsBootstrapAsync();
-        // Wait, CheckNeedsBootstrapAsync doesn't change state. EnsureInstalledAsync does.
-        await manager.EnsureInstalledAsync();
 
         var readiness = provider.CheckReadiness(new AppSettings(), null);
 
@@ -99,10 +106,54 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         Assert.Null(readiness.BlockingReason);
     }
 
+    [Fact]
+    public void WeSpeakerCpuDiarizationProvider_CheckReadiness_SurfacesFailedValidationReason()
+    {
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "cpu-requirements.txt");
+        var constraintsPath = Path.Combine(FindInferenceDirectory(), "cpu-constraints.txt");
+        var runtimeRoot = Path.Combine(_dir, "cpu-runtime-failed");
+
+        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var scriptsDir = isWindows ? "Scripts" : "bin";
+        var pythonExe = isWindows ? "python.exe" : "python";
+        Directory.CreateDirectory(Path.Combine(runtimeRoot, ".venv", scriptsDir));
+        File.WriteAllBytes(Path.Combine(runtimeRoot, ".venv", scriptsDir, pythonExe), Array.Empty<byte>());
+
+        var markerHash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        File.WriteAllText(Path.Combine(runtimeRoot, ".cpu-bootstrap-version"), markerHash);
+        File.WriteAllText(
+            Path.Combine(runtimeRoot, ".cpu-runtime-validation.json"),
+            JsonSerializer.Serialize(new ManagedCpuRuntimeValidationRecord
+            {
+                MarkerHash = markerHash,
+                IsValid = false,
+                FailureReason = "CPU runtime validation failed: ModuleNotFoundError: whisper",
+                PackageVersions = new()
+                {
+                    ["torch"] = "2.8.0+cpu",
+                    ["torchaudio"] = "2.8.0+cpu",
+                    ["wespeaker"] = "0.0.0",
+                },
+            }));
+
+        var manager = new ManagedCpuRuntimeManager(
+            _log,
+            cpuRuntimeRootResolver: () => runtimeRoot,
+            requirementsPathResolver: () => requirementsPath,
+            constraintsPathResolver: () => constraintsPath);
+
+        var provider = new WeSpeakerCpuDiarizationProvider(_log, manager);
+        var readiness = provider.CheckReadiness(new AppSettings(), null);
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains("validation failed", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("whisper", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string FindInferenceDirectory()
     {
         var outputDir = Path.Combine(AppContext.BaseDirectory, "inference");
-        var requirementsPath = Path.Combine(outputDir, "requirements.txt");
+        var requirementsPath = Path.Combine(outputDir, "cpu-requirements.txt");
         if (Directory.Exists(outputDir) && File.Exists(requirementsPath))
             return outputDir;
 
@@ -110,7 +161,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         for (var i = 0; i < 8; i++)
         {
             var candidate = Path.Combine(dir, "inference");
-            if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "requirements.txt")))
+            if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "cpu-requirements.txt")))
                 return candidate;
 
             var parent = Directory.GetParent(dir)?.FullName;
@@ -122,10 +173,10 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         throw new InvalidOperationException($"Could not locate inference directory from {AppContext.BaseDirectory}.");
     }
 
-    private static string ComputeMarkerHash(string requirementsPath)
+    private static string ComputeMarkerHash(string requirementsPath, string constraintsPath)
     {
-        var content = $"python:3.11.6\n{File.ReadAllText(requirementsPath)}";
-        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content));
+        var content = $"python:3.11.6\n[requirements]\n{File.ReadAllText(requirementsPath)}\n[constraints]\n{File.ReadAllText(constraintsPath)}";
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
     }
 }
