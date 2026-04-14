@@ -30,11 +30,8 @@
 
   <!-- Staged after optional FetchWinNativeDepsIfNeeded (../Directory.Build.targets) so first build after clone works. -->
   <Target Name="IncludeLibMpvForTests" BeforeTargets="AssignTargetPaths" AfterTargets="FetchWinNativeDepsIfNeeded" Condition="'$(OS)' == 'Windows_NT'">
-    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\native\win-x64\libmpv-2.dll')">
-      <None Include="$(MSBuildProjectDirectory)\..\native\win-x64\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
-    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\native\win-arm64\libmpv-2.dll')">
-      <None Include="$(MSBuildProjectDirectory)\..\native\win-arm64\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
+    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\native\$(BabelWinNativeSubdir)\libmpv-2.dll')">
+      <None Include="$(MSBuildProjectDirectory)\..\native\$(BabelWinNativeSubdir)\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
   </Target>
 
