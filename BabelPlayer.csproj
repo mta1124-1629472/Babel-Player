@@ -60,7 +60,7 @@
     </AssemblyAttribute>
   </ItemGroup>
 
-<ItemGroup>
+<ItemGroup Condition="Exists('native\win-x64\libmpv-2.dll')">
   <None Include="native\win-x64\libmpv-2.dll">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

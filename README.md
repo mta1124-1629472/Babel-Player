@@ -241,6 +241,8 @@ Sessions save automatically. Your session will appear in the recent sessions lis
 ```powershell
 git clone https://github.com/Babelworks/Babel-Player.git
 cd Babel-Player
+# Windows: fetch libmpv-2.dll and uv.exe (too large for Git; previously Git LFS)
+pwsh ./scripts/fetch-win-native-deps.ps1
 dotnet build
 dotnet run --project BabelPlayer.csproj
 ```
