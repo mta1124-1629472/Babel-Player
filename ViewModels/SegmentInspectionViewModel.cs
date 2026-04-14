@@ -7,7 +7,7 @@ namespace Babel.Player.ViewModels;
 
 public partial class SegmentInspectionViewModel : ViewModelBase, IDisposable
 {
-    private readonly EmbeddedPlaybackViewModel _playback;
+    private readonly EmbeddedPlaybackPreviewViewModel _preview;
 
     [ObservableProperty]
     private bool _isVisible;
@@ -32,16 +32,16 @@ public partial class SegmentInspectionViewModel : ViewModelBase, IDisposable
 
     public SegmentInspectionViewModel(EmbeddedPlaybackViewModel playback)
     {
-        _playback = playback;
-        _playback.PropertyChanged += OnPlaybackPropertyChanged;
-        Refresh(_playback.SelectedSegment);
+        _preview = playback.Preview;
+        _preview.PropertyChanged += OnPreviewPropertyChanged;
+        Refresh(_preview.SelectedSegment);
     }
 
-    private void OnPlaybackPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnPreviewPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(EmbeddedPlaybackViewModel.SelectedSegment))
+        if (e.PropertyName == nameof(EmbeddedPlaybackPreviewViewModel.SelectedSegment))
         {
-            Refresh(_playback.SelectedSegment);
+            Refresh(_preview.SelectedSegment);
         }
     }
 
@@ -72,6 +72,6 @@ public partial class SegmentInspectionViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
-        _playback.PropertyChanged -= OnPlaybackPropertyChanged;
+        _preview.PropertyChanged -= OnPreviewPropertyChanged;
     }
 }

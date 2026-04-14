@@ -7,6 +7,8 @@ using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
+using CoordinatorOptions = Babel.Player.Models.CoordinatorOptions;
+using RegistryBundle = Babel.Player.Models.RegistryBundle;
 
 namespace Babel.Player.Services;
 
@@ -354,12 +356,23 @@ public static class DependencyLocator
         var snapshotStore = new SessionSnapshotStore(
             Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
         
-        return new SessionWorkflowCoordinator(
-            snapshotStore, appLog, appSettings, perSessionStore, recentStore, 
-            transcriptionRegistry, translationRegistry, ttsRegistry, 
-            transportManager: transportManager, keyStore: apiKeyStore, 
-            diarizationRegistry: diarizationRegistry,
-            containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager,
-            audioProcessingService: audioProcessingService);
+        var registries = new RegistryBundle(
+            perSessionStore,
+            recentStore,
+            transcriptionRegistry,
+            translationRegistry,
+            ttsRegistry);
+
+        var options = new CoordinatorOptions
+        {
+            KeyStore                    = apiKeyStore,
+            DiarizationRegistry         = diarizationRegistry,
+            ContainerizedProbe          = containerizedProbe,
+            ContainerizedInferenceManager = containerizedManager,
+            AudioProcessingService      = audioProcessingService,
+        };
+
+        var coreServices = new CoordinatorCoreServices(snapshotStore, appLog, appSettings);
+        return new SessionWorkflowCoordinator(coreServices, transportManager, registries, options);
     }
 }

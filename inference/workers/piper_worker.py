@@ -66,11 +66,14 @@ def handle_request(payload: dict[str, Any], model_dir: str) -> dict[str, Any]:
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
+    # On Windows, CreateProcess cannot directly execute .cmd/.bat files; shell=True
+    # routes through cmd.exe so both native piper.exe and test-stub piper.cmd work.
     result = subprocess.run(
         ["piper", "--model", model_path, "--output_file", output_path],
         input=text,
         text=True,
         capture_output=True,
+        shell=platform.system() == "Windows",
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "unknown error"

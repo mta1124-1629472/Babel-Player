@@ -247,14 +247,25 @@ public sealed class FileSystemCredentialProvider : ISecureCredentialProvider
                 return Encoding.UTF8.GetString(plaintext);
             }
 
-            // Legacy format: base64(plaintext) on non-Windows, or base64(DPAPI) on Windows,
-            // written by the pre-v1 implementation.
+            // Legacy format: base64(plaintext), written by the pre-v1 implementation.
+            // On Windows, attempt DPAPI unwrap first in case the file was written on a
+            // machine that had an intermediate version with DPAPI-wrapped legacy entries.
+            // Fall back to plain base64 decode on CryptographicException so we remain
+            // compatible with the most common case: plaintext base64 on any platform.
             var legacyBytes = Convert.FromBase64String(stored);
             if (OperatingSystem.IsWindows())
             {
-                var decrypted = System.Security.Cryptography.ProtectedData.Unprotect(
-                    legacyBytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
-                return Encoding.UTF8.GetString(decrypted);
+                try
+                {
+                    var decrypted = System.Security.Cryptography.ProtectedData.Unprotect(
+                        legacyBytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                    return Encoding.UTF8.GetString(decrypted);
+                }
+                catch (System.Security.Cryptography.CryptographicException)
+                {
+                    // Not a DPAPI blob — credential was written as plain base64 by the
+                    // pre-v1 implementation. Fall through to the plaintext decode below.
+                }
             }
             return Encoding.UTF8.GetString(legacyBytes);
         }

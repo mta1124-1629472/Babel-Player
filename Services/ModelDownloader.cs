@@ -124,18 +124,30 @@ except Exception as e:
             var psi = new ProcessStartInfo
             {
                 FileName = pythonPath,
-                Arguments = $"\"{scriptPath}\" \"{repoId}\"",
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
 
+            psi.ArgumentList.Add(scriptPath);
+            psi.ArgumentList.Add(repoId);
+
             using var proc = Process.Start(psi);
             if (proc == null) return false;
 
             _log.Info($"Started model download for {repoId}. This may take a few minutes...");
-            
+
+            var stdoutReaderTask = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    string? line = await proc.StandardOutput.ReadLineAsync(token);
+                    if (line == null) break;
+                    _log.Info($"[hf-download] {line}");
+                }
+            }, token);
+
             var errorReaderTask = Task.Run(async () =>
             {
                 while (true)
@@ -157,7 +169,7 @@ except Exception as e:
             try
             {
                 await proc.WaitForExitAsync(token);
-                await errorReaderTask;
+                await Task.WhenAll(stdoutReaderTask, errorReaderTask);
             }
             catch (OperationCanceledException)
             {

@@ -45,28 +45,29 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
 
-        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
-        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
-        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
         diarizationRegistry ??= new FakeDiarizationRegistry(
             (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider()),
             (ProviderNames.WeSpeakerLocal, "WeSpeaker", new FakeDiarizationProvider()));
-        var audioProcessingService = new FfmpegAudioProcessingService(log);
 
-        return new SessionWorkflowCoordinator(
-            store,
-            log,
-            settings,
+        var registries = new Babel.Player.Models.RegistryBundle(
             perSessionStore,
             recentStore,
-            transcriptionRegistry,
-            translationRegistry,
-            ttsRegistry,
-            diarizationRegistry: diarizationRegistry,
-            containerizedProbe: containerizedProbe,
+            new Babel.Player.Services.Registries.TranscriptionRegistry(log),
+            new Babel.Player.Services.Registries.TranslationRegistry(log),
+            new Babel.Player.Services.Registries.TtsRegistry(log));
+
+        var options = new Babel.Player.Models.CoordinatorOptions
+        {
+            DiarizationRegistry    = diarizationRegistry,
+            ContainerizedProbe     = containerizedProbe,
+            AudioProcessingService = new FfmpegAudioProcessingService(log),
+        };
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(store, log, settings);
+
+        return new SessionWorkflowCoordinator(
+            coreServices, registries, options,
             segmentPlayer: segmentPlayer,
-            sourcePlayer: sourcePlayer,
-            audioProcessingService: audioProcessingService);
+            sourcePlayer: sourcePlayer);
     }
 
     private static SessionWorkflowCoordinator CreateCoordinator(
@@ -473,26 +474,22 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
 
-        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
-        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
-        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        diarizationRegistry ??= FakeDiarizationFactory.CreateDefaultRegistry();
-        var audioProcessingService = new FfmpegAudioProcessingService(log);
-
+        var registries = new Babel.Player.Models.RegistryBundle(
+            perSessionStore, recentStore,
+            new Babel.Player.Services.Registries.TranscriptionRegistry(log),
+            new Babel.Player.Services.Registries.TranslationRegistry(log),
+            new Babel.Player.Services.Registries.TtsRegistry(log));
+        var options = new Babel.Player.Models.CoordinatorOptions
+        {
+            DiarizationRegistry    = diarizationRegistry ?? FakeDiarizationFactory.CreateDefaultRegistry(),
+            ContainerizedProbe     = containerizedProbe,
+            AudioProcessingService = new FfmpegAudioProcessingService(log),
+        };
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(store, log, settings);
         return new SessionWorkflowCoordinator(
-            store,
-            log,
-            settings,
-            perSessionStore,
-            recentStore,
-            transcriptionRegistry,
-            translationRegistry,
-            ttsRegistry,
-            diarizationRegistry: diarizationRegistry,
-            containerizedProbe: containerizedProbe,
+            coreServices, registries, options,
             segmentPlayer: segmentPlayer,
-            sourcePlayer: sourcePlayer,
-            audioProcessingService: audioProcessingService);
+            sourcePlayer: sourcePlayer);
     }
 
     private static SessionWorkflowCoordinator CreateCoordinator(
@@ -663,26 +660,22 @@ public sealed class SegmentInspectionTests
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
 
-        var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
-        var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
-        var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        diarizationRegistry ??= FakeDiarizationFactory.CreateDefaultRegistry();
-        var audioProcessingService = new FfmpegAudioProcessingService(log);
-
+        var registries = new Babel.Player.Models.RegistryBundle(
+            perSessionStore, recentStore,
+            new Babel.Player.Services.Registries.TranscriptionRegistry(log),
+            new Babel.Player.Services.Registries.TranslationRegistry(log),
+            new Babel.Player.Services.Registries.TtsRegistry(log));
+        var options = new Babel.Player.Models.CoordinatorOptions
+        {
+            DiarizationRegistry    = diarizationRegistry ?? FakeDiarizationFactory.CreateDefaultRegistry(),
+            ContainerizedProbe     = containerizedProbe,
+            AudioProcessingService = new FfmpegAudioProcessingService(log),
+        };
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(store, log, settings);
         return new SessionWorkflowCoordinator(
-            store,
-            log,
-            settings,
-            perSessionStore,
-            recentStore,
-            transcriptionRegistry,
-            translationRegistry,
-            ttsRegistry,
-            diarizationRegistry: diarizationRegistry,
-            containerizedProbe: containerizedProbe,
+            coreServices, registries, options,
             segmentPlayer: segmentPlayer,
-            sourcePlayer: sourcePlayer,
-            audioProcessingService: audioProcessingService);
+            sourcePlayer: sourcePlayer);
     }
 
     private static SessionWorkflowCoordinator CreateCoordinator(
@@ -763,7 +756,7 @@ public sealed class SegmentInspectionTests
 
         Assert.Equal(
             [string.Empty, ProviderNames.NemoLocal, ProviderNames.WeSpeakerLocal],
-            playback.DiarizationProviderOptions);
+            playback.SpeakerRouting.DiarizationProviderOptions);
     }
 
     [Fact]
@@ -771,7 +764,7 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm(new FakeDiarizationRegistry());
 
-        Assert.Equal([string.Empty], playback.DiarizationProviderOptions);
+        Assert.Equal([string.Empty], playback.SpeakerRouting.DiarizationProviderOptions);
     }
 
     [Fact]
@@ -779,6 +772,7 @@ public sealed class SegmentInspectionTests
     {
         using var playback = CreatePlaybackVm();
 
+        Assert.NotNull(playback.Preview);
         Assert.NotNull(playback.Pipeline);
         Assert.NotNull(playback.SpeakerRouting);
     }
@@ -788,10 +782,10 @@ public sealed class SegmentInspectionTests
     {
         using var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
 
-        playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
+        playback.SpeakerRouting.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
         Assert.Equal(ProviderNames.WeSpeakerLocal, playback.Coordinator.CurrentSettings.DiarizationProvider);
-        Assert.Equal(ProviderNames.WeSpeakerLocal, playback.DiarizationProvider);
+        Assert.Equal(ProviderNames.WeSpeakerLocal, playback.SpeakerRouting.DiarizationProvider);
     }
 
     [Fact]
@@ -799,10 +793,10 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
-        playback.DiarizationProvider = string.Empty;
+        playback.SpeakerRouting.DiarizationProvider = string.Empty;
 
         Assert.Equal(string.Empty, playback.Coordinator.CurrentSettings.DiarizationProvider);
-        Assert.Equal("Manual speaker mapping is the default release flow.", playback.AutoSpeakerDetectionStatus);
+        Assert.Equal("Manual speaker mapping is the default release flow.", playback.SpeakerRouting.AutoSpeakerDetectionStatus);
     }
 
     [Fact]
@@ -810,7 +804,7 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
 
-        playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
+        playback.SpeakerRouting.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
         var selectionSnapshot = playback.CaptureProviderHealthSelectionSnapshot();
         var snapshot = playback.BuildDiarizationHealthSnapshot(selectionSnapshot);
@@ -851,12 +845,12 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
-        playback.DiarizationMaxSpeakers = 3;
-        playback.DiarizationMinSpeakers = 5;
+        playback.SpeakerRouting.DiarizationMaxSpeakers = 3;
+        playback.SpeakerRouting.DiarizationMinSpeakers = 5;
 
-        Assert.Null(playback.DiarizationMinSpeakers);
+        Assert.Null(playback.SpeakerRouting.DiarizationMinSpeakers);
         Assert.Null(playback.Coordinator.CurrentSettings.DiarizationMinSpeakers);
-        Assert.Equal(3, playback.DiarizationMaxSpeakers);
+        Assert.Equal(3, playback.SpeakerRouting.DiarizationMaxSpeakers);
         Assert.Equal(3, playback.Coordinator.CurrentSettings.DiarizationMaxSpeakers);
         Assert.Equal("Diarization min speakers cannot be greater than max speakers.", playback.StatusText);
     }
@@ -866,12 +860,12 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
-        playback.DiarizationMinSpeakers = 4;
-        playback.DiarizationMaxSpeakers = 2;
+        playback.SpeakerRouting.DiarizationMinSpeakers = 4;
+        playback.SpeakerRouting.DiarizationMaxSpeakers = 2;
 
-        Assert.Null(playback.DiarizationMaxSpeakers);
+        Assert.Null(playback.SpeakerRouting.DiarizationMaxSpeakers);
         Assert.Null(playback.Coordinator.CurrentSettings.DiarizationMaxSpeakers);
-        Assert.Equal(4, playback.DiarizationMinSpeakers);
+        Assert.Equal(4, playback.SpeakerRouting.DiarizationMinSpeakers);
         Assert.Equal(4, playback.Coordinator.CurrentSettings.DiarizationMinSpeakers);
         Assert.Equal("Diarization min speakers cannot be greater than max speakers.", playback.StatusText);
     }
@@ -881,18 +875,18 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
-        Assert.False(playback.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.False(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
 
         playback.Coordinator.CurrentSession = playback.Coordinator.CurrentSession with
         {
             Stage = SessionWorkflowStage.Transcribed,
         };
 
-        Assert.True(playback.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.True(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
 
-        playback.DiarizationProvider = string.Empty;
+        playback.SpeakerRouting.DiarizationProvider = string.Empty;
 
-        Assert.False(playback.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.False(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
     }
 
     [Fact]
@@ -936,16 +930,16 @@ public sealed class SegmentInspectionTests
 
         var playback = new EmbeddedPlaybackViewModel(coordinator);
 
-        Assert.True(playback.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.True(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
 
-        await playback.RunDiarizationOnlyCommand.ExecuteAsync(null);
+        await playback.Pipeline.RunDiarizationOnlyCommand.ExecuteAsync(null);
 
         var translation = await ArtifactJson.LoadTranslationAsync(translationPath);
 
         Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
         Assert.Null(coordinator.CurrentSession.TtsPath);
         Assert.Equal("spk_02", translation.Segments![0].SpeakerId);
-        Assert.Single(playback.Segments);
+        Assert.Single(playback.Preview.Segments);
         Assert.True(
             playback.StatusText.Contains("reset to translated state", StringComparison.OrdinalIgnoreCase) ||
             playback.StatusText.Contains("segments loaded", StringComparison.OrdinalIgnoreCase),
@@ -1012,14 +1006,14 @@ public sealed class SegmentInspectionTests
         var segment = new WorkflowSegmentState(
             "segment_5.0", 5.0, 8.0, "Source line", true, "Translated line", false);
 
-        playback.SelectedSegment = segment;
+        playback.Preview.SelectedSegment = segment;
 
         Assert.True(inspection.IsVisible);
         Assert.Equal("Source line", inspection.SourceText);
         Assert.Equal("Translated line", inspection.TranslatedText);
         Assert.False(inspection.HasTtsAudio);
 
-        playback.SelectedSegment = null;
+        playback.Preview.SelectedSegment = null;
         Assert.False(inspection.IsVisible);
     }
 
@@ -1028,7 +1022,7 @@ public sealed class SegmentInspectionTests
     {
         var (playback, segmentPlayer, sourcePlayer) = CreatePlaybackVmWithFakePlayers();
 
-        playback.SpeechRate = 1.4;
+        playback.Preview.SpeechRate = 1.4;
 
         Assert.Equal(1.4, playback.Coordinator.TtsPlaybackRate);
         Assert.Equal(1.0, sourcePlayer.PlaybackRate);
@@ -1135,11 +1129,11 @@ public sealed class SegmentInspectionTests
         // Pre-select a segment while IsSourceMediaLoaded is false so OnSelectedSegmentChanged
         // exits early without calling SeekAndPlayAsync.
         var seg = new WorkflowSegmentState("segment_2.0", 2.0, 4.0, "test", false, null, false);
-        playback.SelectedSegment = seg;
+        playback.Preview.SelectedSegment = seg;
 
         // Mark media as loaded — from this point any non-guarded SelectedSegment change
         // with a non-null value would call SeekAndPlayAsync on the source player.
-        playback.IsSourceMediaLoaded = true;
+        playback.Preview.IsSourceMediaLoaded = true;
 
         var segments = new List<WorkflowSegmentState>
         {
@@ -1150,7 +1144,7 @@ public sealed class SegmentInspectionTests
 
         // This call replaces the internal Segments collection.
         // If not properly guarded, Avalonia would re-select the segment and trigger playback.
-        await playback.RefreshSegmentsAsync(segments);
+        await playback.Preview.RefreshSegmentsAsync(segments);
 
         Assert.Equal(0, sourcePlayer.LastSeekPosition);
         Assert.False(sourcePlayer.IsPlaying);

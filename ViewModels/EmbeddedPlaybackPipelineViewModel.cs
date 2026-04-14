@@ -3,10 +3,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace Babel.Player.ViewModels;
 
-public sealed class EmbeddedPlaybackPipelineViewModel : ViewModelBase, IDisposable
+public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, IDisposable
 {
     private readonly EmbeddedPlaybackViewModel _parent;
     private readonly SessionWorkflowCoordinator _coordinator;
@@ -21,18 +23,40 @@ public sealed class EmbeddedPlaybackPipelineViewModel : ViewModelBase, IDisposab
         _coordinator = coordinator;
     }
 
-    public void Cancel()
-    {
-        if (_pipelineCts is null)
-            return;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
+    private double _pipelineProgressPercent;
 
-        _pipelineCts.Cancel();
-        _parent.StatusText = "Canceling pipeline...";
-        ResetProgressState();
-        _parent.ClearStatusErrorDetail();
-    }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
+    private bool _isPipelineProgressVisible;
 
-    public async Task RunAsync()
+    [ObservableProperty]
+    private string _pipelineStageTitle = string.Empty;
+
+    [ObservableProperty]
+    private string _pipelineStageDetail = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
+    private bool _isPipelineProgressIndeterminate;
+
+    public bool CanRunPipeline => !_parent.IsBusy;
+
+    public bool CanRunDiarizationOnly =>
+        !_parent.IsBusy &&
+        _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed &&
+        !string.IsNullOrWhiteSpace(_parent.SpeakerRouting.DiarizationProvider);
+
+    public string PipelineProgressStatusLine =>
+        !IsPipelineProgressVisible
+            ? string.Empty
+            : IsPipelineProgressIndeterminate
+                ? "Current stage progress is active, but this provider has not reported a numeric percentage yet."
+                : $"Current stage progress: {PipelineProgressPercent:P0}. The bar resets for each remaining pipeline stage.";
+
+    [RelayCommand(CanExecute = nameof(CanRunPipeline))]
+    public async Task RunPipelineAsync()
     {
         var diagnostics = _coordinator.BootstrapDiagnostics;
         if (!diagnostics.AllDependenciesAvailable)
@@ -72,7 +96,7 @@ public sealed class EmbeddedPlaybackPipelineViewModel : ViewModelBase, IDisposab
 
             ShowRefreshDetail("Loading segments and refreshing playback data…");
             _parent.StatusText = "Loading segments…";
-            await _parent.RefreshSegmentsAsync();
+            await _parent.Preview.RefreshSegmentsAsync();
             _parent.StatusText = _coordinator.CurrentSession.StatusMessage;
             _parent.ClearStatusErrorDetail();
         }
@@ -95,16 +119,29 @@ public sealed class EmbeddedPlaybackPipelineViewModel : ViewModelBase, IDisposab
         }
     }
 
-    public void Clear()
+    [RelayCommand]
+    public void ClearPipeline()
     {
         _coordinator.ClearPipeline();
-        _parent.Segments.Clear();
-        _parent.HasSegments = false;
+        _parent.Preview.ClearSegments();
         _parent.ResetInteractiveModes();
         _parent.StatusText = "Pipeline cleared. Ready to run fresh.";
         _parent.ClearStatusErrorDetail();
     }
 
+    [RelayCommand]
+    public void CancelPipeline()
+    {
+        if (_pipelineCts is null)
+            return;
+
+        _pipelineCts.Cancel();
+        _parent.StatusText = "Canceling pipeline...";
+        ResetProgressState();
+        _parent.ClearStatusErrorDetail();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRunDiarizationOnly))]
     public async Task RunDiarizationOnlyAsync()
     {
         _diarizationCts?.Cancel();
@@ -136,7 +173,7 @@ public sealed class EmbeddedPlaybackPipelineViewModel : ViewModelBase, IDisposab
                 completionStatus = "Diarization complete. Speaker assignments were unchanged.";
             }
 
-            await _parent.RefreshSegmentsAsync();
+            await _parent.Preview.RefreshSegmentsAsync();
             _parent.StatusText = completionStatus;
             _parent.ClearStatusErrorDetail();
         }
@@ -158,6 +195,42 @@ public sealed class EmbeddedPlaybackPipelineViewModel : ViewModelBase, IDisposab
         }
     }
 
+    public void NotifyBusyStateChanged()
+    {
+        RunPipelineCommand.NotifyCanExecuteChanged();
+        RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
+    }
+
+    public void NotifySessionStateChanged() => RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
+
+    internal void ApplyStageUpdate(SessionWorkflowCoordinator.PipelineStageUpdate update)
+    {
+        PipelineStageTitle = $"Stage {update.StageIndex} of {update.StageCount}: {update.Title}";
+        PipelineStageDetail = update.Detail;
+        PipelineProgressPercent = update.Progress01;
+        IsPipelineProgressIndeterminate = update.IsIndeterminate;
+        IsPipelineProgressVisible = true;
+    }
+
+    internal void ShowRefreshDetail(string detail)
+    {
+        if (!IsPipelineProgressVisible)
+            return;
+
+        PipelineStageDetail = detail;
+        PipelineProgressPercent = 1.0;
+        IsPipelineProgressIndeterminate = true;
+    }
+
+    internal void ResetProgressState()
+    {
+        PipelineStageTitle = string.Empty;
+        PipelineStageDetail = string.Empty;
+        PipelineProgressPercent = 0;
+        IsPipelineProgressIndeterminate = false;
+        IsPipelineProgressVisible = false;
+    }
+
     public void Dispose()
     {
         _pipelineCts?.Cancel();
@@ -167,33 +240,5 @@ public sealed class EmbeddedPlaybackPipelineViewModel : ViewModelBase, IDisposab
         _diarizationCts?.Cancel();
         _diarizationCts?.Dispose();
         _diarizationCts = null;
-    }
-
-    internal void ApplyStageUpdate(SessionWorkflowCoordinator.PipelineStageUpdate update)
-    {
-        _parent.PipelineStageTitle = $"Stage {update.StageIndex} of {update.StageCount}: {update.Title}";
-        _parent.PipelineStageDetail = update.Detail;
-        _parent.PipelineProgressPercent = update.Progress01;
-        _parent.IsPipelineProgressIndeterminate = update.IsIndeterminate;
-        _parent.IsPipelineProgressVisible = true;
-    }
-
-    internal void ShowRefreshDetail(string detail)
-    {
-        if (!_parent.IsPipelineProgressVisible)
-            return;
-
-        _parent.PipelineStageDetail = detail;
-        _parent.PipelineProgressPercent = 1.0;
-        _parent.IsPipelineProgressIndeterminate = true;
-    }
-
-    internal void ResetProgressState()
-    {
-        _parent.PipelineStageTitle = string.Empty;
-        _parent.PipelineStageDetail = string.Empty;
-        _parent.PipelineProgressPercent = 0;
-        _parent.IsPipelineProgressIndeterminate = false;
-        _parent.IsPipelineProgressVisible = false;
     }
 }
