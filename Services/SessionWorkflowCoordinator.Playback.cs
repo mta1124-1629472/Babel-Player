@@ -86,6 +86,19 @@ public sealed partial class SessionWorkflowCoordinator
     /// </exception>
     public async Task<bool> RunDiarizationAsync(CancellationToken cancellationToken = default)
     {
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H31",
+            location: "SessionWorkflowCoordinator.Playback.cs:RunDiarizationAsync",
+            message: "RunDiarizationAsync entered",
+            data: new
+            {
+                stage = CurrentSession.Stage.ToString(),
+                provider = CurrentSettings.DiarizationProvider,
+                managedThreadId = Environment.CurrentManagedThreadId,
+            });
+        // #endregion
         if (CurrentSession.Stage < SessionWorkflowStage.Transcribed)
             throw new InvalidOperationException("No transcript available. Please transcribe media first.");
 
@@ -111,6 +124,20 @@ public sealed partial class SessionWorkflowCoordinator
             resultingStage: CurrentSession.Stage >= SessionWorkflowStage.Translated
                 ? CurrentSession.Stage
                 : SessionWorkflowStage.Diarized);
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H31",
+            location: "SessionWorkflowCoordinator.Playback.cs:RunDiarizationAsync",
+            message: "RunDiarizationAsync completed",
+            data: new
+            {
+                stage = CurrentSession.Stage.ToString(),
+                speakerAssignmentsChanged = outcome.SpeakerAssignmentsChanged,
+                speakerCount = outcome.SpeakerCount,
+                segmentCount = outcome.SegmentCount,
+            });
+        // #endregion
 
         return outcome.SpeakerAssignmentsChanged;
     }
@@ -462,14 +489,81 @@ public sealed partial class SessionWorkflowCoordinator
             // #endregion
             if (tempExtractedAudio is not null)
             {
+                var cleanupStopwatch = Stopwatch.StartNew();
+                // #region agent log
+                WriteDebugLog(
+                    runId: "initial",
+                    hypothesisId: "H33",
+                    location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
+                    message: "Starting temp extracted audio cleanup",
+                    data: new
+                    {
+                        tempExtractedAudio,
+                    });
+                // #endregion
                 try
                 {
-                    if (File.Exists(tempExtractedAudio))
+                    var exists = File.Exists(tempExtractedAudio);
+                    // #region agent log
+                    WriteDebugLog(
+                        runId: "initial",
+                        hypothesisId: "H33",
+                        location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
+                        message: "Temp extracted audio existence checked",
+                        data: new
+                        {
+                            tempExtractedAudio,
+                            exists,
+                        });
+                    // #endregion
+                    if (exists)
+                    {
                         File.Delete(tempExtractedAudio);
+                        // #region agent log
+                        WriteDebugLog(
+                            runId: "initial",
+                            hypothesisId: "H33",
+                            location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
+                            message: "Deleted temp extracted audio file",
+                            data: new
+                            {
+                                tempExtractedAudio,
+                            });
+                        // #endregion
+                    }
                 }
                 catch (Exception ex)
                 {
                     _log.Warning($"Failed to clean up temp diarization audio: {ex.Message}");
+                    // #region agent log
+                    WriteDebugLog(
+                        runId: "initial",
+                        hypothesisId: "H33",
+                        location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
+                        message: "Temp extracted audio cleanup failed",
+                        data: new
+                        {
+                            tempExtractedAudio,
+                            exceptionType = ex.GetType().FullName,
+                            error = ex.Message,
+                        });
+                    // #endregion
+                }
+                finally
+                {
+                    cleanupStopwatch.Stop();
+                    // #region agent log
+                    WriteDebugLog(
+                        runId: "initial",
+                        hypothesisId: "H33",
+                        location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
+                        message: "Finished temp extracted audio cleanup",
+                        data: new
+                        {
+                            tempExtractedAudio,
+                            elapsedMs = cleanupStopwatch.ElapsedMilliseconds,
+                        });
+                    // #endregion
                 }
             }
         }

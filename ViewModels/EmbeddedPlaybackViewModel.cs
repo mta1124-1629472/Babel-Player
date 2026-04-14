@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
@@ -102,7 +103,18 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     private async void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        switch (e.PropertyName)
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => OnCoordinatorPropertyChangedCoreAsync(e.PropertyName));
+            return;
+        }
+
+        await OnCoordinatorPropertyChangedCoreAsync(e.PropertyName);
+    }
+
+    private async Task OnCoordinatorPropertyChangedCoreAsync(string? propertyName)
+    {
+        switch (propertyName)
         {
             case nameof(SessionWorkflowCoordinator.PlaybackState):
                 OnPropertyChanged(nameof(PlaybackState));
