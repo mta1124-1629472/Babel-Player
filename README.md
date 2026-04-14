@@ -354,8 +354,9 @@ Babel-Player/
 │   ├── architecture.md      # Structural map and ownership rules
 │   ├── PLAN.md              # Milestone plans (index)
 │   ├── context/             # Extra agent context (Gemini, Qwen, …)
-│   ├── history/smoke/       # Milestone smoke / gate evidence
-│   └── benchmarks/          # Transcription benchmark runs + leaderboard
+│   └── history/
+│       ├── smoke/           # Milestone smoke / gate evidence
+│       └── benchmarks/    # Transcription benchmark runs + leaderboard
 ├── native/win-x64/          # libmpv-2.dll (fetched; see README setup)
 ├── installer/               # Inno Setup script
 ├── site/                    # GitHub Pages (jekyll)

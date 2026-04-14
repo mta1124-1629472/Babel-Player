@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Aggregate all benchmark result files in docs/benchmarks/ into a leaderboard.
+Aggregate all benchmark result files in docs/history/benchmarks/ into a leaderboard.
 
-Reads every *.json file in docs/benchmarks/, groups results by matrix × machine,
-and writes docs/benchmarks/LEADERBOARD.md with a sorted summary table.
+Reads every *.json file in docs/history/benchmarks/, groups results by matrix × machine,
+and writes docs/history/benchmarks/LEADERBOARD.md with a sorted summary table.
 
 Usage:
   python scripts/aggregate_leaderboard.py
@@ -176,7 +176,7 @@ def build_markdown(rows: list[ResultRow], all_rows: list[ResultRow]) -> str:
         "---",
         "",
         "_To add your results: run `python scripts/run_cpu_transcription_benchmark.py`, "
-        "commit the JSON file to `docs/benchmarks/`, and open a PR._",
+        "commit the JSON file to `docs/history/benchmarks/`, and open a PR._",
         "",
     ]
     return "\n".join(lines)
@@ -187,8 +187,8 @@ def main() -> None:
     parser.add_argument(
         "--benchmarks-dir",
         type=Path,
-        default=REPO_ROOT / "docs" / "benchmarks",
-        help="Directory containing benchmark JSON files (default: docs/benchmarks/)",
+        default=REPO_ROOT / "docs" / "history" / "benchmarks",
+        help="Directory containing benchmark JSON files (default: docs/history/benchmarks/)",
     )
     args = parser.parse_args()
 
