@@ -359,7 +359,6 @@ Babel-Player/
 │       └── benchmarks/    # Transcription benchmark runs + leaderboard
 ├── native/win-x64/          # libmpv-2.dll (fetched; see README setup)
 ├── installer/               # Inno Setup script
-├── site/                    # GitHub Pages (jekyll)
 ├── AGENTS.md                # Operating rules (read before non-trivial changes)
 ├── CLAUDE.md                # Claude / Cursor-oriented project context
 ├── CONTRIBUTING.md
@@ -394,6 +393,7 @@ Read these first:
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow and scope discipline
 - [docs/architecture.md](docs/architecture.md) — structural map and ownership rules
 - [docs/privacy-policy.md](docs/privacy-policy.md) — privacy policy (published copy also on GitHub Pages)
+- **Marketing site (GitHub Pages)** — Jekyll source on branch [`site`](https://github.com/Babelworks/Babel-Player/tree/site); push to that branch to deploy (workflow lives in `.github/workflows/` on `main`).
 
 Minimum verification before opening a PR:
 
