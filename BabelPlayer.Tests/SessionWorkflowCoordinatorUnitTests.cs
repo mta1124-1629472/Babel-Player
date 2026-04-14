@@ -71,7 +71,11 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             DiarizationRegistry         = diarizationRegistry,
             AudioProcessingService      = audioProcessingService,
         };
-        return new SessionWorkflowCoordinator(_ctx.Store, _ctx.Log, settings ?? _ctx.Settings, registries, options);
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(
+            _ctx.Store,
+            _ctx.Log,
+            settings ?? _ctx.Settings);
+        return new SessionWorkflowCoordinator(coreServices, registries, options);
     }
 
     private AppSettings CreateMatchingSettings() =>

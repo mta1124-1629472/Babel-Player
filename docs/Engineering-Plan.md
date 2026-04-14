@@ -1,7 +1,7 @@
 # Babel-Player — Engineering Plan
 
-**Last updated:** April 13, 2026 — code-verified audit; consolidated from Milestones-Tracker and Remaining-Implementation-Plan  
-**Status:** Phases 1–3 and 5 complete. Phase 4 and Phase 6 (partial) remain.
+**Last updated:** April 13, 2026 — code-verified audit plus constructor cleanup completion  
+**Status:** Phases 1–3, 5, and Phase 6 item 6.1b/6.4 complete. Phase 4 and Phase 6 (6.2a) remain.
 
 ---
 
@@ -80,57 +80,26 @@ Babel-Player is a local-first multilingual video dubbing application. Stack: C# 
 
 | Item | Resolution |
 |---|---|
+| 6.1b — VM decomposition | `EmbeddedPlaybackViewModel.cs` reduced to 163 lines; preview, pipeline, and speaker-routing child VMs now own their binding surfaces |
 | 6.3 — Qwen TTS server-side batching | `/tts/qwen/batch` endpoint live |
+| 6.4 — Constructor cleanup | `CoordinatorCoreServices` added; coordinator constructors reduced to ≤ 5 parameters; all call sites updated |
 | 6.5 — Clean shutdown | `Environment.Exit` removed; Part 4 staged |
 
 ---
 
 ## Remaining Work
 
-Execution order is fixed by dependency: constructor cleanup unblocks everything that adds coordinator parameters; VM decomposition reduces risk before streaming adds coordinator-to-VM surface area.
+Execution order is fixed by dependency: Parakeet lands before streaming so the next capability can be added without reopening the completed playback VM split.
 
 ```
-Tier 1 (6.4 constructor)   → 2–3 days    — do first, no dependencies
+Tier 2 (4.x Parakeet)      → 1.5–2 weeks — do next
     ↓
-Tier 2 (6.1b VM decomp)    → 2–3 days    — reduces risk for streaming
-    ↓
-Tier 3 (4.x Parakeet)      → 1.5–2 weeks — new capability; parallel with Tier 4 if resourced
-    ↓
-Tier 4 (6.2 streaming)     → 2–3 weeks   — highest impact, highest risk, last
+Tier 3 (6.2 streaming)     → 2–3 weeks   — highest impact, highest risk, last
 ```
 
 ---
 
-### Tier 1 — Constructor Cleanup (6.4)
-
-**`Services/SessionWorkflowCoordinator.cs`, lines ~112–160**
-
-Current state: 18 parameters (8 required, 10 optional). No `CoordinatorOptions` record exists. Both Parakeet and streaming will want to extend the coordinator — clean this first to avoid doing it twice.
-
-What remains:
-- Create a `CoordinatorOptions` record bundling related services
-- Reduce constructor to ≤ 5 parameters
-- Update composition root in `App.axaml.cs`
-
-Acceptance: ≤ 5 parameters. All 22 tests pass. No behavior change.
-
----
-
-### Tier 2 — ViewModel Decomposition (6.1b)
-
-**`ViewModels/EmbeddedPlaybackViewModel.cs`**
-
-Current state: **2,473 lines**. `EmbeddedPlaybackPipelineViewModel.cs` and `EmbeddedPlaybackSpeakerRoutingViewModel.cs` were created in Part 4 but the main file was not reduced — logic was added alongside the sub-VMs rather than moved into them. Must be finished before streaming adds more coordinator-to-VM surface area.
-
-What remains:
-- Move playback control, subtitle management, and dub mode logic into existing or new sub-VMs
-- Target: main VM under 800 lines
-
-Acceptance: Main VM under 800 lines. All tests pass. No behavior change.
-
----
-
-### Tier 3 — Parakeet ASR Provider (4.1–4.3)
+### Tier 2 — Parakeet ASR Provider (4.1–4.3)
 
 **Zero Parakeet references exist anywhere in the codebase.**
 
@@ -151,7 +120,7 @@ Acceptance: Main VM under 800 lines. All tests pass. No behavior change.
 
 ---
 
-### Tier 4 — Channel Streaming Pipeline (6.2a)
+### Tier 3 — Channel Streaming Pipeline (6.2a)
 
 **`Services/SessionWorkflowCoordinator.Pipeline.cs`**
 
@@ -170,7 +139,6 @@ Acceptance: Transcription segments begin flowing to translation before full tran
 
 | Item | Pipeline Impact | Effort | Risk |
 |---|---|---|---|
-| 6.4 — Constructor cleanup | — | 2–3 days | Low |
 | 6.1b — VM decomposition | — | 2–3 days | Low |
 | 4.1–4.3 — Parakeet ASR | ~10x ASR speed (EU langs) | 1.5–2 weeks | Medium |
 | 6.2a — Channel streaming | ~30–50% end-to-end | 2–3 weeks | Medium |

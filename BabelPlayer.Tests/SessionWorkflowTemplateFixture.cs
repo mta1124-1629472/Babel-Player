@@ -106,7 +106,8 @@ public sealed class SessionWorkflowTemplateFixture : IAsyncDisposable
             DiarizationRegistry    = diarizationRegistry,
             AudioProcessingService = audioProcessing,
         };
-        var coordinator = new SessionWorkflowCoordinator(store, log, settings, registries, options);
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(store, log, settings);
+        var coordinator = new SessionWorkflowCoordinator(coreServices, registries, options);
 
         coordinator.Initialize();
 

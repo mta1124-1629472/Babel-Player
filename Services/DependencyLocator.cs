@@ -372,6 +372,7 @@ public static class DependencyLocator
             AudioProcessingService      = audioProcessingService,
         };
 
-        return new SessionWorkflowCoordinator(snapshotStore, appLog, appSettings, transportManager, registries, options);
+        var coreServices = new CoordinatorCoreServices(snapshotStore, appLog, appSettings);
+        return new SessionWorkflowCoordinator(coreServices, transportManager, registries, options);
     }
 }
