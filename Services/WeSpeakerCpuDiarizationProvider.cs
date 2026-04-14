@@ -24,6 +24,31 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     };
 
     private readonly ManagedCpuRuntimeManager _cpuRuntimeManager;
+    private const string DebugLogPath = "/home/ander/projects/Babel-Player/.cursor/debug-b0c5b4.log";
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "b0c5b4",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
 
     /// <summary>
     /// Creates a WeSpeakerCpuDiarizationProvider and initializes an internal ManagedCpuRuntimeManager for CPU-based WeSpeaker diarization.
@@ -52,6 +77,19 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
         var inspection = _cpuRuntimeManager.InspectRuntimeState();
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H2",
+            location: "WeSpeakerCpuDiarizationProvider.cs:CheckReadiness",
+            message: "Managed CPU inspection during WeSpeaker readiness check",
+            data: new
+            {
+                state = inspection.State.ToString(),
+                needsBootstrap = inspection.NeedsBootstrap,
+                detail = inspection.Detail,
+            });
+        // #endregion
 
         if (inspection.State == ManagedCpuState.Failed)
         {
@@ -84,9 +122,42 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     {
         try
         {
+            var beforeInspection = _cpuRuntimeManager.InspectRuntimeState();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H1",
+                location: "WeSpeakerCpuDiarizationProvider.cs:EnsureReadyAsync",
+                message: "WeSpeaker EnsureReadyAsync starting runtime inspection",
+                data: new
+                {
+                    state = beforeInspection.State.ToString(),
+                    needsBootstrap = beforeInspection.NeedsBootstrap,
+                    detail = beforeInspection.Detail,
+                });
+            // #endregion
+
             await _cpuRuntimeManager.EnsureInstalledAsync(cancellationToken: ct).ConfigureAwait(false);
             progress?.Report(1.0);
-            return _cpuRuntimeManager.State == ManagedCpuState.Ready;
+            var isReady = _cpuRuntimeManager.State == ManagedCpuState.Ready;
+            var afterInspection = _cpuRuntimeManager.InspectRuntimeState();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H1",
+                location: "WeSpeakerCpuDiarizationProvider.cs:EnsureReadyAsync",
+                message: "WeSpeaker EnsureReadyAsync completed runtime inspection",
+                data: new
+                {
+                    managerState = _cpuRuntimeManager.State.ToString(),
+                    returnedIsReady = isReady,
+                    inspectedState = afterInspection.State.ToString(),
+                    needsBootstrap = afterInspection.NeedsBootstrap,
+                    detail = afterInspection.Detail,
+                    failureReason = _cpuRuntimeManager.FailureReason,
+                });
+            // #endregion
+            return isReady;
         }
         catch (OperationCanceledException)
         {

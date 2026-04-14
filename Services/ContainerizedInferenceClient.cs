@@ -19,6 +19,7 @@ public sealed class ContainerizedInferenceClient
     private readonly string _inferenceServiceUrl;
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = false };
+    private const string DebugLogPath = "/home/ander/projects/Babel-Player/.cursor/debug-b0c5b4.log";
 
     /// <summary>
     /// Initializes a new ContainerizedInferenceClient for the specified inference service URL and logger, using a default HttpClient and no request lease tracker.
@@ -322,6 +323,22 @@ public sealed class ContainerizedInferenceClient
 
             const string endpoint = "/diarize";
             _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H3",
+                location: "ContainerizedInferenceClient.cs:DiarizeAsync",
+                message: "Posting diarization request to managed GPU host",
+                data: new
+                {
+                    endpoint,
+                    serviceUrl = _inferenceServiceUrl,
+                    audioFilePath,
+                    normalizedEngine,
+                    minSpeakers,
+                    maxSpeakers,
+                });
+            // #endregion
 
             using var content = new MultipartFormDataContent();
             await using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
@@ -350,6 +367,20 @@ public sealed class ContainerizedInferenceClient
         catch (Exception ex)
         {
             _log.Error($"Diarization failed: {ex.Message}", ex);
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H3",
+                location: "ContainerizedInferenceClient.cs:DiarizeAsync",
+                message: "Managed GPU diarization request failed",
+                data: new
+                {
+                    audioFilePath,
+                    engine,
+                    exceptionType = ex.GetType().FullName,
+                    error = ex.Message,
+                });
+            // #endregion
             return new DiarizationResult(false, [], 0, ex.Message);
         }
     }
@@ -1140,6 +1171,30 @@ public sealed class ContainerizedInferenceClient
     /// <returns>An <see cref="IDisposable"/> representing the acquired lease that must be disposed to release it, or <c>null</c> if no lease tracker is configured.</returns>
     private IDisposable? AcquireLease(ContainerizedRequestKind kind) =>
         _requestLeaseTracker?.Acquire(kind);
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "b0c5b4",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
 
 }
 

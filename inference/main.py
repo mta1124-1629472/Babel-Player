@@ -98,6 +98,8 @@ _nemo_restore_meta_patch_applied = False
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
 TEMP_DIR.mkdir(exist_ok=True)
+DEBUG_LOG_PATH = Path("/home/ander/projects/Babel-Player/.cursor/debug-b0c5b4.log")
+DEBUG_SESSION_ID = "b0c5b4"
 NEMO_DIARIZATION_DEFAULT_PROVIDER = "nemo"
 NEMO_VAD_MODEL = "vad_multilingual_marblenet"
 NEMO_SPEAKER_EMBEDDING_MODEL = "titanet_large"
@@ -122,6 +124,25 @@ NEMO_VAD_PARAMETERS = {
     "min_duration_off": 0.2,
     "filter_speech_first": True,
 }
+
+
+def _write_debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    payload = {
+        "sessionId": DEBUG_SESSION_ID,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    try:
+        # region agent log
+        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as log_file:
+            log_file.write(json.dumps(payload, ensure_ascii=True) + "\n")
+        # endregion
+    except Exception:
+        pass
 
 
 def _normalize_torch_device(map_location):
@@ -1290,6 +1311,21 @@ def _run_nemo_diarization(
     Raises:
         RuntimeError: If NeMo produces no RTTM output file.
     """
+    # region agent log
+    _write_debug_log(
+        run_id="initial",
+        hypothesis_id="H4",
+        location="inference/main.py:_run_nemo_diarization",
+        message="Starting NeMo diarization worker",
+        data={
+            "audio_path": str(audio_path),
+            "audio_exists": audio_path.exists(),
+            "min_speakers": min_speakers,
+            "max_speakers": max_speakers,
+            "temp_dir": str(TEMP_DIR),
+        },
+    )
+    # endregion
     _apply_nemo_meta_tensor_restore_patch()
     import nemo.collections.asr as nemo_asr
 
@@ -1802,9 +1838,49 @@ async def diarize(
     _validate_diarization_speaker_bounds(min_speakers, max_speakers)
     temp_audio_path: Optional[Path] = None
     try:
+        # region agent log
+        _write_debug_log(
+            run_id="initial",
+            hypothesis_id="H3",
+            location="inference/main.py:diarize",
+            message="Received diarization HTTP request",
+            data={
+                "filename": audio.filename,
+                "min_speakers": min_speakers,
+                "max_speakers": max_speakers,
+                "temp_dir": str(TEMP_DIR),
+            },
+        )
+        # endregion
         temp_audio_path = _stage_audio_upload_to_temp(audio, "diar")
         temp_audio_path.write_bytes(await audio.read())
+        # region agent log
+        _write_debug_log(
+            run_id="initial",
+            hypothesis_id="H3",
+            location="inference/main.py:diarize",
+            message="Staged uploaded diarization audio file",
+            data={
+                "staged_path": str(temp_audio_path),
+                "exists": temp_audio_path.exists(),
+                "suffix": temp_audio_path.suffix,
+            },
+        )
+        # endregion
         temp_audio_path = _ensure_wav_audio(temp_audio_path)
+        # region agent log
+        _write_debug_log(
+            run_id="initial",
+            hypothesis_id="H4",
+            location="inference/main.py:diarize",
+            message="Prepared WAV file for NeMo diarization",
+            data={
+                "wav_path": str(temp_audio_path),
+                "exists": temp_audio_path.exists(),
+                "suffix": temp_audio_path.suffix,
+            },
+        )
+        # endregion
         segments, speaker_count = await asyncio.to_thread(
             _run_nemo_diarization,
             temp_audio_path,
@@ -1819,6 +1895,20 @@ async def diarize(
         raise
     except Exception as exc:
         logger.error(f"Diarization failed: {exc}", exc_info=True)
+        # region agent log
+        _write_debug_log(
+            run_id="initial",
+            hypothesis_id="H4",
+            location="inference/main.py:diarize",
+            message="Diarization endpoint raised exception",
+            data={
+                "exception_type": type(exc).__name__,
+                "error": str(exc),
+                "temp_audio_path": str(temp_audio_path) if temp_audio_path else None,
+                "temp_audio_exists": temp_audio_path.exists() if temp_audio_path else False,
+            },
+        )
+        # endregion
         if temp_audio_path:
             background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
         raise HTTPException(status_code=400, detail=str(exc))
