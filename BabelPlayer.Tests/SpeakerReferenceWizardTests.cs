@@ -57,7 +57,7 @@ public sealed class SpeakerReferenceWizardTests
     }
 
     [Fact]
-    public void BuildPersistencePayload_OnlyIncludesChangedItems()
+    public void BuildReferencePersistencePayload_OnlyIncludesChangedItems()
     {
         var unchanged = new SpeakerReferenceDraftItem("spk_00", @"C:\same.wav");
         var changed = new SpeakerReferenceDraftItem("spk_01", @"C:\old.wav");
