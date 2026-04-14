@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 
@@ -178,6 +180,135 @@ public sealed class ContainerizedInferenceClient
         {
             _log.Error($"Transcription failed: {ex.Message}", ex);
             return new TranscriptionResult(false, [], "unknown", 0.0, ex.Message);
+        }
+    }
+
+    internal async Task<TranscriptionResult> TranscribeStreamingAsync(
+        string audioFilePath,
+        ChannelWriter<TranscriptChannelItem> writer,
+        string modelName = "base",
+        string? language = null,
+        string cpuComputeType = "int8",
+        int cpuThreads = 0,
+        int numWorkers = 1,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        try
+        {
+            using var lease = AcquireLease(ContainerizedRequestKind.Transcription);
+
+            if (!File.Exists(audioFilePath))
+                throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
+
+            _log.Info($"Streaming transcription with containerized service: {audioFilePath}");
+
+            using var content = new MultipartFormDataContent();
+            await using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
+            content.Add(new StreamContent(fileStream), "file", Path.GetFileName(audioFilePath));
+            content.Add(new StringContent(modelName), "model");
+            if (language is not null)
+                content.Add(new StringContent(language), "language");
+            content.Add(new StringContent(string.IsNullOrWhiteSpace(cpuComputeType) ? "int8" : cpuComputeType), "cpu_compute_type");
+            if (cpuThreads > 0)
+                content.Add(new StringContent(cpuThreads.ToString()), "cpu_threads");
+            content.Add(new StringContent((numWorkers < 1 ? 1 : numWorkers).ToString()), "num_workers");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_inferenceServiceUrl}/transcribe/stream")
+            {
+                Content = content,
+            };
+            using var response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(payload)
+                    ? $"HTTP {(int)response.StatusCode}"
+                    : payload);
+            }
+
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var reader = new StreamReader(stream);
+
+            var sourceLanguage = language ?? "unknown";
+            var languageProbability = 0d;
+            var peakRamMb = -1d;
+            var peakVramMb = -1d;
+            var segments = new List<TranscriptSegment>();
+            var stopwatch = Stopwatch.StartNew();
+
+            while (true)
+            {
+                var line = await reader.ReadLineAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (line is null)
+                    break;
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                var evt = JsonSerializer.Deserialize<StreamingTranscriptionEventDto>(line, JsonOptions)
+                    ?? throw new InvalidOperationException("Failed to deserialize streaming transcription event.");
+
+                if (string.Equals(evt.Type, "metadata", StringComparison.Ordinal))
+                {
+                    sourceLanguage = string.IsNullOrWhiteSpace(evt.Language) ? sourceLanguage : evt.Language;
+                    languageProbability = evt.LanguageProbability;
+                    continue;
+                }
+
+                if (string.Equals(evt.Type, "complete", StringComparison.Ordinal))
+                {
+                    peakRamMb = evt.PeakRamMb;
+                    peakVramMb = evt.PeakVramMb;
+                    continue;
+                }
+
+                if (!string.Equals(evt.Type, "segment", StringComparison.Ordinal) || evt.Segment is null)
+                    continue;
+
+                var text = evt.Segment.Text?.Trim();
+                if (string.IsNullOrWhiteSpace(text))
+                    continue;
+
+                var artifactSegment = new TranscriptSegmentArtifact
+                {
+                    Start = evt.Segment.Start,
+                    End = evt.Segment.End,
+                    Text = text,
+                    Words = evt.Segment.Words is null
+                        ? null
+                        : [.. evt.Segment.Words
+                            .Where(word => !string.IsNullOrWhiteSpace(word.Text))
+                            .Select(word => new WordTimestamp(word.Text!, word.Start, word.End))],
+                };
+                var segmentId = SessionWorkflowCoordinator.SegmentId(artifactSegment.Start);
+                segments.Add(new TranscriptSegment(artifactSegment.Start, artifactSegment.End, text));
+                await writer.WriteAsync(
+                    new TranscriptChannelItem(segmentId, artifactSegment, sourceLanguage, languageProbability),
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            stopwatch.Stop();
+            _log.Info($"Streaming transcription complete: {segments.Count} segments");
+
+            return new TranscriptionResult(
+                true,
+                segments,
+                sourceLanguage,
+                languageProbability,
+                null,
+                ElapsedMs: stopwatch.ElapsedMilliseconds,
+                PeakVramMb: peakVramMb,
+                PeakRamMb: peakRamMb);
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Streaming transcription failed: {ex.Message}", ex);
+            return new TranscriptionResult(false, [], language ?? "unknown", 0.0, ex.Message);
         }
     }
 
@@ -876,6 +1007,54 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("text")]
         public string? Text { get; set; }
+    }
+
+    private sealed class StreamingTranscriptionEventDto
+    {
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
+
+        [JsonPropertyName("language")]
+        public string? Language { get; set; }
+
+        [JsonPropertyName("language_probability")]
+        public double LanguageProbability { get; set; }
+
+        [JsonPropertyName("segment")]
+        public StreamingTranscriptSegmentDto? Segment { get; set; }
+
+        [JsonPropertyName("peak_ram_mb")]
+        public double PeakRamMb { get; set; } = -1;
+
+        [JsonPropertyName("peak_vram_mb")]
+        public double PeakVramMb { get; set; } = -1;
+    }
+
+    private sealed class StreamingTranscriptSegmentDto
+    {
+        [JsonPropertyName("start")]
+        public double Start { get; set; }
+
+        [JsonPropertyName("end")]
+        public double End { get; set; }
+
+        [JsonPropertyName("text")]
+        public string? Text { get; set; }
+
+        [JsonPropertyName("words")]
+        public List<StreamingWordTimestampDto>? Words { get; set; }
+    }
+
+    private sealed class StreamingWordTimestampDto
+    {
+        [JsonPropertyName("text")]
+        public string? Text { get; set; }
+
+        [JsonPropertyName("start")]
+        public double Start { get; set; }
+
+        [JsonPropertyName("end")]
+        public double End { get; set; }
     }
 
     private sealed class TranslationApiResponseDto

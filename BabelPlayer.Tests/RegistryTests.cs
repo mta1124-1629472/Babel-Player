@@ -448,8 +448,9 @@ public sealed class RegistryTests : IDisposable
     {
         var providers = _transcriptionRegistry.GetAvailableProviders(ComputeProfile.Gpu);
 
-        Assert.Single(providers);
-        Assert.Equal(ProviderNames.FasterWhisper, providers[0].Id);
+        Assert.Equal(2, providers.Count);
+        Assert.Contains(providers, p => p.Id == ProviderNames.FasterWhisper);
+        Assert.Contains(providers, p => p.Id == ProviderNames.Parakeet);
     }
 
     [Fact]

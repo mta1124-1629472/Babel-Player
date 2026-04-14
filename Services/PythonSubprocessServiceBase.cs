@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -221,7 +222,7 @@ public abstract class PythonSubprocessServiceBase
         }
     }
 
-    private async Task EnsurePythonRuntimeReadyAsync(CancellationToken cancellationToken)
+    protected async Task EnsurePythonRuntimeReadyAsync(CancellationToken cancellationToken)
     {
         if (_cpuRuntimeManager is null)
         {
@@ -242,6 +243,118 @@ public abstract class PythonSubprocessServiceBase
                 ?? $"Expected managed CPU Python at {PythonPath}.";
             throw new InvalidOperationException(
                 $"Managed CPU runtime is not ready for subprocess providers. {failureReason}");
+        }
+    }
+
+    protected async Task<ScriptResult> RunPythonStreamingScriptAsync(
+        string scriptContent,
+        Func<string, CancellationToken, Task> onStdoutLineAsync,
+        IReadOnlyList<string>? arguments = null,
+        string scriptPrefix = "script",
+        string? standardInput = null,
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(onStdoutLineAsync);
+
+        if (!IsValidScriptPrefix(scriptPrefix))
+        {
+            throw new ArgumentException(
+                $"scriptPrefix must contain only alphanumeric characters, hyphens, and underscores. Got: {scriptPrefix}",
+                nameof(scriptPrefix));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await EnsurePythonRuntimeReadyAsync(cancellationToken).ConfigureAwait(false);
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
+
+        try
+        {
+            await File.WriteAllTextAsync(scriptPath, scriptContent, cancellationToken).ConfigureAwait(false);
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = PythonPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = standardInput is not null,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            psi.ArgumentList.Add(scriptPath);
+            foreach (var argument in arguments ?? Array.Empty<string>())
+                psi.ArgumentList.Add(argument);
+            if (environmentVariables is not null)
+            {
+                foreach (var (key, value) in environmentVariables)
+                    psi.Environment[key] = value;
+            }
+
+            using var proc = Process.Start(psi)
+                ?? throw new InvalidOperationException($"Failed to start Python process ({scriptPrefix}).");
+
+            var stderrBuilder = new StringBuilder();
+            var stdoutBuilder = new StringBuilder();
+            var stdinTask = WriteStandardInputAsync(proc, standardInput, cancellationToken);
+            var stderrTask = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    var line = await proc.StandardError.ReadLineAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+                    if (line is null)
+                        break;
+
+                    if (stderrBuilder.Length > 0)
+                        stderrBuilder.AppendLine();
+                    stderrBuilder.Append(line);
+                }
+            }, cancellationToken);
+            var stdoutTask = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    var line = await proc.StandardOutput.ReadLineAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+                    if (line is null)
+                        break;
+
+                    if (stdoutBuilder.Length > 0)
+                        stdoutBuilder.AppendLine();
+                    stdoutBuilder.Append(line);
+                    await onStdoutLineAsync(line, cancellationToken).ConfigureAwait(false);
+                }
+            }, cancellationToken);
+
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                await Task.WhenAll(stdoutTask, stderrTask, stdinTask).ConfigureAwait(false);
+                await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    proc.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    // Best effort.
+                }
+
+                throw;
+            }
+            finally
+            {
+                sw.Stop();
+            }
+
+            return new ScriptResult(proc.ExitCode, stdoutBuilder.ToString(), stderrBuilder.ToString(), sw.ElapsedMilliseconds);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath))
+                File.Delete(scriptPath);
         }
     }
 

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 
@@ -38,48 +39,7 @@ public sealed partial class SessionWorkflowCoordinator
         if (!File.Exists(CurrentSession.IngestedMediaPath))
             throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
 
-        ReportStage(
-            stageContext,
-            $"Checking transcription runtime, provider readiness, and model availability for {CurrentSettings.TranscriptionProvider} / {CurrentSettings.TranscriptionModel}…",
-            progress01: 0,
-            isIndeterminate: true);
-
-        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TranscriptionRuntime, cancellationToken);
-
-        var readiness = CurrentSettings.TranscriptionRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
-            ? await ContainerizedProviderReadiness.CheckTranscriptionForExecutionAsync(
-                CurrentSettings,
-                _containerizedProbe,
-                cancellationToken)
-            : TranscriptionRegistry.CheckReadiness(
-                CurrentSettings.TranscriptionProvider,
-                CurrentSettings.TranscriptionModel,
-                CurrentSettings,
-                KeyStore,
-                CurrentSettings.TranscriptionProfile);
-        if (!readiness.IsReady && !readiness.RequiresModelDownload)
-            throw new PipelineProviderException(readiness.BlockingReason!);
-
-        if (readiness.RequiresModelDownload)
-        {
-            var downloadProgress = CreateStageDownloadProgress(
-                stageContext,
-                progress,
-                $"Preparing transcription model '{CurrentSettings.TranscriptionModel}'");
-            if (!await TranscriptionRegistry.EnsureModelAsync(
-                    CurrentSettings.TranscriptionProvider,
-                    CurrentSettings.TranscriptionModel,
-                    CurrentSettings,
-                    downloadProgress,
-                    cancellationToken,
-                    CurrentSettings.TranscriptionProfile,
-                    KeyStore))
-            {
-                throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranscriptionModel}'.");
-            }
-        }
-
-        _transcriptionService ??= CreateTranscriptionService();
+        await EnsureTranscriptionProviderReadyAsync(progress, stageContext, cancellationToken);
 
         ReportStage(
             stageContext,
@@ -110,7 +70,8 @@ public sealed partial class SessionWorkflowCoordinator
                   $"[{CurrentSettings.TranscriptionProvider}/{CurrentSettings.TranscriptionModel}] " +
                   $"route=({routeSummary}) hw=({hwSummary})");
 
-        var result = await _transcriptionService.TranscribeAsync(
+        var transcriptionService = _transcriptionService ??= CreateTranscriptionService();
+        var result = await transcriptionService.TranscribeAsync(
             new TranscriptionRequest(
                 CurrentSession.IngestedMediaPath,
                 transcriptPath,
@@ -128,23 +89,7 @@ public sealed partial class SessionWorkflowCoordinator
             throw new InvalidOperationException($"Transcription failed: {errorMsg}");
         }
 
-        var nowUtc = DateTimeOffset.UtcNow;
-        CurrentSession = CurrentSession with
-        {
-            Stage = SessionWorkflowStage.Transcribed,
-            TranscriptPath = transcriptPath,
-            SourceLanguage = result.Language,
-            TranscribedAtUtc = nowUtc,
-            TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
-            TranscriptionProvider = CurrentSettings.TranscriptionProvider,
-            TranscriptionModel = CurrentSettings.TranscriptionModel,
-            StatusMessage = ShouldPauseForSpeakerMapping()
-                ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for speaker mapping."
-                : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
-        };
-
-        _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
-        SaveCurrentSession();
+        CommitTranscriptionSessionState(result, transcriptPath);
 
         ReportStage(
             stageContext,
@@ -221,22 +166,7 @@ public sealed partial class SessionWorkflowCoordinator
             throw new InvalidOperationException($"Translation failed: {errorMsg}");
         }
 
-        var nowUtc = DateTimeOffset.UtcNow;
-        CurrentSession = CurrentSession with
-        {
-            Stage = SessionWorkflowStage.Translated,
-            TranslationPath = translationPath,
-            SourceLanguage = src,
-            TargetLanguage = lang,
-            TranslatedAtUtc = nowUtc,
-            TranslationRuntime = CurrentSettings.TranslationRuntime,
-            TranslationProvider = CurrentSettings.TranslationProvider,
-            TranslationModel = CurrentSettings.TranslationModel,
-            StatusMessage = $"Translated {result.Segments.Count} segments to {lang}. Ready for TTS/dubbing.",
-        };
-
-        _log.Info($"Translation complete: {result.Segments.Count} segments, {src} -> {lang}");
-        SaveCurrentSession();
+        CommitTranslationSessionState(result, translationPath, src, lang);
 
         ReportStage(
             stageContext,
@@ -307,6 +237,101 @@ public sealed partial class SessionWorkflowCoordinator
         await StitchSegmentClipsAsync(segmentAudioPaths, orderedSegments, ttsPath, stageContext, cancellationToken);
 
         CommitTtsSessionState(v, ttsPath, segmentsDir, segmentAudioPaths, totalSegments, stageContext);
+    }
+
+    private async Task EnsureTranscriptionProviderReadyAsync(
+        IProgress<double>? progress,
+        PipelineStageContext? stageContext,
+        CancellationToken cancellationToken)
+    {
+        ReportStage(
+            stageContext,
+            $"Checking transcription runtime, provider readiness, and model availability for {CurrentSettings.TranscriptionProvider} / {CurrentSettings.TranscriptionModel}…",
+            progress01: 0,
+            isIndeterminate: true);
+
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TranscriptionRuntime, cancellationToken);
+
+        var readiness = CurrentSettings.TranscriptionRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
+            ? await ContainerizedProviderReadiness.CheckTranscriptionForExecutionAsync(
+                CurrentSettings,
+                _containerizedProbe,
+                cancellationToken)
+            : TranscriptionRegistry.CheckReadiness(
+                CurrentSettings.TranscriptionProvider,
+                CurrentSettings.TranscriptionModel,
+                CurrentSettings,
+                KeyStore,
+                CurrentSettings.TranscriptionProfile);
+
+        if (!readiness.IsReady && !readiness.RequiresModelDownload)
+            throw new PipelineProviderException(readiness.BlockingReason!);
+
+        if (readiness.RequiresModelDownload)
+        {
+            var downloadProgress = CreateStageDownloadProgress(
+                stageContext,
+                progress,
+                $"Preparing transcription model '{CurrentSettings.TranscriptionModel}'");
+            if (!await TranscriptionRegistry.EnsureModelAsync(
+                    CurrentSettings.TranscriptionProvider,
+                    CurrentSettings.TranscriptionModel,
+                    CurrentSettings,
+                    downloadProgress,
+                    cancellationToken,
+                    CurrentSettings.TranscriptionProfile,
+                    KeyStore))
+            {
+                throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranscriptionModel}'.");
+            }
+        }
+
+        _transcriptionService ??= CreateTranscriptionService();
+    }
+
+    private void CommitTranscriptionSessionState(TranscriptionResult result, string transcriptPath)
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+        CurrentSession = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = result.Language,
+            TranscribedAtUtc = nowUtc,
+            TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
+            TranscriptionProvider = CurrentSettings.TranscriptionProvider,
+            TranscriptionModel = CurrentSettings.TranscriptionModel,
+            StatusMessage = ShouldRunDiarization()
+                ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
+                : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
+        };
+
+        _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
+        SaveCurrentSession();
+    }
+
+    private void CommitTranslationSessionState(
+        TranslationResult result,
+        string translationPath,
+        string sourceLanguage,
+        string targetLanguage)
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+        CurrentSession = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranslationPath = translationPath,
+            SourceLanguage = sourceLanguage,
+            TargetLanguage = targetLanguage,
+            TranslatedAtUtc = nowUtc,
+            TranslationRuntime = CurrentSettings.TranslationRuntime,
+            TranslationProvider = CurrentSettings.TranslationProvider,
+            TranslationModel = CurrentSettings.TranslationModel,
+            StatusMessage = $"Translated {result.Segments.Count} segments to {targetLanguage}. Ready for TTS/dubbing.",
+        };
+
+        _log.Info($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
+        SaveCurrentSession();
     }
 
     /// <summary>
@@ -665,23 +690,567 @@ public sealed partial class SessionWorkflowCoordinator
         }
     }
 
+    private async Task ExecuteStreamingPipelineAsync(
+        IProgress<double>? progress,
+        PipelineStageContext? transcriptionStageContext,
+        PipelineStageContext? translationStageContext,
+        PipelineStageContext? ttsStageContext,
+        CancellationToken cancellationToken)
+    {
+        await EnsureTranscriptionProviderReadyAsync(progress, transcriptionStageContext, cancellationToken);
+
+        if (_transcriptionService is not IStreamingTranscriptionProvider streamingProvider)
+        {
+            await TranscribeMediaAsync(progress, transcriptionStageContext, cancellationToken);
+            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
+                progress,
+                translationStageContext,
+                ttsStageContext,
+                cancellationToken);
+            return;
+        }
+
+        ReportStage(
+            transcriptionStageContext,
+            $"Starting transcription with {CurrentSettings.TranscriptionProvider} / {CurrentSettings.TranscriptionModel}. Translation will begin as segments arrive.",
+            progress01: 0,
+            isIndeterminate: true,
+            streamingStatus: "Downstream translation and dubbing will overlap with ASR output.");
+
+        var transcriptPath = BuildTranscriptArtifactPath();
+        var transcriptPartialPath = TranscriptArtifactStreamingWriter.GetPartialPath(transcriptPath);
+        var targetLanguage = CurrentSettings.TargetLanguage;
+        var translationPath = BuildTranslationArtifactPath(transcriptPath, targetLanguage);
+        var translationPartialPath = TranscriptArtifactStreamingWriter.GetPartialPath(translationPath);
+        var voice = CurrentSettings.TtsVoice;
+        var ttsLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
+        var (ttsPath, segmentsDir) = BuildTtsArtifacts(translationPath, voice);
+
+        var transcriptArtifactWriter = new TranscriptArtifactStreamingWriter(
+            transcriptPartialPath,
+            CurrentSession.SourceLanguage ?? "unknown",
+            0d);
+        await transcriptArtifactWriter.InitializeAsync(cancellationToken).ConfigureAwait(false);
+
+        var transcriptChannel = Channel.CreateBounded<TranscriptChannelItem>(new BoundedChannelOptions(8)
+        {
+            SingleReader = true,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait,
+        });
+        var translationChannel = Channel.CreateBounded<TranslationChannelItem>(new BoundedChannelOptions(8)
+        {
+            SingleReader = true,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait,
+        });
+        var ttsResultChannel = Channel.CreateBounded<TtsChannelItem>(new BoundedChannelOptions(Math.Max(4, _ttsService?.MaxConcurrency ?? 4))
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.Wait,
+        });
+
+        var translationWriter = new TranslationArtifactStreamingWriter(
+            translationPartialPath,
+            CurrentSession.SourceLanguage ?? "unknown",
+            targetLanguage);
+        await translationWriter.InitializeAsync(cancellationToken).ConfigureAwait(false);
+
+        var translationDownloadProgress = CreateStageDownloadProgress(
+            translationStageContext,
+            progress,
+            $"Preparing translation model '{CurrentSettings.TranslationModel}'");
+        await EnsureTranslationExecutionReadyAsync(translationDownloadProgress, cancellationToken).ConfigureAwait(false);
+        _translationService ??= CreateTranslationService();
+        await EnsureTtsProviderReadyAsync(voice, progress, ttsStageContext, cancellationToken).ConfigureAwait(false);
+        _ttsService ??= CreateTtsService();
+        await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken).ConfigureAwait(false);
+        await EnsureMultiSpeakerReferenceClipsAsync(cancellationToken).ConfigureAwait(false);
+
+        ReportStage(
+            translationStageContext,
+            $"Streaming translation to {targetLanguage} with {CurrentSettings.TranslationProvider} / {CurrentSettings.TranslationModel}.",
+            progress01: 0,
+            isIndeterminate: true,
+            streamingStatus: "Dub generation will start as translated segments arrive.");
+        ReportStage(
+            ttsStageContext,
+            $"Streaming TTS synthesis with {CurrentSettings.TtsProvider} / {voice}.",
+            progress01: 0,
+            isIndeterminate: true,
+            streamingStatus: "Segment clips are generated as translation continues.");
+
+        var ttsCollectorTask = CollectStreamingTtsResultsAsync(ttsResultChannel.Reader, ttsStageContext, cancellationToken);
+        var ttsStageTask = RunStreamingTtsStageAsync(
+            translationChannel.Reader,
+            ttsResultChannel.Writer,
+            voice,
+            ttsLanguage,
+            segmentsDir,
+            cancellationToken);
+        var translationTask = RunStreamingTranslationStageAsync(
+            transcriptChannel.Reader,
+            translationChannel.Writer,
+            translationWriter,
+            targetLanguage,
+            translationStageContext,
+            cancellationToken);
+
+        var forwardingWriter = new TranscriptChannelForwardingWriter(transcriptArtifactWriter, transcriptChannel.Writer);
+        TranscriptionResult transcriptionResult;
+        try
+        {
+            transcriptionResult = await streamingProvider.TranscribeStreamingAsync(
+                new TranscriptionRequest(
+                    CurrentSession.IngestedMediaPath!,
+                    transcriptPath,
+                    CurrentSettings.TranscriptionModel,
+                    null,
+                    CurrentSettings.TranscriptionCpuComputeType,
+                    CurrentSettings.TranscriptionCpuThreads,
+                    CurrentSettings.TranscriptionNumWorkers),
+                forwardingWriter,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            forwardingWriter.TryComplete(ex);
+            throw;
+        }
+        finally
+        {
+            forwardingWriter.TryComplete();
+        }
+
+        await transcriptArtifactWriter.CompleteAsync(transcriptionResult, transcriptPath, cancellationToken).ConfigureAwait(false);
+        CommitTranscriptionSessionState(transcriptionResult, transcriptPath);
+        ReportStage(
+            transcriptionStageContext,
+            $"Transcription complete. {transcriptionResult.Segments.Count} segments were detected in {transcriptionResult.Language}.",
+            progress01: 1,
+            isIndeterminate: false);
+
+        var translationResult = await translationTask.ConfigureAwait(false);
+        await translationWriter.CompleteAsync(translationPath, cancellationToken).ConfigureAwait(false);
+        CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
+        ReportStage(
+            translationStageContext,
+            $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
+            progress01: 1,
+            isIndeterminate: false);
+
+        await ttsStageTask.ConfigureAwait(false);
+        var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
+        await StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, cancellationToken).ConfigureAwait(false);
+        CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, translationWriter.OrderedSegments.Count, ttsStageContext);
+    }
+
+    private async Task ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
+        IProgress<double>? progress,
+        PipelineStageContext? translationStageContext,
+        PipelineStageContext? ttsStageContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
+            throw new InvalidOperationException("No transcript available. Please transcribe media first.");
+
+        var transcript = await _artifactReader.LoadTranscriptAsync(CurrentSession.TranscriptPath, cancellationToken).ConfigureAwait(false);
+        var transcriptChannel = Channel.CreateBounded<TranscriptChannelItem>(new BoundedChannelOptions(8)
+        {
+            SingleReader = true,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait,
+        });
+
+        var producerTask = Task.Run(async () =>
+        {
+            try
+            {
+                foreach (var segment in transcript.Segments ?? [])
+                {
+                    if (string.IsNullOrWhiteSpace(segment.Text))
+                        continue;
+
+                    var segmentId = SegmentId(segment.Start);
+                    await transcriptChannel.Writer.WriteAsync(
+                        new TranscriptChannelItem(
+                            segmentId,
+                            CloneTranscriptSegment(segment),
+                            CurrentSession.SourceLanguage ?? transcript.Language ?? "unknown",
+                            transcript.LanguageProbability),
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                transcriptChannel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                transcriptChannel.Writer.TryComplete(ex);
+                throw;
+            }
+        }, cancellationToken);
+
+        var targetLanguage = CurrentSettings.TargetLanguage;
+        var translationPath = BuildTranslationArtifactPath(CurrentSession.TranscriptPath, targetLanguage);
+        var translationPartialPath = TranscriptArtifactStreamingWriter.GetPartialPath(translationPath);
+        var voice = CurrentSettings.TtsVoice;
+        var ttsLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
+        var (ttsPath, segmentsDir) = BuildTtsArtifacts(translationPath, voice);
+
+        var translationDownloadProgress = CreateStageDownloadProgress(
+            translationStageContext,
+            progress,
+            $"Preparing translation model '{CurrentSettings.TranslationModel}'");
+        await EnsureTranslationExecutionReadyAsync(translationDownloadProgress, cancellationToken).ConfigureAwait(false);
+        _translationService ??= CreateTranslationService();
+        await EnsureTtsProviderReadyAsync(voice, progress, ttsStageContext, cancellationToken).ConfigureAwait(false);
+        _ttsService ??= CreateTtsService();
+        await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken).ConfigureAwait(false);
+        await EnsureMultiSpeakerReferenceClipsAsync(cancellationToken).ConfigureAwait(false);
+
+        var translationWriter = new TranslationArtifactStreamingWriter(
+            translationPartialPath,
+            CurrentSession.SourceLanguage ?? transcript.Language ?? "unknown",
+            targetLanguage);
+        await translationWriter.InitializeAsync(cancellationToken).ConfigureAwait(false);
+
+        ReportStage(
+            translationStageContext,
+            $"Streaming translation to {targetLanguage} with {CurrentSettings.TranslationProvider} / {CurrentSettings.TranslationModel}.",
+            progress01: 0,
+            isIndeterminate: true,
+            streamingStatus: "Dub generation will start as translated segments arrive.");
+        ReportStage(
+            ttsStageContext,
+            $"Streaming TTS synthesis with {CurrentSettings.TtsProvider} / {voice}.",
+            progress01: 0,
+            isIndeterminate: true,
+            streamingStatus: "Segment clips are generated as translation continues.");
+
+        var translationChannel = Channel.CreateBounded<TranslationChannelItem>(new BoundedChannelOptions(8)
+        {
+            SingleReader = true,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait,
+        });
+        var ttsResultChannel = Channel.CreateBounded<TtsChannelItem>(new BoundedChannelOptions(Math.Max(4, _ttsService?.MaxConcurrency ?? 4))
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.Wait,
+        });
+
+        var ttsCollectorTask = CollectStreamingTtsResultsAsync(ttsResultChannel.Reader, ttsStageContext, cancellationToken);
+        var ttsStageTask = RunStreamingTtsStageAsync(
+            translationChannel.Reader,
+            ttsResultChannel.Writer,
+            voice,
+            ttsLanguage,
+            segmentsDir,
+            cancellationToken);
+        var translationTask = RunStreamingTranslationStageAsync(
+            transcriptChannel.Reader,
+            translationChannel.Writer,
+            translationWriter,
+            targetLanguage,
+            translationStageContext,
+            cancellationToken);
+
+        await producerTask.ConfigureAwait(false);
+        var translationResult = await translationTask.ConfigureAwait(false);
+        await translationWriter.CompleteAsync(translationPath, cancellationToken).ConfigureAwait(false);
+        CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
+        ReportStage(
+            translationStageContext,
+            $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
+            progress01: 1,
+            isIndeterminate: false);
+
+        await ttsStageTask.ConfigureAwait(false);
+        var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
+        await StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, cancellationToken).ConfigureAwait(false);
+        CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, translationWriter.OrderedSegments.Count, ttsStageContext);
+    }
+
+    private async Task<TranslationResult> RunStreamingTranslationStageAsync(
+        ChannelReader<TranscriptChannelItem> transcriptReader,
+        ChannelWriter<TranslationChannelItem> translationWriter,
+        TranslationArtifactStreamingWriter artifactWriter,
+        string targetLanguage,
+        PipelineStageContext? stageContext,
+        CancellationToken cancellationToken)
+    {
+        var completed = 0;
+        string? sourceLanguage = null;
+
+        try
+        {
+            await foreach (var item in transcriptReader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            {
+                sourceLanguage ??= item.SourceLanguage;
+                await artifactWriter.AppendPendingSegmentAsync(item, cancellationToken).ConfigureAwait(false);
+
+                var result = await _translationService!.TranslateSingleSegmentAsync(
+                    new SingleSegmentTranslationRequest(
+                        item.Segment.Text ?? string.Empty,
+                        item.SegmentId,
+                        artifactWriter.PartialPath,
+                        artifactWriter.PartialPath,
+                        item.SourceLanguage,
+                        targetLanguage,
+                        CurrentSettings.TranslationModel),
+                    cancellationToken).ConfigureAwait(false);
+
+                if (!result.Success)
+                {
+                    var errorMsg = result.ErrorMessage ?? "Unknown translation error";
+                    _log.Error($"Streaming translation failed: {errorMsg}", new Exception(errorMsg));
+                    throw new InvalidOperationException($"Translation failed: {errorMsg}");
+                }
+
+                await artifactWriter.ReloadFromDiskAsync(cancellationToken).ConfigureAwait(false);
+                var translatedSegment = artifactWriter.OrderedSegments.FirstOrDefault(segment =>
+                    string.Equals(segment.Id, item.SegmentId, StringComparison.Ordinal));
+                if (translatedSegment is null)
+                    throw new InvalidOperationException($"Translated segment '{item.SegmentId}' was not written to the partial artifact.");
+
+                completed++;
+                ReportStage(
+                    stageContext,
+                    $"Translated segment {completed}…",
+                    progress01: 0,
+                    isIndeterminate: true,
+                    streamingStatus: "Dub is consuming translated segments in parallel.");
+                await translationWriter.WriteAsync(
+                    new TranslationChannelItem(
+                        item.SegmentId,
+                        CloneTranslationSegment(translatedSegment),
+                        item.SourceLanguage,
+                        targetLanguage),
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            await artifactWriter.ReloadFromDiskAsync(cancellationToken).ConfigureAwait(false);
+            var source = sourceLanguage ?? CurrentSession.SourceLanguage ?? "unknown";
+            return BuildTranslationResult(artifactWriter.OrderedSegments, source, targetLanguage);
+        }
+        catch (Exception ex)
+        {
+            translationWriter.TryComplete(ex);
+            throw;
+        }
+        finally
+        {
+            translationWriter.TryComplete();
+        }
+    }
+
+    private async Task RunStreamingTtsStageAsync(
+        ChannelReader<TranslationChannelItem> translationReader,
+        ChannelWriter<TtsChannelItem> resultWriter,
+        string defaultVoice,
+        string? ttsLanguage,
+        string segmentsDir,
+        CancellationToken cancellationToken)
+    {
+        var parallelism = Math.Max(1, _ttsService?.MaxConcurrency ?? 1);
+        var semaphore = new SemaphoreSlim(parallelism, parallelism);
+        var tasks = new List<Task>();
+
+        try
+        {
+            await foreach (var item in translationReader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+                tasks.Add(Task.Run(async () =>
+                {
+                    try
+                    {
+                        await GenerateStreamingTtsSegmentAsync(
+                            item,
+                            defaultVoice,
+                            ttsLanguage,
+                            segmentsDir,
+                            resultWriter,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                }, cancellationToken));
+            }
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+            resultWriter.TryComplete();
+        }
+        catch (Exception ex)
+        {
+            resultWriter.TryComplete(ex);
+            throw;
+        }
+    }
+
+    private async Task<ConcurrentDictionary<string, string>> CollectStreamingTtsResultsAsync(
+        ChannelReader<TtsChannelItem> resultReader,
+        PipelineStageContext? stageContext,
+        CancellationToken cancellationToken)
+    {
+        var segmentAudioPaths = new ConcurrentDictionary<string, string>();
+        var completed = 0;
+
+        await foreach (var item in resultReader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            completed++;
+            if (item.Result.Success && !string.IsNullOrWhiteSpace(item.Result.AudioPath) && File.Exists(item.Result.AudioPath))
+                segmentAudioPaths[item.SegmentId] = item.Result.AudioPath;
+
+            ReportStage(
+                stageContext,
+                $"Generated segment clip {completed}…",
+                progress01: 0,
+                isIndeterminate: true,
+                streamingStatus: "Translation is still feeding new segments downstream.");
+        }
+
+        return segmentAudioPaths;
+    }
+
+    private async Task GenerateStreamingTtsSegmentAsync(
+        TranslationChannelItem item,
+        string defaultVoice,
+        string? ttsLanguage,
+        string segmentsDir,
+        ChannelWriter<TtsChannelItem> resultWriter,
+        CancellationToken cancellationToken)
+    {
+        var id = item.SegmentId;
+        var text = item.Segment.TranslatedText;
+        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(text))
+            return;
+
+        var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
+        var resolvedVoice = ResolveVoiceForSegment(item.Segment, defaultVoice);
+        var referenceAudioPath = ResolveReferenceAudioForSegment(item.Segment);
+
+        try
+        {
+            var task = _ttsService!.GenerateSegmentTtsAsync(
+                new SingleSegmentTtsRequest(
+                    text,
+                    segmentAudioPath,
+                    resolvedVoice,
+                    item.Segment.SpeakerId,
+                    referenceAudioPath,
+                    Language: ttsLanguage,
+                    SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
+                cancellationToken);
+            _pendingTtsTasks.Add(task);
+            var result = await task.ConfigureAwait(false);
+            if (result.Success && File.Exists(segmentAudioPath))
+            {
+                await resultWriter.WriteAsync(
+                    new TtsChannelItem(
+                        id,
+                        CloneTranslationSegment(item.Segment),
+                        result with { AudioPath = segmentAudioPath }),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                _log.Warning($"Streaming TTS failed or file missing for segment {id}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Streaming TTS generation failed for {id}: {ex.Message}", ex);
+        }
+    }
+
+    private string BuildTranscriptArtifactPath()
+    {
+        var sessionDir = GetSessionDirectory();
+        var transcriptDir = Path.Combine(sessionDir, "transcripts");
+        Directory.CreateDirectory(transcriptDir);
+        var fileName = Path.GetFileNameWithoutExtension(CurrentSession.IngestedMediaPath);
+        return Path.Combine(transcriptDir, $"{fileName}.json");
+    }
+
+    private static string BuildTranslationArtifactPath(string transcriptPath, string targetLanguage)
+    {
+        var translationDir = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(transcriptPath)!)!, "translations");
+        Directory.CreateDirectory(translationDir);
+        var fileName = Path.GetFileNameWithoutExtension(transcriptPath);
+        return Path.Combine(translationDir, $"{fileName}_{targetLanguage}.json");
+    }
+
+    private static (string TtsPath, string SegmentsDir) BuildTtsArtifacts(string translationPath, string voice)
+    {
+        var sessionDir = Path.GetDirectoryName(Path.GetDirectoryName(translationPath)!)!;
+        var ttsDir = Path.Combine(sessionDir, "tts");
+        Directory.CreateDirectory(ttsDir);
+        var fileName = Path.GetFileNameWithoutExtension(translationPath);
+        var ttsPath = Path.Combine(ttsDir, $"{fileName}_{voice}.mp3");
+        var segmentsDir = Path.Combine(ttsDir, "segments", Path.GetFileNameWithoutExtension(translationPath));
+        Directory.CreateDirectory(segmentsDir);
+        return (ttsPath, segmentsDir);
+    }
+
+    private static TranslationResult BuildTranslationResult(
+        IReadOnlyList<TranslationSegmentArtifact> segments,
+        string sourceLanguage,
+        string targetLanguage) =>
+        new(
+            true,
+            segments.Select(segment => new TranslatedSegment(
+                segment.Start,
+                segment.End,
+                segment.Text ?? string.Empty,
+                segment.TranslatedText ?? string.Empty,
+                segment.SpeakerId)).ToList(),
+            sourceLanguage,
+            targetLanguage,
+            null);
+
+    private static TranscriptSegmentArtifact CloneTranscriptSegment(TranscriptSegmentArtifact segment) =>
+        new()
+        {
+            Start = segment.Start,
+            End = segment.End,
+            Text = segment.Text,
+            SpeakerId = segment.SpeakerId,
+            OriginalStart = segment.OriginalStart,
+            Words = segment.Words is null ? null : [.. segment.Words],
+        };
+
+    private static TranslationSegmentArtifact CloneTranslationSegment(TranslationSegmentArtifact segment) =>
+        new()
+        {
+            Id = segment.Id,
+            Start = segment.Start,
+            End = segment.End,
+            Text = segment.Text,
+            TranslatedText = segment.TranslatedText,
+            SpeakerId = segment.SpeakerId,
+        };
+
     public Task AdvancePipelineAsync(
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default) =>
         AdvancePipelineAsync(progress, stageProgress: null, cancellationToken);
 
     /// <summary>
-    /// Advances the pipeline from the current session stage through transcription, optional diarization pause, translation, and TTS.
+    /// Advances the pipeline from the current session stage through transcription, optional diarization, translation, and TTS.
     /// </summary>
     /// <param name="progress">Optional combined progress reporter for the overall advance operation.</param>
     /// <param name="stageProgress">Optional per-stage reporter that receives stage title/detail and per-stage progress updates.</param>
     /// <param name="cancellationToken">Cancellation token observed throughout stage execution.</param>
     /// <remarks>
-    /// Entry starts at <see cref="CurrentSession"/>.Stage. For multi-speaker sessions configured to pause for mapping,
-    /// this method may stop early at <see cref="SessionWorkflowStage.Diarized"/>. Otherwise it continues through
-    /// translation and TTS toward <see cref="SessionWorkflowStage.TtsGenerated"/>. Depending on cancellation or
-    /// prior stage state, possible return stages include <see cref="SessionWorkflowStage.Diarized"/>,
-    /// <see cref="SessionWorkflowStage.Transcribed"/>, <see cref="SessionWorkflowStage.Translated"/>, and
+    /// Entry starts at <see cref="CurrentSession"/>.Stage. Automatic runs continue through translation and TTS
+    /// after diarization instead of stopping for a manual speaker-mapping confirmation. Depending on cancellation or
+    /// prior stage state, possible return stages include <see cref="SessionWorkflowStage.Transcribed"/>,
+    /// <see cref="SessionWorkflowStage.Diarized"/>, <see cref="SessionWorkflowStage.Translated"/>, and
     /// <see cref="SessionWorkflowStage.TtsGenerated"/>. State changes are persisted by the invoked stage methods
     /// (for example via <see cref="SaveCurrentSession"/>). Cancellation is respected and propagated via
     /// <paramref name="cancellationToken"/>.
@@ -691,12 +1260,21 @@ public sealed partial class SessionWorkflowCoordinator
         IProgress<PipelineStageUpdate>? stageProgress = null,
         CancellationToken cancellationToken = default)
     {
-        var pauseAfterDiarization = ShouldPauseForSpeakerMapping()
-            && CurrentSession.Stage < SessionWorkflowStage.Diarized;
-        var remainingStages = GetAdvancePipelineStages(CurrentSession.Stage, pauseAfterDiarization);
-        var stage = CurrentSession.Stage;
+        var shouldRunDiarization = ShouldRunDiarization();
+        var remainingStages = GetAdvancePipelineStages(CurrentSession.Stage, shouldRunDiarization);
 
-        if (stage < SessionWorkflowStage.Transcribed)
+        if (CurrentSession.Stage < SessionWorkflowStage.Transcribed && !shouldRunDiarization)
+        {
+            await ExecuteStreamingPipelineAsync(
+                progress,
+                GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress),
+                GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+                cancellationToken);
+            return;
+        }
+
+        if (CurrentSession.Stage < SessionWorkflowStage.Transcribed)
         {
             await TranscribeMediaAsync(
                 progress,
@@ -704,28 +1282,24 @@ public sealed partial class SessionWorkflowCoordinator
                 cancellationToken);
         }
 
-        stage = CurrentSession.Stage;
-        if (pauseAfterDiarization && stage < SessionWorkflowStage.Diarized)
+        if (shouldRunDiarization && CurrentSession.Stage < SessionWorkflowStage.Diarized)
         {
             await ExecuteDiarizationStageAsync(
                 GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress),
                 cancellationToken);
+        }
+
+        if (CurrentSession.Stage < SessionWorkflowStage.Translated)
+        {
+            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
+                progress,
+                GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+                cancellationToken);
             return;
         }
 
-        stage = CurrentSession.Stage;
-        if (stage < SessionWorkflowStage.Translated)
-        {
-            await TranslateTranscriptAsync(
-                progress,
-                null,
-                null,
-                GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
-                cancellationToken);
-        }
-
-        stage = CurrentSession.Stage;
-        if (stage < SessionWorkflowStage.TtsGenerated)
+        if (CurrentSession.Stage < SessionWorkflowStage.TtsGenerated)
         {
             await GenerateTtsAsync(
                 progress,
@@ -773,20 +1347,18 @@ public sealed partial class SessionWorkflowCoordinator
             throw new InvalidOperationException("Speaker mapping is not ready yet. Run the pipeline through diarization first.");
 
         var remainingStages = GetContinuationPipelineStages(CurrentSession.Stage);
-        var stage = CurrentSession.Stage;
 
-        if (stage < SessionWorkflowStage.Translated)
+        if (CurrentSession.Stage < SessionWorkflowStage.Translated)
         {
-            await TranslateTranscriptAsync(
+            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
                 progress,
-                null,
-                null,
                 GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                 cancellationToken);
+            return;
         }
 
-        stage = CurrentSession.Stage;
-        if (stage < SessionWorkflowStage.TtsGenerated)
+        if (CurrentSession.Stage < SessionWorkflowStage.TtsGenerated)
         {
             await GenerateTtsAsync(
                 progress,
@@ -862,16 +1434,16 @@ public sealed partial class SessionWorkflowCoordinator
             CurrentSession.TranscriptPath,
             cancellationToken,
             resultingStage: SessionWorkflowStage.Diarized,
-            statusMessage: "Speaker mapping ready. Assign voices, then continue.");
+            statusMessage: "Speaker mapping complete. Continuing translation and dubbing.");
 
         ReportStage(
             stageContext,
-            $"Speaker mapping ready. Identified {outcome.SpeakerCount} speakers across {outcome.SegmentCount} segments.",
+            $"Speaker mapping complete. Identified {outcome.SpeakerCount} speakers across {outcome.SegmentCount} segments.",
             progress01: 1,
             isIndeterminate: false);
     }
 
-    private bool ShouldPauseForSpeakerMapping() =>
+    private bool ShouldRunDiarization() =>
         CurrentSession.MultiSpeakerEnabled
         && !string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider);
 }

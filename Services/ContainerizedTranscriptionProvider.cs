@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
@@ -15,7 +16,7 @@ namespace Babel.Player.Services;
 /// client. Writes a transcript JSON artifact to <see cref="TranscriptionRequest.OutputJsonPath"/>
 /// in the same format produced by <see cref="FasterWhisperTranscriptionProvider"/>.
 /// </summary>
-public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider
+public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider, IStreamingTranscriptionProvider
 {
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
@@ -78,6 +79,31 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider
         _log.Info($"[ContainerizedTranscription] Complete: {result.Segments.Count} segments, lang={result.Language}");
 
         return result;
+    }
+
+    async Task<TranscriptionResult> IStreamingTranscriptionProvider.TranscribeStreamingAsync(
+        TranscriptionRequest request,
+        ChannelWriter<TranscriptChannelItem> writer,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(request.SourceAudioPath))
+            throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
+
+        var cpuThreads = request.CpuThreads > 0 ? request.CpuThreads.ToString() : "auto";
+        var cpuWorkers = Math.Max(1, request.NumWorkers);
+        var cpuCompute = string.IsNullOrWhiteSpace(request.CpuComputeType) ? "int8" : request.CpuComputeType;
+        _log.Info($"[ContainerizedTranscription] Streaming transcription: {request.SourceAudioPath} " +
+                  $"(model={request.ModelName}, cpu_compute={cpuCompute}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers})");
+
+        return await _client.TranscribeStreamingAsync(
+            request.SourceAudioPath,
+            writer,
+            request.ModelName,
+            request.LanguageHint,
+            request.CpuComputeType,
+            request.CpuThreads,
+            request.NumWorkers,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>

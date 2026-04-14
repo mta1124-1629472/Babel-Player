@@ -271,7 +271,7 @@ public sealed partial class SessionWorkflowCoordinator
             var nextStatusMessage = statusMessage ?? (
                 nextStage >= SessionWorkflowStage.Translated
                     ? "Diarization complete. Speaker assignments updated."
-                    : "Speaker mapping ready. Assign voices, then continue.");
+                    : "Speaker mapping complete. Ready to resume translation/TTS.");
 
             CurrentSession = currentSession with
             {
