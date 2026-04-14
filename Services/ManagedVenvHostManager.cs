@@ -1369,7 +1369,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     private static bool AllCapabilitiesReady(ContainerCapabilitiesSnapshot capabilities) =>
         capabilities.TranscriptionReady
         && capabilities.TranslationReady
-        && capabilities.TtsReady;
+        && capabilities.TtsReady
+        && capabilities.DiarizationReady;
 
     private static string FormatCapabilities(ContainerCapabilitiesSnapshot? capabilities)
     {
@@ -1379,7 +1380,8 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         return
             $"tx={capabilities.TranscriptionReady}('{capabilities.TranscriptionDetail ?? "<none>"}'), " +
             $"tl={capabilities.TranslationReady}('{capabilities.TranslationDetail ?? "<none>"}'), " +
-            $"tts={capabilities.TtsReady}('{capabilities.TtsDetail ?? "<none>"}')";
+            $"tts={capabilities.TtsReady}('{capabilities.TtsDetail ?? "<none>"}'), " +
+            $"diar={capabilities.DiarizationReady}('{capabilities.DiarizationDetail ?? "<none>"}')";
     }
 
     private async Task<bool> IsScriptChangedSinceLastStartAsync(CancellationToken cancellationToken)

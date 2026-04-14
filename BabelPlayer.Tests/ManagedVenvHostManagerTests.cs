@@ -874,6 +874,50 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         Assert.True(int.TryParse(parts[1], out var minor) && minor >= 0, $"Expected valid minor version, got '{parts[1]}'");
     }
 
+    [Fact]
+    public void AllCapabilitiesReady_RequiresDiarizationReadiness()
+    {
+        var method = typeof(ManagedVenvHostManager).GetMethod(
+            "AllCapabilitiesReady",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var capabilities = new ContainerCapabilitiesSnapshot(
+            TranscriptionReady: true,
+            TranscriptionDetail: null,
+            TranslationReady: true,
+            TranslationDetail: null,
+            TtsReady: true,
+            TtsDetail: null,
+            DiarizationReady: false,
+            DiarizationDetail: "contract mismatch");
+
+        var result = (bool)method!.Invoke(null, [capabilities])!;
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void FormatCapabilities_IncludesDiarizationState()
+    {
+        var method = typeof(ManagedVenvHostManager).GetMethod(
+            "FormatCapabilities",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var capabilities = new ContainerCapabilitiesSnapshot(
+            TranscriptionReady: true,
+            TranscriptionDetail: "ready",
+            TranslationReady: true,
+            TranslationDetail: "ready",
+            TtsReady: true,
+            TtsDetail: "ready",
+            DiarizationReady: false,
+            DiarizationDetail: "contract mismatch");
+
+        var formatted = (string)method!.Invoke(null, [capabilities])!;
+        Assert.Contains("diar=False('contract mismatch')", formatted, StringComparison.Ordinal);
+    }
+
     private static HardwareSnapshot CreateHardwareSnapshot(bool hasCuda, bool hasAvx2) =>
         new(
             IsDetecting: false,
