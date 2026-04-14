@@ -100,8 +100,8 @@ publish/
 tasks.json
 
 # Generated benchmark outputs
-# docs/benchmarks/ (results remain in git, but ignore temp or lock files if any)
-# docs/benchmarks/*.lock
+# docs/history/benchmarks/ (results remain in git, but ignore temp or lock files if any)
+# docs/history/benchmarks/*.lock
 
 # Local tool state
 .kilo/node_modules/

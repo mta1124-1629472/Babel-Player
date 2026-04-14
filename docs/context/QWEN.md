@@ -46,7 +46,7 @@ Babel-Player/
 ├── BabelPlayer.Tests/         # xUnit integration tests
 ├── inference/                 # Python inference server (FastAPI)
 ├── scripts/                   # Architecture linter, dev tooling
-├── docs/                      # Architecture, benchmarks, history/smoke notes
+├── docs/                      # architecture.md; history/smoke; history/benchmarks
 ├── native/win-x64/            # libmpv-2.dll
 ├── tools/win-x64/             # ffmpeg.exe, uv.exe
 ├── installer/                 # Inno Setup installer scripts
