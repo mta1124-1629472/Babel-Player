@@ -300,9 +300,9 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
                 stderr = $"Failed to read worker stderr: {ex.Message}";
             }
 
-            var killSuffix = killAttempted ? " (kill attempted)." : ".";
+            var killSuffix = killAttempted ? " (kill attempted)" : "";
             throw new InvalidOperationException(
-                $"{_poolName} worker {worker.Index + 1} exited without a response. {stderr}".Trim());
+                $"{_poolName} worker {worker.Index + 1} exited without a response{killSuffix}. {stderr}".Trim());
         }
 
         var envelope = JsonSerializer.Deserialize<WorkerResponseEnvelope<TResponse>>(responseLine, JsonOptions)
