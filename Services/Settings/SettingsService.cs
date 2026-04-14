@@ -143,8 +143,9 @@ public sealed class SettingsService
             settings.TranscriptionNumWorkers = TranscriptionNumWorkers ?? settings.TranscriptionNumWorkers;
 
             settings.DiarizationProvider = DiarizationProvider ?? settings.DiarizationProvider;
-            settings.DiarizationMinSpeakers = DiarizationMinSpeakers ?? settings.DiarizationMinSpeakers;
-            settings.DiarizationMaxSpeakers = DiarizationMaxSpeakers ?? settings.DiarizationMaxSpeakers;
+            // Legacy diarization speaker bounds are ignored; providers auto-detect by default.
+            settings.DiarizationMinSpeakers = null;
+            settings.DiarizationMaxSpeakers = null;
 
             settings.TranslationProvider = TranslationProvider ?? settings.TranslationProvider;
             settings.TranslationProfile = ResolveProfile(
@@ -201,8 +202,8 @@ public sealed class SettingsService
             TranscriptionCpuThreads = settings.TranscriptionCpuThreads,
             TranscriptionNumWorkers = settings.TranscriptionNumWorkers,
             DiarizationProvider = settings.DiarizationProvider,
-            DiarizationMinSpeakers = settings.DiarizationMinSpeakers,
-            DiarizationMaxSpeakers = settings.DiarizationMaxSpeakers,
+            DiarizationMinSpeakers = null,
+            DiarizationMaxSpeakers = null,
             TranslationProvider = settings.TranslationProvider,
             TranslationProfile = settings.TranslationProfile,
             TranslationModel = settings.TranslationModel,

@@ -1344,6 +1344,29 @@ def _run_nemo_diarization(
     # endregion
     _apply_nemo_meta_tensor_restore_patch()
     import nemo.collections.asr as nemo_asr
+    import nemo.collections.asr.parts.utils.vad_utils as nemo_vad_utils
+
+    # NeMo VAD uses tqdm progress bars that may flush to an invalid stderr handle
+    # under managed host execution on Windows ([Errno 22]). Force quiet tqdm in that path.
+    if not getattr(nemo_vad_utils, "_babel_tqdm_patched", False):
+        original_tqdm = nemo_vad_utils.tqdm
+
+        def _quiet_tqdm(*args, **kwargs):
+            kwargs["disable"] = True
+            kwargs.setdefault("file", sys.stdout)
+            return original_tqdm(*args, **kwargs)
+
+        nemo_vad_utils.tqdm = _quiet_tqdm
+        nemo_vad_utils._babel_tqdm_patched = True
+        # region agent log
+        _write_debug_log(
+            run_id="initial",
+            hypothesis_id="H14",
+            location="inference/main.py:_run_nemo_diarization",
+            message="Applied NeMo VAD tqdm quiet patch",
+            data={"module": "nemo.collections.asr.parts.utils.vad_utils"},
+        )
+        # endregion
 
     with tempfile.TemporaryDirectory(dir=TEMP_DIR, prefix="nemo_diar_") as work_dir_name:
         work_dir = Path(work_dir_name)
@@ -1395,6 +1418,20 @@ def _run_nemo_diarization(
             min_speakers,
             max_speakers,
         )
+        # region agent log
+        _write_debug_log(
+            run_id="initial",
+            hypothesis_id="H20",
+            location="inference/main.py:_run_nemo_diarization",
+            message="Built NeMo clustering config for diarization run",
+            data={
+                "oracle_num_speakers": bool(config.diarizer.clustering.parameters.oracle_num_speakers),
+                "max_num_speakers": int(config.diarizer.clustering.parameters.max_num_speakers),
+                "vad_model": str(config.diarizer.vad.model_path),
+                "speaker_embedding_model": str(config.diarizer.speaker_embeddings.model_path),
+            },
+        )
+        # endregion
 
         try:
             with _nemo_diarizer_construction_lock:
@@ -1432,7 +1469,21 @@ def _run_nemo_diarization(
                 },
             )
             # endregion
+            diarize_started = time.perf_counter()
             diarizer.diarize()
+            diarize_elapsed = time.perf_counter() - diarize_started
+            # region agent log
+            _write_debug_log(
+                run_id="initial",
+                hypothesis_id="H20",
+                location="inference/main.py:_run_nemo_diarization",
+                message="NeMo diarizer.diarize() completed",
+                data={
+                    "elapsed_s": round(diarize_elapsed, 3),
+                    "out_dir": str(out_dir),
+                },
+            )
+            # endregion
         except Exception as exc:
             # region agent log
             _write_debug_log(
@@ -1455,8 +1506,27 @@ def _run_nemo_diarization(
         rttm_files = sorted(out_dir.rglob("*.rttm"))
         if not rttm_files:
             raise RuntimeError("NeMo diarization did not produce an RTTM file")
+        rttm_path = rttm_files[0]
+        raw_labels: list[str] = []
+        for line in rttm_path.read_text(encoding="utf-8").splitlines():
+            parts = line.split()
+            if len(parts) >= 8 and parts[0] == "SPEAKER":
+                raw_labels.append(parts[7].strip())
+        # region agent log
+        _write_debug_log(
+            run_id="initial",
+            hypothesis_id="H21",
+            location="inference/main.py:_run_nemo_diarization",
+            message="Parsed NeMo RTTM raw speaker labels",
+            data={
+                "rttm_path": str(rttm_path),
+                "raw_label_count": len(raw_labels),
+                "unique_raw_labels": sorted(set(raw_labels)),
+            },
+        )
+        # endregion
 
-        return _parse_rttm_file(rttm_files[0])
+        return _parse_rttm_file(rttm_path)
 
 
 def _validate_diarization_speaker_bounds(

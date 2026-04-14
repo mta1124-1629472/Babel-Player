@@ -1,8 +1,10 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using Babel.Player.Models;
@@ -14,6 +16,7 @@ namespace Babel.Player.ViewModels;
 
 public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, IDisposable
 {
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
     private readonly EmbeddedPlaybackViewModel _parent;
     private readonly SessionWorkflowCoordinator _coordinator;
     private string? _lastKnownSourceMediaPath;
@@ -197,7 +200,32 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     {
         try
         {
+            var refreshStopwatch = Stopwatch.StartNew();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H28",
+                location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
+                message: "RefreshSegmentsAsync started",
+                data: new
+                {
+                    providedSegments = segments?.Count,
+                    managedThreadId = Environment.CurrentManagedThreadId,
+                    syncContext = Dispatcher.UIThread.CheckAccess() ? "UI" : "NonUI",
+                });
+            // #endregion
             var list = segments ?? await _coordinator.GetSegmentWorkflowListAsync();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H28",
+                location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
+                message: "RefreshSegmentsAsync loaded workflow segment list",
+                data: new
+                {
+                    listCount = list.Count,
+                });
+            // #endregion
             _isUpdatingActiveSegment = true;
             try
             {
@@ -215,11 +243,36 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             {
                 _isUpdatingActiveSegment = false;
             }
+            refreshStopwatch.Stop();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H28",
+                location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
+                message: "RefreshSegmentsAsync completed",
+                data: new
+                {
+                    elapsedMs = refreshStopwatch.ElapsedMilliseconds,
+                    segmentCount = Segments.Count,
+                });
+            // #endregion
         }
         catch (Exception ex)
         {
             _parent.StatusText = $"Failed to load segments: {ex.Message}";
             _parent.SetStatusErrorDetail("Load Segments failed", ex);
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H28",
+                location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
+                message: "RefreshSegmentsAsync failed",
+                data: new
+                {
+                    exceptionType = ex.GetType().FullName,
+                    error = ex.Message,
+                });
+            // #endregion
         }
     }
 
@@ -709,4 +762,45 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private static string FormatMs(double milliseconds) =>
         milliseconds <= 0 ? "0:00" : TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss");
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
+    }
 }

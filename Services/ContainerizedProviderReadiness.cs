@@ -5,6 +5,8 @@ using Babel.Player.Services.Settings;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,6 +22,7 @@ public static class ContainerizedProviderReadiness
     private static readonly TimeSpan ExecutionProbeBudget = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan CapabilityWarmupBudget = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan CapabilityWarmupRetryDelay = TimeSpan.FromSeconds(2);
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
 
     internal readonly record struct ExecutionWaitOptions(
         TimeSpan ExecutionProbeBudget,
@@ -175,19 +178,42 @@ public static class ContainerizedProviderReadiness
         if (string.IsNullOrWhiteSpace(serviceUrl))
             return new ProviderReadiness(false, "No GPU inference host URL configured.");
 
+        var probeStopwatch = Stopwatch.StartNew();
         var probeResult = await probe.WaitForProbeAsync(
             serviceUrl,
             forceRefresh: true,
             waitTimeout: waitOptions.ExecutionProbeBudget,
             cancellationToken).ConfigureAwait(false);
+        probeStopwatch.Stop();
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H22",
+            location: "ContainerizedProviderReadiness.cs:CheckForExecutionAsync",
+            message: "Initial execution probe wait completed",
+            data: new
+            {
+                stage = stage.ToString(),
+                providerId,
+                serviceUrl,
+                elapsedMs = probeStopwatch.ElapsedMilliseconds,
+                probeState = probeResult.State.ToString(),
+                probeError = probeResult.ErrorDetail,
+                capabilitiesError = probeResult.CapabilitiesError,
+                hasCapabilities = probeResult.Capabilities is not null,
+                isStale = probeResult.IsStale,
+            });
+        // #endregion
 
         if (IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
         {
             var warmupSw = Stopwatch.StartNew();
+            var warmupAttempts = 0;
             while (warmupSw.Elapsed < waitOptions.CapabilityWarmupBudget)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 await Task.Delay(waitOptions.CapabilityWarmupRetryDelay, cancellationToken).ConfigureAwait(false);
+                warmupAttempts++;
                 probeResult = await probe.WaitForProbeAsync(
                     serviceUrl,
                     forceRefresh: true,
@@ -196,9 +222,85 @@ public static class ContainerizedProviderReadiness
                 if (!IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
                     break;
             }
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H23",
+                location: "ContainerizedProviderReadiness.cs:CheckForExecutionAsync",
+                message: "Capability warmup probe loop completed",
+                data: new
+                {
+                    stage = stage.ToString(),
+                    providerId,
+                    attempts = warmupAttempts,
+                    elapsedMs = warmupSw.ElapsedMilliseconds,
+                    finalProbeState = probeResult.State.ToString(),
+                    finalProbeError = probeResult.ErrorDetail,
+                    finalCapabilitiesError = probeResult.CapabilitiesError,
+                    finalHasCapabilities = probeResult.Capabilities is not null,
+                });
+            // #endregion
         }
 
-        return MapProbeResultToReadiness(settings, probeResult, stage, providerId);
+        var readiness = MapProbeResultToReadiness(settings, probeResult, stage, providerId);
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H22",
+            location: "ContainerizedProviderReadiness.cs:CheckForExecutionAsync",
+            message: "Mapped execution probe to provider readiness",
+            data: new
+            {
+                stage = stage.ToString(),
+                providerId,
+                readinessIsReady = readiness.IsReady,
+                readinessBlockingReason = readiness.BlockingReason,
+                probeState = probeResult.State.ToString(),
+                hasCapabilities = probeResult.Capabilities is not null,
+            });
+        // #endregion
+        return readiness;
+    }
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
     }
 
     /// <summary>
