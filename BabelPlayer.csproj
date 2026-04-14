@@ -60,45 +60,26 @@
     </AssemblyAttribute>
   </ItemGroup>
 
-<ItemGroup Condition="Exists('tools\win-x64\ffmpeg.exe')">
-  <None Include="tools\win-x64\ffmpeg.exe">
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-  </None>
-</ItemGroup>
-<ItemGroup Condition="Exists('tools\win-arm64\ffmpeg.exe')">
-  <None Include="tools\win-arm64\ffmpeg.exe">
+<ItemGroup Condition="Exists('tools\$(BabelWinNativeSubdir)\ffmpeg.exe')">
+  <None Include="tools\$(BabelWinNativeSubdir)\ffmpeg.exe">
+    <Link>tools\$(BabelWinNativeSubdir)\ffmpeg.exe</Link>
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
   </None>
 </ItemGroup>
 
-  <!-- Staged after optional FetchWinNativeDepsIfNeeded (Directory.Build.targets) so a single build picks up freshly downloaded files. -->
+  <!-- Staged after optional FetchWinNativeDepsIfNeeded (Directory.Build.targets) so a single build picks up freshly downloaded files. Uses $(BabelWinNativeSubdir) (win-x64 vs win-arm64) from Directory.Build.targets. -->
   <Target Name="IncludeBabelWinNativeArtifacts" BeforeTargets="AssignTargetPaths" AfterTargets="FetchWinNativeDepsIfNeeded" Condition="'$(OS)' == 'Windows_NT'">
-    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\native\win-x64\libmpv-2.dll')">
-      <None Include="$(MSBuildProjectDirectory)\native\win-x64\libmpv-2.dll">
-        <Link>native\win-x64\libmpv-2.dll</Link>
+    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\native\$(BabelWinNativeSubdir)\libmpv-2.dll')">
+      <None Include="$(MSBuildProjectDirectory)\native\$(BabelWinNativeSubdir)\libmpv-2.dll">
+        <Link>native\$(BabelWinNativeSubdir)\libmpv-2.dll</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       </None>
     </ItemGroup>
-    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\tools\win-x64\uv.exe')">
-      <None Include="$(MSBuildProjectDirectory)\tools\win-x64\uv.exe">
-        <Link>tools\win-x64\uv.exe</Link>
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      </None>
-    </ItemGroup>
-    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\native\win-arm64\libmpv-2.dll')">
-      <None Include="$(MSBuildProjectDirectory)\native\win-arm64\libmpv-2.dll">
-        <Link>native\win-arm64\libmpv-2.dll</Link>
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      </None>
-    </ItemGroup>
-    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\tools\win-arm64\uv.exe')">
-      <None Include="$(MSBuildProjectDirectory)\tools\win-arm64\uv.exe">
-        <Link>tools\win-arm64\uv.exe</Link>
+    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\uv.exe')">
+      <None Include="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\uv.exe">
+        <Link>tools\$(BabelWinNativeSubdir)\uv.exe</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       </None>
