@@ -736,6 +736,167 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
     }
 
+    public void ApplySpeakerReferenceAudioPathChanges(IReadOnlyDictionary<string, string?> updates)
+    {
+        ArgumentNullException.ThrowIfNull(updates);
+        if (updates.Count == 0)
+            return;
+
+        var current = CurrentSession.SpeakerReferenceAudioPaths is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
+
+        var changed = false;
+        foreach (var (speakerId, candidatePath) in updates)
+        {
+            if (string.IsNullOrWhiteSpace(speakerId))
+                continue;
+
+            var normalizedSpeakerId = speakerId.Trim();
+            var normalizedPath = string.IsNullOrWhiteSpace(candidatePath) ? null : candidatePath.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalizedPath))
+            {
+                changed |= current.Remove(normalizedSpeakerId);
+                continue;
+            }
+
+            if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
+                !string.Equals(existing, normalizedPath, StringComparison.Ordinal))
+            {
+                current[normalizedSpeakerId] = normalizedPath;
+                changed = true;
+            }
+        }
+
+        if (!changed)
+            return;
+
+        CurrentSession = CurrentSession with
+        {
+            SpeakerReferenceAudioPaths = current.Count == 0 ? null : current,
+        };
+        SaveCurrentSession();
+    }
+
+    public async Task<string> ExtractSpeakerReferenceFromSegmentAsync(
+        string speakerId,
+        WorkflowSegmentState segment,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
+        ArgumentNullException.ThrowIfNull(segment);
+
+        if (_audioProcessingService is null)
+            throw new InvalidOperationException("Audio processing is unavailable, so reference extraction cannot run.");
+
+        var mediaPath = !string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath)
+            ? CurrentSession.IngestedMediaPath
+            : CurrentSession.SourceMediaPath;
+        if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
+            throw new FileNotFoundException("Cannot extract reference clip because source media is unavailable.", mediaPath);
+
+        var safeSpeakerId = string.Join("_", speakerId.Trim().Split(Path.GetInvalidFileNameChars()));
+        var refsDir = Path.Combine(GetSessionDirectory(), "tts", "references");
+        Directory.CreateDirectory(refsDir);
+
+        var startSeconds = Math.Max(0, segment.StartSeconds);
+        var naturalDuration = Math.Max(0.1, segment.EndSeconds - segment.StartSeconds);
+        var durationSeconds = Math.Clamp(naturalDuration, 3.0, 15.0);
+        var outputPath = Path.Combine(
+            refsDir,
+            $"manual-ref-{safeSpeakerId}-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.wav");
+
+        await _audioProcessingService.ExtractAudioClipAsync(
+            mediaPath,
+            outputPath,
+            startSeconds,
+            durationSeconds,
+            cancellationToken).ConfigureAwait(false);
+
+        return outputPath;
+    }
+
+    public async Task<string?> AutoPickAlternateSpeakerReferenceAsync(
+        string speakerId,
+        IReadOnlyCollection<string>? excludePaths = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
+
+        if (_audioProcessingService is null)
+            return null;
+
+        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath) || !File.Exists(CurrentSession.TranscriptPath))
+            return null;
+
+        var mediaPath = !string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath)
+            ? CurrentSession.IngestedMediaPath
+            : CurrentSession.SourceMediaPath;
+        if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
+            return null;
+
+        var transcript = await ArtifactJson
+            .LoadTranscriptAsync(CurrentSession.TranscriptPath, cancellationToken)
+            .ConfigureAwait(false);
+        if (transcript.Segments is null || transcript.Segments.Count == 0)
+            return null;
+
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (excludePaths is not null)
+        {
+            foreach (var path in excludePaths.Where(path => !string.IsNullOrWhiteSpace(path)))
+                excluded.Add(path.Trim());
+        }
+
+        var refsDir = Path.Combine(GetSessionDirectory(), "tts", "references");
+        Directory.CreateDirectory(refsDir);
+        var safeSpeakerId = string.Join("_", speakerId.Trim().Split(Path.GetInvalidFileNameChars()));
+
+        var candidates = transcript.Segments
+            .Where(segment => string.Equals(segment.SpeakerId, speakerId, StringComparison.Ordinal))
+            .Select(segment => new
+            {
+                Start = segment.Start,
+                Duration = Math.Max(0.1, segment.End - segment.Start),
+            })
+            .Where(candidate => candidate.Duration > 0)
+            .OrderByDescending(candidate => candidate.Duration)
+            .Take(8)
+            .ToList();
+
+        foreach (var candidate in candidates)
+        {
+            var boundedDuration = Math.Clamp(candidate.Duration, 3.0, 15.0);
+            var startMs = (long)Math.Round(candidate.Start * 1000, MidpointRounding.AwayFromZero);
+            var outputPath = Path.Combine(refsDir, $"alt-ref-{safeSpeakerId}-{startMs}.wav");
+            if (excluded.Contains(outputPath))
+                continue;
+
+            try
+            {
+                await _audioProcessingService.ExtractAudioClipAsync(
+                        mediaPath,
+                        outputPath,
+                        Math.Max(0, candidate.Start),
+                        boundedDuration,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return outputPath;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Try next candidate.
+            }
+        }
+
+        return null;
+    }
+
     public void SetMultiSpeakerEnabled(bool enabled)
     {
         if (CurrentSession.MultiSpeakerEnabled == enabled)

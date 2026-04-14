@@ -316,6 +316,19 @@ public partial class MainWindow : Window
         await vm.Playback.SpeakerRouting.SetReferenceAudioForSelectedSpeakerAsync(path);
     }
 
+    public async void OnReviewSpeakerReferencesClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        var wizard = new SpeakerReferenceWizardWindow
+        {
+            DataContext = new SpeakerReferenceWizardViewModel(vm.Playback, vm.Coordinator),
+        };
+
+        await wizard.ShowDialog(this);
+    }
+
     /// <summary>
     /// Prompts the user to choose an output .srt file and exports the current playback segments as SubRip subtitles.
     /// </summary>

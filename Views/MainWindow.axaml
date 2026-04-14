@@ -344,7 +344,7 @@
                                                 IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
                                  </Grid>
 
-                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
                                      <Button Grid.Row="0" Grid.Column="0"
                                              Command="{Binding Playback.SpeakerRouting.AssignSelectedSpeakerVoiceCommand}"
                                              IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
@@ -368,18 +368,10 @@
                                              HorizontalAlignment="Stretch"
                                              Padding="0,7" FontSize="12"
                                              Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                            CornerRadius="4"
-                                            Content="Use selected segment" />
+                                             CornerRadius="4"
+                                             Click="OnBrowseReferenceClipClick"
+                                             Content="Browse ref clip" />
                                      <Button Grid.Row="1" Grid.Column="1"
-                                            IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                            IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
-                                            HorizontalAlignment="Stretch"
-                                            Padding="0,7" FontSize="12"
-                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                            CornerRadius="4"
-                                            Click="OnBrowseReferenceClipClick"
-                                            Content="Browse ref clip" />
-                                    <Button Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                              Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerReferenceAudioCommand}"
                                              IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
                                              IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
@@ -389,6 +381,14 @@
                                              CornerRadius="4"
                                              Content="Clear speaker ref" />
                                 </Grid>
+                                <Button IsEnabled="{Binding Playback.SpeakerRouting.CanReviewSpeakerReferences}"
+                                        IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
+                                        HorizontalAlignment="Stretch"
+                                        Padding="0,7" FontSize="12"
+                                        Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                        CornerRadius="4"
+                                        Click="OnReviewSpeakerReferencesClick"
+                                        Content="Review speaker references..." />
 
                                  <!-- Fallback voice used when a speaker has no explicit assignment -->
                                  <StackPanel Spacing="4">

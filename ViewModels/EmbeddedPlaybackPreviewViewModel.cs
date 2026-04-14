@@ -229,15 +229,62 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             _isUpdatingActiveSegment = true;
             try
             {
+                // #region agent log
+                WriteDebugLog(
+                    runId: "initial",
+                    hypothesisId: "H29",
+                    location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
+                    message: "About to replace Segments collection",
+                    data: new
+                    {
+                        incomingCount = list.Count,
+                    });
+                // #endregion
                 SelectedSegment = null;
                 Segments = new ObservableCollection<WorkflowSegmentState>(list);
+                // #region agent log
+                WriteDebugLog(
+                    runId: "initial",
+                    hypothesisId: "H29",
+                    location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
+                    message: "Replaced Segments collection",
+                    data: new
+                    {
+                        segmentsCount = Segments.Count,
+                    });
+                // #endregion
                 HasSegments = Segments.Count > 0;
                 _parent.StatusText = HasSegments
                     ? $"{Segments.Count} segments loaded."
                     : "No segments available. Run the workflow first.";
                 _parent.ClearStatusErrorDetail();
                 if (IsSubtitleModeOn)
+                {
+                    // #region agent log
+                    WriteDebugLog(
+                        runId: "initial",
+                        hypothesisId: "H29",
+                        location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
+                        message: "Applying subtitle state during refresh",
+                        data: new
+                        {
+                            isSubtitleModeOn = IsSubtitleModeOn,
+                            activeSrtPath = _activeSrtPath,
+                        });
+                    // #endregion
                     ApplySubtitleState();
+                    // #region agent log
+                    WriteDebugLog(
+                        runId: "initial",
+                        hypothesisId: "H29",
+                        location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
+                        message: "Applied subtitle state during refresh",
+                        data: new
+                        {
+                            activeSrtPath = _activeSrtPath,
+                        });
+                    // #endregion
+                }
             }
             finally
             {
@@ -483,10 +530,44 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     partial void OnSegmentsChanged(ObservableCollection<WorkflowSegmentState> value)
     {
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H30",
+            location: "EmbeddedPlaybackPreviewViewModel.cs:OnSegmentsChanged",
+            message: "OnSegmentsChanged entered",
+            data: new
+            {
+                valueCount = value.Count,
+                managedThreadId = Environment.CurrentManagedThreadId,
+            });
+        // #endregion
         var sorted = value.ToArray();
         Array.Sort(sorted, (a, b) => a.StartSeconds.CompareTo(b.StartSeconds));
         _sortedSegments = sorted;
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H30",
+            location: "EmbeddedPlaybackPreviewViewModel.cs:OnSegmentsChanged",
+            message: "OnSegmentsChanged sorted segment cache",
+            data: new
+            {
+                sortedCount = _sortedSegments.Length,
+            });
+        // #endregion
         _parent.SpeakerRouting.RebuildSpeakerIds(value, SelectedSegment?.SpeakerId);
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H30",
+            location: "EmbeddedPlaybackPreviewViewModel.cs:OnSegmentsChanged",
+            message: "OnSegmentsChanged completed",
+            data: new
+            {
+                speakerCount = _parent.SpeakerRouting.SpeakerIds.Count,
+            });
+        // #endregion
     }
 
     private void OnPositionTimerTick(object? sender, EventArgs e)
