@@ -481,6 +481,7 @@ for package_name in [
     "onnxruntime",
     "openai-whisper",
     "peft",
+    "scikit-learn",
 ]:
     try:
         payload["packages"][package_name] = metadata.version(package_name)

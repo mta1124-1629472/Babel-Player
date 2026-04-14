@@ -187,6 +187,8 @@ public sealed class InferenceRequirementsTests
         Assert.DoesNotContain("config.diarizer.speaker_embeddings.scale_n", source, StringComparison.Ordinal);
         Assert.DoesNotContain("config.diarizer.speaker_embeddings.parameters.scale_n", source, StringComparison.Ordinal);
         Assert.Contains("NeMo diarization config contract invalid", source, StringComparison.Ordinal);
+        Assert.Contains("_apply_nemo_meta_tensor_restore_patch()", source, StringComparison.Ordinal);
+        Assert.Contains("instance.to_empty(device=normalized_map_location)", source, StringComparison.Ordinal);
     }
 
     // ── cpu-requirements.txt / cpu-constraints.txt (managed CPU runtime) ───
@@ -202,6 +204,7 @@ public sealed class InferenceRequirementsTests
     [InlineData("onnxruntime")]
     [InlineData("openai-whisper")]
     [InlineData("peft")]
+    [InlineData("scikit-learn")]
     [InlineData("torch")]
     [InlineData("torchaudio")]
     public void CpuRequirements_ContainsManagedCpuSubprocessDependencies(string expectedLine)
@@ -223,6 +226,7 @@ public sealed class InferenceRequirementsTests
         Assert.Contains("onnxruntime==1.24.4", lines);
         Assert.Contains("openai-whisper==20250625", lines);
         Assert.Contains("peft==0.18.1", lines);
+        Assert.Contains("scikit-learn==1.7.2", lines);
     }
 
     [Fact]

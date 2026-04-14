@@ -1,6 +1,6 @@
 # Babel-Player — Engineering Plan
 
-**Last updated:** April 13, 2026 — code-verified audit plus constructor cleanup completion  
+**Last updated:** April 14, 2026 — diarization runtime repair verification  
 **Status:** Phases 1–3, 5, and Phase 6 item 6.1b/6.4 complete. Phase 4 and Phase 6 (6.2a) remain.
 
 ---
@@ -14,7 +14,8 @@ Babel-Player is a local-first multilingual video dubbing application. Stack: C# 
 - Default local inference does not require Docker. All local providers (faster-whisper, NLLB/CTranslate2, Qwen TTS, NeMo diarization) run as endpoints in a single FastAPI process inside a managed `.venv`. Docker is an advanced optional backend; not required for CPU or managed-GPU paths.
 - `nemo-toolkit[asr]==2.7.2` is installed in the GPU `.venv`, verified working with `torch 2.8.0` and Python 3.12.
 - Multi-speaker voice cloning is fully implemented. `SessionWorkflowCoordinator.TtsReference.cs` extracts per-speaker reference clips via `/speakers/extract-reference`. The diarization → speaker extraction → per-speaker TTS chain is complete and tested.
-- Edge TTS and Piper are the only subprocess-based providers. Everything else runs in the persistent FastAPI server.
+- Edge TTS, Piper, and WeSpeaker are subprocess-based providers. Everything else runs in the persistent FastAPI server.
+- Managed CPU diarization bootstrap now uses dedicated `inference/cpu-requirements.txt` and `inference/cpu-constraints.txt` manifests plus a persisted import-validation record before WeSpeaker is marked ready.
 - XTTS v2 removed. All XTTS references are legacy.
 
 ### Provider map (verified April 13, 2026)
@@ -30,7 +31,7 @@ Babel-Player is a local-first multilingual video dubbing application. Stack: C# 
 | TTS | OpenAI TTS | Cloud | HTTP client | API key |
 | TTS | ElevenLabs | Cloud | HTTP client | API key |
 | Diarization | NeMo ClusteringDiarizer | GPU | `.venv` FastAPI | No |
-| Diarization | WeSpeaker (CPU) | CPU | `.venv` FastAPI | No |
+| Diarization | WeSpeaker (CPU) | CPU | Managed CPU `.venv` subprocess | No |
 
 ---
 

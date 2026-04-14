@@ -208,8 +208,12 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
 import json
 import sys
 import traceback
+import io
+from contextlib import redirect_stdout
 
 import wespeaker
+import wespeaker.cli.speaker as speaker_module
+import wespeaker.diar.extract_emb as extract_emb_module
 
 def _coerce_float(value):
     try:
@@ -263,11 +267,29 @@ def _parse_item(item):
 
     return None
 
+def _patch_wespeaker_subsegment():
+    original_subsegment = extract_emb_module.subsegment
+
+    def patched_subsegment(fbank, seg_id, window_fs, period_fs, frame_shift):
+        if getattr(fbank, "dim", lambda: 0)() == 3 and fbank.size(0) == 1:
+            fbank = fbank.squeeze(0)
+        return original_subsegment(fbank, seg_id, window_fs, period_fs, frame_shift)
+
+    extract_emb_module.subsegment = patched_subsegment
+    speaker_module.subsegment = patched_subsegment
+
 def main():
     audio_path = sys.argv[1]
-    model = wespeaker.load_model("english")
-    model.set_device("cpu")
-    raw_result = model.diarize(audio_path)
+    _patch_wespeaker_subsegment()
+    captured_stdout = io.StringIO()
+    with redirect_stdout(captured_stdout):
+        model = wespeaker.load_model("english")
+        model.set_device("cpu")
+        raw_result = model.diarize(audio_path)
+
+    diagnostic_output = captured_stdout.getvalue().strip()
+    if diagnostic_output:
+        print(diagnostic_output, file=sys.stderr)
 
     segments = []
     for item in _extract_items(raw_result):
