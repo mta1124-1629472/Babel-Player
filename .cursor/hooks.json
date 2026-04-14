@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/recommended-shell-guard.sh",
+        "failClosed": false
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": ".cursor/hooks/recommended-prompt-secrets.sh",
+        "matcher": "UserPromptSubmit",
+        "failClosed": false
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": ".cursor/hooks/recommended-pre-write-guard.sh",
+        "matcher": "Write",
+        "failClosed": false
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/recommended-dotnet-format.sh",
+        "matcher": "Write|TabWrite",
+        "failClosed": false
+      }
+    ]
+  }
+}

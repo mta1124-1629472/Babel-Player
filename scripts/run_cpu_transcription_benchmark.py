@@ -148,7 +148,7 @@ def collect_environment_snapshot(machine_id_override: str | None = None) -> dict
     python_version = platform.python_version()
     runtimes = {
         pkg: package_version(pkg)
-        for pkg in ["faster-whisper", "googletrans", "edge-tts", "torch"]
+        for pkg in ["faster-whisper", "ctranslate2", "edge-tts", "torch"]
     }
     return {
         "MachineId": sanitize_token(machine_id.lower()),

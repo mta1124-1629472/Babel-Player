@@ -221,12 +221,12 @@ public sealed class InferenceRequirementsTests
         var constraintsPath = Path.Combine(FindInferenceDirectory(), "cpu-constraints.txt");
         var lines = ReadRequirementsLines(constraintsPath);
 
-        Assert.Contains("torch==2.8.0", lines);
-        Assert.Contains("torchaudio==2.8.0", lines);
-        Assert.Contains("onnxruntime==1.24.4", lines);
-        Assert.Contains("openai-whisper==20250625", lines);
-        Assert.Contains("peft==0.18.1", lines);
-        Assert.Contains("scikit-learn==1.7.2", lines);
+        Assert.Contains("torch==2.5.1", lines);
+        Assert.Contains("torchaudio==2.5.1", lines);
+        Assert.Contains("onnxruntime==1.19.2", lines);
+        Assert.Contains("openai-whisper==20240930", lines);
+        Assert.Contains("peft==0.13.2", lines);
+        Assert.Contains("scikit-learn==1.3.2", lines);
     }
 
     [Fact]
