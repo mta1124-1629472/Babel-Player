@@ -57,7 +57,9 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         _dllHandle = LoadLibMpvDll();
         if (_dllHandle == IntPtr.Zero)
         {
-            throw new DllNotFoundException("libmpv DLL not found. Please ensure libmpv is installed and accessible.");
+            throw new DllNotFoundException(
+                "libmpv DLL could not be loaded. On Windows, run `pwsh ./scripts/fetch-win-native-deps.ps1` " +
+                "from the repo root, rebuild, and ensure `native/win-x64/libmpv-2.dll` exists or is copied to the output directory.");
         }
 
         // Load function pointers
@@ -87,80 +89,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         _hasEnded = false;
     }
     
-    private IntPtr LoadLibMpvDll()
-    {
-        try
-        {
-            string baseDir = AppContext.BaseDirectory;
-            // Go up three levels to get to the solution root from the bin directory
-            string solutionRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".."));
-            string nativeDir = Path.Combine(solutionRoot, "native", "win-x64");
-            
-            // Try the native directory first
-            string[] possibleNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
-            foreach (string dllName in possibleNames)
-            {
-                string path = Path.Combine(nativeDir, dllName);
-                if (File.Exists(path))
-                {
-                    IntPtr handle = NativeLibrary.Load(path);
-                    if (handle != IntPtr.Zero)
-                    {
-                        return handle;
-                    }
-                }
-            }
-            
-            // If not found in native directory, try the base directory (where the exe is)
-            foreach (string dllName in possibleNames)
-            {
-                string path = Path.Combine(baseDir, dllName);
-                if (File.Exists(path))
-                {
-                    IntPtr handle = NativeLibrary.Load(path);
-                    if (handle != IntPtr.Zero)
-                    {
-                        return handle;
-                    }
-                }
-            }
-
-            // Also try the native/win-x64 subdirectory of the base directory — this is where
-            // CopyToOutputDirectory places the DLL when built or published (preserving the
-            // native\win-x64\ relative path structure).
-            string nativeSubDir = Path.Combine(baseDir, "native", "win-x64");
-            foreach (string dllName in possibleNames)
-            {
-                string path = Path.Combine(nativeSubDir, dllName);
-                if (File.Exists(path))
-                {
-                    IntPtr handle = NativeLibrary.Load(path);
-                    if (handle != IntPtr.Zero)
-                    {
-                        return handle;
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // If we fail, we'll fall back to default loading below
-            // For debugging, we could log the exception, but we'll just ignore and fall back.
-        }
-        
-        // Fall back to default loading (from system paths or same directory as exe)
-        string[] fallbackNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
-        foreach (string dllName in fallbackNames)
-        {
-            IntPtr handle = NativeLibrary.Load(dllName);
-            if (handle != IntPtr.Zero)
-            {
-                return handle;
-            }
-        }
-        
-        return IntPtr.Zero;
-    }
+    private IntPtr LoadLibMpvDll() => LibMpvNativeLoader.Load();
     
     private void LoadLibMpvFunctions()
     {
