@@ -282,8 +282,7 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
             {
                 using var stderrTimeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(stderrReadTimeoutMs));
                 using var linkedStderrCts = CancellationTokenSource.CreateLinkedTokenSource(linkedCts.Token, stderrTimeoutCts.Token);
-                stderr = await worker.Process.StandardError.ReadToEndAsync(linkedStderrCts.Token)
-                    .ConfigureAwait(false);
+                stderr = await ReadBoundedStderrAsync(worker.Process.StandardError, linkedStderrCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (linkedCts.IsCancellationRequested)
             {
@@ -300,9 +299,9 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
                 stderr = $"Failed to read worker stderr: {ex.Message}";
             }
 
-            var killSuffix = killAttempted ? " (kill attempted)." : ".";
+            var killSuffix = killAttempted ? " (kill attempted)" : "";
             throw new InvalidOperationException(
-                $"{_poolName} worker {worker.Index + 1} exited without a response. {stderr}".Trim());
+                $"{_poolName} worker {worker.Index + 1} exited without a response{killSuffix}. {stderr}".Trim());
         }
 
         var envelope = JsonSerializer.Deserialize<WorkerResponseEnvelope<TResponse>>(responseLine, JsonOptions)
@@ -315,6 +314,41 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
             throw new InvalidOperationException($"{_poolName} worker returned success without a payload.");
 
         workItem.Completion.TrySetResult(envelope.Payload);
+    }
+
+    /// <summary>
+    /// Bounded line-by-line reader for stderr.
+    /// Prevents OOM/hangs when a dying python process dumps a massive traceback.
+    /// Also avoids the bug where ReadToEndAsync with a CancellationToken might not honor
+    /// the token properly if the OS pipe buffer hasn't closed yet.
+    /// </summary>
+    private static async Task<string> ReadBoundedStderrAsync(StreamReader reader, CancellationToken cancellationToken)
+    {
+        var sb = new System.Text.StringBuilder();
+        int linesRead = 0;
+        const int maxLines = 50;
+        const int maxChars = 4096;
+
+        while (linesRead < maxLines && sb.Length < maxChars)
+        {
+            var line = await reader.ReadLineAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (line == null) break;
+            sb.AppendLine(line);
+            linesRead++;
+        }
+
+        if (linesRead >= maxLines || sb.Length >= maxChars)
+        {
+            sb.AppendLine("[... stderr truncated ...]");
+            // Drain remainder quietly so process can exit fully without filling pipe
+            try
+            {
+                while (await reader.ReadLineAsync().WaitAsync(cancellationToken).ConfigureAwait(false) != null) { }
+            }
+            catch (OperationCanceledException) { }
+        }
+
+        return sb.ToString().Trim();
     }
 
     private void DisposeWorker(WorkerState? worker, string reason)
