@@ -79,12 +79,17 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
                 .ToList();
 
             var references = _coordinator.GetSpeakerReferenceAudioPaths();
+            var voices = _coordinator.GetSpeakerVoiceAssignments();
             var drafts = new List<SpeakerReferenceDraftItem>(speakerIds.Count);
             foreach (var speakerId in speakerIds)
             {
                 references.TryGetValue(speakerId!, out var path);
-                var item = new SpeakerReferenceDraftItem(speakerId!, path);
-                await RefreshConfidenceAsync(item, cancellationToken);
+                voices.TryGetValue(speakerId!, out var voice);
+                var item = new SpeakerReferenceDraftItem(speakerId!, path, voice)
+                {
+                    ReferenceActionsEnabled = IsCloningTts,
+                };
+                await RefreshConfidenceAsync(item, IsCloningTts, cancellationToken);
                 item.PropertyChanged += (_, _) => OnPropertyChanged(nameof(HasPendingChanges));
                 drafts.Add(item);
             }
@@ -110,10 +115,10 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
             return;
 
         item.RestoreAuto();
-        _ = RefreshConfidenceAsync(item);
+        _ = RefreshConfidenceAsync(item, IsCloningTts);
         RecomputeCounts();
         ApplyFilter();
-        StatusText = $"Restored auto reference for {item.SpeakerId}.";
+        StatusText = $"Restored auto settings for {item.SpeakerId}.";
     }
 
     public async Task ApplyBrowseSelectionAsync(SpeakerReferenceDraftItem item, string? selectedPath, CancellationToken cancellationToken = default)
@@ -122,7 +127,7 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
             return;
 
         item.SetDraftReferencePath(selectedPath, "Browse file");
-        await RefreshConfidenceAsync(item, cancellationToken);
+        await RefreshConfidenceAsync(item, IsCloningTts, cancellationToken);
         RecomputeCounts();
         ApplyFilter();
         StatusText = $"Selected a custom clip for {item.SpeakerId}.";
@@ -146,7 +151,7 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
         }
 
         item.SetDraftReferencePath(alternate, "Auto-pick another");
-        await RefreshConfidenceAsync(item);
+        await RefreshConfidenceAsync(item, IsCloningTts);
         RecomputeCounts();
         ApplyFilter();
         StatusText = $"Auto-picked a different clip for {item.SpeakerId}.";
@@ -183,7 +188,7 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
                 cancellationToken);
 
             item.SetDraftReferencePath(extractedPath, "Use selected segment");
-            await RefreshConfidenceAsync(item, cancellationToken);
+            await RefreshConfidenceAsync(item, IsCloningTts, cancellationToken);
             RecomputeCounts();
             ApplyFilter();
             StatusText = $"Extracted a reference clip from the selected segment for {item.SpeakerId}.";
@@ -202,7 +207,7 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
         foreach (var item in AllDraftItems)
         {
             item.RestoreAuto();
-            await RefreshConfidenceAsync(item);
+            await RefreshConfidenceAsync(item, IsCloningTts);
         }
 
         RecomputeCounts();
@@ -212,13 +217,16 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
 
     public async Task FinishAsync(CancellationToken cancellationToken = default)
     {
-        var changes = BuildPersistencePayload(AllDraftItems);
-        _coordinator.ApplySpeakerReferenceAudioPathChanges(changes);
+        var refChanges = BuildReferencePersistencePayload(AllDraftItems);
+        var voiceChanges = BuildVoicePersistencePayload(AllDraftItems);
+        _coordinator.ApplySpeakerReferenceAudioPathChanges(refChanges);
+        _coordinator.ApplySpeakerVoiceAssignmentChanges(voiceChanges);
         await _playback.Preview.RefreshSegmentsAsync();
         _playback.SpeakerRouting.UpdateSelectedSpeakerDetails(_playback.SpeakerRouting.SelectedSpeakerId);
-        StatusText = changes.Count == 0
-            ? "No speaker reference changes were applied."
-            : $"Applied reference updates for {changes.Count} speakers.";
+        var total = refChanges.Count + voiceChanges.Count;
+        StatusText = total == 0
+            ? "No speaker setup changes were applied."
+            : $"Applied {refChanges.Count} reference and {voiceChanges.Count} voice updates.";
         _playback.StatusText = StatusText;
     }
 
@@ -227,12 +235,12 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
         StatusText = "Speaker reference draft changes were discarded.";
     }
 
-    internal static Dictionary<string, string?> BuildPersistencePayload(IEnumerable<SpeakerReferenceDraftItem> draftItems)
+    internal static Dictionary<string, string?> BuildReferencePersistencePayload(IEnumerable<SpeakerReferenceDraftItem> draftItems)
     {
         var result = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var item in draftItems)
         {
-            if (!item.IsChanged)
+            if (!item.IsReferenceChanged)
                 continue;
             result[item.SpeakerId] = string.IsNullOrWhiteSpace(item.EffectiveReferencePath)
                 ? null
@@ -242,10 +250,60 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
         return result;
     }
 
+    internal static Dictionary<string, string?> BuildVoicePersistencePayload(IEnumerable<SpeakerReferenceDraftItem> draftItems)
+    {
+        var result = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var item in draftItems)
+        {
+            if (!item.IsVoiceChanged)
+                continue;
+            result[item.SpeakerId] = string.IsNullOrWhiteSpace(item.EffectiveAssignedVoice)
+                ? null
+                : item.EffectiveAssignedVoice;
+        }
+
+        return result;
+    }
+
     partial void OnShowLowConfidenceOnlyChanged(bool value) => ApplyFilter();
 
-    private async Task RefreshConfidenceAsync(SpeakerReferenceDraftItem item, CancellationToken cancellationToken = default)
+    private bool IsCloningTts =>
+        string.Equals(_playback.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal);
+
+    public void UseActiveTtsVoiceForSpeaker(SpeakerReferenceDraftItem item)
     {
+        if (string.IsNullOrWhiteSpace(_playback.TtsModelOrVoice))
+        {
+            item.SetInlineError("Select an active TTS voice in the DUB section first.");
+            return;
+        }
+
+        item.SetDraftVoice(_playback.TtsModelOrVoice, "Use active TTS");
+        item.SetInlineError(string.Empty);
+        OnPropertyChanged(nameof(HasPendingChanges));
+        StatusText = $"Draft: assign active TTS voice to {item.SpeakerId}.";
+    }
+
+    public void ClearDraftVoiceForSpeaker(SpeakerReferenceDraftItem item)
+    {
+        item.SetDraftVoice(string.Empty, "Clear voice");
+        item.SetInlineError(string.Empty);
+        OnPropertyChanged(nameof(HasPendingChanges));
+        StatusText = $"Draft: cleared voice for {item.SpeakerId}.";
+    }
+
+    private async Task RefreshConfidenceAsync(
+        SpeakerReferenceDraftItem item,
+        bool cloningTts,
+        CancellationToken cancellationToken = default)
+    {
+        if (!cloningTts)
+        {
+            item.ConfidenceTier = SpeakerReferenceConfidenceTier.Good;
+            item.ConfidenceReasonSummary = "Reference clips apply when TTS is Qwen (voice cloning).";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(item.EffectiveReferencePath))
         {
             item.ConfidenceTier = SpeakerReferenceConfidenceTier.Poor;

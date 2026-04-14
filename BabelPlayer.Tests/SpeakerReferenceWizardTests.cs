@@ -65,12 +65,57 @@ public sealed class SpeakerReferenceWizardTests
         var cleared = new SpeakerReferenceDraftItem("spk_02", @"C:\old2.wav");
         cleared.SetDraftReferencePath(string.Empty, "Clear");
 
-        var payload = SpeakerReferenceWizardViewModel.BuildPersistencePayload([unchanged, changed, cleared]);
+        var payload = SpeakerReferenceWizardViewModel.BuildReferencePersistencePayload([unchanged, changed, cleared]);
 
         Assert.Equal(2, payload.Count);
         Assert.Equal(@"C:\new.wav", payload["spk_01"]);
         Assert.Null(payload["spk_02"]);
         Assert.False(payload.ContainsKey("spk_00"));
+    }
+
+    [Fact]
+    public void BuildVoicePersistencePayload_OnlyIncludesChangedVoices()
+    {
+        var a = new SpeakerReferenceDraftItem("spk_00", @"C:\x.wav", "voice-a");
+        var b = new SpeakerReferenceDraftItem("spk_01", @"C:\y.wav", "voice-b");
+        b.SetDraftVoice("voice-c", "Edit");
+
+        var payload = SpeakerReferenceWizardViewModel.BuildVoicePersistencePayload([a, b]);
+
+        Assert.Single(payload);
+        Assert.Equal("voice-c", payload["spk_01"]);
+    }
+
+    [Fact]
+    public void DraftItem_VoiceChangeSetsIsChanged()
+    {
+        var item = new SpeakerReferenceDraftItem("spk_00", @"C:\a.wav", "v1");
+        Assert.False(item.IsChanged);
+        item.SetDraftVoice("v2", "Edit");
+        Assert.True(item.IsVoiceChanged);
+        Assert.True(item.IsChanged);
+    }
+
+    [Fact]
+    public void ApplySpeakerVoiceAssignmentChanges_AppliesOnlyProvidedDiffs()
+    {
+        using var harness = new CoordinatorHarness();
+        var coordinator = harness.CreateCoordinator();
+        coordinator.Initialize();
+        coordinator.SetSpeakerVoiceAssignment("spk_00", "a");
+        coordinator.SetSpeakerVoiceAssignment("spk_01", "b");
+
+        coordinator.ApplySpeakerVoiceAssignmentChanges(new Dictionary<string, string?>
+        {
+            ["spk_00"] = "a",
+            ["spk_01"] = "c",
+            ["spk_02"] = null,
+        });
+
+        var voices = coordinator.GetSpeakerVoiceAssignments();
+        Assert.Equal("a", voices["spk_00"]);
+        Assert.Equal("c", voices["spk_01"]);
+        Assert.False(voices.ContainsKey("spk_02"));
     }
 
     [Fact]

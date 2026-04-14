@@ -86,30 +86,34 @@ public sealed partial class SessionWorkflowCoordinator
     /// </exception>
     public async Task<bool> RunDiarizationAsync(CancellationToken cancellationToken = default)
     {
-        if (CurrentSession.Stage < SessionWorkflowStage.Transcribed)
+#pragma warning disable MVVMTK0034 // snapshot read avoids generated-property design-time false negatives in some IDE states
+        var currentSession = _currentSession;
+#pragma warning restore MVVMTK0034
+
+        if (currentSession.Stage < SessionWorkflowStage.Transcribed)
             throw new InvalidOperationException("No transcript available. Please transcribe media first.");
 
-        if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
+        if (string.IsNullOrWhiteSpace(currentSession.IngestedMediaPath))
             throw new InvalidOperationException("No ingested media is available for diarization.");
 
-        if (!File.Exists(CurrentSession.IngestedMediaPath))
-            throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
+        if (!File.Exists(currentSession.IngestedMediaPath))
+            throw new FileNotFoundException($"Ingested media file not found: {currentSession.IngestedMediaPath}");
 
-        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
+        if (string.IsNullOrWhiteSpace(currentSession.TranscriptPath))
             throw new InvalidOperationException("No transcript available. Please transcribe media first.");
 
-        if (!File.Exists(CurrentSession.TranscriptPath))
-            throw new FileNotFoundException($"Transcript file not found: {CurrentSession.TranscriptPath}");
+        if (!File.Exists(currentSession.TranscriptPath))
+            throw new FileNotFoundException($"Transcript file not found: {currentSession.TranscriptPath}");
 
         if (string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider))
             throw new InvalidOperationException("No diarization provider is selected.");
 
         var outcome = await ExecuteDiarizationAsync(
-            CurrentSession.IngestedMediaPath,
-            CurrentSession.TranscriptPath,
+            currentSession.IngestedMediaPath,
+            currentSession.TranscriptPath,
             cancellationToken,
-            resultingStage: CurrentSession.Stage >= SessionWorkflowStage.Translated
-                ? CurrentSession.Stage
+            resultingStage: currentSession.Stage >= SessionWorkflowStage.Translated
+                ? currentSession.Stage
                 : SessionWorkflowStage.Diarized);
 
         return outcome.SpeakerAssignmentsChanged;
@@ -243,28 +247,31 @@ public sealed partial class SessionWorkflowCoordinator
             var transcriptChanged = await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
             transcriptMergeStopwatch.Stop();
             var translationChanged = false;
+#pragma warning disable MVVMTK0034 // snapshot read avoids generated-property design-time false negatives in some IDE states
+            var currentSession = _currentSession;
+#pragma warning restore MVVMTK0034
 
-            if (!string.IsNullOrWhiteSpace(CurrentSession.TranslationPath) &&
-                File.Exists(CurrentSession.TranslationPath))
+            if (!string.IsNullOrWhiteSpace(currentSession.TranslationPath) &&
+                File.Exists(currentSession.TranslationPath))
             {
                 var translationMergeStopwatch = Stopwatch.StartNew();
                 translationChanged = await MergeSpeakerIdsIntoTranslationAsync(
                     transcriptPath,
-                    CurrentSession.TranslationPath,
+                    currentSession.TranslationPath,
                     ct);
                 translationMergeStopwatch.Stop();
             }
 
             var nextStage = resultingStage ?? (
-                CurrentSession.Stage >= SessionWorkflowStage.Translated
-                    ? CurrentSession.Stage
+                currentSession.Stage >= SessionWorkflowStage.Translated
+                    ? currentSession.Stage
                     : SessionWorkflowStage.Diarized);
             var nextStatusMessage = statusMessage ?? (
                 nextStage >= SessionWorkflowStage.Translated
                     ? "Diarization complete. Speaker assignments updated."
                     : "Speaker mapping ready. Assign voices, then continue.");
 
-            CurrentSession = CurrentSession with
+            CurrentSession = currentSession with
             {
                 Stage = nextStage,
                 DiarizationProvider = CurrentSettings.DiarizationProvider,
@@ -527,6 +534,49 @@ public sealed partial class SessionWorkflowCoordinator
             return;
 
         CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
+        SaveCurrentSession();
+    }
+
+    public void ApplySpeakerVoiceAssignmentChanges(IReadOnlyDictionary<string, string?> updates)
+    {
+        ArgumentNullException.ThrowIfNull(updates);
+        if (updates.Count == 0)
+            return;
+
+        var current = CurrentSession.SpeakerVoiceAssignments is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
+
+        var changed = false;
+        foreach (var (speakerId, candidateVoice) in updates)
+        {
+            if (string.IsNullOrWhiteSpace(speakerId))
+                continue;
+
+            var normalizedSpeakerId = speakerId.Trim();
+            var normalizedVoice = string.IsNullOrWhiteSpace(candidateVoice) ? null : candidateVoice.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalizedVoice))
+            {
+                changed |= current.Remove(normalizedSpeakerId);
+                continue;
+            }
+
+            if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
+                !string.Equals(existing, normalizedVoice, StringComparison.Ordinal))
+            {
+                current[normalizedSpeakerId] = normalizedVoice;
+                changed = true;
+            }
+        }
+
+        if (!changed)
+            return;
+
+        CurrentSession = CurrentSession with
+        {
+            SpeakerVoiceAssignments = current.Count == 0 ? null : current,
+        };
         SaveCurrentSession();
     }
 
