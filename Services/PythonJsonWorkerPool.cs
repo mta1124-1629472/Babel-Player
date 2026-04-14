@@ -348,7 +348,8 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
 
         // Drain the pipe without capturing, so the OS pipe buffer doesn't
         // block the process from exiting. The cancellation token keeps this bounded.
-        if (!stderr.EndOfStream)
+        string? nextLine = await stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+        if (nextLine is not null)
         {
             truncated = true;
             while (await stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false) is not null)
