@@ -62,6 +62,19 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
     [RelayCommand(CanExecute = nameof(CanRunPipeline))]
     public async Task RunPipelineAsync()
     {
+        // #region agent log
+        WriteDebugLog(
+            runId: "initial",
+            hypothesisId: "H32",
+            location: "EmbeddedPlaybackPipelineViewModel.cs:RunPipelineAsync",
+            message: "RunPipelineAsync entered",
+            data: new
+            {
+                stage = _coordinator.CurrentSession.Stage.ToString(),
+                isBusy = _parent.IsBusy,
+                provider = _parent.SpeakerRouting.DiarizationProvider,
+            });
+        // #endregion
         var diagnostics = _coordinator.BootstrapDiagnostics;
         if (!diagnostics.AllDependenciesAvailable)
         {
@@ -85,6 +98,17 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
 
             if (_coordinator.CurrentSession.Stage == SessionWorkflowStage.Diarized)
             {
+                // #region agent log
+                WriteDebugLog(
+                    runId: "initial",
+                    hypothesisId: "H32",
+                    location: "EmbeddedPlaybackPipelineViewModel.cs:RunPipelineAsync",
+                    message: "Invoking ContinuePipelineAsync",
+                    data: new
+                    {
+                        stage = _coordinator.CurrentSession.Stage.ToString(),
+                    });
+                // #endregion
                 await _coordinator.ContinuePipelineAsync(
                     progress: null,
                     stageProgress: stageProgress,
@@ -92,15 +116,60 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
             }
             else
             {
+                // #region agent log
+                WriteDebugLog(
+                    runId: "initial",
+                    hypothesisId: "H32",
+                    location: "EmbeddedPlaybackPipelineViewModel.cs:RunPipelineAsync",
+                    message: "Invoking AdvancePipelineAsync",
+                    data: new
+                    {
+                        stage = _coordinator.CurrentSession.Stage.ToString(),
+                    });
+                // #endregion
                 await _coordinator.AdvancePipelineAsync(
                     progress: null,
                     stageProgress: stageProgress,
                     cancellationToken: cancellationToken);
             }
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H32",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunPipelineAsync",
+                message: "Pipeline coordinator call returned",
+                data: new
+                {
+                    stage = _coordinator.CurrentSession.Stage.ToString(),
+                });
+            // #endregion
 
             ShowRefreshDetail("Loading segments and refreshing playback data…");
             _parent.StatusText = "Loading segments…";
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H32",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunPipelineAsync",
+                message: "Starting preview refresh after pipeline",
+                data: new
+                {
+                    stage = _coordinator.CurrentSession.Stage.ToString(),
+                });
+            // #endregion
             await _parent.Preview.RefreshSegmentsAsync();
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H32",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunPipelineAsync",
+                message: "Completed preview refresh after pipeline",
+                data: new
+                {
+                    segmentCount = _parent.Preview.Segments.Count,
+                    stage = _coordinator.CurrentSession.Stage.ToString(),
+                });
+            // #endregion
             _parent.StatusText = _coordinator.CurrentSession.StatusMessage;
             _parent.ClearStatusErrorDetail();
         }
@@ -117,6 +186,18 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
         finally
         {
             _parent.IsBusy = false;
+            // #region agent log
+            WriteDebugLog(
+                runId: "initial",
+                hypothesisId: "H32",
+                location: "EmbeddedPlaybackPipelineViewModel.cs:RunPipelineAsync",
+                message: "RunPipelineAsync finally executed",
+                data: new
+                {
+                    isBusy = _parent.IsBusy,
+                    stage = _coordinator.CurrentSession.Stage.ToString(),
+                });
+            // #endregion
             ResetProgressState();
             _pipelineCts?.Dispose();
             _pipelineCts = null;
