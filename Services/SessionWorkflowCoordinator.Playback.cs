@@ -156,6 +156,8 @@ public sealed partial class SessionWorkflowCoordinator
         if (DiarizationRegistry is null)
             throw new PipelineProviderException("No diarization registry is configured.");
 
+        ValidateDiarizationSpeakerBounds(CurrentSettings.DiarizationMinSpeakers, CurrentSettings.DiarizationMaxSpeakers);
+
         var providerDescriptor = DiarizationRegistry
             .GetAvailableProviders()
             .FirstOrDefault(provider => string.Equals(provider.Id, CurrentSettings.DiarizationProvider, StringComparison.Ordinal));
