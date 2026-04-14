@@ -6,7 +6,7 @@
 .DESCRIPTION
   - libmpv-2.dll: pinned zhongfly/mpv-winbuild libmpv dev archive (GitHub Releases)
   - uv.exe: astral-sh/uv Windows zip (x86_64 or aarch64)
-  - ffmpeg.exe: optional; pinned GyanD codexffmpeg build (same source as release workflow)
+  - ffmpeg.exe: optional — GyanD codexffmpeg (x64) or BtbN FFmpeg-Builds winarm64-lgpl (ARM64); see IncludeFfmpeg block
 
   On ARM64 Windows, artifacts go under native/win-arm64 and tools/win-arm64.
   On x64 Windows, under native/win-x64 and tools/win-x64.
@@ -107,11 +107,17 @@ try {
     Write-Host "Wrote $(Join-Path $ToolsDir 'uv.exe')"
 
     if ($IncludeFfmpeg) {
-        if ([string]::IsNullOrWhiteSpace($FfmpegVersion)) {
-            throw "IncludeFfmpeg was set but FfmpegVersion / env:FFMPEG_VERSION is empty."
+        if ($targetArch -eq "Arm64") {
+            # GyanD essentials zips are x64-only; BtbN publishes winarm64 LGPL builds (moving "latest" — pin if CI must be byte-stable).
+            $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-lgpl.zip"
+            Write-Host "Downloading FFmpeg (winarm64 LGPL) from $ffmpegUrl"
+        } else {
+            if ([string]::IsNullOrWhiteSpace($FfmpegVersion)) {
+                throw "IncludeFfmpeg was set but FfmpegVersion / env:FFMPEG_VERSION is empty."
+            }
+            $ffmpegUrl = "https://github.com/GyanD/codexffmpeg/releases/download/$FfmpegVersion/ffmpeg-$FfmpegVersion-essentials_build.zip"
+            Write-Host "Downloading FFmpeg $FfmpegVersion from $ffmpegUrl"
         }
-        $ffmpegUrl = "https://github.com/GyanD/codexffmpeg/releases/download/$FfmpegVersion/ffmpeg-$FfmpegVersion-essentials_build.zip"
-        Write-Host "Downloading FFmpeg $FfmpegVersion from $ffmpegUrl"
         $ffmpegZip = Join-Path $scratch "ffmpeg.zip"
         Invoke-WebRequest -Uri $ffmpegUrl -OutFile $ffmpegZip
         $ffmpegTemp = Join-Path $scratch "ffmpeg_temp"

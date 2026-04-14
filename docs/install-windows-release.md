@@ -5,7 +5,8 @@
 | Option | File | Best for |
 |---|---|---|
 | **Installer** (recommended) | `Babel-Player-<version>-win-x64-setup.exe` | Most users — adds Start Menu shortcut + uninstaller |
-| **Portable ZIP** | `Babel-Player-<version>-win-x64-portable.zip` | USB drives, no-install environments |
+| **Portable ZIP (x64)** | `Babel-Player-<version>-win-x64-portable.zip` | USB drives, no-install environments |
+| **Portable ZIP (ARM64)** | `Babel-Player-<version>-win-arm64-portable.zip` | Windows on ARM PCs (Snapdragon and similar) |
 
 Verify your download (optional):
 ```powershell

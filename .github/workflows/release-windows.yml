@@ -1,4 +1,4 @@
-name: Release Win x64
+name: Release Windows
 
 on:
   push:
@@ -15,14 +15,22 @@ permissions:
   contents: write
 
 jobs:
-  publish-win-x64:
-    name: Publish Windows x64 Self-Contained Release
-    runs-on: windows-latest
+  publish-windows:
+    name: Publish (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+            fetch_arch: ""
+          - rid: win-arm64
+            runner: windows-11-arm
+            fetch_arch: "Arm64"
 
     env:
-      # Pin ffmpeg to a specific build from the GyanD GitHub mirror (zip format, reliable CDN).
-      # Source: https://github.com/GyanD/codexffmpeg/releases
-      # Update this value when a newer build has been validated.
+      # Pin ffmpeg (GyanD x64 essentials) — ARM64 fetch script uses BtbN winarm64 LGPL when -Architecture Arm64.
       FFMPEG_VERSION: "2026-03-30-git-e54e117998"
 
     steps:
@@ -36,7 +44,12 @@ jobs:
         shell: pwsh
         env:
           FFMPEG_VERSION: ${{ env.FFMPEG_VERSION }}
-        run: pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -IncludeFfmpeg
+        run: |
+          if ("${{ matrix.fetch_arch }}" -ne "") {
+            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -IncludeFfmpeg -Architecture ${{ matrix.fetch_arch }}
+          } else {
+            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -IncludeFfmpeg
+          }
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -44,7 +57,7 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore
-        run: dotnet restore BabelPlayer.csproj -r win-x64
+        run: dotnet restore BabelPlayer.csproj -r ${{ matrix.rid }}
 
       - name: Run architecture checks
         run: python scripts/check-architecture.py
@@ -58,8 +71,6 @@ jobs:
       - name: Publish self-contained build
         shell: pwsh
         run: |
-          # Resolve version: strip leading 'v' from tag (e.g. v1.2.0 -> 1.2.0),
-          # or fall back to the workflow_dispatch override input.
           $refName = "${{ github.ref_name }}"
           $override = "${{ github.event.inputs.version_override }}"
           if ($refName -match '^v\d') {
@@ -70,12 +81,13 @@ jobs:
             $version = "0.0.0-dev"
           }
           $buildDate = (Get-Date -Format "yyyy-MM-dd")
+          $rid = "${{ matrix.rid }}"
 
-          Write-Host "Embedding version=$version  buildDate=$buildDate"
+          Write-Host "Embedding version=$version  buildDate=$buildDate  rid=$rid"
 
           dotnet publish BabelPlayer.csproj `
             --configuration Release `
-            -p:RuntimeIdentifier=win-x64 `
+            -p:RuntimeIdentifier=$rid `
             --self-contained true `
             -p:PublishSingleFile=false `
             -p:Version=$version `
@@ -83,24 +95,22 @@ jobs:
             -p:BuildDate=$buildDate `
             -o ./publish
 
-          # Copy external binaries into publish root so the release bundle is self-contained.
-          # libmpv-2.dll, ffmpeg.exe, and uv.exe are produced by fetch-win-native-deps.ps1.
-          Copy-Item -Path "native/win-x64/libmpv-2.dll" -Destination "./publish/" -Force
-          Copy-Item -Path "tools/win-x64/ffmpeg.exe"    -Destination "./publish/" -Force
-          Copy-Item -Path "tools/win-x64/uv.exe"        -Destination "./publish/" -Force
+          $native = if ($rid -eq "win-arm64") { "native/win-arm64" } else { "native/win-x64" }
+          $tools = if ($rid -eq "win-arm64") { "tools/win-arm64" } else { "tools/win-x64" }
+          Copy-Item -Path "$native/libmpv-2.dll" -Destination "./publish/" -Force
+          Copy-Item -Path "$tools/ffmpeg.exe"    -Destination "./publish/" -Force
+          Copy-Item -Path "$tools/uv.exe"        -Destination "./publish/" -Force
 
       - name: Verify publish output
         shell: pwsh
         run: |
           $missing = @()
 
-          # Core app binaries
           if (-not (Test-Path "./publish/BabelPlayer.exe"))  { $missing += "BabelPlayer.exe" }
           if (-not (Test-Path "./publish/ffmpeg.exe"))       { $missing += "ffmpeg.exe" }
           if (-not (Test-Path "./publish/libmpv-2.dll"))     { $missing += "libmpv-2.dll" }
           if (-not (Test-Path "./publish/uv.exe"))           { $missing += "uv.exe" }
 
-          # Inference directory and required files
           $inferenceFiles = @(
             "inference/main.py",
             "inference/requirements.txt",
@@ -128,8 +138,9 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($tag)) {
             $tag = "manual"
           }
+          $rid = "${{ matrix.rid }}"
 
-          $bundleRoot = Join-Path "${{ github.workspace }}" "dist\\Babel-Player-$tag-win-x64-portable"
+          $bundleRoot = Join-Path "${{ github.workspace }}" "dist\\Babel-Player-$tag-$rid-portable"
           if (Test-Path $bundleRoot) {
             Remove-Item -Path $bundleRoot -Recurse -Force
           }
@@ -150,6 +161,7 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($tag)) {
             $tag = "manual"
           }
+          $rid = "${{ matrix.rid }}"
           $bundleDir = "${{ steps.stage_bundle.outputs.bundle_root }}"
 
           if (-not (Test-Path $bundleDir)) {
@@ -157,8 +169,8 @@ jobs:
           }
 
           New-Item -ItemType Directory -Path "dist" -Force | Out-Null
-          $zipPath = "dist/Babel-Player-$tag-win-x64-portable.zip"
-          $checksumPath = "dist/Babel-Player-$tag-win-x64-portable.sha256"
+          $zipPath = "dist/Babel-Player-$tag-$rid-portable.zip"
+          $checksumPath = "dist/Babel-Player-$tag-$rid-portable.sha256"
 
           Compress-Archive -Path "$bundleDir\\*" -DestinationPath $zipPath -Force
           $hash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -168,12 +180,14 @@ jobs:
           "checksum_path=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Install Inno Setup
+        if: matrix.rid == 'win-x64'
         shell: pwsh
         run: |
           choco install innosetup --yes --no-progress
 
-      - name: Build installer
+      - name: Build installer (x64 only)
         id: installer
+        if: matrix.rid == 'win-x64'
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
@@ -210,21 +224,51 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: babel-player-${{ github.ref_name || 'manual' }}-win-x64-portable
+          name: babel-player-${{ github.ref_name || 'manual' }}-${{ matrix.rid }}-portable
           path: |
             ${{ steps.package.outputs.zip_path }}
             ${{ steps.package.outputs.checksum_path }}
           if-no-files-found: error
           retention-days: 30
 
+      - name: Upload installer artifact (x64 only)
+        if: matrix.rid == 'win-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: babel-player-${{ github.ref_name || 'manual' }}-win-x64-installer
+          path: |
+            ${{ steps.installer.outputs.installer_path }}
+            ${{ steps.installer.outputs.installer_checksum }}
+          if-no-files-found: error
+          retention-days: 30
+
+  github-release:
+    name: Create GitHub Release
+    needs: publish-windows
+    if: success() && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download portable artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: babel-player-*-portable
+          path: release-files
+          merge-multiple: true
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: babel-player-*-win-x64-installer
+          path: release-files
+          merge-multiple: true
+
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ steps.package.outputs.zip_path }}
-            ${{ steps.package.outputs.checksum_path }}
-            ${{ steps.installer.outputs.installer_path }}
-            ${{ steps.installer.outputs.installer_checksum }}
+            release-files/*
           body_path: docs/install-windows-release.md
           generate_release_notes: true
