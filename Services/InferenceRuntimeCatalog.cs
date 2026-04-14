@@ -29,6 +29,7 @@ public static class InferenceRuntimeCatalog
         ProviderNames.OpenAiWhisperApi
             or ProviderNames.GoogleStt
             or ProviderNames.GeminiTranscription => ComputeProfile.Cloud,
+        ProviderNames.Parakeet => ComputeProfile.Gpu,
         _ => ComputeProfile.Cpu,
     };
 
@@ -129,6 +130,9 @@ public static class InferenceRuntimeCatalog
                 _ => DefaultTranscriptionProvider(profile),
             };
         }
+
+        if (providerId == ProviderNames.Parakeet && profile == ComputeProfile.Gpu)
+            return ProviderNames.Parakeet;
 
         return ProviderNames.FasterWhisper;
     }
@@ -333,7 +337,8 @@ public static class InferenceRuntimeCatalog
         ProviderNames.FasterWhisper
             or ProviderNames.OpenAiWhisperApi
             or ProviderNames.GoogleStt
-            or ProviderNames.GeminiTranscription => true,
+            or ProviderNames.GeminiTranscription
+            or ProviderNames.Parakeet => true,
         _ => false,
     };
 

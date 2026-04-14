@@ -97,6 +97,8 @@ _flash_attn_available: bool | None = None
 _qwen_max_concurrency = 1
 _nemo_diarizer_construction_lock = threading.Lock()
 _nemo_restore_meta_patch_applied = False
+_parakeet_model = None
+_parakeet_model_lock = threading.Lock()
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -1663,6 +1665,158 @@ def load_whisper_model(
         whisper_model_key = cache_key
         logger.info("Whisper loaded")
     return whisper_model
+
+
+def load_parakeet_model():
+    global _parakeet_model
+    if _parakeet_model is not None:
+        return _parakeet_model
+    with _parakeet_model_lock:
+        if _parakeet_model is not None:
+            return _parakeet_model
+        import nemo.collections.asr as nemo_asr
+        _apply_nemo_meta_tensor_restore_patch()
+        logger.info("Loading Parakeet TDT 0.6B-v3")
+        model = nemo_asr.models.EncDecRNNTBPEModel.from_pretrained(
+            "nvidia/parakeet-tdt-0.6b-v3"
+        )
+        import torch
+        if torch.cuda.is_available():
+            model = model.cuda()
+        model.train(False)
+        _parakeet_model = model
+        logger.info("Parakeet loaded")
+        return _parakeet_model
+
+
+def _words_to_segments(
+    word_timestamps: list,
+    fallback_text: str,
+) -> list:
+    """Group NeMo word-timestamp objects into TranscriptSegmentResponse segments.
+
+    Splits on sentence-ending punctuation or an inter-word gap > 0.5 s.
+    Falls back to a single segment when no word timestamps are available.
+    """
+    if not word_timestamps:
+        return [
+            TranscriptSegmentResponse(
+                start=0.0,
+                end=0.0,
+                text=fallback_text.strip(),
+                words=[],
+            )
+        ] if fallback_text.strip() else []
+
+    segments: list = []
+    seg_words: list = []
+    seg_start: float = 0.0
+    prev_end: float = 0.0
+
+    for w in word_timestamps:
+        # NeMo word-timestamp items may be dicts or objects with attributes
+        if isinstance(w, dict):
+            w_text = w.get("word") or w.get("text") or ""
+            w_start = float(w.get("start_time") or w.get("start") or 0.0)
+            w_end = float(w.get("end_time") or w.get("end") or 0.0)
+        else:
+            w_text = getattr(w, "word", None) or getattr(w, "text", "")
+            w_start = float(getattr(w, "start_time", None) or getattr(w, "start", 0.0))
+            w_end = float(getattr(w, "end_time", None) or getattr(w, "end", 0.0))
+
+        if not w_text:
+            continue
+
+        gap = w_start - prev_end if seg_words else 0.0
+        ends_sentence = prev_end > 0 and any(
+            seg_words[-1].text.rstrip().endswith(p) for p in (".", "?", "!")
+        ) if seg_words and hasattr(seg_words[-1], "text") else False
+
+        if seg_words and (gap > 0.5 or ends_sentence):
+            segments.append(
+                TranscriptSegmentResponse(
+                    start=seg_start,
+                    end=prev_end,
+                    text=" ".join(
+                        (s.text if hasattr(s, "text") else s.get("text", ""))
+                        for s in seg_words
+                    ).strip(),
+                    words=[
+                        WordTimestampResponse(
+                            text=(s.text if hasattr(s, "text") else s.get("text", "")),
+                            start=(s.start if hasattr(s, "start") else s.get("start", 0.0)),
+                            end=(s.end if hasattr(s, "end") else s.get("end", 0.0)),
+                        )
+                        for s in seg_words
+                    ],
+                )
+            )
+            seg_words = []
+            seg_start = w_start
+
+        word_item = type("W", (), {"text": w_text, "start": w_start, "end": w_end})()
+        seg_words.append(word_item)
+        if not seg_words or len(seg_words) == 1:
+            seg_start = w_start
+        prev_end = w_end
+
+    if seg_words:
+        segments.append(
+            TranscriptSegmentResponse(
+                start=seg_start,
+                end=prev_end,
+                text=" ".join(
+                    (s.text if hasattr(s, "text") else s.get("text", ""))
+                    for s in seg_words
+                ).strip(),
+                words=[
+                    WordTimestampResponse(
+                        text=(s.text if hasattr(s, "text") else s.get("text", "")),
+                        start=(s.start if hasattr(s, "start") else s.get("start", 0.0)),
+                        end=(s.end if hasattr(s, "end") else s.get("end", 0.0)),
+                    )
+                    for s in seg_words
+                ],
+            )
+        )
+
+    return segments
+
+
+@app.post("/transcribe/parakeet", response_model=TranscriptionResponse)
+async def transcribe_parakeet(
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    temp_audio_path = None
+    try:
+        temp_audio_path = TEMP_DIR / f"parakeet_{uuid4().hex}.wav"
+        contents = await file.read()
+        temp_audio_path.write_bytes(contents)
+        model = load_parakeet_model()
+        import torch
+        with torch.inference_mode():
+            hypotheses = model.transcribe([str(temp_audio_path)], timestamps=True)
+        hypothesis = hypotheses[0]
+        word_ts = (
+            hypothesis.timestep.get("word", [])
+            if hasattr(hypothesis, "timestep") and isinstance(hypothesis.timestep, dict)
+            else []
+        )
+        segments = _words_to_segments(word_ts, hypothesis.text)
+        background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
+        return TranscriptionResponse(
+            success=True,
+            language="en",
+            language_probability=1.0,
+            segments=segments,
+        )
+    except Exception as exc:
+        logger.error(f"Parakeet transcription failed: {exc}", exc_info=True)
+        if temp_audio_path:
+            background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/transcribe", response_model=TranscriptionResponse)

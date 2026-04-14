@@ -29,6 +29,7 @@ public static class ProviderNames
     public const string OpenAiWhisperApi       = "openai-whisper-api";
     public const string GoogleStt             = "google-stt";
     public const string GeminiTranscription   = "gemini-transcription";
+    public const string Parakeet              = "parakeet";
 
     // ── Translation ──────────────────────────────────────────────────────
     public const string Nllb200               = "nllb-200";
