@@ -159,36 +159,9 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
             _parent.IsBusy = true;
             _parent.StatusText = $"Running {_parent.ResolveDiarizationProviderLabel()} diarization…";
             _parent.ClearStatusErrorDetail();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H27",
-                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
-                message: "RunDiarizationOnlyAsync started",
-                data: new
-                {
-                    provider = _parent.SpeakerRouting.DiarizationProvider,
-                    stage = _coordinator.CurrentSession.Stage.ToString(),
-                    managedThreadId = Environment.CurrentManagedThreadId,
-                    syncContext = SynchronizationContext.Current?.GetType().FullName,
-                });
-            // #endregion
 
             var hadTranslatableOutput = _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Translated;
             var speakerAssignmentsChanged = await _coordinator.RunDiarizationAsync(cancellationToken);
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H27",
-                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
-                message: "RunDiarizationAsync returned to ViewModel",
-                data: new
-                {
-                    speakerAssignmentsChanged,
-                    hadTranslatableOutput,
-                    stage = _coordinator.CurrentSession.Stage.ToString(),
-                });
-            // #endregion
             string completionStatus;
 
             if (speakerAssignmentsChanged && hadTranslatableOutput)
@@ -206,46 +179,11 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
             }
 
             var refreshStopwatch = Stopwatch.StartNew();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H27",
-                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
-                message: "Starting preview refresh after diarization",
-                data: new
-                {
-                    stage = _coordinator.CurrentSession.Stage.ToString(),
-                });
-            // #endregion
             await _parent.Preview.RefreshSegmentsAsync();
             refreshStopwatch.Stop();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H27",
-                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
-                message: "Completed preview refresh after diarization",
-                data: new
-                {
-                    elapsedMs = refreshStopwatch.ElapsedMilliseconds,
-                    segmentCount = _parent.Preview.Segments.Count,
-                });
-            // #endregion
             _parent.StatusText = completionStatus;
             _parent.ClearStatusErrorDetail();
             totalStopwatch.Stop();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H27",
-                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
-                message: "RunDiarizationOnlyAsync completed successfully",
-                data: new
-                {
-                    totalElapsedMs = totalStopwatch.ElapsedMilliseconds,
-                    completionStatus,
-                });
-            // #endregion
         }
         catch (OperationCanceledException)
         {
@@ -260,18 +198,6 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
         finally
         {
             _parent.IsBusy = false;
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H27",
-                location: "EmbeddedPlaybackPipelineViewModel.cs:RunDiarizationOnlyAsync",
-                message: "RunDiarizationOnlyAsync finally executed",
-                data: new
-                {
-                    isBusy = _parent.IsBusy,
-                    managedThreadId = Environment.CurrentManagedThreadId,
-                });
-            // #endregion
             _diarizationCts?.Dispose();
             _diarizationCts = null;
         }

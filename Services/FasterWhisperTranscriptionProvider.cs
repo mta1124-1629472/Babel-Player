@@ -178,50 +178,6 @@ print('Transcription complete')
                 [inputPath, request.OutputJsonPath],
                 "transcribe",
                 cancellationToken: cancellationToken);
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H13",
-                location: "FasterWhisperTranscriptionProvider.cs:TranscribeAsync",
-                message: "FasterWhisper subprocess completed",
-                data: new
-                {
-                    elapsedMs = result.ElapsedMs,
-                    exitCode = result.ExitCode,
-                    stdoutLength = result.Stdout.Length,
-                    stderrLength = result.Stderr.Length,
-                    stderrTail = result.Stderr.Length <= 1000
-                        ? result.Stderr
-                        : result.Stderr[^1000..],
-                });
-            // #endregion
-            // #region agent log
-            foreach (var stderrLine in result.Stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                try
-                {
-                    using var doc = JsonDocument.Parse(stderrLine);
-                    if (doc.RootElement.TryGetProperty("timing", out var timingName)
-                        && doc.RootElement.TryGetProperty("value", out var timingValue))
-                    {
-                        WriteDebugLog(
-                            runId: "initial",
-                            hypothesisId: "H13",
-                            location: "FasterWhisperTranscriptionProvider.cs:TranscribeAsync",
-                            message: "FasterWhisper timing marker",
-                            data: new
-                            {
-                                timing = timingName.GetString(),
-                                seconds = timingValue.GetDouble(),
-                            });
-                    }
-                }
-                catch
-                {
-                    // Non-JSON stderr lines are expected from runtime dependencies.
-                }
-            }
-            // #endregion
             ThrowIfFailed(result, "Transcription");
 
             Log.Info($"Transcription completed: {request.OutputJsonPath}");

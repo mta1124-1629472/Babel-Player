@@ -111,37 +111,11 @@ public sealed class ManagedCpuRuntimeManager
     {
         var ensureInstalledStopwatch = Stopwatch.StartNew();
         var inspection = InspectRuntimeState();
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H8",
-            location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
-            message: "EnsureInstalledAsync initial inspection",
-            data: new
-            {
-                inspectedState = inspection.State.ToString(),
-                needsBootstrap = inspection.NeedsBootstrap,
-                detail = inspection.Detail,
-            });
-        // #endregion
         CacheNeedsBootstrap(inspection.NeedsBootstrap);
         if (!inspection.NeedsBootstrap)
         {
             ApplyInspection(inspection, logReadyState: true);
             ensureInstalledStopwatch.Stop();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H8",
-                location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
-                message: "EnsureInstalledAsync returned without bootstrap",
-                data: new
-                {
-                    state = State.ToString(),
-                    failureReason = FailureReason,
-                    elapsedMs = ensureInstalledStopwatch.ElapsedMilliseconds,
-                });
-            // #endregion
             return;
         }
 
@@ -155,36 +129,9 @@ public sealed class ManagedCpuRuntimeManager
             {
                 ApplyInspection(inspection, logReadyState: true);
                 ensureInstalledStopwatch.Stop();
-                // #region agent log
-                WriteDebugLog(
-                    runId: "initial",
-                    hypothesisId: "H9",
-                    location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
-                    message: "EnsureInstalledAsync lock recheck found runtime already bootstrapped",
-                    data: new
-                    {
-                        inspectedState = inspection.State.ToString(),
-                        needsBootstrap = inspection.NeedsBootstrap,
-                        detail = inspection.Detail,
-                        elapsedMs = ensureInstalledStopwatch.ElapsedMilliseconds,
-                    });
-                // #endregion
                 return;
             }
 
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H9",
-                location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
-                message: "EnsureInstalledAsync entering RunBootstrapAsync",
-                data: new
-                {
-                    inspectedState = inspection.State.ToString(),
-                    needsBootstrap = inspection.NeedsBootstrap,
-                    detail = inspection.Detail,
-                });
-            // #endregion
             await RunBootstrapAsync(onStatusLine, cancellationToken);
         }
         finally
@@ -194,22 +141,6 @@ public sealed class ManagedCpuRuntimeManager
 
         ensureInstalledStopwatch.Stop();
         var finalInspection = InspectRuntimeState();
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H8",
-            location: "ManagedCpuRuntimeManager.cs:EnsureInstalledAsync",
-            message: "EnsureInstalledAsync completed after bootstrap path",
-            data: new
-            {
-                state = State.ToString(),
-                failureReason = FailureReason,
-                finalInspectedState = finalInspection.State.ToString(),
-                finalNeedsBootstrap = finalInspection.NeedsBootstrap,
-                finalDetail = finalInspection.Detail,
-                elapsedMs = ensureInstalledStopwatch.ElapsedMilliseconds,
-            });
-        // #endregion
     }
 
     /// <summary>

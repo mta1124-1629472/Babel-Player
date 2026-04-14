@@ -323,22 +323,6 @@ public sealed class ContainerizedInferenceClient
 
             const string endpoint = "/diarize";
             _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H3",
-                location: "ContainerizedInferenceClient.cs:DiarizeAsync",
-                message: "Posting diarization request to managed GPU host",
-                data: new
-                {
-                    endpoint,
-                    serviceUrl = _inferenceServiceUrl,
-                    audioFilePath,
-                    normalizedEngine,
-                    minSpeakers,
-                    maxSpeakers,
-                });
-            // #endregion
 
             using var content = new MultipartFormDataContent();
             await using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
@@ -367,20 +351,6 @@ public sealed class ContainerizedInferenceClient
         catch (Exception ex)
         {
             _log.Error($"Diarization failed: {ex.Message}", ex);
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H3",
-                location: "ContainerizedInferenceClient.cs:DiarizeAsync",
-                message: "Managed GPU diarization request failed",
-                data: new
-                {
-                    audioFilePath,
-                    engine,
-                    exceptionType = ex.GetType().FullName,
-                    error = ex.Message,
-                });
-            // #endregion
             return new DiarizationResult(false, [], 0, ex.Message);
         }
     }

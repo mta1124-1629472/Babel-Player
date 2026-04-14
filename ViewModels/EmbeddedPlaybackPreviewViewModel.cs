@@ -201,58 +201,12 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         try
         {
             var refreshStopwatch = Stopwatch.StartNew();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H28",
-                location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
-                message: "RefreshSegmentsAsync started",
-                data: new
-                {
-                    providedSegments = segments?.Count,
-                    managedThreadId = Environment.CurrentManagedThreadId,
-                    syncContext = Dispatcher.UIThread.CheckAccess() ? "UI" : "NonUI",
-                });
-            // #endregion
             var list = segments ?? await _coordinator.GetSegmentWorkflowListAsync();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H28",
-                location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
-                message: "RefreshSegmentsAsync loaded workflow segment list",
-                data: new
-                {
-                    listCount = list.Count,
-                });
-            // #endregion
             _isUpdatingActiveSegment = true;
             try
             {
-                // #region agent log
-                WriteDebugLog(
-                    runId: "initial",
-                    hypothesisId: "H29",
-                    location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
-                    message: "About to replace Segments collection",
-                    data: new
-                    {
-                        incomingCount = list.Count,
-                    });
-                // #endregion
                 SelectedSegment = null;
                 Segments = new ObservableCollection<WorkflowSegmentState>(list);
-                // #region agent log
-                WriteDebugLog(
-                    runId: "initial",
-                    hypothesisId: "H29",
-                    location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
-                    message: "Replaced Segments collection",
-                    data: new
-                    {
-                        segmentsCount = Segments.Count,
-                    });
-                // #endregion
                 HasSegments = Segments.Count > 0;
                 _parent.StatusText = HasSegments
                     ? $"{Segments.Count} segments loaded."
@@ -260,30 +214,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
                 _parent.ClearStatusErrorDetail();
                 if (IsSubtitleModeOn)
                 {
-                    // #region agent log
-                    WriteDebugLog(
-                        runId: "initial",
-                        hypothesisId: "H29",
-                        location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
-                        message: "Applying subtitle state during refresh",
-                        data: new
-                        {
-                            isSubtitleModeOn = IsSubtitleModeOn,
-                            activeSrtPath = _activeSrtPath,
-                        });
-                    // #endregion
                     ApplySubtitleState();
-                    // #region agent log
-                    WriteDebugLog(
-                        runId: "initial",
-                        hypothesisId: "H29",
-                        location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
-                        message: "Applied subtitle state during refresh",
-                        data: new
-                        {
-                            activeSrtPath = _activeSrtPath,
-                        });
-                    // #endregion
                 }
             }
             finally
@@ -291,35 +222,11 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
                 _isUpdatingActiveSegment = false;
             }
             refreshStopwatch.Stop();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H28",
-                location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
-                message: "RefreshSegmentsAsync completed",
-                data: new
-                {
-                    elapsedMs = refreshStopwatch.ElapsedMilliseconds,
-                    segmentCount = Segments.Count,
-                });
-            // #endregion
         }
         catch (Exception ex)
         {
             _parent.StatusText = $"Failed to load segments: {ex.Message}";
             _parent.SetStatusErrorDetail("Load Segments failed", ex);
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H28",
-                location: "EmbeddedPlaybackPreviewViewModel.cs:RefreshSegmentsAsync",
-                message: "RefreshSegmentsAsync failed",
-                data: new
-                {
-                    exceptionType = ex.GetType().FullName,
-                    error = ex.Message,
-                });
-            // #endregion
         }
     }
 
@@ -530,44 +437,10 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     partial void OnSegmentsChanged(ObservableCollection<WorkflowSegmentState> value)
     {
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H30",
-            location: "EmbeddedPlaybackPreviewViewModel.cs:OnSegmentsChanged",
-            message: "OnSegmentsChanged entered",
-            data: new
-            {
-                valueCount = value.Count,
-                managedThreadId = Environment.CurrentManagedThreadId,
-            });
-        // #endregion
         var sorted = value.ToArray();
         Array.Sort(sorted, (a, b) => a.StartSeconds.CompareTo(b.StartSeconds));
         _sortedSegments = sorted;
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H30",
-            location: "EmbeddedPlaybackPreviewViewModel.cs:OnSegmentsChanged",
-            message: "OnSegmentsChanged sorted segment cache",
-            data: new
-            {
-                sortedCount = _sortedSegments.Length,
-            });
-        // #endregion
         _parent.SpeakerRouting.RebuildSpeakerIds(value, SelectedSegment?.SpeakerId);
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H30",
-            location: "EmbeddedPlaybackPreviewViewModel.cs:OnSegmentsChanged",
-            message: "OnSegmentsChanged completed",
-            data: new
-            {
-                speakerCount = _parent.SpeakerRouting.SpeakerIds.Count,
-            });
-        // #endregion
     }
 
     private void OnPositionTimerTick(object? sender, EventArgs e)

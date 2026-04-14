@@ -183,38 +183,7 @@ public sealed partial class SessionWorkflowCoordinator
         {
             ProviderReadiness readiness;
             IDiarizationProvider provider;
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H15",
-                location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                message: "Diarization execution entered",
-                data: new
-                {
-                    provider = CurrentSettings.DiarizationProvider,
-                    managedThreadId = Environment.CurrentManagedThreadId,
-                    syncContext = SynchronizationContext.Current?.GetType().FullName,
-                    minSpeakers = effectiveMinSpeakers,
-                    maxSpeakers = effectiveMaxSpeakers,
-                    sourcePath = audioPath,
-                });
-            // #endregion
 
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H1",
-                location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                message: "Resolved diarization runtime selection",
-                data: new
-                {
-                    provider = CurrentSettings.DiarizationProvider,
-                    usesContainerizedRuntime,
-                    audioPath = effectiveAudioPath,
-                    minSpeakers = effectiveMinSpeakers,
-                    maxSpeakers = effectiveMaxSpeakers,
-                });
-            // #endregion
 
             if (usesContainerizedRuntime)
             {
@@ -227,21 +196,6 @@ public sealed partial class SessionWorkflowCoordinator
                         .ConfigureAwait(false)
                     : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
 
-                // #region agent log
-                WriteDebugLog(
-                    runId: "initial",
-                    hypothesisId: "H3",
-                    location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                    message: "Containerized diarization readiness gate evaluated",
-                    data: new
-                    {
-                        provider = CurrentSettings.DiarizationProvider,
-                        readinessIsReady = readiness.IsReady,
-                        readinessBlockingReason = readiness.BlockingReason,
-                        hasContainerizedProbe = ContainerizedProbe is not null,
-                        effectiveGpuServiceUrl = CurrentSettings.EffectiveGpuServiceUrl,
-                    });
-                // #endregion
 
                 if (!readiness.IsReady)
                 {
@@ -258,21 +212,6 @@ public sealed partial class SessionWorkflowCoordinator
                 var ensuredReady = await provider.EnsureReadyAsync(CurrentSettings, ct: ct).ConfigureAwait(false);
                 readiness = provider.CheckReadiness(CurrentSettings, KeyStore);
 
-                // #region agent log
-                WriteDebugLog(
-                    runId: "initial",
-                    hypothesisId: "H2",
-                    location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                    message: "Local diarization provider readiness after EnsureReadyAsync",
-                    data: new
-                    {
-                        provider = CurrentSettings.DiarizationProvider,
-                        providerType = provider.GetType().FullName,
-                        ensuredReady,
-                        readinessIsReady = readiness.IsReady,
-                        readinessBlockingReason = readiness.BlockingReason,
-                    });
-                // #endregion
 
                 if (!readiness.IsReady)
                 {
@@ -291,119 +230,29 @@ public sealed partial class SessionWorkflowCoordinator
                       $"minSpeakers={effectiveMinSpeakers?.ToString() ?? "auto"}, " +
                       $"maxSpeakers={effectiveMaxSpeakers?.ToString() ?? "auto"}");
             var providerCallStopwatch = Stopwatch.StartNew();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H15",
-                location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                message: "Invoking provider.DiarizeAsync",
-                data: new
-                {
-                    provider = CurrentSettings.DiarizationProvider,
-                    requestAudioPath = request.SourceAudioPath,
-                    requestMinSpeakers = request.MinSpeakers,
-                    requestMaxSpeakers = request.MaxSpeakers,
-                });
-            // #endregion
             var result = await provider.DiarizeAsync(request, ct);
             providerCallStopwatch.Stop();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H18",
-                location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                message: "provider.DiarizeAsync returned",
-                data: new
-                {
-                    provider = CurrentSettings.DiarizationProvider,
-                    elapsedMs = providerCallStopwatch.ElapsedMilliseconds,
-                    success = result.Success,
-                    reportedSpeakerCount = result.SpeakerCount,
-                    distinctSpeakerIds = result.Segments.Select(segment => segment.SpeakerId).Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
-                    segmentCount = result.Segments.Count,
-                    errorMessage = result.ErrorMessage,
-                });
-            // #endregion
 
             if (!result.Success)
             {
                 _log.Warning($"Diarization failed: {result.ErrorMessage}");
-                // #region agent log
-                WriteDebugLog(
-                    runId: "initial",
-                    hypothesisId: "H4",
-                    location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                    message: "Provider returned unsuccessful diarization result",
-                    data: new
-                    {
-                        provider = CurrentSettings.DiarizationProvider,
-                        errorMessage = result.ErrorMessage,
-                    });
-                // #endregion
                 throw new InvalidOperationException(result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
             }
 
             var transcriptMergeStopwatch = Stopwatch.StartNew();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H24",
-                location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                message: "Starting transcript speaker merge",
-                data: new
-                {
-                    transcriptPath,
-                    segmentCount = result.Segments.Count,
-                });
-            // #endregion
             var transcriptChanged = await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
             transcriptMergeStopwatch.Stop();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H24",
-                location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                message: "Completed transcript speaker merge",
-                data: new
-                {
-                    elapsedMs = transcriptMergeStopwatch.ElapsedMilliseconds,
-                    transcriptChanged,
-                });
-            // #endregion
             var translationChanged = false;
 
             if (!string.IsNullOrWhiteSpace(CurrentSession.TranslationPath) &&
                 File.Exists(CurrentSession.TranslationPath))
             {
                 var translationMergeStopwatch = Stopwatch.StartNew();
-                // #region agent log
-                WriteDebugLog(
-                    runId: "initial",
-                    hypothesisId: "H25",
-                    location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                    message: "Starting translation speaker merge",
-                    data: new
-                    {
-                        translationPath = CurrentSession.TranslationPath,
-                    });
-                // #endregion
                 translationChanged = await MergeSpeakerIdsIntoTranslationAsync(
                     transcriptPath,
                     CurrentSession.TranslationPath,
                     ct);
                 translationMergeStopwatch.Stop();
-                // #region agent log
-                WriteDebugLog(
-                    runId: "initial",
-                    hypothesisId: "H25",
-                    location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                    message: "Completed translation speaker merge",
-                    data: new
-                    {
-                        elapsedMs = translationMergeStopwatch.ElapsedMilliseconds,
-                        translationChanged,
-                    });
-                // #endregion
             }
 
             var nextStage = resultingStage ?? (
@@ -422,19 +271,6 @@ public sealed partial class SessionWorkflowCoordinator
                 SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
                 StatusMessage = nextStatusMessage,
             };
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H26",
-                location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                message: "Saving session after diarization",
-                data: new
-                {
-                    nextStage = nextStage.ToString(),
-                    speakerCount = result.SpeakerCount,
-                    segmentCount = result.Segments.Count,
-                });
-            // #endregion
             SaveCurrentSession();
 
             _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
@@ -447,19 +283,6 @@ public sealed partial class SessionWorkflowCoordinator
         finally
         {
             totalStopwatch.Stop();
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H15",
-                location: "SessionWorkflowCoordinator.Playback.cs:ExecuteDiarizationAsync",
-                message: "Diarization execution exiting",
-                data: new
-                {
-                    provider = CurrentSettings.DiarizationProvider,
-                    totalElapsedMs = totalStopwatch.ElapsedMilliseconds,
-                    managedThreadId = Environment.CurrentManagedThreadId,
-                });
-            // #endregion
             if (tempExtractedAudio is not null)
             {
                 try

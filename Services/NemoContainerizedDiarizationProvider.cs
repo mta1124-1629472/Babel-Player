@@ -110,20 +110,6 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
             ProviderNames.NemoLocal,
             _probe,
             ct).ConfigureAwait(false);
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H3",
-            location: "NemoContainerizedDiarizationProvider.cs:EnsureReadyAsync",
-            message: "Nemo containerized execution readiness result",
-            data: new
-            {
-                readinessIsReady = readiness.IsReady,
-                readinessBlockingReason = readiness.BlockingReason,
-                provider = ProviderNames.NemoLocal,
-                serviceUrl = settings.EffectiveGpuServiceUrl,
-            });
-        // #endregion
         progress?.Report(1.0);
         return readiness.IsReady;
     }
@@ -150,20 +136,6 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
                 request.MaxSpeakers,
                 ct)
             .ConfigureAwait(false);
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H4",
-            location: "NemoContainerizedDiarizationProvider.cs:DiarizeAsync",
-            message: "Nemo provider received diarization response from containerized client",
-            data: new
-            {
-                success = result.Success,
-                speakerCount = result.SpeakerCount,
-                segmentCount = result.Segments.Count,
-                errorMessage = result.ErrorMessage,
-            });
-        // #endregion
         return result;
     }
 }

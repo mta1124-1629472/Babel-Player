@@ -185,25 +185,6 @@ public static class ContainerizedProviderReadiness
             waitTimeout: waitOptions.ExecutionProbeBudget,
             cancellationToken).ConfigureAwait(false);
         probeStopwatch.Stop();
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H22",
-            location: "ContainerizedProviderReadiness.cs:CheckForExecutionAsync",
-            message: "Initial execution probe wait completed",
-            data: new
-            {
-                stage = stage.ToString(),
-                providerId,
-                serviceUrl,
-                elapsedMs = probeStopwatch.ElapsedMilliseconds,
-                probeState = probeResult.State.ToString(),
-                probeError = probeResult.ErrorDetail,
-                capabilitiesError = probeResult.CapabilitiesError,
-                hasCapabilities = probeResult.Capabilities is not null,
-                isStale = probeResult.IsStale,
-            });
-        // #endregion
 
         if (IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
         {
@@ -222,43 +203,9 @@ public static class ContainerizedProviderReadiness
                 if (!IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
                     break;
             }
-            // #region agent log
-            WriteDebugLog(
-                runId: "initial",
-                hypothesisId: "H23",
-                location: "ContainerizedProviderReadiness.cs:CheckForExecutionAsync",
-                message: "Capability warmup probe loop completed",
-                data: new
-                {
-                    stage = stage.ToString(),
-                    providerId,
-                    attempts = warmupAttempts,
-                    elapsedMs = warmupSw.ElapsedMilliseconds,
-                    finalProbeState = probeResult.State.ToString(),
-                    finalProbeError = probeResult.ErrorDetail,
-                    finalCapabilitiesError = probeResult.CapabilitiesError,
-                    finalHasCapabilities = probeResult.Capabilities is not null,
-                });
-            // #endregion
         }
 
         var readiness = MapProbeResultToReadiness(settings, probeResult, stage, providerId);
-        // #region agent log
-        WriteDebugLog(
-            runId: "initial",
-            hypothesisId: "H22",
-            location: "ContainerizedProviderReadiness.cs:CheckForExecutionAsync",
-            message: "Mapped execution probe to provider readiness",
-            data: new
-            {
-                stage = stage.ToString(),
-                providerId,
-                readinessIsReady = readiness.IsReady,
-                readinessBlockingReason = readiness.BlockingReason,
-                probeState = probeResult.State.ToString(),
-                hasCapabilities = probeResult.Capabilities is not null,
-            });
-        // #endregion
         return readiness;
     }
 
