@@ -20,7 +20,7 @@ jobs:
     steps:
       # Standard checkout — Git LFS is not used for tracked files in this repo.
       - name: Checkout (no LFS)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           lfs: false
 
@@ -29,7 +29,7 @@ jobs:
         run: rm -rf .claude BabelPlayer.Tests/Pipe || true
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
 
