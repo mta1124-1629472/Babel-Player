@@ -161,3 +161,7 @@ gha-creds-*.json
 
 # APM dependencies
 apm_modules/
+/.github/instructions
+/.github/prompts
+/.github/agents
+/.github/skills
