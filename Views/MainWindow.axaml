@@ -17,6 +17,8 @@
         Background="{DynamicResource WindowBackgroundBrush}">
     <Window.Styles>
         <Style Selector="Border.left-pane">
+            <Setter Property="Width" Value="260" />
+            <Setter Property="Opacity" Value="1" />
             <Setter Property="Transitions">
                 <Transitions>
                     <DoubleTransition Property="Width" Duration="0:0:0.18" />
@@ -32,6 +34,8 @@
         </Style>
 
         <Style Selector="Border.right-pane">
+            <Setter Property="Width" Value="280" />
+            <Setter Property="Opacity" Value="1" />
             <Setter Property="Transitions">
                 <Transitions>
                     <DoubleTransition Property="Width" Duration="0:0:0.18" />
@@ -160,7 +164,7 @@
         <!-- ═══════════════════════════════════════════════════
              LEFT PANEL: Pipeline
              ═══════════════════════════════════════════════════ -->
-<Border Grid.Row="1" Grid.Column="0" Width="260" Background="{DynamicResource PanelBackgroundBrush}"
+<Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}"
         Classes="left-pane"
         Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
@@ -1043,7 +1047,7 @@
         <!-- ═══════════════════════════════════════════════════
              RIGHT PANEL: Segments
              ═══════════════════════════════════════════════════ -->
-        <Border Grid.Row="1" Grid.Column="2" Width="280" Background="{DynamicResource PanelBackgroundBrush}"
+        <Border Grid.Row="1" Grid.Column="2" Background="{DynamicResource PanelBackgroundBrush}"
                 Classes="right-pane"
                 Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
