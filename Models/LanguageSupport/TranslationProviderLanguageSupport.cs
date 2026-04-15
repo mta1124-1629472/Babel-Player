@@ -17,8 +17,8 @@ public static class TranslationProviderLanguageSupport
     public static TranslationLanguageSupportMode GetTranslationMode(string providerId) =>
         providerId switch
         {
-            ProviderNames.OpenAi => TranslationLanguageSupportMode.Multilingual,
-            ProviderNames.GeminiTranslation => TranslationLanguageSupportMode.Multilingual,
+            ProviderNames.OpenAi => OpenAiTranslationCatalog.SupportMode,
+            ProviderNames.GeminiTranslation => GeminiTranslationCatalog.SupportMode,
             _ => TranslationLanguageSupportMode.Finite,
         };
 

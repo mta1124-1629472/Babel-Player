@@ -20,13 +20,13 @@ public sealed class NllbTranslationProvider : PythonSubprocessServiceBase, ITran
         _model = model;
     }
 
-    private static readonly string NllbScript = $@"
+    private const string NllbScriptTemplate = @"
 import sys, json
 
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-FLORES = {{ {NllbLanguageCatalog.BuildPythonDictLiteral()} }}
+FLORES = __FLORES_DICT_BODY__
 
 input_path  = sys.argv[1]
 output_path = sys.argv[2]
@@ -72,13 +72,18 @@ with open(output_path, 'w', encoding='utf-8') as f:
 print('NLLB translation complete')
 ";
 
-    private static readonly string NllbSegmentScript = $@"
+    private static readonly string NllbScript = NllbScriptTemplate.Replace(
+        "__FLORES_DICT_BODY__",
+        "{" + NllbLanguageCatalog.BuildPythonDictLiteral() + "}",
+        StringComparison.Ordinal);
+
+    private const string NllbSegmentScriptTemplate = @"
 import sys, json
 
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-FLORES = {{ {NllbLanguageCatalog.BuildPythonDictLiteral()} }}
+FLORES = __FLORES_DICT_BODY__
 
 src_lang   = sys.argv[1]
 tgt_lang   = sys.argv[2]
@@ -125,6 +130,11 @@ with open(json_path, 'w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
 print(f'NLLB single segment translated: {seg_id}')
 ";
+
+    private static readonly string NllbSegmentScript = NllbSegmentScriptTemplate.Replace(
+        "__FLORES_DICT_BODY__",
+        "{" + NllbLanguageCatalog.BuildPythonDictLiteral() + "}",
+        StringComparison.Ordinal);
 
     public async Task<TranslationResult> TranslateAsync(
         TranslationRequest request,

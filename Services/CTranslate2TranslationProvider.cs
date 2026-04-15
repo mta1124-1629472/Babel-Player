@@ -20,7 +20,7 @@ public class CTranslate2TranslationProvider : PythonSubprocessServiceBase, ITran
         _model = string.IsNullOrWhiteSpace(model) ? "nllb-200-distilled-600M" : model;
     }
 
-    private static readonly string TranslateScript = $@"
+    private const string TranslateScriptTemplate = @"
 import json
 import os
 import sys
@@ -28,7 +28,7 @@ import sys
 import ctranslate2
 from transformers import AutoTokenizer
 
-FLORES = {{ {NllbLanguageCatalog.BuildPythonDictLiteral()} }}
+FLORES = __FLORES_DICT_BODY__
 
 def translate_text(translator, tokenizer, target_prefix, text):
     if not text.strip():
@@ -77,7 +77,12 @@ with open(output_path, 'w', encoding='utf-8') as f:
 print('CTranslate2 translation complete')
 ";
 
-    private static readonly string TranslateSingleSegmentScript = $@"
+    private static readonly string TranslateScript = TranslateScriptTemplate.Replace(
+        "__FLORES_DICT_BODY__",
+        "{" + NllbLanguageCatalog.BuildPythonDictLiteral() + "}",
+        StringComparison.Ordinal);
+
+    private const string TranslateSingleSegmentScriptTemplate = @"
 import json
 import os
 import sys
@@ -85,7 +90,7 @@ import sys
 import ctranslate2
 from transformers import AutoTokenizer
 
-FLORES = {{ {NllbLanguageCatalog.BuildPythonDictLiteral()} }}
+FLORES = __FLORES_DICT_BODY__
 
 src_lang = sys.argv[1]
 tgt_lang = sys.argv[2]
@@ -131,6 +136,11 @@ with open(json_path, 'w', encoding='utf-8') as f:
 
 print(f'CTranslate2 single segment translated: {seg_id}')
 ";
+
+    private static readonly string TranslateSingleSegmentScript = TranslateSingleSegmentScriptTemplate.Replace(
+        "__FLORES_DICT_BODY__",
+        "{" + NllbLanguageCatalog.BuildPythonDictLiteral() + "}",
+        StringComparison.Ordinal);
 
     public async Task<TranslationResult> TranslateAsync(
         TranslationRequest request,

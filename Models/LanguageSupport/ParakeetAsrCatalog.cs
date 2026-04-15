@@ -1,3 +1,5 @@
+using System;
+
 namespace Babel.Player.Models.LanguageSupport;
 
 /// <summary>Parakeet TDT in this repo is English-oriented; only <c>en</c> is treated as a validated ASR hint.</summary>
