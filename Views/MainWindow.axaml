@@ -15,9 +15,61 @@
         WindowDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
         Background="{DynamicResource WindowBackgroundBrush}">
+    <Window.Styles>
+        <Style Selector="Border.left-pane">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.18" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.left-pane.collapsed">
+            <Setter Property="Width" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <Style Selector="Border.right-pane">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.18" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.right-pane.collapsed">
+            <Setter Property="Width" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <Style Selector="Border.top-chrome">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Height" Duration="0:0:0.18" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.top-chrome.fullscreen-hidden">
+            <Setter Property="Height" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+    </Window.Styles>
 
     <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*,Auto">
         <Border Grid.Row="0"
+                Classes="top-chrome"
+                Classes.fullscreen-hidden="{Binding Playback.Preview.IsFullscreen}"
                 Grid.ColumnSpan="3"
                 Background="{DynamicResource SurfaceSubtleBrush}"
                 BorderBrush="{DynamicResource BorderBrush}"
@@ -33,6 +85,7 @@
                            VerticalAlignment="Center" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
                     <Button Content="—"
+                            Classes="chrome-button"
                             Width="36"
                             Height="28"
                             FontSize="14"
@@ -43,6 +96,7 @@
                             Click="OnMinimizeWindowClick"
                             AutomationProperties.Name="Minimize window" />
                     <Button Content="□"
+                            Classes="chrome-button"
                             Width="36"
                             Height="28"
                             FontSize="12"
@@ -53,6 +107,7 @@
                             Click="OnToggleMaximizeWindowClick"
                             AutomationProperties.Name="Maximize or restore window" />
                     <Button Content="✕"
+                            Classes="chrome-button"
                             Width="36"
                             Height="28"
                             FontSize="13"
@@ -81,8 +136,10 @@
              LEFT PANEL: Pipeline
              ═══════════════════════════════════════════════════ -->
 <Border Grid.Row="1" Grid.Column="0" Width="260" Background="{DynamicResource PanelBackgroundBrush}"
+        Classes="left-pane"
+        Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
-        IsVisible="{Binding Playback.Preview.IsSegmentPaneVisible}">
+        >
     <Border.Resources>
         <!-- Shadow the Application ThemeDictionary for all panel descendants.
              These values apply in both Light and Dark mode — the panel is always dark. -->
@@ -959,8 +1016,10 @@
              RIGHT PANEL: Segments
              ═══════════════════════════════════════════════════ -->
         <Border Grid.Row="1" Grid.Column="2" Width="280" Background="{DynamicResource PanelBackgroundBrush}"
+                Classes="right-pane"
+                Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
-                IsVisible="{Binding Playback.Preview.IsSegmentPaneVisible}">
+                >
             <Grid RowDefinitions="Auto,*">
 
                 <!-- Header -->

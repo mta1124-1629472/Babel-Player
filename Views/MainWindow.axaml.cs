@@ -19,6 +19,7 @@ namespace Babel.Player.Views;
 
 public partial class MainWindow : Window
 {
+    private const double ControlsActivityDebounceMs = 75;
     private LibMpvEmbeddedTransport? _embeddedTransport;
 
     private PropertyChangedEventHandler? _playbackPropertyChangedHandler;
@@ -30,6 +31,7 @@ public partial class MainWindow : Window
     private EventHandler? _windowScalingChangedHandler;
     private EventHandler? _screensChangedHandler;
     private Screens? _subscribedScreens;
+    private long _lastControlsActivityTickMs;
 
     public MainWindow()
     {
@@ -148,14 +150,25 @@ public partial class MainWindow : Window
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (DataContext is MainWindowViewModel vm)
-            vm.Playback.Preview.NotifyControlsActivity();
+        NotifyControlsActivityDebounced();
     }
 
     private void OnVideoNativePointerActivity(object? sender, EventArgs e)
     {
-        if (DataContext is MainWindowViewModel vm)
-            vm.Playback.Preview.NotifyControlsActivity();
+        NotifyControlsActivityDebounced();
+    }
+
+    private void NotifyControlsActivityDebounced()
+    {
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        var nowMs = Environment.TickCount64;
+        if (nowMs - _lastControlsActivityTickMs < ControlsActivityDebounceMs)
+            return;
+
+        _lastControlsActivityTickMs = nowMs;
+        vm.Playback.Preview.NotifyControlsActivity();
     }
 
     private void OnPlaybackPropertyChanged(object? sender, PropertyChangedEventArgs e)
