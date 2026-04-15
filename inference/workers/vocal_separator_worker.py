@@ -3,6 +3,7 @@
 
 import logging
 import os
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -12,7 +13,8 @@ DEFAULT_VOCALS_MODEL = "UVR-MDX-NET-Voc_FT.onnx"
 DEFAULT_INSTRUMENTAL_MODEL = "MDX23C-8KFFT-InstVoc_HQ.onnx"
 
 # Stable model cache directory — shared across requests, never inside TEMP_DIR
-SEPARATOR_MODEL_DIR = Path(os.environ.get("SEPARATOR_MODEL_DIR", "/tmp/babel_separator_models"))
+_default_model_dir = Path(tempfile.gettempdir()) / "babel_separator_models"
+SEPARATOR_MODEL_DIR = Path(os.environ.get("SEPARATOR_MODEL_DIR", str(_default_model_dir)))
 SEPARATOR_MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 _MDX_HOP_LENGTH = 1024
@@ -97,6 +99,13 @@ def run_vocal_separation(
             )
         vocals_path = pick_vocals(vocals_stems)
         instrumental_path = pick_instrumental(instrumental_stems)
+        # Discard the stems we don't use — each pass produces 2, we keep 1 from each
+        for rejected in vocals_stems:
+            if rejected != vocals_path:
+                rejected.unlink(missing_ok=True)
+        for rejected in instrumental_stems:
+            if rejected != instrumental_path:
+                rejected.unlink(missing_ok=True)
 
     logger.info(
         "Vocal separation complete — vocals=%s (%d bytes), instrumental=%s (%d bytes)",
