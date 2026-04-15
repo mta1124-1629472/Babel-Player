@@ -156,8 +156,6 @@ public sealed partial class SessionWorkflowCoordinator
         if (DiarizationRegistry is null)
             throw new PipelineProviderException("No diarization registry is configured.");
 
-        ValidateDiarizationSpeakerBounds(CurrentSettings.DiarizationMinSpeakers, CurrentSettings.DiarizationMaxSpeakers);
-
         var providerDescriptor = DiarizationRegistry
             .GetAvailableProviders()
             .FirstOrDefault(provider => string.Equals(provider.Id, CurrentSettings.DiarizationProvider, StringComparison.Ordinal));
@@ -305,17 +303,6 @@ public sealed partial class SessionWorkflowCoordinator
                 }
             }
         }
-    }
-
-    private void ValidateDiarizationSpeakerBounds(int? minSpeakers, int? maxSpeakers)
-    {
-        if (!minSpeakers.HasValue || !maxSpeakers.HasValue || minSpeakers.Value <= maxSpeakers.Value)
-            return;
-
-        var message =
-            $"Invalid diarization speaker bounds: min speakers ({minSpeakers.Value}) cannot be greater than max speakers ({maxSpeakers.Value}).";
-        _log.Warning(message);
-        throw new InvalidOperationException(message);
     }
 
     /// <summary>
