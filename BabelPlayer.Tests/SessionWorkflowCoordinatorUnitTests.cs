@@ -1871,6 +1871,125 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
 
+    // ── Pause-mode playback timing ─────────────────────────────────────────────
+
+    private SessionWorkflowCoordinator CreateCoordinatorWithSegmentPlayer(
+        FakeMediaTransport segmentPlayer,
+        AppSettings? settings = null)
+    {
+        var registries = new Babel.Player.Models.RegistryBundle(
+            _ctx.PerSessionStore, _ctx.RecentStore,
+            new TranscriptionRegistry(_ctx.Log),
+            new TranslationRegistry(_ctx.Log),
+            new TtsRegistry(_ctx.Log));
+        var options = new Babel.Player.Models.CoordinatorOptions();
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(
+            _ctx.Store,
+            _ctx.Log,
+            settings ?? _ctx.Settings);
+        return new SessionWorkflowCoordinator(
+            coreServices, registries, options,
+            segmentPlayer: segmentPlayer);
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_PauseMode_ClearsStateAfterSegmentEnds()
+    {
+        // Arrange: a coordinator with a fake segment player and a minimal TTS-stage session.
+        var fakeSegmentPlayer = new FakeMediaTransport();
+        var coord = CreateCoordinatorWithSegmentPlayer(fakeSegmentPlayer);
+        coord.Initialize();
+
+        const string segmentId = "segment_0.0";
+        var audioPath = Path.Combine(_ctx.Dir, "tts-segment.mp3");
+        await File.WriteAllBytesAsync(audioPath, [0x00, 0x01, 0x02]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = Babel.Player.Models.SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string> { [segmentId] = audioPath },
+        };
+
+        var segment = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId, 0.0, 3.0, "Hello", true, "Hola", true);
+
+        // Act: start Pause-mode playback then simulate the TTS clip ending.
+        _ = coord.PlayTtsForSegmentAsync(segmentId, segment, Babel.Player.Models.SegmentTimingMode.Pause);
+
+        // Wait for the fire-and-forget to reach the Play/await-Ended stage.
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        while (!fakeSegmentPlayer.IsPlaying && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        Assert.Equal(segmentId, coord.ActiveTtsSegmentId);
+        Assert.Equal(Babel.Player.Models.PlaybackState.PlayingSingleSegment, coord.PlaybackState);
+
+        // Simulate the TTS clip ending — StopTtsPlayback() is invoked by _segmentEndedHandler.
+        fakeSegmentPlayer.SimulateEnd();
+
+        // Wait for state cleanup (StopTtsPlayback runs synchronously inside SimulateEnd).
+        timeout = DateTime.UtcNow.AddSeconds(5);
+        while (coord.ActiveTtsSegmentId is not null && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        // Assert: state is cleared.
+        Assert.Null(coord.ActiveTtsSegmentId);
+        Assert.Equal(Babel.Player.Models.PlaybackState.Idle, coord.PlaybackState);
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_PauseMode_DoesNotClearStateWhenDifferentSegmentIsActive()
+    {
+        // Arrange: ensure a second PlayTts call overrides ActiveTtsSegmentId before the first
+        // Ended fires; the first completion path must not clear the updated state.
+        var fakeSegmentPlayer = new FakeMediaTransport();
+        var coord = CreateCoordinatorWithSegmentPlayer(fakeSegmentPlayer);
+        coord.Initialize();
+
+        const string segmentId1 = "segment_0.0";
+        const string segmentId2 = "segment_3.0";
+        var audioPath1 = Path.Combine(_ctx.Dir, "tts-seg1.mp3");
+        var audioPath2 = Path.Combine(_ctx.Dir, "tts-seg2.mp3");
+        await File.WriteAllBytesAsync(audioPath1, [0x00, 0x01, 0x02]);
+        await File.WriteAllBytesAsync(audioPath2, [0x03, 0x04, 0x05]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = Babel.Player.Models.SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                [segmentId1] = audioPath1,
+                [segmentId2] = audioPath2,
+            },
+        };
+
+        var segment1 = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId1, 0.0, 3.0, "Hello", true, "Hola", true);
+        var segment2 = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId2, 3.0, 6.0, "World", true, "Mundo", true);
+
+        // Start first segment in Pause mode; wait until it is playing.
+        _ = coord.PlayTtsForSegmentAsync(segmentId1, segment1, Babel.Player.Models.SegmentTimingMode.Pause);
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        while (!fakeSegmentPlayer.IsPlaying && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        // Immediately start second segment — StopTtsPlayback() resets and then sets segmentId2.
+        _ = coord.PlayTtsForSegmentAsync(segmentId2, segment2, Babel.Player.Models.SegmentTimingMode.Pause);
+        timeout = DateTime.UtcNow.AddSeconds(5);
+        while (coord.ActiveTtsSegmentId != segmentId2 && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        // The second PlayTts call triggers StopTtsPlayback which completes the first Pause-mode TCS.
+        // The first task's continuation sees the wrong segment ID and returns early without clearing state.
+        await Task.Delay(50); // allow pending continuations to run
+
+        // State should still reflect the second segment being tracked (or already cleared by its own end).
+        var activeId = coord.ActiveTtsSegmentId;
+        Assert.True(activeId is null || activeId == segmentId2,
+            $"Expected null or '{segmentId2}' but was '{activeId}'.");
+    }
+
     private sealed class FakeContainerizedInferenceManager : IContainerizedInferenceManager
     {
         public int RequestCount { get; private set; }

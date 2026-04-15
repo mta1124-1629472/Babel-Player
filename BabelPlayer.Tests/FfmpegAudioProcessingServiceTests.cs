@@ -321,4 +321,51 @@ public sealed class FfmpegAudioProcessingServiceTests : IDisposable
         Assert.IsType<string>(result);
         return (string)result!;
     }
+
+    // ── TimeStretchAsync ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task TimeStretchAsync_WhenTargetDurationIsZero_ReturnsFalse()
+    {
+        var inputPath = Path.Combine(_dir, "input.mp3");
+        var outputPath = Path.Combine(_dir, "output.mp3");
+        await File.WriteAllBytesAsync(inputPath, [0x00, 0x01, 0x02]);
+
+        var result = await _service.TimeStretchAsync(inputPath, outputPath,
+            targetDurationSeconds: 0.0, cancellationToken: CancellationToken.None);
+
+        Assert.False(result);
+        Assert.False(File.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task TimeStretchAsync_WhenFfprobeNotAvailable_ReturnsFalse()
+    {
+        if (DependencyLocator.FindFfprobe() is not null)
+            return; // Only runs when ffprobe is absent
+
+        var inputPath = Path.Combine(_dir, "input.mp3");
+        var outputPath = Path.Combine(_dir, "output.mp3");
+        await File.WriteAllBytesAsync(inputPath, [0x00, 0x01, 0x02]);
+
+        var result = await _service.TimeStretchAsync(inputPath, outputPath,
+            targetDurationSeconds: 1.0, cancellationToken: CancellationToken.None);
+
+        Assert.False(result);
+        Assert.False(File.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task ProbeDurationAsync_WhenFfprobeNotAvailable_ReturnsNull()
+    {
+        if (DependencyLocator.FindFfprobe() is not null)
+            return; // Only runs when ffprobe is absent
+
+        var filePath = Path.Combine(_dir, "audio.mp3");
+        await File.WriteAllBytesAsync(filePath, [0x00, 0x01]);
+
+        var result = await _service.ProbeDurationAsync(filePath, CancellationToken.None);
+
+        Assert.Null(result);
+    }
 }
