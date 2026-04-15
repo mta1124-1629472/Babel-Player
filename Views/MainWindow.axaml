@@ -780,7 +780,7 @@
         <!-- ═══════════════════════════════════════════════════
              CENTER PANEL: Video player
              ═══════════════════════════════════════════════════ -->
-        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*"
+        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto"
               Background="{DynamicResource WindowBackgroundBrush}">
 
             <!-- Diagnostics warning bar (hidden when all deps available) -->
@@ -815,16 +815,9 @@
             </Grid>
 
             <!-- Scrub bar -->
-            <Border Grid.Row="1" Padding="12,5"
+            <Border Grid.Row="2" Padding="12,5"
                     Classes="player-controls-row"
-                    Classes.hidden="{Binding !Playback.Preview.IsControlsVisible}"
-                    VerticalAlignment="Bottom"
-                    Margin="12,0,12,76"
-                    ZIndex="20"
-                    Background="#B0141622"
-                    BorderBrush="{DynamicResource BorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8">
+                    Classes.hidden="{Binding !Playback.Preview.IsControlsVisible}">
                 <Grid ColumnDefinitions="40,*,40">
                      <TextBlock Grid.Column="0"
                                 Text="{Binding Playback.Preview.SourcePositionFormatted}"
@@ -844,16 +837,9 @@
             </Border>
 
             <!-- Controls bar -->
-            <Border Grid.Row="1" Padding="12,9"
+            <Border Grid.Row="3" Padding="12,9"
                     Classes="player-controls-row"
-                    Classes.hidden="{Binding !Playback.Preview.IsControlsVisible}"
-                    VerticalAlignment="Bottom"
-                    Margin="12,0,12,12"
-                    ZIndex="21"
-                    Background="#CC141826"
-                    BorderBrush="{DynamicResource BorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="10">
+                    Classes.hidden="{Binding !Playback.Preview.IsControlsVisible}">
                 <Border.Styles>
                     <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
                     <Style Selector="Button.dev-pill">
