@@ -41,9 +41,55 @@ public interface IAudioProcessingService
     /// </summary>
     /// <param name="inputPath">Source media path (video or audio).</param>
     /// <param name="outputPath">Target WAV path.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <summary>
+        /// Extracts the complete audio track from the specified media file and writes it as a 16 kHz, single-channel (mono) WAV file.
+        /// </summary>
+        /// <param name="inputPath">Path to the source media file containing the audio track to extract.</param>
+        /// <param name="outputPath">Destination path for the produced 16 kHz mono WAV file.</param>
+        /// <param name="cancellationToken">Token to observe while waiting for the operation to complete; cancels the extraction when signaled.</param>
     Task ExtractFullAudioAsync(
         string inputPath,
         string outputPath,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Time-stretches an audio file to the target duration without changing pitch.
+    /// Uses ffmpeg atempo; acceptable tempo range is [0.5, 2.0] (chained as needed).
+    /// Returns false and leaves <paramref name="outputPath"/> absent when the stretch
+    /// ratio falls outside <paramref name="minRatio"/>–<paramref name="maxRatio"/>.
+    /// </summary>
+    /// <param name="inputPath">Source audio file.</param>
+    /// <param name="outputPath">Output audio file path (overwritten if it exists).</param>
+    /// <param name="targetDurationSeconds">Desired output duration in seconds.</param>
+    /// <param name="minRatio">Minimum acceptable tempo ratio (default 0.75 — 25% slower).</param>
+    /// <param name="maxRatio">Maximum acceptable tempo ratio (default 1.35 — 35% faster).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <summary>
+        /// Adjusts the input audio's playback speed to match the specified target duration without changing pitch and writes the result to the output path when the required tempo ratio falls within the allowed range.
+        /// </summary>
+        /// <param name="inputPath">Path to the source media file to be time-stretched.</param>
+        /// <param name="outputPath">Path where the stretched audio will be written; existing file will be overwritten when stretching occurs.</param>
+        /// <param name="targetDurationSeconds">Desired duration, in seconds, of the resulting audio.</param>
+        /// <param name="minRatio">Minimum allowed tempo ratio (output duration / input duration) to permit processing.</param>
+        /// <param name="maxRatio">Maximum allowed tempo ratio (output duration / input duration) to permit processing.</param>
+        /// <param name="cancellationToken">Token to observe for cancellation of the operation.</param>
+        /// <returns>`true` if the audio was time-stretched and the output file was written; `false` if the computed tempo ratio is outside the specified [minRatio, maxRatio] bounds and no output is produced.</returns>
+    Task<bool> TimeStretchAsync(
+        string inputPath,
+        string outputPath,
+        double targetDurationSeconds,
+        double minRatio = 0.75,
+        double maxRatio = 1.35,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Probes the duration of an audio or video file using ffprobe.
+    /// Returns null if ffprobe is unavailable or the file cannot be probed.
+    /// <summary>
+/// Probes the duration of an audio or video file using ffprobe.
+/// </summary>
+/// <param name="filePath">Path to the media file to probe.</param>
+/// <param name="cancellationToken">Cancellation token to cancel the probing operation.</param>
+/// <returns>The duration in seconds when probing succeeds; `null` if ffprobe is unavailable or probing fails.</returns>
+    Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default);
 }

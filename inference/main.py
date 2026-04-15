@@ -445,6 +445,7 @@ class CapabilitiesResponse(BaseModel):
     translation: StageCapability
     tts: StageCapability
     diarization: StageCapability
+    vocal_separation: StageCapability
 
 
 class WordTimestampResponse(BaseModel):
@@ -524,6 +525,15 @@ class QwenReferenceResponse(BaseModel):
     error_message: Optional[str] = None
 
 
+class VocalSeparationResponse(BaseModel):
+    success: bool
+    vocals_filename: str           # retrieve via /tts/audio/{filename}
+    instrumental_filename: str     # retrieve via /tts/audio/{filename}
+    vocals_file_size_bytes: int
+    instrumental_file_size_bytes: int
+    vocals_model: str
+    instrumental_model: str
+    error_message: Optional[str] = None
 
 
 # ============================================================================
@@ -581,6 +591,12 @@ def _probe_nllb_available() -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _probe_vocal_separator_available() -> tuple[bool, str]:
+    try:
+        from audio_separator.separator import Separator  # noqa: F401
+        return True, "audio-separator available"
+    except Exception as exc:
+        return False, str(exc)
 
 
 def _find_module(module_name: str):
@@ -1556,6 +1572,7 @@ async def get_stage_capabilities():
     """
     tx_ready, tx_detail = _probe_whisper_available()
     tl_ready, tl_detail = _probe_nllb_available()
+    sep_ready, sep_detail = _probe_vocal_separator_available()
 
     qwen_ready, qwen_detail = _probe_qwen_available()
     tts_ready = qwen_ready
@@ -1592,6 +1609,11 @@ async def get_stage_capabilities():
             },
             default_provider=NEMO_DIARIZATION_DEFAULT_PROVIDER,
             engines=["nemo"],
+        ),
+        vocal_separation=StageCapability(
+            ready=sep_ready,
+            detail=sep_detail,
+            engines=["audio-separator"],
         ),
     )
 
@@ -2274,6 +2296,12 @@ def _deferred_cleanup_temp(path: Path) -> None:
     logger.warning("Could not delete temp file after retries: %s", path)
 
 
+async def _deferred_cleanup_after_delay(path: Path, delay_seconds: int = 1800) -> None:
+    """Remove a file after a delay, allowing the coordinator time to retrieve it."""
+    await asyncio.sleep(delay_seconds)
+    _deferred_cleanup_temp(path)
+
+
 @app.post("/diarize", response_model=DiarizationResponse)
 async def diarize(
     audio: UploadFile = File(...),
@@ -2339,6 +2367,61 @@ async def diarize_wespeaker(
         status_code=410,
         detail="WeSpeaker moved to the managed CPU runtime and is no longer served by the managed GPU host.",
     )
+
+
+# ============================================================================
+# Vocal separation
+# ============================================================================
+
+@app.post("/separate/vocals", response_model=VocalSeparationResponse)
+async def separate_vocals(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    vocals_model: str = Form("UVR-MDX-NET-Voc_FT.onnx"),
+    instrumental_model: str = Form("MDX23C-8KFFT-InstVoc_HQ.onnx"),
+):
+    """
+    Split uploaded audio or video into a vocals stem and an instrumental stem.
+
+    vocals_filename    → download via /tts/audio/{filename}, feed to /transcribe
+    instrumental_filename → download via /tts/audio/{filename}, mix under TTS dub in final assembly
+    """
+    temp_src: Optional[Path] = None
+    try:
+        safe_name = Path(file.filename or "upload").name or "upload"
+        temp_src = TEMP_DIR / f"sep_src_{uuid4().hex}_{safe_name}"
+        temp_src.write_bytes(await file.read())
+
+        from workers.vocal_separator_worker import run_vocal_separation
+
+        vocals_path, instrumental_path = await asyncio.to_thread(
+            run_vocal_separation,
+            temp_src,
+            TEMP_DIR,
+            vocals_model,
+            instrumental_model,
+            use_gpu=(HOST_DEVICE == "cuda"),
+        )
+
+        background_tasks.add_task(_deferred_cleanup_temp, temp_src)
+        # Guard against never-downloaded stems; /tts/audio handler auto-cleans on download
+        background_tasks.add_task(_deferred_cleanup_after_delay, vocals_path, 1800)
+        background_tasks.add_task(_deferred_cleanup_after_delay, instrumental_path, 1800)
+
+        return VocalSeparationResponse(
+            success=True,
+            vocals_filename=vocals_path.name,
+            instrumental_filename=instrumental_path.name,
+            vocals_file_size_bytes=vocals_path.stat().st_size,
+            instrumental_file_size_bytes=instrumental_path.stat().st_size,
+            vocals_model=vocals_model,
+            instrumental_model=instrumental_model,
+        )
+    except Exception as exc:
+        logger.error("Vocal separation failed: %s", exc, exc_info=True)
+        if temp_src and temp_src.exists():
+            background_tasks.add_task(_deferred_cleanup_temp, temp_src)
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ============================================================================

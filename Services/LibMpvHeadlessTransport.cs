@@ -237,6 +237,9 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         }
     }
 
+    /// <inheritdoc />
+    public bool IsPlaying => _isLoaded && !_disposed && !_isPaused && !_hasEnded;
+
     public long Duration
     {
         get

@@ -64,7 +64,10 @@ public static class DependencyLocator
         return Probe(candidates, "--version");
     }
 
-    /// <summary>Returns a working ffmpeg executable path, or null if not found.</summary>
+    /// <summary>
+    /// Locates a working ffmpeg executable and returns its resolved path.
+    /// </summary>
+    /// <returns>The full path to a working ffmpeg executable, or <c>null</c> if none is found.</returns>
     public static string? FindFfmpeg()
     {
         var appDir = AppContext.BaseDirectory;
@@ -77,7 +80,26 @@ public static class DependencyLocator
         return Probe(candidates, "-version");
     }
 
-    /// <summary>Returns a working piper executable path, or null if not found.</summary>
+    /// <summary>
+    /// Locates a usable ffprobe executable on disk or in the system PATH.
+    /// </summary>
+    /// <returns>The full path to a working ffprobe executable that reports its version, or <c>null</c> if none is found.</returns>
+    public static string? FindFfprobe()
+    {
+        var appDir = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            Path.Combine(appDir, "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "ffprobe.exe"),
+            "ffprobe",
+        };
+        return Probe(candidates, "-version");
+    }
+
+    /// <summary>
+    /// Locates a usable Piper executable by probing candidates in the application directory and the system PATH.
+    /// </summary>
+    /// <returns>The resolved full path to a Piper executable that responds to `--version`, or `null` if none is found.</returns>
     public static string? FindPiper()
     {
         var appDir = AppContext.BaseDirectory;

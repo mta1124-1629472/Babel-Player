@@ -23,6 +23,10 @@ soundfile==0.12.1
 git+https://github.com/wenet-e2e/wespeaker.git@c92349a14d6b426808c4e09b8b12e076864dfc11
 s3prl==0.4.17
 
+# Vocal separation
+audio-separator>=0.24.0
+onnxruntime>=1.18.0
+
 # Shared ML
 # Shared ML
 torch==2.8.0

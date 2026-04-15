@@ -123,6 +123,26 @@
                                       Content="Always start local GPU runtime at app start"/>
                         </StackPanel>
 
+                        <!-- Dubbing -->
+                        <Separator Margin="0,4,0,4"/>
+                        <TextBlock Text="Dubbing" FontWeight="SemiBold"/>
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Segment timing mode:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Controls how dubbed TTS audio is aligned with the original segment window."/>
+                            <ComboBox ItemsSource="{Binding DubTimingModeOptions}"
+                                      SelectedItem="{Binding DubTimingMode, Mode=TwoWay}"
+                                      Width="180"
+                                      HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Converter={StaticResource SegmentTimingModeDisplayConverter}}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Opacity="0.65" TextWrapping="Wrap"
+                                       Text="Off: play TTS as-is (source drives timing). Stretch: time-scale TTS to fit the segment window. Pause: stop source video while TTS plays, then resume."/>
+                        </StackPanel>
+
                         <!-- Advanced CPU transcription tuning (collapsed by default) -->
                         <Expander Header="Advanced: CPU Transcription"
                                   IsExpanded="False"

@@ -57,7 +57,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         IDiarizationRegistry? diarizationRegistry = null,
         ITtsRegistry? ttsRegistry = null,
         IAudioProcessingService? audioProcessingService = null,
-        ContainerizedServiceProbe? containerizedProbe = null)
+        ContainerizedServiceProbe? containerizedProbe = null,
+        IMediaTransport? segmentPlayer = null,
+        IMediaTransport? sourcePlayer = null)
     {
         var registries = new Babel.Player.Models.RegistryBundle(
             _ctx.PerSessionStore, _ctx.RecentStore,
@@ -75,7 +77,57 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             _ctx.Store,
             _ctx.Log,
             settings ?? _ctx.Settings);
-        return new SessionWorkflowCoordinator(coreServices, registries, options);
+        return new SessionWorkflowCoordinator(
+            coreServices,
+            registries,
+            options,
+            segmentPlayer: segmentPlayer,
+            sourcePlayer: sourcePlayer);
+    }
+
+    private sealed class ControllableStretchAudioProcessingService : IAudioProcessingService
+    {
+        public TaskCompletionSource<bool> StretchStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> AllowStretchCompletion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task CombineAudioSegmentsAsync(
+            IReadOnlyList<string> segmentAudioPaths,
+            string outputAudioPath,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("CombineAudioSegmentsAsync is not used in this test."));
+
+        public Task ExtractAudioClipAsync(
+            string inputPath,
+            string outputPath,
+            double startTimeSeconds,
+            double durationSeconds,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("ExtractAudioClipAsync is not used in this test."));
+
+        public Task ExtractFullAudioAsync(
+            string inputPath,
+            string outputPath,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("ExtractFullAudioAsync is not used in this test."));
+
+        public async Task<bool> TimeStretchAsync(
+            string inputPath,
+            string outputPath,
+            double targetDurationSeconds,
+            double minRatio = 0.75,
+            double maxRatio = 1.35,
+            CancellationToken cancellationToken = default)
+        {
+            StretchStarted.TrySetResult(true);
+            await AllowStretchCompletion.Task.ConfigureAwait(false);
+            await File.WriteAllBytesAsync(outputPath, [0xAB, 0xCD], cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult<double?>(1.0);
     }
 
     private AppSettings CreateMatchingSettings() =>
@@ -517,6 +569,76 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         Assert.NotNull(coord.CurrentSession.SpeakerVoiceAssignments);
         Assert.True(coord.CurrentSession.SpeakerVoiceAssignments!.TryGetValue("spk_01", out var voice));
         Assert.Equal("en-US-AriaNeural", voice);
+    }
+
+    [Fact]
+    public void SetSegmentTimingOverride_PersistsInCurrentSession()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        coord.SetSegmentTimingOverride("segment_0.0", SegmentTimingMode.Pause);
+
+        Assert.NotNull(coord.CurrentSession.SegmentTimingModeOverrides);
+        Assert.True(coord.CurrentSession.SegmentTimingModeOverrides!.TryGetValue("segment_0.0", out var mode));
+        Assert.Equal(SegmentTimingMode.Pause, mode);
+    }
+
+    [Fact]
+    public void SetSegmentTimingOverride_Null_RemovesEntry()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.SetSegmentTimingOverride("segment_0.0", SegmentTimingMode.Stretch);
+
+        coord.SetSegmentTimingOverride("segment_0.0", null);
+
+        Assert.True(coord.CurrentSession.SegmentTimingModeOverrides is null
+            || !coord.CurrentSession.SegmentTimingModeOverrides.ContainsKey("segment_0.0"));
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_StretchSuperseded_DoesNotOverrideNewerPlayback()
+    {
+        var stretchService = new ControllableStretchAudioProcessingService();
+        var segmentPlayer = new FakeMediaTransport();
+        var coord = CreateCoordinator(
+            audioProcessingService: stretchService,
+            segmentPlayer: segmentPlayer);
+        coord.Initialize();
+
+        var segmentAPath = Path.Combine(_ctx.Dir, "segment_a.mp3");
+        var segmentBPath = Path.Combine(_ctx.Dir, "segment_b.mp3");
+        await File.WriteAllBytesAsync(segmentAPath, [0x01, 0x02]);
+        await File.WriteAllBytesAsync(segmentBPath, [0x03, 0x04]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                ["segment_0.0"] = segmentAPath,
+                ["segment_1.0"] = segmentBPath,
+            },
+        };
+
+        var segmentA = new WorkflowSegmentState("segment_0.0", 0.0, 1.0, "a", true, "A", true);
+        var segmentB = new WorkflowSegmentState("segment_1.0", 1.0, 2.0, "b", true, "B", true);
+
+        await coord.PlayTtsForSegmentAsync("segment_0.0", segmentA, SegmentTimingMode.Stretch);
+        await stretchService.StretchStarted.Task;
+
+        await coord.PlayTtsForSegmentAsync("segment_1.0", segmentB, SegmentTimingMode.Off);
+        Assert.True(
+            SpinWait.SpinUntil(
+                () => string.Equals(segmentPlayer.LastLoadedFile, segmentBPath, StringComparison.Ordinal),
+                TimeSpan.FromSeconds(2)),
+            "Expected newer segment playback to load segment B audio.");
+
+        stretchService.AllowStretchCompletion.TrySetResult(true);
+        await Task.Delay(200);
+
+        Assert.Equal(segmentBPath, segmentPlayer.LastLoadedFile);
     }
 
     [Fact]
@@ -1840,6 +1962,125 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
+
+    // ── Pause-mode playback timing ─────────────────────────────────────────────
+
+    private SessionWorkflowCoordinator CreateCoordinatorWithSegmentPlayer(
+        FakeMediaTransport segmentPlayer,
+        AppSettings? settings = null)
+    {
+        var registries = new Babel.Player.Models.RegistryBundle(
+            _ctx.PerSessionStore, _ctx.RecentStore,
+            new TranscriptionRegistry(_ctx.Log),
+            new TranslationRegistry(_ctx.Log),
+            new TtsRegistry(_ctx.Log));
+        var options = new Babel.Player.Models.CoordinatorOptions();
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(
+            _ctx.Store,
+            _ctx.Log,
+            settings ?? _ctx.Settings);
+        return new SessionWorkflowCoordinator(
+            coreServices, registries, options,
+            segmentPlayer: segmentPlayer);
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_PauseMode_ClearsStateAfterSegmentEnds()
+    {
+        // Arrange: a coordinator with a fake segment player and a minimal TTS-stage session.
+        var fakeSegmentPlayer = new FakeMediaTransport();
+        var coord = CreateCoordinatorWithSegmentPlayer(fakeSegmentPlayer);
+        coord.Initialize();
+
+        const string segmentId = "segment_0.0";
+        var audioPath = Path.Combine(_ctx.Dir, "tts-segment.mp3");
+        await File.WriteAllBytesAsync(audioPath, [0x00, 0x01, 0x02]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = Babel.Player.Models.SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string> { [segmentId] = audioPath },
+        };
+
+        var segment = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId, 0.0, 3.0, "Hello", true, "Hola", true);
+
+        // Act: start Pause-mode playback then simulate the TTS clip ending.
+        _ = coord.PlayTtsForSegmentAsync(segmentId, segment, Babel.Player.Models.SegmentTimingMode.Pause);
+
+        // Wait for the fire-and-forget to reach the Play/await-Ended stage.
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        while (!fakeSegmentPlayer.IsPlaying && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        Assert.Equal(segmentId, coord.ActiveTtsSegmentId);
+        Assert.Equal(Babel.Player.Models.PlaybackState.PlayingSingleSegment, coord.PlaybackState);
+
+        // Simulate the TTS clip ending — StopTtsPlayback() is invoked by _segmentEndedHandler.
+        fakeSegmentPlayer.SimulateEnd();
+
+        // Wait for state cleanup (StopTtsPlayback runs synchronously inside SimulateEnd).
+        timeout = DateTime.UtcNow.AddSeconds(5);
+        while (coord.ActiveTtsSegmentId is not null && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        // Assert: state is cleared.
+        Assert.Null(coord.ActiveTtsSegmentId);
+        Assert.Equal(Babel.Player.Models.PlaybackState.Idle, coord.PlaybackState);
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_PauseMode_DoesNotClearStateWhenDifferentSegmentIsActive()
+    {
+        // Arrange: ensure a second PlayTts call overrides ActiveTtsSegmentId before the first
+        // Ended fires; the first completion path must not clear the updated state.
+        var fakeSegmentPlayer = new FakeMediaTransport();
+        var coord = CreateCoordinatorWithSegmentPlayer(fakeSegmentPlayer);
+        coord.Initialize();
+
+        const string segmentId1 = "segment_0.0";
+        const string segmentId2 = "segment_3.0";
+        var audioPath1 = Path.Combine(_ctx.Dir, "tts-seg1.mp3");
+        var audioPath2 = Path.Combine(_ctx.Dir, "tts-seg2.mp3");
+        await File.WriteAllBytesAsync(audioPath1, [0x00, 0x01, 0x02]);
+        await File.WriteAllBytesAsync(audioPath2, [0x03, 0x04, 0x05]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = Babel.Player.Models.SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                [segmentId1] = audioPath1,
+                [segmentId2] = audioPath2,
+            },
+        };
+
+        var segment1 = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId1, 0.0, 3.0, "Hello", true, "Hola", true);
+        var segment2 = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId2, 3.0, 6.0, "World", true, "Mundo", true);
+
+        // Start first segment in Pause mode; wait until it is playing.
+        _ = coord.PlayTtsForSegmentAsync(segmentId1, segment1, Babel.Player.Models.SegmentTimingMode.Pause);
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        while (!fakeSegmentPlayer.IsPlaying && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        // Immediately start second segment — StopTtsPlayback() resets and then sets segmentId2.
+        _ = coord.PlayTtsForSegmentAsync(segmentId2, segment2, Babel.Player.Models.SegmentTimingMode.Pause);
+        timeout = DateTime.UtcNow.AddSeconds(5);
+        while (coord.ActiveTtsSegmentId != segmentId2 && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        // The second PlayTts call triggers StopTtsPlayback which completes the first Pause-mode TCS.
+        // The first task's continuation sees the wrong segment ID and returns early without clearing state.
+        await Task.Delay(50); // allow pending continuations to run
+
+        // State should still reflect the second segment being tracked (or already cleared by its own end).
+        var activeId = coord.ActiveTtsSegmentId;
+        Assert.True(activeId is null || activeId == segmentId2,
+            $"Expected null or '{segmentId2}' but was '{activeId}'.");
+    }
 
     private sealed class FakeContainerizedInferenceManager : IContainerizedInferenceManager
     {

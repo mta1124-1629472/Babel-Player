@@ -35,6 +35,16 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private readonly DispatcherTimer _healthTimer;
     private IDisposable? _readinessSignalSubscription;
 
+    /// <summary>
+    /// Initializes the SettingsViewModel, populating view-model properties from the coordinator's current settings and starting background health polling and readiness subscriptions.
+    /// </summary>
+    /// <param name="settingsService">Service used for settings storage and retrieval.</param>
+    /// <param name="coordinator">Coordinator that provides current settings, diagnostics, readiness signals, and change notifications.</param>
+    /// <param name="ownerWindow">Window that will be closed by the view-model's OK/Cancel commands.</param>
+    /// <param name="modelsTab">Injected ModelsTabViewModel instance exposed by this view-model.</param>
+    /// <param name="containerizedManager">Optional inference manager used for backend status checks and restarts; when null a no-op implementation is used.</param>
+    /// <param name="apiKeyStore">Optional API key store dependency.</param>
+    /// <param name="hdrDisplayStateProvider">Optional function used to query whether an HDR-capable display is currently active; when null a platform default probe is used.</param>
     public SettingsViewModel(
         SettingsService settingsService,
         SessionWorkflowCoordinator coordinator,
@@ -64,6 +74,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         TranscriptionCpuComputeType = current.TranscriptionCpuComputeType;
         TranscriptionCpuThreads = current.TranscriptionCpuThreads;
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
+        DubTimingMode = current.DubTimingMode;
 
         // Theme options
         ThemeOptions = ["Light", "Dark", "System"];
@@ -286,6 +297,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public string[] TtsVoiceOptions { get; }
 
+    // ── Dub timing mode ───────────────────────────────────────────────────────
+
+    [ObservableProperty]
+    private SegmentTimingMode _dubTimingMode;
+
+    public SegmentTimingMode[] DubTimingModeOptions { get; } =
+        [SegmentTimingMode.Off, SegmentTimingMode.Stretch, SegmentTimingMode.Pause];
+
     public string[] TranscriptionCpuComputeTypeOptions { get; } =
         ["auto", "int8", "int8_float16", "float32"];
 
@@ -489,7 +508,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private string _toggleFullscreenHotkey;
 
-    // ── Apply / OK / Cancel ───────────────────────────────────────────────────
+    /// <summary>
+    /// Writes the view-model's current settings into the coordinator's settings, applies the selected theme immediately, and signals that settings were modified.
+    /// </summary>
+    /// <remarks>
+    /// Empty or whitespace values are normalized before assignment: the advanced GPU service URL is preserved when blank; transcription compute type defaults to "int8"; transcription threads are clamped to be at least 0; transcription workers are clamped to be at least 1; video tone mapping defaults to "bt.2390" and video target peak defaults to "auto". The selected dub timing mode is persisted.
+    /// </remarks>
 
     [RelayCommand]
     private void Apply()
@@ -510,6 +534,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             : TranscriptionCpuComputeType;
         settings.TranscriptionCpuThreads = Math.Max(0, TranscriptionCpuThreads);
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
+
+        settings.DubTimingMode       = DubTimingMode;
 
         settings.VideoHwdec          = VideoHwdec;
         settings.VideoGpuApi         = VideoGpuApi;

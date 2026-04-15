@@ -21,3 +21,7 @@ qwen-tts>=0.1.1
 soundfile>=0.12.1
 hf_xet>=0.1.0
 nemo-toolkit[asr]>=2.7.0
+
+# Vocal separation
+audio-separator>=0.24.0
+onnxruntime-gpu>=1.18.0
