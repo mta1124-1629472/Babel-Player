@@ -83,12 +83,20 @@ public partial class EmbeddedPlaybackViewModel
     [NotifyPropertyChangedFor(nameof(AvailableTtsOptions))]
     [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
+    [NotifyPropertyChangedFor(nameof(ShowTtsAssignmentModeSwitch))]
+    [NotifyPropertyChangedFor(nameof(ShowPerSpeakerVoiceHint))]
+    [NotifyPropertyChangedFor(nameof(TtsVoiceComboHeaderText))]
     private string _ttsProvider = ProviderNames.EdgeTts;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
     private string _ttsModelOrVoice = "en-US-AriaNeural";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPerSpeakerVoiceHint))]
+    [NotifyPropertyChangedFor(nameof(TtsVoiceComboHeaderText))]
+    private TtsVoiceAssignmentMode _ttsVoiceAssignmentMode = TtsVoiceAssignmentMode.GlobalDefault;
 
     [ObservableProperty]
     private ModelOptionViewModel? _selectedTranscriptionModel;
@@ -150,6 +158,31 @@ public partial class EmbeddedPlaybackViewModel
     public IReadOnlyList<PipelineTargetLanguageOption> TargetLanguageOptions => PipelineTargetLanguageOption.All;
 
     public IReadOnlyList<SpokenLanguageOption> SpokenLanguageOptions => SpokenLanguageOption.All;
+
+    /// <summary>True when Piper/Edge show the global vs per-speaker voice UI.</summary>
+    public bool ShowTtsAssignmentModeSwitch =>
+        string.Equals(TtsProvider, ProviderNames.Piper, StringComparison.Ordinal)
+        || string.Equals(TtsProvider, ProviderNames.EdgeTts, StringComparison.Ordinal);
+
+    public bool ShowPerSpeakerVoiceHint =>
+        ShowTtsAssignmentModeSwitch && TtsVoiceAssignmentMode == TtsVoiceAssignmentMode.PerSpeaker;
+
+    public string TtsVoiceComboHeaderText =>
+        ShowTtsAssignmentModeSwitch && TtsVoiceAssignmentMode == TtsVoiceAssignmentMode.PerSpeaker
+            ? "Fallback voice"
+            : "Voice / Model";
+
+    /// <summary>Two-way with CheckBox: per-speaker mode uses Speaker Reference Wizard; fallback = <see cref="TtsModelOrVoice"/>.</summary>
+    public bool TtsVoiceUsePerSpeakerWizard
+    {
+        get => TtsVoiceAssignmentMode == TtsVoiceAssignmentMode.PerSpeaker;
+        set
+        {
+            var target = value ? TtsVoiceAssignmentMode.PerSpeaker : TtsVoiceAssignmentMode.GlobalDefault;
+            if (TtsVoiceAssignmentMode == target) return;
+            TtsVoiceAssignmentMode = target;
+        }
+    }
 
     internal sealed record ProviderDiagnosticsSelectionSnapshot(
         ComputeProfile TranscriptionRuntime,
@@ -277,6 +310,25 @@ public partial class EmbeddedPlaybackViewModel
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(
             ttsProvider: value,
             ttsVoice: model));
+        NotifyTtsAssignmentModeUi();
+    }
+
+    partial void OnTtsVoiceAssignmentModeChanged(TtsVoiceAssignmentMode value)
+    {
+        if (IsSynchronizingPipelineSettings)
+            return;
+
+        _coordinator.CurrentSettings.TtsVoiceAssignmentMode = value;
+        _coordinator.NotifySettingsModified();
+        NotifyTtsAssignmentModeUi();
+    }
+
+    private void NotifyTtsAssignmentModeUi()
+    {
+        OnPropertyChanged(nameof(ShowTtsAssignmentModeSwitch));
+        OnPropertyChanged(nameof(ShowPerSpeakerVoiceHint));
+        OnPropertyChanged(nameof(TtsVoiceComboHeaderText));
+        OnPropertyChanged(nameof(TtsVoiceUsePerSpeakerWizard));
     }
 
     partial void OnTtsModelOrVoiceChanged(string value)
@@ -342,6 +394,8 @@ public partial class EmbeddedPlaybackViewModel
                 TtsProvider,
                 _coordinator.CurrentSettings.TtsVoice);
 
+            TtsVoiceAssignmentMode = _coordinator.CurrentSettings.TtsVoiceAssignmentMode;
+
             RebuildAllModelOptions();
 
             SelectedTranscriptionModel =
@@ -369,6 +423,7 @@ public partial class EmbeddedPlaybackViewModel
             OnPropertyChanged(nameof(AvailableTranscriptionModels));
             OnPropertyChanged(nameof(AvailableTranslationModels));
             OnPropertyChanged(nameof(AvailableTtsOptions));
+            NotifyTtsAssignmentModeUi();
             SpeakerRouting.SyncFromSettings();
             SpeakerRouting.NotifyTtsProviderChanged();
             RefreshProviderHealthDiagnostics();

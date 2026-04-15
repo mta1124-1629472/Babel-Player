@@ -82,6 +82,9 @@ public sealed class AppSettings
     /// </summary>
     public string TtsVoice { get; set; } = "en_US-lessac-medium";
 
+    /// <summary>For Piper/Edge: use one global voice vs assign per speaker in the Speaker Reference Wizard (fallback = <see cref="TtsVoice"/>).</summary>
+    public TtsVoiceAssignmentMode TtsVoiceAssignmentMode { get; set; } = TtsVoiceAssignmentMode.GlobalDefault;
+
     /// <summary>BCP-47 language code for the translation target.</summary>
     public string TargetLanguage { get; set; } = "en";
 
