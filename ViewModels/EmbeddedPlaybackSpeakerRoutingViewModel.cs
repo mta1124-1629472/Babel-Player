@@ -25,11 +25,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
     }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
-    [NotifyPropertyChangedFor(nameof(CanOpenSpeakerSetupWizard))]
-    private bool _isMultiSpeakerEnabled;
-
-    [ObservableProperty]
     private IReadOnlyList<string> _diarizationProviderOptions = [string.Empty];
 
     [ObservableProperty]
@@ -56,9 +51,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
     [ObservableProperty]
     private string _selectedSpeakerReferenceAudioPath = string.Empty;
 
-    [ObservableProperty]
-    private string _defaultTtsVoiceFallback = string.Empty;
-
     public string AutoSpeakerDetectionStatus
     {
         get => _autoSpeakerDetectionStatus;
@@ -73,9 +65,9 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
 
     public bool HasSpeakers => SpeakerIds.Count > 0;
     public bool HasAutoSpeakerDetectionStatus => !string.IsNullOrWhiteSpace(AutoSpeakerDetectionStatus);
-    public bool IsMultiSpeakerNoSpeakersYet => IsMultiSpeakerEnabled && !HasSpeakers;
+    public bool IsMultiSpeakerNoSpeakersYet => !HasSpeakers;
     public bool IsTtsCloningProvider => string.Equals(_parent.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal);
-    public bool CanOpenSpeakerSetupWizard => IsMultiSpeakerEnabled && HasSpeakers;
+    public bool CanOpenSpeakerSetupWizard => HasSpeakers;
 
     internal void SyncFromSettings()
     {
@@ -84,13 +76,13 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
         {
             if (!_coordinator.CurrentSession.MultiSpeakerEnabled)
                 _coordinator.SetMultiSpeakerEnabled(true);
+            if (!string.IsNullOrWhiteSpace(_coordinator.CurrentSession.DefaultTtsVoiceFallback))
+                _coordinator.SetDefaultTtsVoiceFallback(null);
 
-            IsMultiSpeakerEnabled = true;
             RebuildDiarizationProviderOptions();
             DiarizationProvider = NormalizeDiarizationProviderSelection(_coordinator.CurrentSettings.DiarizationProvider);
             DiarizationMinSpeakers = null;
             DiarizationMaxSpeakers = null;
-            DefaultTtsVoiceFallback = _coordinator.CurrentSession.DefaultTtsVoiceFallback ?? string.Empty;
             RebuildSpeakerIds(_parent.Preview.Segments, _parent.Preview.SelectedSegment?.SpeakerId);
         }
         finally
@@ -186,18 +178,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
         UpdateSelectedSpeakerDetails(value);
     }
 
-    partial void OnIsMultiSpeakerEnabledChanged(bool value)
-    {
-        if (_parent.IsSynchronizingPipelineSettings)
-            return;
-
-        if (!value)
-            DiarizationProvider = string.Empty;
-
-        _coordinator.SetMultiSpeakerEnabled(value);
-        _ = _parent.Preview.RefreshSegmentsAsync();
-    }
-
     partial void OnDiarizationProviderChanged(string value)
     {
         if (_parent.IsSynchronizingPipelineSettings)
@@ -257,29 +237,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
 
         _coordinator.CurrentSettings.DiarizationMaxSpeakers = normalized;
         _coordinator.NotifySettingsModified();
-    }
-
-    partial void OnDefaultTtsVoiceFallbackChanged(string value)
-    {
-        if (_parent.IsSynchronizingPipelineSettings)
-            return;
-
-        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-        var normalizedDisplayValue = normalized ?? string.Empty;
-        if (!string.Equals(value, normalizedDisplayValue, StringComparison.Ordinal))
-        {
-            _parent.IsSynchronizingPipelineSettings = true;
-            try
-            {
-                DefaultTtsVoiceFallback = normalizedDisplayValue;
-            }
-            finally
-            {
-                _parent.IsSynchronizingPipelineSettings = false;
-            }
-        }
-
-        _coordinator.SetDefaultTtsVoiceFallback(normalized);
     }
 
     private void RebuildDiarizationProviderOptions()

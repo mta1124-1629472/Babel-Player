@@ -106,7 +106,6 @@ public sealed class QwenContainerTtsProvider(
 
         foreach (var group in requests.GroupBy(request => ResolveModel(request.VoiceName), StringComparer.Ordinal))
         {
-            var batchPayload = new List<QwenBatchSegmentPayload>(group.Count());
             foreach (var request in group)
             {
                 var referenceAudioPath = await ResolveBatchReferenceAudioAsync(request, cancellationToken);
@@ -117,26 +116,22 @@ public sealed class QwenContainerTtsProvider(
                 }
 
                 var speakerId = request.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault;
-                var referenceId = await EnsureReferenceRegisteredAsync(referenceAudioPath, speakerId, cancellationToken)
-                    ?? throw new InvalidOperationException(
-                        $"Qwen3-TTS reference registration failed for segment '{request.SegmentId}'.");
-
-                batchPayload.Add(new QwenBatchSegmentPayload(
-                    request.SegmentId,
+                _log.Info($"[QwenContainerTts] Segment synth start ({completed + 1}/{requests.Count}): {request.SegmentId}");
+                var result = await QwenSegmentWithRetryAsync(
                     request.Text,
+                    group.Key,
                     ResolveLanguage(request.Language),
-                    referenceId));
-            }
+                    referenceAudioPath,
+                    speakerId,
+                    referenceText: null,
+                    cancellationToken);
 
-            var results = await _client.QwenBatchAsync(group.Key, batchPayload, cancellationToken);
-            foreach (var result in results)
-            {
-                var request = group.First(segment => string.Equals(segment.SegmentId, result.SegmentId, StringComparison.Ordinal));
-                if (!result.Result.Success)
-                    throw new InvalidOperationException($"Qwen batch synthesis failed for segment '{result.SegmentId}'.");
+                if (!result.Success)
+                    throw new InvalidOperationException($"Qwen synthesis failed for segment '{request.SegmentId}': {result.ErrorMessage}");
 
-                await DownloadToOutputPathAsync(result.Result.AudioPath, request.OutputAudioPath, cancellationToken);
-                outputPaths[result.SegmentId] = request.OutputAudioPath;
+                await DownloadToOutputPathAsync(result.AudioPath, request.OutputAudioPath, cancellationToken);
+                outputPaths[request.SegmentId] = request.OutputAudioPath;
+                _log.Info($"[QwenContainerTts] Segment synth saved: {request.OutputAudioPath}");
                 progress?.Report((++completed, requests.Count));
             }
         }
