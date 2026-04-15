@@ -9,6 +9,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1740,9 +1741,84 @@ def _transcribe_parakeet_with_retry(model, temp_audio_path: Path):
             time.sleep(delay_seconds)
 
 
+def _extract_parakeet_word_timestamps(hypothesis) -> list:
+    for attr_name in ("timestep", "timestamp", "timestamps"):
+        attr_value = getattr(hypothesis, attr_name, None)
+        if isinstance(attr_value, dict):
+            for key in ("word", "words"):
+                candidate = attr_value.get(key)
+                if isinstance(candidate, list) and candidate:
+                    return candidate
+        elif attr_value is not None:
+            for key in ("word", "words"):
+                candidate = getattr(attr_value, key, None)
+                if isinstance(candidate, list) and candidate:
+                    return candidate
+
+    direct = getattr(hypothesis, "word_timestamps", None)
+    if isinstance(direct, list) and direct:
+        return direct
+
+    return []
+
+
+def _estimate_wav_duration_seconds(audio_path: Path) -> float:
+    try:
+        with wave.open(str(audio_path), "rb") as wav_reader:
+            frames = wav_reader.getnframes()
+            sample_rate = wav_reader.getframerate()
+            if sample_rate <= 0:
+                return 0.0
+            return float(frames) / float(sample_rate)
+    except (wave.Error, EOFError, OSError):
+        return 0.0
+
+
+def _segment_text_without_word_timestamps(
+    fallback_text: str,
+    duration_seconds: float | None,
+) -> list:
+    text = " ".join((fallback_text or "").split()).strip()
+    if not text:
+        return []
+
+    sentence_chunks = [chunk.strip() for chunk in re.split(r"(?<=[.!?])\s+", text) if chunk.strip()]
+    if len(sentence_chunks) <= 1:
+        words = text.split()
+        chunk_size = 12
+        sentence_chunks = [
+            " ".join(words[index:index + chunk_size])
+            for index in range(0, len(words), chunk_size)
+        ] or [text]
+
+    word_counts = [max(1, len(chunk.split())) for chunk in sentence_chunks]
+    total_words = max(1, sum(word_counts))
+    total_duration = duration_seconds or 0.0
+    if total_duration <= 0:
+        total_duration = max(total_words / 2.6, len(sentence_chunks) * 1.0)
+
+    segments: list = []
+    cursor = 0.0
+    for index, chunk in enumerate(sentence_chunks):
+        chunk_duration = total_duration * (word_counts[index] / total_words)
+        end = total_duration if index == len(sentence_chunks) - 1 else min(total_duration, cursor + chunk_duration)
+        segments.append(
+            TranscriptSegmentResponse(
+                start=round(cursor, 3),
+                end=round(end, 3),
+                text=chunk,
+                words=[],
+            )
+        )
+        cursor = end
+
+    return segments
+
+
 def _words_to_segments(
     word_timestamps: list,
     fallback_text: str,
+    duration_seconds: float | None = None,
 ) -> list:
     """Group NeMo word-timestamp objects into TranscriptSegmentResponse segments.
 
@@ -1750,14 +1826,7 @@ def _words_to_segments(
     Falls back to a single segment when no word timestamps are available.
     """
     if not word_timestamps:
-        return [
-            TranscriptSegmentResponse(
-                start=0.0,
-                end=0.0,
-                text=fallback_text.strip(),
-                words=[],
-            )
-        ] if fallback_text.strip() else []
+        return _segment_text_without_word_timestamps(fallback_text, duration_seconds)
 
     segments: list = []
     seg_words: list = []
@@ -1846,14 +1915,11 @@ async def transcribe_parakeet(
         contents = await file.read()
         temp_audio_path.write_bytes(contents)
         temp_audio_path = _ensure_wav_audio(temp_audio_path, force_mono_16k=True)
+        duration_seconds = _estimate_wav_duration_seconds(temp_audio_path)
         model = load_parakeet_model()
         hypothesis = _transcribe_parakeet_with_retry(model, temp_audio_path)
-        word_ts = (
-            hypothesis.timestep.get("word", [])
-            if hasattr(hypothesis, "timestep") and isinstance(hypothesis.timestep, dict)
-            else []
-        )
-        segments = _words_to_segments(word_ts, hypothesis.text)
+        word_ts = _extract_parakeet_word_timestamps(hypothesis)
+        segments = _words_to_segments(word_ts, hypothesis.text, duration_seconds)
         background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
         return TranscriptionResponse(
             success=True,
