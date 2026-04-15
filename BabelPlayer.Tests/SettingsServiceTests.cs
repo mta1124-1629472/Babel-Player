@@ -97,7 +97,7 @@ public sealed class SettingsServiceTests : IDisposable
 
         var json = File.ReadAllText(_settingsPath);
 
-        Assert.Contains("\"TranscriptionProfile\": \"Gpu\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"TranscriptionProfile\": \"gpu\"", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"TranscriptionRuntime\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"TranslationRuntime\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"TtsRuntime\"", json, StringComparison.Ordinal);

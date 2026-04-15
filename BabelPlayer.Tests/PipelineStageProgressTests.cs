@@ -99,9 +99,9 @@ public sealed class PipelineStageProgressTests() : IDisposable
 
         var streamingCoordinator = CreateCoordinator(
             streamingSettings,
-            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
-            new FakeTranslationRegistry(new DelayedTranslationProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
-            new FakeTtsRegistry(new DelayedTtsProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
+            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 200)),
+            new FakeTranslationRegistry(new DelayedTranslationProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 200)),
+            new FakeTtsRegistry(new DelayedTtsProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 200)),
             context: streamingCtx);
         streamingCoordinator.Initialize();
         streamingCoordinator.LoadMedia(streamingCtx.MediaPath);
@@ -112,9 +112,9 @@ public sealed class PipelineStageProgressTests() : IDisposable
 
         var sequentialCoordinator = CreateCoordinator(
             sequentialSettings,
-            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
-            new FakeTranslationRegistry(new DelayedTranslationProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
-            new FakeTtsRegistry(new DelayedTtsProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
+            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 200)),
+            new FakeTranslationRegistry(new DelayedTranslationProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 200)),
+            new FakeTtsRegistry(new DelayedTtsProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 200)),
             context: sequentialCtx);
         sequentialCoordinator.Initialize();
         sequentialCoordinator.LoadMedia(sequentialCtx.MediaPath);

@@ -402,6 +402,13 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                     "{\"success\":true,\"voice\":\"qwen\",\"segments\":[{\"segment_id\":\"segment_0.0\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/segment-1.mp3\",\"file_size_bytes\":3},{\"segment_id\":\"segment_1.0\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/segment-2.mp3\",\"file_size_bytes\":3}]}");
             }
 
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
+            {
+                batchCount++;
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"qwen\",\"audio_path\":\"/tmp/qwen-segment.mp3\",\"file_size_bytes\":3}");
+            }
+
             if (request.Method == HttpMethod.Get && request.RequestUri is not null && request.RequestUri.AbsolutePath.StartsWith("/tts/audio/", StringComparison.Ordinal))
             {
                 downloadCount++;
@@ -434,7 +441,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.Equal(outputPath, result.AudioPath);
         Assert.True(File.Exists(outputPath));
         Assert.Equal(1, registrationCount);
-        Assert.Equal(1, batchCount);
+        Assert.Equal(2, batchCount);
         Assert.Equal(2, downloadCount);
     }
 
@@ -462,6 +469,13 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                     "{\"success\":true,\"voice\":\"qwen\",\"segments\":[{\"segment_id\":\"segment_a\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/batch-a.mp3\",\"file_size_bytes\":3},{\"segment_id\":\"segment_b\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/batch-b.mp3\",\"file_size_bytes\":3}]}");
             }
 
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
+            {
+                batchCount++;
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"voice\":\"qwen\",\"audio_path\":\"/tmp/qwen-segment.mp3\",\"file_size_bytes\":3}");
+            }
+
             if (request.Method == HttpMethod.Get && request.RequestUri is not null && request.RequestUri.AbsolutePath.StartsWith("/tts/audio/", StringComparison.Ordinal))
             {
                 downloadCount++;
@@ -484,7 +498,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             ]);
 
         Assert.Equal(1, registrationCount);
-        Assert.Equal(1, batchCount);
+        Assert.Equal(2, batchCount);
         Assert.Equal(2, downloadCount);
         Assert.Equal(outputA, generated["segment_a"]);
         Assert.Equal(outputB, generated["segment_b"]);
@@ -1155,8 +1169,8 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             ProviderNames.WeSpeakerLocal,
             probe,
             new ContainerizedProviderReadiness.ExecutionWaitOptions(
-                ExecutionProbeBudget: TimeSpan.FromMilliseconds(200),
-                CapabilityWarmupBudget: TimeSpan.FromMilliseconds(200),
+                ExecutionProbeBudget: TimeSpan.FromSeconds(5),
+                CapabilityWarmupBudget: TimeSpan.FromSeconds(5),
                 CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(50)));
 
         Assert.False(readiness.IsReady);

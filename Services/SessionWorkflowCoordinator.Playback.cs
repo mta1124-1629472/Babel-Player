@@ -502,6 +502,11 @@ public sealed partial class SessionWorkflowCoordinator
             ? new Dictionary<string, SegmentTimingMode>()
             : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
 
+    /// <summary>
+    /// Sets or clears a per-segment dub timing mode override in the current session snapshot.
+    /// </summary>
+    /// <param name="segmentId">Segment identifier (e.g. <c>segment_0.0</c>).</param>
+    /// <param name="mode">Override mode, or <c>null</c> to remove the entry (inherit session default).</param>
     public void SetSegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(segmentId);

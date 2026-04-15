@@ -1435,19 +1435,10 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (CurrentSession.Stage < SessionWorkflowStage.Transcribed && !shouldRunDiarization)
         {
-            await TranscribeMediaAsync(
+            await ExecuteStreamingPipelineAsync(
                 progress,
                 GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress),
-                cancellationToken);
-            await TranslateTranscriptAsync(
-                progress,
-                targetLanguage: null,
-                sourceLanguage: null,
                 GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
-                cancellationToken);
-            await GenerateTtsAsync(
-                progress,
-                voice: null,
                 GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                 cancellationToken);
             return;
@@ -1529,12 +1520,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (CurrentSession.Stage < SessionWorkflowStage.Translated)
         {
-            await TranslateTranscriptAsync(
+            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
                 progress,
-                targetLanguage: null,
-                sourceLanguage: null,
                 GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                 cancellationToken);
+            return;
         }
 
         if (CurrentSession.Stage < SessionWorkflowStage.TtsGenerated)

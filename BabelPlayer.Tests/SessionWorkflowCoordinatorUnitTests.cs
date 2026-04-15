@@ -830,10 +830,10 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
-    public async Task GenerateTtsAsync_QwenProvider_UsesBatchEndpointAndPersistsSegmentOutputs()
+    public async Task GenerateTtsAsync_QwenProvider_UsesSegmentEndpointAndPersistsSegmentOutputs()
     {
         var registerCalls = 0;
-        var batchCalls = 0;
+        var segmentSynthCalls = 0;
         var downloadCalls = 0;
         var handler = new StubHttpMessageHandler((request, _) =>
         {
@@ -844,28 +844,10 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
                 return Task.FromResult(JsonResponse("""{"success":true,"reference_id":"ref-qwen-default"}"""));
             }
 
-            if (request.Method == HttpMethod.Post && path == "/tts/qwen/batch")
+            if (request.Method == HttpMethod.Post && path == "/tts/qwen/segment")
             {
-                batchCalls++;
-                return Task.FromResult(JsonResponse("""
-                {
-                  "success": true,
-                  "segments": [
-                    {
-                      "segment_id": "segment_0.0",
-                      "voice": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-                      "audio_path": "/tmp/qwen-segment-0.mp3",
-                      "file_size_bytes": 3
-                    },
-                    {
-                      "segment_id": "segment_2.0",
-                      "voice": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-                      "audio_path": "/tmp/qwen-segment-1.mp3",
-                      "file_size_bytes": 3
-                    }
-                  ]
-                }
-                """));
+                segmentSynthCalls++;
+                return Task.FromResult(JsonResponse("""{"success":true,"voice":"qwen","audio_path":"/tmp/qwen-segment.mp3","file_size_bytes":3}"""));
             }
 
             if (request.Method == HttpMethod.Get && path is not null && path.StartsWith("/tts/audio/", StringComparison.Ordinal))
@@ -937,7 +919,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         await coord.GenerateTtsAsync();
 
         Assert.Equal(1, registerCalls);
-        Assert.Equal(1, batchCalls);
+        Assert.Equal(2, segmentSynthCalls);
         Assert.Equal(2, downloadCalls);
         Assert.Equal(SessionWorkflowStage.TtsGenerated, coord.CurrentSession.Stage);
         Assert.NotNull(coord.CurrentSession.TtsPath);
