@@ -1694,6 +1694,26 @@ def _is_parakeet_manifest_lock_error(exc: Exception) -> bool:
     return "WinError 32" in message and "manifest.json" in message
 
 
+def _exception_chain_contains(exc: Exception, needle: str) -> bool:
+    seen: set[int] = set()
+    current: Exception | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if needle in str(current):
+            return True
+        next_exc = current.__cause__ or current.__context__
+        current = next_exc if isinstance(next_exc, Exception) else None
+    return False
+
+
+def _is_non_retryable_parakeet_input_error(exc: Exception) -> bool:
+    return (
+        _exception_chain_contains(exc, "Input shape mismatch")
+        or _exception_chain_contains(exc, "expected = (batch, time)")
+        or _exception_chain_contains(exc, "torch.Size([1, 2,")
+    )
+
+
 def _transcribe_parakeet_with_retry(model, temp_audio_path: Path):
     retry_delays_seconds = (0.2, 0.5)
     max_attempts = len(retry_delays_seconds) + 1
@@ -1704,6 +1724,8 @@ def _transcribe_parakeet_with_retry(model, temp_audio_path: Path):
                 hypotheses = model.transcribe([str(temp_audio_path)], timestamps=True)
             return hypotheses[0]
         except Exception as exc:
+            if _is_non_retryable_parakeet_input_error(exc):
+                raise
             if not _is_parakeet_manifest_lock_error(exc) or attempt == max_attempts:
                 raise
             delay_seconds = retry_delays_seconds[attempt - 1]
@@ -1820,9 +1842,10 @@ async def transcribe_parakeet(
 ):
     temp_audio_path = None
     try:
-        temp_audio_path = TEMP_DIR / f"parakeet_{uuid4().hex}.wav"
+        temp_audio_path = _stage_audio_upload_to_temp(file, "parakeet")
         contents = await file.read()
         temp_audio_path.write_bytes(contents)
+        temp_audio_path = _ensure_wav_audio(temp_audio_path, force_mono_16k=True)
         model = load_parakeet_model()
         hypothesis = _transcribe_parakeet_with_retry(model, temp_audio_path)
         word_ts = (
@@ -2079,11 +2102,33 @@ async def translate(
 # ============================================================================
 
 
-def _ensure_wav_audio(audio_path: Path) -> Path:
-    """Convert non-WAV audio/video to 16 kHz mono WAV for NeMo compatibility."""
-    if audio_path.suffix.lower() == ".wav":
+def _requires_wav_normalization(audio_path: Path) -> bool:
+    if audio_path.suffix.lower() != ".wav":
+        return True
+    try:
+        with wave.open(str(audio_path), "rb") as wav_reader:
+            return not (
+                wav_reader.getcomptype() == "NONE"
+                and wav_reader.getnchannels() == 1
+                and wav_reader.getframerate() == 16000
+                and wav_reader.getsampwidth() == 2
+            )
+    except (wave.Error, EOFError, OSError):
+        return True
+
+
+def _ensure_wav_audio(audio_path: Path, *, force_mono_16k: bool = False) -> Path:
+    """Convert media to PCM16 mono 16 kHz WAV for NeMo-compatible inference paths."""
+    if not force_mono_16k and audio_path.suffix.lower() == ".wav":
         return audio_path
-    wav_path = audio_path.with_suffix(".wav")
+    if force_mono_16k and not _requires_wav_normalization(audio_path):
+        return audio_path
+
+    if audio_path.suffix.lower() == ".wav":
+        wav_path = audio_path.with_name(f"{audio_path.stem}_mono16k.wav")
+    else:
+        wav_path = audio_path.with_suffix(".wav")
+
     proc = subprocess.run(
         [
             "ffmpeg", "-y",
@@ -2099,7 +2144,8 @@ def _ensure_wav_audio(audio_path: Path) -> Path:
     )
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg audio conversion failed: {proc.stderr[-500:]}")
-    audio_path.unlink(missing_ok=True)
+    if wav_path != audio_path:
+        audio_path.unlink(missing_ok=True)
     return wav_path
 
 
