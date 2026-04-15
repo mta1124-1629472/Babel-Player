@@ -86,6 +86,55 @@
                         Content="Merge (updates transcript)"
                         Padding="10,6" />
             </StackPanel>
+
+            <Border Margin="0,8,0,0"
+                    Padding="12,10"
+                    CornerRadius="8"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    Background="{DynamicResource ControlBackgroundBrush}"
+                    IsVisible="{Binding ShowPiperVoicePicker}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Piper voices" FontWeight="SemiBold" FontSize="13" />
+                    <TextBlock Text="Download voices here (Settings → Models no longer lists Piper). After download, choose a voice per speaker in the list below, or type a voice id."
+                               FontSize="11"
+                               Opacity="0.8"
+                               TextWrapping="Wrap" />
+                    <ItemsControl ItemsSource="{Binding PiperVoiceCatalogRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PiperVoiceCatalogRowViewModel">
+                                <Border Margin="0,0,0,6" Padding="10,8"
+                                        Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="8">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding Title}"
+                                                   FontSize="12" FontWeight="Medium"
+                                                   VerticalAlignment="Center" Width="260" TextWrapping="Wrap" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4" Margin="12,0">
+                                            <TextBlock Text="{Binding StatusLabel}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource StatusTextBrush}" />
+                                            <ProgressBar Value="{Binding DownloadProgress}"
+                                                         Minimum="0" Maximum="1"
+                                                         Height="4"
+                                                         IsVisible="{Binding IsProgressVisible}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Button Content="Download"
+                                                    IsVisible="{Binding CanDownload}"
+                                                    Command="{Binding DownloadCommand}"
+                                                    FontSize="11" Padding="8,4" />
+                                            <Button Content="Cancel"
+                                                    IsVisible="{Binding CanCancel}"
+                                                    Command="{Binding CancelCommand}"
+                                                    FontSize="11" Padding="8,4" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
         </StackPanel>
 
         <!-- Embedded session preview (libmpv, Windows) -->

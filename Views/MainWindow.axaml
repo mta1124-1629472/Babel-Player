@@ -66,7 +66,7 @@
                 Background="{DynamicResource SurfaceSubtleBrush}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="10,6"
+                Padding="10,0,0,0"
                 PointerPressed="OnTitleBarPointerPressed">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <TextBlock Grid.Column="0"
@@ -75,17 +75,18 @@
                            FontSize="13"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center" />
+                <!-- Win11-style: zero gap, square targets, flush to the right window edge (no right padding on chrome Border). -->
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
-                            Spacing="2"
-                            VerticalAlignment="Center"
+                            Spacing="0"
+                            VerticalAlignment="Stretch"
+                            HorizontalAlignment="Right"
                             UseLayoutRounding="True">
                     <Button Classes="chrome-button"
-                            Width="46"
-                            Height="32"
+                            Width="40"
+                            Height="40"
                             Background="{DynamicResource ButtonBackgroundBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
-                            CornerRadius="4"
                             Click="OnMinimizeWindowClick"
                             AutomationProperties.Name="Minimize window">
                         <Viewbox Width="11" Height="11">
@@ -100,11 +101,10 @@
                         </Viewbox>
                     </Button>
                     <Button Classes="chrome-button"
-                            Width="46"
-                            Height="32"
+                            Width="40"
+                            Height="40"
                             Background="{DynamicResource ButtonBackgroundBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
-                            CornerRadius="4"
                             Click="OnToggleMaximizeWindowClick"
                             AutomationProperties.Name="Maximize or restore window">
                         <Grid Width="24" Height="24">
@@ -149,11 +149,10 @@
                         </Grid>
                     </Button>
                     <Button Classes="chrome-button chrome-close"
-                            Width="46"
-                            Height="32"
+                            Width="40"
+                            Height="40"
                             Background="{DynamicResource DestructiveBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
-                            CornerRadius="4"
                             Click="OnCloseWindowClick"
                             AutomationProperties.Name="Close window">
                         <Viewbox Width="11" Height="11">

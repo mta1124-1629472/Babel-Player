@@ -397,7 +397,7 @@ public partial class MainWindow : Window
 
         var wizard = new SpeakerReferenceWizardWindow
         {
-            DataContext = new SpeakerReferenceWizardViewModel(vm.Playback, vm.Coordinator),
+            DataContext = new SpeakerReferenceWizardViewModel(vm.Playback, vm.Coordinator, vm.ModelDownloader),
         };
         wizard.Closed += (_, _) => _speakerWizardWindow = null;
         _speakerWizardWindow = wizard;

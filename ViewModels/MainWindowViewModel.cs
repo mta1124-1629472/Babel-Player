@@ -36,6 +36,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public SessionWorkflowCoordinator Coordinator { get; }
 
+    /// <summary>Local model downloads (Faster Whisper, Piper voices in wizard, etc.).</summary>
+    public ModelDownloader ModelDownloader => _modelDownloader;
+
     public EmbeddedPlaybackViewModel Playback { get; }
 
     public SegmentInspectionViewModel Inspection { get; }
