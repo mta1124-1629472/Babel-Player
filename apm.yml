@@ -8,6 +8,7 @@ dependencies:
   apm:
   - github/awesome-copilot/skills/review-and-refactor
   - danielmeppiel/form-builder
+  - anthropics/claude-plugins-official/plugins/hookify
   mcp: []
 scripts: {}
 platform:

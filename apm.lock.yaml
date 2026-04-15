@@ -2,6 +2,23 @@ lockfile_version: '1'
 generated_at: '2026-04-15T08:08:30.421298+00:00'
 apm_version: 0.8.11
 dependencies:
+- repo_url: anthropics/claude-plugins-official
+  host: github.com
+  resolved_commit: 48aa43517886014e90ee80a6461f9de75045369d
+  virtual_path: plugins/hookify
+  is_virtual: true
+  package_type: hook_package
+  deployed_files:
+  - .cursor/hooks/hookify/hooks/posttooluse.py
+  - .cursor/hooks/hookify/hooks/pretooluse.py
+  - .cursor/hooks/hookify/hooks/stop.py
+  - .cursor/hooks/hookify/hooks/userpromptsubmit.py
+  - .github/hooks/hookify-hooks.json
+  - .github/hooks/scripts/hookify/hooks/posttooluse.py
+  - .github/hooks/scripts/hookify/hooks/pretooluse.py
+  - .github/hooks/scripts/hookify/hooks/stop.py
+  - .github/hooks/scripts/hookify/hooks/userpromptsubmit.py
+  content_hash: sha256:691165a9e53032b7eab3561f1a96454ca5c196b01b59c1e099f681eddc5c1ac0
 - repo_url: danielmeppiel/form-builder
   host: github.com
   resolved_commit: 6be19fcbba6ac9f114175e7df14cfe5688e247fa

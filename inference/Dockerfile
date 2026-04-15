@@ -22,8 +22,11 @@ RUN pip install --upgrade pip setuptools wheel
 WORKDIR /app
 
 COPY gpu-requirements.txt gpu-constraints.txt ./
-RUN pip install --no-cache-dir \
-    --retries 5 \
+
+# Install with aggressive retry settings and cache to resume failed downloads
+RUN pip install \
+    --retries 10 \
+    --default-timeout=1000 \
     -c gpu-constraints.txt \
     -r gpu-requirements.txt
 
