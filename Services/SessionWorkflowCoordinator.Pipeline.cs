@@ -1461,12 +1461,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (CurrentSession.Stage < SessionWorkflowStage.Translated)
         {
-            await TranslateTranscriptAsync(
+            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
                 progress,
-                targetLanguage: null,
-                sourceLanguage: null,
                 GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                 cancellationToken);
+            return;
         }
 
         if (CurrentSession.Stage < SessionWorkflowStage.TtsGenerated)
@@ -1520,12 +1520,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (CurrentSession.Stage < SessionWorkflowStage.Translated)
         {
-            await TranslateTranscriptAsync(
+            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
                 progress,
-                targetLanguage: null,
-                sourceLanguage: null,
                 GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                 cancellationToken);
+            return;
         }
 
         if (CurrentSession.Stage < SessionWorkflowStage.TtsGenerated)
