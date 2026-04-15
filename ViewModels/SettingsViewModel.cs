@@ -11,6 +11,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Babel.Player.Models;
+using Babel.Player.Models.LanguageSupport;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
@@ -68,7 +69,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         ThemeOptions = ["Light", "Dark", "System"];
 
         // TTS voice options
-        TtsVoiceOptions = [.. TtsRegistry.EdgeTtsVoices];
+        TtsVoiceOptions = [.. EdgeTtsCatalog.VoiceIds];
 
         // Video hardware settings
         _videoHwdec          = current.VideoHwdec;

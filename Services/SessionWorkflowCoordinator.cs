@@ -625,7 +625,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             !string.Equals(CurrentSettings.TranslationProvider, selection.TranslationProvider, StringComparison.Ordinal) ||
             !string.Equals(CurrentSettings.TranslationModel, selection.TranslationModel, StringComparison.Ordinal) ||
             (!string.IsNullOrWhiteSpace(selection.TargetLanguage) &&
-             !string.Equals(CurrentSettings.TargetLanguage, selection.TargetLanguage, StringComparison.Ordinal));
+             !LanguageCode.TargetLanguagesMatch(CurrentSettings.TargetLanguage, selection.TargetLanguage));
         var ttsProviderChanged =
             CurrentSettings.TtsProfile != selection.TtsRuntime ||
             !string.Equals(CurrentSettings.TtsProvider, selection.TtsProvider, StringComparison.Ordinal) ||
@@ -653,7 +653,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         CurrentSettings.TtsProvider = selection.TtsProvider;
         CurrentSettings.TtsVoice = selection.TtsVoice;
         if (!string.IsNullOrWhiteSpace(selection.TargetLanguage))
-            CurrentSettings.TargetLanguage = selection.TargetLanguage;
+            CurrentSettings.TargetLanguage = LanguageCode.NormalizeForPersistence(selection.TargetLanguage);
 
         CurrentSettings.TranscriptionLanguageHint =
             SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(selection.TranscriptionLanguageHint);
