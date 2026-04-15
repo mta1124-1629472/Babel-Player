@@ -417,11 +417,9 @@ public sealed partial class SessionWorkflowCoordinator
             ?? [];
 
         int totalSegments = candidateSegments.Count;
-        int parallelism = Math.Max(1, Math.Min(_ttsService!.MaxConcurrency, candidateSegments.Count));
-
         ReportStage(
             stageContext,
-            $"Generating {totalSegments} segment clips (concurrency={parallelism})…",
+            $"Generating {totalSegments} segment clips…",
             progress01: 0,
             isIndeterminate: true);
 
@@ -442,14 +440,20 @@ public sealed partial class SessionWorkflowCoordinator
             else
             {
                 int completed = 0;
-                await Parallel.ForEachAsync(
-                    candidateSegments,
-                    new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = cancellationToken },
-                    async (seg, ct) =>
-                        await GenerateSingleSegmentAsync(
-                            seg, voice, ttsLanguage, segmentsDir, segmentAudioPaths,
-                            totalSegments, stageContext, ct,
-                            onSucceeded: () => Interlocked.Increment(ref completed)));
+                foreach (var seg in candidateSegments)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await GenerateSingleSegmentAsync(
+                        seg,
+                        voice,
+                        ttsLanguage,
+                        segmentsDir,
+                        segmentAudioPaths,
+                        totalSegments,
+                        stageContext,
+                        cancellationToken,
+                        onSucceeded: () => Interlocked.Increment(ref completed));
+                }
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -1265,10 +1269,19 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (CurrentSession.Stage < SessionWorkflowStage.Transcribed && !shouldRunDiarization)
         {
-            await ExecuteStreamingPipelineAsync(
+            await TranscribeMediaAsync(
                 progress,
                 GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress),
+                cancellationToken);
+            await TranslateTranscriptAsync(
+                progress,
+                targetLanguage: null,
+                sourceLanguage: null,
                 GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                cancellationToken);
+            await GenerateTtsAsync(
+                progress,
+                voice: null,
                 GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                 cancellationToken);
             return;
@@ -1291,12 +1304,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (CurrentSession.Stage < SessionWorkflowStage.Translated)
         {
-            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
+            await TranslateTranscriptAsync(
                 progress,
+                targetLanguage: null,
+                sourceLanguage: null,
                 GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
-                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                 cancellationToken);
-            return;
         }
 
         if (CurrentSession.Stage < SessionWorkflowStage.TtsGenerated)
@@ -1350,12 +1363,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (CurrentSession.Stage < SessionWorkflowStage.Translated)
         {
-            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
+            await TranslateTranscriptAsync(
                 progress,
+                targetLanguage: null,
+                sourceLanguage: null,
                 GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
-                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                 cancellationToken);
-            return;
         }
 
         if (CurrentSession.Stage < SessionWorkflowStage.TtsGenerated)
