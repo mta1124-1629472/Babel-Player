@@ -33,6 +33,7 @@
                     <SolidColorBrush x:Key="AccentSubtleBrush"              Color="#312350" />
                     
                     <SolidColorBrush x:Key="DestructiveBrush"               Color="#6B2525" />
+                    <SolidColorBrush x:Key="DestructiveHoverBrush"         Color="#823232" />
                     <SolidColorBrush x:Key="DestructiveFgBrush"             Color="#FCA5A5" />
                     <SolidColorBrush x:Key="PositiveBrush"                  Color="#1E2E1E" />
                     <SolidColorBrush x:Key="PositiveFgBrush"                Color="#86EFAC" />
@@ -132,27 +133,24 @@
         <Style Selector="Button.control-pill.active:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PillActivePressedBackgroundBrush}" />
         </Style>
+        <!-- Caption controls: no text Content; use vector icons. Keep layout stable (no hover scale). -->
         <Style Selector="Button.chrome-button">
-            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-            <Setter Property="RenderTransform">
-                <Setter.Value>
-                    <ScaleTransform ScaleX="1" ScaleY="1" />
-                </Setter.Value>
-            </Setter>
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="UseLayoutRounding" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="ScaleTransform.ScaleX" Duration="0:0:0.10" />
-                    <DoubleTransition Property="ScaleTransform.ScaleY" Duration="0:0:0.10" />
+                    <BrushTransition Property="Background" Duration="0:0:0.08" />
                 </Transitions>
             </Setter>
         </Style>
-        <Style Selector="Button.chrome-button:pointerover">
-            <Setter Property="ScaleTransform.ScaleX" Value="1.03" />
-            <Setter Property="ScaleTransform.ScaleY" Value="1.03" />
+        <Style Selector="Button.chrome-button:pointerover:not(.chrome-close) /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
         </Style>
-        <Style Selector="Button.chrome-button:pressed">
-            <Setter Property="ScaleTransform.ScaleX" Value="0.97" />
-            <Setter Property="ScaleTransform.ScaleY" Value="0.97" />
+        <Style Selector="Button.chrome-button.chrome-close:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DestructiveHoverBrush}" />
         </Style>
     </Application.Styles>
 </Application>

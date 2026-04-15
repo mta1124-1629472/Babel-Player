@@ -20,6 +20,34 @@ public partial class SpeakerReferenceWizardWindow : Window
     public SpeakerReferenceWizardWindow()
     {
         InitializeComponent();
+
+        if (this.FindControl<MpvVideoView>("WizardVideoView") is { } wizardVideo)
+        {
+            wizardVideo.HandleReady += OnWizardVideoHandleReady;
+            wizardVideo.SizeChanged += (_, _) => UpdateWizardVideoViewport();
+        }
+
+        PositionChanged += (_, _) => UpdateWizardVideoViewport();
+    }
+
+    private void OnWizardVideoHandleReady(object? sender, IntPtr hwnd)
+    {
+        if (DataContext is SpeakerReferenceWizardViewModel vm)
+        {
+            vm.MiniPreview.AttachAndLoad(hwnd);
+            UpdateWizardVideoViewport();
+        }
+    }
+
+    private void UpdateWizardVideoViewport()
+    {
+        if (this.FindControl<MpvVideoView>("WizardVideoView") is not { } videoView ||
+            DataContext is not SpeakerReferenceWizardViewModel vm)
+        {
+            return;
+        }
+
+        vm.MiniPreview.SetViewport(videoView, this);
     }
 
     protected override void OnClosed(EventArgs e)

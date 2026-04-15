@@ -138,6 +138,24 @@ public sealed class SpeakerReferenceWizardTests
     }
 
     [Fact]
+    public void ComputeClipStartAndBounds_ClampsWindowAndEndOfMedia()
+    {
+        var (start, _) = SpeakerWizardPlayheadHelper.ComputeClipStartAndBounds(
+            centerSec: 100.0,
+            windowSec: 8.0,
+            mediaDurationSec: 60.0);
+
+        Assert.Equal(52.0, start, precision: 5);
+
+        var (start2, _) = SpeakerWizardPlayheadHelper.ComputeClipStartAndBounds(
+            centerSec: 5.0,
+            windowSec: 10.0,
+            mediaDurationSec: 120.0);
+
+        Assert.Equal(0.0, start2, precision: 5);
+    }
+
+    [Fact]
     public void ListDownloadedPiperVoiceIds_ReturnsVoicesWithOnnxAndSidecarJson()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"babel-piper-list-{Guid.NewGuid():N}");

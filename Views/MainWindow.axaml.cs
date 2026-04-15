@@ -99,11 +99,28 @@ public partial class MainWindow : Window
         var videoView = this.FindControl<MpvVideoView>("VideoView");
         if (videoView is not null)
             UpdateEmbeddedTransportViewportMetrics(videoView);
+
+        SyncChromeWindowState();
+    }
+
+    private void SyncChromeWindowState()
+    {
+        var maxIcon = this.FindControl<Control>("ChromeMaximizeIcon");
+        var restoreIcon = this.FindControl<Control>("ChromeRestoreIcon");
+        if (maxIcon is null || restoreIcon is null)
+            return;
+
+        var maximized = WindowState == WindowState.Maximized;
+        maxIcon.IsVisible = !maximized;
+        restoreIcon.IsVisible = maximized;
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+
+        if (change.Property == WindowStateProperty)
+            SyncChromeWindowState();
 
         if (change.Property != WindowStateProperty || _isApplyingWindowStateFromViewModel)
             return;
