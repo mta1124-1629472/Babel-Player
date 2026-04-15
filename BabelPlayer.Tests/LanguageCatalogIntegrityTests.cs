@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text.RegularExpressions;
+using Babel.Player.Models;
 using Babel.Player.Models.LanguageSupport;
 
 namespace BabelPlayer.Tests;
@@ -46,5 +47,26 @@ public sealed class LanguageCatalogIntegrityTests
         Assert.True(WhisperAsrLanguageCatalog.IsSupportedHint("en"));
         Assert.True(WhisperAsrLanguageCatalog.IsSupportedHint("zh"));
         Assert.False(WhisperAsrLanguageCatalog.IsSupportedHint("not-a-whisper-code-xyz"));
+    }
+
+    [Fact]
+    public void PipelineTargetLanguageOptions_AlignWithNllbCatalog()
+    {
+        var targets = PipelineTargetLanguageOption.All.Select(o => o.Code).OrderBy(c => c).ToList();
+        Assert.Equal(NllbLanguageCatalog.IsoCodes.OrderBy(c => c).ToList(), targets);
+    }
+
+    [Fact]
+    public void SpokenLanguageOptions_CoverNllbCodesSupportedByWhisper()
+    {
+        var hints = SpokenLanguageOption.All.Where(o => o.Code is not null).Select(o => o.Code!).ToHashSet();
+        foreach (var code in NllbLanguageCatalog.IsoCodes)
+        {
+            if (WhisperAsrLanguageCatalog.IsSupportedHint(code))
+                Assert.Contains(code, hints);
+        }
+
+        Assert.Equal("Auto-detect", SpokenLanguageOption.All[0].DisplayName);
+        Assert.Null(SpokenLanguageOption.All[0].Code);
     }
 }

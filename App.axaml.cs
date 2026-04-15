@@ -107,9 +107,9 @@ public partial class App : Application
                     GpuApi:         appSettings.VideoGpuApi,
                     UseGpuNext:     appSettings.VideoUseGpuNext,
                     VsrEnabled:     appSettings.VideoVsrEnabled,
-                    HdrEnabled:     appSettings.VideoHdrEnabled,
-                    AllowHdrPassthrough: appSettings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
-                    PreferDriverAutoHdr: appSettings.VideoPreferDriverAutoHdr,
+                    HdrPlaybackMode: appSettings.VideoHdrPlaybackMode,
+                    AllowHdrPassthrough: appSettings.VideoHdrPlaybackMode != VideoHdrPlaybackMode.Off
+                        && HardwareSnapshot.QueryActiveHdrDisplay(),
                     ToneMapping:    appSettings.VideoToneMapping,
                     TargetPeak:     appSettings.VideoTargetPeak,
                     HdrComputePeak: appSettings.VideoHdrComputePeak),

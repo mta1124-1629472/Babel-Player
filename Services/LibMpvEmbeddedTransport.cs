@@ -120,27 +120,24 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         SetOption("hwdec",   _options.HwdecMode);
         SetOption("gpu-api", _options.GpuApi);
 
-        // ── HDR passthrough options (gpu-next + active HDR display required) ──
-        // PreferDriverAutoHdr keeps driver-managed RTX Auto HDR in charge by avoiding mpv's
-        // explicit HDR output options, which can otherwise suppress SDR->HDR conversion paths.
-        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough && !_options.PreferDriverAutoHdr)
+        // ── HDR options (gpu-next; mutually exclusive driver RTX HDR vs mpv passthrough) ──
+        if (_options.UseGpuNext
+            && _options.AllowHdrPassthrough
+            && _options.HdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough)
         {
-            // Request mpv's HDR-capable output path. Driver-level Auto HDR remains
-            // separate and cannot be controlled from this playback path.
             SetOption("target-colorspace-hint", "yes");
-            // Tone-mapping algorithm for HDR → display peak mapping.
             SetOption("tone-mapping", _options.ToneMapping);
-            // Display peak nit target ("auto" or a numeric string like "1000").
             if (!string.IsNullOrWhiteSpace(_options.TargetPeak))
                 SetOption("target-peak", _options.TargetPeak);
-            // Dynamic per-frame peak detection — may cause brightness instability.
             SetOption("hdr-compute-peak", _options.HdrComputePeak ? "yes" : "no");
-            // Honour the display ICC profile for accurate colour.
             SetOption("icc-profile-auto", "yes");
         }
-        else if (_options.UseGpuNext && _options.HdrEnabled && _options.PreferDriverAutoHdr)
+        else if (_options.UseGpuNext
+                 && _options.AllowHdrPassthrough
+                 && _options.HdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr)
         {
-            _log?.Info("HDR passthrough preference: keeping NVIDIA driver Auto HDR compatibility mode (mpv HDR passthrough options not forced).");
+            _log?.Info(
+                "HDR mode: NVIDIA driver RTX/Auto HDR — mpv HDR passthrough options are not forced.");
         }
 
         // Keep audio enabled for source media preview
@@ -158,7 +155,9 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _isPaused = true;
         _hasEnded = false;
 
-        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough && !_options.PreferDriverAutoHdr)
+        if (_options.UseGpuNext
+            && _options.AllowHdrPassthrough
+            && _options.HdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough)
         {
             _log?.Info(
                 $"Configured mpv HDR passthrough: gpu-next={_options.UseGpuNext}, " +
