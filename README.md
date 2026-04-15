@@ -175,7 +175,7 @@ On Windows, Settings exposes optional **RTX Video** features when **gpu-next** i
 
 ## Language support
 
-**At a glance:** The **local** pipeline lets you pick **16** **target** (dub) languages. **Source** speech is handled by Whisper: **Auto-detect** reaches **far more** languages than the **manual** spoken-language hint list, which only mirrors those **16** ISO codes (plus Auto-detect) so hints stay aligned with the embedded translation batch. Separately, **cloud** translators may advertise **many more** destination languages than this app’s embedded batch.
+**At a glance:** **Dub targets** are a **curated set of 16** local output languages—each one is wired end-to-end (translation + UI catalogs + offline Piper voices where available) so the pipeline stays predictable and testable. **Transcription** is the flexible side: **Auto-detect** uses Whisper’s full breadth; the **optional spoken-language hints** are shortcuts for languages that match that same dub lineup, so what you hear and what you translate into stay in sync. Cloud translation APIs may add **extra destinations** beyond the embedded batch, depending on provider and integration.
 
 Language coverage depends on **which stage** you mean. The UI distinguishes **what language you are dubbing into** (translation target) from **what language is spoken in the source** (transcription / ASR).
 
@@ -185,18 +185,15 @@ The embedded **local** translation path (NLLB + CTranslate2) exposes **16** sele
 
 Arabic (`ar`), German (`de`), English (`en`), Spanish (`es`), French (`fr`), Hindi (`hi`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Dutch (`nl`), Polish (`pl`), Portuguese (`pt`), Russian (`ru`), Swedish (`sv`), Turkish (`tr`), Chinese — Simplified (`zh`).
 
-The underlying **NLLB-200** models can represent **many more** language pairs in principle; this product batch keeps targets fixed for predictable downloads and QA. Cloud translation providers (DeepL, Gemini, OpenAI, …) may offer **additional** targets depending on API and app integration.
+The **NLLB-200** family can model additional pairs in research settings; Babel Player ships this **focused batch** so downloads, QA, and UX stay manageable. Cloud translation providers (DeepL, Gemini, OpenAI, …) can extend reach with **their** target lists when you route translation through them.
 
 ### Translate **from** (source speech / transcription)
 
-**Transcription** uses **Faster-Whisper** (OpenAI Whisper weights). Whisper supports **dozens of source languages** when you use **Auto-detect** (recommended when the spoken language is not listed below).
+**Transcription** uses **Faster-Whisper** (OpenAI Whisper weights). For **source** audio, the default is **Auto-detect**, which leverages Whisper across **many** spoken languages—use it whenever you want maximum coverage or the language does not appear in the hint list.
 
-The **optional spoken-language hint** dropdown is **much smaller** than the set of **translation targets** some **cloud** providers list: it is **narrower** than Whisper’s full ASR set too. It lists **Auto-detect** first, then **only** languages that appear in **both** the embedded translation batch **and** Whisper’s language list (today that is the **same 16** ISO codes as local translation targets). So:
+The **spoken-language hint** menu (Auto-detect, then 16 ISO codes) is not a cap on recognition: it is a **curated shortcut list**—languages that appear in **both** the local dub batch **and** Whisper’s ASR table—so choosing a hint lines up transcription with a **guaranteed local translation + dub path**. You are not trading away Whisper’s reach; you are optionally pinning a known-good pairing.
 
-- **Possible “translate from” (transcription) in practice:** any language Whisper can handle → **often much broader** than the named hint list, via **Auto-detect**.
-- **Explicit hint list:** **16** named languages (plus Auto-detect), kept **aligned** with local translation targets—not an exhaustive list of every language Whisper supports.
-
-For **local Piper TTS**, curated download rows cover **14** of those 16 targets; **Japanese** and **Korean** do not ship in the standard **rhasspy/piper-voices** v1.0.0 corpus—use **Edge TTS**, **Qwen**, or another provider for those dubs.
+For **offline Piper TTS**, the in-app voice catalog ships **14** of those **16** targets; **Japanese** and **Korean** use **Edge TTS**, **Qwen**, or another provider until Piper publishes matching voices in the standard **rhasspy/piper-voices** release.
 
 ---
 ## Requirements
