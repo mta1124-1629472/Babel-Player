@@ -72,8 +72,9 @@ public sealed class SessionArtifactReader
             var assignedVoice = ResolveAssignedVoice(speakerId, speakerVoiceAssignments);
             var hasReferenceAudio = HasReferenceAudio(speakerId, speakerReferenceAudioPaths);
 
+            SegmentTimingMode timingOverride = default;
             var hasTimingOverride = timingOverrides is not null
-                && timingOverrides.TryGetValue(id, out var timingOverride);
+                && timingOverrides.TryGetValue(id, out timingOverride);
 
             result.Add(new WorkflowSegmentState(
                 id,
