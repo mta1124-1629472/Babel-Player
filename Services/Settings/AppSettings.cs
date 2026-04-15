@@ -211,6 +211,15 @@ public sealed class AppSettings
     public bool VideoHdrEnabled { get; set; } = false;
 
     /// <summary>
+    /// Prefer NVIDIA's driver-level Auto HDR path when both HDR and gpu-next are enabled.
+    /// When true, Babel Player avoids forcing mpv's HDR passthrough options so RTX Auto HDR
+    /// can continue owning SDR->HDR conversion. Turn this off if you explicitly want mpv HDR
+    /// passthrough/tone-mapping instead of driver-managed HDR conversion.
+    /// Takes effect on app restart.
+    /// </summary>
+    public bool VideoPreferDriverAutoHdr { get; set; } = true;
+
+    /// <summary>
     /// HDR tone-mapping algorithm used by mpv when VideoHdrEnabled is true.
     /// Options: bt.2390, mobius, clip, auto.
     /// Takes effect on app restart.

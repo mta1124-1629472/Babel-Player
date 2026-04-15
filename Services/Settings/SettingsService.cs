@@ -121,6 +121,7 @@ public sealed class SettingsService
         public bool? VideoUseGpuNext { get; set; }
         public bool? VideoVsrEnabled { get; set; }
         public bool? VideoHdrEnabled { get; set; }
+        public bool? VideoPreferDriverAutoHdr { get; set; }
         public string? VideoToneMapping { get; set; }
         public string? VideoTargetPeak { get; set; }
         public bool? VideoHdrComputePeak { get; set; }
@@ -190,6 +191,7 @@ public sealed class SettingsService
             settings.VideoUseGpuNext = VideoUseGpuNext ?? settings.VideoUseGpuNext;
             settings.VideoVsrEnabled = VideoVsrEnabled ?? settings.VideoVsrEnabled;
             settings.VideoHdrEnabled = VideoHdrEnabled ?? settings.VideoHdrEnabled;
+            settings.VideoPreferDriverAutoHdr = VideoPreferDriverAutoHdr ?? settings.VideoPreferDriverAutoHdr;
             settings.VideoToneMapping = VideoToneMapping ?? settings.VideoToneMapping;
             settings.VideoTargetPeak = VideoTargetPeak ?? settings.VideoTargetPeak;
             settings.VideoHdrComputePeak = VideoHdrComputePeak ?? settings.VideoHdrComputePeak;
@@ -230,6 +232,7 @@ public sealed class SettingsService
             VideoUseGpuNext = settings.VideoUseGpuNext,
             VideoVsrEnabled = settings.VideoVsrEnabled,
             VideoHdrEnabled = settings.VideoHdrEnabled,
+            VideoPreferDriverAutoHdr = settings.VideoPreferDriverAutoHdr,
             VideoToneMapping = settings.VideoToneMapping,
             VideoTargetPeak = settings.VideoTargetPeak,
             VideoHdrComputePeak = settings.VideoHdrComputePeak,

@@ -80,6 +80,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         // Video enhancement settings
         _videoVsrEnabled     = current.VideoVsrEnabled;
         _videoHdrEnabled     = current.VideoHdrEnabled;
+        _videoPreferDriverAutoHdr = current.VideoPreferDriverAutoHdr;
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
@@ -364,6 +365,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _videoHdrEnabled;
 
+    [ObservableProperty]
+    private bool _videoPreferDriverAutoHdr;
+
     public string VsrSupportHintText => _coordinator.VideoEnhancementDiagnostics.SupportHintText;
     public string VsrRequestedStateText => _coordinator.VideoEnhancementDiagnostics.RequestedStateText;
     public string VsrResolvedStateText => _coordinator.VideoEnhancementDiagnostics.ResolvedStateText;
@@ -386,7 +390,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public bool HasHdrAvailabilityHint => !string.IsNullOrWhiteSpace(HdrAvailabilityHintText);
 
     public static string HdrDriverFeatureHintText =>
-        "RTX Auto HDR (SDR→HDR) is a separate driver feature — enable it in NVIDIA Control Panel.";
+        "RTX Auto HDR (SDR→HDR) is a driver feature in NVIDIA Control Panel. If HDR passthrough seems to suppress it, keep 'Prefer NVIDIA driver Auto HDR' enabled.";
 
     // ── Hotkeys ───────────────────────────────────────────────────────────────
 
@@ -430,6 +434,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.VideoUseGpuNext     = VideoUseGpuNext;
         settings.VideoVsrEnabled     = VideoVsrEnabled;
         settings.VideoHdrEnabled     = VideoHdrEnabled;
+        settings.VideoPreferDriverAutoHdr = VideoPreferDriverAutoHdr;
 
         // Apply theme change immediately when Save & Close is pressed
         if (Application.Current is { } app)

@@ -884,26 +884,30 @@ public sealed class SegmentInspectionTests
     }
 
     [Fact]
-    public void EmbeddedPlaybackViewModel_RunDiarizationOnlyCommand_RequiresProviderAndTranscribedStage()
+    public void EmbeddedPlaybackViewModel_RefreshDiarizationCommand_RequiresProviderAndTranscribedStage()
     {
         var playback = CreatePlaybackVm();
 
-        Assert.False(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.False(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
+
+        var transcriptPath = Path.GetTempFileName();
+        File.WriteAllText(transcriptPath, """{"language":"es","segments":[]}""");
 
         playback.Coordinator.CurrentSession = playback.Coordinator.CurrentSession with
         {
             Stage = SessionWorkflowStage.Transcribed,
+            TranscriptPath = transcriptPath,
         };
 
-        Assert.True(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.True(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
 
         playback.SpeakerRouting.DiarizationProvider = string.Empty;
 
-        Assert.False(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.False(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
     }
 
     [Fact]
-    public async Task EmbeddedPlaybackViewModel_RunDiarizationOnlyCommand_WhenAssignmentsChange_ResetsPipelineToTranslated()
+    public async Task EmbeddedPlaybackViewModel_RefreshDiarizationCommand_WhenAssignmentsChange_ResetsPipelineToTranslated()
     {
         var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}");
         var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.log"));
@@ -943,9 +947,9 @@ public sealed class SegmentInspectionTests
 
         var playback = new EmbeddedPlaybackViewModel(coordinator);
 
-        Assert.True(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.True(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
 
-        await playback.Pipeline.RunDiarizationOnlyCommand.ExecuteAsync(null);
+        await playback.Pipeline.RefreshDiarizationCommand.ExecuteAsync(null);
 
         var translation = await ArtifactJson.LoadTranslationAsync(translationPath);
 
