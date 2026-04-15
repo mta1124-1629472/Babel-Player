@@ -1478,4 +1478,104 @@ public sealed partial class SessionWorkflowCoordinator
         if (string.IsNullOrWhiteSpace(raw)) return nonNormalizedFallback;
         return raw.Trim();
     }
+
+    /// <summary>
+    /// Re-run transcription, optionally continuing through diarization (if enabled), translation, and TTS.
+    /// </summary>
+    internal async Task RerunTranscriptionAsync(
+        bool remainingDownstream,
+        IProgress<PipelineStageUpdate>? stageProgress,
+        CancellationToken cancellationToken)
+    {
+        ResetPipelineToMediaLoaded();
+        SaveCurrentSession();
+
+        if (remainingDownstream)
+        {
+            await AdvancePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var singleStage = new[] { SessionWorkflowStage.Transcribed };
+        await TranscribeMediaAsync(
+            null,
+            GetStageContext(singleStage, SessionWorkflowStage.Transcribed, stageProgress),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Re-run diarization; optionally continue with translation and TTS afterward.
+    /// </summary>
+    internal async Task RerunDiarizationAsync(
+        bool remainingDownstream,
+        IProgress<PipelineStageUpdate>? stageProgress,
+        CancellationToken cancellationToken)
+    {
+        var hadTranslatableOutput = CurrentSession.Stage >= SessionWorkflowStage.Translated;
+        var speakerAssignmentsChanged = await RunDiarizationAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!remainingDownstream)
+        {
+            if (speakerAssignmentsChanged && hadTranslatableOutput)
+            {
+                ResetPipelineToTranslated();
+                SaveCurrentSession();
+            }
+
+            return;
+        }
+
+        if (HasDiarizationMarker(CurrentSession))
+        {
+            ResetPipelineToDiarized();
+            SaveCurrentSession();
+            await ContinuePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            ResetPipelineToTranscribed();
+            SaveCurrentSession();
+            await AdvancePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Re-run translation from the current transcript; optionally continue with TTS.
+    /// </summary>
+    internal async Task RerunTranslationAsync(
+        bool remainingDownstream,
+        IProgress<PipelineStageUpdate>? stageProgress,
+        CancellationToken cancellationToken)
+    {
+        ResetPipelineForTranslationRetry();
+
+        if (remainingDownstream)
+        {
+            if (CurrentSession.Stage >= SessionWorkflowStage.Diarized)
+                await ContinuePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
+            else
+                await AdvancePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var singleStage = new[] { SessionWorkflowStage.Translated };
+        await TranslateTranscriptAsync(
+            null,
+            null,
+            null,
+            GetStageContext(singleStage, SessionWorkflowStage.Translated, stageProgress),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Re-generate dub (TTS) from the current translation artifact.
+    /// </summary>
+    internal async Task RerunDubAsync(
+        IProgress<PipelineStageUpdate>? stageProgress,
+        CancellationToken cancellationToken)
+    {
+        ResetPipelineToTranslated();
+        SaveCurrentSession();
+        await RunTtsOnlyAsync(null, null, stageProgress, cancellationToken).ConfigureAwait(false);
+    }
 }

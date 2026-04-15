@@ -41,6 +41,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         SessionWorkflowCoordinator coordinator,
         ApiKeyStore? apiKeyStore = null,
         IErrorDialogService? errorDialogService = null,
+        IPipelineRefreshDialogService? pipelineRefreshDialogService = null,
         string? logFilePath = null)
     {
         _coordinator = coordinator;
@@ -49,7 +50,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         _logFilePath = logFilePath;
 
         Preview = new EmbeddedPlaybackPreviewViewModel(this, coordinator);
-        Pipeline = new EmbeddedPlaybackPipelineViewModel(this, coordinator);
+        Pipeline = new EmbeddedPlaybackPipelineViewModel(this, coordinator, pipelineRefreshDialogService);
         SpeakerRouting = new EmbeddedPlaybackSpeakerRoutingViewModel(this, coordinator);
 
         BuildProviderCaches();
@@ -118,7 +119,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     internal void ResetInteractiveModes() => Preview.ResetInteractiveModes();
 
-    partial void OnIsBusyChanged(bool value) => Pipeline.NotifyBusyStateChanged();
+    partial void OnIsBusyChanged(bool value)
+    {
+        Pipeline.NotifyBusyStateChanged();
+        Pipeline.NotifyPipelineFooterChrome();
+    }
 
     private async void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

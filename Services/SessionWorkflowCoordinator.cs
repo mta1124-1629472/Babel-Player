@@ -186,6 +186,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     VsrEnabled:          coreServices.Settings.VideoVsrEnabled,
                     HdrEnabled:          coreServices.Settings.VideoHdrEnabled,
                     AllowHdrPassthrough: coreServices.Settings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
+                    PreferDriverAutoHdr: coreServices.Settings.VideoPreferDriverAutoHdr,
                     ToneMapping:         coreServices.Settings.VideoToneMapping,
                     TargetPeak:          coreServices.Settings.VideoTargetPeak,
                     HdrComputePeak:      coreServices.Settings.VideoHdrComputePeak),
@@ -545,7 +546,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         };
     }
 
-    private void ResetPipelineToDiarized()
+    public void ResetPipelineToDiarized()
     {
         if (CurrentSession.Stage < SessionWorkflowStage.Diarized || !HasDiarizationMarker(CurrentSession))
             return;
@@ -586,6 +587,20 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             TtsProvider = null,
             StatusMessage = "Pipeline reset to translated state."
         };
+    }
+
+    /// <summary>
+    /// Clears translation and downstream artifacts so translation can be re-run, using the same rules as translation settings invalidation.
+    /// </summary>
+    public void ResetPipelineForTranslationRetry()
+    {
+        if (HasDiarizationMarker(CurrentSession))
+            ResetPipelineToDiarized();
+        else
+            ResetPipelineToTranscribed();
+
+        CurrentSession = CurrentSession with { StatusMessage = "Ready to re-run translation." };
+        SaveCurrentSession();
     }
 
     public void ClearPipeline()

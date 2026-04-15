@@ -121,7 +121,9 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         SetOption("gpu-api", _options.GpuApi);
 
         // ── HDR passthrough options (gpu-next + active HDR display required) ──
-        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
+        // PreferDriverAutoHdr keeps driver-managed RTX Auto HDR in charge by avoiding mpv's
+        // explicit HDR output options, which can otherwise suppress SDR->HDR conversion paths.
+        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough && !_options.PreferDriverAutoHdr)
         {
             // Request mpv's HDR-capable output path. Driver-level Auto HDR remains
             // separate and cannot be controlled from this playback path.
@@ -135,6 +137,10 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             SetOption("hdr-compute-peak", _options.HdrComputePeak ? "yes" : "no");
             // Honour the display ICC profile for accurate colour.
             SetOption("icc-profile-auto", "yes");
+        }
+        else if (_options.UseGpuNext && _options.HdrEnabled && _options.PreferDriverAutoHdr)
+        {
+            _log?.Info("HDR passthrough preference: keeping NVIDIA driver Auto HDR compatibility mode (mpv HDR passthrough options not forced).");
         }
 
         // Keep audio enabled for source media preview
@@ -152,7 +158,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _isPaused = true;
         _hasEnded = false;
 
-        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
+        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough && !_options.PreferDriverAutoHdr)
         {
             _log?.Info(
                 $"Configured mpv HDR passthrough: gpu-next={_options.UseGpuNext}, " +
@@ -630,22 +636,31 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         double scaleExact = Math.Min(
             monitorWidth / (double)videoWidth,
             monitorHeight / (double)videoHeight);
-        double scale = Math.Floor(scaleExact * 10.0) / 10.0;
+        const double upscaleEpsilon = 1e-9;
+        double scaleFloored = Math.Floor(scaleExact * 10.0) / 10.0;
+        // Bias toward applying VSR: flooring to one decimal can turn ratios like 1.09 into 1.0 and
+        // incorrectly skip. When any upscale is needed, use the floored value if it already clears
+        // 1.0; otherwise round up to the next tenth so d3d11vpp always receives scale > 1.
+        double scaleForFilter = scaleFloored > 1.0
+            ? scaleFloored
+            : scaleExact > 1.0 + upscaleEpsilon
+                ? Math.Ceiling(scaleExact * 10.0) / 10.0
+                : scaleFloored;
 
-        if (scale <= 1.0)
-            return VsrFilterPlan.Skip("no-upscaling-required", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat, scale);
+        if (scaleForFilter <= 1.0)
+            return VsrFilterPlan.Skip("no-upscaling-required", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat, scaleForFilter);
 
         bool needsFormatConversion =
             !string.IsNullOrEmpty(hwPixelFormat) &&
             hwPixelFormat != "nv12" &&
             hwPixelFormat != "yuv420p";
 
-        string scaleStr = scale.ToString("F1", CultureInfo.InvariantCulture);
+        string scaleStr = scaleForFilter.ToString("F1", CultureInfo.InvariantCulture);
         string filterChain = needsFormatConversion
             ? $"@vsr:lavfi=[format=nv12],d3d11vpp=scaling-mode=nvidia:scale={scaleStr}"
             : $"@vsr:d3d11vpp=scaling-mode=nvidia:scale={scaleStr}";
 
-        return VsrFilterPlan.Apply(filterChain, scale, videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
+        return VsrFilterPlan.Apply(filterChain, scaleForFilter, videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
     }
 
     private IntPtr LoadLibMpvDll() => LibMpvNativeLoader.Load();

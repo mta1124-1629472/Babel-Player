@@ -109,6 +109,7 @@ public partial class App : Application
                     VsrEnabled:     appSettings.VideoVsrEnabled,
                     HdrEnabled:     appSettings.VideoHdrEnabled,
                     AllowHdrPassthrough: appSettings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
+                    PreferDriverAutoHdr: appSettings.VideoPreferDriverAutoHdr,
                     ToneMapping:    appSettings.VideoToneMapping,
                     TargetPeak:     appSettings.VideoTargetPeak,
                     HdrComputePeak: appSettings.VideoHdrComputePeak),
@@ -123,6 +124,7 @@ public partial class App : Application
             desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose;
 
             var errorDialogService = new AvaloniaErrorDialogService(appLog);
+            var pipelineRefreshDialogService = new AvaloniaPipelineRefreshDialogService();
 
             var mainVm = new MainWindowViewModel(
                 _sessionWorkflowCoordinator,
@@ -130,6 +132,7 @@ public partial class App : Application
                 modelDownloader,
                 _apiKeyStore,
                 errorDialogService,
+                pipelineRefreshDialogService,
                 logFilePath: _logFilePath);
 
             desktop.MainWindow = new MainWindow { DataContext = mainVm };

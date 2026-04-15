@@ -10,7 +10,7 @@ public sealed record VideoPlaybackOptions(
     string GpuApi          = "auto",
     bool   UseGpuNext      = false,
     bool   VsrEnabled      = false,
-    bool   HdrEnabled      = false,
+    VideoHdrPlaybackMode HdrPlaybackMode = VideoHdrPlaybackMode.Off,
     bool   AllowHdrPassthrough = false,
     string ToneMapping     = "bt.2390",
     string TargetPeak      = "auto",

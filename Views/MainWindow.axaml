@@ -170,8 +170,6 @@
                                           Click="OnCloseWindowClick" />
                                 <MenuItem Header="Force Close"
                                           Click="OnForceCloseWindowClick" />
-                                <MenuItem Header="Kill All"
-                                          Click="OnKillAllClick" />
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
@@ -247,8 +245,25 @@
 
                         <!-- TRANSCRIPTION -->
                         <StackPanel Spacing="10">
-<TextBlock Text="TRANSCRIPTION" FontSize="10"
-                                        Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                <TextBlock Grid.Column="0" Text="TRANSCRIPTION" FontSize="10"
+                                           Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                                <Button Grid.Column="1"
+                                        Command="{Binding Playback.Pipeline.RefreshTranscriptionCommand}"
+                                        IsEnabled="{Binding Playback.Pipeline.CanRefreshTranscription}"
+                                        Background="Transparent" Padding="6,2"
+                                        Foreground="{DynamicResource StatusTextBrush}"
+                                        ToolTip.Tip="Re-run transcription (choose this stage only or include downstream)">
+                                    <TextBlock Text="↻" FontSize="16" />
+                                    <Button.Styles>
+                                        <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                                        </Style>
+                                    </Button.Styles>
+                                </Button>
+                            </Grid>
 
                              <StackPanel Spacing="5">
                                  <TextBlock Text="Compute" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
@@ -317,8 +332,25 @@
                         <!-- DIARIZATION / SPEAKERS -->
                         <StackPanel Spacing="10">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                <TextBlock Text="DIARIZATION / SPEAKERS" FontSize="10"
-                                           Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                    <TextBlock Grid.Column="0" Text="DIARIZATION / SPEAKERS" FontSize="10"
+                                               Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1"
+                                            Command="{Binding Playback.Pipeline.RefreshDiarizationCommand}"
+                                            IsEnabled="{Binding Playback.Pipeline.CanRefreshDiarization}"
+                                            Background="Transparent" Padding="6,2"
+                                            Foreground="{DynamicResource StatusTextBrush}"
+                                            ToolTip.Tip="Re-run speaker mapping (choose this stage only or include downstream)">
+                                        <TextBlock Text="↻" FontSize="16" />
+                                        <Button.Styles>
+                                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                                            </Style>
+                                        </Button.Styles>
+                                    </Button>
+                                </Grid>
                             </Border>
 
                             <StackPanel Spacing="5">
@@ -373,8 +405,25 @@
                         <!-- TRANSLATION -->
                         <StackPanel Spacing="10">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                <TextBlock Text="TRANSLATION" FontSize="10"
-                                           Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                    <TextBlock Grid.Column="0" Text="TRANSLATION" FontSize="10"
+                                               Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1"
+                                            Command="{Binding Playback.Pipeline.RefreshTranslationCommand}"
+                                            IsEnabled="{Binding Playback.Pipeline.CanRefreshTranslation}"
+                                            Background="Transparent" Padding="6,2"
+                                            Foreground="{DynamicResource StatusTextBrush}"
+                                            ToolTip.Tip="Re-run translation (choose this stage only or include dub)">
+                                        <TextBlock Text="↻" FontSize="16" />
+                                        <Button.Styles>
+                                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                                            </Style>
+                                        </Button.Styles>
+                                    </Button>
+                                </Grid>
                             </Border>
 
                             <StackPanel Spacing="5">
@@ -424,8 +473,25 @@
                         <!-- DUB -->
                         <StackPanel Spacing="10">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                <TextBlock Text="DUB" FontSize="10"
-                                           Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                    <TextBlock Grid.Column="0" Text="DUB" FontSize="10"
+                                               Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1"
+                                            Command="{Binding Playback.Pipeline.RefreshDubCommand}"
+                                            IsEnabled="{Binding Playback.Pipeline.CanRefreshDub}"
+                                            Background="Transparent" Padding="6,2"
+                                            Foreground="{DynamicResource StatusTextBrush}"
+                                            ToolTip.Tip="Re-generate dub audio from the current translation">
+                                        <TextBlock Text="↻" FontSize="16" />
+                                        <Button.Styles>
+                                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                                            </Style>
+                                        </Button.Styles>
+                                    </Button>
+                                </Grid>
                             </Border>
 
                             <StackPanel Spacing="5">
@@ -675,24 +741,27 @@
                             BorderThickness="0,1,0,0"
                             Padding="16,14,16,16">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="{Binding Playback.Pipeline.PipelineStageDetail}"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource PrimaryTextBrush}"
-                                       TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding Playback.Pipeline.PipelineProgressStatusLine}"
-                                       FontSize="10"
-                                       Foreground="{DynamicResource StatusTextBrush}"
-                                       TextWrapping="Wrap" />
-                            <ProgressBar Minimum="0"
-                                         Maximum="1"
-                                         Value="{Binding Playback.Pipeline.PipelineProgressPercent}"
-                                         IsIndeterminate="{Binding Playback.Pipeline.IsPipelineProgressIndeterminate}"
-                                         Height="8"
-                                         Foreground="{DynamicResource AccentSecondaryBrush}"
-                                         Background="{DynamicResource ProgressBackgroundBrush}"
-                                         HorizontalAlignment="Stretch"
-                                         Margin="0,2,0,0"
-                                         AutomationProperties.Name="Pipeline progress" />
+                            <StackPanel Spacing="6"
+                                       IsVisible="{Binding Playback.Pipeline.ShowPipelineStatusChrome}">
+                                <TextBlock Text="{Binding Playback.Pipeline.PipelineStageDetail}"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Playback.Pipeline.PipelineProgressStatusLine}"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource StatusTextBrush}"
+                                           TextWrapping="Wrap" />
+                                <ProgressBar Minimum="0"
+                                             Maximum="1"
+                                             Value="{Binding Playback.Pipeline.PipelineProgressPercent}"
+                                             IsIndeterminate="{Binding Playback.Pipeline.IsPipelineProgressIndeterminate}"
+                                             Height="8"
+                                             Foreground="{DynamicResource AccentSecondaryBrush}"
+                                             Background="{DynamicResource ProgressBackgroundBrush}"
+                                             HorizontalAlignment="Stretch"
+                                             Margin="0,2,0,0"
+                                             AutomationProperties.Name="Pipeline progress" />
+                            </StackPanel>
 
                             <Grid>
                                 <Button HorizontalAlignment="Stretch"
@@ -763,25 +832,6 @@
                                     </StackPanel>
                                 </Button>
                             </Grid>
-
-                            <Button HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"
-                                    VerticalContentAlignment="Center"
-                                    Padding="0,10"
-                                    FontSize="13"
-                                    FontWeight="SemiBold"
-                                    Background="{DynamicResource ButtonBackgroundBrush}"
-                                    Foreground="{DynamicResource PrimaryTextBrush}"
-                                    BorderBrush="{DynamicResource BorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Command="{Binding Playback.Pipeline.RunDiarizationOnlyCommand}"
-                                    IsEnabled="{Binding Playback.Pipeline.CanRunDiarizationOnly}">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="↻" VerticalAlignment="Center" />
-                                    <TextBlock Text="Re-diarize" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
 
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                 <TextBlock Grid.Column="0"

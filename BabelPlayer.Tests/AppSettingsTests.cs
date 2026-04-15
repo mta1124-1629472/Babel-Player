@@ -66,6 +66,7 @@ public sealed class AppSettingsTests
     {
         var settings = new AppSettings();
 
+        Assert.True(settings.VideoPreferDriverAutoHdr);
         Assert.Equal("bt.2390", settings.VideoToneMapping);
         Assert.Equal("auto", settings.VideoTargetPeak);
         Assert.True(settings.VideoHdrComputePeak);
