@@ -34,6 +34,30 @@ public sealed class LanguageCatalogIntegrityTests
         Assert.Equal(PiperTtsCatalog.Voices.Count, PiperTtsCatalog.VoiceIds.Distinct().Count());
 
     [Fact]
+    public void PiperVoiceRows_UseNllbCanonicalCodes()
+    {
+        var nllb = NllbLanguageCatalog.IsoCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in PiperTtsCatalog.Voices)
+            Assert.Contains(row.CanonicalCode, nllb);
+    }
+
+    [Fact]
+    public void PiperTtsCatalog_OffersVoiceForEachNllbLanguageExceptUnpublished()
+    {
+        var covered = PiperTtsCatalog.Voices
+            .Select(v => v.CanonicalCode)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var skip = PiperTtsCatalog.NllbIsoCodesWithoutRhasspyVoice
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var code in NllbLanguageCatalog.IsoCodes)
+        {
+            if (skip.Contains(code))
+                continue;
+            Assert.Contains(code, covered);
+        }
+    }
+
+    [Fact]
     public void DeepLTranslationCatalog_IncludesCommonNormalizedTargets()
     {
         Assert.True(DeepLTranslationCatalog.IsSupportedApiCode("EN"));
