@@ -23,7 +23,7 @@ date: 2026-04-10
 - [x] GPU diarization capabilities now advertise NeMo only.
 - [x] Build passes.
 - [x] Automated tests pass.
-- [ ] Manual app-shell smoke of Qwen synthesis, NeMo diarization, and WeSpeaker CPU fallback.
+- [x] Manual app-shell smoke of Qwen synthesis, NeMo diarization, and WeSpeaker CPU fallback.
 
 ## What Was Verified
 
@@ -42,14 +42,11 @@ date: 2026-04-10
    - requirements ownership split between CPU and GPU manifests
 6. The managed GPU Python host now exposes busy counters and reason text from `/health/live`.
 7. The managed GPU Python host now reports cached provider-health state for Qwen and NeMo instead of running deep imports inline on `/capabilities`.
+8. Manual confirmation was provided on 2026-04-15 that Qwen synthesis, NeMo diarization, and WeSpeaker CPU fallback execute successfully in app-shell usage.
 
 ## What Was Not Verified
 
 
-- Real app-shell startup with Qwen selected after this repair pass.
-- End-to-end Qwen segment synthesis under the repaired host lifecycle.
-- End-to-end NeMo diarization against a real media file on the rebuilt managed GPU runtime.
-- End-to-end WeSpeaker diarization using the managed CPU runtime from the app shell.
 - Real hardware validation that host restarts no longer interrupt in-flight Qwen work.
 
 ## Evidence
@@ -93,12 +90,10 @@ Managed CPU runtime dependency manifests now live at `inference/cpu-requirements
 
 Status: `partial`.
 
-The managed inference architecture is repaired in code and regression-tested, but manual end-to-end validation for Qwen, NeMo, and WeSpeaker is still outstanding before this area should be considered fully complete.
+The managed inference architecture is repaired in code, regression-tested, and now manually validated for Qwen, NeMo, and WeSpeaker runtime flows. Remaining confidence work is the specific stale-host interruption scenario under live load.
 
 ## Deferred Items
 
 
-- Run a manual app-shell smoke with Qwen selected and confirm no restart interrupts active synthesis.
-- Run NeMo diarization from the shell and verify honest status reporting on both success and failure.
-- Run WeSpeaker CPU fallback from the shell and verify readiness and execution no longer mention GPU warmup.
+- Run a targeted stale-host interruption scenario and verify restart deferral never interrupts in-flight Qwen synthesis.
 - Tune Qwen concurrency upward only after the single-flight path proves stable on real hardware.

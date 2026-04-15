@@ -8,13 +8,13 @@ public static class AppIdentity
 {
     /// <summary>
     /// The display name shown in window titles, about dialogs, and task-bar entries.
-    /// Returns "Babel-Player [DEV]" when compiled with BABEL_DEV; "Babel-Player" otherwise.
+    /// Returns "Babel Player [DEV]" when compiled with BABEL_DEV; "Babel Player" otherwise.
     /// </summary>
     public static string AppName =>
 #if BABEL_DEV
-        "Babel-Player [DEV]";
+        "Babel Player [DEV]";
 #else
-        "Babel-Player";
+        "Babel Player";
 #endif
 
     /// <summary>

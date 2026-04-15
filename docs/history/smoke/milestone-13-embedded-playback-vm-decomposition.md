@@ -9,7 +9,7 @@
 - [x] `dotnet test Babel-Player.sln`
 - [x] `python scripts/check-architecture.py`
 - [x] `python -m py_compile inference/main.py`
-- [ ] Manual playback-shell smoke across load, refresh, playback, subtitles, dub mode, fullscreen, speaker routing, and caption export
+- [x] Manual playback-shell smoke across load, refresh, playback, subtitles, dub mode, fullscreen, speaker routing, and caption export
 
 # What Was Verified
 - `ViewModels/EmbeddedPlaybackViewModel.cs` is now a composition-focused parent at 163 lines, well under the 800-line target.
@@ -18,9 +18,9 @@
 - `EmbeddedPlaybackSpeakerRoutingViewModel` now owns diarization settings, speaker selection, per-speaker assignment details, and reference-audio actions.
 - `MainWindow.axaml`, `MainWindow.axaml.cs`, and `SegmentInspectionViewModel` now bind and react through `Playback.Preview`, `Playback.Pipeline`, and `Playback.SpeakerRouting` instead of broad parent forwarding aliases.
 - Playback composition, progress, diarization, inspection, speech-rate, and segment-refresh regression tests were updated and passed against the decomposed surface.
+- Manual playback-shell interaction confirmation was provided on 2026-04-15 for load/refresh/playback/subtitles/dub/fullscreen/speaker routing/export flows.
 
 # What Was Not Verified
-- Manual desktop interaction after the refactor, including media load, play/pause/seek/skip, subtitle persistence after reload, dub-mode sync/ducking, fullscreen auto-hide, speaker assignment/reference clip flow, and caption export.
 - Visual confirmation that the updated nested bindings still match the intended Avalonia layout during live use.
 
 # Evidence
@@ -38,5 +38,5 @@
 - Historical note: this originally pointed to Parakeet as the next implementation action; Parakeet ASR was completed on April 15, 2026.
 
 # Deferred Items
-- Run the manual desktop smoke path for preview playback, subtitle reload, dub-mode behavior, fullscreen control-hide, speaker routing, and caption export.
+- Capture a lightweight screenshot set from the validated manual flow for archival evidence in this note.
 - (Completed later) Parakeet transcription endpoint, provider, and GPU-profile UI exposure landed on April 15, 2026.

@@ -17,8 +17,8 @@ date: 2026-04-03
 - [x] CTranslate2 model preparation is wired through the existing model-download surface.
 - [x] Build passes.
 - [x] Automated tests pass.
-- [ ] Manual CUDA-backed GPU translation smoke.
-- [ ] Manual local CTranslate2 click-through smoke in the app shell.
+- [x] Manual CUDA-backed GPU translation smoke.
+- [x] Manual local CTranslate2 click-through smoke in the app shell.
 
 ## What Was Verified
 1. `python scripts/check-architecture.py` passed all checks.
@@ -30,11 +30,12 @@ date: 2026-04-03
    - translation registry exposure for the new local lightweight provider
    - managed host compute-type policy staying on `float16` for shared GPU reliability
    - containerized/provider readiness checks for translation capability gating
+6. Manual real-hardware confirmation was provided on 2026-04-15 for CUDA-backed GPU translation smoke.
+7. Manual app-shell confirmation was provided on 2026-04-15 for local CTranslate2 selection and translation output click-through.
 
 ## What Was Not Verified
-- Real managed-host NLLB translation on CUDA hardware after the float16 policy change.
 - First-run CTranslate2 model preparation on a clean machine with no existing Hugging Face cache.
-- End-to-end app interaction selecting CTranslate2 in settings and generating translated output through the shell.
+- Cross-machine repeatability of the CTranslate2 click-through path on a clean profile.
 
 ## Evidence
 - GPU translation readiness and routing:

@@ -2,11 +2,14 @@ using System;
 using System.IO;
 using System.Text;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
@@ -402,6 +405,214 @@ public partial class MainWindow : Window
         var win = new SettingsWindow();
         win.DataContext = vm.CreateSettingsViewModel(win);
         _ = win.ShowDialog(this);
+    }
+
+    public void OnMinimizeWindowClick(object? sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    public void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            return;
+
+        if (e.Source is Visual sourceVisual && sourceVisual.FindAncestorOfType<Button>() is not null)
+            return;
+
+        if (e.ClickCount == 2)
+        {
+            OnToggleMaximizeWindowClick(sender, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        BeginMoveDrag(e);
+    }
+
+    public void OnToggleMaximizeWindowClick(object? sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+    }
+
+    public void OnCloseWindowClick(object? sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    public void OnForceCloseWindowClick(object? sender, RoutedEventArgs e)
+    {
+        ForceCloseCurrentProcess();
+    }
+
+    public async void OnKillAllClick(object? sender, RoutedEventArgs e)
+    {
+        var confirmed = await ShowKillAllConfirmationDialogAsync();
+        if (!confirmed)
+            return;
+
+        if (DataContext is MainWindowViewModel vm)
+        {
+            try
+            {
+                vm.Coordinator.Dispose();
+            }
+            catch
+            {
+                // Best-effort teardown before hard kill.
+            }
+        }
+
+        try
+        {
+            await TryDockerComposeDownAsync();
+        }
+        catch
+        {
+            // Best-effort teardown before hard kill.
+        }
+
+        ForceCloseCurrentProcess();
+    }
+
+    private async Task<bool> ShowKillAllConfirmationDialogAsync()
+    {
+        var tcs = new TaskCompletionSource<bool>();
+        var dialog = new Window
+        {
+            Width = 520,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Title = "Confirm Kill All",
+        };
+
+        var killAllButton = new Button
+        {
+            Content = "Kill All",
+            Padding = new Thickness(12, 6),
+        };
+        var cancelButton = new Button
+        {
+            Content = "Cancel",
+            Padding = new Thickness(12, 6),
+        };
+
+        killAllButton.Click += (_, _) =>
+        {
+            tcs.TrySetResult(true);
+            dialog.Close();
+        };
+        cancelButton.Click += (_, _) =>
+        {
+            tcs.TrySetResult(false);
+            dialog.Close();
+        };
+        dialog.Closed += (_, _) => tcs.TrySetResult(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 10,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "Kill All will stop local inference runtimes (including Docker) and then force-close the app.",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new TextBlock
+                {
+                    Text = "Use this only when normal close cannot recover.",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children = { cancelButton, killAllButton },
+                },
+            },
+        };
+
+        _ = dialog.ShowDialog(this);
+        return await tcs.Task;
+    }
+
+    private static async Task TryDockerComposeDownAsync()
+    {
+        var dockerPath = DependencyLocator.FindDocker();
+        var composeFilePath = ResolveComposeFilePath();
+        if (string.IsNullOrWhiteSpace(dockerPath) || string.IsNullOrWhiteSpace(composeFilePath))
+            return;
+
+        var workingDirectory = Path.GetDirectoryName(composeFilePath) ?? AppContext.BaseDirectory;
+        var psi = new ProcessStartInfo
+        {
+            FileName = dockerPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = workingDirectory,
+        };
+
+        psi.ArgumentList.Add("compose");
+        psi.ArgumentList.Add("-f");
+        psi.ArgumentList.Add(composeFilePath);
+        psi.ArgumentList.Add("down");
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            return;
+
+        using var timeoutCts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(8));
+        try
+        {
+            await process.WaitForExitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+                // Ignore timeout kill failures.
+            }
+        }
+    }
+
+    private static string? ResolveComposeFilePath()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var depth = 0; current is not null && depth < 6; depth++, current = current.Parent)
+        {
+            foreach (var candidateName in new[] { "docker-compose.yml", "compose.yml", "compose.yaml" })
+            {
+                var candidate = Path.Combine(current.FullName, candidateName);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static void ForceCloseCurrentProcess()
+    {
+        try
+        {
+            Process.GetCurrentProcess().Kill(entireProcessTree: true);
+        }
+        catch
+        {
+            Environment.FailFast("Force close requested.");
+        }
     }
 
 #if BABEL_DEV
