@@ -223,10 +223,14 @@
                         <TextBlock Text="RTX Video Enhancement" FontWeight="SemiBold" Margin="0,12,0,0"/>
 
                         <CheckBox IsChecked="{Binding VideoVsrEnabled, Mode=TwoWay}"
-                                  IsEnabled="{Binding VideoUseGpuNext}"
+                                  IsEnabled="{Binding VsrSettingsAvailable}"
                                   Content="RTX Video Super Resolution (VSR)"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                    Text="AI upscaling via NVIDIA d3d11vpp. Requires RTX GPU, driver &#x2265; 551.23, and 'RTX Video Enhancement' enabled in NVIDIA Control Panel." />
+                                    Text="AI upscaling via NVIDIA d3d11vpp. Requires a detected GeForce RTX GPU, driver &#x2265; 551.23, gpu-next, and 'RTX Video Enhancement' in NVIDIA Control Panel." />
+                        <TextBlock TextWrapping="Wrap"
+                                   Opacity="0.65"
+                                   IsVisible="{Binding HasRtxVideoHardwareGateHint}"
+                                   Text="{Binding RtxVideoHardwareGateHint}" />
                         <TextBlock TextWrapping="Wrap" Opacity="0.55"
                                    Text="VSR quality is controlled in NVIDIA Control Panel. mpv's d3d11vpp filter does not expose an in-app quality setting." />
 
@@ -264,7 +268,7 @@
                             <RadioButton GroupName="VideoHdrPlaybackMode"
                                          Content="RTX HDR (NVIDIA driver)"
                                          IsChecked="{Binding IsHdrModeNvidia, Mode=TwoWay}"
-                                         IsEnabled="{Binding HdrSettingsAvailable}"/>
+                                         IsEnabled="{Binding RtxHdrDriverModeAvailable}"/>
                             <RadioButton GroupName="VideoHdrPlaybackMode"
                                          Content="HDR passthrough (mpv)"
                                          IsChecked="{Binding IsHdrModeMpv, Mode=TwoWay}"

@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/github/license/Babelworks/Babel-Player)](LICENSE)
 
 
-**Babel Player is a A high-performance .NET 10 and Avalonia 12 workstation for segment-based AI video dubbing. Local RTX-accelerated transcription, translation, and voice cloning with cloud API support. Built natively for Windows x64 and ARM.**
+**Babel Player is a high-performance .NET 10 and Avalonia 12 workstation for segment-based AI video dubbing. Local RTX-accelerated transcription, translation, and voice cloning with cloud API support. Built natively for Windows x64 and ARM.**
 
 ```
 The Pipeline: Load Media → Timed Transcript → Voice Assignment → Translated Dialogue → Voiced Dubbing → In-Context Preview
@@ -29,11 +29,12 @@ If you find it useful, consider sponsoring:
 - [What It Does](#what-it-does)
 - [Features](#features)
 - [Provider Support](#provider-support)
+- [Language support](#language-support)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [First Run](#first-run)
 - [Source Build](#source-build)
-- [License](#License)
+- [License](#license)
 - [Dependencies](#dependencies)
 - [Current Limitations](#current-limitations)
 - [Roadmap](#roadmap)
@@ -54,10 +55,10 @@ The full loop:
 3. **Diarize & Assign**: Identify unique speakers and assign specific voices to individual segments.
 4. **Translate** — adapt the transcript into a target language
 5. **Dub** — generate a spoken TTS audio track, one segment at a time
-7. **Preview** — play source video alongside dubbed segments; toggle between original and dub audio
-8. **Refine** — regenerate individual segments, adjust text, re-run TTS on demand
-9. **Export** — save captions as `.srt`
-10. **Persist** — sessions save automatically; reopen and continue later
+6. **Preview** — play source video alongside dubbed segments; toggle between original and dub audio
+7. **Refine** — regenerate individual segments, adjust text, re-run TTS on demand
+8. **Export** — save captions as `.srt`
+9. **Persist** — sessions save automatically; reopen and continue later
 
 ---
 
@@ -91,9 +92,16 @@ The GPU path bootstraps a managed local venv automatically using the bundled `uv
 - Hover-reveal volume slider
 - Refined transport controls with unified pill styling and visual grouping
 
+#### Embedded playback: RTX Video Super Resolution and HDR
+
+On Windows, Settings exposes optional **RTX Video** features when **gpu-next** is enabled (mpv’s modern GPU video output path):
+
+- **RTX Video Super Resolution (VSR)** upscales video via NVIDIA’s **d3d11vpp** path. It requires a **GeForce RTX-class GPU (Turing or newer)**, **NVIDIA driver 551.23 or newer**, RTX Video enabled in NVIDIA Control Panel, and gpu-next. The UI hides or disables VSR when this hardware gate is not met.
+- **HDR** is mutually exclusive between **Off**, **NVIDIA driver RTX HDR** (driver-managed HDR; uses the **same RTX Video hardware floor** as VSR plus Windows HDR), and **mpv HDR passthrough** (tone-mapping and peak options inside mpv; **does not** use the RTX hardware gate—only an HDR-capable display with Windows HDR). If Windows HDR is off or the display is not HDR-capable, HDR modes are unavailable.
+
 ### Multi-Speaker Routing
 
-- Automatic speaker diarization via Pyannote (requires HuggingFace token)
+- Automatic speaker diarization — **NeMo ClusteringDiarizer** (GPU / container path) or **WeSpeaker** (CPU)
 - Per-speaker voice assignment — assign different TTS voices to different speakers
 - Voice cloning for compatible providers (XTTS v2, Qwen3-TTS) — reference audio uploaded per speaker
 - Speaker boundary detection — automatically splits segments at detected speaker changes
@@ -139,8 +147,8 @@ The GPU path bootstraps a managed local venv automatically using the bundled `uv
 
 | Provider | Runtime | Notes |
 |---|---|---|
-| [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) | GPU | Models: `distilled-1.3B`, `1.3B`; 200+ languages |
-| [CTranslate2](https://github.com/OpenNMT/CTranslate2) | CPU | int8-quantized; model: `distilled-600M`; fast |
+| [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) | GPU | Models: `distilled-1.3B`, `1.3B`; the **family** covers 200+ languages, but the embedded UI pins **16** high-value targets (see [Language support](#language-support)) |
+| [CTranslate2](https://github.com/OpenNMT/CTranslate2) | CPU | int8-quantized; model: `distilled-600M`; fast; same **16** UI targets as NLLB GPU path |
 | [DeepL](https://www.deepl.com/docs-api) | Cloud | Higher quality for European languages; requires API key |
 | [Google Gemini](https://ai.google.dev/) | Cloud | `gemini-2.0-flash`, `gemini-2.5-flash-preview-04-17`; requires API key |
 | [OpenAI](https://platform.openai.com/docs/guides/text-generation) | Cloud | Requires API key |
@@ -150,7 +158,7 @@ The GPU path bootstraps a managed local venv automatically using the bundled `uv
 | Provider | Runtime | Notes |
 |---|---|---|
 | [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS) | GPU | Voice cloning; auto-extracts reference audio from source video |
-| [Piper](https://github.com/rhasspy/piper) | CPU | Fully offline; fast; lower voice quality |
+| [Piper](https://github.com/rhasspy/piper) | CPU | Fully offline; fast; lower voice quality; curated voices align with **14** of the **16** local targets ([Language support](#language-support)) |
 | [Edge TTS](https://github.com/rany2/edge-tts) | Cloud | **No API key required**; Microsoft Azure voices |
 | [ElevenLabs](https://elevenlabs.io/docs) | Cloud | Highest voice quality; requires API key |
 | [Google Cloud TTS](https://cloud.google.com/text-to-speech/docs) | Cloud | Requires API key |
@@ -162,6 +170,33 @@ The GPU path bootstraps a managed local venv automatically using the bundled `uv
 |---|---|
 | [NeMo](https://github.com/NVIDIA/NeMo) | GPU |
 | [WeSpeaker](https://github.com/wenet-e2e/wespeaker) | CPU |
+
+---
+
+## Language support
+
+**At a glance:** The **local** pipeline lets you pick **16** **target** (dub) languages. **Source** speech is handled by Whisper: **Auto-detect** reaches **far more** languages than the **manual** spoken-language hint list, which only mirrors those **16** ISO codes (plus Auto-detect) so hints stay aligned with the embedded translation batch. Separately, **cloud** translators may advertise **many more** destination languages than this app’s embedded batch.
+
+Language coverage depends on **which stage** you mean. The UI distinguishes **what language you are dubbing into** (translation target) from **what language is spoken in the source** (transcription / ASR).
+
+### Translate **to** (pipeline target / dub language)
+
+The embedded **local** translation path (NLLB + CTranslate2) exposes **16** selectable **output** languages, aligned with the bundled tokenizer map:
+
+Arabic (`ar`), German (`de`), English (`en`), Spanish (`es`), French (`fr`), Hindi (`hi`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Dutch (`nl`), Polish (`pl`), Portuguese (`pt`), Russian (`ru`), Swedish (`sv`), Turkish (`tr`), Chinese — Simplified (`zh`).
+
+The underlying **NLLB-200** models can represent **many more** language pairs in principle; this product batch keeps targets fixed for predictable downloads and QA. Cloud translation providers (DeepL, Gemini, OpenAI, …) may offer **additional** targets depending on API and app integration.
+
+### Translate **from** (source speech / transcription)
+
+**Transcription** uses **Faster-Whisper** (OpenAI Whisper weights). Whisper supports **dozens of source languages** when you use **Auto-detect** (recommended when the spoken language is not listed below).
+
+The **optional spoken-language hint** dropdown is **much smaller** than the set of **translation targets** some **cloud** providers list: it is **narrower** than Whisper’s full ASR set too. It lists **Auto-detect** first, then **only** languages that appear in **both** the embedded translation batch **and** Whisper’s language list (today that is the **same 16** ISO codes as local translation targets). So:
+
+- **Possible “translate from” (transcription) in practice:** any language Whisper can handle → **often much broader** than the named hint list, via **Auto-detect**.
+- **Explicit hint list:** **16** named languages (plus Auto-detect), kept **aligned** with local translation targets—not an exhaustive list of every language Whisper supports.
+
+For **local Piper TTS**, curated download rows cover **14** of those 16 targets; **Japanese** and **Korean** do not ship in the standard **rhasspy/piper-voices** v1.0.0 corpus—use **Edge TTS**, **Qwen**, or another provider for those dubs.
 
 ---
 ## Requirements
@@ -218,7 +253,7 @@ An Inno Setup installer (`Babel-Player-<version>-win-x64-setup.exe`) is also ava
 3. In the pipeline pane, pick `CPU`, `GPU`, or `Cloud` for each stage.
 4. Select a provider and model or voice for that stage.
 5. If using cloud providers, go to **Settings → API Keys** and enter your credentials.
-6. If using diarization (multi-speaker), toggle "Enable multi-speaker routing" and set your HuggingFace token.
+6. If using diarization (multi-speaker), enable it in the pipeline and pick a **NeMo** (GPU) or **WeSpeaker** (CPU) path per Settings.
 7. Click **Run Pipeline**. The pipeline will:
    - Transcribe the source audio
    - Translate the transcript
@@ -237,17 +272,18 @@ Sessions save automatically. Your session will appear in the recent sessions lis
 
 1. **Clone the repository**
    ```bash
-   git clone [https://github.com/Babelworks/Babel-Player.git](https://github.com/Babelworks/Babel-Player.git)
+   git clone https://github.com/Babelworks/Babel-Player.git
    cd Babel-Player
-2. Fetch Native Binaries (Required for libmpv-2.dll and uv.exe)
-   Note: These binaries are excluded from Git to keep the repository lean.
+   ```
+2. **Fetch native binaries** (required for `libmpv-2.dll` and `uv.exe`). They are excluded from Git to keep the repository lean:
+   ```powershell
    pwsh ./scripts/fetch-win-native-deps.ps1
-
-3. Build and Run   
+   ```
+3. **Build and run**
+   ```powershell
    dotnet build Babel-Player.sln
    dotnet run --project BabelPlayer.csproj
-   
-```
+   ```
 
 Run the full verification suite:
 
@@ -298,7 +334,8 @@ Babel Player bundles **libmpv** (GPL-2.0-or-later) and **ffmpeg** (LGPL-2.1-or-l
 | `piper-tts` | Local neural TTS (CPU-based) |
 | `qwen-tts` | Qwen3-TTS with voice cloning support |
 | `tts` (Coqui) | XTTS v2 voice synthesis with cloning |
-| `pyannote.audio` | Speaker diarization (speaker detection and segmentation) |
+| WeSpeaker / related | CPU speaker embedding diarization (see `inference/requirements.txt`) |
+| NeMo (GPU diarization) | Loaded where the NeMo diarization path is used (container / runtime image) |
 | `torch` / `transformers` / `accelerate` | ML runtime with CUDA/CPU backends |
 | `fastapi` / `uvicorn` | Inference HTTP server (containerized backend) |
 | `soundfile` / `numpy` | Audio I/O and processing |
@@ -324,10 +361,6 @@ Babel Player bundles **libmpv** (GPL-2.0-or-later) and **ffmpeg** (LGPL-2.1-or-l
 ---
 
 ## Roadmap
-
-### In progress (Milestone 12)
-
-- **Container health status** — live container status visible in Settings UI
 
 ### Planned (Milestone 13 and beyond)
 
@@ -355,7 +388,7 @@ Babel-Player/
 │   └── Registries/          # Per-stage provider registries with compute-aware filtering
 ├── ViewModels/              # MVVM layer with observables and commands
 ├── Views/                   # Avalonia XAML UI with refined styling
-├── BabelPlayer.Tests/       # xUnit integration tests (~650 tests)
+├── BabelPlayer.Tests/       # xUnit test project (large suite)
 ├── inference/               # Python inference server (FastAPI + Faster-Whisper + TTS + diarization)
 ├── scripts/                 # Architecture linter and development tooling
 ├── docs/
@@ -406,8 +439,8 @@ Read these first:
 Minimum verification before opening a PR:
 
 ```powershell
-dotnet build babel-player.sln
-dotnet test babel-player.sln
+dotnet build Babel-Player.sln
+dotnet test Babel-Player.sln
 python scripts/check-architecture.py
 ```
 

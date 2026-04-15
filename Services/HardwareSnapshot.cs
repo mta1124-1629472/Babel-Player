@@ -127,6 +127,15 @@ public sealed record HardwareSnapshot(
         }
     }
 
+    /// <summary>
+    /// True when this machine meets the app-enforced floor for NVIDIA RTX Video features
+    /// (RTX Video Super Resolution and Control Panel RTX Video / Auto HDR): a GPU name that
+    /// indicates GeForce/RTX-class hardware and an NVIDIA driver ≥ 551.23 (same floor as VSR
+    /// in-app diagnostics). Detection is best-effort via <c>nvidia-smi</c>.
+    /// </summary>
+    public bool MeetsNvidiaRtxVideoHardwareGate =>
+        !IsDetecting && IsRtxCapable && IsVsrDriverSufficient;
+
     // ── Detection ──────────────────────────────────────────────────────────────
 
     /// <summary>

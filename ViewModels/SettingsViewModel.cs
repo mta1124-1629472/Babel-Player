@@ -344,6 +344,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(HdrSettingsAvailable))]
     [NotifyPropertyChangedFor(nameof(HdrAvailabilityHintText))]
     [NotifyPropertyChangedFor(nameof(HasHdrAvailabilityHint))]
+    [NotifyPropertyChangedFor(nameof(VsrSettingsAvailable))]
+    [NotifyPropertyChangedFor(nameof(RtxHdrDriverModeAvailable))]
+    [NotifyPropertyChangedFor(nameof(RtxVideoHardwareGateHint))]
+    [NotifyPropertyChangedFor(nameof(HasRtxVideoHardwareGateHint))]
     private bool _videoUseGpuNext;
 
     public string[] HwdecOptions { get; } =
@@ -403,6 +407,49 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public bool IsMpvHdrPassthroughDetailsVisible =>
         VideoUseGpuNext && VideoHdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough;
+
+    /// <summary>
+    /// VSR requires gpu-next plus NVIDIA RTX Video hardware floor (GeForce RTX GPU + driver ≥ 551.23).
+    /// </summary>
+    public bool VsrSettingsAvailable =>
+        VideoUseGpuNext && _coordinator.HardwareSnapshot.MeetsNvidiaRtxVideoHardwareGate;
+
+    /// <summary>
+    /// RTX HDR (driver) mode requires Windows HDR plus the same NVIDIA RTX Video hardware floor as VSR.
+    /// mpv HDR passthrough does not use this gate.
+    /// </summary>
+    public bool RtxHdrDriverModeAvailable =>
+        HdrSettingsAvailable && _coordinator.HardwareSnapshot.MeetsNvidiaRtxVideoHardwareGate;
+
+    /// <summary>
+    /// Explains why RTX Video features are disabled when gpu-next is on but hardware does not qualify.
+    /// </summary>
+    public string RtxVideoHardwareGateHint
+    {
+        get
+        {
+            if (!VideoUseGpuNext)
+                return string.Empty;
+            var s = _coordinator.HardwareSnapshot;
+            if (s.IsDetecting)
+                return string.Empty;
+            if (s.MeetsNvidiaRtxVideoHardwareGate)
+                return string.Empty;
+            if (string.IsNullOrWhiteSpace(s.GpuName))
+                return "No NVIDIA GPU was detected (nvidia-smi). RTX Video Super Resolution and RTX HDR require a supported NVIDIA GPU and driver.";
+            if (!s.IsRtxCapable)
+                return "RTX Video Super Resolution and RTX HDR require a GeForce RTX-class GPU (Turing or newer).";
+            if (!s.IsVsrDriverSufficient)
+            {
+                var ver = string.IsNullOrWhiteSpace(s.NvidiaDriverVersion) ? "unknown" : s.NvidiaDriverVersion;
+                return $"NVIDIA driver {ver} is below 551.23, the minimum for RTX Video (VSR and RTX HDR). Update GeForce Game Ready or Studio Driver.";
+            }
+
+            return string.Empty;
+        }
+    }
+
+    public bool HasRtxVideoHardwareGateHint => !string.IsNullOrWhiteSpace(RtxVideoHardwareGateHint);
 
     public string VsrSupportHintText => _coordinator.VideoEnhancementDiagnostics.SupportHintText;
     public string VsrRequestedStateText => _coordinator.VideoEnhancementDiagnostics.RequestedStateText;
@@ -562,6 +609,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CpuInfo));
             OnPropertyChanged(nameof(GpuInfo));
             OnPropertyChanged(nameof(RamInfo));
+            OnPropertyChanged(nameof(VsrSettingsAvailable));
+            OnPropertyChanged(nameof(RtxHdrDriverModeAvailable));
+            OnPropertyChanged(nameof(RtxVideoHardwareGateHint));
+            OnPropertyChanged(nameof(HasRtxVideoHardwareGateHint));
+            if (VideoHdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr && !RtxHdrDriverModeAvailable)
+                VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
         }
         else if (e.PropertyName == nameof(SessionWorkflowCoordinator.BootstrapDiagnostics))
         {
@@ -590,7 +643,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(HdrSettingsAvailable));
         OnPropertyChanged(nameof(HdrAvailabilityHintText));
         OnPropertyChanged(nameof(HasHdrAvailabilityHint));
+        OnPropertyChanged(nameof(RtxHdrDriverModeAvailable));
         OnPropertyChanged(nameof(IsMpvHdrPassthroughDetailsVisible));
+        if (VideoHdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr && !RtxHdrDriverModeAvailable)
+            VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
     }
 
     partial void OnVideoUseGpuNextChanged(bool value)
@@ -598,6 +654,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         if (!value && VideoHdrPlaybackMode != VideoHdrPlaybackMode.Off)
             VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
         OnPropertyChanged(nameof(IsMpvHdrPassthroughDetailsVisible));
+        OnPropertyChanged(nameof(VsrSettingsAvailable));
+        OnPropertyChanged(nameof(RtxHdrDriverModeAvailable));
+        OnPropertyChanged(nameof(RtxVideoHardwareGateHint));
+        OnPropertyChanged(nameof(HasRtxVideoHardwareGateHint));
     }
 
     // ── Null-object for tests / design-time ───────────────────────────────────
