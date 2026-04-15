@@ -218,7 +218,7 @@
                                   Content="Use gpu-next video output (required for RTX enhancements)"/>
                         <TextBlock TextWrapping="Wrap"
                                    Opacity="0.6"
-                                   Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or HDR Passthrough." />
+                                   Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or HDR modes." />
 
                         <TextBlock Text="RTX Video Enhancement" FontWeight="SemiBold" Margin="0,12,0,0"/>
 
@@ -253,18 +253,44 @@
                             </Grid>
                         </Border>
 
-                        <CheckBox IsChecked="{Binding VideoHdrEnabled, Mode=TwoWay}"
-                                  IsEnabled="{Binding HdrSettingsAvailable}"
-                                  Content="HDR Passthrough"
-                                  Margin="0,8,0,0"/>
+                        <TextBlock Text="HDR" FontWeight="SemiBold" Margin="0,8,0,0"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                   Text="Enables mpv's HDR passthrough path so HDR source video stays HDR through the Windows display pipeline. Requires gpu-next and Windows HDR enabled on at least one connected display." />
-                        <CheckBox IsChecked="{Binding VideoPreferDriverAutoHdr, Mode=TwoWay}"
-                                  IsEnabled="{Binding VideoUseGpuNext}"
-                                  Content="Prefer NVIDIA driver Auto HDR compatibility"
-                                  Margin="0,6,0,0"/>
-                        <TextBlock TextWrapping="Wrap" Opacity="0.55"
-                                   Text="Recommended for RTX Auto HDR users. When enabled, Babel Player avoids forcing mpv passthrough parameters so NVIDIA's driver-level SDR→HDR path can remain active." />
+                                   Text="Choose one mode. RTX HDR follows NVIDIA Control Panel. HDR passthrough configures mpv (tone-mapping, etc.). Requires gpu-next and Windows HDR on the active display." />
+                        <StackPanel Spacing="4" Margin="0,6,0,0">
+                            <RadioButton GroupName="VideoHdrPlaybackMode"
+                                         Content="Off"
+                                         IsChecked="{Binding IsHdrModeOff, Mode=TwoWay}"
+                                         IsEnabled="{Binding VideoUseGpuNext}"/>
+                            <RadioButton GroupName="VideoHdrPlaybackMode"
+                                         Content="RTX HDR (NVIDIA driver)"
+                                         IsChecked="{Binding IsHdrModeNvidia, Mode=TwoWay}"
+                                         IsEnabled="{Binding HdrSettingsAvailable}"/>
+                            <RadioButton GroupName="VideoHdrPlaybackMode"
+                                         Content="HDR passthrough (mpv)"
+                                         IsChecked="{Binding IsHdrModeMpv, Mode=TwoWay}"
+                                         IsEnabled="{Binding HdrSettingsAvailable}"/>
+                        </StackPanel>
+                        <StackPanel IsVisible="{Binding IsMpvHdrPassthroughDetailsVisible}"
+                                    Margin="0,8,0,0"
+                                    Spacing="6">
+                            <TextBlock Text="mpv passthrough options" FontWeight="SemiBold" Opacity="0.85"/>
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
+                                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Tone mapping"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                          ItemsSource="{Binding HdrToneMappingOptions}"
+                                          SelectedItem="{Binding VideoToneMapping, Mode=TwoWay}"
+                                          Width="220" HorizontalAlignment="Left"/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Target peak"/>
+                                <TextBox Grid.Row="1" Grid.Column="1"
+                                         Text="{Binding VideoTargetPeak, Mode=TwoWay}"
+                                         Width="220" HorizontalAlignment="Left"
+                                         Watermark="auto or nits"/>
+                                <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="HDR compute peak"/>
+                                <CheckBox Grid.Row="2" Grid.Column="1"
+                                          IsChecked="{Binding VideoHdrComputePeak, Mode=TwoWay}"
+                                          Content="Dynamic per-frame peak (mpv)"/>
+                            </Grid>
+                        </StackPanel>
                         <TextBlock TextWrapping="Wrap"
                                    Opacity="0.55"
                                    IsVisible="{Binding HasHdrAvailabilityHint}"

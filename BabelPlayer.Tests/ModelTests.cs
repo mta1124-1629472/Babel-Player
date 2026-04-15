@@ -259,7 +259,7 @@ public sealed class ModelTests
     {
         var opts = new VideoPlaybackOptions();
 
-        Assert.True(opts.PreferDriverAutoHdr);
+        Assert.Equal(VideoHdrPlaybackMode.Off, opts.HdrPlaybackMode);
         Assert.Equal("bt.2390", opts.ToneMapping);
         Assert.Equal("auto", opts.TargetPeak);
         Assert.True(opts.HdrComputePeak);

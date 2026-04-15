@@ -201,40 +201,29 @@ public sealed class AppSettings
     public bool VideoVsrEnabled { get; set; } = false;
 
     /// <summary>
-    /// Enable mpv HDR passthrough (target-colorspace-hint + tone-mapping).
-    /// Requests an HDR-capable mpv output path for the OS/display pipeline.
-    /// This is separate from NVIDIA RTX Auto HDR, which remains a driver-level
-    /// SDR-to-HDR feature configured in NVIDIA Control Panel.
-    /// Requires an HDR-capable display with Windows HDR enabled.
+    /// HDR strategy for embedded playback: off, NVIDIA driver RTX/Auto HDR, or mpv HDR passthrough.
+    /// Modes are mutually exclusive. Driver RTX HDR avoids mpv HDR init options; passthrough applies
+    /// tone-mapping settings below. Requires gpu-next, and a non-off mode requires Windows HDR active.
     /// Takes effect on app restart.
     /// </summary>
-    public bool VideoHdrEnabled { get; set; } = false;
+    public VideoHdrPlaybackMode VideoHdrPlaybackMode { get; set; } = VideoHdrPlaybackMode.Off;
 
     /// <summary>
-    /// Prefer NVIDIA's driver-level Auto HDR path when both HDR and gpu-next are enabled.
-    /// When true, Babel Player avoids forcing mpv's HDR passthrough options so RTX Auto HDR
-    /// can continue owning SDR->HDR conversion. Turn this off if you explicitly want mpv HDR
-    /// passthrough/tone-mapping instead of driver-managed HDR conversion.
-    /// Takes effect on app restart.
-    /// </summary>
-    public bool VideoPreferDriverAutoHdr { get; set; } = true;
-
-    /// <summary>
-    /// HDR tone-mapping algorithm used by mpv when VideoHdrEnabled is true.
-    /// Options: bt.2390, mobius, clip, auto.
+    /// HDR tone-mapping algorithm used by mpv when <see cref="VideoHdrPlaybackMode"/> is
+    /// <see cref="VideoHdrPlaybackMode.MpvHdrPassthrough"/>. Options: bt.2390, mobius, clip, auto.
     /// Takes effect on app restart.
     /// </summary>
     public string VideoToneMapping { get; set; } = "bt.2390";
 
     /// <summary>
     /// Display peak brightness target in nits, or "auto".
-    /// Used by mpv tone-mapping when VideoHdrEnabled is true.
+    /// Used by mpv when <see cref="VideoHdrPlaybackMode"/> is <see cref="VideoHdrPlaybackMode.MpvHdrPassthrough"/>.
     /// Takes effect on app restart.
     /// </summary>
     public string VideoTargetPeak { get; set; } = "auto";
 
     /// <summary>
-    /// Enable dynamic per-frame peak detection for HDR tone-mapping.
+    /// Enable dynamic per-frame peak detection for HDR tone-mapping (mpv passthrough mode only).
     /// May cause brightness instability on some content. Default true.
     /// Takes effect on app restart.
     /// </summary>

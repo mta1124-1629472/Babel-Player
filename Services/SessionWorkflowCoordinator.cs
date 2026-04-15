@@ -184,9 +184,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     GpuApi:              coreServices.Settings.VideoGpuApi,
                     UseGpuNext:          coreServices.Settings.VideoUseGpuNext,
                     VsrEnabled:          coreServices.Settings.VideoVsrEnabled,
-                    HdrEnabled:          coreServices.Settings.VideoHdrEnabled,
-                    AllowHdrPassthrough: coreServices.Settings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
-                    PreferDriverAutoHdr: coreServices.Settings.VideoPreferDriverAutoHdr,
+                    HdrPlaybackMode:     coreServices.Settings.VideoHdrPlaybackMode,
+                    AllowHdrPassthrough: coreServices.Settings.VideoHdrPlaybackMode != VideoHdrPlaybackMode.Off
+                        && HardwareSnapshot.QueryActiveHdrDisplay(),
                     ToneMapping:         coreServices.Settings.VideoToneMapping,
                     TargetPeak:          coreServices.Settings.VideoTargetPeak,
                     HdrComputePeak:      coreServices.Settings.VideoHdrComputePeak),

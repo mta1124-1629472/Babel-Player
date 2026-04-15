@@ -17,6 +17,7 @@ public sealed class SettingsService
         {
             WriteIndented = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
         };
 
     private readonly string _filePath;
@@ -120,8 +121,14 @@ public sealed class SettingsService
         public string? VideoGpuApi { get; set; }
         public bool? VideoUseGpuNext { get; set; }
         public bool? VideoVsrEnabled { get; set; }
+        public VideoHdrPlaybackMode? VideoHdrPlaybackMode { get; set; }
+
+        /// <summary>Legacy JSON; used only when migrating older settings files.</summary>
         public bool? VideoHdrEnabled { get; set; }
+
+        /// <summary>Legacy JSON; used only when migrating older settings files.</summary>
         public bool? VideoPreferDriverAutoHdr { get; set; }
+
         public string? VideoToneMapping { get; set; }
         public string? VideoTargetPeak { get; set; }
         public bool? VideoHdrComputePeak { get; set; }
@@ -190,8 +197,12 @@ public sealed class SettingsService
             settings.VideoGpuApi = VideoGpuApi ?? settings.VideoGpuApi;
             settings.VideoUseGpuNext = VideoUseGpuNext ?? settings.VideoUseGpuNext;
             settings.VideoVsrEnabled = VideoVsrEnabled ?? settings.VideoVsrEnabled;
-            settings.VideoHdrEnabled = VideoHdrEnabled ?? settings.VideoHdrEnabled;
-            settings.VideoPreferDriverAutoHdr = VideoPreferDriverAutoHdr ?? settings.VideoPreferDriverAutoHdr;
+            if (VideoHdrPlaybackMode.HasValue)
+                settings.VideoHdrPlaybackMode = VideoHdrPlaybackMode.Value;
+            else if (VideoHdrEnabled == true)
+                settings.VideoHdrPlaybackMode = VideoPreferDriverAutoHdr != false
+                    ? VideoHdrPlaybackMode.NvidiaDriverRtxHdr
+                    : VideoHdrPlaybackMode.MpvHdrPassthrough;
             settings.VideoToneMapping = VideoToneMapping ?? settings.VideoToneMapping;
             settings.VideoTargetPeak = VideoTargetPeak ?? settings.VideoTargetPeak;
             settings.VideoHdrComputePeak = VideoHdrComputePeak ?? settings.VideoHdrComputePeak;
@@ -231,8 +242,7 @@ public sealed class SettingsService
             VideoGpuApi = settings.VideoGpuApi,
             VideoUseGpuNext = settings.VideoUseGpuNext,
             VideoVsrEnabled = settings.VideoVsrEnabled,
-            VideoHdrEnabled = settings.VideoHdrEnabled,
-            VideoPreferDriverAutoHdr = settings.VideoPreferDriverAutoHdr,
+            VideoHdrPlaybackMode = settings.VideoHdrPlaybackMode,
             VideoToneMapping = settings.VideoToneMapping,
             VideoTargetPeak = settings.VideoTargetPeak,
             VideoHdrComputePeak = settings.VideoHdrComputePeak,

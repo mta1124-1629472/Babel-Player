@@ -79,8 +79,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         // Video enhancement settings
         _videoVsrEnabled     = current.VideoVsrEnabled;
-        _videoHdrEnabled     = current.VideoHdrEnabled;
-        _videoPreferDriverAutoHdr = current.VideoPreferDriverAutoHdr;
+        _videoHdrPlaybackMode = current.VideoHdrPlaybackMode;
+        _videoToneMapping    = current.VideoToneMapping;
+        _videoTargetPeak     = current.VideoTargetPeak;
+        _videoHdrComputePeak = current.VideoHdrComputePeak;
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
@@ -363,10 +365,44 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private bool _videoVsrEnabled;
 
     [ObservableProperty]
-    private bool _videoHdrEnabled;
+    [NotifyPropertyChangedFor(nameof(IsHdrModeOff))]
+    [NotifyPropertyChangedFor(nameof(IsHdrModeNvidia))]
+    [NotifyPropertyChangedFor(nameof(IsHdrModeMpv))]
+    [NotifyPropertyChangedFor(nameof(IsMpvHdrPassthroughDetailsVisible))]
+    private VideoHdrPlaybackMode _videoHdrPlaybackMode;
 
     [ObservableProperty]
-    private bool _videoPreferDriverAutoHdr;
+    private string _videoToneMapping = "bt.2390";
+
+    [ObservableProperty]
+    private string _videoTargetPeak = "auto";
+
+    [ObservableProperty]
+    private bool _videoHdrComputePeak = true;
+
+    public string[] HdrToneMappingOptions { get; } =
+        ["bt.2390", "mobius", "clip", "auto"];
+
+    public bool IsHdrModeOff
+    {
+        get => VideoHdrPlaybackMode == VideoHdrPlaybackMode.Off;
+        set { if (value) VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off; }
+    }
+
+    public bool IsHdrModeNvidia
+    {
+        get => VideoHdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr;
+        set { if (value) VideoHdrPlaybackMode = VideoHdrPlaybackMode.NvidiaDriverRtxHdr; }
+    }
+
+    public bool IsHdrModeMpv
+    {
+        get => VideoHdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough;
+        set { if (value) VideoHdrPlaybackMode = VideoHdrPlaybackMode.MpvHdrPassthrough; }
+    }
+
+    public bool IsMpvHdrPassthroughDetailsVisible =>
+        VideoUseGpuNext && VideoHdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough;
 
     public string VsrSupportHintText => _coordinator.VideoEnhancementDiagnostics.SupportHintText;
     public string VsrRequestedStateText => _coordinator.VideoEnhancementDiagnostics.RequestedStateText;
@@ -390,7 +426,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public bool HasHdrAvailabilityHint => !string.IsNullOrWhiteSpace(HdrAvailabilityHintText);
 
     public static string HdrDriverFeatureHintText =>
-        "RTX Auto HDR (SDR→HDR) is a driver feature in NVIDIA Control Panel. If HDR passthrough seems to suppress it, keep 'Prefer NVIDIA driver Auto HDR' enabled.";
+        "RTX HDR uses NVIDIA Control Panel (RTX Video / Auto HDR). HDR passthrough uses mpv instead — pick one mode; they are mutually exclusive.";
 
     // ── Hotkeys ───────────────────────────────────────────────────────────────
 
@@ -433,8 +469,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.VideoExportEncoder  = VideoExportEncoder;
         settings.VideoUseGpuNext     = VideoUseGpuNext;
         settings.VideoVsrEnabled     = VideoVsrEnabled;
-        settings.VideoHdrEnabled     = VideoHdrEnabled;
-        settings.VideoPreferDriverAutoHdr = VideoPreferDriverAutoHdr;
+        settings.VideoHdrPlaybackMode = VideoHdrPlaybackMode;
+        settings.VideoToneMapping    = string.IsNullOrWhiteSpace(VideoToneMapping)
+            ? "bt.2390"
+            : VideoToneMapping.Trim();
+        settings.VideoTargetPeak     = string.IsNullOrWhiteSpace(VideoTargetPeak)
+            ? "auto"
+            : VideoTargetPeak.Trim();
+        settings.VideoHdrComputePeak = VideoHdrComputePeak;
 
         // Apply theme change immediately when Save & Close is pressed
         if (Application.Current is { } app)
@@ -541,10 +583,19 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     internal void RefreshHdrDisplayState()
     {
         _isHdrDisplayActive = _hdrDisplayStateProvider();
+        if (!IsHdrDisplayActive && VideoHdrPlaybackMode != VideoHdrPlaybackMode.Off)
+            VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
+
         OnPropertyChanged(nameof(IsHdrDisplayActive));
         OnPropertyChanged(nameof(HdrSettingsAvailable));
         OnPropertyChanged(nameof(HdrAvailabilityHintText));
         OnPropertyChanged(nameof(HasHdrAvailabilityHint));
+    }
+
+    partial void OnVideoUseGpuNextChanged(bool value)
+    {
+        if (!value && VideoHdrPlaybackMode != VideoHdrPlaybackMode.Off)
+            VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
     }
 
     // ── Null-object for tests / design-time ───────────────────────────────────
