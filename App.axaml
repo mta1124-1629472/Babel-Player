@@ -133,9 +133,10 @@
         <Style Selector="Button.control-pill.active:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PillActivePressedBackgroundBrush}" />
         </Style>
-        <!-- Caption controls: no text Content; use vector icons. Keep layout stable (no hover scale). -->
+        <!-- Caption controls: no text Content; use vector icons. Win11-like: square, flush, no hover scale. -->
         <Style Selector="Button.chrome-button">
             <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="UseLayoutRounding" Value="True" />

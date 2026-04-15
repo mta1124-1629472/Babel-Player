@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Models.LanguageSupport;
 using Babel.Player.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -29,12 +30,17 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase, IDi
 
     public SpeakerReferenceWizardViewModel(
         EmbeddedPlaybackViewModel playback,
-        SessionWorkflowCoordinator coordinator)
+        SessionWorkflowCoordinator coordinator,
+        ModelDownloader modelDownloader)
     {
         _playback = playback;
         _coordinator = coordinator;
         MiniPreview = new SpeakerWizardMiniPreviewViewModel(coordinator);
         _playback.PropertyChanged += OnPlaybackPropertyChanged;
+
+        PiperVoiceCatalogRows = new ObservableCollection<PiperVoiceCatalogRowViewModel>(
+            PiperTtsCatalog.Voices.Select(v =>
+                new PiperVoiceCatalogRowViewModel(modelDownloader, coordinator, v, RefreshPiperVoices)));
     }
 
     public SpeakerWizardMiniPreviewViewModel MiniPreview { get; }
@@ -78,6 +84,10 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase, IDi
 
     [ObservableProperty]
     private ObservableCollection<string> _piperVoices = new();
+
+    /// <summary>Catalog Piper voices with download controls (when TTS is Piper).</summary>
+    [ObservableProperty]
+    private ObservableCollection<PiperVoiceCatalogRowViewModel> _piperVoiceCatalogRows = new();
 
     [ObservableProperty]
     private ObservableCollection<string> _speakerIdOptions = new();
@@ -289,6 +299,8 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase, IDi
     {
         var list = ModelDownloader.ListDownloadedPiperVoiceIds(_coordinator.CurrentSettings.PiperModelDir);
         PiperVoices = new ObservableCollection<string>(list);
+        foreach (var row in PiperVoiceCatalogRows)
+            row.RefreshStatus();
     }
 
     [RelayCommand]
