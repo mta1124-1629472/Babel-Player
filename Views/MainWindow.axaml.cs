@@ -32,6 +32,8 @@ public partial class MainWindow : Window
     private EventHandler? _screensChangedHandler;
     private Screens? _subscribedScreens;
     private long _lastControlsActivityTickMs;
+    private bool _isApplyingWindowStateFromViewModel;
+    private bool _isApplyingFullscreenFromWindowState;
 
     public MainWindow()
     {
@@ -96,6 +98,25 @@ public partial class MainWindow : Window
         var videoView = this.FindControl<MpvVideoView>("VideoView");
         if (videoView is not null)
             UpdateEmbeddedTransportViewportMetrics(videoView);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property != WindowStateProperty || _isApplyingWindowStateFromViewModel)
+            return;
+
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        var isFullscreen = WindowState == WindowState.FullScreen;
+        if (vm.Playback.Preview.IsFullscreen == isFullscreen)
+            return;
+
+        _isApplyingFullscreenFromWindowState = true;
+        vm.Playback.Preview.IsFullscreen = isFullscreen;
+        _isApplyingFullscreenFromWindowState = false;
     }
 
     protected override void OnClosed(EventArgs e)
@@ -186,8 +207,16 @@ public partial class MainWindow : Window
                     this.FindControl<ListBox>("SegmentList")?.ScrollIntoView(item);
                 break;
             case nameof(EmbeddedPlaybackPreviewViewModel.IsFullscreen):
-                if (DataContext is MainWindowViewModel vm)
-                    WindowState = vm.Playback.Preview.IsFullscreen ? WindowState.FullScreen : WindowState.Normal;
+                if (DataContext is MainWindowViewModel vm && !_isApplyingFullscreenFromWindowState)
+                {
+                    var desiredState = vm.Playback.Preview.IsFullscreen ? WindowState.FullScreen : WindowState.Normal;
+                    if (WindowState != desiredState)
+                    {
+                        _isApplyingWindowStateFromViewModel = true;
+                        WindowState = desiredState;
+                        _isApplyingWindowStateFromViewModel = false;
+                    }
+                }
                 break;
         }
     }

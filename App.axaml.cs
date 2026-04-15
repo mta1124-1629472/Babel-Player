@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Styling;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Markup.Xaml;
@@ -69,6 +70,8 @@ public partial class App : Application
             _logFilePath = Path.Combine(appDataRoot, "logs", "babel-player.log");
             var appLog = new AppLog(_logFilePath);
             _startupLog = appLog;
+
+            TryEnsureWindowsNativeDependencies(appLog, appDataRoot);
 
             // Initialize Settings and other stores
             var settingsFilePath = Path.Combine(appDataRoot, "settings", "app-settings.json");
@@ -159,6 +162,135 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static void TryEnsureWindowsNativeDependencies(AppLog log, string appDataRoot)
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var rid = WindowsPackagingPaths.NativeRidFolder;
+        if (HasNativeDepsInOutput(rid))
+            return;
+
+        var repoRoot = ResolveRepoRootWithFetchScript();
+        if (repoRoot is null)
+            return;
+
+        var markerDir = Path.Combine(appDataRoot, "state");
+        Directory.CreateDirectory(markerDir);
+        var markerPath = Path.Combine(markerDir, "win-native-deps-bootstrap.marker");
+        if (!ShouldAttemptNativeDepsBootstrap(markerPath))
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            var scriptPath = Path.Combine(repoRoot, "scripts", "fetch-win-native-deps.ps1");
+            var exitCode = await RunFetchScriptAsync(scriptPath).ConfigureAwait(false);
+            File.WriteAllText(markerPath, $"{DateTimeOffset.UtcNow:O}|exit={exitCode}");
+
+            if (exitCode == 0)
+            {
+                CopyRepoNativeDepsToOutput(repoRoot, rid);
+                log.Info("Startup native deps bootstrap completed.");
+            }
+            else
+            {
+                log.Warning($"Startup native deps bootstrap skipped/failed (exit={exitCode}).");
+            }
+        });
+    }
+
+    private static bool HasNativeDepsInOutput(string rid)
+    {
+        var appDir = AppContext.BaseDirectory;
+        return File.Exists(Path.Combine(appDir, "native", rid, "libmpv-2.dll"))
+            && File.Exists(Path.Combine(appDir, "tools", rid, "uv.exe"));
+    }
+
+    private static bool ShouldAttemptNativeDepsBootstrap(string markerPath)
+    {
+        if (!File.Exists(markerPath))
+            return true;
+
+        var age = DateTimeOffset.UtcNow - File.GetLastWriteTimeUtc(markerPath);
+        return age > TimeSpan.FromHours(12);
+    }
+
+    private static string? ResolveRepoRootWithFetchScript()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var depth = 0; current is not null && depth < 10; depth++, current = current.Parent)
+        {
+            var scriptPath = Path.Combine(current.FullName, "scripts", "fetch-win-native-deps.ps1");
+            if (File.Exists(scriptPath))
+                return current.FullName;
+        }
+
+        return null;
+    }
+
+    private static async Task<int> RunFetchScriptAsync(string scriptPath)
+    {
+        var launchers = new[] { "pwsh", "powershell.exe" };
+        foreach (var launcher in launchers)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = launcher,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? AppContext.BaseDirectory,
+                };
+
+                psi.ArgumentList.Add("-NoProfile");
+                psi.ArgumentList.Add("-NonInteractive");
+                psi.ArgumentList.Add("-ExecutionPolicy");
+                psi.ArgumentList.Add("Bypass");
+                psi.ArgumentList.Add("-File");
+                psi.ArgumentList.Add(scriptPath);
+
+                using var process = Process.Start(psi);
+                if (process is null)
+                    continue;
+
+                await process.WaitForExitAsync().ConfigureAwait(false);
+                return process.ExitCode;
+            }
+            catch
+            {
+                // Try the next launcher.
+            }
+        }
+
+        return -1;
+    }
+
+    private static void CopyRepoNativeDepsToOutput(string repoRoot, string rid)
+    {
+        var appDir = AppContext.BaseDirectory;
+        CopyIfExists(
+            Path.Combine(repoRoot, "native", rid, "libmpv-2.dll"),
+            Path.Combine(appDir, "native", rid, "libmpv-2.dll"));
+        CopyIfExists(
+            Path.Combine(repoRoot, "tools", rid, "uv.exe"),
+            Path.Combine(appDir, "tools", rid, "uv.exe"));
+    }
+
+    private static void CopyIfExists(string source, string destination)
+    {
+        if (!File.Exists(source))
+            return;
+
+        var destinationDirectory = Path.GetDirectoryName(destination);
+        if (!string.IsNullOrWhiteSpace(destinationDirectory))
+            Directory.CreateDirectory(destinationDirectory);
+
+        File.Copy(source, destination, overwrite: true);
     }
 
     private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
