@@ -44,6 +44,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private bool _subscribedToSourceDiagnostics;
     private readonly EventHandler _segmentEndedHandler;
     private readonly EventHandler<Exception> _segmentErrorHandler;
+    /// <summary>When pause-mode TTS is waiting on segment Ended, <see cref="StopTtsPlayback"/> completes this so the wait does not hang.</summary>
+    private TaskCompletionSource<bool>? _ttsPauseModeCompletion;
     private readonly Action<VsrDiagnosticSnapshot> _vsrDiagnosticChangedHandler;
     private VsrDiagnosticSnapshot? _latestVsrDiagnostic;
     private readonly ConcurrentDictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
@@ -125,7 +127,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// <summary>
     /// Creates a <see cref="SessionWorkflowCoordinator"/> with an explicit transport manager.
     /// Use this overload in production via <see cref="DependencyLocator"/>.
+    /// <summary>
+    /// Initializes a new <see cref="SessionWorkflowCoordinator"/> using the provided core services, media transport manager, registries, and optional components.
     /// </summary>
+    /// <param name="coreServices">Core application services and shared dependencies (settings, store, logging) required by the coordinator.</param>
+    /// <param name="transportManager">Media transport manager responsible for playback and segment transports for this coordinator.</param>
+    /// <param name="registries">Registry bundle providing per-session stores and provider registries (transcription, translation, TTS, recent sessions).</param>
+    /// <param name="options">Optional coordinator extensions and test hooks (container probe/manager, audio processing, artifact reader, session switch service, key store, diarization registry). When null, defaults are applied.</param>
     public SessionWorkflowCoordinator(
         CoordinatorCoreServices coreServices,
         IMediaTransportManager transportManager,
@@ -154,8 +162,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         KeyStore = options.KeyStore;
         _transportManager = transportManager;
 
-        _segmentEndedHandler = (_, _) => StopTtsPlayback();
-        _segmentErrorHandler = (_, ex) => StopTtsPlayback();
+        _segmentEndedHandler = OnSegmentPlayerEnded;
+        _segmentErrorHandler = (_, _) => OnSegmentPlayerError();
         _vsrDiagnosticChangedHandler = RecordVsrDiagnosticSnapshot;
         if (_containerizedProbe is not null)
             _containerizedProbe.ProbeResultUpdated += OnProbeResultUpdated;
@@ -197,6 +205,41 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     public string StateFilePath => _store.StateFilePath;
+
+    /// <summary>
+    /// Handles the segment-player "ended" event by either completing a pending TTS pause wait or stopping TTS playback.
+    /// </summary>
+    /// <remarks>
+    /// Expected state on entry: invoked when a media segment playback finishes. If a pause-mode TTS await is active (represented by <c>_ttsPauseModeCompletion</c>), this method completes that <c>TaskCompletionSource&lt;bool&gt;</c> with <c>true</c>, causing awaiting code to resume. If no pause-mode await is active, the method stops TTS playback by calling <c>StopTtsPlayback()</c>. This method does not persist session state and completes synchronously. It does not throw on normal operation.
+    /// </remarks>
+    private void OnSegmentPlayerEnded(object? sender, EventArgs e)
+    {
+        if (_ttsPauseModeCompletion is null)
+        {
+            StopTtsPlayback();
+            return;
+        }
+
+        _ttsPauseModeCompletion.TrySetResult(true);
+    }
+
+    /// <summary>
+    /// Handles a playback error for the currently playing segment by either stopping TTS playback or signaling a pending TTS pause-mode wait with failure.
+    /// </summary>
+    /// <remarks>
+    /// If a pause-mode TTS wait is active (indicated by <c>_ttsPauseModeCompletion</c>), the method completes that <see cref="TaskCompletionSource{bool}"/> with <c>false</c> to indicate an error. If no pause-mode wait is active, the method stops TTS playback via <see cref="StopTtsPlayback()"/>.
+    /// This method is an event handler invoked when a segment player reports an error; it does not persist session state.
+    /// </remarks>
+    private void OnSegmentPlayerError()
+    {
+        if (_ttsPauseModeCompletion is null)
+        {
+            StopTtsPlayback();
+            return;
+        }
+
+        _ttsPauseModeCompletion.TrySetResult(false);
+    }
 
     public string LogFilePath => _log.LogFilePath;
     internal AppLog Log => _log;

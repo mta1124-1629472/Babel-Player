@@ -39,6 +39,28 @@ def find_model(voice: str, model_dir: str) -> str | None:
 
 
 def handle_request(payload: dict[str, Any], model_dir: str) -> dict[str, Any]:
+    """
+    Generate a speech file using the Piper CLI for the requested voice and return metadata about the output.
+    
+    Args:
+        payload (dict[str, Any]): Request payload containing:
+            - text (str): Non-empty text to synthesize.
+            - output_path (str): Non-empty path where Piper should write the audio file.
+            - voice (str): Non-empty voice identifier to locate the .onnx model.
+        model_dir (str): Optional directory to search for voice models in addition to platform defaults.
+    
+    Returns:
+        dict[str, Any]: Metadata about the generated output with keys:
+            - output_path (str): The same output_path passed in the payload.
+            - voice (str): The voice identifier used.
+            - file_size_bytes (int): Size of the produced file in bytes.
+            - duration_seconds (float | None): Duration in seconds if probe succeeded, otherwise None.
+    
+    Raises:
+        ValueError: If any of `text`, `output_path`, or `voice` is missing or empty.
+        RuntimeError: If the `piper` CLI is not found on PATH or if Piper fails to produce the output.
+        FileNotFoundError: If the specified voice model cannot be located.
+    """
     text = payload.get("text")
     output_path = payload.get("output_path")
     voice = payload.get("voice")
@@ -81,10 +103,24 @@ def handle_request(payload: dict[str, Any], model_dir: str) -> dict[str, Any]:
     if not os.path.exists(output_path):
         raise RuntimeError(f"Piper did not create output file: {output_path}")
 
+    file_size = os.path.getsize(output_path)
+    duration_seconds: float | None = None
+    try:
+        import soundfile as sf
+        info = sf.info(output_path)
+        duration_seconds = info.duration
+    except (ImportError, OSError, RuntimeError, ValueError) as exc:
+        print(
+            f"[piper_worker] duration probe unavailable for {output_path!r}: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+
     return {
         "output_path": output_path,
         "voice": voice,
-        "file_size_bytes": os.path.getsize(output_path),
+        "file_size_bytes": file_size,
+        "duration_seconds": duration_seconds,
     }
 
 

@@ -133,10 +133,17 @@ public sealed class SettingsService
         public string? VideoTargetPeak { get; set; }
         public bool? VideoHdrComputePeak { get; set; }
         public string? VideoExportEncoder { get; set; }
+        public SegmentTimingMode? DubTimingMode { get; set; }
         public string? Theme { get; set; }
         public int? MaxRecentSessions { get; set; }
         public bool? AutoSaveEnabled { get; set; }
 
+        /// <summary>
+        /// Produce an <see cref="AppSettings"/> populated from this file representation, applying legacy migrations and normalization.
+        /// </summary>
+        /// <returns>
+        /// An <see cref="AppSettings"/> instance populated from the file's values; legacy settings are migrated and deprecated or compatibility-only fields are normalized or ignored.
+        /// </returns>
         public AppSettings ToSettings()
         {
             var settings = new AppSettings();
@@ -207,6 +214,8 @@ public sealed class SettingsService
             settings.VideoTargetPeak = VideoTargetPeak ?? settings.VideoTargetPeak;
             settings.VideoHdrComputePeak = VideoHdrComputePeak ?? settings.VideoHdrComputePeak;
             settings.VideoExportEncoder = VideoExportEncoder ?? settings.VideoExportEncoder;
+            if (DubTimingMode.HasValue)
+                settings.DubTimingMode = DubTimingMode.Value;
             settings.Theme = Theme ?? settings.Theme;
             settings.MaxRecentSessions = MaxRecentSessions ?? settings.MaxRecentSessions;
             settings.AutoSaveEnabled = AutoSaveEnabled ?? settings.AutoSaveEnabled;
@@ -214,6 +223,11 @@ public sealed class SettingsService
             return settings;
         }
 
+        /// <summary>
+        /// Creates an AppSettingsFile representation of the given runtime settings for JSON persistence.
+        /// </summary>
+        /// <param name="settings">The runtime AppSettings to convert into the persisted JSON model.</param>
+        /// <returns>An AppSettingsFile populated from the provided settings suitable for serialization; diarization min/max speaker bounds are set to null for compatibility.</returns>
         public static AppSettingsFile FromSettings(AppSettings settings) => new()
         {
             TranscriptionProvider = settings.TranscriptionProvider,
@@ -247,6 +261,7 @@ public sealed class SettingsService
             VideoTargetPeak = settings.VideoTargetPeak,
             VideoHdrComputePeak = settings.VideoHdrComputePeak,
             VideoExportEncoder = settings.VideoExportEncoder,
+            DubTimingMode = settings.DubTimingMode,
             Theme = settings.Theme,
             MaxRecentSessions = settings.MaxRecentSessions,
             AutoSaveEnabled = settings.AutoSaveEnabled,

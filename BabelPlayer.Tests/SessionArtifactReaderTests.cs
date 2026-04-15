@@ -263,6 +263,30 @@ public sealed class SessionArtifactReaderTests : IDisposable
         Assert.True(result[0].HasTtsAudio);
     }
 
+    [Fact]
+    public async Task BuildWorkflowSegmentsAsync_WithTimingOverrideMap_PopulatesTimingModeOverride()
+    {
+        var transcriptPath = WriteTranscript(
+        [
+            (0.0, 1.5, "Hola", null),
+            (1.5, 3.0, "Mundo", null),
+        ]);
+
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptPath = transcriptPath,
+            SegmentTimingModeOverrides = new Dictionary<string, SegmentTimingMode>
+            {
+                ["segment_1.5"] = SegmentTimingMode.Pause,
+            },
+        };
+
+        var result = await _reader.BuildWorkflowSegmentsAsync(snap);
+        Assert.Equal(2, result.Count);
+        Assert.Null(result[0].TimingModeOverride);
+        Assert.Equal(SegmentTimingMode.Pause, result[1].TimingModeOverride);
+    }
+
     // ── GetTranslatedTextAsync ────────────────────────────────────────────────
 
     [Fact]

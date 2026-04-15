@@ -215,6 +215,7 @@ public static class SessionSnapshotSemantics
         {
             SpeakerVoiceAssignments = null,
             SpeakerReferenceAudioPaths = null,
+            SegmentTimingModeOverrides = null,
             DefaultTtsVoiceFallback = null,
             DiarizationProvider = null,
             SpeakersDetectedAtUtc = null,

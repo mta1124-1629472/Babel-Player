@@ -597,6 +597,58 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
     }
 
     [Fact]
+    public async Task StopTtsPlayback_DuringPauseMode_DoesNotLeakEndedHandlerToNextSegment()
+    {
+        var caseDir = _fixture.CreateCaseDirectory(nameof(StopTtsPlayback_DuringPauseMode_DoesNotLeakEndedHandlerToNextSegment));
+        var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
+        var log = new AppLog(Path.Combine(caseDir, "case.log"));
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var segmentPlayer = new FakeMediaTransport();
+        var sourcePlayer = new FakeMediaTransport();
+        var coordinator = CreateCoordinator(store, log, caseDir, segmentPlayer, sourcePlayer);
+        coordinator.Initialize();
+        sourcePlayer.Pause();
+
+        var segment = new WorkflowSegmentState(
+            SegmentId: "segment_0.0",
+            StartSeconds: 0.0,
+            EndSeconds: 1.5,
+            SourceText: "hola",
+            HasTranslation: true,
+            TranslatedText: "hello",
+            HasTtsAudio: true);
+        var audioPath = Path.Combine(caseDir, "pause-mode-tts.mp3");
+        await File.WriteAllBytesAsync(audioPath, [0x01, 0x02, 0x03]);
+        coordinator.CurrentSession = coordinator.CurrentSession with
+        {
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                [segment.SegmentId] = audioPath,
+            },
+        };
+
+        // Start Pause mode playback, then stop before Ended is raised.
+        await coordinator.PlayTtsForSegmentAsync(segment.SegmentId, segment, SegmentTimingMode.Pause);
+        await SessionWorkflowTests.WaitUntilPlayingAsync(segmentPlayer);
+        coordinator.StopTtsPlayback();
+        await Task.Delay(50);
+
+        // Establish a sentinel source position; only a leaked handler should change this on next Ended.
+        const long sentinelSeek = 1234;
+        sourcePlayer.Seek(sentinelSeek);
+        sourcePlayer.Pause();
+
+        // Simulate a later Ended event on the shared segment player. A stale pause handler would
+        // seek to segment end and resume source playback from the stopped segment.
+        segmentPlayer.SimulateEnd();
+        await Task.Delay(50);
+
+        Assert.Equal(sentinelSeek, sourcePlayer.LastSeekPosition);
+        Assert.False(sourcePlayer.IsPlaying);
+        Assert.True(sourcePlayer.IsPaused);
+    }
+
+    [Fact]
     [Trait("Category", "RequiresPython")]
     public async Task Dispose_CleansUpSourcePlayer()
     {
