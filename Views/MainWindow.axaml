@@ -453,8 +453,19 @@
                                           BorderBrush="{DynamicResource BorderBrush}" />
                             </StackPanel>
 
+                            <StackPanel Spacing="6" IsVisible="{Binding Playback.ShowTtsAssignmentModeSwitch}">
+                                <TextBlock Text="Voice assignment" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <CheckBox Content="Assign per speaker in Speaker Reference Wizard (fallback voice below)"
+                                          IsChecked="{Binding Playback.TtsVoiceUsePerSpeakerWizard, Mode=TwoWay}"
+                                          FontSize="12" />
+                                <TextBlock Text="Use one voice for every speaker, or turn on the option above and set a fallback plus per-speaker voices in the wizard."
+                                           FontSize="11" Opacity="0.75" TextWrapping="Wrap"
+                                           IsVisible="{Binding Playback.ShowPerSpeakerVoiceHint}" />
+                            </StackPanel>
+
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Voice / Model" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"
+                                           Text="{Binding Playback.TtsVoiceComboHeaderText}" />
                                 <ComboBox ItemsSource="{Binding Playback.AvailableTtsOptions}"
                                           SelectedItem="{Binding Playback.SelectedTtsOption, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
