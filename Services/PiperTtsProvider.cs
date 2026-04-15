@@ -87,6 +87,16 @@ public sealed class PiperTtsProvider : PythonSubprocessServiceBase, ITtsProvider
             cancellationToken: cancellationToken);
     }
 
+    /// <summary>
+    /// Generate TTS audio for a single segment via the Piper worker pool and return a result describing the produced audio file.
+    /// </summary>
+    /// <param name="request">The segment request containing Text, OutputAudioPath, VoiceName and optional Language; the request must be valid.</param>
+    /// <param name="cancellationToken">Token to cancel the segment generation operation; the method observes cancellation while awaiting the worker pool.</param>
+    /// <returns>A <see cref="TtsResult"/> that indicates success and includes the output file path, voice, file size, and optional duration.</returns>
+    /// <exception cref="ObjectDisposedException">If the provider has been disposed before calling this method.</exception>
+    /// <exception cref="ArgumentException">If the <paramref name="request"/> is invalid (missing text, output path, or voice).</exception>
+    /// <exception cref="InvalidOperationException">If the Piper worker returns an empty output path or the expected output file was not created.</exception>
+    /// <exception cref="OperationCanceledException">If <paramref name="cancellationToken"/> is canceled while waiting for the worker pool.</exception>
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default)
@@ -118,6 +128,16 @@ public sealed class PiperTtsProvider : PythonSubprocessServiceBase, ITtsProvider
         return new TtsResult(true, response.OutputPath, response.Voice, fileSize, null, response.DurationSeconds);
     }
 
+    /// <summary>
+    /// Determines whether the Piper TTS provider is ready to generate audio using the supplied application settings.
+    /// </summary>
+    /// <param name="settings">Application settings containing the configured TTS voice and Piper model directory.</param>
+    /// <returns>
+    /// A <see cref="ProviderReadiness"/> describing readiness:
+    /// - If the configured Piper voice is not downloaded, returns not ready with <c>RequiresModelDownload</c> set to <c>true</c> and a download description.
+    /// - If the Piper CLI executable is not found on PATH, returns not ready with an explanatory message.
+    /// - Otherwise returns <see cref="ProviderReadiness.Ready"/>.
+    /// </returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
     {
         var voice = settings.TtsVoice;

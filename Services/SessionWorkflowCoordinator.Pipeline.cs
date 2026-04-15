@@ -196,6 +196,20 @@ public sealed partial class SessionWorkflowCoordinator
     /// Thrown when no translation is available, a required voice model download fails, or when zero segment clips were produced.
     /// </exception>
     /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session cannot be found.</exception>
+    /// <summary>
+    /// Generates speech audio (a combined dub) from the current session's translation and persists TTS artifacts to the session state.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter for overall TTS pipeline progress.</param>
+    /// <param name="voice">Optional voice identifier to use; when null the coordinator's configured TTS voice is used.</param>
+    /// <param name="stageContext">Optional context used for stage reporting; used to annotate and report stage progress and completion.</param>
+    /// <param name="cancellationToken">Cancellation token that aborts the operation; cooperative cancellation is honored by awaited operations.</param>
+    /// <remarks>
+    /// Preconditions: requires <see cref="CurrentSession.TranslationPath"/> to be non-empty and point to an existing translation artifact.
+    /// On success: creates per-segment audio under the session's tts/segments directory, produces a combined dub MP3 under tts/, and updates and persists the session state to the TtsGenerated stage.
+    /// Guarding behavior: verifies TTS provider/runtime readiness and downloads any required models before generation; if readiness cannot be achieved the method throws <see cref="PipelineProviderException"/>.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when no translation path is available on the current session.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the translation artifact file cannot be found on disk.</exception>
     /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider/runtime is not ready and cannot proceed.</exception>
     internal async Task GenerateTtsAsync(
         IProgress<double>? progress,
@@ -245,6 +259,23 @@ public sealed partial class SessionWorkflowCoordinator
         CommitTtsSessionState(v, ttsPath, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
     }
 
+    /// <summary>
+    /// Verifies the transcription runtime/provider is ready for execution and ensures any required transcription model is available.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter for overall readiness; may be used to report download progress.</param>
+    /// <param name="stageContext">Optional pipeline stage context used for reporting stage messages.</param>
+    /// <param name="cancellationToken">Token to cancel readiness checks and any model download operations.</param>
+    /// <remarks>
+    /// Entry state: no specific session stage required; caller should have a configured <c>CurrentSettings.TranscriptionProvider</c> and <c>CurrentSettings.TranscriptionModel</c>.
+    /// Exit state: a transcription service instance is created and assigned to <c>_transcriptionService</c> if readiness checks and any necessary model download succeed.
+    /// This method does not persist session state.
+    /// Cancellation: the operation observes <paramref name="cancellationToken"/> and will abort ongoing checks or downloads when cancelled.
+    /// Guard behavior:
+    /// - If the provider/runtime is blocked from executing and a model download is not allowed, a <see cref="PipelineProviderException"/> is thrown with the blocking reason.
+    /// - If a required model download fails, an <see cref="InvalidOperationException"/> is thrown.
+    /// </remarks>
+    /// <exception cref="PipelineProviderException">Thrown when the provider/runtime is not ready and model download is not permitted; the exception message contains the blocking reason.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when a required model download fails.</exception>
     private async Task EnsureTranscriptionProviderReadyAsync(
         IProgress<double>? progress,
         PipelineStageContext? stageContext,
@@ -402,7 +433,26 @@ public sealed partial class SessionWorkflowCoordinator
     /// Loads the translation, dispatches per-segment TTS generation (Qwen batch or parallel generic),
     /// and returns the produced audio paths keyed by segment ID, the total candidate count,
     /// and the ordered segment list (for stitch ordering without a second disk read).
+    /// <summary>
+    /// Generates per-segment TTS audio clips for the current translation and returns produced paths and durations.
     /// </summary>
+    /// <remarks>
+    /// Entry requirements: <see cref="CurrentSession.TranslationPath"/> must be set and point to an existing translation artifact.
+    /// On success: does not modify or persist <see cref="CurrentSession"/> stage/state; it only produces segment audio artifacts on disk.
+    /// Cancellation: honors <paramref name="cancellationToken"/> and will throw <see cref="OperationCanceledException"/> when cancelled.
+    /// </remarks>
+    /// <param name="voice">The TTS voice to use for generated segments.</param>
+    /// <param name="ttsLanguage">Optional language identifier to pass to the TTS provider; may be null to use provider defaults.</param>
+    /// <param name="segmentsDir">Directory where per-segment audio files will be written.</param>
+    /// <param name="stageContext">Optional pipeline stage context used for progress/stage reporting.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation.</param>
+    /// <returns>
+    /// A tuple containing:
+    /// - `SegmentAudioPaths`: a thread-safe map from segment ID to generated audio file path;
+    /// - `SegmentDurations`: a thread-safe map from segment ID to the audio duration in seconds (only present for segments that reported duration);
+    /// - `TotalSegments`: the number of candidate segments considered for generation;
+    /// - `OrderedSegments`: the ordered list of translation segments that were processed.
+    /// </returns>
     private async Task<(ConcurrentDictionary<string, string> SegmentAudioPaths, ConcurrentDictionary<string, double> SegmentDurations, int TotalSegments, IReadOnlyList<TranslationSegmentArtifact> OrderedSegments)> GenerateSegmentClipsAsync(
         string voice,
         string? ttsLanguage,
@@ -487,7 +537,19 @@ public sealed partial class SessionWorkflowCoordinator
     /// <paramref name="onSucceeded"/> is invoked (thread-safely by the caller) to increment the shared
     /// progress counter; returning the new count lets this method report accurate progress without
     /// holding a ref parameter across an async boundary.
+    /// <summary>
+    /// Synchronously schedules and awaits generation of a single segment TTS clip, recording its output path and duration when successful.
     /// </summary>
+    /// <param name="seg">The translated segment artifact containing Id, TranslatedText, and speaker metadata.</param>
+    /// <param name="defaultVoice">Fallback voice to use if the segment does not specify one.</param>
+    /// <param name="ttsLanguage">Optional TTS language hint to pass to the provider.</param>
+    /// <param name="segmentsDir">Directory where per-segment audio files are written.</param>
+    /// <param name="segmentAudioPaths">Concurrent map to record produced segment audio file paths keyed by segment Id.</param>
+    /// <param name="segmentDurations">Concurrent map to record produced segment durations (seconds) keyed by segment Id.</param>
+    /// <param name="totalSegments">Total number of segments being generated (used for progress reporting).</param>
+    /// <param name="stageContext">Optional pipeline stage context used for progress reporting.</param>
+    /// <param name="cancellationToken">Token to observe for cooperative cancellation of the generation operation.</param>
+    /// <param name="onSucceeded">Callback invoked when a segment is recorded as succeeded; returns the new count of completed segments.</param>
     private async Task GenerateSingleSegmentAsync(
         TranslationSegmentArtifact seg,
         string defaultVoice,
@@ -601,7 +663,17 @@ public sealed partial class SessionWorkflowCoordinator
 
     /// <summary>
     /// Validates segment yield, advances session to TtsGenerated, persists state, and reports stage completion.
+    /// <summary>
+    /// Finalizes TTS state after segment generation by updating the current session to the TtsGenerated stage, persisting the session, and reporting completion.
     /// </summary>
+    /// <param name="voice">The voice identifier used to generate the TTS dub.</param>
+    /// <param name="ttsPath">Path to the final stitched dub output file.</param>
+    /// <param name="segmentsDir">Directory containing per-segment audio files.</param>
+    /// <param name="segmentAudioPaths">Map of segment ID to generated audio file path for successfully produced segments.</param>
+    /// <param name="segmentDurations">Optional map of segment ID to duration in seconds; when non-null and non-empty this will be persisted to the session, otherwise durations are not saved.</param>
+    /// <param name="totalSegments">Total number of segments expected for the translation/TTS run.</param>
+    /// <param name="stageContext">Optional pipeline stage context used for final reporting.</param>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="totalSegments"/> &gt; 0 but no segments were successfully generated.</exception>
     private void CommitTtsSessionState(
         string voice,
         string ttsPath,
@@ -649,6 +721,24 @@ public sealed partial class SessionWorkflowCoordinator
             isIndeterminate: false);
     }
 
+    /// <summary>
+    /// Generates TTS audio for multiple translated segments in a single batch using the Qwen container TTS provider and records produced file paths and durations.
+    /// </summary>
+    /// <remarks>
+    /// Entry state: expects a prepared translation artifact (segments with Id/TranslatedText) and that TTS provider readiness and reference clips (if required) have already been validated by the caller.
+    /// Exit state: populates <paramref name="segmentAudioPaths"/> with produced per-segment output paths and, when available, records per-segment durations into <paramref name="segmentDurations"/>; does not itself persist session state.
+    /// Cancellation: honors <paramref name="cancellationToken"/> and will propagate OperationCanceledException when cancelled.
+    /// Guard conditions: silently returns when there are no valid candidate segments (no Id or translated text). The method logs and continues when individual segment outputs are missing; it does not throw for missing outputs.
+    /// </remarks>
+    /// <param name="qwenProvider">The Qwen container TTS provider used to perform the batch generation.</param>
+    /// <param name="candidateSegments">The list of translation segments to synthesize; only segments with non-empty Id and TranslatedText are processed.</param>
+    /// <param name="segmentsDir">Directory where per-segment MP3 files will be written.</param>
+    /// <param name="defaultVoice">Default voice to use when a segment does not specify one.</param>
+    /// <param name="ttsLanguage">TTS language hint to pass to the provider, or null to omit.</param>
+    /// <param name="stageContext">Optional pipeline stage context used for progress reporting.</param>
+    /// <param name="segmentAudioPaths">Thread-safe map that will be filled with segmentId -> generated audio file path for successful outputs.</param>
+    /// <param name="segmentDurations">Thread-safe map that will be filled with segmentId -> duration in seconds when the provider returns duration metadata.</param>
+    /// <param name="cancellationToken">Cancellation token to observe while performing the batch operation.</param>
     private async Task GenerateQwenBatchSegmentAudioAsync(
         QwenContainerTtsProvider qwenProvider,
         IReadOnlyList<TranslationSegmentArtifact> candidateSegments,
@@ -713,6 +803,28 @@ public sealed partial class SessionWorkflowCoordinator
         }
     }
 
+    /// <summary>
+    /// Runs the end-to-end streaming pipeline: starts streaming transcription (if a streaming ASR provider is available),
+    /// forwards segments to the streaming translation and TTS stages as they arrive, and persists transcription, translation,
+    /// and TTS session state when each stage completes. If no streaming ASR provider is available, falls back to the non‑streaming
+    /// transcription path and then runs translation and TTS from the completed transcript.
+    /// </summary>
+    /// <remarks>
+    /// Entry requirements:
+    /// - A media file must already be ingested (CurrentSession.IngestedMediaPath must be set and exist).
+    /// - Transcription provider readiness is verified via EnsureTranscriptionProviderReadyAsync; that guard may throw
+    ///   a <see cref="PipelineProviderException"/> when blocked or an <see cref="InvalidOperationException"/> on failed model download.
+    /// On success:
+    /// - Commits and persists session state for the transcription, translation, and TTS stages as each completes.
+    /// Cancellation:
+    /// - Honors <paramref name="cancellationToken"/> and will observe cancellation for async operations; cancellation will surface as
+    ///   <see cref="OperationCanceledException"/> from awaited calls.
+    /// </remarks>
+    /// <param name="progress">Optional progress reporter used for stage-level progress updates and model download reporting.</param>
+    /// <param name="transcriptionStageContext">Context used to report transcription stage messages and progress.</param>
+    /// <param name="translationStageContext">Context used to report translation stage messages and progress.</param>
+    /// <param name="ttsStageContext">Context used to report TTS stage messages and progress.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation of the pipeline execution.</param>
     private async Task ExecuteStreamingPipelineAsync(
         IProgress<double>? progress,
         PipelineStageContext? transcriptionStageContext,
@@ -871,6 +983,20 @@ public sealed partial class SessionWorkflowCoordinator
         CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
     }
 
+    /// <summary>
+    /// Translates an existing transcript into the target language and generates streaming TTS dubs for the translated segments, producing final translation and TTS artifacts persisted to the current session.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter used for stage download and progress updates.</param>
+    /// <param name="translationStageContext">Context used to report translation stage progress and status.</param>
+    /// <param name="ttsStageContext">Context used to report TTS stage progress and status.</param>
+    /// <param name="cancellationToken">Cancellation token that aborts the streaming translation and TTS pipeline.</param>
+    /// <remarks>
+    /// Preconditions: <see cref="CurrentSession.TranscriptPath"/> must be set and point to an existing transcript; otherwise an <see cref="InvalidOperationException"/> is thrown. 
+    /// On success: commits and persists translation and TTS session state (translation artifact and final dub), and stitches per-segment audio into the final TTS file. 
+    /// The method ensures translation and TTS providers/runtimes are ready (including any required model downloads) before processing; readiness failures will surface as provider-specific exceptions. 
+    /// Cancellation: respects <paramref name="cancellationToken"/> for all async operations and will stop producing further segments when cancelled.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when no transcript is available at <see cref="CurrentSession.TranscriptPath"/>.</exception>
     private async Task ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
         IProgress<double>? progress,
         PipelineStageContext? translationStageContext,
@@ -1000,6 +1126,23 @@ public sealed partial class SessionWorkflowCoordinator
         CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
     }
 
+    /// <summary>
+    /// Consumes transcript segments from the provided reader, translates each segment into the specified target language, appends translated segments to the streaming translation artifact, and publishes translated segments to the translation writer for downstream TTS consumption.
+    /// </summary>
+    /// <param name="transcriptReader">Channel reader that yields incoming transcript segments to translate.</param>
+    /// <param name="translationWriter">Channel writer that receives translated segments for downstream stages.</param>
+    /// <param name="artifactWriter">Streaming artifact writer used to append pending segments and reload the partial translation artifact on disk.</param>
+    /// <param name="targetLanguage">Normalized target language code to translate segments into.</param>
+    /// <param name="stageContext">Optional pipeline stage context used to report progress messages.</param>
+    /// <param name="cancellationToken">Token to observe for cooperative cancellation; when canceled the method will stop reading and propagate cancellation.</param>
+    /// <returns>A <see cref="TranslationResult"/> built from the completed partial translation artifact (ordered segments and detected source language).</returns>
+    /// <remarks>
+    /// Entry state: expects a populated transcription stream available from <paramref name="transcriptReader"/>.  
+    /// Exit state on success: writes translated segments into the partial translation artifact on disk and emits corresponding items to <paramref name="translationWriter"/>; does not persist overall session state.  
+    /// Cancellation: honors <paramref name="cancellationToken"/> and will cease processing when cancellation is requested.  
+    /// Guard conditions: requires an initialized translation service; translation failures or missing translated segments will abort the stage.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when a translation call fails or when a translated segment is not present in the partial artifact after translation.</exception>
     private async Task<TranslationResult> RunStreamingTranslationStageAsync(
         ChannelReader<TranscriptChannelItem> transcriptReader,
         ChannelWriter<TranslationChannelItem> translationWriter,

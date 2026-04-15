@@ -42,6 +42,23 @@ def validate_payload(payload: object) -> dict:
 
 
 async def synthesize(payload: dict, simulate: bool) -> dict:
+    """
+    Synthesize speech described by payload and write the resulting audio file.
+    
+    Args:
+        payload (dict): Payload object containing:
+            - "output_path" (str): Filesystem path where the audio file will be written.
+            - "voice" (str): Voice identifier to use for synthesis.
+            - "text" (str): Text to synthesize.
+        simulate (bool): If True, write a UTF-8 placeholder file containing the voice and text instead of performing real TTS.
+    
+    Returns:
+        dict: Result summary with the following keys:
+            - "output_path" (str): The provided output path.
+            - "voice" (str): The voice identifier used.
+            - "file_size_bytes" (int): Size of the written file in bytes.
+            - "duration_seconds" (float | None): Audio duration in seconds if probeable, otherwise `None`.
+    """
     output_path = payload["output_path"]
     voice = payload["voice"]
     text = payload["text"]

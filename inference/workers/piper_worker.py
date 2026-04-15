@@ -39,6 +39,28 @@ def find_model(voice: str, model_dir: str) -> str | None:
 
 
 def handle_request(payload: dict[str, Any], model_dir: str) -> dict[str, Any]:
+    """
+    Generate a speech file using the Piper CLI for the requested voice and return metadata about the output.
+    
+    Args:
+        payload (dict[str, Any]): Request payload containing:
+            - text (str): Non-empty text to synthesize.
+            - output_path (str): Non-empty path where Piper should write the audio file.
+            - voice (str): Non-empty voice identifier to locate the .onnx model.
+        model_dir (str): Optional directory to search for voice models in addition to platform defaults.
+    
+    Returns:
+        dict[str, Any]: Metadata about the generated output with keys:
+            - output_path (str): The same output_path passed in the payload.
+            - voice (str): The voice identifier used.
+            - file_size_bytes (int): Size of the produced file in bytes.
+            - duration_seconds (float | None): Duration in seconds if probe succeeded, otherwise None.
+    
+    Raises:
+        ValueError: If any of `text`, `output_path`, or `voice` is missing or empty.
+        RuntimeError: If the `piper` CLI is not found on PATH or if Piper fails to produce the output.
+        FileNotFoundError: If the specified voice model cannot be located.
+    """
     text = payload.get("text")
     output_path = payload.get("output_path")
     voice = payload.get("voice")

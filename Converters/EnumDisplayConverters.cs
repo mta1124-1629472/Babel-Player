@@ -33,13 +33,21 @@ public sealed class GpuHostBackendDisplayConverter : IValueConverter
     /// <summary>
         /// Conversion back from the target type to the source type is not supported by this converter.
         /// </summary>
-        /// <exception cref="NotSupportedException">Always thrown to indicate reverse conversion is not implemented.</exception>
+        /// <summary>
+        /// Indicates that converting from the target back to the source is not supported and will always throw.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">Thrown unconditionally because backward conversion is not implemented.</exception>
         public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 
 public sealed class SegmentTimingModeDisplayConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a SegmentTimingMode value into its user-facing label.
+    /// </summary>
+    /// <param name="value">The value to convert; expected to be a <see cref="SegmentTimingMode"/> or null.</param>
+    /// <returns>A string label: "Off" for <see cref="SegmentTimingMode.Off"/>, "Stretch" for <see cref="SegmentTimingMode.Stretch"/>, "Pause" for <see cref="SegmentTimingMode.Pause"/>, the original value's <c>ToString()</c> for unrecognized values, or an empty string if <paramref name="value"/> is null.</returns>
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
     {
         SegmentTimingMode.Off => "Off",
@@ -48,7 +56,11 @@ public sealed class SegmentTimingModeDisplayConverter : IValueConverter
         _ => value?.ToString() ?? string.Empty,
     };
 
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+    /// <summary>
+        /// Indicates that converting from the target back to the source is not supported and will always throw.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">Thrown unconditionally because backward conversion is not implemented.</exception>
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 

@@ -226,6 +226,13 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         }
     }
 
+    /// <summary>
+    /// Extracts the entire audio track from <paramref name="inputPath"/> and writes it to <paramref name="outputPath"/> as mono 16 kHz PCM signed 16-bit (pcm_s16le).
+    /// </summary>
+    /// <param name="inputPath">Path to the source media file.</param>
+    /// <param name="outputPath">Path where the extracted audio file will be created; the containing directory will be created if it does not exist.</param>
+    /// <param name="cancellationToken">Token that, when cancelled, will attempt to terminate the ffmpeg process and will propagate cancellation to the caller.</param>
+    /// <exception cref="InvalidOperationException">Thrown if ffmpeg is not found, if the ffmpeg process fails to start, or if ffmpeg exits with a non-zero code or the expected output file is not produced.</exception>
     public async Task ExtractFullAudioAsync(
         string inputPath,
         string outputPath,
@@ -288,6 +295,12 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         var outputFileInfo = new FileInfo(outputPath);
     }
 
+    /// <summary>
+    /// Probes a media file with ffprobe and obtains its duration in seconds.
+    /// </summary>
+    /// <param name="filePath">Path to the media file to probe.</param>
+    /// <param name="cancellationToken">Token to cancel the probe; cancellation attempts to terminate the ffprobe process and will throw <see cref="OperationCanceledException"/> when observed.</param>
+    /// <returns>The duration in seconds as a <see cref="double"/> if ffprobe succeeds and the output parses, or <c>null</c> if ffprobe is unavailable, parsing fails, or an error occurs.</returns>
     public async Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
     {
         var ffprobePath = DependencyLocator.FindFfprobe();
@@ -357,6 +370,18 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         }
     }
 
+    /// <summary>
+    /// Adjusts the audio playback speed of an input file to target a specific duration and writes the result to an output file.
+    /// </summary>
+    /// <param name="inputPath">Path to the source audio file to be time-stretched.</param>
+    /// <param name="outputPath">Path where the time-stretched output will be written. The method creates the output directory if needed.</param>
+    /// <param name="targetDurationSeconds">Desired duration, in seconds, for the output file.</param>
+    /// <param name="minRatio">Minimum allowed tempo ratio (sourceDuration / targetDuration). If the computed tempo is below this value the operation is skipped and the method returns <c>false</c>.</param>
+    /// <param name="maxRatio">Maximum allowed tempo ratio (sourceDuration / targetDuration). If the computed tempo is above this value the operation is skipped and the method returns <c>false</c>.</param>
+    /// <param name="cancellationToken">Token to cancel the operation; cancellation attempts to terminate the spawned ffmpeg process.</param>
+    /// <returns>`true` if the time-stretch operation completed and produced the output file; `false` if the operation was skipped because the source duration was invalid or the tempo ratio fell outside [<paramref name="minRatio"/>, <paramref name="maxRatio"/>].</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ffmpeg is not found, if the ffmpeg process fails to start, or if ffmpeg exits non-zero or does not produce the expected output file.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the provided <paramref name="cancellationToken"/> is canceled during processing.</exception>
     public async Task<bool> TimeStretchAsync(
         string inputPath,
         string outputPath,
@@ -446,7 +471,12 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
     /// <summary>
     /// Builds an atempo filter chain. Each <c>atempo</c> is bounded to [0.5, 2.0] per ffmpeg docs;
     /// larger ratio changes are achieved by chaining (e.g. <c>atempo=2.0,atempo=1.25</c>).
+    /// <summary>
+    /// Builds an ffmpeg `atempo` filter chain that achieves the requested tempo while ensuring each stage is within ffmpeg's per-stage bounds (0.5 to 2.0).
     /// </summary>
+    /// <param name="tempo">Target tempo ratio (source duration divided by target duration); must be a finite value greater than 0.</param>
+    /// <returns>A comma-separated ffmpeg `atempo=` filter string representing one or more stages (e.g., "atempo=1.500000,atempo=0.750000").</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="tempo"/> is not finite or is less than or equal to zero.</exception>
     private static string BuildAtempoFilter(double tempo)
     {
         if (double.IsNaN(tempo) || double.IsInfinity(tempo) || tempo <= 0)
@@ -488,7 +518,12 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
             factors.Select(value => $"atempo={value.ToString("F6", CultureInfo.InvariantCulture)}"));
     }
 
-    private static string EscapeConcatListPath(string path) =>
+    /// <summary>
+            /// Escapes a filesystem path for inclusion in an ffmpeg concat demuxer list file.
+            /// </summary>
+            /// <param name="path">The input file path to escape.</param>
+            /// <returns>The escaped path with backslashes converted to forward slashes and single quotes escaped for use inside single-quoted concat list entries.</returns>
+            private static string EscapeConcatListPath(string path) =>
         path.Replace("\\", "/", StringComparison.Ordinal)
             .Replace("'", "'\\''", StringComparison.Ordinal);
 }

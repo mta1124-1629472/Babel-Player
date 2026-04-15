@@ -77,6 +77,21 @@ public sealed class EdgeTtsProvider : PythonSubprocessServiceBase, ITtsProvider,
             GenerateSegmentTtsAsync,
             cancellationToken);
 
+    /// <summary>
+    /// Generates speech for a single TTS segment using the Edge TTS worker and writes the audio to the specified output path.
+    /// </summary>
+    /// <remarks>
+    /// Entry: expects the provider and its Python worker pool to be ready to accept work; the request must contain valid text, voice, and an output path. 
+    /// Exit: on success, a completed audio file exists at the returned output path and the provider remains ready for additional requests. 
+    /// Cancellation: operation honors <paramref name="cancellationToken"/>; if cancelled, the underlying worker call is aborted and no result is returned.
+    /// </remarks>
+    /// <param name="request">The segment request. <see cref="SingleSegmentTtsRequest.Text"/>, <see cref="SingleSegmentTtsRequest.VoiceName"/>, and <see cref="SingleSegmentTtsRequest.OutputAudioPath"/> must be non-empty; <see cref="SingleSegmentTtsRequest.Language"/> may be null.</param>
+    /// <param name="cancellationToken">Token to cancel the segment generation operation.</param>
+    /// <returns>
+    /// A <see cref="TtsResult"/> describing the generated audio: success flag, output path, voice name, file size in bytes, any error (null on success), and the audio duration in seconds (nullable).
+    /// </returns>
+    /// <exception cref="ArgumentException">Thrown when required request fields (text, voice name, or output audio path) are null, empty, or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if the worker reports an output path but the audio file is not present after worker completion.</exception>
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default)
@@ -107,7 +122,14 @@ public sealed class EdgeTtsProvider : PythonSubprocessServiceBase, ITtsProvider,
         return new TtsResult(true, response.OutputPath, response.Voice, response.FileSizeBytes, null, response.DurationSeconds);
     }
 
-    public void Dispose() => _workerPool.Dispose();
+    /// <summary>
+/// Releases resources used by the provider by disposing its Python worker pool.
+/// </summary>
+/// <remarks>
+/// After calling this method the provider should not be used to generate TTS; the underlying worker pool is disposed.
+/// This method forwards disposal to the internal worker pool and does not throw on normal disposal semantics.
+/// </remarks>
+public void Dispose() => _workerPool.Dispose();
 
     private static PythonJsonWorkerPool<EdgeTtsWorkerRequest, EdgeTtsWorkerResponse> CreateWorkerPool(
         AppLog log,
