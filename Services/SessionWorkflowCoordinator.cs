@@ -42,6 +42,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly IMediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
     private bool _subscribedToSourceDiagnostics;
+    private CancellationTokenSource? _activeSingleSegmentPlaybackCts;
     private readonly EventHandler _segmentEndedHandler;
     private readonly EventHandler<Exception> _segmentErrorHandler;
     /// <summary>When pause-mode TTS is waiting on segment Ended, <see cref="StopTtsPlayback"/> completes this so the wait does not hang.</summary>
@@ -204,7 +205,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     {
         if (_ttsPauseModeCompletion is null)
         {
-            StopTtsPlayback();
+            StopTtsPlayback(cancelActivePauseWait: false);
             return;
         }
 

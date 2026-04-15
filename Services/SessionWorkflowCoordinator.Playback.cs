@@ -968,10 +968,14 @@ public sealed partial class SessionWorkflowCoordinator
             throw new FileNotFoundException($"TTS audio file not found: {audioPath}", audioPath);
 
         StopTtsPlayback();
+        var playbackCts = new CancellationTokenSource();
+        var previousPlaybackCts = Interlocked.Exchange(ref _activeSingleSegmentPlaybackCts, playbackCts);
+        previousPlaybackCts?.Cancel();
+        previousPlaybackCts?.Dispose();
         PlaybackState = PlaybackState.PlayingSingleSegment;
         ActiveTtsSegmentId = segmentId;
 
-        _ = PlayTtsWithTimingAsync(segmentId, audioPath, segment, timingMode).FireAndForgetAsync(
+        _ = PlayTtsWithTimingAsync(segmentId, audioPath, segment, timingMode, playbackCts).FireAndForgetAsync(
             _log, $"Play TTS for segment {segmentId}");
         return Task.CompletedTask;
     }
@@ -980,82 +984,97 @@ public sealed partial class SessionWorkflowCoordinator
         string segmentId,
         string audioPath,
         WorkflowSegmentState? segment,
-        SegmentTimingMode timingMode)
+        SegmentTimingMode timingMode,
+        CancellationTokenSource playbackCts)
     {
+        var playbackToken = playbackCts.Token;
         var effectivePath = audioPath;
 
-        if (timingMode == SegmentTimingMode.Stretch && segment is not null && _audioProcessingService is not null)
+        try
         {
-            var targetDuration = segment.EndSeconds - segment.StartSeconds;
-            if (targetDuration > 0)
+            if (timingMode == SegmentTimingMode.Stretch && segment is not null && _audioProcessingService is not null)
             {
-                var stretchedPath = audioPath + ".stretched.mp3";
-                try
+                var targetDuration = segment.EndSeconds - segment.StartSeconds;
+                if (targetDuration > 0)
                 {
-                    var stretched = await _audioProcessingService.TimeStretchAsync(
-                        audioPath, stretchedPath, targetDuration,
-                        cancellationToken: CancellationToken.None).ConfigureAwait(false);
-                    if (!IsStillActiveTtsSegment(segmentId))
-                        return;
-                    if (stretched && File.Exists(stretchedPath))
-                        effectivePath = stretchedPath;
+                    var stretchedPath = audioPath + ".stretched.mp3";
+                    try
+                    {
+                        var stretched = await _audioProcessingService.TimeStretchAsync(
+                            audioPath, stretchedPath, targetDuration,
+                            cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                        if (!IsStillActiveTtsSegment(segmentId))
+                            return;
+                        if (stretched && File.Exists(stretchedPath))
+                            effectivePath = stretchedPath;
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Warning($"Time-stretch failed for segment audio, playing original: {ex.Message}");
+                    }
                 }
-                catch (Exception ex)
-                {
-                    _log.Warning($"Time-stretch failed for segment audio, playing original: {ex.Message}");
-                }
-            }
-        }
-
-        if (!IsStillActiveTtsSegment(segmentId))
-            return;
-
-        var player = GetOrCreateSegmentPlayer();
-        player.Load(effectivePath);
-        player.Volume = TtsVolume;
-
-        if (timingMode == SegmentTimingMode.Pause && segment is not null)
-        {
-            var source = SourceMediaPlayer;
-            var sourceWasPlaying = source?.IsPlaying == true;
-
-            // Pause the source video, play TTS fully, then seek to segment end and optionally resume.
-            source?.Pause();
-
-            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _ttsPauseModeCompletion = tcs;
-
-            try
-            {
-                await Task.Run(() => player.Play()).ConfigureAwait(false);
-                await tcs.Task.ConfigureAwait(false);
-            }
-            finally
-            {
-                if (ReferenceEquals(_ttsPauseModeCompletion, tcs))
-                    _ttsPauseModeCompletion = null;
             }
 
             if (!IsStillActiveTtsSegment(segmentId))
                 return;
 
-            // Seek source to segment end; only resume if it was playing before we paused for preview.
-            if (source is not null)
-            {
-                source.Seek((long)(segment.EndSeconds * 1000));
-                if (sourceWasPlaying)
-                    source.Play();
-            }
+            var player = GetOrCreateSegmentPlayer();
+            player.Load(effectivePath);
+            player.Volume = TtsVolume;
 
-            if (string.Equals(ActiveTtsSegmentId, segmentId, StringComparison.Ordinal))
+            if (timingMode == SegmentTimingMode.Pause && segment is not null)
             {
-                ActiveTtsSegmentId = null;
-                PlaybackState = PlaybackState.Idle;
+                var source = SourceMediaPlayer;
+                var sourceWasPlaying = source?.IsPlaying == true;
+
+                // Pause the source video, play TTS fully, then seek to segment end and optionally resume.
+                source?.Pause();
+
+                var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _ttsPauseModeCompletion = tcs;
+                using var cancellationRegistration = playbackToken.Register(() => tcs.TrySetCanceled(playbackToken));
+
+                try
+                {
+                    await Task.Run(() => player.Play(), playbackToken).ConfigureAwait(false);
+                    await tcs.Task.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (playbackToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                finally
+                {
+                    if (ReferenceEquals(_ttsPauseModeCompletion, tcs))
+                        _ttsPauseModeCompletion = null;
+                }
+
+                if (!IsStillActiveTtsSegment(segmentId))
+                    return;
+
+                // Seek source to segment end; only resume if it was playing before we paused for preview.
+                if (source is not null)
+                {
+                    source.Seek((long)(segment.EndSeconds * 1000));
+                    if (sourceWasPlaying)
+                        source.Play();
+                }
+
+                if (string.Equals(ActiveTtsSegmentId, segmentId, StringComparison.Ordinal))
+                {
+                    ActiveTtsSegmentId = null;
+                    PlaybackState = PlaybackState.Idle;
+                }
+            }
+            else
+            {
+                await Task.Run(() => player.Play()).ConfigureAwait(false);
             }
         }
-        else
+        finally
         {
-            await Task.Run(() => player.Play()).ConfigureAwait(false);
+            if (Interlocked.CompareExchange(ref _activeSingleSegmentPlaybackCts, null, playbackCts) == playbackCts)
+                playbackCts.Dispose();
         }
     }
 
@@ -1069,8 +1088,18 @@ public sealed partial class SessionWorkflowCoordinator
     /// If a segment player exists, attempts to pause it and ignores an ObjectDisposedException (race/shutdown case).
     /// After returning, <see cref="ActiveTtsSegmentId"/> is cleared and <see cref="PlaybackState"/> is set to <see cref="PlaybackState.Idle"/>.
     /// </remarks>
-    public void StopTtsPlayback()
+    public void StopTtsPlayback(bool cancelActivePauseWait = true)
     {
+        if (cancelActivePauseWait)
+        {
+            var playbackCts = Interlocked.Exchange(ref _activeSingleSegmentPlaybackCts, null);
+            if (playbackCts is not null)
+            {
+                playbackCts.Cancel();
+                playbackCts.Dispose();
+            }
+        }
+
         try
         {
             _transportManager.SegmentPlayer?.Pause();
