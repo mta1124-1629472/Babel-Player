@@ -6,49 +6,86 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         x:Class="Babel.Player.Views.SpeakerReferenceWizardWindow"
+        x:Name="WizardRoot"
         x:DataType="vm:SpeakerReferenceWizardViewModel"
         Title="Speaker setup wizard"
-        Width="940"
-        Height="680"
-        MinWidth="820"
-        MinHeight="560"
+        Width="980"
+        Height="760"
+        MinWidth="860"
+        MinHeight="620"
         CanResize="True"
         WindowStartupLocation="CenterOwner">
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="18">
-        <StackPanel Grid.Row="0" Spacing="6">
+        <StackPanel Grid.Row="0" Spacing="8">
             <TextBlock Text="Speaker setup wizard" FontSize="20" FontWeight="SemiBold" />
             <TextBlock Text="Configure per-speaker voice and (for Qwen) reference clips. Changes stay in draft mode until you choose Finish."
                        FontSize="12"
                        Opacity="0.75"
                        TextWrapping="Wrap" />
+            <TextBlock Text="Keep this window open and use the main video preview to scrub the timeline and select a segment. You can also jump to a speaker's segments below, then use 'Use selected segment' or 'Use playhead clip'."
+                       FontSize="12"
+                       Opacity="0.85"
+                       TextWrapping="Wrap" />
         </StackPanel>
 
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*" Margin="0,12,0,10" ColumnSpacing="10">
-            <Border Grid.Column="0" Background="{DynamicResource PositiveBrush}" CornerRadius="8" Padding="10,5">
-                <TextBlock Text="{Binding GoodCount, StringFormat='Good: {0}'}" FontSize="12" />
-            </Border>
-            <Border Grid.Column="1" Background="{DynamicResource InfoBrush}" CornerRadius="8" Padding="10,5">
-                <TextBlock Text="{Binding ReviewCount, StringFormat='Review: {0}'}" FontSize="12" />
-            </Border>
-            <Border Grid.Column="2" Background="{DynamicResource DestructiveBrush}" CornerRadius="8" Padding="10,5">
-                <TextBlock Text="{Binding PoorCount, StringFormat='Poor: {0}'}" FontSize="12" />
-            </Border>
-            <CheckBox Grid.Column="3"
-                      IsChecked="{Binding ShowLowConfidenceOnly, Mode=TwoWay}"
-                      Content="Show low confidence only"
-                      VerticalAlignment="Center" />
-            <Button Grid.Column="4"
-                    Command="{Binding ResetAllCommand}"
-                    Content="Reset all drafts"
-                    Padding="10,6" />
-            <TextBlock Grid.Column="5"
-                       Text="{Binding StatusText}"
-                       VerticalAlignment="Center"
-                       TextAlignment="Right"
-                       TextWrapping="Wrap"
-                       Opacity="0.8" />
-        </Grid>
+        <StackPanel Grid.Row="1" Spacing="10" Margin="0,12,0,10">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*" ColumnSpacing="10">
+                <Border Grid.Column="0" Background="{DynamicResource PositiveBrush}" CornerRadius="8" Padding="10,5">
+                    <TextBlock Text="{Binding GoodCount, StringFormat='Good: {0}'}" FontSize="12" />
+                </Border>
+                <Border Grid.Column="1" Background="{DynamicResource InfoBrush}" CornerRadius="8" Padding="10,5">
+                    <TextBlock Text="{Binding ReviewCount, StringFormat='Review: {0}'}" FontSize="12" />
+                </Border>
+                <Border Grid.Column="2" Background="{DynamicResource DestructiveBrush}" CornerRadius="8" Padding="10,5">
+                    <TextBlock Text="{Binding PoorCount, StringFormat='Poor: {0}'}" FontSize="12" />
+                </Border>
+                <CheckBox Grid.Column="3"
+                          IsChecked="{Binding ShowLowConfidenceOnly, Mode=TwoWay}"
+                          Content="Show low confidence only"
+                          VerticalAlignment="Center" />
+                <Button Grid.Column="4"
+                        Command="{Binding ResetAllCommand}"
+                        Content="Reset all drafts"
+                        Padding="10,6" />
+                <TextBlock Grid.Column="5"
+                           Text="{Binding StatusText}"
+                           VerticalAlignment="Center"
+                           TextAlignment="Right"
+                           TextWrapping="Wrap"
+                           Opacity="0.8" />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="Playhead clip (s)" VerticalAlignment="Center" Opacity="0.75" FontSize="12" />
+                <Slider Width="180"
+                        Minimum="3"
+                        Maximum="15"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        Value="{Binding PlayheadClipWindowSeconds, Mode=TwoWay}" />
+                <TextBlock Text="{Binding PlayheadClipWindowSeconds, StringFormat='{}{0:F0}s'}"
+                           VerticalAlignment="Center"
+                           MinWidth="36" />
+                <Button Command="{Binding StopReferencePreviewCommand}"
+                        Content="Stop preview"
+                        Padding="8,6" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Merge speaker" VerticalAlignment="Center" FontSize="12" Opacity="0.75" />
+                <ComboBox Width="140"
+                          ItemsSource="{Binding SpeakerIdOptions}"
+                          SelectedItem="{Binding MergeSourceSpeakerId, Mode=TwoWay}" />
+                <TextBlock Text="→" VerticalAlignment="Center" />
+                <ComboBox Width="140"
+                          ItemsSource="{Binding SpeakerIdOptions}"
+                          SelectedItem="{Binding MergeTargetSpeakerId, Mode=TwoWay}" />
+                <Button Command="{Binding MergeSpeakersCommand}"
+                        Content="Merge (updates transcript)"
+                        Padding="10,6" />
+            </StackPanel>
+        </StackPanel>
 
         <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -56,7 +93,10 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="model:SpeakerReferenceDraftItem">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,10">
-                                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto" RowSpacing="6" ColumnSpacing="12">
+                                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                                      ColumnDefinitions="Auto,*,Auto"
+                                      RowSpacing="6"
+                                      ColumnSpacing="12">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding SpeakerId}" FontWeight="SemiBold" FontSize="13" />
                                     <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding LastActionLabel}" Opacity="0.75" />
                                     <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding ConfidenceTier}" FontWeight="SemiBold" />
@@ -83,25 +123,76 @@
                                                 Padding="8,6" />
                                     </StackPanel>
 
-                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Clip" Opacity="0.7"
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Piper voice" Opacity="0.7"
+                                               IsVisible="{Binding ShowPiperVoiceRow}" />
+                                    <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                                              IsVisible="{Binding ShowPiperVoiceRow}"
+                                              IsEditable="True"
+                                              ItemsSource="{Binding $parent[Window].DataContext.PiperVoices}"
+                                              SelectedItem="{Binding DraftAssignedVoice, Mode=TwoWay}"
+                                              MinWidth="200"
+                                              FontSize="11"
+                                              ToolTip.Tip="Pick a downloaded Piper voice, or type a voice id manually." />
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Segments" Opacity="0.7" />
+                                    <ScrollViewer Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2"
+                                                  MaxHeight="100"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding SourceSegments}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Vertical" Spacing="4" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="model:WorkflowSegmentState">
+                                                    <Button HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Left"
+                                                            Padding="8,4"
+                                                            FontSize="11"
+                                                            Click="OnJumpToSegmentClick"
+                                                            Tag="{Binding}"
+                                                            ToolTip.Tip="{Binding SourceText}">
+                                                        <TextBlock Text="{Binding StartSeconds, StringFormat='Jump to {0:F1}s'}" />
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Clip" Opacity="0.7"
                                                IsVisible="{Binding ReferenceActionsEnabled}" />
-                                    <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2"
                                                Text="{Binding EffectiveReferencePath, TargetNullValue='—'}"
                                                TextWrapping="Wrap"
                                                FontFamily="Consolas,monospace"
                                                FontSize="11"
                                                IsVisible="{Binding ReferenceActionsEnabled}" />
 
-                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Reason" Opacity="0.7"
+                                    <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3"
+                                                Orientation="Horizontal" Spacing="8"
+                                                IsVisible="{Binding ReferenceActionsEnabled}">
+                                        <Button Tag="{Binding}"
+                                                Click="OnPlayReferenceClick"
+                                                Content="Play reference"
+                                                Padding="8,6" />
+                                        <Button Tag="{Binding}"
+                                                Click="OnRevealReferenceClick"
+                                                Content="Show in folder"
+                                                Padding="8,6" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Reason" Opacity="0.7"
                                                IsVisible="{Binding ReferenceActionsEnabled}" />
-                                    <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2"
+                                    <TextBlock Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2"
                                                Text="{Binding ConfidenceReasonSummary}"
                                                TextWrapping="Wrap"
                                                FontSize="11"
                                                IsVisible="{Binding ReferenceActionsEnabled}" />
 
-                                    <Grid Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
-                                          ColumnDefinitions="*,*,*" ColumnSpacing="8"
+                                    <Grid Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3"
+                                          ColumnDefinitions="*,*,*,*" ColumnSpacing="8"
                                           IsVisible="{Binding ReferenceActionsEnabled}">
                                         <Button Grid.Column="0"
                                                 Tag="{Binding}"
@@ -115,12 +206,17 @@
                                                 Padding="8,6" />
                                         <Button Grid.Column="2"
                                                 Tag="{Binding}"
+                                                Click="OnUsePlayheadClipClick"
+                                                Content="Use playhead clip"
+                                                Padding="8,6" />
+                                        <Button Grid.Column="3"
+                                                Tag="{Binding}"
                                                 Click="OnAutoPickAnotherClick"
                                                 Content="Auto-pick another"
                                                 Padding="8,6" />
                                     </Grid>
 
-                                    <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3"
+                                    <TextBlock Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
                                                Text="{Binding InlineError}"
                                                Foreground="{DynamicResource DestructiveBrush}"
                                                FontSize="11"

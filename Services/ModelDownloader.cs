@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -355,6 +356,34 @@ except Exception as e:
         string onnxPath = Path.Combine(resolvedDir, $"{voice}.onnx");
         string jsonPath = Path.Combine(resolvedDir, $"{voice}.onnx.json");
         return File.Exists(onnxPath) && File.Exists(jsonPath);
+    }
+
+    /// <summary>
+    /// Lists Piper voice ids that have both <c>{id}.onnx</c> and <c>{id}.onnx.json</c> in the resolved model directory.
+    /// </summary>
+    public static IReadOnlyList<string> ListDownloadedPiperVoiceIds(string? piperDir)
+    {
+        var resolvedDir = ResolvePiperModelDir(piperDir);
+        if (string.IsNullOrEmpty(resolvedDir) || !Directory.Exists(resolvedDir))
+            return [];
+
+        var list = new List<string>();
+        foreach (var onnx in Directory.EnumerateFiles(resolvedDir, "*.onnx", SearchOption.TopDirectoryOnly))
+        {
+            if (onnx.EndsWith(".onnx.json", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var baseName = Path.GetFileNameWithoutExtension(onnx);
+            if (string.IsNullOrWhiteSpace(baseName))
+                continue;
+
+            var jsonPath = Path.Combine(resolvedDir, $"{baseName}.onnx.json");
+            if (File.Exists(jsonPath))
+                list.Add(baseName);
+        }
+
+        list.Sort(StringComparer.Ordinal);
+        return list;
     }
 
     /// <summary>

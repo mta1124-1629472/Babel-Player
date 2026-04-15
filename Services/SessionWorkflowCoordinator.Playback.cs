@@ -654,13 +654,30 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
     }
 
-    public async Task<string> ExtractSpeakerReferenceFromSegmentAsync(
+    public Task<string> ExtractSpeakerReferenceFromSegmentAsync(
         string speakerId,
         WorkflowSegmentState segment,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
         ArgumentNullException.ThrowIfNull(segment);
+
+        var startSeconds = Math.Max(0, segment.StartSeconds);
+        var naturalDuration = Math.Max(0.1, segment.EndSeconds - segment.StartSeconds);
+        return ExtractSpeakerReferenceFromSourceAsync(speakerId, startSeconds, naturalDuration, cancellationToken);
+    }
+
+    /// <summary>
+    /// Extracts a WAV reference clip from the session's ingested (or source) media at an arbitrary timeline window.
+    /// Duration is clamped between 3 and 15 seconds (same rules as segment-based extraction).
+    /// </summary>
+    public async Task<string> ExtractSpeakerReferenceFromSourceAsync(
+        string speakerId,
+        double startSeconds,
+        double naturalDurationSeconds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
 
         if (_audioProcessingService is null)
             throw new InvalidOperationException("Audio processing is unavailable, so reference extraction cannot run.");
@@ -675,8 +692,8 @@ public sealed partial class SessionWorkflowCoordinator
         var refsDir = Path.Combine(GetSessionDirectory(), "tts", "references");
         Directory.CreateDirectory(refsDir);
 
-        var startSeconds = Math.Max(0, segment.StartSeconds);
-        var naturalDuration = Math.Max(0.1, segment.EndSeconds - segment.StartSeconds);
+        var start = Math.Max(0, startSeconds);
+        var naturalDuration = Math.Max(0.1, naturalDurationSeconds);
         var durationSeconds = Math.Clamp(naturalDuration, 3.0, 15.0);
         var outputPath = Path.Combine(
             refsDir,
@@ -685,12 +702,36 @@ public sealed partial class SessionWorkflowCoordinator
         await _audioProcessingService.ExtractAudioClipAsync(
             mediaPath,
             outputPath,
-            startSeconds,
+            start,
             durationSeconds,
             cancellationToken).ConfigureAwait(false);
 
         return outputPath;
     }
+
+    /// <summary>
+    /// Plays a short audio file on the headless segment transport (stops active TTS preview first).
+    /// </summary>
+    public Task PlayWizardAudioPreviewAsync(string audioFilePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(audioFilePath);
+        if (!File.Exists(audioFilePath))
+            throw new FileNotFoundException("Preview audio file not found.", audioFilePath);
+
+        StopTtsPlayback();
+
+        var player = GetOrCreateSegmentPlayer();
+        player.Load(audioFilePath);
+        player.Volume = TtsVolume;
+        player.Seek(0);
+        _ = Task.Run(() => player.Play()).FireAndForgetAsync(_log, "Play wizard reference preview");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Stops wizard / TTS preview playback on the segment transport.
+    /// </summary>
+    public void StopWizardAudioPreview() => StopTtsPlayback();
 
     public async Task<string?> AutoPickAlternateSpeakerReferenceAsync(
         string speakerId,
