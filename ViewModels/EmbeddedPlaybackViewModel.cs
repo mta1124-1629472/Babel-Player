@@ -18,6 +18,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private readonly IErrorDialogService? _errorDialogService;
     private readonly string? _logFilePath;
     private bool _isSynchronizingPipelineSettings;
+    private readonly PropertyChangedEventHandler _previewPropertyChangedHandler;
 
     [ObservableProperty]
     private string _statusText = "No segments loaded.";
@@ -51,6 +52,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         BuildProviderCaches();
         SyncProviderModelFieldsFromSettings();
 
+        _previewPropertyChangedHandler = OnPreviewPropertyChanged;
+        Preview.PropertyChanged += _previewPropertyChangedHandler;
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
         _coordinator.SettingsModified += OnCoordinatorSettingsModified;
     }
@@ -62,6 +65,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     public bool HasErrorDetails => !string.IsNullOrWhiteSpace(StatusErrorDetail);
     public bool HasDiagnosticsWarning => !_coordinator.BootstrapDiagnostics.AllDependenciesAvailable;
+    public bool ShowDiagnosticsWarningBanner => HasDiagnosticsWarning && !Preview.IsFullscreen;
     public string DiagnosticsWarningText => _coordinator.BootstrapDiagnostics.DiagnosticSummary;
     public bool HasVsrPlaybackStatus => _coordinator.VideoEnhancementDiagnostics.HasPlaybackStatus;
     public string VsrPlaybackStatusText => _coordinator.VideoEnhancementDiagnostics.PlaybackStatusText;
@@ -124,6 +128,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 break;
             case nameof(SessionWorkflowCoordinator.BootstrapDiagnostics):
                 OnPropertyChanged(nameof(HasDiagnosticsWarning));
+                OnPropertyChanged(nameof(ShowDiagnosticsWarningBanner));
                 OnPropertyChanged(nameof(DiagnosticsWarningText));
                 OnPropertyChanged(nameof(HwInferenceLine));
                 break;
@@ -171,6 +176,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        Preview.PropertyChanged -= _previewPropertyChangedHandler;
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
         _coordinator.SettingsModified -= OnCoordinatorSettingsModified;
 
@@ -179,6 +185,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         DisposeProviderHealthDiagnostics();
 
         GC.SuppressFinalize(this);
+    }
+
+    private void OnPreviewPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(EmbeddedPlaybackPreviewViewModel.IsFullscreen))
+            OnPropertyChanged(nameof(ShowDiagnosticsWarningBanner));
     }
 }
 
