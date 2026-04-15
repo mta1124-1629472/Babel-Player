@@ -936,12 +936,13 @@ public sealed partial class SessionWorkflowCoordinator
         PlaybackState = PlaybackState.PlayingSingleSegment;
         ActiveTtsSegmentId = segmentId;
 
-        _ = PlayTtsWithTimingAsync(audioPath, segment, timingMode).FireAndForgetAsync(
+        _ = PlayTtsWithTimingAsync(segmentId, audioPath, segment, timingMode).FireAndForgetAsync(
             _log, $"Play TTS for segment {segmentId}");
         return Task.CompletedTask;
     }
 
     private async Task PlayTtsWithTimingAsync(
+        string segmentId,
         string audioPath,
         WorkflowSegmentState? segment,
         SegmentTimingMode timingMode)
@@ -959,6 +960,8 @@ public sealed partial class SessionWorkflowCoordinator
                     var stretched = await _audioProcessingService.TimeStretchAsync(
                         audioPath, stretchedPath, targetDuration,
                         cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                    if (!IsStillActiveTtsSegment(segmentId))
+                        return;
                     if (stretched && File.Exists(stretchedPath))
                         effectivePath = stretchedPath;
                 }
@@ -969,34 +972,47 @@ public sealed partial class SessionWorkflowCoordinator
             }
         }
 
+        if (!IsStillActiveTtsSegment(segmentId))
+            return;
+
         var player = GetOrCreateSegmentPlayer();
         player.Load(effectivePath);
         player.Volume = TtsVolume;
 
         if (timingMode == SegmentTimingMode.Pause && segment is not null)
         {
-            // Pause the source video, play TTS fully, then seek to segment end and resume.
-            SourceMediaPlayer?.Pause();
+            var source = SourceMediaPlayer;
+            var sourceWasPlaying = source?.IsPlaying == true;
+
+            // Pause the source video, play TTS fully, then seek to segment end and optionally resume.
+            source?.Pause();
 
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            void OnEnded(object? sender, EventArgs e) => tcs.TrySetResult(true);
-            player.Ended += OnEnded;
+            _ttsPauseModeCompletion = tcs;
 
-            await Task.Run(() => player.Play()).ConfigureAwait(false);
-            await tcs.Task.ConfigureAwait(false);
-
-            player.Ended -= OnEnded;
-
-            // Seek source to where this segment ends and resume.
-            if (SourceMediaPlayer is not null)
+            try
             {
-                SourceMediaPlayer.Seek((long)(segment.EndSeconds * 1000));
-                SourceMediaPlayer.Play();
+                await Task.Run(() => player.Play()).ConfigureAwait(false);
+                await tcs.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                if (ReferenceEquals(_ttsPauseModeCompletion, tcs))
+                    _ttsPauseModeCompletion = null;
             }
 
-            // Clear playback state only if we're still tracking this segment
-            // (user may have stopped playback while TTS was playing).
-            if (ActiveTtsSegmentId is not null)
+            if (!IsStillActiveTtsSegment(segmentId))
+                return;
+
+            // Seek source to segment end; only resume if it was playing before we paused for preview.
+            if (source is not null)
+            {
+                source.Seek((long)(segment.EndSeconds * 1000));
+                if (sourceWasPlaying)
+                    source.Play();
+            }
+
+            if (string.Equals(ActiveTtsSegmentId, segmentId, StringComparison.Ordinal))
             {
                 ActiveTtsSegmentId = null;
                 PlaybackState = PlaybackState.Idle;
@@ -1007,6 +1023,9 @@ public sealed partial class SessionWorkflowCoordinator
             await Task.Run(() => player.Play()).ConfigureAwait(false);
         }
     }
+
+    private bool IsStillActiveTtsSegment(string segmentId) =>
+        string.Equals(ActiveTtsSegmentId, segmentId, StringComparison.Ordinal);
 
     /// <summary>
     /// Stops any active TTS playback and resets the coordinator's TTS playback state.
@@ -1025,6 +1044,8 @@ public sealed partial class SessionWorkflowCoordinator
         {
             // Shutdown/race path: segment transport was disposed while timer tick tried to stop playback.
         }
+        _ttsPauseModeCompletion?.TrySetResult(false);
+        _ttsPauseModeCompletion = null;
         ActiveTtsSegmentId = null;
         PlaybackState = PlaybackState.Idle;
     }

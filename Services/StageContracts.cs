@@ -100,8 +100,8 @@ public sealed record TtsResult(
     string? ErrorMessage,
     /// <summary>
     /// Duration of the generated audio clip in seconds.
-    /// Null when the provider does not report duration (all existing providers).
-    /// Populated by providers that probe audio duration after generation.
+    /// Null when the provider does not report duration.
+    /// Populated by providers that return clip duration metadata (e.g. Edge TTS, Piper workers).
     /// </summary>
     double? DurationSeconds = null);
 

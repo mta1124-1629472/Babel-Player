@@ -193,7 +193,7 @@ The **NLLB-200** family can model additional pairs in research settings; Babel P
 
 The **spoken-language hint** menu (Auto-detect, then 16 ISO codes) is not a cap on recognition: it is a **curated shortcut list**—languages that appear in **both** the local dub batch **and** Whisper’s ASR table—so choosing a hint lines up transcription with a **guaranteed local translation + dub path**. You are not trading away Whisper’s reach; you are optionally pinning a known-good pairing.
 
-For **offline Piper TTS**, the in-app voice catalog ships **14** of those **16** targets; **Japanese** and **Korean** use **Edge TTS**, **Qwen**, or another provider until Piper publishes matching voices in the standard **rhasspy/piper-voices** release.
+For **offline Piper TTS** (as of April 2026), the in-app voice catalog ships **14** of those **16** targets; **Japanese** and **Korean** use **Edge TTS**, **Qwen**, or another provider until Piper publishes matching voices—verify current voice lists in [rhasspy/piper-voices](https://github.com/rhasspy/piper-voices).
 
 ---
 ## Requirements

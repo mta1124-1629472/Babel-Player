@@ -44,6 +44,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private bool _subscribedToSourceDiagnostics;
     private readonly EventHandler _segmentEndedHandler;
     private readonly EventHandler<Exception> _segmentErrorHandler;
+    /// <summary>When pause-mode TTS is waiting on segment Ended, <see cref="StopTtsPlayback"/> completes this so the wait does not hang.</summary>
+    private TaskCompletionSource<bool>? _ttsPauseModeCompletion;
     private readonly Action<VsrDiagnosticSnapshot> _vsrDiagnosticChangedHandler;
     private VsrDiagnosticSnapshot? _latestVsrDiagnostic;
     private readonly ConcurrentDictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
@@ -154,8 +156,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         KeyStore = options.KeyStore;
         _transportManager = transportManager;
 
-        _segmentEndedHandler = (_, _) => StopTtsPlayback();
-        _segmentErrorHandler = (_, ex) => StopTtsPlayback();
+        _segmentEndedHandler = OnSegmentPlayerEnded;
+        _segmentErrorHandler = (_, _) => OnSegmentPlayerError();
         _vsrDiagnosticChangedHandler = RecordVsrDiagnosticSnapshot;
         if (_containerizedProbe is not null)
             _containerizedProbe.ProbeResultUpdated += OnProbeResultUpdated;
@@ -197,6 +199,28 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     public string StateFilePath => _store.StateFilePath;
+
+    private void OnSegmentPlayerEnded(object? sender, EventArgs e)
+    {
+        if (_ttsPauseModeCompletion is null)
+        {
+            StopTtsPlayback();
+            return;
+        }
+
+        _ttsPauseModeCompletion.TrySetResult(true);
+    }
+
+    private void OnSegmentPlayerError()
+    {
+        if (_ttsPauseModeCompletion is null)
+        {
+            StopTtsPlayback();
+            return;
+        }
+
+        _ttsPauseModeCompletion.TrySetResult(false);
+    }
 
     public string LogFilePath => _log.LogFilePath;
     internal AppLog Log => _log;

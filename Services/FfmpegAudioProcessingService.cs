@@ -424,15 +424,33 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
     }
 
     /// <summary>
-    /// Builds an atempo filter chain. atempo is bounded to [0.5, 2.0] per ffmpeg docs,
-    /// so values outside that range are achieved by chaining multiple filters.
+    /// Builds an atempo filter chain. Each <c>atempo</c> is bounded to [0.5, 2.0] per ffmpeg docs;
+    /// larger ratio changes are achieved by chaining (e.g. <c>atempo=2.0,atempo=1.25</c>).
     /// </summary>
     private static string BuildAtempoFilter(double tempo)
     {
-        // Clamp to practical safe bounds (our callers already guard against extremes,
-        // but be defensive here anyway).
-        tempo = Math.Clamp(tempo, 0.5, 2.0);
-        return $"atempo={tempo.ToString("F6", System.Globalization.CultureInfo.InvariantCulture)}";
+        const double min = 0.5;
+        const double max = 2.0;
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        if (tempo <= 0)
+            return $"atempo={min.ToString(inv)}";
+
+        var factors = new List<double>();
+        var t = tempo;
+        while (t < min - 1e-9)
+        {
+            factors.Add(min);
+            t /= min;
+        }
+
+        while (t > max + 1e-9)
+        {
+            factors.Add(max);
+            t /= max;
+        }
+
+        factors.Add(Math.Clamp(t, min, max));
+        return string.Join(",", factors.Select(f => $"atempo={f.ToString("F6", inv)}"));
     }
 
     private static string EscapeConcatListPath(string path) =>
