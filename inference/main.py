@@ -2417,6 +2417,8 @@ async def separate_vocals(
             vocals_model=vocals_model,
             instrumental_model=instrumental_model,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Vocal separation failed: %s", exc, exc_info=True)
         if temp_src and temp_src.exists():
