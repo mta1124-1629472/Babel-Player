@@ -201,8 +201,8 @@ public sealed class SettingsService
                 settings.VideoHdrPlaybackMode = VideoHdrPlaybackMode.Value;
             else if (VideoHdrEnabled == true)
                 settings.VideoHdrPlaybackMode = VideoPreferDriverAutoHdr != false
-                    ? VideoHdrPlaybackMode.NvidiaDriverRtxHdr
-                    : VideoHdrPlaybackMode.MpvHdrPassthrough;
+                    ? Babel.Player.Models.VideoHdrPlaybackMode.NvidiaDriverRtxHdr
+                    : Babel.Player.Models.VideoHdrPlaybackMode.MpvHdrPassthrough;
             settings.VideoToneMapping = VideoToneMapping ?? settings.VideoToneMapping;
             settings.VideoTargetPeak = VideoTargetPeak ?? settings.VideoTargetPeak;
             settings.VideoHdrComputePeak = VideoHdrComputePeak ?? settings.VideoHdrComputePeak;

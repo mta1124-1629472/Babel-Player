@@ -590,12 +590,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(HdrSettingsAvailable));
         OnPropertyChanged(nameof(HdrAvailabilityHintText));
         OnPropertyChanged(nameof(HasHdrAvailabilityHint));
+        OnPropertyChanged(nameof(IsMpvHdrPassthroughDetailsVisible));
     }
 
     partial void OnVideoUseGpuNextChanged(bool value)
     {
         if (!value && VideoHdrPlaybackMode != VideoHdrPlaybackMode.Off)
             VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
+        OnPropertyChanged(nameof(IsMpvHdrPassthroughDetailsVisible));
     }
 
     // ── Null-object for tests / design-time ───────────────────────────────────
