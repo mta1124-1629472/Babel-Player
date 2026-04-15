@@ -72,9 +72,23 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="TranslateTransform.Y" Value="-8" />
         </Style>
+
+        <Style Selector="Border.player-controls-row">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.10" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.player-controls-row.hidden">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*,Auto">
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*,Auto" PointerMoved="OnWindowSurfacePointerMoved">
         <Border Grid.Row="0"
                 Classes="top-chrome"
                 Classes.fullscreen-hidden="{Binding Playback.Preview.IsFullscreen}"
@@ -802,7 +816,8 @@
 
             <!-- Scrub bar -->
             <Border Grid.Row="2" Padding="12,5"
-                    IsVisible="{Binding Playback.Preview.IsControlsVisible}">
+                    Classes="player-controls-row"
+                    Classes.hidden="{Binding !Playback.Preview.IsControlsVisible}">
                 <Grid ColumnDefinitions="40,*,40">
                      <TextBlock Grid.Column="0"
                                 Text="{Binding Playback.Preview.SourcePositionFormatted}"
@@ -823,7 +838,8 @@
 
             <!-- Controls bar -->
             <Border Grid.Row="3" Padding="12,9"
-                    IsVisible="{Binding Playback.Preview.IsControlsVisible}">
+                    Classes="player-controls-row"
+                    Classes.hidden="{Binding !Playback.Preview.IsControlsVisible}">
                 <Border.Styles>
                     <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
                     <Style Selector="Button.dev-pill">
