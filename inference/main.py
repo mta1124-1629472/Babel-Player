@@ -1689,6 +1689,35 @@ def load_parakeet_model():
         return _parakeet_model
 
 
+def _is_parakeet_manifest_lock_error(exc: Exception) -> bool:
+    message = str(exc)
+    return "WinError 32" in message and "manifest.json" in message
+
+
+def _transcribe_parakeet_with_retry(model, temp_audio_path: Path):
+    retry_delays_seconds = (0.2, 0.5)
+    max_attempts = len(retry_delays_seconds) + 1
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with torch.inference_mode():
+                hypotheses = model.transcribe([str(temp_audio_path)], timestamps=True)
+            return hypotheses[0]
+        except Exception as exc:
+            if not _is_parakeet_manifest_lock_error(exc) or attempt == max_attempts:
+                raise
+            delay_seconds = retry_delays_seconds[attempt - 1]
+            logger.warning(
+                "Parakeet manifest lock detected; retrying transcribe "
+                "(attempt %s/%s, delay=%.1fs): %s",
+                attempt,
+                max_attempts,
+                delay_seconds,
+                exc,
+            )
+            time.sleep(delay_seconds)
+
+
 def _words_to_segments(
     word_timestamps: list,
     fallback_text: str,
@@ -1795,17 +1824,14 @@ async def transcribe_parakeet(
         contents = await file.read()
         temp_audio_path.write_bytes(contents)
         model = load_parakeet_model()
-        import torch
-        with torch.inference_mode():
-            hypotheses = model.transcribe([str(temp_audio_path)], timestamps=True)
-        hypothesis = hypotheses[0]
+        hypothesis = _transcribe_parakeet_with_retry(model, temp_audio_path)
         word_ts = (
             hypothesis.timestep.get("word", [])
             if hasattr(hypothesis, "timestep") and isinstance(hypothesis.timestep, dict)
             else []
         )
         segments = _words_to_segments(word_ts, hypothesis.text)
-        background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
+        background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
         return TranscriptionResponse(
             success=True,
             language="en",
@@ -1815,7 +1841,7 @@ async def transcribe_parakeet(
     except Exception as exc:
         logger.error(f"Parakeet transcription failed: {exc}", exc_info=True)
         if temp_audio_path:
-            background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
+            background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
