@@ -37,5 +37,13 @@ public sealed partial class SessionWorkflowCoordinator
         RefreshVideoEnhancementDiagnostics();
     }
 
-    partial void OnHardwareSnapshotChanged(HardwareSnapshot value) => RefreshVideoEnhancementDiagnostics();
+    partial void OnHardwareSnapshotChanged(HardwareSnapshot value)
+    {
+        RefreshVideoEnhancementDiagnostics();
+        EmitReadinessSignal(
+            ReadinessSignalKind.BootstrapApplied,
+            summary: "Hardware snapshot updated.",
+            source: nameof(HardwareSnapshot),
+            forceRefresh: true);
+    }
 }

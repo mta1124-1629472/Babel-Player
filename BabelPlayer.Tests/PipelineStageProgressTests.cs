@@ -53,6 +53,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
     public async Task AdvancePipelineAsync_FreshRun_StreamsStageWorkBeforeUpstreamCompletes()
     {
         var settings = CreateSettings();
+        settings.DiarizationProvider = string.Empty;
         var probe = new PipelineTimingProbe(expectedSegments: 3);
         var coordinator = CreateCoordinator(
             settings,
@@ -61,7 +62,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
             new FakeTtsRegistry(new DelayedTtsProvider(probe, perSegmentDelayMs: 80)));
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
-        coordinator.SetMultiSpeakerEnabled(false);
 
         List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
         await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
@@ -91,7 +91,9 @@ public sealed class PipelineStageProgressTests() : IDisposable
     public async Task AdvancePipelineAsync_StreamingPipeline_ReducesWallTimeAgainstSequentialStages()
     {
         var streamingSettings = CreateSettings();
+        streamingSettings.DiarizationProvider = string.Empty;
         var sequentialSettings = CreateSettings();
+        sequentialSettings.DiarizationProvider = string.Empty;
         using var streamingCtx = new TestContext();
         using var sequentialCtx = new TestContext();
 
@@ -103,7 +105,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
             context: streamingCtx);
         streamingCoordinator.Initialize();
         streamingCoordinator.LoadMedia(streamingCtx.MediaPath);
-        streamingCoordinator.SetMultiSpeakerEnabled(false);
 
         var streamingStopwatch = Stopwatch.StartNew();
         await streamingCoordinator.AdvancePipelineAsync(progress: null, cancellationToken: CancellationToken.None);
@@ -117,7 +118,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
             context: sequentialCtx);
         sequentialCoordinator.Initialize();
         sequentialCoordinator.LoadMedia(sequentialCtx.MediaPath);
-        sequentialCoordinator.SetMultiSpeakerEnabled(false);
 
         var sequentialStopwatch = Stopwatch.StartNew();
         await sequentialCoordinator.TranscribeMediaAsync();
@@ -134,6 +134,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
     public async Task AdvancePipelineAsync_FromTranslatedSession_EmitsOnlyDubAsOneOfOne()
     {
         var settings = CreateSettings();
+        settings.DiarizationProvider = string.Empty;
         var transcriptionRegistry = new FakeTranscriptionRegistry(new FakeTranscriptionProvider());
         var translationRegistry = new FakeTranslationRegistry(new FakeTranslationProvider());
         var ttsRegistry = new FakeTtsRegistry(new FakeTtsProvider());
@@ -141,7 +142,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
         var coordinator = CreateCoordinator(settings, transcriptionRegistry, translationRegistry, ttsRegistry);
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
-        coordinator.SetMultiSpeakerEnabled(false);
         await coordinator.TranscribeMediaAsync();
         await coordinator.TranslateTranscriptAsync();
 
@@ -165,6 +165,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
     public async Task AdvancePipelineAsync_ModelDownloadProgress_IsMappedIntoActiveStageBar()
     {
         var settings = CreateSettings();
+        settings.DiarizationProvider = string.Empty;
         var downloadProvider = new FakeTranslationProvider(
             requiresDownload: true,
             downloadSteps: [0.25, 0.5, 1.0]);
@@ -175,7 +176,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
             new FakeTtsRegistry(new FakeTtsProvider()));
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
-        coordinator.SetMultiSpeakerEnabled(false);
 
         List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
         await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
@@ -295,7 +295,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
             new FakeTtsRegistry(new FakeTtsProvider()));
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
-        coordinator.SetMultiSpeakerEnabled(false);
         await coordinator.TranscribeMediaAsync();
         await coordinator.TranslateTranscriptAsync();
 

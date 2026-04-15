@@ -1,8 +1,10 @@
 using System;
 using System.ComponentModel;
 using System.Linq;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reactive.Linq;
 using Avalonia.Threading;
 using Avalonia;
 using Avalonia.Controls;
@@ -30,6 +32,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private bool _isHdrDisplayActive;
     private CancellationTokenSource? _restartCts;
     private readonly DispatcherTimer _healthTimer;
+    private IDisposable? _readinessSignalSubscription;
 
     public SettingsViewModel(
         SettingsService settingsService,
@@ -99,6 +102,11 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _healthTimer.Start();
         
         UpdateBackendStatus();
+        _readinessSignalSubscription = _coordinator.ReadinessSignals
+            .Select(signal => $"{signal.Kind}:{signal.Source}:{signal.Summary}:{signal.ForceRefresh}")
+            .DistinctUntilChanged(StringComparer.Ordinal)
+            .Throttle(TimeSpan.FromMilliseconds(300))
+            .Subscribe(_ => Dispatcher.UIThread.Post(UpdateBackendStatus));
     }
 
     // ── About ─────────────────────────────────────────────────────────────────
@@ -128,15 +136,20 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         if (IsRestartingBackend) return;
 
         var status = _containerizedManager.GetCurrentStatus(_coordinator.CurrentSettings);
-        
+        var age = DateTimeOffset.UtcNow - status.CheckedAtUtc;
+        var freshness = age < TimeSpan.FromSeconds(1)
+            ? "updated just now"
+            : $"updated {Math.Max(1, (int)age.TotalSeconds).ToString(CultureInfo.CurrentCulture)}s ago";
+        var staleTag = status.IsStale ? " (stale)" : string.Empty;
+
         BackendStatusText = status is { Busy: true, BusyReason: not null }
-            ? $"Busy: {status.BusyReason}"
+            ? $"Busy: {status.BusyReason} · {freshness}"
             : status.State switch
             {
-                ContainerizedProbeState.Available => "Ready",
-                ContainerizedProbeState.Unavailable => "Unavailable",
+                ContainerizedProbeState.Available => $"Ready{staleTag} · {freshness}",
+                ContainerizedProbeState.Unavailable => $"Unavailable · {freshness}",
                 ContainerizedProbeState.Checking => "Checking\u2026",
-                _ => status.State.ToString()
+                _ => $"{status.State} · {freshness}"
             };
 
         BackendStatusBrush = status.State switch
@@ -148,6 +161,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         };
 
         BackendErrorDetail = status.ErrorDetail;
+        _healthTimer.Interval = status.State switch
+        {
+            ContainerizedProbeState.Checking => TimeSpan.FromSeconds(2),
+            ContainerizedProbeState.Unavailable => TimeSpan.FromSeconds(4),
+            ContainerizedProbeState.Available when status.IsStale => TimeSpan.FromSeconds(4),
+            ContainerizedProbeState.Available => TimeSpan.FromSeconds(12),
+            _ => TimeSpan.FromSeconds(5)
+        };
     }
 
     // ── Diagnostics ───────────────────────────────────────────────────────────
@@ -170,6 +191,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         try
         {
+            _coordinator.RequestReadinessRefresh("Diagnostics refresh requested.");
             var warmupData = await Task.Run(() => _coordinator.GatherBootstrapWarmupData());
             _coordinator.ApplyBootstrapWarmupData(warmupData);
 
@@ -476,6 +498,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _healthTimer.Stop();
         _restartCts?.Cancel();
         _restartCts?.Dispose();
+        _readinessSignalSubscription?.Dispose();
+        _readinessSignalSubscription = null;
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
     }
 

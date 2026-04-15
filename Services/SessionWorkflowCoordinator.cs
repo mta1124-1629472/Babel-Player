@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reactive.Subjects;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
@@ -46,6 +47,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly Action<VsrDiagnosticSnapshot> _vsrDiagnosticChangedHandler;
     private VsrDiagnosticSnapshot? _latestVsrDiagnostic;
     private readonly ConcurrentDictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Subject<ReadinessSignal> _readinessSignals = new();
+    private readonly ConcurrentDictionary<string, ContainerizedProbeState> _lastProbeStates =
         new(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty]
@@ -90,6 +94,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private string? _runtimeWarmupStatusText;
 
+    [ObservableProperty]
+    private DateTimeOffset _readinessLastUpdatedUtc;
+
+    [ObservableProperty]
+    private ReadinessSignal? _lastReadinessSignal;
+
     /// <summary>
     /// Set when the CTranslate2 translation provider fails and the pipeline
     /// automatically falls back to the NLLB PyTorch provider.
@@ -108,6 +118,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Subscribers should call SettingsService.Save() in response.
     /// </summary>
     public event Action? SettingsModified;
+    public IObservable<ReadinessSignal> ReadinessSignals => _readinessSignals;
 
     public ApiKeyStore? KeyStore { get; private set; }
 
@@ -146,6 +157,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _segmentEndedHandler = (_, _) => StopTtsPlayback();
         _segmentErrorHandler = (_, ex) => StopTtsPlayback();
         _vsrDiagnosticChangedHandler = RecordVsrDiagnosticSnapshot;
+        if (_containerizedProbe is not null)
+            _containerizedProbe.ProbeResultUpdated += OnProbeResultUpdated;
 
         RefreshVideoEnhancementDiagnostics();
     }
@@ -285,6 +298,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     {
         BootstrapDiagnostics = warmup.Diagnostics;
         InferenceMode = warmup.ResolvedInferenceMode;
+        EmitReadinessSignal(
+            ReadinessSignalKind.BootstrapApplied,
+            summary: "Bootstrap diagnostics updated.",
+            source: nameof(ApplyBootstrapWarmupData),
+            forceRefresh: true);
 
         if (!BootstrapDiagnostics.AllDependenciesAvailable)
             _log.Warning($"Bootstrap: {BootstrapDiagnostics.DiagnosticSummary}");
@@ -977,6 +995,72 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         CurrentSession = snapshot;
         PersistSnapshot(snapshot, updateStatus: true);
     }
+
+    private void OnProbeResultUpdated(ContainerizedProbeResult probeResult)
+    {
+        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(probeResult.ServiceUrl);
+        var hadPrevious = _lastProbeStates.TryGetValue(normalizedUrl, out var previousState);
+        _lastProbeStates[normalizedUrl] = probeResult.State;
+        var forceRefresh = !hadPrevious || previousState != probeResult.State || probeResult.State != ContainerizedProbeState.Checking;
+        if (RequiresContainerizedRuntime()
+            && string.Equals(
+                normalizedUrl,
+                ContainerizedInferenceClient.NormalizeBaseUrl(CurrentSettings.EffectiveGpuServiceUrl),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var warmupText = DescribeRuntimeWarmupStatus(probeResult);
+            if (!string.IsNullOrWhiteSpace(warmupText))
+                RuntimeWarmupStatusText = warmupText;
+        }
+
+        var currentBootstrap = BootstrapDiagnostics;
+        var updatedBootstrap = currentBootstrap with
+        {
+            ContainerizedServiceAvailable = probeResult.State == ContainerizedProbeState.Available,
+            ContainerizedServiceUrl = string.IsNullOrWhiteSpace(probeResult.ServiceUrl)
+                ? currentBootstrap.ContainerizedServiceUrl
+                : probeResult.ServiceUrl,
+            ContainerizedCudaAvailable = probeResult.CudaAvailable,
+            ContainerizedCudaVersion = probeResult.CudaVersion ?? currentBootstrap.ContainerizedCudaVersion,
+        };
+        if (updatedBootstrap != currentBootstrap)
+        {
+            BootstrapDiagnostics = updatedBootstrap;
+            InferenceMode = ResolveInferenceMode(updatedBootstrap);
+        }
+
+        EmitReadinessSignal(
+            ReadinessSignalKind.ProbeResultUpdated,
+            summary: $"Probe {probeResult.State}" + (probeResult.IsStale ? " (stale)" : string.Empty),
+            source: normalizedUrl,
+            forceRefresh: forceRefresh);
+    }
+
+    private void EmitReadinessSignal(
+        ReadinessSignalKind kind,
+        string summary,
+        string? source = null,
+        bool forceRefresh = false)
+    {
+        var signal = new ReadinessSignal(kind, DateTimeOffset.UtcNow, summary, source, forceRefresh);
+        LastReadinessSignal = signal;
+        ReadinessLastUpdatedUtc = signal.TimestampUtc;
+        _readinessSignals.OnNext(signal);
+    }
+
+    partial void OnRuntimeWarmupStatusTextChanged(string? value) =>
+        EmitReadinessSignal(
+            ReadinessSignalKind.RuntimeWarmupStatusChanged,
+            summary: string.IsNullOrWhiteSpace(value) ? "Runtime warmup idle." : value,
+            source: nameof(RuntimeWarmupStatusText),
+            forceRefresh: true);
+
+    partial void OnBootstrapDiagnosticsChanged(BootstrapDiagnostics value) =>
+        EmitReadinessSignal(
+            ReadinessSignalKind.BootstrapApplied,
+            summary: value.DiagnosticSummary,
+            source: nameof(BootstrapDiagnostics),
+            forceRefresh: true);
 
     private void PersistSnapshot(WorkflowSessionSnapshot snapshot, bool updateStatus)
     {

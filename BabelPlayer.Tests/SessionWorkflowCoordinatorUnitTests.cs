@@ -559,17 +559,6 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
-    public void SetMultiSpeakerEnabled_UpdatesSessionFlag()
-    {
-        var coord = CreateCoordinator();
-        coord.Initialize();
-
-        coord.SetMultiSpeakerEnabled(true);
-
-        Assert.True(coord.CurrentSession.MultiSpeakerEnabled);
-    }
-
-    [Fact]
     public async Task RegenerateSegmentTts_MultiSpeakerEnabled_UsesSpeakerMappedVoice()
     {
         var fakeTts = new FakeTtsProvider();
@@ -611,7 +600,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
-    public async Task RegenerateSegmentTts_MultiSpeakerEnabled_UsesDefaultFallbackWhenSpeakerUnmapped()
+    public async Task RegenerateSegmentTts_WhenSpeakerUnmapped_UsesActiveVoice()
     {
         var fakeTts = new FakeTtsProvider();
         var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
@@ -641,13 +630,12 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             TranslationPath = translationPath,
             TtsVoice = "global-voice",
             MultiSpeakerEnabled = true,
-            DefaultTtsVoiceFallback = "fallback-voice",
         };
 
         await coord.RegenerateSegmentTtsAsync("segment_0.0");
 
         Assert.NotNull(fakeTts.LastSegmentRequest);
-        Assert.Equal("fallback-voice", fakeTts.LastSegmentRequest!.VoiceName);
+        Assert.Equal("global-voice", fakeTts.LastSegmentRequest!.VoiceName);
         Assert.Equal("spk_02", fakeTts.LastSegmentRequest.SpeakerId);
     }
 
