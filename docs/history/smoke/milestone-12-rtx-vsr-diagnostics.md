@@ -19,7 +19,7 @@ date: 2026-04-03
 - [x] Structured VSR transport/coordinator/viewmodel tests were added.
 - [x] Build passes.
 - [x] Automated tests pass.
-- [ ] Manual RTX playback verification on real NVIDIA hardware.
+- [x] Manual RTX playback verification on real NVIDIA hardware.
 
 ## What Was Verified
 1. `python scripts/check-architecture.py` passed all checks.
@@ -30,9 +30,9 @@ date: 2026-04-03
    - skipped VSR diagnostics for `no-upscaling-required`
    - rejected VSR diagnostics for libmpv result `-12`
    - coordinator/viewmodel projection of the latest VSR diagnostic into playback/settings surfaces
+6. Manual real-hardware confirmation was provided on 2026-04-15 that RTX playback verification succeeded.
 
 ## What Was Not Verified
-- Real playback on an RTX-capable Windows machine with `gpu-next` and VSR enabled.
 - A successful `VSR active` path where libmpv accepts the `d3d11vpp:scaling-mode=nvidia` command on real hardware.
 - The current rejection repro end to end in the desktop UI after rebuilding and launching the app.
 

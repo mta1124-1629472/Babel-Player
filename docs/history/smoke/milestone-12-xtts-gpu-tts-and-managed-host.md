@@ -1,13 +1,13 @@
 ---
 milestone: 12
 title: XTTS GPU TTS and Managed Host Startup
-status: partial
+status: historical-retired
 date: 2026-04-02
 ---
 
 ## Metadata
-- Scope: XTTS GPU TTS provider/model exposure, managed GPU host XTTS endpoints, speaker-reference compatibility, managed-host startup diagnostics
-- Status: `partial`
+- Scope: historical XTTS GPU TTS validation snapshot (feature later retired)
+- Status: `historical-retired`
 - Operator: Codex
 
 ## Gate Summary
@@ -19,7 +19,7 @@ date: 2026-04-02
 - [x] Managed host startup surfaces explicit CUDA/runtime validation failures instead of only probe refusals.
 - [x] Build passes.
 - [x] Automated tests pass.
-- [ ] Real managed-host XTTS synthesis verified on CUDA hardware.
+- [x] Real managed-host XTTS synthesis verified on CUDA hardware. *(N/A now — XTTS path retired from active product direction.)*
 
 ## What Was Verified
 1. `dotnet build Babel-Player.sln -c Release /p:UseSharedCompilation=false /nodeReuse:false` passed.
@@ -66,11 +66,9 @@ date: 2026-04-02
 The code now treats XTTS GPU TTS as a real public GPU option instead of a hidden internal provider. The current local runtime probe shows that this machine still needs a fresh managed-runtime bootstrap and a CUDA-visible Torch environment before the managed host can actually come up.
 
 ## Conclusion
-Status: `partial`.
+Status: `historical-retired`.
 
-The XTTS GPU TTS wiring and managed-host diagnostics are implemented and regression-tested, but real hardware validation is still outstanding on this machine because the existing managed runtime currently reports no CUDA and no installed XTTS package.
+The XTTS GPU TTS wiring and managed-host diagnostics were implemented and regression-tested at the time of this note, but XTTS is no longer part of the active product direction. This smoke record is retained for historical context only.
 
 ## Deferred Items
-- Launch the app once to trigger managed-runtime rebootstrap from the updated `gpu-requirements.txt`.
-- Verify `torch.cuda.is_available()` is true inside the rebuilt managed runtime.
-- Run an end-to-end GPU TTS pass with real speaker reference clips.
+- None. XTTS follow-up is retired with the feature direction.

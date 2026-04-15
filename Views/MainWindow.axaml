@@ -12,14 +12,75 @@
         Icon="/Assets/Icons/app.ico"
         Width="1280" Height="700"
         MinWidth="960" MinHeight="520"
+        WindowDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
         Background="{DynamicResource WindowBackgroundBrush}">
 
-    <Grid ColumnDefinitions="Auto,*,Auto">
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*,Auto">
+        <Border Grid.Row="0"
+                Grid.ColumnSpan="3"
+                Background="{DynamicResource SurfaceSubtleBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="10,6"
+                PointerPressed="OnTitleBarPointerPressed">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <TextBlock Grid.Column="0"
+                           Text="Babel Player"
+                           Foreground="{DynamicResource PrimaryTextBrush}"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                    <Button Content="—"
+                            Width="36"
+                            Height="28"
+                            FontSize="14"
+                            Background="{DynamicResource ButtonBackgroundBrush}"
+                            Foreground="{DynamicResource PrimaryTextBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            CornerRadius="6"
+                            Click="OnMinimizeWindowClick"
+                            AutomationProperties.Name="Minimize window" />
+                    <Button Content="□"
+                            Width="36"
+                            Height="28"
+                            FontSize="12"
+                            Background="{DynamicResource ButtonBackgroundBrush}"
+                            Foreground="{DynamicResource PrimaryTextBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            CornerRadius="6"
+                            Click="OnToggleMaximizeWindowClick"
+                            AutomationProperties.Name="Maximize or restore window" />
+                    <Button Content="✕"
+                            Width="36"
+                            Height="28"
+                            FontSize="13"
+                            Background="{DynamicResource DestructiveBrush}"
+                            Foreground="{DynamicResource PrimaryTextBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            CornerRadius="6"
+                            Click="OnCloseWindowClick"
+                            AutomationProperties.Name="Close window">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Close"
+                                          Click="OnCloseWindowClick" />
+                                <MenuItem Header="Force Close"
+                                          Click="OnForceCloseWindowClick" />
+                                <MenuItem Header="Kill All"
+                                          Click="OnKillAllClick" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
 
         <!-- ═══════════════════════════════════════════════════
              LEFT PANEL: Pipeline
              ═══════════════════════════════════════════════════ -->
-<Border Grid.Column="0" Width="260" Background="{DynamicResource PanelBackgroundBrush}"
+<Border Grid.Row="1" Grid.Column="0" Width="260" Background="{DynamicResource PanelBackgroundBrush}"
         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
         IsVisible="{Binding Playback.Preview.IsSegmentPaneVisible}">
     <Border.Resources>
@@ -639,7 +700,7 @@
         <!-- ═══════════════════════════════════════════════════
              CENTER PANEL: Video player
              ═══════════════════════════════════════════════════ -->
-        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto"
+        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto"
               Background="{DynamicResource WindowBackgroundBrush}">
 
             <!-- Diagnostics warning bar (hidden when all deps available) -->
@@ -897,7 +958,7 @@
         <!-- ═══════════════════════════════════════════════════
              RIGHT PANEL: Segments
              ═══════════════════════════════════════════════════ -->
-        <Border Grid.Column="2" Width="280" Background="{DynamicResource PanelBackgroundBrush}"
+        <Border Grid.Row="1" Grid.Column="2" Width="280" Background="{DynamicResource PanelBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
                 IsVisible="{Binding Playback.Preview.IsSegmentPaneVisible}">
             <Grid RowDefinitions="Auto,*">

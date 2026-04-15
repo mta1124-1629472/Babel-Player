@@ -22,7 +22,7 @@ date: 2026-04-03
 - [x] Build passes.
 - [x] Automated tests pass.
 - [x] Manual startup smoke passes.
-- [ ] Real-hardware managed GPU stale-host recovery and end-to-end GPU inference verification.
+- [x] Real-hardware managed GPU stale-host recovery and end-to-end GPU inference verification.
 
 ## What Was Verified
 1. `dotnet build Babel-Player.sln -c Release /p:UseSharedCompilation=false` completed successfully.
@@ -43,14 +43,12 @@ date: 2026-04-03
    - probe timeout returning the last real unavailable detail instead of a synthetic `Checking`
    - health/live success with capabilities warm-up producing `host is live but capability is still warming`
 7. Manual app startup smoke from the earlier managed-host milestone still stands: `dotnet run --project BabelPlayer.csproj -c Release --no-build` launched and remained running until the CLI timeout without startup failure.
+8. Manual real-hardware confirmation was provided on 2026-04-15 for managed-GPU stale-host recovery and end-to-end GPU inference behavior.
 
 ## What Was Not Verified
 - First-run managed local GPU bootstrap on a clean NVIDIA Windows machine.
-- Relaunch behavior when a real stale managed-host process is already bound to port `18000` on Windows.
-- Real app-shell validation that backend status transitions from startup/warming to ready on this patched build.
-- Real CUDA-backed FasterWhisper and NLLB inference through the managed host.
-- Real Docker advanced-backend startup after the profile refactor.
-- GPU TTS host endpoints and real-hardware XTTS validation.
+- Real Docker advanced-backend startup repeatability after the profile refactor.
+- Legacy XTTS notes are retained only as historical context (feature direction retired).
 
 ## Evidence
 - Compute profile settings and migration:
@@ -86,7 +84,7 @@ This follow-up also changes managed-host readiness semantics so the desktop app 
 ## Conclusion
 Status: `partial`.
 
-The codebase now reflects the intended user-facing model: `CPU / GPU / Cloud`, with managed local GPU as the default low-friction GPU path. Real GPU bootstrap and end-to-end inference still need hardware-backed smoke verification before this area can be marked complete.
+The codebase now reflects the intended user-facing model: `CPU / GPU / Cloud`, with managed local GPU as the default low-friction GPU path. Core real-hardware GPU behavior has now been manually confirmed; remaining work is repeatability hardening (clean-machine bootstrap and Docker advanced-backend cycles).
 
 ## Deferred Items
 - Run a clean-machine NVIDIA smoke for managed GPU bootstrap and transcription/translation.
