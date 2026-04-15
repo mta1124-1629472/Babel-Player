@@ -23,13 +23,16 @@ WORKDIR /app
 
 COPY gpu-constraints.txt ./
 
-# Step 1: PyTorch from its own index. Done first and separately so the resolver
-# doesn't have to reconcile cu128 wheels against PyPI packages simultaneously.
+# Step 1: PyTorch installed from pre-downloaded wheels to avoid large SSL downloads
+# inside Docker's network stack. Download the .whl files first on the host:
+#   curl -L -o inference/torch-2.8.0+cu128.whl "https://download.pytorch.org/whl/cu128/torch-2.8.0%2Bcu128-cp310-cp310-manylinux_2_28_x86_64.whl"
+#   curl -L -o inference/torchaudio-2.8.0+cu128.whl "https://download.pytorch.org/whl/cu128/torchaudio-2.8.0%2Bcu128-cp310-cp310-manylinux_2_28_x86_64.whl"
+#   curl -L -o inference/torchvision-0.23.0+cu128.whl "https://download.pytorch.org/whl/cu128/torchvision-0.23.0%2Bcu128-cp310-cp310-manylinux_2_28_x86_64.whl"
+COPY torch-2.8.0+cu128.whl torchaudio-2.8.0+cu128.whl torchvision-0.23.0+cu128.whl ./
 RUN pip install --no-cache-dir \
-    --index-url https://download.pytorch.org/whl/cu128 \
-    torch==2.8.0+cu128 \
-    torchaudio==2.8.0+cu128 \
-    torchvision==0.23.0+cu128
+    torch-2.8.0+cu128.whl \
+    torchaudio-2.8.0+cu128.whl \
+    torchvision-0.23.0+cu128.whl
 
 # Step 2: Everything else from PyPI, pinned via constraints.
 RUN pip install --no-cache-dir -c gpu-constraints.txt \

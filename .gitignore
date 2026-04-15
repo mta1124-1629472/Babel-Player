@@ -1,5 +1,8 @@
 # User-specific files
 inference/*.local-before-pull
+
+# Pre-downloaded PyTorch wheels for Docker build (too large for git)
+inference/*.whl
 *.user
 *.suo
 *.userosscache
