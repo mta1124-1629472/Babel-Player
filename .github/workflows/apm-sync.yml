@@ -1,0 +1,52 @@
+name: APM Version Sync
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  sync-version:
+    name: Sync apm.yml version to Git tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Use a PAT or the default GITHUB_TOKEN. For protected branches,
+          # replace with a PAT that has push access.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Strip refs/tags/ prefix if present, keep the v prefix
+          TAG="${GITHUB_REF_NAME}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Update version in apm.yml
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          # Replace the version line in apm.yml in-place
+          sed -i "s/^version: .*/version: ${TAG}/" apm.yml
+          echo "Updated apm.yml version to ${TAG}"
+          grep "^version:" apm.yml
+
+      - name: Commit updated apm.yml
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apm.yml
+          # Only commit if there is an actual change
+          git diff --cached --quiet && echo "No version change, skipping commit." || \
+            git commit -m "chore: sync apm.yml version to ${{ steps.version.outputs.tag }}"
+
+      - name: Push commit
+        run: git push origin HEAD:${{ github.ref_name }}
+        # Note: pushes to the tag's branch. If the tag was cut from main,
+        # this pushes to main. Adjust the target branch if your workflow differs.

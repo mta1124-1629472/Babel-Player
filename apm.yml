@@ -5,6 +5,61 @@ description: Babel Player is a .NET 10/Avalonia 12 workstation for segment-based
   with cloud API support. Built natively for Windows x64 and ARM.
 author: babelworks
 dependencies:
-  apm: []
+  apm:
+  - github/awesome-copilot/skills/review-and-refactor
+  - danielmeppiel/form-builder
   mcp: []
 scripts: {}
+platform:
+  runtime: net10.0
+  ui: Avalonia 12
+  output: WinExe
+  targets:
+  - win-x64
+  - win-arm64
+  root_namespace: Babel.Player
+  assembly: BabelPlayer
+architecture:
+  state_owner: Babel.Player.Services.SessionWorkflowCoordinator
+  pipeline_stages:
+  - Foundation
+  - MediaLoaded
+  - Transcribed
+  - Diarized
+  - Translated
+  - TtsGenerated
+  pipeline_entry_points:
+  - AdvancePipelineAsync
+  - ContinuePipelineAsync
+  - RunTtsOnlyAsync
+  service_placement:
+    orchestration: Babel.Player.Services
+    registries: Babel.Player.Services.Registries
+    credentials: Babel.Player.Services.Credentials
+    settings: Babel.Player.Services.Settings
+    models: Babel.Player.Models
+    views: Babel.Player.Views
+    viewmodels: Babel.Player.ViewModels
+  provider_constants_source: Models/ProviderNames.cs
+  runtime_catalog: Babel.Player.Services.InferenceRuntimeCatalog
+  python_boundary:
+    serialization: explicit
+    segment_id_format: segment_{start}
+  transports:
+    embedded: LibMpvEmbeddedTransport
+    headless: LibMpvHeadlessTransport
+    manager: MediaTransportManager
+  gpu_pipeline:
+    routing: managed_host_or_containerized
+    cpu_routing: managed_runtime_bootstrap
+    fallback_policy: explicit_blocked_with_remediation
+  persistence:
+    current_session: SessionSnapshotStore
+    per_session: PerSessionSnapshotStore
+    recent_sessions: RecentSessionsStore
+    data_root: '%LOCALAPPDATA%\BabelPlayer\'
+    artifact_restore: downgrade_stage_if_missing
+  scope:
+    milestone_driven: true
+    plan_reference: docs/PLAN.md
+    smoke_notes: docs/history/smoke/

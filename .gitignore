@@ -157,3 +157,7 @@ gha-creds-*.json
 /fix_merge_conflict.sh
 /add-bootstrap-mocks.ps1
 /setup-qwen-coder.ps1
+
+
+# APM dependencies
+apm_modules/
