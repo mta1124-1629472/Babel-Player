@@ -942,7 +942,9 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         string errorMessage = "offline") =>
         (serviceUrl, _, _) => Task.FromResult(ContainerHealthStatus.Unavailable(serviceUrl, errorMessage));
 
-    private static async Task<string> ComputeBootstrapVersionAsync(string requirementsPath, string constraintsPath)
+    // Changed from ComputeBootstrapVersionAsync to ComputeBootstrapVersion to fix CS1998.
+    // Kept the synchronous ReadToEnd calls matching previous behavior.
+    private static string ComputeBootstrapVersion(string requirementsPath, string constraintsPath)
     {
         var builder = new StringBuilder();
         builder.AppendLine("3.12"); // PythonVersion constant from ManagedVenvHostManager
@@ -980,7 +982,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
         {
             await File.WriteAllTextAsync(
                 Path.Combine(_dir, ".bootstrap-version"),
-                await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath));
+                ComputeBootstrapVersion(requirementsPath, constraintsPath));
             await File.WriteAllTextAsync(
                 Path.Combine(_dir, ".script-version"),
                 await ComputeScriptVersionAsync(scriptPath));
