@@ -27,8 +27,6 @@ jobs:
           - rid: win-x64
             runner: windows-latest
             fetch_arch: ""
-          # windows-11-arm is a GitHub-hosted ARM64 runner (public beta as of 2025).
-          # If your repo does not have access, comment out this matrix entry.
           - rid: win-arm64
             runner: windows-11-arm
             fetch_arch: "Arm64"
@@ -37,7 +35,7 @@ jobs:
       # GyanD codexffmpeg essentials — update this when a new build is released.
       # Format: the tag name from https://github.com/GyanD/codexffmpeg/releases
       # ARM64 uses BtbN (moving "latest" tag) — not affected by this variable.
-      FFMPEG_VERSION: "7.1.1"
+      FFMPEG_VERSION: "2026-04-09-git-d3d0b7a5ee"
 
     steps:
       - name: Checkout
