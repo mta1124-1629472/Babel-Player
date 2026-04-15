@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Use a PAT or the default GITHUB_TOKEN. For protected branches,
           # replace with a PAT that has push access.

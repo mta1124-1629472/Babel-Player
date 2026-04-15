@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           lfs: false
           clean: true
@@ -57,7 +57,7 @@ jobs:
           }
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
 
@@ -78,7 +78,7 @@ jobs:
 
       - name: Upload test results on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-results-${{ matrix.rid }}
           path: TestResults/core-results.trx
@@ -208,7 +208,7 @@ jobs:
           "installer_checksum=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Upload portable artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: babel-player-${{ github.ref_name || 'manual' }}-${{ matrix.rid }}-portable
           path: |
@@ -219,7 +219,7 @@ jobs:
 
       - name: Upload installer artifact (x64 only)
         if: matrix.rid == 'win-x64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: babel-player-${{ github.ref_name || 'manual' }}-win-x64-installer
           path: |
@@ -237,10 +237,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download all release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: babel-player-*
           path: release-files
