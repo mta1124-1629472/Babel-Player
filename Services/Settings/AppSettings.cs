@@ -236,6 +236,12 @@ public sealed class AppSettings
     /// </summary>
     public string VideoExportEncoder { get; set; } = "auto";
 
+    /// <summary>
+    /// Session-level dub timing strategy applied during dub-mode preview playback.
+    /// Individual segments can override this via <see cref="Babel.Player.Models.WorkflowSegmentState.TimingModeOverride"/>.
+    /// </summary>
+    public SegmentTimingMode DubTimingMode { get; set; } = SegmentTimingMode.Off;
+
     /// <summary>UI theme: "Light", "Dark", or "System".</summary>
     public string Theme { get; set; } = "System";
 

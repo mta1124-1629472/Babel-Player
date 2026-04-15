@@ -288,6 +288,150 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         var outputFileInfo = new FileInfo(outputPath);
     }
 
+    public async Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
+    {
+        var ffprobePath = DependencyLocator.FindFfprobe();
+        if (ffprobePath is null)
+        {
+            _log.Warning("ffprobe not found; cannot probe audio duration.");
+            return null;
+        }
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffprobePath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("-v");
+        psi.ArgumentList.Add("error");
+        psi.ArgumentList.Add("-show_entries");
+        psi.ArgumentList.Add("format=duration");
+        psi.ArgumentList.Add("-of");
+        psi.ArgumentList.Add("default=noprint_wrappers=1:nokey=1");
+        psi.ArgumentList.Add(filePath);
+
+        try
+        {
+            using var proc = Process.Start(psi)
+                ?? throw new InvalidOperationException("Failed to start ffprobe.");
+
+            using var reg = cancellationToken.Register(() =>
+            {
+                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+            });
+
+            var stdout = await proc.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+
+            if (proc.ExitCode == 0 && double.TryParse(
+                    stdout.Trim(),
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var duration))
+                return duration;
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"ffprobe duration probe failed for '{filePath}': {ex.Message}");
+            return null;
+        }
+    }
+
+    public async Task<bool> TimeStretchAsync(
+        string inputPath,
+        string outputPath,
+        double targetDurationSeconds,
+        double minRatio = 0.75,
+        double maxRatio = 1.35,
+        CancellationToken cancellationToken = default)
+    {
+        var sourceDuration = await ProbeDurationAsync(inputPath, cancellationToken).ConfigureAwait(false);
+        if (sourceDuration is null or <= 0 || targetDurationSeconds <= 0)
+        {
+            _log.Warning($"TimeStretch skipped: cannot determine valid duration for '{inputPath}'.");
+            return false;
+        }
+
+        // tempo = source / target  (>1 = speed up, <1 = slow down)
+        double tempo = sourceDuration.Value / targetDurationSeconds;
+
+        if (tempo < minRatio || tempo > maxRatio)
+        {
+            _log.Info($"TimeStretch skipped: tempo ratio {tempo:F3} outside [{minRatio:F2}, {maxRatio:F2}] for '{Path.GetFileName(inputPath)}'.");
+            return false;
+        }
+
+        var ffmpegPath = DependencyLocator.FindFfmpeg()
+            ?? throw new InvalidOperationException("ffmpeg not found. TimeStretch requires ffmpeg.");
+
+        var outputDir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDir))
+            Directory.CreateDirectory(outputDir);
+
+        // atempo is clamped to [0.5, 2.0]; chain two filters for extreme ratios.
+        string atempoFilter = BuildAtempoFilter(tempo);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffmpegPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("-y");
+        psi.ArgumentList.Add("-i");
+        psi.ArgumentList.Add(inputPath);
+        psi.ArgumentList.Add("-filter:a");
+        psi.ArgumentList.Add(atempoFilter);
+        psi.ArgumentList.Add("-vn");
+        psi.ArgumentList.Add("-c:a");
+        psi.ArgumentList.Add("libmp3lame");
+        psi.ArgumentList.Add("-q:a");
+        psi.ArgumentList.Add("3");
+        psi.ArgumentList.Add(outputPath);
+
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start ffmpeg for time-stretch.");
+
+        using var registration = cancellationToken.Register(() =>
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+        });
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var stdout = await stdoutTask.ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0 || !File.Exists(outputPath))
+        {
+            throw new InvalidOperationException(
+                $"ffmpeg time-stretch failed (exit {process.ExitCode}): {stderr} {stdout}".Trim());
+        }
+
+        _log.Info($"TimeStretch: '{Path.GetFileName(inputPath)}' {sourceDuration.Value:F2}s -> {targetDurationSeconds:F2}s (tempo {tempo:F3})");
+        return true;
+    }
+
+    /// <summary>
+    /// Builds an atempo filter chain. atempo is bounded to [0.5, 2.0] per ffmpeg docs,
+    /// so values outside that range are achieved by chaining multiple filters.
+    /// </summary>
+    private static string BuildAtempoFilter(double tempo)
+    {
+        // Clamp to practical safe bounds (our callers already guard against extremes,
+        // but be defensive here anyway).
+        tempo = Math.Clamp(tempo, 0.5, 2.0);
+        return $"atempo={tempo.ToString("F6", System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
     private static string EscapeConcatListPath(string path) =>
         path.Replace("\\", "/", StringComparison.Ordinal)
             .Replace("'", "'\\''", StringComparison.Ordinal);

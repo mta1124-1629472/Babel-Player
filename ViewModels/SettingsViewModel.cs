@@ -64,6 +64,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         TranscriptionCpuComputeType = current.TranscriptionCpuComputeType;
         TranscriptionCpuThreads = current.TranscriptionCpuThreads;
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
+        DubTimingMode = current.DubTimingMode;
 
         // Theme options
         ThemeOptions = ["Light", "Dark", "System"];
@@ -285,6 +286,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private string _selectedVoice;
 
     public string[] TtsVoiceOptions { get; }
+
+    // ── Dub timing mode ───────────────────────────────────────────────────────
+
+    [ObservableProperty]
+    private SegmentTimingMode _dubTimingMode;
+
+    public SegmentTimingMode[] DubTimingModeOptions { get; } =
+        [SegmentTimingMode.Off, SegmentTimingMode.Stretch, SegmentTimingMode.Pause];
 
     public string[] TranscriptionCpuComputeTypeOptions { get; } =
         ["auto", "int8", "int8_float16", "float32"];
@@ -510,6 +519,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             : TranscriptionCpuComputeType;
         settings.TranscriptionCpuThreads = Math.Max(0, TranscriptionCpuThreads);
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
+
+        settings.DubTimingMode       = DubTimingMode;
 
         settings.VideoHwdec          = VideoHwdec;
         settings.VideoGpuApi         = VideoGpuApi;

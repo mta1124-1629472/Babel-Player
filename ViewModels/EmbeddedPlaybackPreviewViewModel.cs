@@ -703,8 +703,10 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         if (segment.HasTtsAudio)
         {
+            // Resolve effective timing mode: per-segment override takes priority, then session setting.
+            var effectiveMode = segment.TimingModeOverride ?? _coordinator.CurrentSettings.DubTimingMode;
             ApplyDucking();
-            _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId);
+            _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId, segment, effectiveMode);
         }
     }
 
@@ -722,6 +724,27 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart) =>
         ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
+
+    /// <summary>
+    /// Applies a per-segment timing mode override by replacing the matching segment record in the
+    /// observable collection and the sorted cache. Called by <see cref="SegmentInspectionViewModel"/>.
+    /// </summary>
+    public void ApplySegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
+    {
+        for (int i = 0; i < Segments.Count; i++)
+        {
+            if (Segments[i].SegmentId == segmentId)
+            {
+                Segments[i] = Segments[i] with { TimingModeOverride = mode };
+                // Rebuild sorted cache so playback lookup picks up the change.
+                _sortedSegments = [.. Segments.OrderBy(s => s.StartSeconds)];
+                // Refresh the SelectedSegment reference so the inspection VM re-reads it.
+                if (SelectedSegment?.SegmentId == segmentId)
+                    SelectedSegment = Segments[i];
+                return;
+            }
+        }
+    }
 
     private void OnControlsHideTimerTick(object? sender, EventArgs e)
     {

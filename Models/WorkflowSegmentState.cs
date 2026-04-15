@@ -12,4 +12,9 @@ public sealed record WorkflowSegmentState(
     bool HasTtsAudio,
     string? SpeakerId = null,
     string? AssignedVoice = null,
-    bool HasReferenceAudio = false);
+    bool HasReferenceAudio = false,
+    /// <summary>
+    /// Per-segment override for dub timing behaviour.
+    /// Null means "inherit the session-level DubTimingMode setting".
+    /// </summary>
+    SegmentTimingMode? TimingModeOverride = null);

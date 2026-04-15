@@ -81,10 +81,20 @@ def handle_request(payload: dict[str, Any], model_dir: str) -> dict[str, Any]:
     if not os.path.exists(output_path):
         raise RuntimeError(f"Piper did not create output file: {output_path}")
 
+    file_size = os.path.getsize(output_path)
+    duration_seconds: float | None = None
+    try:
+        import soundfile as sf
+        info = sf.info(output_path)
+        duration_seconds = info.duration
+    except Exception:
+        pass
+
     return {
         "output_path": output_path,
         "voice": voice,
-        "file_size_bytes": os.path.getsize(output_path),
+        "file_size_bytes": file_size,
+        "duration_seconds": duration_seconds,
     }
 
 

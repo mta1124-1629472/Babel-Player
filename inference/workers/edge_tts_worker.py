@@ -57,10 +57,20 @@ async def synthesize(payload: dict, simulate: bool) -> dict:
         communicate = edge_tts.Communicate(text, voice)
         await communicate.save(output_path)
 
+    file_size = output_file.stat().st_size
+    duration_seconds: float | None = None
+    try:
+        import soundfile as sf
+        info = sf.info(output_path)
+        duration_seconds = info.duration
+    except Exception:
+        pass
+
     return {
         "output_path": output_path,
         "voice": voice,
-        "file_size_bytes": output_file.stat().st_size,
+        "file_size_bytes": file_size,
+        "duration_seconds": duration_seconds,
     }
 
 

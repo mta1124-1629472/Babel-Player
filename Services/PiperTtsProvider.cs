@@ -115,7 +115,7 @@ public sealed class PiperTtsProvider : PythonSubprocessServiceBase, ITtsProvider
             : new FileInfo(response.OutputPath).Length;
 
         Log.Info($"Piper segment TTS completed: {response.OutputPath}");
-        return new TtsResult(true, response.OutputPath, response.Voice, fileSize, null);
+        return new TtsResult(true, response.OutputPath, response.Voice, fileSize, null, response.DurationSeconds);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
@@ -264,5 +264,6 @@ public sealed class PiperTtsProvider : PythonSubprocessServiceBase, ITtsProvider
     private sealed record PiperWorkerResponse(
         [property: JsonPropertyName("output_path")] string OutputPath,
         [property: JsonPropertyName("voice")] string Voice,
-        [property: JsonPropertyName("file_size_bytes")] long FileSizeBytes);
+        [property: JsonPropertyName("file_size_bytes")] long FileSizeBytes,
+        [property: JsonPropertyName("duration_seconds")] double? DurationSeconds = null);
 }

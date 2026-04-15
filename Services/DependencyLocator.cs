@@ -77,6 +77,19 @@ public static class DependencyLocator
         return Probe(candidates, "-version");
     }
 
+    /// <summary>Returns a working ffprobe executable path, or null if not found.</summary>
+    public static string? FindFfprobe()
+    {
+        var appDir = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            Path.Combine(appDir, "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "ffprobe.exe"),
+            "ffprobe",
+        };
+        return Probe(candidates, "-version");
+    }
+
     /// <summary>Returns a working piper executable path, or null if not found.</summary>
     public static string? FindPiper()
     {

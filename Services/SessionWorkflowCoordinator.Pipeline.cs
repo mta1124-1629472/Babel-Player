@@ -237,12 +237,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         _log.Info($"Starting TTS generation: {CurrentSession.TranslationPath} -> {ttsPath}");
 
-        var (segmentAudioPaths, totalSegments, orderedSegments) = await GenerateSegmentClipsAsync(
+        var (segmentAudioPaths, segmentDurations, totalSegments, orderedSegments) = await GenerateSegmentClipsAsync(
             v, ttsLanguage, segmentsDir, stageContext, cancellationToken);
 
         await StitchSegmentClipsAsync(segmentAudioPaths, orderedSegments, ttsPath, stageContext, cancellationToken);
 
-        CommitTtsSessionState(v, ttsPath, segmentsDir, segmentAudioPaths, totalSegments, stageContext);
+        CommitTtsSessionState(v, ttsPath, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
     }
 
     private async Task EnsureTranscriptionProviderReadyAsync(
@@ -403,7 +403,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// and returns the produced audio paths keyed by segment ID, the total candidate count,
     /// and the ordered segment list (for stitch ordering without a second disk read).
     /// </summary>
-    private async Task<(ConcurrentDictionary<string, string> SegmentAudioPaths, int TotalSegments, IReadOnlyList<TranslationSegmentArtifact> OrderedSegments)> GenerateSegmentClipsAsync(
+    private async Task<(ConcurrentDictionary<string, string> SegmentAudioPaths, ConcurrentDictionary<string, double> SegmentDurations, int TotalSegments, IReadOnlyList<TranslationSegmentArtifact> OrderedSegments)> GenerateSegmentClipsAsync(
         string voice,
         string? ttsLanguage,
         string segmentsDir,
@@ -411,6 +411,7 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken)
     {
         var segmentAudioPaths = new ConcurrentDictionary<string, string>();
+        var segmentDurations = new ConcurrentDictionary<string, double>();
 
         ReportStage(
             stageContext,
@@ -443,6 +444,7 @@ public sealed partial class SessionWorkflowCoordinator
                     ttsLanguage,
                     stageContext,
                     segmentAudioPaths,
+                    segmentDurations,
                     cancellationToken);
             }
             else
@@ -457,6 +459,7 @@ public sealed partial class SessionWorkflowCoordinator
                         ttsLanguage,
                         segmentsDir,
                         segmentAudioPaths,
+                        segmentDurations,
                         totalSegments,
                         stageContext,
                         cancellationToken,
@@ -471,7 +474,7 @@ public sealed partial class SessionWorkflowCoordinator
             throw;
         }
 
-        return (segmentAudioPaths, totalSegments, candidateSegments);
+        return (segmentAudioPaths, segmentDurations, totalSegments, candidateSegments);
     }
 
     /// <summary>
@@ -491,6 +494,7 @@ public sealed partial class SessionWorkflowCoordinator
         string? ttsLanguage,
         string segmentsDir,
         ConcurrentDictionary<string, string> segmentAudioPaths,
+        ConcurrentDictionary<string, double> segmentDurations,
         int totalSegments,
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken,
@@ -529,6 +533,8 @@ public sealed partial class SessionWorkflowCoordinator
             if (segResult.Success && File.Exists(segmentAudioPath))
             {
                 segmentAudioPaths[id] = segmentAudioPath;
+                if (segResult.DurationSeconds is { } dur)
+                    segmentDurations[id] = dur;
                 var done = onSucceeded();
                 ReportStage(
                     stageContext,
@@ -601,6 +607,7 @@ public sealed partial class SessionWorkflowCoordinator
         string ttsPath,
         string segmentsDir,
         ConcurrentDictionary<string, string> segmentAudioPaths,
+        ConcurrentDictionary<string, double>? segmentDurations,
         int totalSegments,
         PipelineStageContext? stageContext)
     {
@@ -625,6 +632,9 @@ public sealed partial class SessionWorkflowCoordinator
             TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
             TtsSegmentsPath = segmentsDir,
             TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
+            TtsSegmentDurations = segmentDurations is { Count: > 0 }
+                ? new Dictionary<string, double>(segmentDurations)
+                : null,
             TtsRuntime = CurrentSettings.TtsRuntime,
             TtsProvider = CurrentSettings.TtsProvider,
             StatusMessage = statusMessage,
@@ -647,6 +657,7 @@ public sealed partial class SessionWorkflowCoordinator
         string? ttsLanguage,
         PipelineStageContext? stageContext,
         ConcurrentDictionary<string, string> segmentAudioPaths,
+        ConcurrentDictionary<string, double> segmentDurations,
         CancellationToken cancellationToken)
     {
         var batchRequests = new List<QwenBatchSegmentRequest>(candidateSegments.Count);
@@ -857,7 +868,7 @@ public sealed partial class SessionWorkflowCoordinator
         await ttsStageTask.ConfigureAwait(false);
         var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
         await StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, cancellationToken).ConfigureAwait(false);
-        CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, translationWriter.OrderedSegments.Count, ttsStageContext);
+        CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
     }
 
     private async Task ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
@@ -986,7 +997,7 @@ public sealed partial class SessionWorkflowCoordinator
         await ttsStageTask.ConfigureAwait(false);
         var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
         await StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, cancellationToken).ConfigureAwait(false);
-        CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, translationWriter.OrderedSegments.Count, ttsStageContext);
+        CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
     }
 
     private async Task<TranslationResult> RunStreamingTranslationStageAsync(

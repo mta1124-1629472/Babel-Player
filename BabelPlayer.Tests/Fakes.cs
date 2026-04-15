@@ -206,4 +206,11 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         await File.WriteAllBytesAsync(outputPath, [0xEE, 0xFF], cancellationToken);
     }
+
+    public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
+        double minRatio = 0.75, double maxRatio = 1.35, CancellationToken cancellationToken = default)
+        => Task.FromResult(false); // No-op in tests; stretch path is not exercised by unit tests.
+
+    public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
+        => Task.FromResult<double?>(null);
 }

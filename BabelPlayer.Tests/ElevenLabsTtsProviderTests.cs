@@ -391,5 +391,12 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
             string outputPath,
             CancellationToken cancellationToken) =>
             Task.CompletedTask;
+
+        public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
+            double minRatio = 0.75, double maxRatio = 1.35, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
+            => Task.FromResult<double?>(null);
     }
 }

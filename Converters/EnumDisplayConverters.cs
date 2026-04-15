@@ -38,6 +38,20 @@ public sealed class GpuHostBackendDisplayConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+public sealed class SegmentTimingModeDisplayConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
+    {
+        SegmentTimingMode.Off => "Off",
+        SegmentTimingMode.Stretch => "Stretch",
+        SegmentTimingMode.Pause => "Pause",
+        _ => value?.ToString() ?? string.Empty,
+    };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 public sealed class DiarizationProviderDisplayConverter : IValueConverter
 {
     /// <summary>

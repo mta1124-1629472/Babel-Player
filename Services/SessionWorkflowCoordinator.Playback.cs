@@ -912,6 +912,15 @@ public sealed partial class SessionWorkflowCoordinator
     /// <exception cref="InvalidOperationException">Thrown if there is no active session or if no TTS audio path exists for the specified segment.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the resolved TTS audio file does not exist on disk.</exception>
     public Task PlayTtsForSegmentAsync(string segmentId)
+        => PlayTtsForSegmentAsync(segmentId, null, SegmentTimingMode.Off);
+
+    /// <summary>
+    /// Plays the TTS audio for a segment with the specified timing mode.
+    /// </summary>
+    /// <param name="segmentId">Segment identifier.</param>
+    /// <param name="segment">Full segment state (needed for Stretch/Pause modes to read timing windows).</param>
+    /// <param name="timingMode">Effective timing mode — resolves per-segment override then session default.</param>
+    public Task PlayTtsForSegmentAsync(string segmentId, WorkflowSegmentState? segment, SegmentTimingMode timingMode)
     {
         if (CurrentSession is null)
             throw new InvalidOperationException("No active session.");
@@ -925,13 +934,78 @@ public sealed partial class SessionWorkflowCoordinator
 
         StopTtsPlayback();
         PlaybackState = PlaybackState.PlayingSingleSegment;
+        ActiveTtsSegmentId = segmentId;
+
+        _ = PlayTtsWithTimingAsync(audioPath, segment, timingMode).FireAndForgetAsync(
+            _log, $"Play TTS for segment {segmentId}");
+        return Task.CompletedTask;
+    }
+
+    private async Task PlayTtsWithTimingAsync(
+        string audioPath,
+        WorkflowSegmentState? segment,
+        SegmentTimingMode timingMode)
+    {
+        var effectivePath = audioPath;
+
+        if (timingMode == SegmentTimingMode.Stretch && segment is not null && _audioProcessingService is not null)
+        {
+            var targetDuration = segment.EndSeconds - segment.StartSeconds;
+            if (targetDuration > 0)
+            {
+                var stretchedPath = audioPath + ".stretched.mp3";
+                try
+                {
+                    var stretched = await _audioProcessingService.TimeStretchAsync(
+                        audioPath, stretchedPath, targetDuration,
+                        cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                    if (stretched && File.Exists(stretchedPath))
+                        effectivePath = stretchedPath;
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning($"Time-stretch failed for segment audio, playing original: {ex.Message}");
+                }
+            }
+        }
 
         var player = GetOrCreateSegmentPlayer();
-        player.Load(audioPath);
+        player.Load(effectivePath);
         player.Volume = TtsVolume;
-        ActiveTtsSegmentId = segmentId;
-        _ = Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play TTS for segment {segmentId}");
-        return Task.CompletedTask;
+
+        if (timingMode == SegmentTimingMode.Pause && segment is not null)
+        {
+            // Pause the source video, play TTS fully, then seek to segment end and resume.
+            SourceMediaPlayer?.Pause();
+
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnEnded(object? sender, EventArgs e) => tcs.TrySetResult(true);
+            player.Ended += OnEnded;
+
+            await Task.Run(() => player.Play()).ConfigureAwait(false);
+            await tcs.Task.ConfigureAwait(false);
+
+            player.Ended -= OnEnded;
+
+            // Seek source to where this segment ends and resume.
+            if (SourceMediaPlayer is not null)
+            {
+                SourceMediaPlayer.Seek((long)(segment.EndSeconds * 1000));
+                SourceMediaPlayer.Play();
+            }
+
+            // Clear playback state only if we're still tracking this segment
+            // (user may have stopped playback while TTS was playing).
+            if (ActiveTtsSegmentId is not null)
+            {
+                ActiveTtsSegmentId = null;
+                PlaybackState = PlaybackState.Idle;
+            }
+        }
+        else
+        {
+            await Task.Run(() => player.Play()).ConfigureAwait(false);
+        }
     }
 
     /// <summary>

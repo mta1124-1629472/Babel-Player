@@ -46,4 +46,31 @@ public interface IAudioProcessingService
         string inputPath,
         string outputPath,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Time-stretches an audio file to the target duration without changing pitch.
+    /// Uses ffmpeg atempo; acceptable tempo range is [0.5, 2.0] (chained as needed).
+    /// Returns false and leaves <paramref name="outputPath"/> absent when the stretch
+    /// ratio falls outside <paramref name="minRatio"/>–<paramref name="maxRatio"/>.
+    /// </summary>
+    /// <param name="inputPath">Source audio file.</param>
+    /// <param name="outputPath">Output audio file path (overwritten if it exists).</param>
+    /// <param name="targetDurationSeconds">Desired output duration in seconds.</param>
+    /// <param name="minRatio">Minimum acceptable tempo ratio (default 0.75 — 25% slower).</param>
+    /// <param name="maxRatio">Maximum acceptable tempo ratio (default 1.35 — 35% faster).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if the file was stretched and written; false if ratio is out of range.</returns>
+    Task<bool> TimeStretchAsync(
+        string inputPath,
+        string outputPath,
+        double targetDurationSeconds,
+        double minRatio = 0.75,
+        double maxRatio = 1.35,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Probes the duration of an audio or video file using ffprobe.
+    /// Returns null if ffprobe is unavailable or the file cannot be probed.
+    /// </summary>
+    Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default);
 }

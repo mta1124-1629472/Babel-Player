@@ -104,7 +104,7 @@ public sealed class EdgeTtsProvider : PythonSubprocessServiceBase, ITtsProvider,
             throw new InvalidOperationException($"Segment TTS output file not created: {response.OutputPath}");
 
         Log.Info($"Edge TTS segment completed: {response.OutputPath} ({response.FileSizeBytes} bytes)");
-        return new TtsResult(true, response.OutputPath, response.Voice, response.FileSizeBytes, null);
+        return new TtsResult(true, response.OutputPath, response.Voice, response.FileSizeBytes, null, response.DurationSeconds);
     }
 
     public void Dispose() => _workerPool.Dispose();
@@ -164,5 +164,8 @@ public sealed class EdgeTtsProvider : PythonSubprocessServiceBase, ITtsProvider,
 
         [JsonPropertyName("file_size_bytes")]
         public long FileSizeBytes { get; init; }
+
+        [JsonPropertyName("duration_seconds")]
+        public double? DurationSeconds { get; init; }
     }
 }

@@ -1130,7 +1130,7 @@
                 Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
                 >
-            <Grid RowDefinitions="Auto,*">
+            <Grid RowDefinitions="Auto,*,Auto">
 
                 <!-- Header -->
                 <Border Grid.Row="0" Padding="14,11"
@@ -1263,6 +1263,69 @@
                                HorizontalAlignment="Center" />
                 </StackPanel>
                 </Panel>
+
+                <!-- Segment inspection panel (row 2) — shown when a segment with TTS audio is selected -->
+                <Border Grid.Row="2"
+                        IsVisible="{Binding Inspection.IsVisible}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                        Padding="14,10">
+                    <StackPanel Spacing="6">
+
+                        <TextBlock Text="Segment timing" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource StatusTextBrush}"/>
+
+                        <TextBlock Text="{Binding Inspection.TimingLabel}"
+                                   FontSize="11" Foreground="{DynamicResource StatusTextBrush}"/>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                            <!-- Inherit = clear override -->
+                            <Button Content="Inherit"
+                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                    CommandParameter="{x:Null}"
+                                    Padding="8,3" FontSize="11"
+                                    CornerRadius="4"
+                                    ToolTip.Tip="Use session default timing mode">
+                                <Button.Styles>
+                                    <Style Selector="Button">
+                                        <Setter Property="Background" Value="#1E1E2C"/>
+                                        <Setter Property="Foreground" Value="#A0A0B8"/>
+                                    </Style>
+                                </Button.Styles>
+                            </Button>
+                            <Button Content="Stretch"
+                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                    CommandParameter="{x:Static models:SegmentTimingMode.Stretch}"
+                                    Padding="8,3" FontSize="11"
+                                    CornerRadius="4"
+                                    ToolTip.Tip="Time-stretch TTS to fit the segment window">
+                                <Button.Styles>
+                                    <Style Selector="Button">
+                                        <Setter Property="Background" Value="#1E1E2C"/>
+                                        <Setter Property="Foreground" Value="#A0A0B8"/>
+                                    </Style>
+                                </Button.Styles>
+                            </Button>
+                            <Button Content="Pause"
+                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                    CommandParameter="{x:Static models:SegmentTimingMode.Pause}"
+                                    Padding="8,3" FontSize="11"
+                                    CornerRadius="4"
+                                    ToolTip.Tip="Pause source video while TTS plays, then resume">
+                                <Button.Styles>
+                                    <Style Selector="Button">
+                                        <Setter Property="Background" Value="#1E1E2C"/>
+                                        <Setter Property="Foreground" Value="#A0A0B8"/>
+                                    </Style>
+                                </Button.Styles>
+                            </Button>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding Inspection.TimingOverrideLabel}"
+                                   FontSize="10" Foreground="{DynamicResource StatusTextBrush}"
+                                   Opacity="0.7"/>
+
+                    </StackPanel>
+                </Border>
 
             </Grid>
         </Border>
