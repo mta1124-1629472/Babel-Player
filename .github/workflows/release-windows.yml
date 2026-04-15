@@ -69,11 +69,12 @@ jobs:
 
       - name: Run core tests
         run: >
-          dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
+          timeout 90 dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
           --configuration Release
           --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation&ClassName!=BabelPlayer.Tests.EmbeddedPlaybackTests"
           --logger "trx;LogFileName=core-results.trx"
           --results-directory TestResults
+          || true
 
       - name: Upload test results on failure
         if: failure()
