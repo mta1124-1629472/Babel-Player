@@ -32,6 +32,7 @@ public sealed record WorkflowSessionSnapshot(
     InferenceRuntime? TranscriptionRuntime = null,
     string? TranscriptionProvider = null,
     string? TranscriptionModel = null,
+    string? TranscriptionLanguageHint = null,
     InferenceRuntime? TranslationRuntime = null,
     string? TranslationProvider = null,
     string? TranslationModel = null,

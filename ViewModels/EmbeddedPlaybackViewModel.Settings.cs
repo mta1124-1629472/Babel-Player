@@ -99,6 +99,14 @@ public partial class EmbeddedPlaybackViewModel
     [ObservableProperty]
     private ModelOptionViewModel? _selectedTtsOption;
 
+    /// <summary>Pipeline output language (dub/sub target). Extend <see cref="PipelineTargetLanguageOption.All"/> for more locales.</summary>
+    [ObservableProperty]
+    private PipelineTargetLanguageOption? _selectedTargetLanguageOption = PipelineTargetLanguageOption.English;
+
+    /// <summary>Optional ASR language hint; first entry is auto-detect.</summary>
+    [ObservableProperty]
+    private SpokenLanguageOption? _selectedSpokenLanguageOption = SpokenLanguageOption.All[0];
+
     public static IReadOnlyList<ComputeProfile> InferenceRuntimeOptions { get; } =
         [ComputeProfile.Cpu, ComputeProfile.Gpu, ComputeProfile.Cloud];
 
@@ -138,6 +146,10 @@ public partial class EmbeddedPlaybackViewModel
     public string TranslationKeyStatus => _translationKeyStatus;
     public string TtsKeyStatus => _ttsKeyStatus;
     public ObservableCollection<ProviderHealthSnapshot> ProviderHealthSnapshots => _providerHealthSnapshots;
+
+    public IReadOnlyList<PipelineTargetLanguageOption> TargetLanguageOptions => PipelineTargetLanguageOption.All;
+
+    public IReadOnlyList<SpokenLanguageOption> SpokenLanguageOptions => SpokenLanguageOption.All;
 
     internal sealed record ProviderDiagnosticsSelectionSnapshot(
         ComputeProfile TranscriptionRuntime,
@@ -275,6 +287,22 @@ public partial class EmbeddedPlaybackViewModel
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(ttsVoice: value));
     }
 
+    partial void OnSelectedTargetLanguageOptionChanged(PipelineTargetLanguageOption? value)
+    {
+        if (IsSynchronizingPipelineSettings || value is null)
+            return;
+
+        ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection());
+    }
+
+    partial void OnSelectedSpokenLanguageOptionChanged(SpokenLanguageOption? value)
+    {
+        if (IsSynchronizingPipelineSettings || value is null)
+            return;
+
+        ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection());
+    }
+
     private void OnCoordinatorSettingsModified()
     {
         SyncProviderModelFieldsFromSettings();
@@ -325,6 +353,18 @@ public partial class EmbeddedPlaybackViewModel
             SelectedTtsOption =
                 _availableTtsOptions.FirstOrDefault(model => model.ModelId == TtsModelOrVoice)
                 ?? (_availableTtsOptions.Count > 0 ? _availableTtsOptions[0] : null);
+
+            SelectedTargetLanguageOption =
+                PipelineTargetLanguageOption.All.FirstOrDefault(o =>
+                    string.Equals(o.Code, _coordinator.CurrentSettings.TargetLanguage, StringComparison.OrdinalIgnoreCase))
+                ?? PipelineTargetLanguageOption.English;
+
+            SelectedSpokenLanguageOption =
+                SpokenLanguageOption.All.FirstOrDefault(o =>
+                    SessionSnapshotSemantics.TranscriptionLanguageHintsMatch(
+                        o.Code,
+                        _coordinator.CurrentSettings.TranscriptionLanguageHint))
+                ?? SpokenLanguageOption.All[0];
 
             OnPropertyChanged(nameof(AvailableTranscriptionModels));
             OnPropertyChanged(nameof(AvailableTranslationModels));
@@ -577,7 +617,9 @@ public partial class EmbeddedPlaybackViewModel
         string? translationModel = null,
         ComputeProfile? ttsRuntime = null,
         string? ttsProvider = null,
-        string? ttsVoice = null) =>
+        string? ttsVoice = null,
+        string? targetLanguageOverride = null,
+        string? transcriptionLanguageHintOverride = null) =>
         new(
             transcriptionRuntime ?? TranscriptionRuntime,
             transcriptionProvider ?? TranscriptionProvider,
@@ -588,7 +630,11 @@ public partial class EmbeddedPlaybackViewModel
             ttsRuntime ?? TtsRuntime,
             ttsProvider ?? TtsProvider,
             ttsVoice ?? TtsModelOrVoice,
-            _coordinator.CurrentSettings.TargetLanguage);
+            targetLanguageOverride
+                ?? SelectedTargetLanguageOption?.Code
+                ?? _coordinator.CurrentSettings.TargetLanguage,
+            transcriptionLanguageHintOverride
+                ?? SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(SelectedSpokenLanguageOption?.Code));
 
     private static string GetReadinessStatus(ProviderReadiness readiness)
     {

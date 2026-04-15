@@ -10,7 +10,8 @@ public sealed record PipelineSettingsSelection(
     ComputeProfile TtsRuntime,
     string TtsProvider,
     string TtsVoice,
-    string? TargetLanguage = null);
+    string? TargetLanguage = null,
+    string? TranscriptionLanguageHint = null);
 
 public sealed record PipelineSettingsApplyResult(
     PipelineInvalidation Invalidation,

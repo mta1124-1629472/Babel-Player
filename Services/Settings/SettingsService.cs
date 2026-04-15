@@ -104,6 +104,7 @@ public sealed class SettingsService
         public ComputeProfile? TtsProfile { get; set; }
         public InferenceRuntime? TtsRuntime { get; set; }
         public string? TtsVoice { get; set; }
+        public string? TranscriptionLanguageHint { get; set; }
         public string? TargetLanguage { get; set; }
         public string? PiperModelDir { get; set; }
         public GpuHostBackend? PreferredLocalGpuBackend { get; set; }
@@ -163,6 +164,10 @@ public sealed class SettingsService
                 InferenceRuntimeCatalog.InferTtsProfile);
             settings.TtsVoice = TtsVoice ?? settings.TtsVoice;
 
+            if (TranscriptionLanguageHint is not null)
+                settings.TranscriptionLanguageHint = string.IsNullOrWhiteSpace(TranscriptionLanguageHint)
+                    ? null
+                    : TranscriptionLanguageHint;
             settings.TargetLanguage = TargetLanguage ?? settings.TargetLanguage;
             settings.PiperModelDir = PiperModelDir ?? settings.PiperModelDir;
 
@@ -201,6 +206,7 @@ public sealed class SettingsService
             TranscriptionCpuComputeType = settings.TranscriptionCpuComputeType,
             TranscriptionCpuThreads = settings.TranscriptionCpuThreads,
             TranscriptionNumWorkers = settings.TranscriptionNumWorkers,
+            TranscriptionLanguageHint = settings.TranscriptionLanguageHint,
             DiarizationProvider = settings.DiarizationProvider,
             DiarizationMinSpeakers = null,
             DiarizationMaxSpeakers = null,

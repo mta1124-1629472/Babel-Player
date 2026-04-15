@@ -40,6 +40,11 @@ public sealed class AppSettings
     public int TranscriptionNumWorkers { get; set; } = 1;
 
     /// <summary>
+    /// Optional Whisper/source-language hint (ISO-639-1, e.g. <c>es</c>). Null or empty = auto-detect.
+    /// </summary>
+    public string? TranscriptionLanguageHint { get; set; }
+
+    /// <summary>
     /// Diarization provider identifier (e.g. "nemo-local"). Defaults to NeMo; empty string disables diarization.
     /// </summary>
     public string DiarizationProvider { get; set; } = ProviderNames.NemoLocal;

@@ -76,7 +76,7 @@ public sealed partial class SessionWorkflowCoordinator
                 CurrentSession.IngestedMediaPath,
                 transcriptPath,
                 CurrentSettings.TranscriptionModel,
-                null,
+                SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(CurrentSettings.TranscriptionLanguageHint),
                 CurrentSettings.TranscriptionCpuComputeType,
                 CurrentSettings.TranscriptionCpuThreads,
                 CurrentSettings.TranscriptionNumWorkers),
@@ -301,6 +301,8 @@ public sealed partial class SessionWorkflowCoordinator
             TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
             TranscriptionModel = CurrentSettings.TranscriptionModel,
+            TranscriptionLanguageHint = SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
+                CurrentSettings.TranscriptionLanguageHint),
             StatusMessage = ShouldRunDiarization()
                 ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
                 : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
@@ -810,7 +812,7 @@ public sealed partial class SessionWorkflowCoordinator
                     CurrentSession.IngestedMediaPath!,
                     transcriptPath,
                     CurrentSettings.TranscriptionModel,
-                    null,
+                    SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(CurrentSettings.TranscriptionLanguageHint),
                     CurrentSettings.TranscriptionCpuComputeType,
                     CurrentSettings.TranscriptionCpuThreads,
                     CurrentSettings.TranscriptionNumWorkers),
