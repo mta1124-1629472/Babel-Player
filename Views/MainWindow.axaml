@@ -21,8 +21,7 @@
             <Setter Property="Opacity" Value="1" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Width" Duration="0:0:0.18" />
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
                 </Transitions>
             </Setter>
         </Style>
@@ -38,8 +37,7 @@
             <Setter Property="Opacity" Value="1" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Width" Duration="0:0:0.18" />
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
                 </Transitions>
             </Setter>
         </Style>
@@ -54,10 +52,15 @@
             <Setter Property="Height" Value="40" />
             <Setter Property="Opacity" Value="1" />
             <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <TranslateTransform Y="0" />
+                </Setter.Value>
+            </Setter>
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Height" Duration="0:0:0.18" />
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+                    <DoubleTransition Property="TranslateTransform.Y" Duration="0:0:0.12" />
                 </Transitions>
             </Setter>
         </Style>
@@ -67,31 +70,7 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="IsHitTestVisible" Value="False" />
             <Setter Property="BorderThickness" Value="0" />
-        </Style>
-
-        <Style Selector="Border.player-controls-row">
-            <Setter Property="Opacity" Value="1" />
-            <Setter Property="MaxHeight" Value="140" />
-            <Setter Property="ClipToBounds" Value="True" />
-            <Setter Property="RenderTransform">
-                <Setter.Value>
-                    <TranslateTransform Y="0" />
-                </Setter.Value>
-            </Setter>
-            <Setter Property="Transitions">
-                <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.16" />
-                    <DoubleTransition Property="MaxHeight" Duration="0:0:0.16" />
-                    <DoubleTransition Property="TranslateTransform.Y" Duration="0:0:0.16" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Border.player-controls-row.hidden">
-            <Setter Property="Opacity" Value="0" />
-            <Setter Property="MaxHeight" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="IsHitTestVisible" Value="False" />
-            <Setter Property="TranslateTransform.Y" Value="10" />
+            <Setter Property="TranslateTransform.Y" Value="-8" />
         </Style>
     </Window.Styles>
 
@@ -823,8 +802,7 @@
 
             <!-- Scrub bar -->
             <Border Grid.Row="2" Padding="12,5"
-                    Classes="player-controls-row"
-                    Classes.hidden="{Binding !Playback.Preview.IsControlsVisible}">
+                    IsVisible="{Binding Playback.Preview.IsControlsVisible}">
                 <Grid ColumnDefinitions="40,*,40">
                      <TextBlock Grid.Column="0"
                                 Text="{Binding Playback.Preview.SourcePositionFormatted}"
@@ -845,8 +823,7 @@
 
             <!-- Controls bar -->
             <Border Grid.Row="3" Padding="12,9"
-                    Classes="player-controls-row"
-                    Classes.hidden="{Binding !Playback.Preview.IsControlsVisible}">
+                    IsVisible="{Binding Playback.Preview.IsControlsVisible}">
                 <Border.Styles>
                     <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
                     <Style Selector="Button.dev-pill">
