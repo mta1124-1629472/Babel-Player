@@ -57,7 +57,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         IDiarizationRegistry? diarizationRegistry = null,
         ITtsRegistry? ttsRegistry = null,
         IAudioProcessingService? audioProcessingService = null,
-        ContainerizedServiceProbe? containerizedProbe = null)
+        ContainerizedServiceProbe? containerizedProbe = null,
+        IMediaTransport? segmentPlayer = null,
+        IMediaTransport? sourcePlayer = null)
     {
         var registries = new Babel.Player.Models.RegistryBundle(
             _ctx.PerSessionStore, _ctx.RecentStore,
@@ -75,7 +77,57 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             _ctx.Store,
             _ctx.Log,
             settings ?? _ctx.Settings);
-        return new SessionWorkflowCoordinator(coreServices, registries, options);
+        return new SessionWorkflowCoordinator(
+            coreServices,
+            registries,
+            options,
+            segmentPlayer: segmentPlayer,
+            sourcePlayer: sourcePlayer);
+    }
+
+    private sealed class ControllableStretchAudioProcessingService : IAudioProcessingService
+    {
+        public TaskCompletionSource<bool> StretchStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> AllowStretchCompletion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task CombineAudioSegmentsAsync(
+            IReadOnlyList<string> segmentAudioPaths,
+            string outputAudioPath,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("CombineAudioSegmentsAsync is not used in this test."));
+
+        public Task ExtractAudioClipAsync(
+            string inputPath,
+            string outputPath,
+            double startTimeSeconds,
+            double durationSeconds,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("ExtractAudioClipAsync is not used in this test."));
+
+        public Task ExtractFullAudioAsync(
+            string inputPath,
+            string outputPath,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("ExtractFullAudioAsync is not used in this test."));
+
+        public async Task<bool> TimeStretchAsync(
+            string inputPath,
+            string outputPath,
+            double targetDurationSeconds,
+            double minRatio = 0.75,
+            double maxRatio = 1.35,
+            CancellationToken cancellationToken = default)
+        {
+            StretchStarted.TrySetResult(true);
+            await AllowStretchCompletion.Task.ConfigureAwait(false);
+            await File.WriteAllBytesAsync(outputPath, [0xAB, 0xCD], cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult<double?>(1.0);
     }
 
     private AppSettings CreateMatchingSettings() =>
@@ -543,6 +595,50 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
 
         Assert.True(coord.CurrentSession.SegmentTimingModeOverrides is null
             || !coord.CurrentSession.SegmentTimingModeOverrides.ContainsKey("segment_0.0"));
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_StretchSuperseded_DoesNotOverrideNewerPlayback()
+    {
+        var stretchService = new ControllableStretchAudioProcessingService();
+        var segmentPlayer = new FakeMediaTransport();
+        var coord = CreateCoordinator(
+            audioProcessingService: stretchService,
+            segmentPlayer: segmentPlayer);
+        coord.Initialize();
+
+        var segmentAPath = Path.Combine(_ctx.Dir, "segment_a.mp3");
+        var segmentBPath = Path.Combine(_ctx.Dir, "segment_b.mp3");
+        await File.WriteAllBytesAsync(segmentAPath, [0x01, 0x02]);
+        await File.WriteAllBytesAsync(segmentBPath, [0x03, 0x04]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                ["segment_0.0"] = segmentAPath,
+                ["segment_1.0"] = segmentBPath,
+            },
+        };
+
+        var segmentA = new WorkflowSegmentState("segment_0.0", 0.0, 1.0, "a", true, "A", true);
+        var segmentB = new WorkflowSegmentState("segment_1.0", 1.0, 2.0, "b", true, "B", true);
+
+        await coord.PlayTtsForSegmentAsync("segment_0.0", segmentA, SegmentTimingMode.Stretch);
+        await stretchService.StretchStarted.Task;
+
+        await coord.PlayTtsForSegmentAsync("segment_1.0", segmentB, SegmentTimingMode.Off);
+        Assert.True(
+            SpinWait.SpinUntil(
+                () => string.Equals(segmentPlayer.LastLoadedFile, segmentBPath, StringComparison.Ordinal),
+                TimeSpan.FromSeconds(2)),
+            "Expected newer segment playback to load segment B audio.");
+
+        stretchService.AllowStretchCompletion.TrySetResult(true);
+        await Task.Delay(200);
+
+        Assert.Equal(segmentBPath, segmentPlayer.LastLoadedFile);
     }
 
     [Fact]

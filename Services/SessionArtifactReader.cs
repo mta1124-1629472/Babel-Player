@@ -72,9 +72,12 @@ public sealed class SessionArtifactReader
             var assignedVoice = ResolveAssignedVoice(speakerId, speakerVoiceAssignments);
             var hasReferenceAudio = HasReferenceAudio(speakerId, speakerReferenceAudioPaths);
 
-            SegmentTimingMode? timingModeOverride = null;
-            if (timingOverrides is not null && timingOverrides.TryGetValue(id, out var mode))
-                timingModeOverride = mode;
+            SegmentTimingMode? timingOverride = null;
+            if (timingOverrides is not null
+                && timingOverrides.TryGetValue(id, out var mappedTimingOverride))
+            {
+                timingOverride = mappedTimingOverride;
+            }
 
             result.Add(new WorkflowSegmentState(
                 id,
@@ -87,7 +90,7 @@ public sealed class SessionArtifactReader
                 speakerId,
                 assignedVoice,
                 hasReferenceAudio,
-                timingModeOverride));
+                timingOverride));
         }
 
         return result;
