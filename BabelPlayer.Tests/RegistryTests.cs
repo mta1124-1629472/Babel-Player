@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Models.LanguageSupport;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
@@ -331,13 +332,13 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void TtsRegistry_EdgeTtsVoices_IsNonEmpty()
     {
-        Assert.NotEmpty(TtsRegistry.EdgeTtsVoices);
+        Assert.NotEmpty(EdgeTtsCatalog.VoiceIds);
     }
 
     [Fact]
     public void TtsRegistry_PiperVoices_IsNonEmpty()
     {
-        Assert.NotEmpty(TtsRegistry.PiperVoices);
+        Assert.NotEmpty(PiperTtsCatalog.VoiceIds);
     }
 
     [Fact]
@@ -377,8 +378,8 @@ public sealed class RegistryTests : IDisposable
     [Fact]
     public void TtsRegistry_QwenModels_ContainsBothBaseModels()
     {
-        Assert.Contains("Qwen/Qwen3-TTS-12Hz-1.7B-Base", TtsRegistry.QwenModels);
-        Assert.Contains("Qwen/Qwen3-TTS-12Hz-0.6B-Base", TtsRegistry.QwenModels);
+        Assert.Contains("Qwen/Qwen3-TTS-12Hz-1.7B-Base", QwenTtsCatalog.ModelIds);
+        Assert.Contains("Qwen/Qwen3-TTS-12Hz-0.6B-Base", QwenTtsCatalog.ModelIds);
     }
 
     [Fact]

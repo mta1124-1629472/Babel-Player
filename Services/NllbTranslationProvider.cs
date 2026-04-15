@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Models.LanguageSupport;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
@@ -19,18 +20,13 @@ public sealed class NllbTranslationProvider : PythonSubprocessServiceBase, ITran
         _model = model;
     }
 
-    private const string NllbScript = @"
+    private static readonly string NllbScript = $@"
 import sys, json
 
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-FLORES = {
-    'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',
-    'it':'ita_Latn','pt':'por_Latn','ru':'rus_Cyrl','zh':'zho_Hans',
-    'ja':'jpn_Jpan','ko':'kor_Hang','ar':'arb_Arab','hi':'hin_Deva',
-    'nl':'nld_Latn','pl':'pol_Latn','sv':'swe_Latn','tr':'tur_Latn',
-}
+FLORES = {{ {NllbLanguageCatalog.BuildPythonDictLiteral()} }}
 
 input_path  = sys.argv[1]
 output_path = sys.argv[2]
@@ -76,18 +72,13 @@ with open(output_path, 'w', encoding='utf-8') as f:
 print('NLLB translation complete')
 ";
 
-    private const string NllbSegmentScript = @"
+    private static readonly string NllbSegmentScript = $@"
 import sys, json
 
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-FLORES = {
-    'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',
-    'it':'ita_Latn','pt':'por_Latn','ru':'rus_Cyrl','zh':'zho_Hans',
-    'ja':'jpn_Jpan','ko':'kor_Hang','ar':'arb_Arab','hi':'hin_Deva',
-    'nl':'nld_Latn','pl':'pol_Latn','sv':'swe_Latn','tr':'tur_Latn',
-}
+FLORES = {{ {NllbLanguageCatalog.BuildPythonDictLiteral()} }}
 
 src_lang   = sys.argv[1]
 tgt_lang   = sys.argv[2]

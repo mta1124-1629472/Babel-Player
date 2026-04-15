@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Models.LanguageSupport;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
@@ -19,7 +20,7 @@ public class CTranslate2TranslationProvider : PythonSubprocessServiceBase, ITran
         _model = string.IsNullOrWhiteSpace(model) ? "nllb-200-distilled-600M" : model;
     }
 
-    private const string TranslateScript = @"
+    private static readonly string TranslateScript = $@"
 import json
 import os
 import sys
@@ -27,12 +28,7 @@ import sys
 import ctranslate2
 from transformers import AutoTokenizer
 
-FLORES = {
-    'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',
-    'it':'ita_Latn','pt':'por_Latn','ru':'rus_Cyrl','zh':'zho_Hans',
-    'ja':'jpn_Jpan','ko':'kor_Hang','ar':'arb_Arab','hi':'hin_Deva',
-    'nl':'nld_Latn','pl':'pol_Latn','sv':'swe_Latn','tr':'tur_Latn',
-}
+FLORES = {{ {NllbLanguageCatalog.BuildPythonDictLiteral()} }}
 
 def translate_text(translator, tokenizer, target_prefix, text):
     if not text.strip():
@@ -81,7 +77,7 @@ with open(output_path, 'w', encoding='utf-8') as f:
 print('CTranslate2 translation complete')
 ";
 
-    private const string TranslateSingleSegmentScript = @"
+    private static readonly string TranslateSingleSegmentScript = $@"
 import json
 import os
 import sys
@@ -89,12 +85,7 @@ import sys
 import ctranslate2
 from transformers import AutoTokenizer
 
-FLORES = {
-    'en':'eng_Latn','es':'spa_Latn','fr':'fra_Latn','de':'deu_Latn',
-    'it':'ita_Latn','pt':'por_Latn','ru':'rus_Cyrl','zh':'zho_Hans',
-    'ja':'jpn_Jpan','ko':'kor_Hang','ar':'arb_Arab','hi':'hin_Deva',
-    'nl':'nld_Latn','pl':'pol_Latn','sv':'swe_Latn','tr':'tur_Latn',
-}
+FLORES = {{ {NllbLanguageCatalog.BuildPythonDictLiteral()} }}
 
 src_lang = sys.argv[1]
 tgt_lang = sys.argv[2]

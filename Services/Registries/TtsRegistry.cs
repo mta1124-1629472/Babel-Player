@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Models.LanguageSupport;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Settings;
 
@@ -61,7 +62,7 @@ public sealed class TtsRegistry : ITtsRegistry
                     "Piper (Local)",
                     false,
                     null,
-                    PiperVoices,
+                    PiperTtsCatalog.VoiceIds,
                     SupportedRuntimes: [InferenceRuntime.Local],
                     DefaultRuntime: InferenceRuntime.Local),
                 .. GetAvailableProviders(ComputeProfile.Gpu),
@@ -78,7 +79,7 @@ public sealed class TtsRegistry : ITtsRegistry
                     "Piper (Local)",
                     false,
                     null,
-                    PiperVoices,
+                    PiperTtsCatalog.VoiceIds,
                     SupportedRuntimes: [InferenceRuntime.Local],
                     DefaultRuntime: InferenceRuntime.Local),
             ];
@@ -93,7 +94,7 @@ public sealed class TtsRegistry : ITtsRegistry
                     "Qwen3-TTS (Local GPU Host)",
                     false,
                     null,
-                    QwenModels,
+                    QwenTtsCatalog.ModelIds,
                     SupportedRuntimes: [InferenceRuntime.Containerized],
                     DefaultRuntime: InferenceRuntime.Containerized,
                     IsImplemented: true),
@@ -107,7 +108,7 @@ public sealed class TtsRegistry : ITtsRegistry
                 "Edge TTS",
                 false,
                 null,
-                EdgeTtsVoices,
+                EdgeTtsCatalog.VoiceIds,
                 SupportedRuntimes: [InferenceRuntime.Cloud],
                 DefaultRuntime: InferenceRuntime.Cloud),
             new(
@@ -137,7 +138,7 @@ public sealed class TtsRegistry : ITtsRegistry
     {
         var normalizedProviderId = ResolveProviderId(providerId, settings, profile);
         if (profile == ComputeProfile.Gpu && string.Equals(normalizedProviderId, ProviderNames.Qwen, StringComparison.Ordinal))
-            return QwenModels;
+            return QwenTtsCatalog.ModelIds;
 
         return GetAvailableProviders(profile)
             .FirstOrDefault(p => p.Id == normalizedProviderId)?.SupportedModels
@@ -247,31 +248,4 @@ public sealed class TtsRegistry : ITtsRegistry
 
         return InferenceRuntimeCatalog.NormalizeTtsProvider(profile, providerId);
     }
-    
-    public static readonly IReadOnlyList<string> PiperVoices =
-    [
-        "en_US-lessac-medium",
-        "en_US-ryan-high",
-        "en_US-ljspeech-high",
-        "en_GB-alan-medium",
-        "de_DE-thorsten-medium",
-        "fr_FR-gilles-low",
-        "es_ES-mls_10246-low",
-    ];
-    public static readonly IReadOnlyList<string> QwenModels =
-    [
-        "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-        "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-    ];
-    public static readonly IReadOnlyList<string> EdgeTtsVoices =
-    [
-        "en-US-AriaNeural",    "en-US-GuyNeural",     "en-US-JennyNeural",   "en-US-ChristopherNeural",
-        "en-GB-SoniaNeural",   "en-GB-RyanNeural",    "en-AU-NatashaNeural", "en-AU-WilliamNeural",
-        "es-ES-ElviraNeural",  "es-ES-AlvaroNeural",  "fr-FR-DeniseNeural",  "fr-FR-HenriNeural",
-        "de-DE-KatjaNeural",   "de-DE-ConradNeural",  "it-IT-ElsaNeural",    "it-IT-DiegoNeural",
-        "pt-BR-FranciscaNeural","pt-BR-AntonioNeural", "ja-JP-NanamiNeural",  "ja-JP-KeitaNeural",
-        "ko-KR-SunHiNeural",   "ko-KR-InJoonNeural",  "zh-CN-XiaoxiaoNeural","zh-CN-YunxiNeural",
-        "ar-SA-ZariyahNeural", "ar-SA-HamedNeural",   "hi-IN-SwaraNeural",   "hi-IN-MadhurNeural",
-        "ru-RU-SvetlanaNeural","ru-RU-DmitryNeural",
-    ];
 }

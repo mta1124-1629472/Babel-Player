@@ -95,7 +95,7 @@ public static class SessionSnapshotSemantics
         bool translationChanged = snapshot.TranslationRuntime != settings.TranslationRuntime
             || snapshot.TranslationProvider != settings.TranslationProvider
             || snapshot.TranslationModel != settings.TranslationModel
-            || snapshot.TargetLanguage != settings.TargetLanguage;
+            || !LanguageCode.TargetLanguagesMatch(snapshot.TargetLanguage, settings.TargetLanguage);
         bool ttsChanged = snapshot.TtsRuntime != settings.TtsRuntime
             || snapshot.TtsProvider != settings.TtsProvider
             || snapshot.TtsVoice != settings.TtsVoice;
@@ -155,13 +155,10 @@ public static class SessionSnapshotSemantics
     }
 
     public static string? NormalizeTranscriptionLanguageHint(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        LanguageCode.NormalizeForPersistence(value);
 
     public static bool TranscriptionLanguageHintsMatch(string? a, string? b) =>
-        string.Equals(
-            NormalizeTranscriptionLanguageHint(a),
-            NormalizeTranscriptionLanguageHint(b),
-            StringComparison.OrdinalIgnoreCase);
+        LanguageCode.LanguageEquals(a, b);
 
     public static string DescribeSessionProvenance(WorkflowSessionSnapshot snapshot) =>
         $"stage={snapshot.Stage}, " +
