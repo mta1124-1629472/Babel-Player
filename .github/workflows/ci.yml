@@ -1,5 +1,10 @@
 name: CI
 
+# One active run per PR/ref: new commits cancel older runs so queued jobs do not stack for hours.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -13,6 +18,7 @@ jobs:
   build-and-core-test:
     name: Build & Core Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
