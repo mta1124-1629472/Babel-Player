@@ -53,7 +53,6 @@ The full loop:
 3. **Diarize & Assign**: Identify unique speakers and assign specific voices to individual segments.
 4. **Translate** — adapt the transcript into a target language
 5. **Dub** — generate a spoken TTS audio track, one segment at a time
-6. **Multi-speaker routing** (optional) — assign different voices to different speakers via diarization
 7. **Preview** — play source video alongside dubbed segments; toggle between original and dub audio
 8. **Refine** — regenerate individual segments, adjust text, re-run TTS on demand
 9. **Export** — save captions as `.srt`
