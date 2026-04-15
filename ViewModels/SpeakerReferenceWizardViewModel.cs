@@ -33,8 +33,11 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase, IDi
     {
         _playback = playback;
         _coordinator = coordinator;
+        MiniPreview = new SpeakerWizardMiniPreviewViewModel(coordinator);
         _playback.PropertyChanged += OnPlaybackPropertyChanged;
     }
+
+    public SpeakerWizardMiniPreviewViewModel MiniPreview { get; }
 
     private void OnPlaybackPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -142,6 +145,7 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase, IDi
             HasLoaded = true;
             OnPropertyChanged(nameof(ShowPiperVoicePicker));
             MergeSpeakersCommand.NotifyCanExecuteChanged();
+            MiniPreview.TryReloadAfterSessionChange();
             StatusText = AllDraftItems.Count == 0
                 ? "No diarized speakers found yet."
                 : $"Loaded {AllDraftItems.Count} speakers for review.";
@@ -314,6 +318,7 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase, IDi
     {
         ArgumentNullException.ThrowIfNull(segment);
         await _playback.Preview.SelectSegmentAndSeekAsync(segment, playSource: false);
+        MiniPreview.SeekToSegmentStart(segment);
         StatusText = $"Preview jumped to {segment.SegmentId} ({segment.StartSeconds:F1}s).";
     }
 
@@ -324,31 +329,38 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase, IDi
         if (item is null)
             return new UseSelectedSegmentOutcome(UseSelectedSegmentStatus.Failed, "Invalid item.");
 
-        var duration = Math.Clamp(PlayheadClipWindowSeconds, 3.0, 15.0);
-        var center = _playback.Preview.SourcePositionMs / 1000.0;
-        var half = duration / 2.0;
-        var start = Math.Max(0, center - half);
-        var mediaDurationSec = _playback.Preview.SourceDurationMs / 1000.0;
-        if (mediaDurationSec > duration + 0.05)
+        var windowSec = Math.Clamp(PlayheadClipWindowSeconds, 3.0, 15.0);
+        double centerSec;
+        double mediaDurationSec;
+        if (MiniPreview.UseMiniPlayheadForClips)
         {
-            var maxStart = Math.Max(0, mediaDurationSec - duration);
-            if (start > maxStart)
-                start = maxStart;
+            centerSec = MiniPreview.PositionMs / 1000.0;
+            mediaDurationSec = MiniPreview.DurationMs / 1000.0;
         }
+        else
+        {
+            centerSec = _playback.Preview.SourcePositionMs / 1000.0;
+            mediaDurationSec = _playback.Preview.SourceDurationMs / 1000.0;
+        }
+
+        var (start, _) = SpeakerWizardPlayheadHelper.ComputeClipStartAndBounds(
+            centerSec,
+            windowSec,
+            mediaDurationSec);
 
         try
         {
             var extractedPath = await _coordinator.ExtractSpeakerReferenceFromSourceAsync(
                 item.SpeakerId,
                 start,
-                duration,
+                windowSec,
                 cancellationToken);
 
             item.SetDraftReferencePath(extractedPath, "Use playhead clip");
             await RefreshConfidenceAsync(item, IsCloningTts, cancellationToken);
             RecomputeCounts();
             ApplyFilter();
-            StatusText = $"Extracted {duration:F1}s reference from playhead for {item.SpeakerId}.";
+            StatusText = $"Extracted {windowSec:F1}s reference from playhead for {item.SpeakerId}.";
             return new UseSelectedSegmentOutcome(UseSelectedSegmentStatus.Applied);
         }
         catch (Exception ex)
@@ -509,5 +521,6 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase, IDi
     public void Dispose()
     {
         _playback.PropertyChanged -= OnPlaybackPropertyChanged;
+        MiniPreview.Dispose();
     }
 }

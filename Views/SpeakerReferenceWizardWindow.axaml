@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Babel.Player.ViewModels"
         xmlns:model="using:Babel.Player.Models"
+        xmlns:v="using:Babel.Player.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
@@ -10,20 +11,20 @@
         x:DataType="vm:SpeakerReferenceWizardViewModel"
         Title="Speaker setup wizard"
         Width="980"
-        Height="760"
+        Height="820"
         MinWidth="860"
-        MinHeight="620"
+        MinHeight="680"
         CanResize="True"
         WindowStartupLocation="CenterOwner">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="18">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="18">
         <StackPanel Grid.Row="0" Spacing="8">
             <TextBlock Text="Speaker setup wizard" FontSize="20" FontWeight="SemiBold" />
             <TextBlock Text="Configure per-speaker voice and (for Qwen) reference clips. Changes stay in draft mode until you choose Finish."
                        FontSize="12"
                        Opacity="0.75"
                        TextWrapping="Wrap" />
-            <TextBlock Text="Keep this window open and use the main video preview to scrub the timeline and select a segment. You can also jump to a speaker's segments below, then use 'Use selected segment' or 'Use playhead clip'."
+            <TextBlock Text="Scrub the embedded preview (Windows) or the main window. Use 'Use playhead clip' with the loaded mini player when available. Jump to a speaker's segments to sync both previews."
                        FontSize="12"
                        Opacity="0.85"
                        TextWrapping="Wrap" />
@@ -87,7 +88,72 @@
             </StackPanel>
         </StackPanel>
 
-        <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+        <!-- Embedded session preview (libmpv, Windows) -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="10"
+                Margin="0,0,0,10"
+                IsVisible="{Binding MiniPreview.ShowVideoSurface}">
+            <Grid RowDefinitions="Auto,200,Auto,Auto" RowSpacing="8">
+                <TextBlock Text="Session preview (embedded)"
+                           FontWeight="SemiBold"
+                           FontSize="13" />
+                <v:MpvVideoView x:Name="WizardVideoView"
+                                Grid.Row="1"
+                                Height="200"
+                                MinHeight="160"
+                                HorizontalAlignment="Stretch" />
+                <Grid Grid.Row="2"
+                      ColumnDefinitions="44,*,44,Auto"
+                      ColumnSpacing="8"
+                      VerticalAlignment="Center">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding MiniPreview.PositionFormatted}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource VideoOverlaySubtextBrush}" />
+                    <Slider Grid.Column="1"
+                            Minimum="0"
+                            Maximum="{Binding MiniPreview.DurationMs}"
+                            Value="{Binding MiniPreview.PositionMs, Mode=TwoWay}"
+                            IsEnabled="{Binding MiniPreview.HasLoadedMedia}"
+                            VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding MiniPreview.DurationFormatted}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               TextAlignment="Right"
+                               Foreground="{DynamicResource VideoOverlaySubtextBrush}" />
+                    <Button Grid.Column="3"
+                            Command="{Binding MiniPreview.ToggleMiniPlaybackCommand}"
+                            Content="{Binding MiniPreview.MiniPlayPauseLabel}"
+                            Padding="10,6" />
+                </Grid>
+                <TextBlock Grid.Row="3"
+                           Text="{Binding MiniPreview.StatusHint}"
+                           FontSize="11"
+                           Foreground="{DynamicResource DestructiveBrush}"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding MiniPreview.HasStatusHint}" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="12"
+                Margin="0,0,0,10"
+                IsVisible="{Binding MiniPreview.ShowNonWindowsHint}">
+            <TextBlock Text="Embedded session preview uses libmpv on Windows. On this platform, use the main video preview to scrub and pick playhead clips."
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       Opacity="0.85" />
+        </Border>
+
+        <Border Grid.Row="3" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding VisibleDraftItems}">
                     <ItemsControl.ItemTemplate>
@@ -230,7 +296,7 @@
             </ScrollViewer>
         </Border>
 
-        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" Margin="0,12,0,0" ColumnSpacing="8">
+        <Grid Grid.Row="4" ColumnDefinitions="*,Auto,Auto" Margin="0,12,0,0" ColumnSpacing="8">
             <TextBlock Grid.Column="0"
                        Text="Finish applies only changed voice and reference mappings. Cancel discards all draft edits."
                        VerticalAlignment="Center"

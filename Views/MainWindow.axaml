@@ -75,40 +75,96 @@
                            FontSize="13"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center" />
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-                    <Button Content="—"
-                            Classes="chrome-button"
-                            Width="36"
-                            Height="28"
-                            FontSize="14"
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="2"
+                            VerticalAlignment="Center"
+                            UseLayoutRounding="True">
+                    <Button Classes="chrome-button"
+                            Width="46"
+                            Height="32"
                             Background="{DynamicResource ButtonBackgroundBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            CornerRadius="6"
+                            CornerRadius="4"
                             Click="OnMinimizeWindowClick"
-                            AutomationProperties.Name="Minimize window" />
-                    <Button Content="□"
-                            Classes="chrome-button"
-                            Width="36"
-                            Height="28"
-                            FontSize="12"
+                            AutomationProperties.Name="Minimize window">
+                        <Viewbox Width="11" Height="11">
+                            <Canvas Width="24" Height="24">
+                                <Border Canvas.Left="5"
+                                        Canvas.Top="11"
+                                        Width="14"
+                                        Height="2"
+                                        Background="{DynamicResource PrimaryTextBrush}"
+                                        CornerRadius="1" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                    <Button Classes="chrome-button"
+                            Width="46"
+                            Height="32"
                             Background="{DynamicResource ButtonBackgroundBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            CornerRadius="6"
+                            CornerRadius="4"
                             Click="OnToggleMaximizeWindowClick"
-                            AutomationProperties.Name="Maximize or restore window" />
-                    <Button Content="✕"
-                            Classes="chrome-button"
-                            Width="36"
-                            Height="28"
-                            FontSize="13"
+                            AutomationProperties.Name="Maximize or restore window">
+                        <Grid Width="24" Height="24">
+                            <Viewbox x:Name="ChromeMaximizeIcon"
+                                     Width="11"
+                                     Height="11"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center">
+                                <Canvas Width="24" Height="24">
+                                    <Rectangle Canvas.Left="6"
+                                               Canvas.Top="6"
+                                               Width="12"
+                                               Height="12"
+                                               Stroke="{DynamicResource PrimaryTextBrush}"
+                                               StrokeThickness="1.5"
+                                               Fill="Transparent" />
+                                </Canvas>
+                            </Viewbox>
+                            <Viewbox x:Name="ChromeRestoreIcon"
+                                     Width="11"
+                                     Height="11"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     IsVisible="False">
+                                <Canvas Width="24" Height="24">
+                                    <Rectangle Canvas.Left="9"
+                                               Canvas.Top="5"
+                                               Width="9"
+                                               Height="9"
+                                               Stroke="{DynamicResource PrimaryTextBrush}"
+                                               StrokeThickness="1.5"
+                                               Fill="Transparent" />
+                                    <Rectangle Canvas.Left="5"
+                                               Canvas.Top="9"
+                                               Width="9"
+                                               Height="9"
+                                               Stroke="{DynamicResource PrimaryTextBrush}"
+                                               StrokeThickness="1.5"
+                                               Fill="Transparent" />
+                                </Canvas>
+                            </Viewbox>
+                        </Grid>
+                    </Button>
+                    <Button Classes="chrome-button chrome-close"
+                            Width="46"
+                            Height="32"
                             Background="{DynamicResource DestructiveBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            CornerRadius="6"
+                            CornerRadius="4"
                             Click="OnCloseWindowClick"
                             AutomationProperties.Name="Close window">
+                        <Viewbox Width="11" Height="11">
+                            <Canvas Width="24" Height="24">
+                                <Path Stroke="{DynamicResource PrimaryTextBrush}"
+                                      StrokeThickness="1.5"
+                                      StrokeLineCap="Round"
+                                      Stretch="None"
+                                      Data="M 7,7 L 17,17 M 17,7 L 7,17" />
+                            </Canvas>
+                        </Viewbox>
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Close"
