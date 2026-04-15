@@ -17,3 +17,28 @@
 - On Windows, client diagnostics are commonly written to `%LocalAppData%/BabelPlayer/logs/babel-player.log`.
 - Per-provider language allowlists and multilingual capability tags are maintained in centralized catalog types in the codebase rather than ad hoc string checks scattered through the pipeline.
 - NVIDIA RTX Video features (VSR, RTX HDR) are gated on supported GPU hardware, display HDR state where applicable, and the GPU-accelerated video path (for example `VideoUseGpuNext`-style settings), not on a single flag alone.
+
+## Cursor Cloud specific instructions
+
+### Environment
+
+The Cloud Agent VM runs Ubuntu 24.04 (x64). .NET 10.0 SDK is installed at `$HOME/.dotnet` and added to `PATH` via `~/.bashrc`. Python 3.12 is available at `/usr/bin/python3`.
+
+### Build / Test / Lint
+
+Standard commands from `CLAUDE.md` and `README.md` work on the Linux VM:
+
+```bash
+dotnet restore Babel-Player.sln
+dotnet build Babel-Player.sln --no-restore
+dotnet test Babel-Player.sln --no-build --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation"
+python3 scripts/check-architecture.py
+python3 -m py_compile inference/main.py
+```
+
+### Known gotchas
+
+- **`dotnet test` hangs after completion**: The VSTest host process does not exit after all tests finish on Linux. Use `timeout 90 dotnet test ...` or background the process and kill it after ~30 seconds of inactivity. All test results are produced within the first ~15 seconds.
+- **Pre-existing test failures**: Several tests fail on `main` independent of environment: Qwen batch endpoint mock tests, timing-sensitive pipeline streaming tests (`PipelineStageProgressTests`), a settings serialization test, and a `ContainerizedServiceProbeTests` cache test. These are not caused by the Linux environment.
+- **No GUI on Linux**: This is a Windows desktop app (Avalonia + libmpv). The app cannot be launched graphically on the Cloud Agent VM. Build, test, and lint verification are the appropriate scope for CI-equivalent validation.
+- **Native binaries not needed for tests**: `libmpv-2.dll` and `uv.exe` are Windows-only and fetched via `scripts/fetch-win-native-deps.ps1`. They are not needed for building or running the core test suite on Linux.
