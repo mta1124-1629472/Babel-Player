@@ -23,6 +23,7 @@ WORKDIR /app
 
 COPY gpu-requirements.txt gpu-constraints.txt ./
 RUN pip install --no-cache-dir \
+    --retries 5 \
     -c gpu-constraints.txt \
     -r gpu-requirements.txt
 
