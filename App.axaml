@@ -89,6 +89,18 @@
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <ScaleTransform ScaleX="1" ScaleY="1" />
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="ScaleTransform.ScaleX" Duration="0:0:0.12" />
+                    <DoubleTransition Property="ScaleTransform.ScaleY" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
         </Style>
         <Style Selector="Button.control-pill /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
@@ -96,8 +108,16 @@
         <Style Selector="Button.control-pill:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PillHoverBackgroundBrush}" />
         </Style>
+        <Style Selector="Button.control-pill:pointerover">
+            <Setter Property="ScaleTransform.ScaleX" Value="1.04" />
+            <Setter Property="ScaleTransform.ScaleY" Value="1.04" />
+        </Style>
         <Style Selector="Button.control-pill:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PillPressedBackgroundBrush}" />
+        </Style>
+        <Style Selector="Button.control-pill:pressed">
+            <Setter Property="ScaleTransform.ScaleX" Value="0.98" />
+            <Setter Property="ScaleTransform.ScaleY" Value="0.98" />
         </Style>
         <Style Selector="Button.control-pill.active">
             <Setter Property="Foreground" Value="{DynamicResource PillActiveForegroundBrush}" />
@@ -111,6 +131,28 @@
         </Style>
         <Style Selector="Button.control-pill.active:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PillActivePressedBackgroundBrush}" />
+        </Style>
+        <Style Selector="Button.chrome-button">
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <ScaleTransform ScaleX="1" ScaleY="1" />
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="ScaleTransform.ScaleX" Duration="0:0:0.10" />
+                    <DoubleTransition Property="ScaleTransform.ScaleY" Duration="0:0:0.10" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.chrome-button:pointerover">
+            <Setter Property="ScaleTransform.ScaleX" Value="1.03" />
+            <Setter Property="ScaleTransform.ScaleY" Value="1.03" />
+        </Style>
+        <Style Selector="Button.chrome-button:pressed">
+            <Setter Property="ScaleTransform.ScaleX" Value="0.97" />
+            <Setter Property="ScaleTransform.ScaleY" Value="0.97" />
         </Style>
     </Application.Styles>
 </Application>
