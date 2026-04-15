@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -18,6 +20,14 @@ public partial class SpeakerReferenceWizardWindow : Window
     public SpeakerReferenceWizardWindow()
     {
         InitializeComponent();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (DataContext is IDisposable disposable)
+            disposable.Dispose();
+
+        base.OnClosed(e);
     }
 
     protected override async void OnOpened(EventArgs e)
@@ -106,6 +116,94 @@ public partial class SpeakerReferenceWizardWindow : Window
             return;
 
         await vm.AutoPickAnotherCommand.ExecuteAsync(item);
+    }
+
+    private async void OnUsePlayheadClipClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not SpeakerReferenceWizardViewModel vm ||
+            sender is not Button { Tag: SpeakerReferenceDraftItem item })
+        {
+            return;
+        }
+
+        if (!item.ReferenceActionsEnabled)
+            return;
+
+        await vm.UsePlayheadClipAsync(item);
+    }
+
+    private async void OnJumpToSegmentClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not SpeakerReferenceWizardViewModel vm ||
+            sender is not Button { Tag: WorkflowSegmentState segment })
+        {
+            return;
+        }
+
+        await vm.JumpToSegmentAsync(segment);
+    }
+
+    private async void OnPlayReferenceClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not SpeakerReferenceWizardViewModel vm ||
+            sender is not Button { Tag: SpeakerReferenceDraftItem item })
+        {
+            return;
+        }
+
+        await vm.PlayReferencePreviewCommand.ExecuteAsync(item);
+    }
+
+    private void OnRevealReferenceClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: SpeakerReferenceDraftItem item })
+            return;
+
+        if (string.IsNullOrWhiteSpace(item.EffectiveReferencePath) || !File.Exists(item.EffectiveReferencePath))
+        {
+            item.SetInlineError("Reference file is missing on disk.");
+            return;
+        }
+
+        item.SetInlineError(string.Empty);
+        try
+        {
+            RevealFileInFileManager(item.EffectiveReferencePath);
+        }
+        catch (Exception ex)
+        {
+            item.SetInlineError($"Could not open folder: {ex.Message}");
+        }
+    }
+
+    private static void RevealFileInFileManager(string fullPath)
+    {
+        fullPath = Path.GetFullPath(fullPath);
+        if (OperatingSystem.IsWindows())
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{fullPath}\"",
+                UseShellExecute = true,
+            });
+            return;
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "/usr/bin/open",
+                Arguments = $"-R \"{fullPath}\"",
+                UseShellExecute = false,
+            });
+            return;
+        }
+
+        var dir = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(dir))
+            Process.Start(new ProcessStartInfo { FileName = "xdg-open", Arguments = dir, UseShellExecute = true });
     }
 
     private void OnUseActiveTtsVoiceClick(object? sender, RoutedEventArgs e)

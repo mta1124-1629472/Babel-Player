@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Registries;
@@ -134,6 +135,119 @@ public sealed class SpeakerReferenceWizardTests
 
         Assert.Single(filtered);
         Assert.Equal("spk_01", filtered[0].SpeakerId);
+    }
+
+    [Fact]
+    public void ListDownloadedPiperVoiceIds_ReturnsVoicesWithOnnxAndSidecarJson()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"babel-piper-list-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "en_US-test.onnx"), "x");
+            File.WriteAllText(Path.Combine(dir, "en_US-test.onnx.json"), "{}");
+            File.WriteAllText(Path.Combine(dir, "orphan.onnx"), "x");
+
+            var list = ModelDownloader.ListDownloadedPiperVoiceIds(dir);
+
+            Assert.Single(list);
+            Assert.Equal("en_US-test", list[0]);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public async Task MergeDiarizedSpeakersAsync_RewritesArtifactsAndRemapsSessionMaps()
+    {
+        using var harness = new CoordinatorHarness();
+        var coordinator = harness.CreateCoordinator();
+        coordinator.Initialize();
+
+        var dir = Path.Combine(Path.GetTempPath(), $"babel-merge-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var transcriptPath = Path.Combine(dir, "transcript.json");
+        await File.WriteAllTextAsync(
+            transcriptPath,
+            """
+            {
+              "language": "en",
+              "language_probability": 1,
+              "segments": [
+                { "start": 0, "end": 1, "text": "a", "speakerId": "spk_a" },
+                { "start": 1, "end": 2, "text": "b", "speakerId": "spk_b" }
+              ]
+            }
+            """);
+
+        var translationPath = Path.Combine(dir, "translation.json");
+        await File.WriteAllTextAsync(
+            translationPath,
+            """
+            {
+              "sourceLanguage": "en",
+              "targetLanguage": "de",
+              "segments": [
+                { "id": "s1", "start": 0, "end": 1, "text": "a", "translatedText": "a", "speakerId": "spk_a" },
+                { "id": "s2", "start": 1, "end": 2, "text": "b", "translatedText": "b", "speakerId": "spk_b" }
+              ]
+            }
+            """);
+
+        coordinator.CurrentSession = coordinator.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+            SpeakerVoiceAssignments = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["spk_a"] = "va",
+                ["spk_b"] = "vb",
+            },
+            SpeakerReferenceAudioPaths = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["spk_a"] = @"C:\ra.wav",
+                ["spk_b"] = @"C:\rb.wav",
+            },
+        };
+
+        var changed = await coordinator.MergeDiarizedSpeakersAsync("spk_b", "spk_a");
+
+        Assert.Equal(1, changed);
+
+        var transcript = await ArtifactJson.LoadTranscriptAsync(transcriptPath);
+        Assert.NotNull(transcript.Segments);
+        Assert.All(transcript.Segments, s => Assert.Equal("spk_a", s.SpeakerId));
+
+        var translation = await ArtifactJson.LoadTranslationAsync(translationPath);
+        Assert.NotNull(translation.Segments);
+        Assert.All(translation.Segments, s => Assert.Equal("spk_a", s.SpeakerId));
+
+        var voices = coordinator.GetSpeakerVoiceAssignments();
+        Assert.Equal("va", voices["spk_a"]);
+        Assert.False(voices.ContainsKey("spk_b"));
+
+        var refs = coordinator.GetSpeakerReferenceAudioPaths();
+        Assert.Equal(@"C:\ra.wav", refs["spk_a"]);
+        Assert.False(refs.ContainsKey("spk_b"));
+
+        try
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+        catch
+        {
+            // best effort
+        }
     }
 
     [Fact]

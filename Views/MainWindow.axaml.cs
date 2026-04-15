@@ -34,6 +34,7 @@ public partial class MainWindow : Window
     private long _lastControlsActivityTickMs;
     private bool _isApplyingWindowStateFromViewModel;
     private bool _isApplyingFullscreenFromWindowState;
+    private SpeakerReferenceWizardWindow? _speakerWizardWindow;
 
     public MainWindow()
     {
@@ -366,17 +367,24 @@ public partial class MainWindow : Window
         await vm.Playback.SpeakerRouting.SetReferenceAudioForSelectedSpeakerAsync(path);
     }
 
-    public async void OnReviewSpeakerReferencesClick(object? sender, RoutedEventArgs e)
+    public void OnReviewSpeakerReferencesClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm)
             return;
+
+        if (_speakerWizardWindow is { IsVisible: true })
+        {
+            _speakerWizardWindow.Activate();
+            return;
+        }
 
         var wizard = new SpeakerReferenceWizardWindow
         {
             DataContext = new SpeakerReferenceWizardViewModel(vm.Playback, vm.Coordinator),
         };
-
-        await wizard.ShowDialog(this);
+        wizard.Closed += (_, _) => _speakerWizardWindow = null;
+        _speakerWizardWindow = wizard;
+        wizard.Show(this);
     }
 
     /// <summary>

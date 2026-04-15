@@ -195,6 +195,63 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             ApplySubtitleState();
     }
 
+    /// <summary>
+    /// Selects a segment in the preview list and seeks source media. Used from the speaker setup wizard while the main window stays interactive.
+    /// </summary>
+    public async Task SelectSegmentAndSeekAsync(WorkflowSegmentState segment, bool playSource = false)
+    {
+        ArgumentNullException.ThrowIfNull(segment);
+
+        _isUpdatingActiveSegment = true;
+        try
+        {
+            SelectedSegment = segment;
+        }
+        finally
+        {
+            _isUpdatingActiveSegment = false;
+        }
+
+        _parent.SpeakerRouting.TrySelectSpeakerForSegment(segment.SpeakerId);
+
+        try
+        {
+            var player = _coordinator.SourceMediaPlayer;
+            if (player is null)
+            {
+                var ingestedPath = _coordinator.CurrentSession.IngestedMediaPath;
+                if (string.IsNullOrEmpty(ingestedPath))
+                    return;
+
+                player = _coordinator.GetOrCreateSourcePlayer();
+                player.Load(ingestedPath);
+            }
+
+            player.Seek((long)(segment.StartSeconds * 1000));
+
+            if (!playSource)
+            {
+                player.Pause();
+                IsSourcePaused = true;
+                if (IsDubModeOn)
+                    ApplyDubForSegment(null);
+            }
+            else
+            {
+                await Task.Run(player.Play);
+                IsSourcePaused = false;
+                _parent.ClearStatusErrorDetail();
+                if (IsDubModeOn && !IsSourcePaused)
+                    ApplyDubForSegment(segment);
+            }
+        }
+        catch (Exception ex)
+        {
+            _parent.StatusText = $"Seek failed: {ex.Message}";
+            _parent.SetStatusErrorDetail("Source seek failed", ex);
+        }
+    }
+
     [RelayCommand]
     public async Task RefreshSegmentsAsync(System.Collections.Generic.List<WorkflowSegmentState>? segments = null)
     {

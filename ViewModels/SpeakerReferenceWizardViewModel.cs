@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,7 +22,7 @@ public enum UseSelectedSegmentStatus
 
 public sealed record UseSelectedSegmentOutcome(UseSelectedSegmentStatus Status, string? Message = null);
 
-public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
+public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase, IDisposable
 {
     private readonly EmbeddedPlaybackViewModel _playback;
     private readonly SessionWorkflowCoordinator _coordinator;
@@ -32,6 +33,16 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
     {
         _playback = playback;
         _coordinator = coordinator;
+        _playback.PropertyChanged += OnPlaybackPropertyChanged;
+    }
+
+    private void OnPlaybackPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(EmbeddedPlaybackViewModel.TtsProvider) or nameof(EmbeddedPlaybackViewModel.TtsModelOrVoice))
+        {
+            OnPropertyChanged(nameof(ShowPiperVoicePicker));
+            RefreshPiperVoices();
+        }
     }
 
     [ObservableProperty]
@@ -62,7 +73,26 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
     [ObservableProperty]
     private bool _hasLoaded;
 
+    [ObservableProperty]
+    private ObservableCollection<string> _piperVoices = new();
+
+    [ObservableProperty]
+    private ObservableCollection<string> _speakerIdOptions = new();
+
+    [ObservableProperty]
+    private string? _mergeSourceSpeakerId;
+
+    [ObservableProperty]
+    private string? _mergeTargetSpeakerId;
+
+    /// <summary>Reference clip length when using the main preview playhead (seconds, clamped 3–15 at extract).</summary>
+    [ObservableProperty]
+    private double _playheadClipWindowSeconds = 8.0;
+
     public bool HasPendingChanges => AllDraftItems.Any(item => item.IsChanged);
+
+    public bool ShowPiperVoicePicker =>
+        string.Equals(_playback.TtsProvider, ProviderNames.Piper, StringComparison.Ordinal);
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -88,16 +118,30 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
                 var item = new SpeakerReferenceDraftItem(speakerId!, path, voice)
                 {
                     ReferenceActionsEnabled = IsCloningTts,
+                    ShowPiperVoiceRow = ShowPiperVoicePicker,
                 };
+                var segsForSpeaker = segments
+                    .Where(s => string.Equals(s.SpeakerId, speakerId, StringComparison.Ordinal))
+                    .OrderBy(s => s.StartSeconds)
+                    .ToList();
+                item.SetSourceSegments(segsForSpeaker);
                 await RefreshConfidenceAsync(item, IsCloningTts, cancellationToken);
                 item.PropertyChanged += (_, _) => OnPropertyChanged(nameof(HasPendingChanges));
                 drafts.Add(item);
             }
 
             AllDraftItems = new ObservableCollection<SpeakerReferenceDraftItem>(drafts);
+            SpeakerIdOptions = new ObservableCollection<string>(speakerIds!);
+            if (MergeSourceSpeakerId is null || !SpeakerIdOptions.Contains(MergeSourceSpeakerId))
+                MergeSourceSpeakerId = SpeakerIdOptions.FirstOrDefault();
+            if (MergeTargetSpeakerId is null || !SpeakerIdOptions.Contains(MergeTargetSpeakerId))
+                MergeTargetSpeakerId = SpeakerIdOptions.Skip(1).FirstOrDefault() ?? SpeakerIdOptions.FirstOrDefault();
+            RefreshPiperVoices();
             RecomputeCounts();
             ApplyFilter();
             HasLoaded = true;
+            OnPropertyChanged(nameof(ShowPiperVoicePicker));
+            MergeSpeakersCommand.NotifyCanExecuteChanged();
             StatusText = AllDraftItems.Count == 0
                 ? "No diarized speakers found yet."
                 : $"Loaded {AllDraftItems.Count} speakers for review.";
@@ -217,6 +261,7 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
 
     public async Task FinishAsync(CancellationToken cancellationToken = default)
     {
+        _coordinator.StopWizardAudioPreview();
         var refChanges = BuildReferencePersistencePayload(AllDraftItems);
         var voiceChanges = BuildVoicePersistencePayload(AllDraftItems);
         _coordinator.ApplySpeakerReferenceAudioPathChanges(refChanges);
@@ -232,8 +277,128 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
 
     public void Cancel()
     {
+        _coordinator.StopWizardAudioPreview();
         StatusText = "Speaker reference draft changes were discarded.";
     }
+
+    public void RefreshPiperVoices()
+    {
+        var list = ModelDownloader.ListDownloadedPiperVoiceIds(_coordinator.CurrentSettings.PiperModelDir);
+        PiperVoices = new ObservableCollection<string>(list);
+    }
+
+    [RelayCommand]
+    private async Task PlayReferencePreviewAsync(SpeakerReferenceDraftItem? item)
+    {
+        if (item is null || string.IsNullOrWhiteSpace(item.EffectiveReferencePath))
+            return;
+        if (!File.Exists(item.EffectiveReferencePath))
+        {
+            item.SetInlineError("Reference file is missing on disk.");
+            return;
+        }
+
+        item.SetInlineError(string.Empty);
+        await _coordinator.PlayWizardAudioPreviewAsync(item.EffectiveReferencePath);
+        StatusText = $"Playing reference clip for {item.SpeakerId}.";
+    }
+
+    [RelayCommand]
+    private void StopReferencePreview()
+    {
+        _coordinator.StopWizardAudioPreview();
+        StatusText = "Stopped audio preview.";
+    }
+
+    public async Task JumpToSegmentAsync(WorkflowSegmentState segment, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(segment);
+        await _playback.Preview.SelectSegmentAndSeekAsync(segment, playSource: false);
+        StatusText = $"Preview jumped to {segment.SegmentId} ({segment.StartSeconds:F1}s).";
+    }
+
+    public async Task<UseSelectedSegmentOutcome> UsePlayheadClipAsync(
+        SpeakerReferenceDraftItem item,
+        CancellationToken cancellationToken = default)
+    {
+        if (item is null)
+            return new UseSelectedSegmentOutcome(UseSelectedSegmentStatus.Failed, "Invalid item.");
+
+        var duration = Math.Clamp(PlayheadClipWindowSeconds, 3.0, 15.0);
+        var center = _playback.Preview.SourcePositionMs / 1000.0;
+        var half = duration / 2.0;
+        var start = Math.Max(0, center - half);
+        var mediaDurationSec = _playback.Preview.SourceDurationMs / 1000.0;
+        if (mediaDurationSec > duration + 0.05)
+        {
+            var maxStart = Math.Max(0, mediaDurationSec - duration);
+            if (start > maxStart)
+                start = maxStart;
+        }
+
+        try
+        {
+            var extractedPath = await _coordinator.ExtractSpeakerReferenceFromSourceAsync(
+                item.SpeakerId,
+                start,
+                duration,
+                cancellationToken);
+
+            item.SetDraftReferencePath(extractedPath, "Use playhead clip");
+            await RefreshConfidenceAsync(item, IsCloningTts, cancellationToken);
+            RecomputeCounts();
+            ApplyFilter();
+            StatusText = $"Extracted {duration:F1}s reference from playhead for {item.SpeakerId}.";
+            return new UseSelectedSegmentOutcome(UseSelectedSegmentStatus.Applied);
+        }
+        catch (Exception ex)
+        {
+            item.SetInlineError(ex.Message);
+            return new UseSelectedSegmentOutcome(UseSelectedSegmentStatus.Failed, ex.Message);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanMergeSpeakers))]
+    private async Task MergeSpeakersAsync()
+    {
+        if (string.IsNullOrWhiteSpace(MergeSourceSpeakerId) || string.IsNullOrWhiteSpace(MergeTargetSpeakerId))
+            return;
+        if (string.Equals(MergeSourceSpeakerId, MergeTargetSpeakerId, StringComparison.Ordinal))
+            return;
+
+        IsBusy = true;
+        try
+        {
+            _coordinator.StopWizardAudioPreview();
+            var n = await _coordinator.MergeDiarizedSpeakersAsync(
+                MergeSourceSpeakerId,
+                MergeTargetSpeakerId);
+
+            await LoadAsync();
+            await _playback.Preview.RefreshSegmentsAsync();
+            StatusText = n == 0
+                ? $"Merged {MergeSourceSpeakerId} → {MergeTargetSpeakerId} (session maps updated; no transcript segments matched source id)."
+                : $"Merged {MergeSourceSpeakerId} → {MergeTargetSpeakerId} ({n} transcript segments relabeled).";
+            _playback.StatusText = StatusText;
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Merge failed: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private bool CanMergeSpeakers() =>
+        !string.IsNullOrWhiteSpace(MergeSourceSpeakerId)
+        && !string.IsNullOrWhiteSpace(MergeTargetSpeakerId)
+        && !string.Equals(MergeSourceSpeakerId, MergeTargetSpeakerId, StringComparison.Ordinal);
+
+    partial void OnMergeSourceSpeakerIdChanged(string? value) => MergeSpeakersCommand.NotifyCanExecuteChanged();
+
+    partial void OnMergeTargetSpeakerIdChanged(string? value) => MergeSpeakersCommand.NotifyCanExecuteChanged();
 
     internal static Dictionary<string, string?> BuildReferencePersistencePayload(IEnumerable<SpeakerReferenceDraftItem> draftItems)
     {
@@ -339,5 +504,10 @@ public sealed partial class SpeakerReferenceWizardViewModel : ViewModelBase
         if (!showLowConfidenceOnly)
             return source;
         return source.Where(item => item.IsLowConfidence).ToList();
+    }
+
+    public void Dispose()
+    {
+        _playback.PropertyChanged -= OnPlaybackPropertyChanged;
     }
 }

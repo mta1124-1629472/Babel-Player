@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Babel.Player.Models;
@@ -24,6 +25,9 @@ public sealed partial class SpeakerReferenceDraftItem : ObservableObject
     }
 
     public string SpeakerId { get; }
+
+    /// <summary>Workflow segments attributed to this speaker (for preview jump).</summary>
+    public IReadOnlyList<WorkflowSegmentState> SourceSegments { get; private set; } = Array.Empty<WorkflowSegmentState>();
 
     public string AutoReferencePath { get; }
 
@@ -51,6 +55,10 @@ public sealed partial class SpeakerReferenceDraftItem : ObservableObject
 
     [ObservableProperty]
     private bool _referenceActionsEnabled = true;
+
+    /// <summary>Set by the speaker wizard when TTS provider is Piper (shows per-row voice picker).</summary>
+    [ObservableProperty]
+    private bool _showPiperVoiceRow;
 
     [ObservableProperty]
     private string _lastActionLabel = "Auto";
@@ -101,6 +109,9 @@ public sealed partial class SpeakerReferenceDraftItem : ObservableObject
     {
         InlineError = string.IsNullOrWhiteSpace(message) ? string.Empty : message.Trim();
     }
+
+    public void SetSourceSegments(IReadOnlyList<WorkflowSegmentState> segments) =>
+        SourceSegments = segments ?? Array.Empty<WorkflowSegmentState>();
 
     private static string? NormalizePath(string? path) =>
         string.IsNullOrWhiteSpace(path) ? null : path.Trim();
