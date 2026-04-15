@@ -9,3 +9,4 @@
 - The codebase actively uses both managed CPU and managed GPU inference flows for diarization/transcription debugging.
 - The repository no longer uses Git LFS; LFS-related hook assumptions are outdated here.
 - Docker support is maintained as a power-user inference-host option; containerizing the desktop app is not the primary runtime model.
+- Forward-facing product naming uses `Babel Player` (space, no dash); dev builds append `[DEV]`.

@@ -153,6 +153,11 @@ public partial class MainWindow : Window
         NotifyControlsActivityDebounced();
     }
 
+    private void OnWindowSurfacePointerMoved(object? sender, PointerEventArgs e)
+    {
+        NotifyControlsActivityDebounced();
+    }
+
     private void OnVideoNativePointerActivity(object? sender, EventArgs e)
     {
         NotifyControlsActivityDebounced();
