@@ -952,18 +952,14 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
-    public async Task RunDiarizationAsync_WhenSpeakerBoundsAreInvalid_ThrowsBeforeProviderExecution()
+    public async Task RunDiarizationAsync_IgnoresLegacySpeakerBoundsAndUsesAutoDetection()
     {
-        var providerInvoked = false;
         var fakeProvider = new FakeDiarizationProvider(_ =>
-        {
-            providerInvoked = true;
-            return new DiarizationResult(
+            new DiarizationResult(
                 true,
                 [new DiarizedSegment(0.0, 1.0, "spk_00")],
                 1,
-                null);
-        });
+                null));
         var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
         var settings = CreateMatchingSettings();
         settings.DiarizationProvider = ProviderNames.NemoLocal;
@@ -983,11 +979,11 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             TranscriptPath = transcriptPath,
         };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => coord.RunDiarizationAsync());
+        await coord.RunDiarizationAsync();
 
-        Assert.Contains("min speakers", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("max speakers", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(providerInvoked);
+        Assert.NotNull(fakeProvider.LastRequest);
+        Assert.Null(fakeProvider.LastRequest!.MinSpeakers);
+        Assert.Null(fakeProvider.LastRequest.MaxSpeakers);
     }
 
     [Fact]
