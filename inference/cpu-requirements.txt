@@ -27,6 +27,9 @@ openai-whisper
 peft
 scikit-learn
 
+# Vocal separation
+audio-separator>=0.24.0
+
 # Shared ML
 torch
 torchaudio
