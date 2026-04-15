@@ -772,35 +772,11 @@ public sealed partial class SessionWorkflowCoordinator
         return null;
     }
 
-    public void SetMultiSpeakerEnabled(bool enabled)
-    {
-        if (CurrentSession.MultiSpeakerEnabled == enabled)
-            return;
-
-        CurrentSession = CurrentSession with { MultiSpeakerEnabled = enabled };
-        SaveCurrentSession();
-    }
-
-    public void SetDefaultTtsVoiceFallback(string? voice)
-    {
-        var normalized = string.IsNullOrWhiteSpace(voice) ? null : voice.Trim();
-        if (string.Equals(CurrentSession.DefaultTtsVoiceFallback, normalized, StringComparison.Ordinal))
-            return;
-
-        CurrentSession = CurrentSession with { DefaultTtsVoiceFallback = normalized };
-        SaveCurrentSession();
-    }
-
     private string ResolveVoiceForSegment(TranslationSegmentArtifact segment, string defaultVoice)
     {
-        if (!CurrentSession.MultiSpeakerEnabled)
-            return defaultVoice;
-
         var speakerId = segment.SpeakerId;
         if (string.IsNullOrWhiteSpace(speakerId))
-            return !string.IsNullOrWhiteSpace(CurrentSession.DefaultTtsVoiceFallback)
-                ? CurrentSession.DefaultTtsVoiceFallback
-                : defaultVoice;
+            return defaultVoice;
 
         if (CurrentSession.SpeakerVoiceAssignments is not null &&
             CurrentSession.SpeakerVoiceAssignments.TryGetValue(speakerId, out var mappedVoice) &&
@@ -809,9 +785,7 @@ public sealed partial class SessionWorkflowCoordinator
             return mappedVoice;
         }
 
-        return !string.IsNullOrWhiteSpace(CurrentSession.DefaultTtsVoiceFallback)
-            ? CurrentSession.DefaultTtsVoiceFallback
-            : defaultVoice;
+        return defaultVoice;
     }
 
     private string? ResolveReferenceAudioForSegment(TranslationSegmentArtifact segment)
@@ -819,22 +793,11 @@ public sealed partial class SessionWorkflowCoordinator
         if (CurrentSession.SpeakerReferenceAudioPaths is null)
             return null;
 
-        if (CurrentSession.MultiSpeakerEnabled)
-        {
-            var speakerId = segment.SpeakerId;
-            if (!string.IsNullOrWhiteSpace(speakerId) &&
-                CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var speakerPath) &&
-                !string.IsNullOrWhiteSpace(speakerPath))
-                return speakerPath;
-
-            // No per-speaker reference — fall back to the provider's default key so the
-            // provider's auto-extract fallback (or a manually placed default) can still fire.
-            var fallbackKey = QwenReferenceKeys.SingleSpeakerDefault;
-            return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(fallbackKey, out var fallbackPath) &&
-                   !string.IsNullOrWhiteSpace(fallbackPath)
-                ? fallbackPath
-                : null;
-        }
+        var speakerId = segment.SpeakerId;
+        if (!string.IsNullOrWhiteSpace(speakerId) &&
+            CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var speakerPath) &&
+            !string.IsNullOrWhiteSpace(speakerPath))
+            return speakerPath;
 
         var defaultKey = QwenReferenceKeys.SingleSpeakerDefault;
         return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(defaultKey, out var defaultPath) &&
@@ -1034,6 +997,10 @@ public sealed partial class SessionWorkflowCoordinator
     public void Dispose()
     {
         RequestShutdown();
+        if (_containerizedProbe is not null)
+            _containerizedProbe.ProbeResultUpdated -= OnProbeResultUpdated;
+        _readinessSignals.OnCompleted();
+        _readinessSignals.Dispose();
         FlushPendingSave();
         WaitForOwnedBackgroundOperations(TimeSpan.FromSeconds(5));
 

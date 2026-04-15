@@ -1457,6 +1457,5 @@ public sealed partial class SessionWorkflowCoordinator
     }
 
     private bool ShouldRunDiarization() =>
-        CurrentSession.MultiSpeakerEnabled
-        && !string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider);
+        !string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider);
 }

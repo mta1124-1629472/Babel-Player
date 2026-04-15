@@ -74,11 +74,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
         _parent.IsSynchronizingPipelineSettings = true;
         try
         {
-            if (!_coordinator.CurrentSession.MultiSpeakerEnabled)
-                _coordinator.SetMultiSpeakerEnabled(true);
-            if (!string.IsNullOrWhiteSpace(_coordinator.CurrentSession.DefaultTtsVoiceFallback))
-                _coordinator.SetDefaultTtsVoiceFallback(null);
-
             RebuildDiarizationProviderOptions();
             DiarizationProvider = NormalizeDiarizationProviderSelection(_coordinator.CurrentSettings.DiarizationProvider);
             DiarizationMinSpeakers = null;

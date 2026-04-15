@@ -28,6 +28,7 @@ public partial class EmbeddedPlaybackViewModel
     private CancellationTokenSource? _providerHealthRefreshCts;
     private int _providerHealthRefreshVersion;
     private ProviderDiagnosticsSelectionSnapshot? _lastQueuedProviderHealthSnapshot;
+    private DateTimeOffset _lastProviderHealthRefreshAtUtc = DateTimeOffset.MinValue;
     private IReadOnlyList<ModelOptionViewModel> _availableTranscriptionModels = [];
     private IReadOnlyList<ModelOptionViewModel> _availableTranslationModels = [];
     private IReadOnlyList<ModelOptionViewModel> _availableTtsOptions = [];
@@ -625,7 +626,8 @@ public partial class EmbeddedPlaybackViewModel
 
     private void QueueProviderHealthRefresh(ProviderDiagnosticsSelectionSnapshot snapshot, bool force = false)
     {
-        if (!force && snapshot == _lastQueuedProviderHealthSnapshot)
+        var nowUtc = DateTimeOffset.UtcNow;
+        if (!ShouldQueueProviderHealthRefresh(snapshot, force, nowUtc))
             return;
 
         _lastQueuedProviderHealthSnapshot = snapshot;
@@ -718,6 +720,7 @@ public partial class EmbeddedPlaybackViewModel
             _providerHealthSnapshots.Clear();
             foreach (var snapshot in health)
                 _providerHealthSnapshots.Add(snapshot);
+            _lastProviderHealthRefreshAtUtc = DateTimeOffset.UtcNow;
 
             var transcription = health.FirstOrDefault(entry => string.Equals(entry.Section, "Transcription", StringComparison.Ordinal));
             var translation = health.FirstOrDefault(entry => string.Equals(entry.Section, "Translation", StringComparison.Ordinal));
@@ -1121,6 +1124,33 @@ public partial class EmbeddedPlaybackViewModel
         health.Any(snapshot => IsStartingStatus(snapshot.StatusLine));
 
     private static bool IsStartingStatus(string status) => status.StartsWith('⏳');
+    private bool HasTransientProviderHealthState() =>
+        _providerHealthSnapshots.Any(snapshot =>
+            snapshot.IsStale
+            || IsStartingStatus(snapshot.StatusLine)
+            || snapshot.HostState.Contains("checking", StringComparison.OrdinalIgnoreCase));
+
+    internal bool ShouldQueueProviderHealthRefresh(
+        ProviderDiagnosticsSelectionSnapshot snapshot,
+        bool force,
+        DateTimeOffset nowUtc)
+    {
+        if (force || snapshot != _lastQueuedProviderHealthSnapshot)
+            return true;
+
+        var ttl = HasTransientProviderHealthState()
+            ? TimeSpan.FromSeconds(3)
+            : TimeSpan.FromSeconds(8);
+        return nowUtc - _lastProviderHealthRefreshAtUtc >= ttl;
+    }
+
+    internal void RecordProviderHealthRefreshForTests(
+        ProviderDiagnosticsSelectionSnapshot snapshot,
+        DateTimeOffset refreshedAtUtc)
+    {
+        _lastQueuedProviderHealthSnapshot = snapshot;
+        _lastProviderHealthRefreshAtUtc = refreshedAtUtc;
+    }
 
     internal string ResolveDiarizationProviderLabel()
     {

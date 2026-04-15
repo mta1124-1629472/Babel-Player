@@ -65,6 +65,20 @@ public sealed partial class SessionWorkflowCoordinator
     public void NotifySettingsModified()
     {
         RefreshVideoEnhancementDiagnostics();
+        EmitReadinessSignal(
+            ReadinessSignalKind.SettingsChanged,
+            summary: "Settings updated.",
+            source: nameof(NotifySettingsModified),
+            forceRefresh: true);
         SettingsModified?.Invoke();
+    }
+
+    public void RequestReadinessRefresh(string reason = "Manual refresh")
+    {
+        EmitReadinessSignal(
+            ReadinessSignalKind.DiagnosticsRefreshRequested,
+            summary: reason,
+            source: nameof(RequestReadinessRefresh),
+            forceRefresh: true);
     }
 }
