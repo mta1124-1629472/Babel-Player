@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Services;
@@ -206,5 +207,45 @@ public sealed class FfmpegAudioProcessingServiceTests : IDisposable
         }
 
         Assert.True(Directory.Exists(nestedOutputDir));
+    }
+
+    // ── BuildAtempoFilter ───────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(1.25, "atempo=1.250000")]
+    [InlineData(2.5, "atempo=1.250000,atempo=2.000000")]
+    [InlineData(4.0, "atempo=2.000000,atempo=2.000000")]
+    [InlineData(0.4, "atempo=0.800000,atempo=0.500000")]
+    [InlineData(0.25, "atempo=0.500000,atempo=0.500000")]
+    public void BuildAtempoFilter_ProducesExpectedChain(double tempo, string expectedFilter)
+    {
+        var filter = InvokeBuildAtempoFilter(tempo);
+        Assert.Equal(expectedFilter, filter);
+    }
+
+    [Fact]
+    public void BuildAtempoFilter_NonPositiveTempo_ThrowsArgumentOutOfRangeException()
+    {
+        var method = typeof(FfmpegAudioProcessingService).GetMethod(
+            "BuildAtempoFilter",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var ex = Assert.Throws<TargetInvocationException>(() => method!.Invoke(null, [0.0]));
+        Assert.IsType<ArgumentOutOfRangeException>(ex.InnerException);
+    }
+
+    private static string InvokeBuildAtempoFilter(double tempo)
+    {
+        var method = typeof(FfmpegAudioProcessingService).GetMethod(
+            "BuildAtempoFilter",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(null, [tempo]);
+        Assert.IsType<string>(result);
+        return (string)result!;
     }
 }

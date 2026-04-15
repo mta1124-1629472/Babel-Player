@@ -373,7 +373,7 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        // atempo is clamped to [0.5, 2.0]; chain two filters for extreme ratios.
+        // atempo accepts [0.5, 2.0] per stage; build a chain for out-of-range tempos.
         string atempoFilter = BuildAtempoFilter(tempo);
 
         var psi = new ProcessStartInfo
@@ -426,10 +426,43 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
     /// </summary>
     private static string BuildAtempoFilter(double tempo)
     {
-        // Clamp to practical safe bounds (our callers already guard against extremes,
-        // but be defensive here anyway).
-        tempo = Math.Clamp(tempo, 0.5, 2.0);
-        return $"atempo={tempo.ToString("F6", System.Globalization.CultureInfo.InvariantCulture)}";
+        if (double.IsNaN(tempo) || double.IsInfinity(tempo) || tempo <= 0)
+            throw new ArgumentOutOfRangeException(nameof(tempo), "Tempo must be a finite positive value.");
+
+        const double minAtempo = 0.5;
+        const double maxAtempo = 2.0;
+        const double epsilon = 1e-12;
+
+        var factors = new List<double>();
+        var remaining = tempo;
+        var maxFactorCount = 0;
+        var minFactorCount = 0;
+
+        while (remaining > maxAtempo + epsilon)
+        {
+            remaining /= maxAtempo;
+            maxFactorCount++;
+        }
+
+        while (remaining < minAtempo - epsilon)
+        {
+            remaining /= minAtempo;
+            minFactorCount++;
+        }
+
+        // Avoid an unnecessary atempo=1.000000 stage for exact power-of-two decompositions.
+        if (Math.Abs(remaining - 1.0) > epsilon || (maxFactorCount == 0 && minFactorCount == 0))
+            factors.Add(remaining);
+
+        for (var i = 0; i < maxFactorCount; i++)
+            factors.Add(maxAtempo);
+
+        for (var i = 0; i < minFactorCount; i++)
+            factors.Add(minAtempo);
+
+        return string.Join(
+            ",",
+            factors.Select(value => $"atempo={value.ToString("F6", CultureInfo.InvariantCulture)}"));
     }
 
     private static string EscapeConcatListPath(string path) =>
