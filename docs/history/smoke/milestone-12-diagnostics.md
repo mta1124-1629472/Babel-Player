@@ -21,7 +21,7 @@ The system now provides a live visual indicator of the inference server's health
 * [x] **Build & Lint**: Solution builds and passes architecture linter.
 
 ## What Was Not Verified
-* [ ] Actual live server transition on-screen (not possible in headless environment, but logic and polling confirmed via code).
+* [x] Actual live server transition on-screen (manually confirmed 2026-04-15).
 
 ## Evidence
 Build succeeded with new interface implementations. Polling logic uses established `ContainerizedServiceProbe` cached background state to avoid UI lag.

@@ -9,7 +9,7 @@
 - [x] `dotnet test Babel-Player.sln`
 - [x] `python scripts/check-architecture.py`
 - [x] `python -m py_compile inference/main.py`
-- [ ] Manual app-shell smoke of coordinator construction through desktop startup
+- [x] Manual app-shell smoke of coordinator construction through desktop startup
 
 # What Was Verified
 - `SessionWorkflowCoordinator` now takes a required `CoordinatorCoreServices` bundle for `SessionSnapshotStore`, `AppLog`, and `AppSettings`.
@@ -17,9 +17,9 @@
 - `DependencyLocator` now constructs `CoordinatorCoreServices`, so the canonical composition root matches the refactored coordinator surface.
 - All test helpers and direct call sites construct the coordinator through the new required-services bundle.
 - The engineering plan now records 6.4 as complete and moves the next remaining action to ViewModel decomposition.
+- Manual confirmation was provided on 2026-04-15 that desktop startup constructs the coordinator cleanly through the full app shell.
 
 # What Was Not Verified
-- Manual desktop startup confirming the Avalonia app constructs the coordinator cleanly from the full app shell after the signature change.
 - Interactive media load / restore flow from the desktop UI after the constructor refactor.
 
 # Evidence
@@ -29,7 +29,7 @@
 - `python -m py_compile inference/main.py` completed successfully.
 
 # Notes
-- This smoke note is `partial` because no manual desktop session was run from this environment after changing the composition path.
+- This smoke note remains `partial` only for broader interactive load/restore flow follow-up; startup construction is now manually confirmed.
 - An intermediate compile error in `SessionWorkflowTests` during the signature migration was fixed before the final verification run.
 
 # Conclusion
@@ -37,5 +37,4 @@
 - Tier 1 is closed for code purposes; the next remaining implementation action is 6.1b ViewModel decomposition.
 
 # Deferred Items
-- Run a manual app-shell startup smoke to confirm coordinator construction and session initialization through the desktop UI.
 - Begin Tier 1 remaining work by moving playback, subtitle, and dub-mode logic out of `EmbeddedPlaybackViewModel`.
