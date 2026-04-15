@@ -809,57 +809,44 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
-    public async Task GenerateTtsAsync_QwenProvider_UsesBatchEndpointAndPersistsSegmentOutputs()
+    public async Task GenerateTtsAsync_QwenProvider_UsesPerSegmentEndpointAndPersistsSegmentOutputs()
     {
         var registerCalls = 0;
         var batchCalls = 0;
         var downloadCalls = 0;
-        var handler = new StubHttpMessageHandler((request, _) =>
+        var handler = new StubHttpMessageHandler(async (request, _) =>
         {
             var path = request.RequestUri?.AbsolutePath;
             if (request.Method == HttpMethod.Post && path == "/tts/qwen/references")
             {
                 registerCalls++;
-                return Task.FromResult(JsonResponse("""{"success":true,"reference_id":"ref-qwen-default"}"""));
+                return JsonResponse("""{"success":true,"reference_id":"ref-qwen-default"}""");
             }
 
-            if (request.Method == HttpMethod.Post && path == "/tts/qwen/batch")
+            if (request.Method == HttpMethod.Post && path == "/tts/qwen/segment")
             {
                 batchCalls++;
-                return Task.FromResult(JsonResponse("""
+                var content = await request.Content!.ReadAsStringAsync();
+                if (content.Contains("name=\"text\"\r\n\r\nhello"))
                 {
-                  "success": true,
-                  "segments": [
-                    {
-                      "segment_id": "segment_0.0",
-                      "voice": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-                      "audio_path": "/tmp/qwen-segment-0.mp3",
-                      "file_size_bytes": 3
-                    },
-                    {
-                      "segment_id": "segment_2.0",
-                      "voice": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-                      "audio_path": "/tmp/qwen-segment-1.mp3",
-                      "file_size_bytes": 3
-                    }
-                  ]
+                    return JsonResponse("""{"success":true,"audio_path":"/tmp/qwen-segment-0.mp3","file_size_bytes":3}""");
                 }
-                """));
+                return JsonResponse("""{"success":true,"audio_path":"/tmp/qwen-segment-1.mp3","file_size_bytes":3}""");
             }
 
             if (request.Method == HttpMethod.Get && path is not null && path.StartsWith("/tts/audio/", StringComparison.Ordinal))
             {
                 downloadCalls++;
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent([0x10, 0x20, 0x30]),
-                });
+                };
             }
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+            return new HttpResponseMessage(HttpStatusCode.NotFound)
             {
                 Content = new StringContent($"Unhandled request: {request.Method} {path}", Encoding.UTF8, "text/plain"),
-            });
+            };
         });
 
         var qwenProvider = new QwenContainerTtsProvider(
@@ -916,7 +903,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         await coord.GenerateTtsAsync();
 
         Assert.Equal(1, registerCalls);
-        Assert.Equal(1, batchCalls);
+        Assert.Equal(2, batchCalls);
         Assert.Equal(2, downloadCalls);
         Assert.Equal(SessionWorkflowStage.TtsGenerated, coord.CurrentSession.Stage);
         Assert.NotNull(coord.CurrentSession.TtsPath);
