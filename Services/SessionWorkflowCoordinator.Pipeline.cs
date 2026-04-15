@@ -118,8 +118,12 @@ public sealed partial class SessionWorkflowCoordinator
         if (!File.Exists(CurrentSession.TranscriptPath))
             throw new FileNotFoundException($"Transcript file not found: {CurrentSession.TranscriptPath}");
 
-        var lang = targetLanguage ?? CurrentSettings.TargetLanguage;
-        var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
+        var rawLang = targetLanguage ?? CurrentSettings.TargetLanguage;
+        var lang = NormalizePipelineLanguage(rawLang, CurrentSettings.TargetLanguage);
+        var rawSrc = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
+        var src = string.Equals(rawSrc, "auto", StringComparison.OrdinalIgnoreCase)
+            ? "auto"
+            : NormalizePipelineLanguage(rawSrc, rawSrc);
 
         ReportStage(
             stageContext,
@@ -225,7 +229,9 @@ public sealed partial class SessionWorkflowCoordinator
 
         var fileName = Path.GetFileNameWithoutExtension(CurrentSession.TranslationPath);
         var ttsPath = Path.Combine(ttsDir, $"{fileName}_{v}.mp3");
-        var ttsLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
+        var ttsLanguage = NormalizePipelineLanguage(
+            CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage,
+            CurrentSettings.TargetLanguage);
         var segmentsDir = Path.Combine(ttsDir, "segments", Path.GetFileNameWithoutExtension(CurrentSession.TranslationPath!));
         Directory.CreateDirectory(segmentsDir);
 
@@ -725,11 +731,13 @@ public sealed partial class SessionWorkflowCoordinator
 
         var transcriptPath = BuildTranscriptArtifactPath();
         var transcriptPartialPath = TranscriptArtifactStreamingWriter.GetPartialPath(transcriptPath);
-        var targetLanguage = CurrentSettings.TargetLanguage;
+        var targetLanguage = NormalizePipelineLanguage(CurrentSettings.TargetLanguage, CurrentSettings.TargetLanguage);
         var translationPath = BuildTranslationArtifactPath(transcriptPath, targetLanguage);
         var translationPartialPath = TranscriptArtifactStreamingWriter.GetPartialPath(translationPath);
         var voice = CurrentSettings.TtsVoice;
-        var ttsLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
+        var ttsLanguage = NormalizePipelineLanguage(
+            CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage,
+            CurrentSettings.TargetLanguage);
         var (ttsPath, segmentsDir) = BuildTtsArtifacts(translationPath, voice);
 
         var transcriptArtifactWriter = new TranscriptArtifactStreamingWriter(
@@ -897,11 +905,13 @@ public sealed partial class SessionWorkflowCoordinator
             }
         }, cancellationToken);
 
-        var targetLanguage = CurrentSettings.TargetLanguage;
+        var targetLanguage = NormalizePipelineLanguage(CurrentSettings.TargetLanguage, CurrentSettings.TargetLanguage);
         var translationPath = BuildTranslationArtifactPath(CurrentSession.TranscriptPath, targetLanguage);
         var translationPartialPath = TranscriptArtifactStreamingWriter.GetPartialPath(translationPath);
         var voice = CurrentSettings.TtsVoice;
-        var ttsLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
+        var ttsLanguage = NormalizePipelineLanguage(
+            CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage,
+            CurrentSettings.TargetLanguage);
         var (ttsPath, segmentsDir) = BuildTtsArtifacts(translationPath, voice);
 
         var translationDownloadProgress = CreateStageDownloadProgress(
@@ -1460,4 +1470,12 @@ public sealed partial class SessionWorkflowCoordinator
 
     private bool ShouldRunDiarization() =>
         !string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider);
+
+    private static string NormalizePipelineLanguage(string? raw, string nonNormalizedFallback)
+    {
+        var n = LanguageCode.NormalizeForPersistence(raw);
+        if (n is not null) return n;
+        if (string.IsNullOrWhiteSpace(raw)) return nonNormalizedFallback;
+        return raw.Trim();
+    }
 }

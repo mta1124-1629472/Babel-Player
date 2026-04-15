@@ -1368,6 +1368,60 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
+    public void ApplyPipelineSettings_TargetLanguageCasingOnly_DoesNotApply()
+    {
+        var settings = CreateMatchingSettings();
+        settings.TargetLanguage = "en";
+        var coord = CreateCoordinator(settings);
+        coord.Initialize();
+
+        var result = coord.ApplyPipelineSettings(new PipelineSettingsSelection(
+            settings.TranscriptionProfile,
+            settings.TranscriptionProvider,
+            settings.TranscriptionModel,
+            settings.TranslationProfile,
+            settings.TranslationProvider,
+            settings.TranslationModel,
+            settings.TtsProfile,
+            settings.TtsProvider,
+            settings.TtsVoice,
+            "EN"));
+
+        Assert.False(result.SettingsChanged);
+        Assert.Equal("en", coord.CurrentSettings.TargetLanguage);
+    }
+
+    [Fact]
+    public void ComputeInvalidation_TargetLanguageDiffersOnlyByCasing_ReturnsNoneAtTranslatedStage()
+    {
+        var translationPath = Path.Combine(_ctx.Dir, "translation.json");
+        File.WriteAllText(translationPath, "{\"segments\":[]}");
+
+        var now = DateTimeOffset.UtcNow;
+        var settings = CreateMatchingSettings();
+        settings.TargetLanguage = "en";
+
+        var snapshot = new WorkflowSessionSnapshot(
+            Guid.NewGuid(),
+            SessionWorkflowStage.Translated,
+            now,
+            now,
+            "ok",
+            TranslationPath: translationPath,
+            TargetLanguage: "EN",
+            TranscriptionRuntime: InferenceRuntime.Local,
+            TranscriptionProvider: settings.TranscriptionProvider,
+            TranscriptionModel: settings.TranscriptionModel,
+            TranslationRuntime: InferenceRuntime.Local,
+            TranslationProvider: settings.TranslationProvider,
+            TranslationModel: settings.TranslationModel,
+            TtsRuntime: InferenceRuntime.Local,
+            TtsProvider: settings.TtsProvider);
+
+        Assert.Equal(PipelineInvalidation.None, SessionSnapshotSemantics.ComputeInvalidation(snapshot, settings));
+    }
+
+    [Fact]
     public void ApplyPipelineSettings_ContainerizedRuntime_RequestsContainerStart()
     {
         var manager = new FakeContainerizedInferenceManager();

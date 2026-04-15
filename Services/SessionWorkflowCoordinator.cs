@@ -653,7 +653,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         CurrentSettings.TtsProvider = selection.TtsProvider;
         CurrentSettings.TtsVoice = selection.TtsVoice;
         if (!string.IsNullOrWhiteSpace(selection.TargetLanguage))
-            CurrentSettings.TargetLanguage = LanguageCode.NormalizeForPersistence(selection.TargetLanguage);
+        {
+            CurrentSettings.TargetLanguage = LanguageCode.NormalizeForPersistence(selection.TargetLanguage)
+                ?? selection.TargetLanguage.Trim();
+        }
 
         CurrentSettings.TranscriptionLanguageHint =
             SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(selection.TranscriptionLanguageHint);
