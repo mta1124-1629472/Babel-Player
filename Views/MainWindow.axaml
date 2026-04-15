@@ -1294,6 +1294,11 @@
                                     CommandParameter="{x:Null}"
                                     ToolTip.Tip="Use session default timing mode"/>
                             <Button Classes="segmentTimingButton"
+                                    Content="Off"
+                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                    CommandParameter="{x:Static models:SegmentTimingMode.Off}"
+                                    ToolTip.Tip="Play TTS as-is for this segment (no stretch/pause alignment)"/>
+                            <Button Classes="segmentTimingButton"
                                     Content="Stretch"
                                     Command="{Binding Inspection.SetTimingOverrideCommand}"
                                     CommandParameter="{x:Static models:SegmentTimingMode.Stretch}"

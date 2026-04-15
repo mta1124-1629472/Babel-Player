@@ -1970,7 +1970,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
 
     private SessionWorkflowCoordinator CreateCoordinatorWithSegmentPlayer(
         FakeMediaTransport segmentPlayer,
-        AppSettings? settings = null)
+        AppSettings? settings = null,
+        FakeMediaTransport? sourcePlayer = null)
     {
         var registries = new Babel.Player.Models.RegistryBundle(
             _ctx.PerSessionStore, _ctx.RecentStore,
@@ -1984,7 +1985,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             settings ?? _ctx.Settings);
         return new SessionWorkflowCoordinator(
             coreServices, registries, options,
-            segmentPlayer: segmentPlayer);
+            segmentPlayer: segmentPlayer,
+            sourcePlayer: sourcePlayer);
     }
 
     [Fact]
@@ -2083,6 +2085,47 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         var activeId = coord.ActiveTtsSegmentId;
         Assert.True(activeId is null || activeId == segmentId2,
             $"Expected null or '{segmentId2}' but was '{activeId}'.");
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_PauseMode_ErrorCompletion_DoesNotSeekSourceToSegmentEnd()
+    {
+        var fakeSegmentPlayer = new FakeMediaTransport();
+        var fakeSourcePlayer = new FakeMediaTransport();
+        var coord = CreateCoordinatorWithSegmentPlayer(
+            fakeSegmentPlayer,
+            sourcePlayer: fakeSourcePlayer);
+        coord.Initialize();
+        coord.GetOrCreateSourcePlayer();
+        fakeSourcePlayer.Play();
+
+        const string segmentId = "segment_0.0";
+        var audioPath = Path.Combine(_ctx.Dir, "tts-segment-error.mp3");
+        await File.WriteAllBytesAsync(audioPath, [0x00, 0x01, 0x02]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = Babel.Player.Models.SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string> { [segmentId] = audioPath },
+        };
+
+        var segment = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId, 0.0, 3.0, "Hello", true, "Hola", true);
+
+        _ = coord.PlayTtsForSegmentAsync(segmentId, segment, Babel.Player.Models.SegmentTimingMode.Pause);
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        while (!fakeSegmentPlayer.IsPlaying && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        fakeSegmentPlayer.SimulateError(new InvalidOperationException("simulated tts failure"));
+
+        timeout = DateTime.UtcNow.AddSeconds(5);
+        while (coord.ActiveTtsSegmentId is not null && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        Assert.Equal(Babel.Player.Models.PlaybackState.Idle, coord.PlaybackState);
+        Assert.True(fakeSourcePlayer.IsPlaying);
+        Assert.Equal(0, fakeSourcePlayer.LastSeekPosition);
     }
 
     [Fact]
