@@ -26,7 +26,7 @@ The Cloud Agent VM runs Ubuntu 24.04 (x64). .NET 10.0 SDK is installed at `$HOME
 
 ### Build / Test / Lint
 
-Standard commands from `CLAUDE.md` and `README.md` work on the Linux VM:
+The repository's standard verification commands work on this Linux VM:
 
 ```bash
 export DOTNET_ROOT="$HOME/.dotnet"
