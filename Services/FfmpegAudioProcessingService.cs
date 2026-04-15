@@ -323,8 +323,11 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
                 try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
             });
 
-            var stdout = await proc.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
             await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            _ = await stderrTask.ConfigureAwait(false);
 
             if (proc.ExitCode == 0 && double.TryParse(
                     stdout.Trim(),
