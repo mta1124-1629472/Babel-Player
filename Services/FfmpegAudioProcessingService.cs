@@ -320,7 +320,15 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
 
             using var reg = cancellationToken.Register(() =>
             {
-                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+                try
+                {
+                    if (!proc.HasExited)
+                        proc.Kill(entireProcessTree: true);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning($"Failed to terminate ffprobe process on cancellation for '{filePath}': {ex.Message}");
+                }
             });
 
             var stdoutTask = proc.StandardOutput.ReadToEndAsync(cancellationToken);
@@ -337,6 +345,10 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
                 return duration;
 
             return null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -404,7 +416,15 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
 
         using var registration = cancellationToken.Register(() =>
         {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex)
+            {
+                _log.Warning($"Failed to terminate ffmpeg time-stretch process on cancellation for '{inputPath}': {ex.Message}");
+            }
         });
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
