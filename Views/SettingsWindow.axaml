@@ -284,7 +284,7 @@
                                 <TextBox Grid.Row="1" Grid.Column="1"
                                          Text="{Binding VideoTargetPeak, Mode=TwoWay}"
                                          Width="220" HorizontalAlignment="Left"
-                                         Watermark="auto or nits"/>
+                                         PlaceholderText="auto or nits"/>
                                 <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="HDR compute peak"/>
                                 <CheckBox Grid.Row="2" Grid.Column="1"
                                           IsChecked="{Binding VideoHdrComputePeak, Mode=TwoWay}"
