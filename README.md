@@ -33,6 +33,7 @@ If you find it useful, consider sponsoring:
 - [Installation](#installation)
 - [First Run](#first-run)
 - [Source Build](#source-build)
+- [License](#License)
 - [Dependencies](#dependencies)
 - [Current Limitations](#current-limitations)
 - [Roadmap](#roadmap)
@@ -257,6 +258,22 @@ python -m py_compile inference/main.py
 ```
 
 The architecture linter (`scripts/check-architecture.py`) enforces structural rules: provider string constants, ViewModel pipeline call discipline, coordinator line limits, and `PLACEHOLDER` requirements on unimplemented stubs.
+
+---
+
+## License
+
+Babel Player is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+
+Third-party libraries and pre-trained models are used under their respective licenses. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for the full list.
+
+### Non-commercial model restrictions
+
+The **NLLB-200** translation model (Meta, CC-BY-NC-4.0) is licensed for **non-commercial use only**. If you intend to use Babel Player commercially, you must replace this model with a commercially-licensed alternative or obtain a separate license from Meta.
+
+### Bundled binaries
+
+Babel Player bundles **libmpv** (GPL-2.0-or-later) and **ffmpeg** (LGPL-2.1-or-later / GPL-2.0-or-later depending on build). Source code for these is available at their respective upstream repositories linked in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ---
 
