@@ -94,6 +94,9 @@ public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessService
 
             var modelNameLiteral = request.ModelName.Replace("\\", "\\\\").Replace("'", "\\'");
             var cpuComputeTypeLiteral = cpuComputeType.Replace("\\", "\\\\").Replace("'", "\\'");
+            var languageHintLiteral = string.IsNullOrWhiteSpace(request.LanguageHint)
+                ? "None"
+                : $"'{request.LanguageHint.Replace("\\", "\\\\").Replace("'", "\\'")}'";
 
             var whisperCtorArgs =
                 $"model_name, device='cpu', compute_type='{cpuComputeTypeLiteral}', num_workers={numWorkers}";
@@ -129,6 +132,7 @@ def _sample_vram_mb():
 from faster_whisper import WhisperModel
 
 model_name = '{modelNameLiteral}'
+language_hint = {languageHintLiteral}
 print('CPU transcription runtime: compute_type={cpuComputeTypeLiteral}, cpu_threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, num_workers={numWorkers}')
 t0 = perf_counter()
 model = WhisperModel({whisperCtorArgs})
@@ -140,7 +144,7 @@ ram_before = _sample_ram_mb()
 vram_before = _sample_vram_mb()
 
 t2 = perf_counter()
-segments, info = model.transcribe(sys.argv[1])
+segments, info = model.transcribe(sys.argv[1], language=language_hint or None)
 t3 = perf_counter()
 print(json.dumps({{'timing':'transcribe_s','value': round(t3 - t2, 3)}}), file=sys.stderr)
 

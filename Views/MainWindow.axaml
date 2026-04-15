@@ -170,6 +170,26 @@
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="16,16,16,0" Spacing="20">
 
+                        <!-- TARGET LANGUAGE -->
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="TARGET LANGUAGE" FontSize="10"
+                                       Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Output (dub / subs)" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <ComboBox ItemsSource="{Binding Playback.TargetLanguageOptions}"
+                                          SelectedItem="{Binding Playback.SelectedTargetLanguageOption, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                          BorderBrush="{DynamicResource BorderBrush}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                        </StackPanel>
+
                         <!-- TRANSCRIPTION -->
                         <StackPanel Spacing="10">
 <TextBlock Text="TRANSCRIPTION" FontSize="10"
@@ -213,6 +233,21 @@
                                                  <TextBlock Text="⬇ Needs Download" Foreground="{DynamicResource StatusTextBrush}" IsVisible="{Binding IsDownloadVisible, FallbackValue=False}" FontSize="10" VerticalAlignment="Center"/>
                                                  <TextBlock Text="✓ Ready" Foreground="{DynamicResource StatusTextBrush}" IsVisible="{Binding IsReadyVisible, FallbackValue=False}" FontSize="10" VerticalAlignment="Center"/>
                                             </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Spoken language (ASR hint)" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <ComboBox ItemsSource="{Binding Playback.SpokenLanguageOptions}"
+                                          SelectedItem="{Binding Playback.SelectedSpokenLanguageOption, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                          BorderBrush="{DynamicResource BorderBrush}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" />
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>

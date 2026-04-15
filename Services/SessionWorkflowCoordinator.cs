@@ -427,6 +427,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 TranscriptPath = null,
                 SourceLanguage = null,
                 TranscribedAtUtc = null,
+                TranscriptionLanguageHint = null,
                 TranslationPath = null,
                 TargetLanguage = null,
                 TranslatedAtUtc = null,
@@ -500,6 +501,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             TranscriptionRuntime = null,
             TranscriptionProvider = null,
             TranscriptionModel = null,
+            TranscriptionLanguageHint = null,
             TranslationRuntime = null,
             TranslationProvider = null,
             TranslationModel = null,
@@ -614,7 +616,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         var transcriptionProviderChanged =
             CurrentSettings.TranscriptionProfile != selection.TranscriptionRuntime ||
             !string.Equals(CurrentSettings.TranscriptionProvider, selection.TranscriptionProvider, StringComparison.Ordinal) ||
-            !string.Equals(CurrentSettings.TranscriptionModel, selection.TranscriptionModel, StringComparison.Ordinal);
+            !string.Equals(CurrentSettings.TranscriptionModel, selection.TranscriptionModel, StringComparison.Ordinal) ||
+            !SessionSnapshotSemantics.TranscriptionLanguageHintsMatch(
+                CurrentSettings.TranscriptionLanguageHint,
+                selection.TranscriptionLanguageHint);
         var translationProviderChanged =
             CurrentSettings.TranslationProfile != selection.TranslationRuntime ||
             !string.Equals(CurrentSettings.TranslationProvider, selection.TranslationProvider, StringComparison.Ordinal) ||
@@ -650,6 +655,9 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         if (!string.IsNullOrWhiteSpace(selection.TargetLanguage))
             CurrentSettings.TargetLanguage = selection.TargetLanguage;
 
+        CurrentSettings.TranscriptionLanguageHint =
+            SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(selection.TranscriptionLanguageHint);
+
         if (transcriptionProviderChanged) _transcriptionService = null;
         if (translationProviderChanged) _translationService = null;
         if (ttsProviderChanged)
@@ -663,7 +671,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             $"ApplyPipelineSettings: stage={CurrentSession.Stage}, invalidation={invalidation}, " +
             $"selection=({selection.TranscriptionRuntime}/{selection.TranscriptionProvider}/{selection.TranscriptionModel}, " +
             $"{selection.TranslationRuntime}/{selection.TranslationProvider}/{selection.TranslationModel}, " +
-            $"{selection.TtsRuntime}/{selection.TtsProvider}/{selection.TtsVoice}, target={selection.TargetLanguage ?? "<unchanged>"}), " +
+            $"{selection.TtsRuntime}/{selection.TtsProvider}/{selection.TtsVoice}, target={selection.TargetLanguage ?? "<unchanged>"}, asrHint={selection.TranscriptionLanguageHint ?? "<auto>"}), " +
             $"provenance=({SessionSnapshotSemantics.DescribeSessionProvenance(CurrentSession)})");
         var statusMessage = invalidation switch
         {
