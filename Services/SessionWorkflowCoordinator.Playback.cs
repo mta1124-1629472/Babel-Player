@@ -497,6 +497,40 @@ public sealed partial class SessionWorkflowCoordinator
             ? new Dictionary<string, string>()
             : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
 
+    public IReadOnlyDictionary<string, SegmentTimingMode> GetSegmentTimingModeOverrides() =>
+        CurrentSession.SegmentTimingModeOverrides is null
+            ? new Dictionary<string, SegmentTimingMode>()
+            : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
+
+    public void SetSegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segmentId);
+        var normalizedSegmentId = segmentId.Trim();
+        var current = CurrentSession.SegmentTimingModeOverrides is null
+            ? new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
+            : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
+
+        var changed = false;
+        if (mode.HasValue)
+        {
+            changed = !current.TryGetValue(normalizedSegmentId, out var existing) || existing != mode.Value;
+            current[normalizedSegmentId] = mode.Value;
+        }
+        else
+        {
+            changed = current.Remove(normalizedSegmentId);
+        }
+
+        if (!changed)
+            return;
+
+        CurrentSession = CurrentSession with
+        {
+            SegmentTimingModeOverrides = current.Count == 0 ? null : current,
+        };
+        SaveCurrentSession();
+    }
+
     public void SetSpeakerVoiceAssignment(string speakerId, string voiceOrModel)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
