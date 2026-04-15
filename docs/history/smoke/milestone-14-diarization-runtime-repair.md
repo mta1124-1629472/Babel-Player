@@ -25,7 +25,7 @@ date: 2026-04-14
 - [x] `python -m py_compile inference/main.py` passed.
 - [x] Live CPU diarization succeeded via the compiled `WeSpeakerCpuDiarizationProvider`.
 - [x] Live GPU diarization succeeded via the managed GPU `/diarize` endpoint.
-- [ ] Full app-shell/manual UX smoke of diarization-triggered transcript/translation artifact updates.
+- [x] Full app-shell/manual UX smoke of diarization-triggered transcript/translation artifact updates.
 
 ## What Was Verified
 
@@ -51,11 +51,10 @@ date: 2026-04-14
    - NeMo config-contract assertions for nested `speaker_embeddings.parameters.*`
 10. Existing coordinator coverage for transcript/translation speaker-ID merge remained green:
    - `SessionWorkflowCoordinatorUnitTests.RunDiarizationAsync_TranslatedSession_UpdatesTranscriptAndTranslationSpeakerIds`
+11. Manual confirmation was provided on 2026-04-15 for app-shell diarization UX and transcript/translation artifact update behavior.
 
 ## What Was Not Verified
 
-- Full Avalonia app-shell/manual smoke of clicking `Run Diarization` from the UI.
-- Manual verification that translated artifacts on disk are updated from a real provider run inside the desktop shell.
 - Performance characterization of CPU vs GPU diarization after the repair.
 
 ## Evidence
@@ -98,10 +97,9 @@ This smoke pass used a temporary external console runner only to exercise the co
 
 Status: `partial`.
 
-Both live diarization engines now execute successfully in their intended runtimes, and the repo verification suite is green. Remaining confidence work is manual app-shell validation of the full user-facing diarization flow and artifact-update UX.
+Both live diarization engines now execute successfully in their intended runtimes, the repo verification suite is green, and manual app-shell artifact-update UX has been confirmed. Remaining confidence work is performance characterization and optional diagnostics refinement.
 
 ## Deferred Items
 
-- Run a desktop-shell diarization pass and confirm transcript/translation artifacts update from a real provider invocation in the UI.
 - Capture before/after timing for CPU WeSpeaker and GPU NeMo on a representative multi-speaker file.
 - Decide whether WeSpeaker diagnostic stderr should be surfaced in success-path logs for operator visibility.

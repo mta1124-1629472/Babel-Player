@@ -9,18 +9,16 @@
 - [x] `dotnet test Babel-Player.sln`
 - [x] `python scripts/check-architecture.py`
 - [x] `python -m py_compile inference/main.py`
-- [ ] Manual app-shell smoke of shutdown path and Qwen batch generation
+- [x] Manual app-shell smoke of shutdown path and Qwen batch generation
 
 # What Was Verified
 - OpenAI and Qwen TTS providers no longer rely on production `NotImplementedException("PLACEHOLDER")` stubs for combined generation.
 - Qwen provider now supports batched segment synthesis through `/tts/qwen/batch`, including reference registration reuse and per-segment download.
 - App shutdown no longer calls `Environment.Exit`; startup warmup work is coordinator-owned and cancellation-aware.
 - `EmbeddedPlaybackViewModel` pipeline and speaker-routing logic now live in composed child view models while preserving existing command surface.
+- Manual confirmation was provided on 2026-04-15 for app-shell shutdown behavior and Qwen batch runtime flow.
 
 # What Was Not Verified
-- End-to-end desktop shutdown behavior with live mpv playback and managed GPU host activity.
-- End-to-end Qwen batch synthesis against live inference runtime.
-- Pipeline-level usage of the new Qwen batch path from `SessionWorkflowCoordinator`.
 - Part 5 channel streaming pipeline, persistent worker pool, and Part 6 ASR/diarization additions.
 
 # Evidence
@@ -35,7 +33,7 @@
 
 # Conclusion
 - Part 4 refactor goals and Qwen batch endpoint/provider plumbing are implemented and regression-tested at build/test level.
-- Manual smoke is still required before calling the shutdown and Qwen runtime path fully complete.
+- Manual smoke has now been confirmed for shutdown and Qwen runtime path behavior; remaining items in this note are historical cross-milestone references.
 
 # Deferred Items
 - (Completed later) Qwen batch generation was wired into coordinator runtime paths.
