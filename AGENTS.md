@@ -22,13 +22,15 @@
 
 ### Environment
 
-The Cloud Agent VM runs Ubuntu 24.04 (x64). .NET 10.0 SDK is installed at `$HOME/.dotnet` and added to `PATH` via `~/.bashrc`. Python 3.12 is available at `/usr/bin/python3`.
+The Cloud Agent VM runs Ubuntu 24.04 (x64). .NET 10.0 SDK is installed at `$HOME/.dotnet`. In non-interactive shells, `~/.bashrc` may not be sourced automatically, so export `DOTNET_ROOT` and update `PATH` explicitly before running `dotnet` commands. Python 3.12 is available at `/usr/bin/python3`.
 
 ### Build / Test / Lint
 
 Standard commands from `CLAUDE.md` and `README.md` work on the Linux VM:
 
 ```bash
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$DOTNET_ROOT:$PATH"
 dotnet restore Babel-Player.sln
 dotnet build Babel-Player.sln --no-restore
 dotnet test Babel-Player.sln --no-build --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation"
