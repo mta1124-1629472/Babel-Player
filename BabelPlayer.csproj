@@ -38,10 +38,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.0" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.0.0" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.0" />
+    <PackageReference Include="Avalonia" Version="12.0.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.1" />
+    <PackageReference Include="System.Reactive" Version="6.1.0" />
     <!-- Override Avalonia.FreeDesktop's vulnerable transitive D-Bus dependency. -->
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
     <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.0-beta3" />
@@ -60,26 +61,31 @@
     </AssemblyAttribute>
   </ItemGroup>
 
-<ItemGroup>
-  <None Include="native\win-x64\libmpv-2.dll">
+<ItemGroup Condition="Exists('tools\$(BabelWinNativeSubdir)\ffmpeg.exe')">
+  <None Include="tools\$(BabelWinNativeSubdir)\ffmpeg.exe">
+    <Link>tools\$(BabelWinNativeSubdir)\ffmpeg.exe</Link>
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
   </None>
 </ItemGroup>
 
-<ItemGroup Condition="Exists('tools\win-x64\ffmpeg.exe')">
-  <None Include="tools\win-x64\ffmpeg.exe">
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-  </None>
-</ItemGroup>
-
-<ItemGroup Condition="Exists('tools\win-x64\uv.exe')">
-  <None Include="tools\win-x64\uv.exe">
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-  </None>
-</ItemGroup>
+  <!-- Staged after optional FetchWinNativeDepsIfNeeded (Directory.Build.targets) so a single build picks up freshly downloaded files. Uses $(BabelWinNativeSubdir) (win-x64 vs win-arm64) from Directory.Build.targets. -->
+  <Target Name="IncludeBabelWinNativeArtifacts" BeforeTargets="AssignTargetPaths" AfterTargets="FetchWinNativeDepsIfNeeded" Condition="'$(OS)' == 'Windows_NT'">
+    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\native\$(BabelWinNativeSubdir)\libmpv-2.dll')">
+      <None Include="$(MSBuildProjectDirectory)\native\$(BabelWinNativeSubdir)\libmpv-2.dll">
+        <Link>native\$(BabelWinNativeSubdir)\libmpv-2.dll</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </None>
+    </ItemGroup>
+    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\uv.exe')">
+      <None Include="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\uv.exe">
+        <Link>tools\$(BabelWinNativeSubdir)\uv.exe</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </None>
+    </ItemGroup>
+  </Target>
 
 <ItemGroup>
   <None Include="docker-compose.yml">

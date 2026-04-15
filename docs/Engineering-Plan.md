@@ -1,7 +1,7 @@
 # Babel-Player — Engineering Plan
 
-**Last updated:** April 13, 2026 — code-verified audit plus constructor cleanup completion  
-**Status:** Phases 1–3, 5, and Phase 6 item 6.1b/6.4 complete. Phase 4 and Phase 6 (6.2a) remain.
+**Last updated:** April 15, 2026 — Parakeet + streaming status refresh  
+**Status:** Phases 1–6 implemented in code; remaining work is verification/benchmark follow-up.
 
 ---
 
@@ -14,7 +14,8 @@ Babel-Player is a local-first multilingual video dubbing application. Stack: C# 
 - Default local inference does not require Docker. All local providers (faster-whisper, NLLB/CTranslate2, Qwen TTS, NeMo diarization) run as endpoints in a single FastAPI process inside a managed `.venv`. Docker is an advanced optional backend; not required for CPU or managed-GPU paths.
 - `nemo-toolkit[asr]==2.7.2` is installed in the GPU `.venv`, verified working with `torch 2.8.0` and Python 3.12.
 - Multi-speaker voice cloning is fully implemented. `SessionWorkflowCoordinator.TtsReference.cs` extracts per-speaker reference clips via `/speakers/extract-reference`. The diarization → speaker extraction → per-speaker TTS chain is complete and tested.
-- Edge TTS and Piper are the only subprocess-based providers. Everything else runs in the persistent FastAPI server.
+- Edge TTS, Piper, and WeSpeaker are subprocess-based providers. Everything else runs in the persistent FastAPI server.
+- Managed CPU diarization bootstrap now uses dedicated `inference/cpu-requirements.txt` and `inference/cpu-constraints.txt` manifests plus a persisted import-validation record before WeSpeaker is marked ready.
 - XTTS v2 removed. All XTTS references are legacy.
 
 ### Provider map (verified April 13, 2026)
@@ -22,7 +23,7 @@ Babel-Player is a local-first multilingual video dubbing application. Stack: C# 
 | Stage | Provider | Profile | Deployment | Token |
 |---|---|---|---|---|
 | ASR | faster-whisper | CPU / GPU | `.venv` FastAPI | No |
-| ASR | Parakeet-TDT *(Phase 4, open)* | GPU | `.venv` FastAPI | No |
+| ASR | Parakeet-TDT | GPU | `.venv` FastAPI | No |
 | Translation | NLLB / CTranslate2 | CPU / GPU | `.venv` FastAPI | No |
 | TTS | Qwen TTS | GPU | `.venv` FastAPI | No |
 | TTS | Piper | CPU | Subprocess | No |
@@ -30,7 +31,7 @@ Babel-Player is a local-first multilingual video dubbing application. Stack: C# 
 | TTS | OpenAI TTS | Cloud | HTTP client | API key |
 | TTS | ElevenLabs | Cloud | HTTP client | API key |
 | Diarization | NeMo ClusteringDiarizer | GPU | `.venv` FastAPI | No |
-| Diarization | WeSpeaker (CPU) | CPU | `.venv` FastAPI | No |
+| Diarization | WeSpeaker (CPU) | CPU | Managed CPU `.venv` subprocess | No |
 
 ---
 
@@ -76,11 +77,20 @@ Babel-Player is a local-first multilingual video dubbing application. Stack: C# 
 | 5.1 — Batch Python scripts | Superseded by 5.2; worker pool JSON-RPC achieves the same goal |
 | 5.2 — Persistent Python worker pool | `PythonJsonWorkerPool.cs` with Edge TTS + Piper workers; stderr reading hardened April 13, 2026 |
 
+### Phase 4 — ASR Provider Expansion (NeMo Parakeet) ✅
+
+| Item | Resolution | Verified |
+|---|---|---|
+| 4.1 — Python `/transcribe/parakeet` endpoint | Endpoint implemented in `inference/main.py` using NeMo Parakeet-TDT-0.6B-v3 with timed segment shaping | April 15, 2026 |
+| 4.2 — C# Parakeet provider | `ParakeetTranscriptionProvider` implemented and routed through `ContainerizedInferenceClient.TranscribeParakeetAsync` | April 15, 2026 |
+| 4.3 — UI wiring | Parakeet exposed in GPU transcription provider options via `TranscriptionRegistry` | April 15, 2026 |
+
 ### Phase 6 (partial) — Architectural Refactors ✅ (items below)
 
 | Item | Resolution |
 |---|---|
 | 6.1b — VM decomposition | `EmbeddedPlaybackViewModel.cs` reduced to 163 lines; preview, pipeline, and speaker-routing child VMs now own their binding surfaces |
+| 6.2a — Channel streaming pipeline | `SessionWorkflowCoordinator.Pipeline.cs` now uses channel-based overlap (`TranscriptChannelItem` → `TranslationChannelItem` → `TtsChannelItem`) for streaming execution paths |
 | 6.3 — Qwen TTS server-side batching | `/tts/qwen/batch` endpoint live |
 | 6.4 — Constructor cleanup | `CoordinatorCoreServices` added; coordinator constructors reduced to ≤ 5 parameters; all call sites updated |
 | 6.5 — Clean shutdown | `Environment.Exit` removed; Part 4 staged |
@@ -89,49 +99,11 @@ Babel-Player is a local-first multilingual video dubbing application. Stack: C# 
 
 ## Remaining Work
 
-Execution order is fixed by dependency: Parakeet lands before streaming so the next capability can be added without reopening the completed playback VM split.
+Implementation milestones are complete; remaining follow-up is verification evidence:
 
-```
-Tier 2 (4.x Parakeet)      → 1.5–2 weeks — do next
-    ↓
-Tier 3 (6.2 streaming)     → 2–3 weeks   — highest impact, highest risk, last
-```
-
----
-
-### Tier 2 — Parakeet ASR Provider (4.1–4.3)
-
-**Zero Parakeet references exist anywhere in the codebase.**
-
-#### 4.1 — Python: `POST /transcribe/parakeet`
-- **File:** `inference/main.py`
-- **What:** Full endpoint using NeMo Parakeet-TDT-0.6B-v3. Accepts audio file, returns timed segments matching the existing segment schema.
-- **Dependency:** `nemo-toolkit[asr]` already installed in GPU `.venv`. Weights downloaded on first use.
-- **Acceptance:** Endpoint returns JSON matching the schema consumed by the C# coordinator.
-
-#### 4.2 — C#: `ParakeetTranscriptionProvider`
-- **Files:** `Services/ParakeetTranscriptionProvider.cs`, `Models/ProviderNames.cs`, `Services/Registries/TranscriptionRegistry.cs`
-- **What:** New provider implementing `ITranscriptionProvider`. Add `ProviderNames.Parakeet` constant. Register in `TranscriptionRegistry`.
-- **Acceptance:** Parakeet selectable in transcription provider ComboBox, produces correct timed segments.
-
-#### 4.3 — UI wiring
-- **What:** Surface Parakeet in the transcription provider ComboBox when GPU profile is active.
-- **Acceptance:** Parakeet visible and selectable when GPU compute enabled.
-
----
-
-### Tier 3 — Channel Streaming Pipeline (6.2a)
-
-**`Services/SessionWorkflowCoordinator.Pipeline.cs`**
-
-Current state: fully sequential async/await. Zero `System.Threading.Channels` usage. The Part 4 "staged, partial" tracker note was not reflected in actual code as of April 13, 2026.
-
-What remains:
-- Replace `Transcribe all → Translate all → TTS all` with `Channel<TranscriptSegment>` → `Channel<TranslatedSegment>` → `Channel<TtsResult>` pipeline
-- Each stage reads from upstream channel and writes to downstream, enabling overlap
-- Potentially extract to new `Services/PipelineChannel*.cs` types
-
-Acceptance: Transcription segments begin flowing to translation before full transcription completes; translation segments begin flowing to TTS before full translation completes. Measurable reduction in end-to-end wall time on the test video.
+- Run and record an end-to-end benchmark showing overlap improvements from the channel pipeline path.
+- Run manual app-shell smoke to validate streaming stage messaging/progress UX during real sessions.
+- Keep historical smoke notes synchronized so retired docs do not imply open implementation gaps.
 
 ---
 
@@ -140,5 +112,4 @@ Acceptance: Transcription segments begin flowing to translation before full tran
 | Item | Pipeline Impact | Effort | Risk |
 |---|---|---|---|
 | 6.1b — VM decomposition | — | 2–3 days | Low |
-| 4.1–4.3 — Parakeet ASR | ~10x ASR speed (EU langs) | 1.5–2 weeks | Medium |
-| 6.2a — Channel streaming | ~30–50% end-to-end | 2–3 weeks | Medium |
+| 6.2a — Channel streaming | ~30–50% end-to-end | Implemented (verification follow-up) | Medium |

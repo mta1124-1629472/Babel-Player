@@ -97,7 +97,13 @@ public sealed record TtsResult(
     string AudioPath,
     string Voice,
     long FileSizeBytes,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    /// <summary>
+    /// Duration of the generated audio clip in seconds.
+    /// Null when the provider does not report duration.
+    /// Populated by providers that return clip duration metadata (e.g. Edge TTS, Piper workers).
+    /// </summary>
+    double? DurationSeconds = null);
 
 // --- DIARIZATION ---
 public sealed record DiarizationRequest(

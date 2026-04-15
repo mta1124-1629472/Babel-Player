@@ -1,8 +1,10 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using Babel.Player.Models;
@@ -14,6 +16,7 @@ namespace Babel.Player.ViewModels;
 
 public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, IDisposable
 {
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
     private readonly EmbeddedPlaybackViewModel _parent;
     private readonly SessionWorkflowCoordinator _coordinator;
     private string? _lastKnownSourceMediaPath;
@@ -192,11 +195,69 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             ApplySubtitleState();
     }
 
+    /// <summary>
+    /// Selects a segment in the preview list and seeks source media. Used from the speaker setup wizard while the main window stays interactive.
+    /// </summary>
+    public async Task SelectSegmentAndSeekAsync(WorkflowSegmentState segment, bool playSource = false)
+    {
+        ArgumentNullException.ThrowIfNull(segment);
+
+        _isUpdatingActiveSegment = true;
+        try
+        {
+            SelectedSegment = segment;
+        }
+        finally
+        {
+            _isUpdatingActiveSegment = false;
+        }
+
+        _parent.SpeakerRouting.TrySelectSpeakerForSegment(segment.SpeakerId);
+
+        try
+        {
+            var player = _coordinator.SourceMediaPlayer;
+            if (player is null)
+            {
+                var ingestedPath = _coordinator.CurrentSession.IngestedMediaPath;
+                if (string.IsNullOrEmpty(ingestedPath))
+                    return;
+
+                player = _coordinator.GetOrCreateSourcePlayer();
+                player.Load(ingestedPath);
+            }
+
+            player.Seek((long)(segment.StartSeconds * 1000));
+
+            if (!playSource)
+            {
+                player.Pause();
+                IsSourcePaused = true;
+                if (IsDubModeOn)
+                    ApplyDubForSegment(null);
+            }
+            else
+            {
+                await Task.Run(player.Play);
+                IsSourcePaused = false;
+                _parent.ClearStatusErrorDetail();
+                if (IsDubModeOn && !IsSourcePaused)
+                    ApplyDubForSegment(segment);
+            }
+        }
+        catch (Exception ex)
+        {
+            _parent.StatusText = $"Seek failed: {ex.Message}";
+            _parent.SetStatusErrorDetail("Source seek failed", ex);
+        }
+    }
+
     [RelayCommand]
     public async Task RefreshSegmentsAsync(System.Collections.Generic.List<WorkflowSegmentState>? segments = null)
     {
         try
         {
+            var refreshStopwatch = Stopwatch.StartNew();
             var list = segments ?? await _coordinator.GetSegmentWorkflowListAsync();
             _isUpdatingActiveSegment = true;
             try
@@ -209,12 +270,15 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
                     : "No segments available. Run the workflow first.";
                 _parent.ClearStatusErrorDetail();
                 if (IsSubtitleModeOn)
+                {
                     ApplySubtitleState();
+                }
             }
             finally
             {
                 _isUpdatingActiveSegment = false;
             }
+            refreshStopwatch.Stop();
         }
         catch (Exception ex)
         {
@@ -639,8 +703,10 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         if (segment.HasTtsAudio)
         {
+            // Resolve effective timing mode: per-segment override takes priority, then session setting.
+            var effectiveMode = segment.TimingModeOverride ?? _coordinator.CurrentSettings.DubTimingMode;
             ApplyDucking();
-            _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId);
+            _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId, segment, effectiveMode);
         }
     }
 
@@ -658,6 +724,29 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart) =>
         ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
+
+    /// <summary>
+    /// Applies a per-segment timing mode override through the coordinator (session state owner),
+    /// then mirrors the result into the preview list and sorted cache.
+    /// </summary>
+    public void ApplySegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
+    {
+        _coordinator.SetSegmentTimingOverride(segmentId, mode);
+
+        for (int i = 0; i < Segments.Count; i++)
+        {
+            if (Segments[i].SegmentId == segmentId)
+            {
+                Segments[i] = Segments[i] with { TimingModeOverride = mode };
+                // Rebuild sorted cache so playback lookup picks up the change.
+                _sortedSegments = [.. Segments.OrderBy(s => s.StartSeconds)];
+                // Refresh the SelectedSegment reference so the inspection VM re-reads it.
+                if (SelectedSegment?.SegmentId == segmentId)
+                    SelectedSegment = Segments[i];
+                return;
+            }
+        }
+    }
 
     private void OnControlsHideTimerTick(object? sender, EventArgs e)
     {
@@ -709,4 +798,45 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private static string FormatMs(double milliseconds) =>
         milliseconds <= 0 ? "0:00" : TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss");
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
+    }
 }

@@ -28,6 +28,7 @@ public partial class EmbeddedPlaybackViewModel
     private CancellationTokenSource? _providerHealthRefreshCts;
     private int _providerHealthRefreshVersion;
     private ProviderDiagnosticsSelectionSnapshot? _lastQueuedProviderHealthSnapshot;
+    private DateTimeOffset _lastProviderHealthRefreshAtUtc = DateTimeOffset.MinValue;
     private IReadOnlyList<ModelOptionViewModel> _availableTranscriptionModels = [];
     private IReadOnlyList<ModelOptionViewModel> _availableTranslationModels = [];
     private IReadOnlyList<ModelOptionViewModel> _availableTtsOptions = [];
@@ -82,12 +83,20 @@ public partial class EmbeddedPlaybackViewModel
     [NotifyPropertyChangedFor(nameof(AvailableTtsOptions))]
     [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
+    [NotifyPropertyChangedFor(nameof(ShowTtsAssignmentModeSwitch))]
+    [NotifyPropertyChangedFor(nameof(ShowPerSpeakerVoiceHint))]
+    [NotifyPropertyChangedFor(nameof(TtsVoiceComboHeaderText))]
     private string _ttsProvider = ProviderNames.EdgeTts;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
     private string _ttsModelOrVoice = "en-US-AriaNeural";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPerSpeakerVoiceHint))]
+    [NotifyPropertyChangedFor(nameof(TtsVoiceComboHeaderText))]
+    private TtsVoiceAssignmentMode _ttsVoiceAssignmentMode = TtsVoiceAssignmentMode.GlobalDefault;
 
     [ObservableProperty]
     private ModelOptionViewModel? _selectedTranscriptionModel;
@@ -97,6 +106,14 @@ public partial class EmbeddedPlaybackViewModel
 
     [ObservableProperty]
     private ModelOptionViewModel? _selectedTtsOption;
+
+    /// <summary>Pipeline output language (dub/sub target). Extend <see cref="PipelineTargetLanguageOption.All"/> for more locales.</summary>
+    [ObservableProperty]
+    private PipelineTargetLanguageOption? _selectedTargetLanguageOption = PipelineTargetLanguageOption.English;
+
+    /// <summary>Optional ASR language hint; first entry is auto-detect.</summary>
+    [ObservableProperty]
+    private SpokenLanguageOption? _selectedSpokenLanguageOption = SpokenLanguageOption.All[0];
 
     public static IReadOnlyList<ComputeProfile> InferenceRuntimeOptions { get; } =
         [ComputeProfile.Cpu, ComputeProfile.Gpu, ComputeProfile.Cloud];
@@ -137,6 +154,35 @@ public partial class EmbeddedPlaybackViewModel
     public string TranslationKeyStatus => _translationKeyStatus;
     public string TtsKeyStatus => _ttsKeyStatus;
     public ObservableCollection<ProviderHealthSnapshot> ProviderHealthSnapshots => _providerHealthSnapshots;
+
+    public IReadOnlyList<PipelineTargetLanguageOption> TargetLanguageOptions => PipelineTargetLanguageOption.All;
+
+    public IReadOnlyList<SpokenLanguageOption> SpokenLanguageOptions => SpokenLanguageOption.All;
+
+    /// <summary>True when Piper/Edge show the global vs per-speaker voice UI.</summary>
+    public bool ShowTtsAssignmentModeSwitch =>
+        string.Equals(TtsProvider, ProviderNames.Piper, StringComparison.Ordinal)
+        || string.Equals(TtsProvider, ProviderNames.EdgeTts, StringComparison.Ordinal);
+
+    public bool ShowPerSpeakerVoiceHint =>
+        ShowTtsAssignmentModeSwitch && TtsVoiceAssignmentMode == TtsVoiceAssignmentMode.PerSpeaker;
+
+    public string TtsVoiceComboHeaderText =>
+        ShowTtsAssignmentModeSwitch && TtsVoiceAssignmentMode == TtsVoiceAssignmentMode.PerSpeaker
+            ? "Fallback voice"
+            : "Voice / Model";
+
+    /// <summary>Two-way with CheckBox: per-speaker mode uses Speaker Reference Wizard; fallback = <see cref="TtsModelOrVoice"/>.</summary>
+    public bool TtsVoiceUsePerSpeakerWizard
+    {
+        get => TtsVoiceAssignmentMode == TtsVoiceAssignmentMode.PerSpeaker;
+        set
+        {
+            var target = value ? TtsVoiceAssignmentMode.PerSpeaker : TtsVoiceAssignmentMode.GlobalDefault;
+            if (TtsVoiceAssignmentMode == target) return;
+            TtsVoiceAssignmentMode = target;
+        }
+    }
 
     internal sealed record ProviderDiagnosticsSelectionSnapshot(
         ComputeProfile TranscriptionRuntime,
@@ -264,6 +310,25 @@ public partial class EmbeddedPlaybackViewModel
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(
             ttsProvider: value,
             ttsVoice: model));
+        NotifyTtsAssignmentModeUi();
+    }
+
+    partial void OnTtsVoiceAssignmentModeChanged(TtsVoiceAssignmentMode value)
+    {
+        if (IsSynchronizingPipelineSettings)
+            return;
+
+        _coordinator.CurrentSettings.TtsVoiceAssignmentMode = value;
+        _coordinator.NotifySettingsModified();
+        NotifyTtsAssignmentModeUi();
+    }
+
+    private void NotifyTtsAssignmentModeUi()
+    {
+        OnPropertyChanged(nameof(ShowTtsAssignmentModeSwitch));
+        OnPropertyChanged(nameof(ShowPerSpeakerVoiceHint));
+        OnPropertyChanged(nameof(TtsVoiceComboHeaderText));
+        OnPropertyChanged(nameof(TtsVoiceUsePerSpeakerWizard));
     }
 
     partial void OnTtsModelOrVoiceChanged(string value)
@@ -272,6 +337,22 @@ public partial class EmbeddedPlaybackViewModel
             return;
 
         ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection(ttsVoice: value));
+    }
+
+    partial void OnSelectedTargetLanguageOptionChanged(PipelineTargetLanguageOption? value)
+    {
+        if (IsSynchronizingPipelineSettings || value is null)
+            return;
+
+        ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection());
+    }
+
+    partial void OnSelectedSpokenLanguageOptionChanged(SpokenLanguageOption? value)
+    {
+        if (IsSynchronizingPipelineSettings || value is null)
+            return;
+
+        ApplyPipelineSettingsSelection(CreatePipelineSettingsSelection());
     }
 
     private void OnCoordinatorSettingsModified()
@@ -313,6 +394,8 @@ public partial class EmbeddedPlaybackViewModel
                 TtsProvider,
                 _coordinator.CurrentSettings.TtsVoice);
 
+            TtsVoiceAssignmentMode = _coordinator.CurrentSettings.TtsVoiceAssignmentMode;
+
             RebuildAllModelOptions();
 
             SelectedTranscriptionModel =
@@ -325,9 +408,22 @@ public partial class EmbeddedPlaybackViewModel
                 _availableTtsOptions.FirstOrDefault(model => model.ModelId == TtsModelOrVoice)
                 ?? (_availableTtsOptions.Count > 0 ? _availableTtsOptions[0] : null);
 
+            SelectedTargetLanguageOption =
+                PipelineTargetLanguageOption.All.FirstOrDefault(o =>
+                    string.Equals(o.Code, _coordinator.CurrentSettings.TargetLanguage, StringComparison.OrdinalIgnoreCase))
+                ?? PipelineTargetLanguageOption.English;
+
+            SelectedSpokenLanguageOption =
+                SpokenLanguageOption.All.FirstOrDefault(o =>
+                    SessionSnapshotSemantics.TranscriptionLanguageHintsMatch(
+                        o.Code,
+                        _coordinator.CurrentSettings.TranscriptionLanguageHint))
+                ?? SpokenLanguageOption.All[0];
+
             OnPropertyChanged(nameof(AvailableTranscriptionModels));
             OnPropertyChanged(nameof(AvailableTranslationModels));
             OnPropertyChanged(nameof(AvailableTtsOptions));
+            NotifyTtsAssignmentModeUi();
             SpeakerRouting.SyncFromSettings();
             SpeakerRouting.NotifyTtsProviderChanged();
             RefreshProviderHealthDiagnostics();
@@ -576,7 +672,9 @@ public partial class EmbeddedPlaybackViewModel
         string? translationModel = null,
         ComputeProfile? ttsRuntime = null,
         string? ttsProvider = null,
-        string? ttsVoice = null) =>
+        string? ttsVoice = null,
+        string? targetLanguageOverride = null,
+        string? transcriptionLanguageHintOverride = null) =>
         new(
             transcriptionRuntime ?? TranscriptionRuntime,
             transcriptionProvider ?? TranscriptionProvider,
@@ -587,7 +685,11 @@ public partial class EmbeddedPlaybackViewModel
             ttsRuntime ?? TtsRuntime,
             ttsProvider ?? TtsProvider,
             ttsVoice ?? TtsModelOrVoice,
-            _coordinator.CurrentSettings.TargetLanguage);
+            targetLanguageOverride
+                ?? SelectedTargetLanguageOption?.Code
+                ?? _coordinator.CurrentSettings.TargetLanguage,
+            transcriptionLanguageHintOverride
+                ?? SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(SelectedSpokenLanguageOption?.Code));
 
     private static string GetReadinessStatus(ProviderReadiness readiness)
     {
@@ -625,7 +727,8 @@ public partial class EmbeddedPlaybackViewModel
 
     private void QueueProviderHealthRefresh(ProviderDiagnosticsSelectionSnapshot snapshot, bool force = false)
     {
-        if (!force && snapshot == _lastQueuedProviderHealthSnapshot)
+        var nowUtc = DateTimeOffset.UtcNow;
+        if (!ShouldQueueProviderHealthRefresh(snapshot, force, nowUtc))
             return;
 
         _lastQueuedProviderHealthSnapshot = snapshot;
@@ -718,6 +821,7 @@ public partial class EmbeddedPlaybackViewModel
             _providerHealthSnapshots.Clear();
             foreach (var snapshot in health)
                 _providerHealthSnapshots.Add(snapshot);
+            _lastProviderHealthRefreshAtUtc = DateTimeOffset.UtcNow;
 
             var transcription = health.FirstOrDefault(entry => string.Equals(entry.Section, "Transcription", StringComparison.Ordinal));
             var translation = health.FirstOrDefault(entry => string.Equals(entry.Section, "Translation", StringComparison.Ordinal));
@@ -1121,6 +1225,33 @@ public partial class EmbeddedPlaybackViewModel
         health.Any(snapshot => IsStartingStatus(snapshot.StatusLine));
 
     private static bool IsStartingStatus(string status) => status.StartsWith('⏳');
+    private bool HasTransientProviderHealthState() =>
+        _providerHealthSnapshots.Any(snapshot =>
+            snapshot.IsStale
+            || IsStartingStatus(snapshot.StatusLine)
+            || snapshot.HostState.Contains("checking", StringComparison.OrdinalIgnoreCase));
+
+    internal bool ShouldQueueProviderHealthRefresh(
+        ProviderDiagnosticsSelectionSnapshot snapshot,
+        bool force,
+        DateTimeOffset nowUtc)
+    {
+        if (force || snapshot != _lastQueuedProviderHealthSnapshot)
+            return true;
+
+        var ttl = HasTransientProviderHealthState()
+            ? TimeSpan.FromSeconds(3)
+            : TimeSpan.FromSeconds(8);
+        return nowUtc - _lastProviderHealthRefreshAtUtc >= ttl;
+    }
+
+    internal void RecordProviderHealthRefreshForTests(
+        ProviderDiagnosticsSelectionSnapshot snapshot,
+        DateTimeOffset refreshedAtUtc)
+    {
+        _lastQueuedProviderHealthSnapshot = snapshot;
+        _lastProviderHealthRefreshAtUtc = refreshedAtUtc;
+    }
 
     internal string ResolveDiarizationProviderLabel()
     {

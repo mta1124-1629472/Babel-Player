@@ -25,10 +25,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
     }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
-    private bool _isMultiSpeakerEnabled;
-
-    [ObservableProperty]
     private IReadOnlyList<string> _diarizationProviderOptions = [string.Empty];
 
     [ObservableProperty]
@@ -43,6 +39,7 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSpeakers))]
     [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
+    [NotifyPropertyChangedFor(nameof(CanOpenSpeakerSetupWizard))]
     private ObservableCollection<string> _speakerIds = new();
 
     [ObservableProperty]
@@ -53,9 +50,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
 
     [ObservableProperty]
     private string _selectedSpeakerReferenceAudioPath = string.Empty;
-
-    [ObservableProperty]
-    private string _defaultTtsVoiceFallback = string.Empty;
 
     public string AutoSpeakerDetectionStatus
     {
@@ -71,23 +65,19 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
 
     public bool HasSpeakers => SpeakerIds.Count > 0;
     public bool HasAutoSpeakerDetectionStatus => !string.IsNullOrWhiteSpace(AutoSpeakerDetectionStatus);
-    public bool IsMultiSpeakerNoSpeakersYet => IsMultiSpeakerEnabled && !HasSpeakers;
+    public bool IsMultiSpeakerNoSpeakersYet => !HasSpeakers;
     public bool IsTtsCloningProvider => string.Equals(_parent.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal);
+    public bool CanOpenSpeakerSetupWizard => HasSpeakers;
 
     internal void SyncFromSettings()
     {
         _parent.IsSynchronizingPipelineSettings = true;
         try
         {
-            if (!_coordinator.CurrentSession.MultiSpeakerEnabled)
-                _coordinator.SetMultiSpeakerEnabled(true);
-
-            IsMultiSpeakerEnabled = true;
             RebuildDiarizationProviderOptions();
             DiarizationProvider = NormalizeDiarizationProviderSelection(_coordinator.CurrentSettings.DiarizationProvider);
-            DiarizationMinSpeakers = _coordinator.CurrentSettings.DiarizationMinSpeakers;
-            DiarizationMaxSpeakers = _coordinator.CurrentSettings.DiarizationMaxSpeakers;
-            DefaultTtsVoiceFallback = _coordinator.CurrentSession.DefaultTtsVoiceFallback ?? string.Empty;
+            DiarizationMinSpeakers = null;
+            DiarizationMaxSpeakers = null;
             RebuildSpeakerIds(_parent.Preview.Segments, _parent.Preview.SelectedSegment?.SpeakerId);
         }
         finally
@@ -98,7 +88,11 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
 
     internal void SetAutoSpeakerDetectionStatus(string status) => AutoSpeakerDetectionStatus = status;
 
-    internal void NotifyTtsProviderChanged() => OnPropertyChanged(nameof(IsTtsCloningProvider));
+    internal void NotifyTtsProviderChanged()
+    {
+        OnPropertyChanged(nameof(IsTtsCloningProvider));
+        OnPropertyChanged(nameof(CanOpenSpeakerSetupWizard));
+    }
 
     internal void RebuildSpeakerIds(IEnumerable<WorkflowSegmentState> segments, string? preferredSpeakerId = null)
     {
@@ -179,18 +173,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
         UpdateSelectedSpeakerDetails(value);
     }
 
-    partial void OnIsMultiSpeakerEnabledChanged(bool value)
-    {
-        if (_parent.IsSynchronizingPipelineSettings)
-            return;
-
-        if (!value)
-            DiarizationProvider = string.Empty;
-
-        _coordinator.SetMultiSpeakerEnabled(value);
-        _ = _parent.Preview.RefreshSegmentsAsync();
-    }
-
     partial void OnDiarizationProviderChanged(string value)
     {
         if (_parent.IsSynchronizingPipelineSettings)
@@ -209,6 +191,8 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
         }
 
         _coordinator.CurrentSettings.DiarizationProvider = normalized;
+        _coordinator.CurrentSettings.DiarizationMinSpeakers = null;
+        _coordinator.CurrentSettings.DiarizationMaxSpeakers = null;
         _coordinator.NotifySettingsModified();
         _parent.RefreshProviderHealthDiagnostics();
         _parent.Pipeline.NotifySessionStateChanged();
@@ -248,29 +232,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
 
         _coordinator.CurrentSettings.DiarizationMaxSpeakers = normalized;
         _coordinator.NotifySettingsModified();
-    }
-
-    partial void OnDefaultTtsVoiceFallbackChanged(string value)
-    {
-        if (_parent.IsSynchronizingPipelineSettings)
-            return;
-
-        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-        var normalizedDisplayValue = normalized ?? string.Empty;
-        if (!string.Equals(value, normalizedDisplayValue, StringComparison.Ordinal))
-        {
-            _parent.IsSynchronizingPipelineSettings = true;
-            try
-            {
-                DefaultTtsVoiceFallback = normalizedDisplayValue;
-            }
-            finally
-            {
-                _parent.IsSynchronizingPipelineSettings = false;
-            }
-        }
-
-        _coordinator.SetDefaultTtsVoiceFallback(normalized);
     }
 
     private void RebuildDiarizationProviderOptions()

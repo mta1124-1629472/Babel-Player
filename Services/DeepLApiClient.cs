@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models.LanguageSupport;
 
 namespace Babel.Player.Services;
 
@@ -56,6 +57,9 @@ public sealed class DeepLApiClient : IDisposable
         var normalizedTarget = NormalizeLanguage(targetLanguage, isTargetLanguage: true)
             ?? throw new ArgumentException("Target language cannot be empty.", nameof(targetLanguage));
 
+        if (!DeepLTranslationCatalog.IsSupportedApiCode(normalizedTarget))
+            throw new ArgumentException($"Unsupported DeepL target language code: {normalizedTarget}", nameof(targetLanguage));
+
         var request = new TranslateRequestDto
         {
             Text = [.. texts],
@@ -64,7 +68,11 @@ public sealed class DeepLApiClient : IDisposable
 
         var normalizedSource = NormalizeLanguage(sourceLanguage, isTargetLanguage: false);
         if (!string.IsNullOrWhiteSpace(normalizedSource))
+        {
+            if (!DeepLTranslationCatalog.IsSupportedApiCode(normalizedSource))
+                throw new ArgumentException($"Unsupported DeepL source language code: {normalizedSource}", nameof(sourceLanguage));
             request.SourceLanguage = normalizedSource;
+        }
 
         var content = new StringContent(
             JsonSerializer.Serialize(request, JsonOptions),

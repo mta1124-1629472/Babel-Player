@@ -62,21 +62,6 @@ public sealed class ModelsTabViewModel : ViewModelBase
                 downloader: downloader));
         }
 
-        // ── Piper ─────────────────────────────────────────────────────────────
-        var piperVoices = coordinator.TtsRegistry.GetAvailableProviders()
-                              .FirstOrDefault(p => p.Id == ProviderNames.Piper)?.SupportedModels ?? [];
-        foreach (var voice in piperVoices)
-        {
-            var v = voice;
-            var dir = coordinator.CurrentSettings.PiperModelDir;
-            entries.Add(new ModelDownloadEntry(
-                providerLabel: "Piper",
-                modelId: v,
-                isDownloadedFunc: () => ModelDownloader.IsPiperVoiceDownloaded(v, dir),
-                downloadFunc: (progress, token) => downloader.DownloadPiperVoiceAsync(v, dir, progress, token),
-                downloader: downloader));
-        }
-
         Models = new ObservableCollection<ModelDownloadEntry>(entries);
     }
 }

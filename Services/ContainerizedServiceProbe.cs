@@ -51,6 +51,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
     private readonly AppLog _log;
     private readonly Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>> _probeFunc;
     private readonly ContainerizedProbeMetrics _metrics;
+    public event Action<ContainerizedProbeResult>? ProbeResultUpdated;
 
     // Configurable for testing: controls the pause between successive probe retries
     // inside WaitForProbeAsync. Defaults to 250 ms in production.
@@ -354,6 +355,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             _log.Info(
                 $"Container probe complete: url={normalizedUrl}, state={result.State}, " +
                 $"detail={result.ErrorDetail ?? "<none>"}");
+            ProbeResultUpdated?.Invoke(result);
         }
         catch (Exception ex)
         {

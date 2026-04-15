@@ -1,0 +1,364 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Babel.Player.ViewModels"
+        xmlns:model="using:Babel.Player.Models"
+        xmlns:v="using:Babel.Player.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="Babel.Player.Views.SpeakerReferenceWizardWindow"
+        x:Name="WizardRoot"
+        x:DataType="vm:SpeakerReferenceWizardViewModel"
+        Title="Speaker setup wizard"
+        Width="980"
+        Height="820"
+        MinWidth="860"
+        MinHeight="680"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="18">
+        <StackPanel Grid.Row="0" Spacing="8">
+            <TextBlock Text="Speaker setup wizard" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="Configure per-speaker voice and (for Qwen) reference clips. Changes stay in draft mode until you choose Finish."
+                       FontSize="12"
+                       Opacity="0.75"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="Scrub the embedded preview (Windows) or the main window. Use 'Use playhead clip' with the loaded mini player when available. Jump to a speaker's segments to sync both previews."
+                       FontSize="12"
+                       Opacity="0.85"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Spacing="10" Margin="0,12,0,10">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*" ColumnSpacing="10">
+                <Border Grid.Column="0" Background="{DynamicResource PositiveBrush}" CornerRadius="8" Padding="10,5">
+                    <TextBlock Text="{Binding GoodCount, StringFormat='Good: {0}'}" FontSize="12" />
+                </Border>
+                <Border Grid.Column="1" Background="{DynamicResource InfoBrush}" CornerRadius="8" Padding="10,5">
+                    <TextBlock Text="{Binding ReviewCount, StringFormat='Review: {0}'}" FontSize="12" />
+                </Border>
+                <Border Grid.Column="2" Background="{DynamicResource DestructiveBrush}" CornerRadius="8" Padding="10,5">
+                    <TextBlock Text="{Binding PoorCount, StringFormat='Poor: {0}'}" FontSize="12" />
+                </Border>
+                <CheckBox Grid.Column="3"
+                          IsChecked="{Binding ShowLowConfidenceOnly, Mode=TwoWay}"
+                          Content="Show low confidence only"
+                          VerticalAlignment="Center" />
+                <Button Grid.Column="4"
+                        Command="{Binding ResetAllCommand}"
+                        Content="Reset all drafts"
+                        Padding="10,6" />
+                <TextBlock Grid.Column="5"
+                           Text="{Binding StatusText}"
+                           VerticalAlignment="Center"
+                           TextAlignment="Right"
+                           TextWrapping="Wrap"
+                           Opacity="0.8" />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="Playhead clip (s)" VerticalAlignment="Center" Opacity="0.75" FontSize="12" />
+                <Slider Width="180"
+                        Minimum="3"
+                        Maximum="15"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        Value="{Binding PlayheadClipWindowSeconds, Mode=TwoWay}" />
+                <TextBlock Text="{Binding PlayheadClipWindowSeconds, StringFormat='{}{0:F0}s'}"
+                           VerticalAlignment="Center"
+                           MinWidth="36" />
+                <Button Command="{Binding StopReferencePreviewCommand}"
+                        Content="Stop preview"
+                        Padding="8,6" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Merge speaker" VerticalAlignment="Center" FontSize="12" Opacity="0.75" />
+                <ComboBox Width="140"
+                          ItemsSource="{Binding SpeakerIdOptions}"
+                          SelectedItem="{Binding MergeSourceSpeakerId, Mode=TwoWay}" />
+                <TextBlock Text="→" VerticalAlignment="Center" />
+                <ComboBox Width="140"
+                          ItemsSource="{Binding SpeakerIdOptions}"
+                          SelectedItem="{Binding MergeTargetSpeakerId, Mode=TwoWay}" />
+                <Button Command="{Binding MergeSpeakersCommand}"
+                        Content="Merge (updates transcript)"
+                        Padding="10,6" />
+            </StackPanel>
+
+            <Border Margin="0,8,0,0"
+                    Padding="12,10"
+                    CornerRadius="8"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    Background="{DynamicResource ControlBackgroundBrush}"
+                    IsVisible="{Binding ShowPiperVoicePicker}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Piper voices" FontWeight="SemiBold" FontSize="13" />
+                    <TextBlock Text="Download voices here (Settings → Models no longer lists Piper). After download, choose a voice per speaker in the list below, or type a voice id."
+                               FontSize="11"
+                               Opacity="0.8"
+                               TextWrapping="Wrap" />
+                    <ItemsControl ItemsSource="{Binding PiperVoiceCatalogRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PiperVoiceCatalogRowViewModel">
+                                <Border Margin="0,0,0,6" Padding="10,8"
+                                        Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="8">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding Title}"
+                                                   FontSize="12" FontWeight="Medium"
+                                                   VerticalAlignment="Center" Width="260" TextWrapping="Wrap" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4" Margin="12,0">
+                                            <TextBlock Text="{Binding StatusLabel}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource StatusTextBrush}" />
+                                            <ProgressBar Value="{Binding DownloadProgress}"
+                                                         Minimum="0" Maximum="1"
+                                                         Height="4"
+                                                         IsVisible="{Binding IsProgressVisible}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Button Content="Download"
+                                                    IsVisible="{Binding CanDownload}"
+                                                    Command="{Binding DownloadCommand}"
+                                                    FontSize="11" Padding="8,4" />
+                                            <Button Content="Cancel"
+                                                    IsVisible="{Binding CanCancel}"
+                                                    Command="{Binding CancelCommand}"
+                                                    FontSize="11" Padding="8,4" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- Embedded session preview (libmpv, Windows) -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="10"
+                Margin="0,0,0,10"
+                IsVisible="{Binding MiniPreview.ShowVideoSurface}">
+            <Grid RowDefinitions="Auto,200,Auto,Auto" RowSpacing="8">
+                <TextBlock Text="Session preview (embedded)"
+                           FontWeight="SemiBold"
+                           FontSize="13" />
+                <v:MpvVideoView x:Name="WizardVideoView"
+                                Grid.Row="1"
+                                Height="200"
+                                MinHeight="160"
+                                HorizontalAlignment="Stretch" />
+                <Grid Grid.Row="2"
+                      ColumnDefinitions="44,*,44,Auto"
+                      ColumnSpacing="8"
+                      VerticalAlignment="Center">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding MiniPreview.PositionFormatted}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource VideoOverlaySubtextBrush}" />
+                    <Slider Grid.Column="1"
+                            Minimum="0"
+                            Maximum="{Binding MiniPreview.DurationMs}"
+                            Value="{Binding MiniPreview.PositionMs, Mode=TwoWay}"
+                            IsEnabled="{Binding MiniPreview.HasLoadedMedia}"
+                            VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding MiniPreview.DurationFormatted}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               TextAlignment="Right"
+                               Foreground="{DynamicResource VideoOverlaySubtextBrush}" />
+                    <Button Grid.Column="3"
+                            Command="{Binding MiniPreview.ToggleMiniPlaybackCommand}"
+                            Content="{Binding MiniPreview.MiniPlayPauseLabel}"
+                            Padding="10,6" />
+                </Grid>
+                <TextBlock Grid.Row="3"
+                           Text="{Binding MiniPreview.StatusHint}"
+                           FontSize="11"
+                           Foreground="{DynamicResource DestructiveBrush}"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding MiniPreview.HasStatusHint}" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="12"
+                Margin="0,0,0,10"
+                IsVisible="{Binding MiniPreview.ShowNonWindowsHint}">
+            <TextBlock Text="Embedded session preview uses libmpv on Windows. On this platform, use the main video preview to scrub and pick playhead clips."
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       Opacity="0.85" />
+        </Border>
+
+        <Border Grid.Row="3" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding VisibleDraftItems}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="model:SpeakerReferenceDraftItem">
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,10">
+                                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                                      ColumnDefinitions="Auto,*,Auto"
+                                      RowSpacing="6"
+                                      ColumnSpacing="12">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding SpeakerId}" FontWeight="SemiBold" FontSize="13" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding LastActionLabel}" Opacity="0.75" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding ConfidenceTier}" FontWeight="SemiBold" />
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Voice" Opacity="0.7" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                                               Text="{Binding EffectiveAssignedVoice, TargetNullValue='—'}"
+                                               TextWrapping="Wrap"
+                                               FontSize="11" />
+
+                                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+                                                Orientation="Horizontal" Spacing="8">
+                                        <Button Tag="{Binding}"
+                                                Click="OnKeepAutoClick"
+                                                Content="Keep auto"
+                                                Padding="8,6" />
+                                        <Button Tag="{Binding}"
+                                                Click="OnUseActiveTtsVoiceClick"
+                                                Content="Use active TTS voice"
+                                                Padding="8,6" />
+                                        <Button Tag="{Binding}"
+                                                Click="OnClearVoiceClick"
+                                                Content="Clear voice"
+                                                Padding="8,6" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Piper voice" Opacity="0.7"
+                                               IsVisible="{Binding ShowPiperVoiceRow}" />
+                                    <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                                              IsVisible="{Binding ShowPiperVoiceRow}"
+                                              IsEditable="True"
+                                              ItemsSource="{Binding $parent[Window].DataContext.PiperVoices}"
+                                              SelectedItem="{Binding DraftAssignedVoice, Mode=TwoWay}"
+                                              MinWidth="200"
+                                              FontSize="11"
+                                              ToolTip.Tip="Pick a downloaded Piper voice, or type a voice id manually." />
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Segments" Opacity="0.7" />
+                                    <ScrollViewer Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2"
+                                                  MaxHeight="100"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding SourceSegments}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Vertical" Spacing="4" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="model:WorkflowSegmentState">
+                                                    <Button HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Left"
+                                                            Padding="8,4"
+                                                            FontSize="11"
+                                                            Click="OnJumpToSegmentClick"
+                                                            Tag="{Binding}"
+                                                            ToolTip.Tip="{Binding SourceText}">
+                                                        <TextBlock Text="{Binding StartSeconds, StringFormat='Jump to {0:F1}s'}" />
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Clip" Opacity="0.7"
+                                               IsVisible="{Binding ReferenceActionsEnabled}" />
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2"
+                                               Text="{Binding EffectiveReferencePath, TargetNullValue='—'}"
+                                               TextWrapping="Wrap"
+                                               FontFamily="Consolas,monospace"
+                                               FontSize="11"
+                                               IsVisible="{Binding ReferenceActionsEnabled}" />
+
+                                    <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3"
+                                                Orientation="Horizontal" Spacing="8"
+                                                IsVisible="{Binding ReferenceActionsEnabled}">
+                                        <Button Tag="{Binding}"
+                                                Click="OnPlayReferenceClick"
+                                                Content="Play reference"
+                                                Padding="8,6" />
+                                        <Button Tag="{Binding}"
+                                                Click="OnRevealReferenceClick"
+                                                Content="Show in folder"
+                                                Padding="8,6" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Reason" Opacity="0.7"
+                                               IsVisible="{Binding ReferenceActionsEnabled}" />
+                                    <TextBlock Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2"
+                                               Text="{Binding ConfidenceReasonSummary}"
+                                               TextWrapping="Wrap"
+                                               FontSize="11"
+                                               IsVisible="{Binding ReferenceActionsEnabled}" />
+
+                                    <Grid Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3"
+                                          ColumnDefinitions="*,*,*,*" ColumnSpacing="8"
+                                          IsVisible="{Binding ReferenceActionsEnabled}">
+                                        <Button Grid.Column="0"
+                                                Tag="{Binding}"
+                                                Click="OnBrowseFileClick"
+                                                Content="Browse file"
+                                                Padding="8,6" />
+                                        <Button Grid.Column="1"
+                                                Tag="{Binding}"
+                                                Click="OnUseSelectedSegmentClick"
+                                                Content="Use selected segment"
+                                                Padding="8,6" />
+                                        <Button Grid.Column="2"
+                                                Tag="{Binding}"
+                                                Click="OnUsePlayheadClipClick"
+                                                Content="Use playhead clip"
+                                                Padding="8,6" />
+                                        <Button Grid.Column="3"
+                                                Tag="{Binding}"
+                                                Click="OnAutoPickAnotherClick"
+                                                Content="Auto-pick another"
+                                                Padding="8,6" />
+                                    </Grid>
+
+                                    <TextBlock Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
+                                               Text="{Binding InlineError}"
+                                               Foreground="{DynamicResource DestructiveBrush}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               IsVisible="{Binding HasInlineError}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="4" ColumnDefinitions="*,Auto,Auto" Margin="0,12,0,0" ColumnSpacing="8">
+            <TextBlock Grid.Column="0"
+                       Text="Finish applies only changed voice and reference mappings. Cancel discards all draft edits."
+                       VerticalAlignment="Center"
+                       Opacity="0.75"
+                       TextWrapping="Wrap" />
+            <Button Grid.Column="1"
+                    Click="OnCancelClick"
+                    Content="Cancel"
+                    Padding="14,8" />
+            <Button Grid.Column="2"
+                    Click="OnFinishClick"
+                    Content="Finish"
+                    Padding="14,8" />
+        </Grid>
+    </Grid>
+</Window>

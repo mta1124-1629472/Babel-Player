@@ -1,0 +1,35 @@
+# Managed CPU runtime dependencies for local subprocess providers
+
+# Transcription
+faster-whisper
+
+# Translation
+ctranslate2
+sentencepiece
+transformers
+accelerate
+
+# TTS
+edge-tts
+
+# Audio utilities
+soundfile
+numpy
+requests
+setuptools
+
+# Diarization
+git+https://github.com/wenet-e2e/wespeaker.git@c92349a14d6b426808c4e09b8b12e076864dfc11
+s3prl
+silero-vad
+onnxruntime
+openai-whisper
+peft
+scikit-learn
+
+# Vocal separation
+audio-separator>=0.24.0
+
+# Shared ML
+torch
+torchaudio

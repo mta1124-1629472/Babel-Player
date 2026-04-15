@@ -1,8 +1,10 @@
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
@@ -18,7 +20,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
 {
     private readonly TestContext _ctx = new();
 
-    private sealed class TestContext
+    private sealed class TestContext : IDisposable
     {
         public string Dir { get; } = Path.Combine(Path.GetTempPath(), $"babel-pipeline-progress-{Guid.NewGuid():N}");
         public string StorePath { get; }
@@ -37,26 +39,29 @@ public sealed class PipelineStageProgressTests() : IDisposable
             MediaPath = Path.Combine(Dir, "sample.mp4");
             File.WriteAllText(MediaPath, "fake media");
         }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(Dir, recursive: true); }
+            catch { /* best effort cleanup */ }
+        }
     }
 
-    public void Dispose()
-    {
-        try { Directory.Delete(_ctx.Dir, recursive: true); }
-        catch { /* best effort cleanup */ }
-    }
+    public void Dispose() => _ctx.Dispose();
 
     [Fact]
-    public async Task AdvancePipelineAsync_FreshRun_EmitsSequentialVerboseStageUpdates()
+    public async Task AdvancePipelineAsync_FreshRun_StreamsStageWorkBeforeUpstreamCompletes()
     {
         var settings = CreateSettings();
+        settings.DiarizationProvider = string.Empty;
+        var probe = new PipelineTimingProbe(expectedSegments: 3);
         var coordinator = CreateCoordinator(
             settings,
-            new FakeTranscriptionRegistry(new FakeTranscriptionProvider()),
-            new FakeTranslationRegistry(new FakeTranslationProvider()),
-            new FakeTtsRegistry(new FakeTtsProvider()));
+            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(probe, perSegmentDelayMs: 80)),
+            new FakeTranslationRegistry(new DelayedTranslationProvider(probe, perSegmentDelayMs: 80)),
+            new FakeTtsRegistry(new DelayedTtsProvider(probe, perSegmentDelayMs: 80)));
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
-        coordinator.SetMultiSpeakerEnabled(false);
 
         List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
         await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
@@ -66,18 +71,59 @@ public sealed class PipelineStageProgressTests() : IDisposable
         AssertStage(updates, SessionWorkflowStage.Translated, 2, 3);
         AssertStage(updates, SessionWorkflowStage.TtsGenerated, 3, 3);
 
-        var transcriptionIndex = updates.FindIndex(u => u.TargetStage == SessionWorkflowStage.Transcribed);
-        var translationIndex = updates.FindIndex(u => u.TargetStage == SessionWorkflowStage.Translated);
-        var dubIndex = updates.FindIndex(u => u.TargetStage == SessionWorkflowStage.TtsGenerated);
-        Assert.True(transcriptionIndex >= 0, "Expected at least one transcription update.");
-        Assert.True(translationIndex > transcriptionIndex, "Translation updates should start after transcription updates.");
-        Assert.True(dubIndex > translationIndex, "Dub updates should start after translation updates.");
+        Assert.True(
+            probe.FirstStreamingTranslationStartedAt < probe.TranscriptionCompletedAt,
+            $"Expected translation to start before transcription completed, but translation={probe.FirstStreamingTranslationStartedAt}ms and transcriptionComplete={probe.TranscriptionCompletedAt}ms.");
+        Assert.True(
+            probe.FirstStreamingTtsStartedAt < probe.StreamingTranslationCompletedAt,
+            $"Expected TTS to start before translation completed, but tts={probe.FirstStreamingTtsStartedAt}ms and translationComplete={probe.StreamingTranslationCompletedAt}ms.");
+        Assert.Contains(
+            updates,
+            update => update.TargetStage == SessionWorkflowStage.Translated
+                   && !string.IsNullOrWhiteSpace(update.StreamingStatus));
+        Assert.Contains(
+            updates,
+            update => update.TargetStage == SessionWorkflowStage.TtsGenerated
+                   && !string.IsNullOrWhiteSpace(update.StreamingStatus));
+    }
+
+    [Fact]
+    public async Task AdvancePipelineAsync_StreamingPipeline_ReducesWallTimeAgainstSequentialStages()
+    {
+        // Wall-clock comparisons are unreliable on loaded CI runners.
+        // Instead, verify that translation starts before transcription finishes (and TTS before
+        // translation finishes), which is the structural invariant that proves streaming work.
+        var streamingSettings = CreateSettings();
+        streamingSettings.DiarizationProvider = string.Empty;
+        using var streamingCtx = new TestContext();
+
+        var probe = new PipelineTimingProbe(expectedSegments: 3);
+        var streamingCoordinator = CreateCoordinator(
+            streamingSettings,
+            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(probe, perSegmentDelayMs: 40)),
+            new FakeTranslationRegistry(new DelayedTranslationProvider(probe, perSegmentDelayMs: 40)),
+            new FakeTtsRegistry(new DelayedTtsProvider(probe, perSegmentDelayMs: 40)),
+            context: streamingCtx);
+        streamingCoordinator.Initialize();
+        streamingCoordinator.LoadMedia(streamingCtx.MediaPath);
+
+        await streamingCoordinator.AdvancePipelineAsync(progress: null, cancellationToken: CancellationToken.None);
+
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, streamingCoordinator.CurrentSession.Stage);
+
+        Assert.True(
+            probe.FirstStreamingTranslationStartedAt < probe.TranscriptionCompletedAt,
+            $"Expected translation to start before transcription completed, but translation={probe.FirstStreamingTranslationStartedAt}ms and transcriptionComplete={probe.TranscriptionCompletedAt}ms.");
+        Assert.True(
+            probe.FirstStreamingTtsStartedAt < probe.StreamingTranslationCompletedAt,
+            $"Expected TTS to start before translation completed, but tts={probe.FirstStreamingTtsStartedAt}ms and translationComplete={probe.StreamingTranslationCompletedAt}ms.");
     }
 
     [Fact]
     public async Task AdvancePipelineAsync_FromTranslatedSession_EmitsOnlyDubAsOneOfOne()
     {
         var settings = CreateSettings();
+        settings.DiarizationProvider = string.Empty;
         var transcriptionRegistry = new FakeTranscriptionRegistry(new FakeTranscriptionProvider());
         var translationRegistry = new FakeTranslationRegistry(new FakeTranslationProvider());
         var ttsRegistry = new FakeTtsRegistry(new FakeTtsProvider());
@@ -85,7 +131,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
         var coordinator = CreateCoordinator(settings, transcriptionRegistry, translationRegistry, ttsRegistry);
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
-        coordinator.SetMultiSpeakerEnabled(false);
         await coordinator.TranscribeMediaAsync();
         await coordinator.TranslateTranscriptAsync();
 
@@ -109,6 +154,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
     public async Task AdvancePipelineAsync_ModelDownloadProgress_IsMappedIntoActiveStageBar()
     {
         var settings = CreateSettings();
+        settings.DiarizationProvider = string.Empty;
         var downloadProvider = new FakeTranslationProvider(
             requiresDownload: true,
             downloadSteps: [0.25, 0.5, 1.0]);
@@ -119,7 +165,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
             new FakeTtsRegistry(new FakeTtsProvider()));
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
-        coordinator.SetMultiSpeakerEnabled(false);
 
         List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
         await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
@@ -141,7 +186,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
     }
 
     [Fact]
-    public async Task AdvancePipelineAsync_MultiSpeakerRun_PausesAtDiarized_ThenContinueRunsTranslationAndDub()
+    public async Task AdvancePipelineAsync_MultiSpeakerRun_ContinuesPastDiarizedIntoTranslationAndDub()
     {
         var settings = CreateSettings();
         var diarizationRegistry = new FakeDiarizationRegistry(
@@ -163,21 +208,69 @@ public sealed class PipelineStageProgressTests() : IDisposable
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
 
-        List<SessionWorkflowCoordinator.PipelineStageUpdate> advanceUpdates = [];
-        await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(advanceUpdates));
-
-        Assert.Equal(SessionWorkflowStage.Diarized, coordinator.CurrentSession.Stage);
-        AssertStage(advanceUpdates, SessionWorkflowStage.Transcribed, 1, 2);
-        AssertStage(advanceUpdates, SessionWorkflowStage.Diarized, 2, 2);
-        Assert.DoesNotContain(advanceUpdates, update => update.TargetStage == SessionWorkflowStage.Translated);
-        Assert.DoesNotContain(advanceUpdates, update => update.TargetStage == SessionWorkflowStage.TtsGenerated);
-
-        List<SessionWorkflowCoordinator.PipelineStageUpdate> continuationUpdates = [];
-        await coordinator.ContinuePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(continuationUpdates));
+        List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
+        await coordinator.AdvancePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
 
         Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
-        AssertStage(continuationUpdates, SessionWorkflowStage.Translated, 1, 2);
-        AssertStage(continuationUpdates, SessionWorkflowStage.TtsGenerated, 2, 2);
+        AssertStage(updates, SessionWorkflowStage.Transcribed, 1, 4);
+        AssertStage(updates, SessionWorkflowStage.Diarized, 2, 4);
+        AssertStage(updates, SessionWorkflowStage.Translated, 3, 4);
+        AssertStage(updates, SessionWorkflowStage.TtsGenerated, 4, 4);
+    }
+
+    [Fact]
+    public async Task ContinuePipelineAsync_FromDiarizedSession_StreamsTranslationIntoDub()
+    {
+        var settings = CreateSettings();
+        var probe = new PipelineTimingProbe(expectedSegments: 3);
+        var diarizationRegistry = new FakeDiarizationRegistry(
+            (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider(_ =>
+                new DiarizationResult(
+                    true,
+                    [
+                        new DiarizedSegment(0.0, 1.0, "spk_00"),
+                        new DiarizedSegment(1.0, 2.0, "spk_01"),
+                        new DiarizedSegment(2.0, 3.0, "spk_00"),
+                    ],
+                    2,
+                    null))));
+        var coordinator = CreateCoordinator(
+            settings,
+            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(probe, perSegmentDelayMs: 40)),
+            new FakeTranslationRegistry(new DelayedTranslationProvider(probe, perSegmentDelayMs: 40)),
+            new FakeTtsRegistry(new DelayedTtsProvider(probe, perSegmentDelayMs: 40)),
+            diarizationRegistry);
+        coordinator.Initialize();
+        coordinator.LoadMedia(_ctx.MediaPath);
+
+        await coordinator.AdvancePipelineAsync(progress: null, cancellationToken: CancellationToken.None);
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
+
+        var applyResult = coordinator.ApplyPipelineSettings(
+            new PipelineSettingsSelection(
+                settings.TranscriptionProfile,
+                settings.TranscriptionProvider,
+                settings.TranscriptionModel,
+                settings.TranslationProfile,
+                settings.TranslationProvider,
+                "fake-translation-model-v2",
+                settings.TtsProfile,
+                settings.TtsProvider,
+                settings.TtsVoice,
+                settings.TargetLanguage));
+        Assert.Equal(SessionWorkflowStage.Diarized, applyResult.StageAfterApply);
+
+        probe.Reset();
+
+        List<SessionWorkflowCoordinator.PipelineStageUpdate> updates = [];
+        await coordinator.ContinuePipelineAsync(stageProgress: new CaptureProgress<SessionWorkflowCoordinator.PipelineStageUpdate>(updates));
+
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
+        AssertStage(updates, SessionWorkflowStage.Translated, 1, 2);
+        AssertStage(updates, SessionWorkflowStage.TtsGenerated, 2, 2);
+        Assert.True(
+            probe.FirstStreamingTtsStartedAt < probe.StreamingTranslationCompletedAt,
+            $"Expected continued TTS to start before continued translation completed, but tts={probe.FirstStreamingTtsStartedAt}ms and translationComplete={probe.StreamingTranslationCompletedAt}ms.");
     }
 
     [Fact]
@@ -191,7 +284,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
             new FakeTtsRegistry(new FakeTtsProvider()));
         coordinator.Initialize();
         coordinator.LoadMedia(_ctx.MediaPath);
-        coordinator.SetMultiSpeakerEnabled(false);
         await coordinator.TranscribeMediaAsync();
         await coordinator.TranslateTranscriptAsync();
 
@@ -260,12 +352,14 @@ public sealed class PipelineStageProgressTests() : IDisposable
         ITranscriptionRegistry transcriptionRegistry,
         ITranslationRegistry translationRegistry,
         ITtsRegistry ttsRegistry,
-        IDiarizationRegistry? diarizationRegistry = null)
+        IDiarizationRegistry? diarizationRegistry = null,
+        TestContext? context = null)
     {
-        var log = new AppLog(Path.Combine(_ctx.Dir, $"test-{Guid.NewGuid():N}.log"));
-        var store = new SessionSnapshotStore(_ctx.StorePath, log);
-        var perSessionStore = new PerSessionSnapshotStore(_ctx.PerSessionDir, log);
-        var recentStore = new RecentSessionsStore(_ctx.RecentPath, log);
+        var ctx = context ?? _ctx;
+        var log = new AppLog(Path.Combine(ctx.Dir, $"test-{Guid.NewGuid():N}.log"));
+        var store = new SessionSnapshotStore(ctx.StorePath, log);
+        var perSessionStore = new PerSessionSnapshotStore(ctx.PerSessionDir, log);
+        var recentStore = new RecentSessionsStore(ctx.RecentPath, log);
         var registries = new Babel.Player.Models.RegistryBundle(
             perSessionStore, recentStore,
             transcriptionRegistry, translationRegistry, ttsRegistry);
@@ -317,9 +411,9 @@ public sealed class PipelineStageProgressTests() : IDisposable
 
     private sealed class FakeTranscriptionRegistry : ITranscriptionRegistry
     {
-        private readonly FakeTranscriptionProvider _provider;
+        private readonly ITranscriptionProvider _provider;
 
-        public FakeTranscriptionRegistry(FakeTranscriptionProvider provider)
+        public FakeTranscriptionRegistry(ITranscriptionProvider provider)
         {
             _provider = provider;
         }
@@ -351,9 +445,9 @@ public sealed class PipelineStageProgressTests() : IDisposable
 
     private sealed class FakeTranslationRegistry : ITranslationRegistry
     {
-        private readonly FakeTranslationProvider _provider;
+        private readonly ITranslationProvider _provider;
 
-        public FakeTranslationRegistry(FakeTranslationProvider provider)
+        public FakeTranslationRegistry(ITranslationProvider provider)
         {
             _provider = provider;
         }
@@ -385,9 +479,9 @@ public sealed class PipelineStageProgressTests() : IDisposable
 
     private sealed class FakeTtsRegistry : ITtsRegistry
     {
-        private readonly FakeTtsProvider _provider;
+        private readonly ITtsProvider _provider;
 
-        public FakeTtsRegistry(FakeTtsProvider provider)
+        public FakeTtsRegistry(ITtsProvider provider)
         {
             _provider = provider;
         }
@@ -472,15 +566,16 @@ public sealed class PipelineStageProgressTests() : IDisposable
                     ModelDownloadDescription: $"Download {settings.TranslationModel}")
                 : ProviderReadiness.Ready;
 
-        public Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
+        public async Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
         {
             foreach (var step in _downloadSteps)
             {
                 progress?.Report(step);
+                await Task.Yield();
             }
 
             _requiresDownload = false;
-            return Task.FromResult(true);
+            return true;
         }
 
         public async Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)
@@ -567,6 +662,257 @@ public sealed class PipelineStageProgressTests() : IDisposable
             return Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, new FileInfo(request.OutputAudioPath).Length, null));
         }
     }
+
+    private sealed class PipelineTimingProbe(int expectedSegments)
+    {
+        private readonly Stopwatch _clock = Stopwatch.StartNew();
+        private readonly int _expectedSegments = expectedSegments;
+        private int _streamingTranslationsCompleted;
+        private long _firstStreamingTranslationStartedAt = -1;
+        private long _streamingTranslationCompletedAt = -1;
+        private long _firstStreamingTtsStartedAt = -1;
+        private long _transcriptionCompletedAt = -1;
+
+        public long FirstStreamingTranslationStartedAt => Interlocked.Read(ref _firstStreamingTranslationStartedAt);
+        public long StreamingTranslationCompletedAt => Interlocked.Read(ref _streamingTranslationCompletedAt);
+        public long FirstStreamingTtsStartedAt => Interlocked.Read(ref _firstStreamingTtsStartedAt);
+        public long TranscriptionCompletedAt => Interlocked.Read(ref _transcriptionCompletedAt);
+
+        public void MarkStreamingTranslationStarted() =>
+            Interlocked.CompareExchange(ref _firstStreamingTranslationStartedAt, _clock.ElapsedMilliseconds, -1);
+
+        public void MarkStreamingTranslationCompleted()
+        {
+            if (Interlocked.Increment(ref _streamingTranslationsCompleted) == _expectedSegments)
+                Interlocked.Exchange(ref _streamingTranslationCompletedAt, _clock.ElapsedMilliseconds);
+        }
+
+        public void MarkStreamingTtsStarted() =>
+            Interlocked.CompareExchange(ref _firstStreamingTtsStartedAt, _clock.ElapsedMilliseconds, -1);
+
+        public void MarkTranscriptionCompleted() =>
+            Interlocked.Exchange(ref _transcriptionCompletedAt, _clock.ElapsedMilliseconds);
+
+        public void Reset()
+        {
+            _clock.Restart();
+            Interlocked.Exchange(ref _streamingTranslationsCompleted, 0);
+            Interlocked.Exchange(ref _firstStreamingTranslationStartedAt, -1);
+            Interlocked.Exchange(ref _streamingTranslationCompletedAt, -1);
+            Interlocked.Exchange(ref _firstStreamingTtsStartedAt, -1);
+            Interlocked.Exchange(ref _transcriptionCompletedAt, -1);
+        }
+    }
+
+    private sealed class DelayedTranscriptionProvider(
+        PipelineTimingProbe probe,
+        int perSegmentDelayMs = 80) : ITranscriptionProvider, IStreamingTranscriptionProvider
+    {
+        private static readonly IReadOnlyList<TranscriptSegmentArtifact> Segments =
+        [
+            new() { Start = 0.0, End = 1.0, Text = "Hola" },
+            new() { Start = 1.0, End = 2.0, Text = "Mundo" },
+            new() { Start = 2.0, End = 3.0, Text = "Otra vez" },
+        ];
+
+        public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
+            ProviderReadiness.Ready;
+
+        public Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default) =>
+            Task.FromResult(true);
+
+        public async Task<TranscriptionResult> TranscribeAsync(TranscriptionRequest request, CancellationToken cancellationToken = default)
+        {
+            foreach (var _ in Segments)
+                await Task.Delay(perSegmentDelayMs, cancellationToken);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(request.OutputJsonPath)!);
+            var artifact = new TranscriptArtifact
+            {
+                Language = "es",
+                LanguageProbability = 0.99,
+                Segments = Segments.Select(CloneTranscriptArtifact).ToList(),
+            };
+            File.WriteAllText(request.OutputJsonPath, ArtifactJson.SerializeTranscript(artifact));
+            return BuildResult();
+        }
+
+        public async Task<TranscriptionResult> TranscribeStreamingAsync(
+            TranscriptionRequest request,
+            ChannelWriter<TranscriptChannelItem> writer,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                foreach (var segment in Segments)
+                {
+                    await Task.Delay(perSegmentDelayMs, cancellationToken);
+                    await writer.WriteAsync(
+                        new TranscriptChannelItem(
+                            SessionWorkflowCoordinator.SegmentId(segment.Start),
+                            CloneTranscriptArtifact(segment),
+                            "es",
+                            0.99),
+                        cancellationToken);
+                }
+
+                probe.MarkTranscriptionCompleted();
+                return BuildResult();
+            }
+            finally
+            {
+                writer.TryComplete();
+            }
+        }
+
+        private static TranscriptSegmentArtifact CloneTranscriptArtifact(TranscriptSegmentArtifact segment) =>
+            new()
+            {
+                Start = segment.Start,
+                End = segment.End,
+                Text = segment.Text,
+                SpeakerId = segment.SpeakerId,
+                OriginalStart = segment.OriginalStart,
+                Words = segment.Words is null ? null : [.. segment.Words],
+            };
+
+        private static TranscriptionResult BuildResult() =>
+            new(
+                true,
+                Segments.Select(segment => new TranscriptSegment(
+                    segment.Start,
+                    segment.End,
+                    segment.Text ?? string.Empty,
+                    segment.SpeakerId)).ToList(),
+                "es",
+                0.99,
+                null);
+    }
+
+    private sealed class DelayedTranslationProvider(
+        PipelineTimingProbe probe,
+        int perSegmentDelayMs = 80,
+        bool requiresDownload = false,
+        IReadOnlyList<double>? downloadSteps = null) : ITranslationProvider
+    {
+        private bool _requiresDownload = requiresDownload;
+        private readonly IReadOnlyList<double> _downloadSteps = downloadSteps ?? [];
+
+        public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
+            _requiresDownload
+                ? new ProviderReadiness(
+                    false,
+                    $"Model '{settings.TranslationModel}' not downloaded yet.",
+                    RequiresModelDownload: true,
+                    ModelDownloadDescription: $"Download {settings.TranslationModel}")
+                : ProviderReadiness.Ready;
+
+        public Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
+        {
+            foreach (var step in _downloadSteps)
+                progress?.Report(step);
+
+            _requiresDownload = false;
+            return Task.FromResult(true);
+        }
+
+        public async Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)
+        {
+            var transcript = await ArtifactJson.LoadTranscriptAsync(request.TranscriptJsonPath, cancellationToken);
+            var segments = transcript.Segments?.Select(segment => new TranslationSegmentArtifact
+            {
+                Id = SessionWorkflowCoordinator.SegmentId(segment.Start),
+                Start = segment.Start,
+                End = segment.End,
+                Text = segment.Text,
+                TranslatedText = $"{segment.Text} ({request.TargetLanguage})",
+                SpeakerId = segment.SpeakerId,
+            }).ToList() ?? [];
+
+            foreach (var _ in segments)
+                await Task.Delay(perSegmentDelayMs, cancellationToken);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(request.OutputJsonPath)!);
+            File.WriteAllText(
+                request.OutputJsonPath,
+                ArtifactJson.SerializeTranslation(
+                    new TranslationArtifact
+                    {
+                        SourceLanguage = request.SourceLanguage,
+                        TargetLanguage = request.TargetLanguage,
+                        Segments = segments,
+                    }));
+
+            return BuildTranslationResult(segments, request.SourceLanguage, request.TargetLanguage);
+        }
+
+        public async Task<TranslationResult> TranslateSingleSegmentAsync(SingleSegmentTranslationRequest request, CancellationToken cancellationToken = default)
+        {
+            probe.MarkStreamingTranslationStarted();
+            await Task.Delay(perSegmentDelayMs, cancellationToken);
+
+            var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
+            foreach (var segment in translation.Segments ?? [])
+            {
+                if (segment.Id == request.SegmentId)
+                    segment.TranslatedText = $"{request.SourceText} ({request.TargetLanguage})";
+            }
+
+            File.WriteAllText(request.OutputJsonPath, ArtifactJson.SerializeTranslation(translation));
+            probe.MarkStreamingTranslationCompleted();
+
+            return BuildTranslationResult(
+                translation.Segments ?? [],
+                translation.SourceLanguage ?? request.SourceLanguage,
+                translation.TargetLanguage ?? request.TargetLanguage);
+        }
+
+        private static TranslationResult BuildTranslationResult(
+            IReadOnlyList<TranslationSegmentArtifact> segments,
+            string sourceLanguage,
+            string targetLanguage) =>
+            new(
+                true,
+                segments.Select(segment => new TranslatedSegment(
+                    segment.Start,
+                    segment.End,
+                    segment.Text ?? string.Empty,
+                    segment.TranslatedText ?? string.Empty,
+                    segment.SpeakerId)).ToList(),
+                sourceLanguage,
+                targetLanguage,
+                null);
+    }
+
+    private sealed class DelayedTtsProvider(
+        PipelineTimingProbe probe,
+        int perSegmentDelayMs = 80) : ITtsProvider
+    {
+        public int MaxConcurrency => 1;
+
+        public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
+            ProviderReadiness.Ready;
+
+        public Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default) =>
+            Task.FromResult(true);
+
+        public Task<TtsResult> GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken = default)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(request.OutputAudioPath)!);
+            File.WriteAllText(request.OutputAudioPath, "fake audio");
+            return Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, new FileInfo(request.OutputAudioPath).Length, null));
+        }
+
+        public async Task<TtsResult> GenerateSegmentTtsAsync(SingleSegmentTtsRequest request, CancellationToken cancellationToken = default)
+        {
+            probe.MarkStreamingTtsStarted();
+            await Task.Delay(perSegmentDelayMs, cancellationToken);
+            Directory.CreateDirectory(Path.GetDirectoryName(request.OutputAudioPath)!);
+            File.WriteAllText(request.OutputAudioPath, request.Text);
+            return new TtsResult(true, request.OutputAudioPath, request.VoiceName, new FileInfo(request.OutputAudioPath).Length, null);
+        }
+    }
+
     private class StubAudioProcessingService : IAudioProcessingService
     {
         public Task CombineAudioSegmentsAsync(IReadOnlyList<string> segmentAudioPaths, string outputPath, CancellationToken cancellationToken)
@@ -587,5 +933,21 @@ public sealed class PipelineStageProgressTests() : IDisposable
             File.WriteAllText(outputPath, "fake extracted clip");
             return Task.CompletedTask;
         }
+
+        public Task ExtractFullAudioAsync(string inputPath, string outputPath, CancellationToken cancellationToken)
+        {
+            var outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            File.WriteAllText(outputPath, "fake full audio");
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
+            double minRatio = 0.75, double maxRatio = 1.35, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
+            => Task.FromResult<double?>(null);
     }
 }

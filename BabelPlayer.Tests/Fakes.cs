@@ -120,32 +120,28 @@ public sealed class FakeTranslationProvider : ITranslationProvider
 
     public async Task<TranslationResult> TranslateSingleSegmentAsync(SingleSegmentTranslationRequest request, CancellationToken ct = default)
     {
-        var resultSegments = new List<TranslatedSegment>
+        var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, ct);
+        foreach (var segment in translation.Segments ?? [])
         {
-            new(0.0, 2.0, "Hello world.", "[Translated: Hello world.]")
-        };
+            if (segment.Id == request.SegmentId)
+                segment.TranslatedText = $"{request.SourceText} (en)";
+        }
 
-        var result = new TranslationResult(true, resultSegments, request.SourceLanguage, request.TargetLanguage, null);
-        
-        var json = JsonSerializer.Serialize(new
-        {
-            success = true,
-            segments = resultSegments.Select(s => new
-            {
-                id = $"segment_{s.StartSeconds:G}",
-                startSeconds = s.StartSeconds,
-                endSeconds = s.EndSeconds,
-                text = s.Text,
-                translatedText = s.TranslatedText,
-                speakerId = s.SpeakerId
-            }),
-            sourceLanguage = request.SourceLanguage,
-            targetLanguage = request.TargetLanguage,
-            errorMessage = (string?)null
-        });
-
+        var json = ArtifactJson.SerializeTranslation(translation);
         await File.WriteAllTextAsync(request.OutputJsonPath, json, ct);
-        return result;
+
+        return new TranslationResult(
+            true,
+            (translation.Segments ?? [])
+                .Select(segment => new TranslatedSegment(
+                    segment.Start,
+                    segment.End,
+                    segment.Text ?? string.Empty,
+                    segment.TranslatedText ?? string.Empty))
+                .ToList(),
+            translation.SourceLanguage ?? request.SourceLanguage,
+            translation.TargetLanguage ?? request.TargetLanguage,
+            null);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) => new(true, "Ready");
@@ -203,4 +199,38 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         await File.WriteAllBytesAsync(outputPath, [0xCC, 0xDD], cancellationToken);
     }
+
+    /// <summary>
+    /// Writes a small placeholder audio file to the specified output path and ensures the output directory exists; the input path is not used.
+    /// </summary>
+    /// <param name="inputPath">The source audio path (ignored by this fake implementation).</param>
+    /// <param name="outputPath">The file path to write the placeholder audio bytes to; the method creates the directory if needed.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous write operation.</param>
+    public async Task ExtractFullAudioAsync(string inputPath, string outputPath, CancellationToken cancellationToken)
+    {
+        var dir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        await File.WriteAllBytesAsync(outputPath, [0xEE, 0xFF], cancellationToken);
+    }
+
+    /// <summary>
+        /// Attempts to produce a time-stretched version of an audio file at the requested duration.
+        /// </summary>
+        /// <param name="inputPath">Path to the source audio file to be time-stretched.</param>
+        /// <param name="outputPath">Path where the time-stretched audio should be written.</param>
+        /// <param name="targetDurationSeconds">Desired duration in seconds for the output audio.</param>
+        /// <param name="minRatio">Minimum allowed stretch ratio (output duration / input duration).</param>
+        /// <param name="maxRatio">Maximum allowed stretch ratio (output duration / input duration).</param>
+        /// <param name="cancellationToken">Token to observe while waiting for the operation to complete.</param>
+        /// <returns>`true` if the time-stretched audio was produced and written to <paramref name="outputPath"/>, `false` otherwise.</returns>
+        public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
+        double minRatio = 0.75, double maxRatio = 1.35, CancellationToken cancellationToken = default)
+        => Task.FromResult(false); /// <summary>
+        /// Probe the duration of an audio file in seconds.
+        /// </summary>
+        /// <param name="filePath">Path to the audio file to probe.</param>
+        /// <returns>`double?` containing the duration in seconds, or `null` if the duration is unavailable. This fake implementation always returns `null`.</returns>
+
+    public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
+        => Task.FromResult<double?>(null);
 }

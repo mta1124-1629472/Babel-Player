@@ -24,6 +24,48 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     };
 
     private readonly ManagedCpuRuntimeManager _cpuRuntimeManager;
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
+    }
 
     /// <summary>
     /// Creates a WeSpeakerCpuDiarizationProvider and initializes an internal ManagedCpuRuntimeManager for CPU-based WeSpeaker diarization.
@@ -51,14 +93,16 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     /// <returns>A <see cref="ProviderReadiness"/> that is Ready when the managed CPU runtime is available; otherwise not ready with a diagnostic message explaining whether the runtime failed or still requires bootstrapping.</returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
-        if (_cpuRuntimeManager.State == ManagedCpuState.Failed)
+        var inspection = _cpuRuntimeManager.InspectRuntimeState();
+
+        if (inspection.State == ManagedCpuState.Failed)
         {
             return new ProviderReadiness(
                 false,
-                $"Managed CPU runtime is not ready for WeSpeaker: {_cpuRuntimeManager.FailureReason ?? "bootstrap failed"}");
+                $"Managed CPU runtime is not ready for WeSpeaker: {inspection.Detail ?? "bootstrap failed"}");
         }
 
-        if (_cpuRuntimeManager.State != ManagedCpuState.Ready)
+        if (inspection.State != ManagedCpuState.Ready)
         {
             return new ProviderReadiness(
                 false,
@@ -82,9 +126,13 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     {
         try
         {
+            var beforeInspection = _cpuRuntimeManager.InspectRuntimeState();
+
             await _cpuRuntimeManager.EnsureInstalledAsync(cancellationToken: ct).ConfigureAwait(false);
             progress?.Report(1.0);
-            return _cpuRuntimeManager.State == ManagedCpuState.Ready;
+            var isReady = _cpuRuntimeManager.State == ManagedCpuState.Ready;
+            var afterInspection = _cpuRuntimeManager.InspectRuntimeState();
+            return isReady;
         }
         catch (OperationCanceledException)
         {
@@ -206,8 +254,13 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
 import json
 import sys
 import traceback
+import io
+import time
+from contextlib import redirect_stdout
 
 import wespeaker
+import wespeaker.cli.speaker as speaker_module
+import wespeaker.diar.extract_emb as extract_emb_module
 
 def _coerce_float(value):
     try:
@@ -261,11 +314,35 @@ def _parse_item(item):
 
     return None
 
+def _patch_wespeaker_subsegment():
+    original_subsegment = extract_emb_module.subsegment
+
+    def patched_subsegment(fbank, seg_id, window_fs, period_fs, frame_shift):
+        if getattr(fbank, "dim", lambda: 0)() == 3 and fbank.size(0) == 1:
+            fbank = fbank.squeeze(0)
+        return original_subsegment(fbank, seg_id, window_fs, period_fs, frame_shift)
+
+    extract_emb_module.subsegment = patched_subsegment
+    speaker_module.subsegment = patched_subsegment
+
 def main():
     audio_path = sys.argv[1]
-    model = wespeaker.load_model("english")
-    model.set_device("cpu")
-    raw_result = model.diarize(audio_path)
+    _patch_wespeaker_subsegment()
+    captured_stdout = io.StringIO()
+    with redirect_stdout(captured_stdout):
+        t0 = time.perf_counter()
+        model = wespeaker.load_model("english")
+        t1 = time.perf_counter()
+        model.set_device("cpu")
+        t2 = time.perf_counter()
+        raw_result = model.diarize(audio_path)
+        t3 = time.perf_counter()
+    print(json.dumps({"timing": "load_model_s", "value": round(t1 - t0, 3)}), file=sys.stderr)
+    print(json.dumps({"timing": "diarize_s", "value": round(t3 - t2, 3)}), file=sys.stderr)
+
+    diagnostic_output = captured_stdout.getvalue().strip()
+    if diagnostic_output:
+        print(diagnostic_output, file=sys.stderr)
 
     segments = []
     for item in _extract_items(raw_result):

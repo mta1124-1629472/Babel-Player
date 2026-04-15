@@ -97,11 +97,25 @@ public sealed class SettingsServiceTests : IDisposable
 
         var json = File.ReadAllText(_settingsPath);
 
-        Assert.Contains("\"TranscriptionProfile\": \"Gpu\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"TranscriptionProfile\": \"gpu\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"TranscriptionRuntime\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"TranslationRuntime\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"TtsRuntime\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"ContainerizedServiceUrl\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"AlwaysRunContainerAtAppStart\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SaveAndLoad_DubTimingMode_RoundTrips()
+    {
+        var service = new SettingsService(_settingsPath, _log);
+        service.Save(new AppSettings
+        {
+            DubTimingMode = SegmentTimingMode.Pause
+        });
+
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(SegmentTimingMode.Pause, loaded.DubTimingMode);
     }
 }

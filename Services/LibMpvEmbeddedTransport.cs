@@ -89,7 +89,11 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
         _dllHandle = LoadLibMpvDll();
         if (_dllHandle == IntPtr.Zero)
-            throw new DllNotFoundException("libmpv DLL not found.");
+        {
+            throw new DllNotFoundException(
+                "libmpv DLL could not be loaded. On Windows, run `pwsh ./scripts/fetch-win-native-deps.ps1` " +
+                $"from the repo root, rebuild, and ensure `native/{WindowsPackagingPaths.NativeRidFolder}/libmpv-2.dll` exists or is copied to the output directory.");
+        }
 
         LoadLibMpvFunctions();
 
@@ -116,21 +120,24 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         SetOption("hwdec",   _options.HwdecMode);
         SetOption("gpu-api", _options.GpuApi);
 
-        // ── HDR passthrough options (gpu-next + active HDR display required) ──
-        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
+        // ── HDR options (gpu-next; mutually exclusive driver RTX HDR vs mpv passthrough) ──
+        if (_options.UseGpuNext
+            && _options.AllowHdrPassthrough
+            && _options.HdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough)
         {
-            // Request mpv's HDR-capable output path. Driver-level Auto HDR remains
-            // separate and cannot be controlled from this playback path.
             SetOption("target-colorspace-hint", "yes");
-            // Tone-mapping algorithm for HDR → display peak mapping.
             SetOption("tone-mapping", _options.ToneMapping);
-            // Display peak nit target ("auto" or a numeric string like "1000").
             if (!string.IsNullOrWhiteSpace(_options.TargetPeak))
                 SetOption("target-peak", _options.TargetPeak);
-            // Dynamic per-frame peak detection — may cause brightness instability.
             SetOption("hdr-compute-peak", _options.HdrComputePeak ? "yes" : "no");
-            // Honour the display ICC profile for accurate colour.
             SetOption("icc-profile-auto", "yes");
+        }
+        else if (_options.UseGpuNext
+                 && _options.AllowHdrPassthrough
+                 && _options.HdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr)
+        {
+            _log?.Info(
+                "HDR mode: NVIDIA driver RTX/Auto HDR — mpv HDR passthrough options are not forced.");
         }
 
         // Keep audio enabled for source media preview
@@ -148,7 +155,9 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _isPaused = true;
         _hasEnded = false;
 
-        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
+        if (_options.UseGpuNext
+            && _options.AllowHdrPassthrough
+            && _options.HdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough)
         {
             _log?.Info(
                 $"Configured mpv HDR passthrough: gpu-next={_options.UseGpuNext}, " +
@@ -319,6 +328,9 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             return 0;
         }
     }
+
+    /// <inheritdoc />
+    public bool IsPlaying => _isLoaded && !_disposed && !_isPaused && !_hasEnded;
 
     public long Duration
     {
@@ -626,81 +638,34 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         double scaleExact = Math.Min(
             monitorWidth / (double)videoWidth,
             monitorHeight / (double)videoHeight);
-        double scale = Math.Floor(scaleExact * 10.0) / 10.0;
+        const double upscaleEpsilon = 1e-9;
+        double scaleFloored = Math.Floor(scaleExact * 10.0) / 10.0;
+        // Bias toward applying VSR: flooring to one decimal can turn ratios like 1.09 into 1.0 and
+        // incorrectly skip. When any upscale is needed, use the floored value if it already clears
+        // 1.0; otherwise round up to the next tenth so d3d11vpp always receives scale > 1.
+        double scaleForFilter = scaleFloored > 1.0
+            ? scaleFloored
+            : scaleExact > 1.0 + upscaleEpsilon
+                ? Math.Ceiling(scaleExact * 10.0) / 10.0
+                : scaleFloored;
 
-        if (scale <= 1.0)
-            return VsrFilterPlan.Skip("no-upscaling-required", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat, scale);
+        if (scaleForFilter <= 1.0)
+            return VsrFilterPlan.Skip("no-upscaling-required", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat, scaleForFilter);
 
         bool needsFormatConversion =
             !string.IsNullOrEmpty(hwPixelFormat) &&
             hwPixelFormat != "nv12" &&
             hwPixelFormat != "yuv420p";
 
-        string scaleStr = scale.ToString("F1", CultureInfo.InvariantCulture);
+        string scaleStr = scaleForFilter.ToString("F1", CultureInfo.InvariantCulture);
         string filterChain = needsFormatConversion
             ? $"@vsr:lavfi=[format=nv12],d3d11vpp=scaling-mode=nvidia:scale={scaleStr}"
             : $"@vsr:d3d11vpp=scaling-mode=nvidia:scale={scaleStr}";
 
-        return VsrFilterPlan.Apply(filterChain, scale, videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
+        return VsrFilterPlan.Apply(filterChain, scaleForFilter, videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
     }
 
-    private IntPtr LoadLibMpvDll()
-    {
-        try
-        {
-            string baseDir = AppContext.BaseDirectory;
-            string solutionRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".."));
-            string nativeDir = Path.Combine(solutionRoot, "native", "win-x64");
-
-            string[] possibleNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
-            foreach (string dllName in possibleNames)
-            {
-                string path = Path.Combine(nativeDir, dllName);
-                if (File.Exists(path))
-                {
-                    IntPtr handle = NativeLibrary.Load(path);
-                    if (handle != IntPtr.Zero) return handle;
-                }
-            }
-
-            foreach (string dllName in possibleNames)
-            {
-                string path = Path.Combine(baseDir, dllName);
-                if (File.Exists(path))
-                {
-                    IntPtr handle = NativeLibrary.Load(path);
-                    if (handle != IntPtr.Zero) return handle;
-                }
-            }
-
-            // Also try the native/win-x64 subdirectory of the base directory — this is where
-            // CopyToOutputDirectory places the DLL when built or published (preserving the
-            // native\win-x64\ relative path structure).
-            string nativeSubDir = Path.Combine(baseDir, "native", "win-x64");
-            foreach (string dllName in possibleNames)
-            {
-                string path = Path.Combine(nativeSubDir, dllName);
-                if (File.Exists(path))
-                {
-                    IntPtr handle = NativeLibrary.Load(path);
-                    if (handle != IntPtr.Zero) return handle;
-                }
-            }
-        }
-        catch
-        {
-            // Fall through to default loading
-        }
-
-        string[] fallbackNames = { "libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll" };
-        foreach (string dllName in fallbackNames)
-        {
-            IntPtr handle = NativeLibrary.Load(dllName);
-            if (handle != IntPtr.Zero) return handle;
-        }
-
-        return IntPtr.Zero;
-    }
+    private IntPtr LoadLibMpvDll() => LibMpvNativeLoader.Load();
 
     private void LoadLibMpvFunctions()
     {

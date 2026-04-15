@@ -69,11 +69,35 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
             var runtime = profile == ComputeProfile.Gpu
                 ? InferenceRuntime.Containerized
                 : InferenceRuntime.Local;
+
+            if (profile == ComputeProfile.Gpu)
+            {
+                return
+                [
+                    new(
+                        ProviderNames.FasterWhisper,
+                        "Faster Whisper (Local GPU Host)",
+                        false,
+                        null,
+                        ["tiny", "base", "small", "medium", "large-v3"],
+                        SupportedRuntimes: [InferenceRuntime.Containerized],
+                        DefaultRuntime: InferenceRuntime.Containerized),
+                    new(
+                        ProviderNames.Parakeet,
+                        "Parakeet TDT 0.6B",
+                        false,
+                        null,
+                        ["parakeet-tdt-0.6b-v3"],
+                        SupportedRuntimes: [InferenceRuntime.Containerized],
+                        DefaultRuntime: InferenceRuntime.Containerized),
+                ];
+            }
+
             return
             [
                 new(
                     ProviderNames.FasterWhisper,
-                    profile == ComputeProfile.Gpu ? "Faster Whisper (Local GPU Host)" : "Faster Whisper",
+                    "Faster Whisper",
                     false,
                     null,
                     ["tiny", "base", "small", "medium", "large-v3"],
@@ -174,9 +198,13 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
 
         if (resolvedRuntime == InferenceRuntime.Containerized)
         {
-            return new ContainerizedTranscriptionProvider(
-                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log, null, _requestLeaseTracker),
-                _log);
+            var client = new ContainerizedInferenceClient(
+                settings.EffectiveContainerizedServiceUrl, _log, null, _requestLeaseTracker);
+
+            if (normalizedProviderId == ProviderNames.Parakeet)
+                return new ParakeetTranscriptionProvider(client, _log);
+
+            return new ContainerizedTranscriptionProvider(client, _log);
         }
 
         return normalizedProviderId switch

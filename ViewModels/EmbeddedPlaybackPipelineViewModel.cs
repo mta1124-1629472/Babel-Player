@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -12,41 +13,68 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
 {
     private readonly EmbeddedPlaybackViewModel _parent;
     private readonly SessionWorkflowCoordinator _coordinator;
+    private readonly IPipelineRefreshDialogService? _refreshDialogs;
     private CancellationTokenSource? _pipelineCts;
-    private CancellationTokenSource? _diarizationCts;
 
     internal EmbeddedPlaybackPipelineViewModel(
         EmbeddedPlaybackViewModel parent,
-        SessionWorkflowCoordinator coordinator)
+        SessionWorkflowCoordinator coordinator,
+        IPipelineRefreshDialogService? refreshDialogs = null)
     {
         _parent = parent;
         _coordinator = coordinator;
+        _refreshDialogs = refreshDialogs;
     }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
+    [NotifyPropertyChangedFor(nameof(ShowPipelineStatusChrome))]
     private double _pipelineProgressPercent;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
+    [NotifyPropertyChangedFor(nameof(ShowPipelineStatusChrome))]
     private bool _isPipelineProgressVisible;
 
     [ObservableProperty]
     private string _pipelineStageTitle = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPipelineStatusChrome))]
     private string _pipelineStageDetail = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
     private bool _isPipelineProgressIndeterminate;
 
+    public bool ShowPipelineStatusChrome =>
+        _parent.IsBusy || IsPipelineProgressVisible || !string.IsNullOrWhiteSpace(PipelineStageDetail);
+
     public bool CanRunPipeline => !_parent.IsBusy;
 
-    public bool CanRunDiarizationOnly =>
+    public bool CanRefreshTranscription =>
+        !_parent.IsBusy &&
+        !string.IsNullOrWhiteSpace(_coordinator.CurrentSession.IngestedMediaPath) &&
+        File.Exists(_coordinator.CurrentSession.IngestedMediaPath!);
+
+    public bool CanRefreshDiarization =>
         !_parent.IsBusy &&
         _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed &&
-        !string.IsNullOrWhiteSpace(_parent.SpeakerRouting.DiarizationProvider);
+        !string.IsNullOrWhiteSpace(_parent.SpeakerRouting.DiarizationProvider) &&
+        !string.IsNullOrWhiteSpace(_coordinator.CurrentSession.TranscriptPath) &&
+        File.Exists(_coordinator.CurrentSession.TranscriptPath!);
+
+    public bool CanRefreshTranslation =>
+        !_parent.IsBusy &&
+        _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed &&
+        !string.IsNullOrWhiteSpace(_coordinator.CurrentSession.TranscriptPath) &&
+        File.Exists(_coordinator.CurrentSession.TranscriptPath!);
+
+    public bool CanRefreshDub =>
+        !_parent.IsBusy &&
+        _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Translated &&
+        !string.IsNullOrWhiteSpace(_coordinator.CurrentSession.TranslationPath) &&
+        File.Exists(_coordinator.CurrentSession.TranslationPath!);
 
     public string PipelineProgressStatusLine =>
         !IsPipelineProgressVisible
@@ -141,72 +169,145 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
         _parent.ClearStatusErrorDetail();
     }
 
-    [RelayCommand(CanExecute = nameof(CanRunDiarizationOnly))]
-    public async Task RunDiarizationOnlyAsync()
+    [RelayCommand(CanExecute = nameof(CanRefreshTranscription))]
+    private async Task RefreshTranscriptionAsync()
     {
-        _diarizationCts?.Cancel();
-        _diarizationCts?.Dispose();
-        _diarizationCts = new CancellationTokenSource();
-        var cancellationToken = _diarizationCts.Token;
+        var scope = await GetScopeAsync(PipelineRefreshSection.Transcription).ConfigureAwait(true);
+        if (!scope.HasValue)
+            return;
+
+        await RunPipelineOperationAsync(
+            "Re-running transcription…",
+            ct => _coordinator.RerunTranscriptionAsync(
+                scope.Value == PipelineRefreshScope.RemainingPipeline,
+                new Progress<SessionWorkflowCoordinator.PipelineStageUpdate>(ApplyStageUpdate),
+                ct)).ConfigureAwait(true);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRefreshDiarization))]
+    private async Task RefreshDiarizationAsync()
+    {
+        var scope = await GetScopeAsync(PipelineRefreshSection.Diarization).ConfigureAwait(true);
+        if (!scope.HasValue)
+            return;
+
+        await RunPipelineOperationAsync(
+            $"Running {_parent.ResolveDiarizationProviderLabel()} diarization…",
+            ct => _coordinator.RerunDiarizationAsync(
+                scope.Value == PipelineRefreshScope.RemainingPipeline,
+                new Progress<SessionWorkflowCoordinator.PipelineStageUpdate>(ApplyStageUpdate),
+                ct)).ConfigureAwait(true);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRefreshTranslation))]
+    private async Task RefreshTranslationAsync()
+    {
+        var scope = await GetScopeAsync(PipelineRefreshSection.Translation).ConfigureAwait(true);
+        if (!scope.HasValue)
+            return;
+
+        await RunPipelineOperationAsync(
+            "Re-running translation…",
+            ct => _coordinator.RerunTranslationAsync(
+                scope.Value == PipelineRefreshScope.RemainingPipeline,
+                new Progress<SessionWorkflowCoordinator.PipelineStageUpdate>(ApplyStageUpdate),
+                ct)).ConfigureAwait(true);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRefreshDub))]
+    private async Task RefreshDubAsync()
+    {
+        if (_refreshDialogs is null)
+            return;
+
+        if (!await _refreshDialogs.ConfirmRegenerateDubAsync().ConfigureAwait(true))
+            return;
+
+        await RunPipelineOperationAsync(
+            "Re-generating dub…",
+            ct => _coordinator.RerunDubAsync(
+                new Progress<SessionWorkflowCoordinator.PipelineStageUpdate>(ApplyStageUpdate),
+                ct)).ConfigureAwait(true);
+    }
+
+    private async Task<PipelineRefreshScope?> GetScopeAsync(PipelineRefreshSection section)
+    {
+        if (_refreshDialogs is null)
+            return PipelineRefreshScope.ThisStageOnly;
+
+        return await _refreshDialogs.PromptRefreshScopeAsync(section).ConfigureAwait(true);
+    }
+
+    private async Task RunPipelineOperationAsync(string status, Func<CancellationToken, Task> run)
+    {
+        var diagnostics = _coordinator.BootstrapDiagnostics;
+        if (!diagnostics.AllDependenciesAvailable)
+        {
+            _parent.StatusText = $"⚠ {diagnostics.DiagnosticSummary}";
+            _parent.ClearStatusErrorDetail();
+            return;
+        }
+
+        _pipelineCts?.Cancel();
+        _pipelineCts?.Dispose();
+        _pipelineCts = new CancellationTokenSource();
+        var cancellationToken = _pipelineCts.Token;
+        ResetProgressState();
 
         try
         {
             _parent.IsBusy = true;
-            _parent.StatusText = $"Running {_parent.ResolveDiarizationProviderLabel()} diarization…";
+            _parent.StatusText = status;
             _parent.ClearStatusErrorDetail();
-
-            var hadTranslatableOutput = _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Translated;
-            var speakerAssignmentsChanged = await _coordinator.RunDiarizationAsync(cancellationToken);
-            string completionStatus;
-
-            if (speakerAssignmentsChanged && hadTranslatableOutput)
-            {
-                _coordinator.ResetPipelineToTranslated();
-                completionStatus = "Diarization updated speaker assignments. TTS output was reset to translated state.";
-            }
-            else if (speakerAssignmentsChanged)
-            {
-                completionStatus = "Diarization updated speaker assignments.";
-            }
-            else
-            {
-                completionStatus = "Diarization complete. Speaker assignments were unchanged.";
-            }
-
-            await _parent.Preview.RefreshSegmentsAsync();
-            _parent.StatusText = completionStatus;
+            await run(cancellationToken).ConfigureAwait(true);
+            ShowRefreshDetail("Loading segments and refreshing playback data…");
+            _parent.StatusText = "Loading segments…";
+            await _parent.Preview.RefreshSegmentsAsync().ConfigureAwait(true);
+            _parent.StatusText = _coordinator.CurrentSession.StatusMessage;
             _parent.ClearStatusErrorDetail();
         }
         catch (OperationCanceledException)
         {
-            _parent.StatusText = "Re-diarize cancelled.";
+            _parent.StatusText = "Cancelled.";
             _parent.ClearStatusErrorDetail();
         }
         catch (Exception ex)
         {
-            _parent.StatusText = $"Re-diarize failed: {ex.Message}";
-            _parent.SetStatusErrorDetail("Re-diarize failed", ex);
+            _parent.StatusText = $"Operation failed: {ex.Message}";
+            _parent.SetStatusErrorDetail("Pipeline operation failed", ex);
         }
         finally
         {
             _parent.IsBusy = false;
-            _diarizationCts?.Dispose();
-            _diarizationCts = null;
+            ResetProgressState();
+            _pipelineCts?.Dispose();
+            _pipelineCts = null;
         }
     }
 
     public void NotifyBusyStateChanged()
     {
         RunPipelineCommand.NotifyCanExecuteChanged();
-        RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
+        RefreshTranscriptionCommand.NotifyCanExecuteChanged();
+        RefreshDiarizationCommand.NotifyCanExecuteChanged();
+        RefreshTranslationCommand.NotifyCanExecuteChanged();
+        RefreshDubCommand.NotifyCanExecuteChanged();
     }
 
-    public void NotifySessionStateChanged() => RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
+    public void NotifySessionStateChanged()
+    {
+        NotifyBusyStateChanged();
+        NotifyPipelineFooterChrome();
+    }
+
+    public void NotifyPipelineFooterChrome() => OnPropertyChanged(nameof(ShowPipelineStatusChrome));
 
     internal void ApplyStageUpdate(SessionWorkflowCoordinator.PipelineStageUpdate update)
     {
         PipelineStageTitle = $"Stage {update.StageIndex} of {update.StageCount}: {update.Title}";
-        PipelineStageDetail = update.Detail;
+        PipelineStageDetail = string.IsNullOrWhiteSpace(update.StreamingStatus)
+            ? update.Detail
+            : $"{update.Detail} {update.StreamingStatus}";
         PipelineProgressPercent = update.Progress01;
         IsPipelineProgressIndeterminate = update.IsIndeterminate;
         IsPipelineProgressVisible = true;
@@ -229,6 +330,7 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
         PipelineProgressPercent = 0;
         IsPipelineProgressIndeterminate = false;
         IsPipelineProgressVisible = false;
+        NotifyPipelineFooterChrome();
     }
 
     public void Dispose()
@@ -236,9 +338,5 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
         _pipelineCts?.Cancel();
         _pipelineCts?.Dispose();
         _pipelineCts = null;
-
-        _diarizationCts?.Cancel();
-        _diarizationCts?.Dispose();
-        _diarizationCts = null;
     }
 }

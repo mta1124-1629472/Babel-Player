@@ -174,7 +174,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
         Assert.False(settingsVm.HasHdrAvailabilityHint);
         Assert.Equal(string.Empty, settingsVm.HdrAvailabilityHintText);
         Assert.Equal(
-            "RTX Auto HDR (SDR→HDR) is a separate driver feature — enable it in NVIDIA Control Panel.",
+            "RTX HDR uses NVIDIA Control Panel (RTX Video / Auto HDR). HDR passthrough uses mpv instead — pick one mode; they are mutually exclusive.",
             SettingsViewModel.HdrDriverFeatureHintText);
     }
 

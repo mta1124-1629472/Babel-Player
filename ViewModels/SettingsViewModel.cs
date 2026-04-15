@@ -1,14 +1,17 @@
 using System;
 using System.ComponentModel;
 using System.Linq;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reactive.Linq;
 using Avalonia.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Babel.Player.Models;
+using Babel.Player.Models.LanguageSupport;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
@@ -30,7 +33,18 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private bool _isHdrDisplayActive;
     private CancellationTokenSource? _restartCts;
     private readonly DispatcherTimer _healthTimer;
+    private IDisposable? _readinessSignalSubscription;
 
+    /// <summary>
+    /// Initializes the SettingsViewModel, populating view-model properties from the coordinator's current settings and starting background health polling and readiness subscriptions.
+    /// </summary>
+    /// <param name="settingsService">Service used for settings storage and retrieval.</param>
+    /// <param name="coordinator">Coordinator that provides current settings, diagnostics, readiness signals, and change notifications.</param>
+    /// <param name="ownerWindow">Window that will be closed by the view-model's OK/Cancel commands.</param>
+    /// <param name="modelsTab">Injected ModelsTabViewModel instance exposed by this view-model.</param>
+    /// <param name="containerizedManager">Optional inference manager used for backend status checks and restarts; when null a no-op implementation is used.</param>
+    /// <param name="apiKeyStore">Optional API key store dependency.</param>
+    /// <param name="hdrDisplayStateProvider">Optional function used to query whether an HDR-capable display is currently active; when null a platform default probe is used.</param>
     public SettingsViewModel(
         SettingsService settingsService,
         SessionWorkflowCoordinator coordinator,
@@ -60,12 +74,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         TranscriptionCpuComputeType = current.TranscriptionCpuComputeType;
         TranscriptionCpuThreads = current.TranscriptionCpuThreads;
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
+        DubTimingMode = current.DubTimingMode;
 
         // Theme options
         ThemeOptions = ["Light", "Dark", "System"];
 
         // TTS voice options
-        TtsVoiceOptions = [.. TtsRegistry.EdgeTtsVoices];
+        TtsVoiceOptions = [.. EdgeTtsCatalog.VoiceIds];
 
         // Video hardware settings
         _videoHwdec          = current.VideoHwdec;
@@ -75,7 +90,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         // Video enhancement settings
         _videoVsrEnabled     = current.VideoVsrEnabled;
-        _videoHdrEnabled     = current.VideoHdrEnabled;
+        _videoHdrPlaybackMode = current.VideoHdrPlaybackMode;
+        _videoToneMapping    = current.VideoToneMapping;
+        _videoTargetPeak     = current.VideoTargetPeak;
+        _videoHdrComputePeak = current.VideoHdrComputePeak;
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
@@ -99,6 +117,11 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _healthTimer.Start();
         
         UpdateBackendStatus();
+        _readinessSignalSubscription = _coordinator.ReadinessSignals
+            .Select(signal => $"{signal.Kind}:{signal.Source}:{signal.Summary}:{signal.ForceRefresh}")
+            .DistinctUntilChanged(StringComparer.Ordinal)
+            .Throttle(TimeSpan.FromMilliseconds(300))
+            .Subscribe(_ => Dispatcher.UIThread.Post(UpdateBackendStatus));
     }
 
     // ── About ─────────────────────────────────────────────────────────────────
@@ -128,15 +151,20 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         if (IsRestartingBackend) return;
 
         var status = _containerizedManager.GetCurrentStatus(_coordinator.CurrentSettings);
-        
+        var age = DateTimeOffset.UtcNow - status.CheckedAtUtc;
+        var freshness = age < TimeSpan.FromSeconds(1)
+            ? "updated just now"
+            : $"updated {Math.Max(1, (int)age.TotalSeconds).ToString(CultureInfo.CurrentCulture)}s ago";
+        var staleTag = status.IsStale ? " (stale)" : string.Empty;
+
         BackendStatusText = status is { Busy: true, BusyReason: not null }
-            ? $"Busy: {status.BusyReason}"
+            ? $"Busy: {status.BusyReason} · {freshness}"
             : status.State switch
             {
-                ContainerizedProbeState.Available => "Ready",
-                ContainerizedProbeState.Unavailable => "Unavailable",
+                ContainerizedProbeState.Available => $"Ready{staleTag} · {freshness}",
+                ContainerizedProbeState.Unavailable => $"Unavailable · {freshness}",
                 ContainerizedProbeState.Checking => "Checking\u2026",
-                _ => status.State.ToString()
+                _ => $"{status.State} · {freshness}"
             };
 
         BackendStatusBrush = status.State switch
@@ -148,6 +176,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         };
 
         BackendErrorDetail = status.ErrorDetail;
+        _healthTimer.Interval = status.State switch
+        {
+            ContainerizedProbeState.Checking => TimeSpan.FromSeconds(2),
+            ContainerizedProbeState.Unavailable => TimeSpan.FromSeconds(4),
+            ContainerizedProbeState.Available when status.IsStale => TimeSpan.FromSeconds(4),
+            ContainerizedProbeState.Available => TimeSpan.FromSeconds(12),
+            _ => TimeSpan.FromSeconds(5)
+        };
     }
 
     // ── Diagnostics ───────────────────────────────────────────────────────────
@@ -170,6 +206,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         try
         {
+            _coordinator.RequestReadinessRefresh("Diagnostics refresh requested.");
             var warmupData = await Task.Run(() => _coordinator.GatherBootstrapWarmupData());
             _coordinator.ApplyBootstrapWarmupData(warmupData);
 
@@ -260,6 +297,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public string[] TtsVoiceOptions { get; }
 
+    // ── Dub timing mode ───────────────────────────────────────────────────────
+
+    [ObservableProperty]
+    private SegmentTimingMode _dubTimingMode;
+
+    public SegmentTimingMode[] DubTimingModeOptions { get; } =
+        [SegmentTimingMode.Off, SegmentTimingMode.Stretch, SegmentTimingMode.Pause];
+
     public string[] TranscriptionCpuComputeTypeOptions { get; } =
         ["auto", "int8", "int8_float16", "float32"];
 
@@ -318,6 +363,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(HdrSettingsAvailable))]
     [NotifyPropertyChangedFor(nameof(HdrAvailabilityHintText))]
     [NotifyPropertyChangedFor(nameof(HasHdrAvailabilityHint))]
+    [NotifyPropertyChangedFor(nameof(VsrSettingsAvailable))]
+    [NotifyPropertyChangedFor(nameof(RtxHdrDriverModeAvailable))]
+    [NotifyPropertyChangedFor(nameof(RtxVideoHardwareGateHint))]
+    [NotifyPropertyChangedFor(nameof(HasRtxVideoHardwareGateHint))]
     private bool _videoUseGpuNext;
 
     public string[] HwdecOptions { get; } =
@@ -339,7 +388,87 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private bool _videoVsrEnabled;
 
     [ObservableProperty]
-    private bool _videoHdrEnabled;
+    [NotifyPropertyChangedFor(nameof(IsHdrModeOff))]
+    [NotifyPropertyChangedFor(nameof(IsHdrModeNvidia))]
+    [NotifyPropertyChangedFor(nameof(IsHdrModeMpv))]
+    [NotifyPropertyChangedFor(nameof(IsMpvHdrPassthroughDetailsVisible))]
+    private VideoHdrPlaybackMode _videoHdrPlaybackMode;
+
+    [ObservableProperty]
+    private string _videoToneMapping = "bt.2390";
+
+    [ObservableProperty]
+    private string _videoTargetPeak = "auto";
+
+    [ObservableProperty]
+    private bool _videoHdrComputePeak = true;
+
+    public string[] HdrToneMappingOptions { get; } =
+        ["bt.2390", "mobius", "clip", "auto"];
+
+    public bool IsHdrModeOff
+    {
+        get => VideoHdrPlaybackMode == VideoHdrPlaybackMode.Off;
+        set { if (value) VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off; }
+    }
+
+    public bool IsHdrModeNvidia
+    {
+        get => VideoHdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr;
+        set { if (value) VideoHdrPlaybackMode = VideoHdrPlaybackMode.NvidiaDriverRtxHdr; }
+    }
+
+    public bool IsHdrModeMpv
+    {
+        get => VideoHdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough;
+        set { if (value) VideoHdrPlaybackMode = VideoHdrPlaybackMode.MpvHdrPassthrough; }
+    }
+
+    public bool IsMpvHdrPassthroughDetailsVisible =>
+        VideoUseGpuNext && VideoHdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough;
+
+    /// <summary>
+    /// VSR requires gpu-next plus NVIDIA RTX Video hardware floor (GeForce RTX GPU + driver ≥ 551.23).
+    /// </summary>
+    public bool VsrSettingsAvailable =>
+        VideoUseGpuNext && _coordinator.HardwareSnapshot.MeetsNvidiaRtxVideoHardwareGate;
+
+    /// <summary>
+    /// RTX HDR (driver) mode requires Windows HDR plus the same NVIDIA RTX Video hardware floor as VSR.
+    /// mpv HDR passthrough does not use this gate.
+    /// </summary>
+    public bool RtxHdrDriverModeAvailable =>
+        HdrSettingsAvailable && _coordinator.HardwareSnapshot.MeetsNvidiaRtxVideoHardwareGate;
+
+    /// <summary>
+    /// Explains why RTX Video features are disabled when gpu-next is on but hardware does not qualify.
+    /// </summary>
+    public string RtxVideoHardwareGateHint
+    {
+        get
+        {
+            if (!VideoUseGpuNext)
+                return string.Empty;
+            var s = _coordinator.HardwareSnapshot;
+            if (s.IsDetecting)
+                return string.Empty;
+            if (s.MeetsNvidiaRtxVideoHardwareGate)
+                return string.Empty;
+            if (string.IsNullOrWhiteSpace(s.GpuName))
+                return "No NVIDIA GPU was detected (nvidia-smi). RTX Video Super Resolution and RTX HDR require a supported NVIDIA GPU and driver.";
+            if (!s.IsRtxCapable)
+                return "RTX Video Super Resolution and RTX HDR require a GeForce RTX-class GPU (Turing or newer).";
+            if (!s.IsVsrDriverSufficient)
+            {
+                var ver = string.IsNullOrWhiteSpace(s.NvidiaDriverVersion) ? "unknown" : s.NvidiaDriverVersion;
+                return $"NVIDIA driver {ver} is below 551.23, the minimum for RTX Video (VSR and RTX HDR). Update GeForce Game Ready or Studio Driver.";
+            }
+
+            return string.Empty;
+        }
+    }
+
+    public bool HasRtxVideoHardwareGateHint => !string.IsNullOrWhiteSpace(RtxVideoHardwareGateHint);
 
     public string VsrSupportHintText => _coordinator.VideoEnhancementDiagnostics.SupportHintText;
     public string VsrRequestedStateText => _coordinator.VideoEnhancementDiagnostics.RequestedStateText;
@@ -363,7 +492,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public bool HasHdrAvailabilityHint => !string.IsNullOrWhiteSpace(HdrAvailabilityHintText);
 
     public static string HdrDriverFeatureHintText =>
-        "RTX Auto HDR (SDR→HDR) is a separate driver feature — enable it in NVIDIA Control Panel.";
+        "RTX HDR uses NVIDIA Control Panel (RTX Video / Auto HDR). HDR passthrough uses mpv instead — pick one mode; they are mutually exclusive.";
 
     // ── Hotkeys ───────────────────────────────────────────────────────────────
 
@@ -379,7 +508,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private string _toggleFullscreenHotkey;
 
-    // ── Apply / OK / Cancel ───────────────────────────────────────────────────
+    /// <summary>
+    /// Writes the view-model's current settings into the coordinator's settings, applies the selected theme immediately, and signals that settings were modified.
+    /// </summary>
+    /// <remarks>
+    /// Empty or whitespace values are normalized before assignment: the advanced GPU service URL is preserved when blank; transcription compute type defaults to "int8"; transcription threads are clamped to be at least 0; transcription workers are clamped to be at least 1; video tone mapping defaults to "bt.2390" and video target peak defaults to "auto". The selected dub timing mode is persisted.
+    /// </remarks>
 
     [RelayCommand]
     private void Apply()
@@ -401,12 +535,21 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.TranscriptionCpuThreads = Math.Max(0, TranscriptionCpuThreads);
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
 
+        settings.DubTimingMode       = DubTimingMode;
+
         settings.VideoHwdec          = VideoHwdec;
         settings.VideoGpuApi         = VideoGpuApi;
         settings.VideoExportEncoder  = VideoExportEncoder;
         settings.VideoUseGpuNext     = VideoUseGpuNext;
         settings.VideoVsrEnabled     = VideoVsrEnabled;
-        settings.VideoHdrEnabled     = VideoHdrEnabled;
+        settings.VideoHdrPlaybackMode = VideoHdrPlaybackMode;
+        settings.VideoToneMapping    = string.IsNullOrWhiteSpace(VideoToneMapping)
+            ? "bt.2390"
+            : VideoToneMapping.Trim();
+        settings.VideoTargetPeak     = string.IsNullOrWhiteSpace(VideoTargetPeak)
+            ? "auto"
+            : VideoTargetPeak.Trim();
+        settings.VideoHdrComputePeak = VideoHdrComputePeak;
 
         // Apply theme change immediately when Save & Close is pressed
         if (Application.Current is { } app)
@@ -476,6 +619,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _healthTimer.Stop();
         _restartCts?.Cancel();
         _restartCts?.Dispose();
+        _readinessSignalSubscription?.Dispose();
+        _readinessSignalSubscription = null;
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
     }
 
@@ -490,6 +635,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CpuInfo));
             OnPropertyChanged(nameof(GpuInfo));
             OnPropertyChanged(nameof(RamInfo));
+            OnPropertyChanged(nameof(VsrSettingsAvailable));
+            OnPropertyChanged(nameof(RtxHdrDriverModeAvailable));
+            OnPropertyChanged(nameof(RtxVideoHardwareGateHint));
+            OnPropertyChanged(nameof(HasRtxVideoHardwareGateHint));
+            if (VideoHdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr && !RtxHdrDriverModeAvailable)
+                VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
         }
         else if (e.PropertyName == nameof(SessionWorkflowCoordinator.BootstrapDiagnostics))
         {
@@ -511,10 +662,28 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     internal void RefreshHdrDisplayState()
     {
         _isHdrDisplayActive = _hdrDisplayStateProvider();
+        if (!IsHdrDisplayActive && VideoHdrPlaybackMode != VideoHdrPlaybackMode.Off)
+            VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
+
         OnPropertyChanged(nameof(IsHdrDisplayActive));
         OnPropertyChanged(nameof(HdrSettingsAvailable));
         OnPropertyChanged(nameof(HdrAvailabilityHintText));
         OnPropertyChanged(nameof(HasHdrAvailabilityHint));
+        OnPropertyChanged(nameof(RtxHdrDriverModeAvailable));
+        OnPropertyChanged(nameof(IsMpvHdrPassthroughDetailsVisible));
+        if (VideoHdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr && !RtxHdrDriverModeAvailable)
+            VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
+    }
+
+    partial void OnVideoUseGpuNextChanged(bool value)
+    {
+        if (!value && VideoHdrPlaybackMode != VideoHdrPlaybackMode.Off)
+            VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
+        OnPropertyChanged(nameof(IsMpvHdrPassthroughDetailsVisible));
+        OnPropertyChanged(nameof(VsrSettingsAvailable));
+        OnPropertyChanged(nameof(RtxHdrDriverModeAvailable));
+        OnPropertyChanged(nameof(RtxVideoHardwareGateHint));
+        OnPropertyChanged(nameof(HasRtxVideoHardwareGateHint));
     }
 
     // ── Null-object for tests / design-time ───────────────────────────────────

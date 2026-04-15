@@ -147,7 +147,7 @@ public sealed class TtsReferenceExtractor : IAsyncDisposable
     /// <summary>
     /// Resolves ffmpeg path using the same precedence as the Python server:
     /// 1. Next to the executable
-    /// 2. tools/win-x64/ffmpeg.exe
+    /// 2. tools/&lt;rid&gt;/ffmpeg.exe (e.g. win-x64 or win-arm64)
     /// 3. PATH
     /// </summary>
     private static string? ResolveFfmpegPath()
@@ -159,8 +159,8 @@ public sealed class TtsReferenceExtractor : IAsyncDisposable
         if (File.Exists(localFfmpeg))
             return localFfmpeg;
 
-        // Check tools/win-x64
-        var toolsFfmpeg = Path.Combine(appDir, "tools", "win-x64", "ffmpeg.exe");
+        var rid = WindowsPackagingPaths.NativeRidFolder;
+        var toolsFfmpeg = Path.Combine(appDir, "tools", rid, "ffmpeg.exe");
         if (File.Exists(toolsFfmpeg))
             return toolsFfmpeg;
 

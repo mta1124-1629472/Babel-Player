@@ -17,6 +17,7 @@ public sealed class SettingsService
         {
             WriteIndented = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
         };
 
     private readonly string _filePath;
@@ -104,6 +105,8 @@ public sealed class SettingsService
         public ComputeProfile? TtsProfile { get; set; }
         public InferenceRuntime? TtsRuntime { get; set; }
         public string? TtsVoice { get; set; }
+        public TtsVoiceAssignmentMode? TtsVoiceAssignmentMode { get; set; }
+        public string? TranscriptionLanguageHint { get; set; }
         public string? TargetLanguage { get; set; }
         public string? PiperModelDir { get; set; }
         public GpuHostBackend? PreferredLocalGpuBackend { get; set; }
@@ -118,15 +121,29 @@ public sealed class SettingsService
         public string? VideoGpuApi { get; set; }
         public bool? VideoUseGpuNext { get; set; }
         public bool? VideoVsrEnabled { get; set; }
+        public VideoHdrPlaybackMode? VideoHdrPlaybackMode { get; set; }
+
+        /// <summary>Legacy JSON; used only when migrating older settings files.</summary>
         public bool? VideoHdrEnabled { get; set; }
+
+        /// <summary>Legacy JSON; used only when migrating older settings files.</summary>
+        public bool? VideoPreferDriverAutoHdr { get; set; }
+
         public string? VideoToneMapping { get; set; }
         public string? VideoTargetPeak { get; set; }
         public bool? VideoHdrComputePeak { get; set; }
         public string? VideoExportEncoder { get; set; }
+        public SegmentTimingMode? DubTimingMode { get; set; }
         public string? Theme { get; set; }
         public int? MaxRecentSessions { get; set; }
         public bool? AutoSaveEnabled { get; set; }
 
+        /// <summary>
+        /// Produce an <see cref="AppSettings"/> populated from this file representation, applying legacy migrations and normalization.
+        /// </summary>
+        /// <returns>
+        /// An <see cref="AppSettings"/> instance populated from the file's values; legacy settings are migrated and deprecated or compatibility-only fields are normalized or ignored.
+        /// </returns>
         public AppSettings ToSettings()
         {
             var settings = new AppSettings();
@@ -143,8 +160,9 @@ public sealed class SettingsService
             settings.TranscriptionNumWorkers = TranscriptionNumWorkers ?? settings.TranscriptionNumWorkers;
 
             settings.DiarizationProvider = DiarizationProvider ?? settings.DiarizationProvider;
-            settings.DiarizationMinSpeakers = DiarizationMinSpeakers ?? settings.DiarizationMinSpeakers;
-            settings.DiarizationMaxSpeakers = DiarizationMaxSpeakers ?? settings.DiarizationMaxSpeakers;
+            // Legacy diarization speaker bounds are ignored; providers auto-detect by default.
+            settings.DiarizationMinSpeakers = null;
+            settings.DiarizationMaxSpeakers = null;
 
             settings.TranslationProvider = TranslationProvider ?? settings.TranslationProvider;
             settings.TranslationProfile = ResolveProfile(
@@ -161,7 +179,13 @@ public sealed class SettingsService
                 settings.TtsProvider,
                 InferenceRuntimeCatalog.InferTtsProfile);
             settings.TtsVoice = TtsVoice ?? settings.TtsVoice;
+            if (TtsVoiceAssignmentMode.HasValue)
+                settings.TtsVoiceAssignmentMode = TtsVoiceAssignmentMode.Value;
 
+            if (TranscriptionLanguageHint is not null)
+                settings.TranscriptionLanguageHint = string.IsNullOrWhiteSpace(TranscriptionLanguageHint)
+                    ? null
+                    : TranscriptionLanguageHint;
             settings.TargetLanguage = TargetLanguage ?? settings.TargetLanguage;
             settings.PiperModelDir = PiperModelDir ?? settings.PiperModelDir;
 
@@ -180,11 +204,18 @@ public sealed class SettingsService
             settings.VideoGpuApi = VideoGpuApi ?? settings.VideoGpuApi;
             settings.VideoUseGpuNext = VideoUseGpuNext ?? settings.VideoUseGpuNext;
             settings.VideoVsrEnabled = VideoVsrEnabled ?? settings.VideoVsrEnabled;
-            settings.VideoHdrEnabled = VideoHdrEnabled ?? settings.VideoHdrEnabled;
+            if (VideoHdrPlaybackMode.HasValue)
+                settings.VideoHdrPlaybackMode = VideoHdrPlaybackMode.Value;
+            else if (VideoHdrEnabled == true)
+                settings.VideoHdrPlaybackMode = VideoPreferDriverAutoHdr != false
+                    ? Babel.Player.Models.VideoHdrPlaybackMode.NvidiaDriverRtxHdr
+                    : Babel.Player.Models.VideoHdrPlaybackMode.MpvHdrPassthrough;
             settings.VideoToneMapping = VideoToneMapping ?? settings.VideoToneMapping;
             settings.VideoTargetPeak = VideoTargetPeak ?? settings.VideoTargetPeak;
             settings.VideoHdrComputePeak = VideoHdrComputePeak ?? settings.VideoHdrComputePeak;
             settings.VideoExportEncoder = VideoExportEncoder ?? settings.VideoExportEncoder;
+            if (DubTimingMode.HasValue)
+                settings.DubTimingMode = DubTimingMode.Value;
             settings.Theme = Theme ?? settings.Theme;
             settings.MaxRecentSessions = MaxRecentSessions ?? settings.MaxRecentSessions;
             settings.AutoSaveEnabled = AutoSaveEnabled ?? settings.AutoSaveEnabled;
@@ -192,6 +223,11 @@ public sealed class SettingsService
             return settings;
         }
 
+        /// <summary>
+        /// Creates an AppSettingsFile representation of the given runtime settings for JSON persistence.
+        /// </summary>
+        /// <param name="settings">The runtime AppSettings to convert into the persisted JSON model.</param>
+        /// <returns>An AppSettingsFile populated from the provided settings suitable for serialization; diarization min/max speaker bounds are set to null for compatibility.</returns>
         public static AppSettingsFile FromSettings(AppSettings settings) => new()
         {
             TranscriptionProvider = settings.TranscriptionProvider,
@@ -200,15 +236,17 @@ public sealed class SettingsService
             TranscriptionCpuComputeType = settings.TranscriptionCpuComputeType,
             TranscriptionCpuThreads = settings.TranscriptionCpuThreads,
             TranscriptionNumWorkers = settings.TranscriptionNumWorkers,
+            TranscriptionLanguageHint = settings.TranscriptionLanguageHint,
             DiarizationProvider = settings.DiarizationProvider,
-            DiarizationMinSpeakers = settings.DiarizationMinSpeakers,
-            DiarizationMaxSpeakers = settings.DiarizationMaxSpeakers,
+            DiarizationMinSpeakers = null,
+            DiarizationMaxSpeakers = null,
             TranslationProvider = settings.TranslationProvider,
             TranslationProfile = settings.TranslationProfile,
             TranslationModel = settings.TranslationModel,
             TtsProvider = settings.TtsProvider,
             TtsProfile = settings.TtsProfile,
             TtsVoice = settings.TtsVoice,
+            TtsVoiceAssignmentMode = settings.TtsVoiceAssignmentMode,
             TargetLanguage = settings.TargetLanguage,
             PiperModelDir = settings.PiperModelDir,
             PreferredLocalGpuBackend = settings.PreferredLocalGpuBackend,
@@ -218,11 +256,12 @@ public sealed class SettingsService
             VideoGpuApi = settings.VideoGpuApi,
             VideoUseGpuNext = settings.VideoUseGpuNext,
             VideoVsrEnabled = settings.VideoVsrEnabled,
-            VideoHdrEnabled = settings.VideoHdrEnabled,
+            VideoHdrPlaybackMode = settings.VideoHdrPlaybackMode,
             VideoToneMapping = settings.VideoToneMapping,
             VideoTargetPeak = settings.VideoTargetPeak,
             VideoHdrComputePeak = settings.VideoHdrComputePeak,
             VideoExportEncoder = settings.VideoExportEncoder,
+            DubTimingMode = settings.DubTimingMode,
             Theme = settings.Theme,
             MaxRecentSessions = settings.MaxRecentSessions,
             AutoSaveEnabled = settings.AutoSaveEnabled,

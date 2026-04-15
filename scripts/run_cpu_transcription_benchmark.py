@@ -94,7 +94,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--measured-runs", type=int, default=5)
     parser.add_argument("--cache-mode", action="append", dest="cache_modes", choices=["cold", "warm"], help="Repeatable cache mode selector.")
     parser.add_argument("--container-url", default="http://localhost:8000")
-    parser.add_argument("--output-dir", default=str(REPO_ROOT / "docs" / "benchmarks"))
+    parser.add_argument("--output-dir", default=str(REPO_ROOT / "docs" / "history" / "benchmarks"))
     parser.add_argument("--machine-id", help="Override machine identifier used in environment snapshot.")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs and write a plan JSON without executing benchmarks.")
     return parser.parse_args()
@@ -148,7 +148,7 @@ def collect_environment_snapshot(machine_id_override: str | None = None) -> dict
     python_version = platform.python_version()
     runtimes = {
         pkg: package_version(pkg)
-        for pkg in ["faster-whisper", "googletrans", "edge-tts", "torch"]
+        for pkg in ["faster-whisper", "ctranslate2", "edge-tts", "torch"]
     }
     return {
         "MachineId": sanitize_token(machine_id.lower()),

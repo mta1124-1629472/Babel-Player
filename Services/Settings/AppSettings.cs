@@ -40,6 +40,11 @@ public sealed class AppSettings
     public int TranscriptionNumWorkers { get; set; } = 1;
 
     /// <summary>
+    /// Optional Whisper/source-language hint (ISO-639-1, e.g. <c>es</c>). Null or empty = auto-detect.
+    /// </summary>
+    public string? TranscriptionLanguageHint { get; set; }
+
+    /// <summary>
     /// Diarization provider identifier (e.g. "nemo-local"). Defaults to NeMo; empty string disables diarization.
     /// </summary>
     public string DiarizationProvider { get; set; } = ProviderNames.NemoLocal;
@@ -76,6 +81,9 @@ public sealed class AppSettings
     /// for cloud providers it is the voice name.
     /// </summary>
     public string TtsVoice { get; set; } = "en_US-lessac-medium";
+
+    /// <summary>For Piper/Edge: use one global voice vs assign per speaker in the Speaker Reference Wizard (fallback = <see cref="TtsVoice"/>).</summary>
+    public TtsVoiceAssignmentMode TtsVoiceAssignmentMode { get; set; } = TtsVoiceAssignmentMode.GlobalDefault;
 
     /// <summary>BCP-47 language code for the translation target.</summary>
     public string TargetLanguage { get; set; } = "en";
@@ -193,31 +201,29 @@ public sealed class AppSettings
     public bool VideoVsrEnabled { get; set; } = false;
 
     /// <summary>
-    /// Enable mpv HDR passthrough (target-colorspace-hint + tone-mapping).
-    /// Requests an HDR-capable mpv output path for the OS/display pipeline.
-    /// This is separate from NVIDIA RTX Auto HDR, which remains a driver-level
-    /// SDR-to-HDR feature configured in NVIDIA Control Panel.
-    /// Requires an HDR-capable display with Windows HDR enabled.
+    /// HDR strategy for embedded playback: off, NVIDIA driver RTX/Auto HDR, or mpv HDR passthrough.
+    /// Modes are mutually exclusive. Driver RTX HDR avoids mpv HDR init options; passthrough applies
+    /// tone-mapping settings below. Requires gpu-next, and a non-off mode requires Windows HDR active.
     /// Takes effect on app restart.
     /// </summary>
-    public bool VideoHdrEnabled { get; set; } = false;
+    public VideoHdrPlaybackMode VideoHdrPlaybackMode { get; set; } = VideoHdrPlaybackMode.Off;
 
     /// <summary>
-    /// HDR tone-mapping algorithm used by mpv when VideoHdrEnabled is true.
-    /// Options: bt.2390, mobius, clip, auto.
+    /// HDR tone-mapping algorithm used by mpv when <see cref="VideoHdrPlaybackMode"/> is
+    /// <see cref="VideoHdrPlaybackMode.MpvHdrPassthrough"/>. Options: bt.2390, mobius, clip, auto.
     /// Takes effect on app restart.
     /// </summary>
     public string VideoToneMapping { get; set; } = "bt.2390";
 
     /// <summary>
     /// Display peak brightness target in nits, or "auto".
-    /// Used by mpv tone-mapping when VideoHdrEnabled is true.
+    /// Used by mpv when <see cref="VideoHdrPlaybackMode"/> is <see cref="VideoHdrPlaybackMode.MpvHdrPassthrough"/>.
     /// Takes effect on app restart.
     /// </summary>
     public string VideoTargetPeak { get; set; } = "auto";
 
     /// <summary>
-    /// Enable dynamic per-frame peak detection for HDR tone-mapping.
+    /// Enable dynamic per-frame peak detection for HDR tone-mapping (mpv passthrough mode only).
     /// May cause brightness instability on some content. Default true.
     /// Takes effect on app restart.
     /// </summary>
@@ -229,6 +235,12 @@ public sealed class AppSettings
     /// Options: auto, h264_nvenc, hevc_nvenc, h264_amf, hevc_amf, h264_qsv, hevc_qsv, libx264, libx265.
     /// </summary>
     public string VideoExportEncoder { get; set; } = "auto";
+
+    /// <summary>
+    /// Session-level dub timing strategy applied during dub-mode preview playback.
+    /// Individual segments can override this via <see cref="Babel.Player.Models.WorkflowSegmentState.TimingModeOverride"/>.
+    /// </summary>
+    public SegmentTimingMode DubTimingMode { get; set; } = SegmentTimingMode.Off;
 
     /// <summary>UI theme: "Light", "Dark", or "System".</summary>
     public string Theme { get; set; } = "System";

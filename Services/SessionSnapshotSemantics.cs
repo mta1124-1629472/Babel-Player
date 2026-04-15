@@ -90,11 +90,12 @@ public static class SessionSnapshotSemantics
 
         bool transcriptionChanged = snapshot.TranscriptionRuntime != settings.TranscriptionRuntime
             || snapshot.TranscriptionProvider != settings.TranscriptionProvider
-            || snapshot.TranscriptionModel != settings.TranscriptionModel;
+            || snapshot.TranscriptionModel != settings.TranscriptionModel
+            || !TranscriptionLanguageHintsMatch(snapshot.TranscriptionLanguageHint, settings.TranscriptionLanguageHint);
         bool translationChanged = snapshot.TranslationRuntime != settings.TranslationRuntime
             || snapshot.TranslationProvider != settings.TranslationProvider
             || snapshot.TranslationModel != settings.TranslationModel
-            || snapshot.TargetLanguage != settings.TargetLanguage;
+            || !LanguageCode.TargetLanguagesMatch(snapshot.TargetLanguage, settings.TargetLanguage);
         bool ttsChanged = snapshot.TtsRuntime != settings.TtsRuntime
             || snapshot.TtsProvider != settings.TtsProvider
             || snapshot.TtsVoice != settings.TtsVoice;
@@ -153,9 +154,15 @@ public static class SessionSnapshotSemantics
         return SessionWorkflowStage.Foundation;
     }
 
+    public static string? NormalizeTranscriptionLanguageHint(string? value) =>
+        LanguageCode.NormalizeForPersistence(value);
+
+    public static bool TranscriptionLanguageHintsMatch(string? a, string? b) =>
+        LanguageCode.LanguageEquals(a, b);
+
     public static string DescribeSessionProvenance(WorkflowSessionSnapshot snapshot) =>
         $"stage={snapshot.Stage}, " +
-        $"txc={snapshot.TranscriptionRuntime?.ToString() ?? "<null>"}/{snapshot.TranscriptionProvider ?? "<null>"}/{snapshot.TranscriptionModel ?? "<null>"}, " +
+        $"txc={snapshot.TranscriptionRuntime?.ToString() ?? "<null>"}/{snapshot.TranscriptionProvider ?? "<null>"}/{snapshot.TranscriptionModel ?? "<null>"}/asrHint={snapshot.TranscriptionLanguageHint ?? "<auto>"}, " +
         $"trn={snapshot.TranslationRuntime?.ToString() ?? "<null>"}/{snapshot.TranslationProvider ?? "<null>"}/{snapshot.TranslationModel ?? "<null>"}, " +
         $"tts={snapshot.TtsRuntime?.ToString() ?? "<null>"}/{snapshot.TtsProvider ?? "<null>"}/{snapshot.TtsVoice ?? "<null>"}, " +
         $"srcLang={snapshot.SourceLanguage ?? "<null>"}, tgtLang={snapshot.TargetLanguage ?? "<null>"}";
@@ -208,6 +215,7 @@ public static class SessionSnapshotSemantics
         {
             SpeakerVoiceAssignments = null,
             SpeakerReferenceAudioPaths = null,
+            SegmentTimingModeOverrides = null,
             DefaultTtsVoiceFallback = null,
             DiarizationProvider = null,
             SpeakersDetectedAtUtc = null,
@@ -222,6 +230,7 @@ public static class SessionSnapshotSemantics
             TranscriptionRuntime = null,
             TranscriptionProvider = null,
             TranscriptionModel = null,
+            TranscriptionLanguageHint = null,
         };
 
     public static WorkflowSessionSnapshot ClearMediaLoadedOutputs(WorkflowSessionSnapshot snapshot) =>

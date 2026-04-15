@@ -1,0 +1,7 @@
+<Project>
+  <!-- Disable the workload SDK resolver. This project has no MAUI/Blazor workloads,
+       and the resolver fails with stale manifests after SDK upgrades (e.g. 10.0.201 -> 10.0.202). -->
+  <PropertyGroup>
+    <MSBuildEnableWorkloadResolver>false</MSBuildEnableWorkloadResolver>
+  </PropertyGroup>
+</Project>

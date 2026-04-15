@@ -57,7 +57,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         IDiarizationRegistry? diarizationRegistry = null,
         ITtsRegistry? ttsRegistry = null,
         IAudioProcessingService? audioProcessingService = null,
-        ContainerizedServiceProbe? containerizedProbe = null)
+        ContainerizedServiceProbe? containerizedProbe = null,
+        IMediaTransport? segmentPlayer = null,
+        IMediaTransport? sourcePlayer = null)
     {
         var registries = new Babel.Player.Models.RegistryBundle(
             _ctx.PerSessionStore, _ctx.RecentStore,
@@ -75,7 +77,57 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             _ctx.Store,
             _ctx.Log,
             settings ?? _ctx.Settings);
-        return new SessionWorkflowCoordinator(coreServices, registries, options);
+        return new SessionWorkflowCoordinator(
+            coreServices,
+            registries,
+            options,
+            segmentPlayer: segmentPlayer,
+            sourcePlayer: sourcePlayer);
+    }
+
+    private sealed class ControllableStretchAudioProcessingService : IAudioProcessingService
+    {
+        public TaskCompletionSource<bool> StretchStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> AllowStretchCompletion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task CombineAudioSegmentsAsync(
+            IReadOnlyList<string> segmentAudioPaths,
+            string outputAudioPath,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("CombineAudioSegmentsAsync is not used in this test."));
+
+        public Task ExtractAudioClipAsync(
+            string inputPath,
+            string outputPath,
+            double startTimeSeconds,
+            double durationSeconds,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("ExtractAudioClipAsync is not used in this test."));
+
+        public Task ExtractFullAudioAsync(
+            string inputPath,
+            string outputPath,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("ExtractFullAudioAsync is not used in this test."));
+
+        public async Task<bool> TimeStretchAsync(
+            string inputPath,
+            string outputPath,
+            double targetDurationSeconds,
+            double minRatio = 0.75,
+            double maxRatio = 1.35,
+            CancellationToken cancellationToken = default)
+        {
+            StretchStarted.TrySetResult(true);
+            await AllowStretchCompletion.Task.ConfigureAwait(false);
+            await File.WriteAllBytesAsync(outputPath, [0xAB, 0xCD], cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult<double?>(1.0);
     }
 
     private AppSettings CreateMatchingSettings() =>
@@ -101,7 +153,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             VideoGpuApi = _ctx.Settings.VideoGpuApi,
             VideoUseGpuNext = _ctx.Settings.VideoUseGpuNext,
             VideoVsrEnabled = _ctx.Settings.VideoVsrEnabled,
-            VideoHdrEnabled = _ctx.Settings.VideoHdrEnabled,
+            VideoHdrPlaybackMode = _ctx.Settings.VideoHdrPlaybackMode,
             VideoToneMapping = _ctx.Settings.VideoToneMapping,
             VideoTargetPeak = _ctx.Settings.VideoTargetPeak,
             VideoHdrComputePeak = _ctx.Settings.VideoHdrComputePeak,
@@ -520,6 +572,76 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
+    public void SetSegmentTimingOverride_PersistsInCurrentSession()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        coord.SetSegmentTimingOverride("segment_0.0", SegmentTimingMode.Pause);
+
+        Assert.NotNull(coord.CurrentSession.SegmentTimingModeOverrides);
+        Assert.True(coord.CurrentSession.SegmentTimingModeOverrides!.TryGetValue("segment_0.0", out var mode));
+        Assert.Equal(SegmentTimingMode.Pause, mode);
+    }
+
+    [Fact]
+    public void SetSegmentTimingOverride_Null_RemovesEntry()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.SetSegmentTimingOverride("segment_0.0", SegmentTimingMode.Stretch);
+
+        coord.SetSegmentTimingOverride("segment_0.0", null);
+
+        Assert.True(coord.CurrentSession.SegmentTimingModeOverrides is null
+            || !coord.CurrentSession.SegmentTimingModeOverrides.ContainsKey("segment_0.0"));
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_StretchSuperseded_DoesNotOverrideNewerPlayback()
+    {
+        var stretchService = new ControllableStretchAudioProcessingService();
+        var segmentPlayer = new FakeMediaTransport();
+        var coord = CreateCoordinator(
+            audioProcessingService: stretchService,
+            segmentPlayer: segmentPlayer);
+        coord.Initialize();
+
+        var segmentAPath = Path.Combine(_ctx.Dir, "segment_a.mp3");
+        var segmentBPath = Path.Combine(_ctx.Dir, "segment_b.mp3");
+        await File.WriteAllBytesAsync(segmentAPath, [0x01, 0x02]);
+        await File.WriteAllBytesAsync(segmentBPath, [0x03, 0x04]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                ["segment_0.0"] = segmentAPath,
+                ["segment_1.0"] = segmentBPath,
+            },
+        };
+
+        var segmentA = new WorkflowSegmentState("segment_0.0", 0.0, 1.0, "a", true, "A", true);
+        var segmentB = new WorkflowSegmentState("segment_1.0", 1.0, 2.0, "b", true, "B", true);
+
+        await coord.PlayTtsForSegmentAsync("segment_0.0", segmentA, SegmentTimingMode.Stretch);
+        await stretchService.StretchStarted.Task;
+
+        await coord.PlayTtsForSegmentAsync("segment_1.0", segmentB, SegmentTimingMode.Off);
+        Assert.True(
+            SpinWait.SpinUntil(
+                () => string.Equals(segmentPlayer.LastLoadedFile, segmentBPath, StringComparison.Ordinal),
+                TimeSpan.FromSeconds(2)),
+            "Expected newer segment playback to load segment B audio.");
+
+        stretchService.AllowStretchCompletion.TrySetResult(true);
+        await Task.Delay(200);
+
+        Assert.Equal(segmentBPath, segmentPlayer.LastLoadedFile);
+    }
+
+    [Fact]
     public void RemoveSpeakerVoiceAssignment_RemovesEntry()
     {
         var coord = CreateCoordinator();
@@ -556,17 +678,6 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
 
         Assert.True(coord.CurrentSession.SpeakerReferenceAudioPaths is null
             || !coord.CurrentSession.SpeakerReferenceAudioPaths.ContainsKey("spk_01"));
-    }
-
-    [Fact]
-    public void SetMultiSpeakerEnabled_UpdatesSessionFlag()
-    {
-        var coord = CreateCoordinator();
-        coord.Initialize();
-
-        coord.SetMultiSpeakerEnabled(true);
-
-        Assert.True(coord.CurrentSession.MultiSpeakerEnabled);
     }
 
     [Fact]
@@ -611,7 +722,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
-    public async Task RegenerateSegmentTts_MultiSpeakerEnabled_UsesDefaultFallbackWhenSpeakerUnmapped()
+    public async Task RegenerateSegmentTts_WhenSpeakerUnmapped_UsesActiveVoice()
     {
         var fakeTts = new FakeTtsProvider();
         var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
@@ -641,13 +752,12 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             TranslationPath = translationPath,
             TtsVoice = "global-voice",
             MultiSpeakerEnabled = true,
-            DefaultTtsVoiceFallback = "fallback-voice",
         };
 
         await coord.RegenerateSegmentTtsAsync("segment_0.0");
 
         Assert.NotNull(fakeTts.LastSegmentRequest);
-        Assert.Equal("fallback-voice", fakeTts.LastSegmentRequest!.VoiceName);
+        Assert.Equal("global-voice", fakeTts.LastSegmentRequest!.VoiceName);
         Assert.Equal("spk_02", fakeTts.LastSegmentRequest.SpeakerId);
     }
 
@@ -699,57 +809,44 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
-    public async Task GenerateTtsAsync_QwenProvider_UsesBatchEndpointAndPersistsSegmentOutputs()
+    public async Task GenerateTtsAsync_QwenProvider_UsesPerSegmentEndpointAndPersistsSegmentOutputs()
     {
         var registerCalls = 0;
         var batchCalls = 0;
         var downloadCalls = 0;
-        var handler = new StubHttpMessageHandler((request, _) =>
+        var handler = new StubHttpMessageHandler(async (request, _) =>
         {
             var path = request.RequestUri?.AbsolutePath;
             if (request.Method == HttpMethod.Post && path == "/tts/qwen/references")
             {
                 registerCalls++;
-                return Task.FromResult(JsonResponse("""{"success":true,"reference_id":"ref-qwen-default"}"""));
+                return JsonResponse("""{"success":true,"reference_id":"ref-qwen-default"}""");
             }
 
-            if (request.Method == HttpMethod.Post && path == "/tts/qwen/batch")
+            if (request.Method == HttpMethod.Post && path == "/tts/qwen/segment")
             {
                 batchCalls++;
-                return Task.FromResult(JsonResponse("""
+                var content = await request.Content!.ReadAsStringAsync();
+                if (content.Contains("name=\"text\"\r\n\r\nhello"))
                 {
-                  "success": true,
-                  "segments": [
-                    {
-                      "segment_id": "segment_0.0",
-                      "voice": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-                      "audio_path": "/tmp/qwen-segment-0.mp3",
-                      "file_size_bytes": 3
-                    },
-                    {
-                      "segment_id": "segment_2.0",
-                      "voice": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-                      "audio_path": "/tmp/qwen-segment-1.mp3",
-                      "file_size_bytes": 3
-                    }
-                  ]
+                    return JsonResponse("""{"success":true,"audio_path":"/tmp/qwen-segment-0.mp3","file_size_bytes":3}""");
                 }
-                """));
+                return JsonResponse("""{"success":true,"audio_path":"/tmp/qwen-segment-1.mp3","file_size_bytes":3}""");
             }
 
             if (request.Method == HttpMethod.Get && path is not null && path.StartsWith("/tts/audio/", StringComparison.Ordinal))
             {
                 downloadCalls++;
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent([0x10, 0x20, 0x30]),
-                });
+                };
             }
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+            return new HttpResponseMessage(HttpStatusCode.NotFound)
             {
                 Content = new StringContent($"Unhandled request: {request.Method} {path}", Encoding.UTF8, "text/plain"),
-            });
+            };
         });
 
         var qwenProvider = new QwenContainerTtsProvider(
@@ -806,7 +903,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         await coord.GenerateTtsAsync();
 
         Assert.Equal(1, registerCalls);
-        Assert.Equal(1, batchCalls);
+        Assert.Equal(2, batchCalls);
         Assert.Equal(2, downloadCalls);
         Assert.Equal(SessionWorkflowStage.TtsGenerated, coord.CurrentSession.Stage);
         Assert.NotNull(coord.CurrentSession.TtsPath);
@@ -964,18 +1061,14 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
-    public async Task RunDiarizationAsync_WhenSpeakerBoundsAreInvalid_ThrowsBeforeProviderExecution()
+    public async Task RunDiarizationAsync_IgnoresLegacySpeakerBoundsAndUsesAutoDetection()
     {
-        var providerInvoked = false;
         var fakeProvider = new FakeDiarizationProvider(_ =>
-        {
-            providerInvoked = true;
-            return new DiarizationResult(
+            new DiarizationResult(
                 true,
                 [new DiarizedSegment(0.0, 1.0, "spk_00")],
                 1,
-                null);
-        });
+                null));
         var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
         var settings = CreateMatchingSettings();
         settings.DiarizationProvider = ProviderNames.NemoLocal;
@@ -995,11 +1088,11 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             TranscriptPath = transcriptPath,
         };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => coord.RunDiarizationAsync());
+        await coord.RunDiarizationAsync();
 
-        Assert.Contains("min speakers", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("max speakers", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(providerInvoked);
+        Assert.NotNull(fakeProvider.LastRequest);
+        Assert.Null(fakeProvider.LastRequest!.MinSpeakers);
+        Assert.Null(fakeProvider.LastRequest.MaxSpeakers);
     }
 
     [Fact]
@@ -1051,6 +1144,53 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         var ex = await Assert.ThrowsAsync<PipelineProviderException>(() => coord.RunDiarizationAsync());
 
         Assert.Contains("host is warming", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunDiarizationAsync_LocalProvider_BootstrapsBeforeReadinessGate()
+    {
+        var fakeProvider = new FakeDiarizationProvider(
+            _ => new DiarizationResult(
+                true,
+                [new DiarizedSegment(0.0, 1.0, "spk_01")],
+                1,
+                null),
+            readiness: new ProviderReadiness(false, "Managed CPU runtime is not bootstrapped for WeSpeaker yet."),
+            ensureReadyCallback: (_, _) => ProviderReadiness.Ready);
+        var fakeRegistry = new FakeDiarizationRegistry((
+            new ProviderDescriptor(
+                ProviderNames.WeSpeakerLocal,
+                "WeSpeaker",
+                RequiresApiKey: false,
+                CredentialKey: null,
+                SupportedModels: [],
+                SupportedRuntimes: [InferenceRuntime.Local],
+                DefaultRuntime: InferenceRuntime.Local,
+                IsImplemented: true,
+                Notes: "Uses the managed CPU WeSpeaker provider."),
+            (IDiarizationProvider)fakeProvider));
+        var settings = CreateMatchingSettings();
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
+
+        var coord = CreateCoordinator(settings, diarizationRegistry: fakeRegistry);
+        coord.Initialize();
+
+        var transcriptPath = CreateTempFile("""{"language":"es","segments":[{"start":0.0,"end":1.0,"text":"hola"}]}""");
+        var mediaPath = CreateTempFile("audio");
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
+
+        var changed = await coord.RunDiarizationAsync();
+
+        Assert.True(changed);
+        Assert.Equal(1, fakeProvider.EnsureReadyCallCount);
+        Assert.NotNull(fakeProvider.LastRequest);
+        Assert.Equal(mediaPath, fakeProvider.LastRequest!.SourceAudioPath);
     }
 
     // ── CheckSettingsInvalidation ─────────────────────────────────────────────
@@ -1330,6 +1470,60 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         Assert.Equal(SessionWorkflowStage.MediaLoaded, coord2.CurrentSession.Stage);
         Assert.Null(coord2.CurrentSession.TranscriptPath);
         Assert.Null(coord2.CurrentSession.TranslationPath);
+    }
+
+    [Fact]
+    public void ApplyPipelineSettings_TargetLanguageCasingOnly_DoesNotApply()
+    {
+        var settings = CreateMatchingSettings();
+        settings.TargetLanguage = "en";
+        var coord = CreateCoordinator(settings);
+        coord.Initialize();
+
+        var result = coord.ApplyPipelineSettings(new PipelineSettingsSelection(
+            settings.TranscriptionProfile,
+            settings.TranscriptionProvider,
+            settings.TranscriptionModel,
+            settings.TranslationProfile,
+            settings.TranslationProvider,
+            settings.TranslationModel,
+            settings.TtsProfile,
+            settings.TtsProvider,
+            settings.TtsVoice,
+            "EN"));
+
+        Assert.False(result.SettingsChanged);
+        Assert.Equal("en", coord.CurrentSettings.TargetLanguage);
+    }
+
+    [Fact]
+    public void ComputeInvalidation_TargetLanguageDiffersOnlyByCasing_ReturnsNoneAtTranslatedStage()
+    {
+        var translationPath = Path.Combine(_ctx.Dir, "translation.json");
+        File.WriteAllText(translationPath, "{\"segments\":[]}");
+
+        var now = DateTimeOffset.UtcNow;
+        var settings = CreateMatchingSettings();
+        settings.TargetLanguage = "en";
+
+        var snapshot = new WorkflowSessionSnapshot(
+            Guid.NewGuid(),
+            SessionWorkflowStage.Translated,
+            now,
+            now,
+            "ok",
+            TranslationPath: translationPath,
+            TargetLanguage: "EN",
+            TranscriptionRuntime: InferenceRuntime.Local,
+            TranscriptionProvider: settings.TranscriptionProvider,
+            TranscriptionModel: settings.TranscriptionModel,
+            TranslationRuntime: InferenceRuntime.Local,
+            TranslationProvider: settings.TranslationProvider,
+            TranslationModel: settings.TranslationModel,
+            TtsRuntime: InferenceRuntime.Local,
+            TtsProvider: settings.TtsProvider);
+
+        Assert.Equal(PipelineInvalidation.None, SessionSnapshotSemantics.ComputeInvalidation(snapshot, settings));
     }
 
     [Fact]
@@ -1755,6 +1949,125 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
+
+    // ── Pause-mode playback timing ─────────────────────────────────────────────
+
+    private SessionWorkflowCoordinator CreateCoordinatorWithSegmentPlayer(
+        FakeMediaTransport segmentPlayer,
+        AppSettings? settings = null)
+    {
+        var registries = new Babel.Player.Models.RegistryBundle(
+            _ctx.PerSessionStore, _ctx.RecentStore,
+            new TranscriptionRegistry(_ctx.Log),
+            new TranslationRegistry(_ctx.Log),
+            new TtsRegistry(_ctx.Log));
+        var options = new Babel.Player.Models.CoordinatorOptions();
+        var coreServices = new Babel.Player.Models.CoordinatorCoreServices(
+            _ctx.Store,
+            _ctx.Log,
+            settings ?? _ctx.Settings);
+        return new SessionWorkflowCoordinator(
+            coreServices, registries, options,
+            segmentPlayer: segmentPlayer);
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_PauseMode_ClearsStateAfterSegmentEnds()
+    {
+        // Arrange: a coordinator with a fake segment player and a minimal TTS-stage session.
+        var fakeSegmentPlayer = new FakeMediaTransport();
+        var coord = CreateCoordinatorWithSegmentPlayer(fakeSegmentPlayer);
+        coord.Initialize();
+
+        const string segmentId = "segment_0.0";
+        var audioPath = Path.Combine(_ctx.Dir, "tts-segment.mp3");
+        await File.WriteAllBytesAsync(audioPath, [0x00, 0x01, 0x02]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = Babel.Player.Models.SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string> { [segmentId] = audioPath },
+        };
+
+        var segment = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId, 0.0, 3.0, "Hello", true, "Hola", true);
+
+        // Act: start Pause-mode playback then simulate the TTS clip ending.
+        _ = coord.PlayTtsForSegmentAsync(segmentId, segment, Babel.Player.Models.SegmentTimingMode.Pause);
+
+        // Wait for the fire-and-forget to reach the Play/await-Ended stage.
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        while (!fakeSegmentPlayer.IsPlaying && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        Assert.Equal(segmentId, coord.ActiveTtsSegmentId);
+        Assert.Equal(Babel.Player.Models.PlaybackState.PlayingSingleSegment, coord.PlaybackState);
+
+        // Simulate the TTS clip ending — StopTtsPlayback() is invoked by _segmentEndedHandler.
+        fakeSegmentPlayer.SimulateEnd();
+
+        // Wait for state cleanup (StopTtsPlayback runs synchronously inside SimulateEnd).
+        timeout = DateTime.UtcNow.AddSeconds(5);
+        while (coord.ActiveTtsSegmentId is not null && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        // Assert: state is cleared.
+        Assert.Null(coord.ActiveTtsSegmentId);
+        Assert.Equal(Babel.Player.Models.PlaybackState.Idle, coord.PlaybackState);
+    }
+
+    [Fact]
+    public async Task PlayTtsForSegmentAsync_PauseMode_DoesNotClearStateWhenDifferentSegmentIsActive()
+    {
+        // Arrange: ensure a second PlayTts call overrides ActiveTtsSegmentId before the first
+        // Ended fires; the first completion path must not clear the updated state.
+        var fakeSegmentPlayer = new FakeMediaTransport();
+        var coord = CreateCoordinatorWithSegmentPlayer(fakeSegmentPlayer);
+        coord.Initialize();
+
+        const string segmentId1 = "segment_0.0";
+        const string segmentId2 = "segment_3.0";
+        var audioPath1 = Path.Combine(_ctx.Dir, "tts-seg1.mp3");
+        var audioPath2 = Path.Combine(_ctx.Dir, "tts-seg2.mp3");
+        await File.WriteAllBytesAsync(audioPath1, [0x00, 0x01, 0x02]);
+        await File.WriteAllBytesAsync(audioPath2, [0x03, 0x04, 0x05]);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = Babel.Player.Models.SessionWorkflowStage.TtsGenerated,
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                [segmentId1] = audioPath1,
+                [segmentId2] = audioPath2,
+            },
+        };
+
+        var segment1 = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId1, 0.0, 3.0, "Hello", true, "Hola", true);
+        var segment2 = new Babel.Player.Models.WorkflowSegmentState(
+            segmentId2, 3.0, 6.0, "World", true, "Mundo", true);
+
+        // Start first segment in Pause mode; wait until it is playing.
+        _ = coord.PlayTtsForSegmentAsync(segmentId1, segment1, Babel.Player.Models.SegmentTimingMode.Pause);
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+        while (!fakeSegmentPlayer.IsPlaying && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        // Immediately start second segment — StopTtsPlayback() resets and then sets segmentId2.
+        _ = coord.PlayTtsForSegmentAsync(segmentId2, segment2, Babel.Player.Models.SegmentTimingMode.Pause);
+        timeout = DateTime.UtcNow.AddSeconds(5);
+        while (coord.ActiveTtsSegmentId != segmentId2 && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        // The second PlayTts call triggers StopTtsPlayback which completes the first Pause-mode TCS.
+        // The first task's continuation sees the wrong segment ID and returns early without clearing state.
+        await Task.Delay(50); // allow pending continuations to run
+
+        // State should still reflect the second segment being tracked (or already cleared by its own end).
+        var activeId = coord.ActiveTtsSegmentId;
+        Assert.True(activeId is null || activeId == segmentId2,
+            $"Expected null or '{segmentId2}' but was '{activeId}'.");
+    }
 
     private sealed class FakeContainerizedInferenceManager : IContainerizedInferenceManager
     {

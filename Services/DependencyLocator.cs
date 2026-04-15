@@ -51,17 +51,23 @@ public static class DependencyLocator
     public static string? FindUv()
     {
         var appDir = AppContext.BaseDirectory;
+        var rid = WindowsPackagingPaths.NativeRidFolder;
         var candidates = new[]
         {
             Path.Combine(appDir, "uv.exe"),
             Path.Combine(appDir, "tools", "uv.exe"),
+            Path.Combine(appDir, "tools", rid, "uv.exe"),
             Path.Combine(appDir, "tools", "win-x64", "uv.exe"),
+            Path.Combine(appDir, "tools", "win-arm64", "uv.exe"),
             "uv",
         };
         return Probe(candidates, "--version");
     }
 
-    /// <summary>Returns a working ffmpeg executable path, or null if not found.</summary>
+    /// <summary>
+    /// Locates a working ffmpeg executable and returns its resolved path.
+    /// </summary>
+    /// <returns>The full path to a working ffmpeg executable, or <c>null</c> if none is found.</returns>
     public static string? FindFfmpeg()
     {
         var appDir = AppContext.BaseDirectory;
@@ -74,7 +80,26 @@ public static class DependencyLocator
         return Probe(candidates, "-version");
     }
 
-    /// <summary>Returns a working piper executable path, or null if not found.</summary>
+    /// <summary>
+    /// Locates a usable ffprobe executable on disk or in the system PATH.
+    /// </summary>
+    /// <returns>The full path to a working ffprobe executable that reports its version, or <c>null</c> if none is found.</returns>
+    public static string? FindFfprobe()
+    {
+        var appDir = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            Path.Combine(appDir, "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "ffprobe.exe"),
+            "ffprobe",
+        };
+        return Probe(candidates, "-version");
+    }
+
+    /// <summary>
+    /// Locates a usable Piper executable by probing candidates in the application directory and the system PATH.
+    /// </summary>
+    /// <returns>The resolved full path to a Piper executable that responds to `--version`, or `null` if none is found.</returns>
     public static string? FindPiper()
     {
         var appDir = AppContext.BaseDirectory;
@@ -102,14 +127,13 @@ public static class DependencyLocator
 
     private static string? Probe(string[] candidates, string versionArg)
     {
-        foreach (var path in candidates)
+        foreach (var candidate in candidates)
         {
-            var resolved = ResolveExecutable(path);
-            if (resolved is null)
-                continue;
-
-            if (ProbeExecutable(resolved, versionArg))
-                return resolved;
+            foreach (var resolved in ResolveExecutable(candidate))
+            {
+                if (ProbeExecutable(resolved, versionArg))
+                    return resolved;
+            }
         }
         return null;
     }
@@ -118,12 +142,11 @@ public static class DependencyLocator
     {
         foreach (var candidate in candidates)
         {
-            var resolved = ResolveExecutable(candidate);
-            if (resolved is null)
-                continue;
-
-            if (ProbePythonCandidate(resolved, requirePip))
-                return resolved;
+            foreach (var resolved in ResolveExecutable(candidate))
+            {
+                if (ProbePythonCandidate(resolved, requirePip))
+                    return resolved;
+            }
         }
 
         return null;
@@ -131,11 +154,10 @@ public static class DependencyLocator
 
     private static bool ProbePythonCandidate(string candidate, bool requirePip)
     {
-        var resolved = ResolveExecutable(candidate);
-        if (resolved is null || !ProbeExecutable(resolved, "--version"))
+        if (!ProbeExecutable(candidate, "--version"))
             return false;
 
-        return !requirePip || ProbeExecutable(resolved, "-m pip --version");
+        return !requirePip || ProbeExecutable(candidate, "-m pip --version");
     }
 
     private static bool ProbeExecutable(string fileName, string arguments)
@@ -168,27 +190,29 @@ public static class DependencyLocator
     }
 
     /// <summary>
-    /// Resolves a candidate executable name or path to an existing filesystem path.
+    /// Resolves a candidate executable name or path to existing filesystem paths.
     /// </summary>
     /// <param name="candidate">An executable file path or command name; if it contains directory separators or is rooted it is treated as an explicit path, otherwise it is looked up on the system PATH (and PATHEXT on Windows).</param>
-    /// <returns>The full path to an existing executable if found, or <c>null</c> if the candidate is empty or no matching file exists.</returns>
-    private static string? ResolveExecutable(string candidate)
+    /// <returns>A sequence of full paths to existing executables.</returns>
+    private static System.Collections.Generic.IEnumerable<string> ResolveExecutable(string candidate)
     {
         if (string.IsNullOrWhiteSpace(candidate))
-            return null;
+            yield break;
 
         // Absolute or relative explicit path
         if (candidate.Contains(Path.DirectorySeparatorChar) ||
             candidate.Contains(Path.AltDirectorySeparatorChar) ||
             Path.IsPathRooted(candidate))
         {
-            return File.Exists(candidate) ? candidate : null;
+            if (File.Exists(candidate))
+                yield return candidate;
+            yield break;
         }
 
         // Command name: resolve against PATH (and PATHEXT on Windows) before spawning.
         var pathEnv = Environment.GetEnvironmentVariable("PATH");
         if (string.IsNullOrWhiteSpace(pathEnv))
-            return null;
+            yield break;
 
         var extensions = GetExecutableExtensions();
         var dirs = pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
@@ -203,11 +227,9 @@ public static class DependencyLocator
             {
                 var full = Path.Combine(trimmedDir, candidate + ext);
                 if (File.Exists(full))
-                    return full;
+                    yield return full;
             }
         }
-
-        return null;
     }
 
     /// <summary>

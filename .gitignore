@@ -1,4 +1,8 @@
 # User-specific files
+inference/*.local-before-pull
+
+# Pre-downloaded PyTorch wheels for Docker build (too large for git)
+inference/*.whl
 *.user
 *.suo
 *.userosscache
@@ -99,8 +103,8 @@ publish/
 tasks.json
 
 # Generated benchmark outputs
-# docs/benchmarks/ (results remain in git, but ignore temp or lock files if any)
-# docs/benchmarks/*.lock
+# docs/history/benchmarks/ (results remain in git, but ignore temp or lock files if any)
+# docs/history/benchmarks/*.lock
 
 # Local tool state
 .kilo/node_modules/
@@ -109,15 +113,51 @@ tasks.json
 .kilo/
 .windsurf/
 .Benchmarks/
-.codex/tasks
 *.lscache
 
 
-# External binaries
+# External binaries (fetched by scripts/fetch-win-native-deps.ps1; too large for Git without LFS)
+native/win-x64/libmpv-2.dll
+tools/win-x64/uv.exe
+tools/win-x64/ffmpeg.exe
 ffmpeg.exe
-.codex/environments/environment.toml
 inference/__pycache__/
-scripts/run-local-release-dry-run.ps1
 .vscode/settings.json
 .qwen/
 gha-creds-*.json
+
+# --- Local-only / scratch (not required to build or release; keep untracked) ---
+.claude/settings.local.json
+.cursor/hooks/state/
+
+# Personal IDE notes
+.jules/
+
+# OpenClaw skill copies (optional; restore from marketplace or a private fork)
+/skills/
+
+# Codex local task queue
+.codex/tasks/
+
+# Merge / editor backup files
+*.orig
+
+# Repo-root scratch and one-off maintenance scripts
+/pr_description.md
+/patch.diff
+/patch2.diff
+/patch3.diff
+/test_ignore.sh
+/fix-constructor.ps1
+/fix-duplicates.ps1
+/fix-syntax.ps1
+/fix-tests.ps1
+/fix_conflicts.py
+/fix_merge_conflict.sh
+/add-bootstrap-mocks.ps1
+/setup-qwen-coder.ps1
+
+
+# APM dependencies
+apm_modules/
+

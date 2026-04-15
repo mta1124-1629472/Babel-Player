@@ -5,6 +5,7 @@ services:
       context: ./inference
       dockerfile: Dockerfile
     container_name: babel-inference
+    image: babelplayer-inference:latest
     ports:
       - "127.0.0.1:8000:8000"
     environment:
@@ -14,6 +15,7 @@ services:
       # Dev-only bind mount for rapid iteration on the service code.
       - ./inference:/app:ro
       - inference_cache:/root/.cache
+      - pip-cache:/root/.cache/pip
     # GPU runtime configuration
     runtime: nvidia
     deploy:
@@ -43,6 +45,8 @@ services:
 
 volumes:
   inference_cache:
+    driver: local
+  pip-cache:
     driver: local
 
 networks:

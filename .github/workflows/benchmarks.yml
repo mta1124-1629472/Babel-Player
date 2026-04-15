@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "docs/benchmarks/*.json"
+      - "docs/history/benchmarks/*.json"
 
 jobs:
   aggregate:
@@ -36,7 +36,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/benchmarks/LEADERBOARD.md
+          git add docs/history/benchmarks/LEADERBOARD.md
           if git diff --cached --quiet; then
             echo "Leaderboard unchanged — nothing to commit."
           else

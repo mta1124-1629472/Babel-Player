@@ -1,0 +1,253 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: "Version number to embed (e.g. 1.2.0-dev). Defaults to 0.0.0-dev when not set."
+        required: false
+        default: "0.0.0-dev"
+
+permissions:
+  contents: write
+
+jobs:
+  publish-windows:
+    name: Publish (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      # If ARM64 fails (runner unavailable), x64 still completes and uploads.
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+            fetch_arch: ""
+          - rid: win-arm64
+            runner: windows-11-arm
+            fetch_arch: "Arm64"
+
+    env:
+      # GyanD codexffmpeg essentials — update this when a new build is released.
+      # Format: the tag name from https://github.com/GyanD/codexffmpeg/releases
+      # ARM64 uses BtbN (moving "latest" tag) — not affected by this variable.
+      FFMPEG_VERSION: "2026-04-09-git-d3d0b7a5ee"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          clean: true
+
+      - name: Fetch Windows native dependencies
+        shell: pwsh
+        env:
+          FFMPEG_VERSION: ${{ env.FFMPEG_VERSION }}
+        run: |
+          $arch = "${{ matrix.fetch_arch }}"
+          if ($arch -ne "") {
+            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -IncludeFfmpeg -Architecture $arch
+          } else {
+            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -IncludeFfmpeg
+          }
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore BabelPlayer.csproj -r ${{ matrix.rid }}
+
+      - name: Run architecture checks
+        run: python scripts/check-architecture.py
+
+      - name: Run core tests
+        run: >
+          dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
+          --configuration Release
+          --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation&ClassName!=BabelPlayer.Tests.EmbeddedPlaybackTests"
+          --logger "trx;LogFileName=core-results.trx"
+          --results-directory TestResults
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.rid }}
+          path: TestResults/core-results.trx
+          retention-days: 3
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $refName = "${{ github.ref_name }}"
+          $override = "${{ github.event.inputs.version_override }}"
+          if ($refName -match '^v\d') {
+            $version = $refName.TrimStart('v')
+          } elseif (-not [string]::IsNullOrWhiteSpace($override)) {
+            $version = $override
+          } else {
+            $version = "0.0.0-dev"
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Resolved version: $version"
+
+      - name: Publish self-contained build
+        shell: pwsh
+        run: |
+          $version  = "${{ steps.version.outputs.version }}"
+          $buildDate = (Get-Date -Format "yyyy-MM-dd")
+          $rid = "${{ matrix.rid }}"
+
+          Write-Host "Publishing: version=$version  buildDate=$buildDate  rid=$rid"
+
+          dotnet publish BabelPlayer.csproj `
+            --configuration Release `
+            -p:RuntimeIdentifier=$rid `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:Version=$version `
+            -p:InformationalVersion=$version `
+            -p:BuildDate=$buildDate `
+            -o ./publish
+
+          $native = if ($rid -eq "win-arm64") { "native/win-arm64" } else { "native/win-x64" }
+          $tools  = if ($rid -eq "win-arm64") { "tools/win-arm64"  } else { "tools/win-x64"  }
+
+          Copy-Item -Path "$native/libmpv-2.dll" -Destination "./publish/" -Force
+          Copy-Item -Path "$tools/ffmpeg.exe"    -Destination "./publish/" -Force
+          Copy-Item -Path "$tools/uv.exe"        -Destination "./publish/" -Force
+
+      - name: Verify publish output
+        shell: pwsh
+        run: |
+          $missing = @()
+
+          foreach ($f in @("BabelPlayer.exe", "ffmpeg.exe", "libmpv-2.dll", "uv.exe")) {
+            if (-not (Test-Path "./publish/$f")) { $missing += $f }
+          }
+
+          foreach ($f in @(
+            "inference/main.py",
+            "inference/requirements.txt",
+            "inference/cpu-requirements.txt",
+            "inference/cpu-constraints.txt",
+            "inference/gpu-requirements.txt",
+            "inference/gpu-constraints.txt"
+          )) {
+            if (-not (Test-Path "./publish/$f")) { $missing += $f }
+          }
+
+          if ($missing.Count -gt 0) {
+            throw "Publish output is missing required files: $($missing -join ', ')"
+          }
+          Write-Host "Verification passed — all required files present."
+
+      - name: Stage and package release bundle
+        id: package
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) { $tag = "manual" }
+          $rid = "${{ matrix.rid }}"
+
+          # Stage
+          $bundleDir = "dist/Babel-Player-$tag-$rid-portable"
+          if (Test-Path $bundleDir) { Remove-Item $bundleDir -Recurse -Force }
+          New-Item -ItemType Directory -Path $bundleDir -Force | Out-Null
+          Copy-Item -Path "./publish/*"                                     -Destination $bundleDir -Recurse -Force
+          Copy-Item -Path "./README.md"                                     -Destination "$bundleDir/README.md" -Force
+          Copy-Item -Path "./LICENSE"                                        -Destination "$bundleDir/LICENSE.txt" -Force
+          Copy-Item -Path "./docs/install-windows-release.md"              -Destination "$bundleDir/INSTALL-WINDOWS.md" -Force
+
+          # Package
+          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+          $zipPath      = "dist/Babel-Player-$tag-$rid-portable.zip"
+          $checksumPath = "dist/Babel-Player-$tag-$rid-portable.sha256"
+
+          Compress-Archive -Path "$bundleDir/*" -DestinationPath $zipPath -Force
+          $hash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $zipPath -Leaf)" | Set-Content -Path $checksumPath
+
+          "zip_path=$zipPath"           | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "checksum_path=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Install Inno Setup (x64 only)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build installer (x64 only)
+        id: installer
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $isccPath /DSetupVersion=$version installer\babel-player.iss
+
+          $installerPath  = "dist\Babel-Player-$version-win-x64-setup.exe"
+          $checksumPath   = "dist\Babel-Player-$version-win-x64-setup.sha256"
+
+          if (-not (Test-Path $installerPath)) {
+            throw "Installer not found at $installerPath"
+          }
+
+          $hash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $installerPath -Leaf)" | Set-Content -Path $checksumPath
+
+          "installer_path=$installerPath"    | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "installer_checksum=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: babel-player-${{ github.ref_name || 'manual' }}-${{ matrix.rid }}-portable
+          path: |
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.checksum_path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload installer artifact (x64 only)
+        if: matrix.rid == 'win-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: babel-player-${{ github.ref_name || 'manual' }}-win-x64-installer
+          path: |
+            ${{ steps.installer.outputs.installer_path }}
+            ${{ steps.installer.outputs.installer_checksum }}
+          if-no-files-found: error
+          retention-days: 30
+
+  github-release:
+    name: Create GitHub Release
+    needs: publish-windows
+    # Only run on real tag pushes, not workflow_dispatch.
+    # The win-arm64 job may be skipped/failed without blocking this if x64 succeeded.
+    if: startsWith(github.ref, 'refs/tags/') && !cancelled() && needs.publish-windows.result != 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: babel-player-*
+          path: release-files
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-files/*
+          body_path: docs/install-windows-release.md
+          generate_release_notes: true

@@ -2,11 +2,14 @@ using System;
 using System.IO;
 using System.Text;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
@@ -16,6 +19,7 @@ namespace Babel.Player.Views;
 
 public partial class MainWindow : Window
 {
+    private const double ControlsActivityDebounceMs = 75;
     private LibMpvEmbeddedTransport? _embeddedTransport;
 
     private PropertyChangedEventHandler? _playbackPropertyChangedHandler;
@@ -27,6 +31,10 @@ public partial class MainWindow : Window
     private EventHandler? _windowScalingChangedHandler;
     private EventHandler? _screensChangedHandler;
     private Screens? _subscribedScreens;
+    private long _lastControlsActivityTickMs;
+    private bool _isApplyingWindowStateFromViewModel;
+    private bool _isApplyingFullscreenFromWindowState;
+    private SpeakerReferenceWizardWindow? _speakerWizardWindow;
 
     public MainWindow()
     {
@@ -91,6 +99,42 @@ public partial class MainWindow : Window
         var videoView = this.FindControl<MpvVideoView>("VideoView");
         if (videoView is not null)
             UpdateEmbeddedTransportViewportMetrics(videoView);
+
+        SyncChromeWindowState();
+    }
+
+    private void SyncChromeWindowState()
+    {
+        var maxIcon = this.FindControl<Control>("ChromeMaximizeIcon");
+        var restoreIcon = this.FindControl<Control>("ChromeRestoreIcon");
+        if (maxIcon is null || restoreIcon is null)
+            return;
+
+        var maximized = WindowState == WindowState.Maximized;
+        maxIcon.IsVisible = !maximized;
+        restoreIcon.IsVisible = maximized;
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == WindowStateProperty)
+            SyncChromeWindowState();
+
+        if (change.Property != WindowStateProperty || _isApplyingWindowStateFromViewModel)
+            return;
+
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        var isFullscreen = WindowState == WindowState.FullScreen;
+        if (vm.Playback.Preview.IsFullscreen == isFullscreen)
+            return;
+
+        _isApplyingFullscreenFromWindowState = true;
+        vm.Playback.Preview.IsFullscreen = isFullscreen;
+        _isApplyingFullscreenFromWindowState = false;
     }
 
     protected override void OnClosed(EventArgs e)
@@ -145,14 +189,30 @@ public partial class MainWindow : Window
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (DataContext is MainWindowViewModel vm)
-            vm.Playback.Preview.NotifyControlsActivity();
+        NotifyControlsActivityDebounced();
+    }
+
+    private void OnWindowSurfacePointerMoved(object? sender, PointerEventArgs e)
+    {
+        NotifyControlsActivityDebounced();
     }
 
     private void OnVideoNativePointerActivity(object? sender, EventArgs e)
     {
-        if (DataContext is MainWindowViewModel vm)
-            vm.Playback.Preview.NotifyControlsActivity();
+        NotifyControlsActivityDebounced();
+    }
+
+    private void NotifyControlsActivityDebounced()
+    {
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        var nowMs = Environment.TickCount64;
+        if (nowMs - _lastControlsActivityTickMs < ControlsActivityDebounceMs)
+            return;
+
+        _lastControlsActivityTickMs = nowMs;
+        vm.Playback.Preview.NotifyControlsActivity();
     }
 
     private void OnPlaybackPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -165,8 +225,16 @@ public partial class MainWindow : Window
                     this.FindControl<ListBox>("SegmentList")?.ScrollIntoView(item);
                 break;
             case nameof(EmbeddedPlaybackPreviewViewModel.IsFullscreen):
-                if (DataContext is MainWindowViewModel vm)
-                    WindowState = vm.Playback.Preview.IsFullscreen ? WindowState.FullScreen : WindowState.Normal;
+                if (DataContext is MainWindowViewModel vm && !_isApplyingFullscreenFromWindowState)
+                {
+                    var desiredState = vm.Playback.Preview.IsFullscreen ? WindowState.FullScreen : WindowState.Normal;
+                    if (WindowState != desiredState)
+                    {
+                        _isApplyingWindowStateFromViewModel = true;
+                        WindowState = desiredState;
+                        _isApplyingWindowStateFromViewModel = false;
+                    }
+                }
                 break;
         }
     }
@@ -316,6 +384,26 @@ public partial class MainWindow : Window
         await vm.Playback.SpeakerRouting.SetReferenceAudioForSelectedSpeakerAsync(path);
     }
 
+    public void OnReviewSpeakerReferencesClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        if (_speakerWizardWindow is { IsVisible: true })
+        {
+            _speakerWizardWindow.Activate();
+            return;
+        }
+
+        var wizard = new SpeakerReferenceWizardWindow
+        {
+            DataContext = new SpeakerReferenceWizardViewModel(vm.Playback, vm.Coordinator, vm.ModelDownloader),
+        };
+        wizard.Closed += (_, _) => _speakerWizardWindow = null;
+        _speakerWizardWindow = wizard;
+        wizard.Show(this);
+    }
+
     /// <summary>
     /// Prompts the user to choose an output .srt file and exports the current playback segments as SubRip subtitles.
     /// </summary>
@@ -389,6 +477,119 @@ public partial class MainWindow : Window
         var win = new SettingsWindow();
         win.DataContext = vm.CreateSettingsViewModel(win);
         _ = win.ShowDialog(this);
+    }
+
+    public void OnMinimizeWindowClick(object? sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    public void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            return;
+
+        if (e.Source is Visual sourceVisual && sourceVisual.FindAncestorOfType<Button>() is not null)
+            return;
+
+        if (e.ClickCount == 2)
+        {
+            OnToggleMaximizeWindowClick(sender, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        BeginMoveDrag(e);
+    }
+
+    public void OnToggleMaximizeWindowClick(object? sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+    }
+
+    public void OnCloseWindowClick(object? sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    public void OnForceCloseWindowClick(object? sender, RoutedEventArgs e)
+    {
+        ForceCloseCurrentProcess();
+    }
+
+    private static async Task TryDockerComposeDownAsync()
+    {
+        var dockerPath = DependencyLocator.FindDocker();
+        var composeFilePath = ResolveComposeFilePath();
+        if (string.IsNullOrWhiteSpace(dockerPath) || string.IsNullOrWhiteSpace(composeFilePath))
+            return;
+
+        var workingDirectory = Path.GetDirectoryName(composeFilePath) ?? AppContext.BaseDirectory;
+        var psi = new ProcessStartInfo
+        {
+            FileName = dockerPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = workingDirectory,
+        };
+
+        psi.ArgumentList.Add("compose");
+        psi.ArgumentList.Add("-f");
+        psi.ArgumentList.Add(composeFilePath);
+        psi.ArgumentList.Add("down");
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            return;
+
+        using var timeoutCts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(8));
+        try
+        {
+            await process.WaitForExitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+                // Ignore timeout kill failures.
+            }
+        }
+    }
+
+    private static string? ResolveComposeFilePath()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var depth = 0; current is not null && depth < 6; depth++, current = current.Parent)
+        {
+            foreach (var candidateName in new[] { "docker-compose.yml", "compose.yml", "compose.yaml" })
+            {
+                var candidate = Path.Combine(current.FullName, candidateName);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static void ForceCloseCurrentProcess()
+    {
+        try
+        {
+            Process.GetCurrentProcess().Kill(entireProcessTree: true);
+        }
+        catch
+        {
+            Environment.FailFast("Force close requested.");
+        }
     }
 
 #if BABEL_DEV

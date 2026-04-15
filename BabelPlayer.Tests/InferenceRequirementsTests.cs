@@ -7,11 +7,8 @@ using Xunit;
 namespace BabelPlayer.Tests;
 
 /// <summary>
-/// Validates the content of inference/gpu-requirements.txt and inference/gpu-constraints.txt
-/// following the changes in this PR:
-///   - pydantic pin relaxed from ==2.9.2 to >=2.10.6
-///   - TTS==0.22.0 removed
-///   - nemo-toolkit added (gpu-requirements: [asr]>=2.7.0, gpu-constraints: ==2.7.2)
+/// Validates the inference dependency manifests used by the managed GPU host
+/// and the managed CPU subprocess runtime.
 /// </summary>
 public sealed class InferenceRequirementsTests
 {
@@ -179,60 +176,93 @@ public sealed class InferenceRequirementsTests
         Assert.Contains("config.diarizer.collar = NEMO_COLLAR", source, StringComparison.Ordinal);
         Assert.Contains("config.diarizer.ignore_overlap = NEMO_IGNORE_OVERLAP", source, StringComparison.Ordinal);
         Assert.Contains("setattr(config.diarizer.vad.parameters, key, value)", source, StringComparison.Ordinal);
-        Assert.Contains("config.diarizer.speaker_embeddings.window_length_in_sec", source, StringComparison.Ordinal);
-        Assert.Contains("config.diarizer.speaker_embeddings.shift_length_in_sec", source, StringComparison.Ordinal);
-        Assert.Contains("config.diarizer.speaker_embeddings.multiscale_weights", source, StringComparison.Ordinal);
-        Assert.Contains("config.diarizer.speaker_embeddings.scale_n", source, StringComparison.Ordinal);
         Assert.Contains("config.diarizer.speaker_embeddings.parameters.window_length_in_sec", source, StringComparison.Ordinal);
         Assert.Contains("config.diarizer.speaker_embeddings.parameters.shift_length_in_sec", source, StringComparison.Ordinal);
         Assert.Contains("config.diarizer.speaker_embeddings.parameters.multiscale_weights", source, StringComparison.Ordinal);
-        Assert.Contains("config.diarizer.speaker_embeddings.parameters.scale_n", source, StringComparison.Ordinal);
+        Assert.Contains("config.diarizer.speaker_embeddings.parameters.save_embeddings = False", source, StringComparison.Ordinal);
+        Assert.Contains("_require_config_attr(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("config.diarizer.speaker_embeddings.window_length_in_sec", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("config.diarizer.speaker_embeddings.shift_length_in_sec", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("config.diarizer.speaker_embeddings.multiscale_weights", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("config.diarizer.speaker_embeddings.scale_n", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("config.diarizer.speaker_embeddings.parameters.scale_n", source, StringComparison.Ordinal);
         Assert.Contains("NeMo diarization config contract invalid", source, StringComparison.Ordinal);
+        Assert.Contains("_apply_nemo_meta_tensor_restore_patch()", source, StringComparison.Ordinal);
+        Assert.Contains("instance.to_empty(device=normalized_map_location)", source, StringComparison.Ordinal);
     }
 
-    // ── requirements.txt (managed CPU runtime) ──────────────────────────────
+    // ── cpu-requirements.txt / cpu-constraints.txt (managed CPU runtime) ───
 
     [Theory]
-    [InlineData("edge-tts==7.2.8")]
-    [InlineData("ctranslate2==4.7.1")]
-    [InlineData("transformers==5.0.0")]
-    [InlineData("sentencepiece==0.2.1")]
-    [InlineData("faster-whisper==1.2.1")]
+    [InlineData("edge-tts")]
+    [InlineData("ctranslate2")]
+    [InlineData("transformers")]
+    [InlineData("sentencepiece")]
+    [InlineData("faster-whisper")]
     [InlineData("git+https://github.com/wenet-e2e/wespeaker.git@c92349a14d6b426808c4e09b8b12e076864dfc11")]
-    [InlineData("s3prl==0.4.17")]
-    public void CpuRequirements_ContainsPinnedCpuSubprocessDependencies(string expectedLine)
+    [InlineData("s3prl")]
+    [InlineData("onnxruntime")]
+    [InlineData("openai-whisper")]
+    [InlineData("peft")]
+    [InlineData("scikit-learn")]
+    [InlineData("torch")]
+    [InlineData("torchaudio")]
+    public void CpuRequirements_ContainsManagedCpuSubprocessDependencies(string expectedLine)
     {
-        var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "cpu-requirements.txt");
         var lines = ReadRequirementsLines(requirementsPath);
 
         Assert.Contains(expectedLine, lines);
     }
 
     [Fact]
-    public void CpuRequirements_DoesNotContainGoogleTrans()
+    public void CpuConstraints_PinValidatedWeSpeakerDependencyChain()
     {
-        var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
-        var lines = ReadRequirementsLines(requirementsPath);
+        var constraintsPath = Path.Combine(FindInferenceDirectory(), "cpu-constraints.txt");
+        var lines = ReadRequirementsLines(constraintsPath);
 
-        Assert.DoesNotContain(lines, l => l.StartsWith("googletrans", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("torch==2.5.1", lines);
+        Assert.Contains("torchaudio==2.5.1", lines);
+        Assert.Contains("onnxruntime==1.19.2", lines);
+        Assert.Contains("openai-whisper==20240930", lines);
+        Assert.Contains("peft==0.13.2", lines);
+        Assert.Contains("scikit-learn==1.3.2", lines);
     }
 
     [Fact]
-    public void CpuRequirements_DoesNotContainPyannoteAudio()
+    public void CpuRequirements_DoesNotContainGpuHostPackages()
     {
-        var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "cpu-requirements.txt");
         var lines = ReadRequirementsLines(requirementsPath);
 
+        Assert.DoesNotContain(lines, line => line.StartsWith("qwen-tts", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(lines, line => line.StartsWith("fastapi", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(lines, line => line.StartsWith("uvicorn", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(lines, line => line.StartsWith("python-multipart", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void CpuRequirements_DoNotContainUnusedLegacyDependencies()
+    {
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "cpu-requirements.txt");
+        var lines = ReadRequirementsLines(requirementsPath);
+
+        Assert.DoesNotContain(lines, l => l.StartsWith("googletrans", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(lines, line => line.Contains("pyannote.audio", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
-    public void CpuRequirements_QwenPackage_IsNotPresent()
+    public void CpuConstraints_UsesKnownStablePinnedVersions()
     {
-        var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
-        var lines = ReadRequirementsLines(requirementsPath);
+        var constraintsPath = Path.Combine(FindInferenceDirectory(), "cpu-constraints.txt");
+        var lines = ReadRequirementsLines(constraintsPath);
 
-        Assert.DoesNotContain(lines, line => line.StartsWith("qwen-tts", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("torch==2.5.1", lines);
+        Assert.Contains("torchaudio==2.5.1", lines);
+        Assert.Contains("onnxruntime==1.19.2", lines);
+        Assert.Contains("transformers==4.46.3", lines);
+        Assert.Contains("silero-vad==5.1.0", lines);
+        Assert.Contains("openai-whisper==20240930", lines);
     }
 
     [Theory]

@@ -4,7 +4,7 @@
 
 **Consolidated Implementation Plan: Codebase Health · Inference Performance · NeMo Provider Integrations**
 
-Category: Engineering Report | Author: Michael | Date: April 7, 2026 (revised April 8, 2026) | Status: Active
+Category: Engineering Report | Author: Michael | Date: April 7, 2026 (revised April 8, 2026) | Status: Historical snapshot (superseded)
 
 ---
 
@@ -31,8 +31,8 @@ Following a comprehensive audit of the codebase, the following issues and opport
   - *Fix:* Add a `TextBlock` or colored badge bound to `SpeakerId` in the segment row template of `MainWindow.axaml` (Phase 3.9).
 - **Diarization UI Controls Incomplete:** The UI still relies on a binary CheckBox for auto-speaker detection instead of a ComboBox for provider selection, and lacks a standalone "Re-diarize" command.
   - *Fix:* Replace CheckBox with ComboBox bound to `DiarizationProviderOptions` and add a `RunDiarizationOnlyCommand` to the Diarization panel (Phase 3.7 & 3.8).
-- **Parakeet ASR Integration Missing:** The Parakeet endpoint and C# provider (Phase 4) have not been implemented, leaving faster-whisper as the sole local ASR option.
-  - *Fix:* Implement `POST /transcribe/parakeet` in `inference/main.py` and the corresponding `ParakeetTranscriptionProvider` in C#.
+- **Parakeet ASR Integration Missing (historical audit finding):** This was true at the time of the April 2026 audit and has since been implemented (April 15, 2026).
+  - *Historical fix plan:* Implement `POST /transcribe/parakeet` in `inference/main.py` and the corresponding `ParakeetTranscriptionProvider` in C#.
 
 ### 2. Improper Code (anti-patterns, misuse of APIs, incorrect logic)
 - **`async void` Anti-Pattern in Background Probes:** `Services/ContainerizedServiceProbe.cs` uses an `async void ObserveCompletionWithFaultHandling` method for fire-and-forget background task monitoring. While it catches exceptions, `async void` is an anti-pattern outside of event handlers and complicates lifecycle management.
@@ -139,11 +139,11 @@ Replace pyannote with NeMo ClusteringDiarizer (GPU) and WeSpeaker (CPU fallback)
 
 ---
 
-## Phase 4: ASR Provider Expansion (NeMo Parakeet) (Still Open)
+## Phase 4: ASR Provider Expansion (NeMo Parakeet) (Historical: later completed)
 
 Add Parakeet-TDT-0.6B-v3 as a high-performance ASR option for European languages. Estimated effort: 1.5–2 weeks.
 
-- **Status:** **Still Open** (Flagged in April 2026 Audit).
+- **Status:** **Historical snapshot.** Flagged as open in April 2026 audit; completed later (April 15, 2026).
 
 ---
 

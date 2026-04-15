@@ -271,8 +271,7 @@ public sealed partial class SessionWorkflowCoordinator
         CurrentSettings.TranscriptionRuntime == InferenceRuntime.Containerized
         || CurrentSettings.TranslationRuntime == InferenceRuntime.Containerized
         || CurrentSettings.TtsRuntime == InferenceRuntime.Containerized
-        || (CurrentSession.MultiSpeakerEnabled
-            && InferenceRuntimeCatalog.InferDiarizationRuntime(CurrentSettings.DiarizationProvider) == InferenceRuntime.Containerized);
+        || InferenceRuntimeCatalog.InferDiarizationRuntime(CurrentSettings.DiarizationProvider) == InferenceRuntime.Containerized;
 
     private string GetConfiguredGpuHostLabel() =>
         CurrentSettings.PreferredLocalGpuBackend == GpuHostBackend.ManagedVenv

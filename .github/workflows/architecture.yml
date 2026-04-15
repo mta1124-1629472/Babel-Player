@@ -1,5 +1,9 @@
 name: Architecture Guard
 
+concurrency:
+  group: architecture-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -12,6 +16,10 @@ on:
       - "AGENTS.md"
       - "CLAUDE.md"
       - "CONTRIBUTING.md"
+      - "docs/PLAN.md"
+      - "docs/history/**"
+      - "docs/context/**"
+      - "docs/privacy-policy.md"
       - ".github/workflows/architecture.yml"
   pull_request:
     branches: [main]
@@ -24,6 +32,10 @@ on:
       - "AGENTS.md"
       - "CLAUDE.md"
       - "CONTRIBUTING.md"
+      - "docs/PLAN.md"
+      - "docs/history/**"
+      - "docs/context/**"
+      - "docs/privacy-policy.md"
       - ".github/workflows/architecture.yml"
   workflow_dispatch:
 

@@ -96,4 +96,23 @@ public sealed class LibMpvEmbeddedTransportTests
         Assert.NotNull(plan.FilterChain);
         Assert.Contains("scale=1.3", plan.FilterChain);
     }
+
+    [Fact]
+    public void EvaluateVsrFilterPlan_AppliesWhenFlooredScaleWouldHitOneButExactRequiresUpscale()
+    {
+        // min(2016/1920, 1134/1080) = 1.05 — previously Floor(1.05) == 1.0 skipped VSR incorrectly.
+        var plan = LibMpvEmbeddedTransport.EvaluateVsrFilterPlan(
+            videoWidth: 1920,
+            videoHeight: 1080,
+            displayWidth: 1920,
+            displayHeight: 1080,
+            monitorWidth: 2016,
+            monitorHeight: 1134,
+            hwPixelFormat: "nv12");
+
+        Assert.True(plan.ShouldApply);
+        Assert.Equal(1.1, plan.Scale);
+        Assert.NotNull(plan.FilterChain);
+        Assert.Contains("scale=1.1", plan.FilterChain);
+    }
 }

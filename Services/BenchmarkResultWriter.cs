@@ -10,7 +10,7 @@ namespace Babel.Player.Services;
 
 /// <summary>
 /// Serialises benchmark timing / quality data into the canonical benchmark JSON
-/// schema used by the <c>benchmarks/</c> directory.
+/// schema used by tracked benchmark result files under <c>docs/history/benchmarks/</c>.
 ///
 /// Responsibilities:
 ///   - Accept a batch of <see cref="BenchmarkRunEntry"/> objects (one per measured run)

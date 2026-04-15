@@ -382,8 +382,21 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
             
             // Write dummy audio data
             File.WriteAllBytes(outputPath, [0x01, 0x02, 0x03]);
-            
+
             return Task.CompletedTask;
         }
+
+        public Task ExtractFullAudioAsync(
+            string inputPath,
+            string outputPath,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
+            double minRatio = 0.75, double maxRatio = 1.35, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
+            => Task.FromResult<double?>(null);
     }
 }

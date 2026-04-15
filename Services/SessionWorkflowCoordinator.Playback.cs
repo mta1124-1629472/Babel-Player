@@ -1,16 +1,63 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Registries;
 
 namespace Babel.Player.Services;
 
 public sealed partial class SessionWorkflowCoordinator
 {
+    private static readonly JsonSerializerOptions DebugJsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly string DebugLogPath = ResolveDebugLogPath();
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload, DebugJsonOptions);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
+    }
+
     // ── Diarization ──────────────────────────────────────────────────────
 
     private readonly record struct DiarizationExecutionOutcome(
@@ -39,30 +86,34 @@ public sealed partial class SessionWorkflowCoordinator
     /// </exception>
     public async Task<bool> RunDiarizationAsync(CancellationToken cancellationToken = default)
     {
-        if (CurrentSession.Stage < SessionWorkflowStage.Transcribed)
+#pragma warning disable MVVMTK0034 // snapshot read avoids generated-property design-time false negatives in some IDE states
+        var currentSession = _currentSession;
+#pragma warning restore MVVMTK0034
+
+        if (currentSession.Stage < SessionWorkflowStage.Transcribed)
             throw new InvalidOperationException("No transcript available. Please transcribe media first.");
 
-        if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
+        if (string.IsNullOrWhiteSpace(currentSession.IngestedMediaPath))
             throw new InvalidOperationException("No ingested media is available for diarization.");
 
-        if (!File.Exists(CurrentSession.IngestedMediaPath))
-            throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
+        if (!File.Exists(currentSession.IngestedMediaPath))
+            throw new FileNotFoundException($"Ingested media file not found: {currentSession.IngestedMediaPath}");
 
-        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
+        if (string.IsNullOrWhiteSpace(currentSession.TranscriptPath))
             throw new InvalidOperationException("No transcript available. Please transcribe media first.");
 
-        if (!File.Exists(CurrentSession.TranscriptPath))
-            throw new FileNotFoundException($"Transcript file not found: {CurrentSession.TranscriptPath}");
+        if (!File.Exists(currentSession.TranscriptPath))
+            throw new FileNotFoundException($"Transcript file not found: {currentSession.TranscriptPath}");
 
         if (string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider))
             throw new InvalidOperationException("No diarization provider is selected.");
 
         var outcome = await ExecuteDiarizationAsync(
-            CurrentSession.IngestedMediaPath,
-            CurrentSession.TranscriptPath,
+            currentSession.IngestedMediaPath,
+            currentSession.TranscriptPath,
             cancellationToken,
-            resultingStage: CurrentSession.Stage >= SessionWorkflowStage.Translated
-                ? CurrentSession.Stage
+            resultingStage: currentSession.Stage >= SessionWorkflowStage.Translated
+                ? currentSession.Stage
                 : SessionWorkflowStage.Diarized);
 
         return outcome.SpeakerAssignmentsChanged;
@@ -92,6 +143,8 @@ public sealed partial class SessionWorkflowCoordinator
     /// A <see cref="DiarizationExecutionOutcome"/> containing whether speaker assignments were applied to transcript/translation,
     /// the detected speaker count, and the diarized segment count.
     /// </returns>
+    private static readonly string[] VideoExtensions = [".mp4", ".avi", ".mkv", ".mov"];
+
     private async Task<DiarizationExecutionOutcome> ExecuteDiarizationAsync(
         string audioPath,
         string transcriptPath,
@@ -99,6 +152,7 @@ public sealed partial class SessionWorkflowCoordinator
         SessionWorkflowStage? resultingStage = null,
         string? statusMessage = null)
     {
+        var totalStopwatch = Stopwatch.StartNew();
         if (DiarizationRegistry is null)
             throw new PipelineProviderException("No diarization registry is configured.");
 
@@ -107,91 +161,148 @@ public sealed partial class SessionWorkflowCoordinator
             .FirstOrDefault(provider => string.Equals(provider.Id, CurrentSettings.DiarizationProvider, StringComparison.Ordinal));
         var usesContainerizedRuntime = providerDescriptor?.EffectiveDefaultRuntime == InferenceRuntime.Containerized;
 
-        var readiness = usesContainerizedRuntime && ContainerizedProbe is not null
-            ? await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
-                    CurrentSettings,
-                    CurrentSettings.DiarizationProvider,
-                    ContainerizedProbe,
-                    ct)
-                .ConfigureAwait(false)
-            : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
-        if (!readiness.IsReady)
+        // Force provider-level auto speaker-count detection and ignore legacy min/max bounds.
+        int? effectiveMinSpeakers = null;
+        int? effectiveMaxSpeakers = null;
+
+        // Extract audio from video files — diarization providers cannot decode video containers.
+        var effectiveAudioPath = audioPath;
+        string? tempExtractedAudio = null;
+        var extension = Path.GetExtension(audioPath).ToLowerInvariant();
+
+        if (Array.Exists(VideoExtensions, ext => ext == extension))
         {
-            var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
-            _log.Warning($"Diarization skipped: {blockingReason}");
-            throw new PipelineProviderException(blockingReason);
+            if (_audioProcessingService is null)
+                throw new PipelineProviderException(
+                    "Cannot diarize video files without audio processing support (ffmpeg).");
+
+            tempExtractedAudio = Path.Combine(Path.GetTempPath(), $"diar_{Guid.NewGuid():N}.wav");
+            _log.Info($"Extracting audio from video for diarization: {audioPath} → {tempExtractedAudio}");
+            await _audioProcessingService.ExtractFullAudioAsync(audioPath, tempExtractedAudio, ct)
+                .ConfigureAwait(false);
+            effectiveAudioPath = tempExtractedAudio;
         }
 
-        ValidateDiarizationSpeakerBounds(
-            CurrentSettings.DiarizationMinSpeakers,
-            CurrentSettings.DiarizationMaxSpeakers);
-
-        var provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
-
-        var request = new DiarizationRequest(
-            SourceAudioPath:  audioPath,
-            MinSpeakers:      CurrentSettings.DiarizationMinSpeakers,
-            MaxSpeakers:      CurrentSettings.DiarizationMaxSpeakers);
-
-        _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={audioPath}, " +
-                  $"minSpeakers={CurrentSettings.DiarizationMinSpeakers?.ToString() ?? "auto"}, " +
-                  $"maxSpeakers={CurrentSettings.DiarizationMaxSpeakers?.ToString() ?? "auto"}");
-
-        var result = await provider.DiarizeAsync(request, ct);
-
-        if (!result.Success)
+        try
         {
-            _log.Warning($"Diarization failed: {result.ErrorMessage}");
-            throw new InvalidOperationException(result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
+            ProviderReadiness readiness;
+            IDiarizationProvider provider;
+
+
+            if (usesContainerizedRuntime)
+            {
+                readiness = ContainerizedProbe is not null
+                    ? await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
+                            CurrentSettings,
+                            CurrentSettings.DiarizationProvider,
+                            ContainerizedProbe,
+                            ct)
+                        .ConfigureAwait(false)
+                    : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+
+
+                if (!readiness.IsReady)
+                {
+                    var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
+                    _log.Warning($"Diarization skipped: {blockingReason}");
+                    throw new PipelineProviderException(blockingReason);
+                }
+
+                provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+            }
+            else
+            {
+                provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
+                var ensuredReady = await provider.EnsureReadyAsync(CurrentSettings, ct: ct).ConfigureAwait(false);
+                readiness = provider.CheckReadiness(CurrentSettings, KeyStore);
+
+
+                if (!readiness.IsReady)
+                {
+                    var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
+                    _log.Warning($"Diarization skipped: {blockingReason}");
+                    throw new PipelineProviderException(blockingReason);
+                }
+            }
+
+            var request = new DiarizationRequest(
+                SourceAudioPath:  effectiveAudioPath,
+                MinSpeakers:      effectiveMinSpeakers,
+                MaxSpeakers:      effectiveMaxSpeakers);
+
+            _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={effectiveAudioPath}, " +
+                      $"minSpeakers={effectiveMinSpeakers?.ToString() ?? "auto"}, " +
+                      $"maxSpeakers={effectiveMaxSpeakers?.ToString() ?? "auto"}");
+            var providerCallStopwatch = Stopwatch.StartNew();
+            var result = await provider.DiarizeAsync(request, ct);
+            providerCallStopwatch.Stop();
+
+            if (!result.Success)
+            {
+                _log.Warning($"Diarization failed: {result.ErrorMessage}");
+                throw new InvalidOperationException(result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
+            }
+
+            var transcriptMergeStopwatch = Stopwatch.StartNew();
+            var transcriptChanged = await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
+            transcriptMergeStopwatch.Stop();
+            var translationChanged = false;
+#pragma warning disable MVVMTK0034 // snapshot read avoids generated-property design-time false negatives in some IDE states
+            var currentSession = _currentSession;
+#pragma warning restore MVVMTK0034
+
+            if (!string.IsNullOrWhiteSpace(currentSession.TranslationPath) &&
+                File.Exists(currentSession.TranslationPath))
+            {
+                var translationMergeStopwatch = Stopwatch.StartNew();
+                translationChanged = await MergeSpeakerIdsIntoTranslationAsync(
+                    transcriptPath,
+                    currentSession.TranslationPath,
+                    ct);
+                translationMergeStopwatch.Stop();
+            }
+
+            var nextStage = resultingStage ?? (
+                currentSession.Stage >= SessionWorkflowStage.Translated
+                    ? currentSession.Stage
+                    : SessionWorkflowStage.Diarized);
+            var nextStatusMessage = statusMessage ?? (
+                nextStage >= SessionWorkflowStage.Translated
+                    ? "Diarization complete. Speaker assignments updated."
+                    : "Speaker mapping complete. Ready to resume translation/TTS.");
+
+            CurrentSession = currentSession with
+            {
+                Stage = nextStage,
+                DiarizationProvider = CurrentSettings.DiarizationProvider,
+                SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+                StatusMessage = nextStatusMessage,
+            };
+            SaveCurrentSession();
+
+            _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
+
+            return new DiarizationExecutionOutcome(
+                SpeakerAssignmentsChanged: transcriptChanged || translationChanged,
+                SpeakerCount: result.SpeakerCount,
+                SegmentCount: result.Segments.Count);
         }
-
-        var transcriptChanged = await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
-        var translationChanged = false;
-
-        if (!string.IsNullOrWhiteSpace(CurrentSession.TranslationPath) &&
-            File.Exists(CurrentSession.TranslationPath))
+        finally
         {
-            translationChanged = await MergeSpeakerIdsIntoTranslationAsync(
-                transcriptPath,
-                CurrentSession.TranslationPath,
-                ct);
+            totalStopwatch.Stop();
+            if (tempExtractedAudio is not null)
+            {
+                try
+                {
+                    if (File.Exists(tempExtractedAudio))
+                        File.Delete(tempExtractedAudio);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning($"Failed to clean up temp diarization audio: {ex.Message}");
+                }
+            }
         }
-
-        var nextStage = resultingStage ?? (
-            CurrentSession.Stage >= SessionWorkflowStage.Translated
-                ? CurrentSession.Stage
-                : SessionWorkflowStage.Diarized);
-        var nextStatusMessage = statusMessage ?? (
-            nextStage >= SessionWorkflowStage.Translated
-                ? "Diarization complete. Speaker assignments updated."
-                : "Speaker mapping ready. Assign voices, then continue.");
-
-        CurrentSession = CurrentSession with
-        {
-            Stage = nextStage,
-            DiarizationProvider = CurrentSettings.DiarizationProvider,
-            SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
-            StatusMessage = nextStatusMessage,
-        };
-        SaveCurrentSession();
-
-        _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
-
-        return new DiarizationExecutionOutcome(
-            SpeakerAssignmentsChanged: transcriptChanged || translationChanged,
-            SpeakerCount: result.SpeakerCount,
-            SegmentCount: result.Segments.Count);
-    }
-
-    private void ValidateDiarizationSpeakerBounds(int? minSpeakers, int? maxSpeakers)
-    {
-        if (!minSpeakers.HasValue || !maxSpeakers.HasValue || minSpeakers.Value <= maxSpeakers.Value)
-            return;
-
-        var message =
-            $"Invalid diarization speaker bounds: min speakers ({minSpeakers.Value}) cannot be greater than max speakers ({maxSpeakers.Value}).";
-        _log.Warning(message);
-        throw new InvalidOperationException(message);
     }
 
     /// <summary>
@@ -386,6 +497,40 @@ public sealed partial class SessionWorkflowCoordinator
             ? new Dictionary<string, string>()
             : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
 
+    public IReadOnlyDictionary<string, SegmentTimingMode> GetSegmentTimingModeOverrides() =>
+        CurrentSession.SegmentTimingModeOverrides is null
+            ? new Dictionary<string, SegmentTimingMode>()
+            : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
+
+    public void SetSegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segmentId);
+        var normalizedSegmentId = segmentId.Trim();
+        var current = CurrentSession.SegmentTimingModeOverrides is null
+            ? new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
+            : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
+
+        var changed = false;
+        if (mode.HasValue)
+        {
+            changed = !current.TryGetValue(normalizedSegmentId, out var existing) || existing != mode.Value;
+            current[normalizedSegmentId] = mode.Value;
+        }
+        else
+        {
+            changed = current.Remove(normalizedSegmentId);
+        }
+
+        if (!changed)
+            return;
+
+        CurrentSession = CurrentSession with
+        {
+            SegmentTimingModeOverrides = current.Count == 0 ? null : current,
+        };
+        SaveCurrentSession();
+    }
+
     public void SetSpeakerVoiceAssignment(string speakerId, string voiceOrModel)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
@@ -412,6 +557,49 @@ public sealed partial class SessionWorkflowCoordinator
             return;
 
         CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
+        SaveCurrentSession();
+    }
+
+    public void ApplySpeakerVoiceAssignmentChanges(IReadOnlyDictionary<string, string?> updates)
+    {
+        ArgumentNullException.ThrowIfNull(updates);
+        if (updates.Count == 0)
+            return;
+
+        var current = CurrentSession.SpeakerVoiceAssignments is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
+
+        var changed = false;
+        foreach (var (speakerId, candidateVoice) in updates)
+        {
+            if (string.IsNullOrWhiteSpace(speakerId))
+                continue;
+
+            var normalizedSpeakerId = speakerId.Trim();
+            var normalizedVoice = string.IsNullOrWhiteSpace(candidateVoice) ? null : candidateVoice.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalizedVoice))
+            {
+                changed |= current.Remove(normalizedSpeakerId);
+                continue;
+            }
+
+            if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
+                !string.Equals(existing, normalizedVoice, StringComparison.Ordinal))
+            {
+                current[normalizedSpeakerId] = normalizedVoice;
+                changed = true;
+            }
+        }
+
+        if (!changed)
+            return;
+
+        CurrentSession = CurrentSession with
+        {
+            SpeakerVoiceAssignments = current.Count == 0 ? null : current,
+        };
         SaveCurrentSession();
     }
 
@@ -444,35 +632,213 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
     }
 
-    public void SetMultiSpeakerEnabled(bool enabled)
+    public void ApplySpeakerReferenceAudioPathChanges(IReadOnlyDictionary<string, string?> updates)
     {
-        if (CurrentSession.MultiSpeakerEnabled == enabled)
+        ArgumentNullException.ThrowIfNull(updates);
+        if (updates.Count == 0)
             return;
 
-        CurrentSession = CurrentSession with { MultiSpeakerEnabled = enabled };
+        var current = CurrentSession.SpeakerReferenceAudioPaths is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
+
+        var changed = false;
+        foreach (var (speakerId, candidatePath) in updates)
+        {
+            if (string.IsNullOrWhiteSpace(speakerId))
+                continue;
+
+            var normalizedSpeakerId = speakerId.Trim();
+            var normalizedPath = string.IsNullOrWhiteSpace(candidatePath) ? null : candidatePath.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalizedPath))
+            {
+                changed |= current.Remove(normalizedSpeakerId);
+                continue;
+            }
+
+            if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
+                !string.Equals(existing, normalizedPath, StringComparison.Ordinal))
+            {
+                current[normalizedSpeakerId] = normalizedPath;
+                changed = true;
+            }
+        }
+
+        if (!changed)
+            return;
+
+        CurrentSession = CurrentSession with
+        {
+            SpeakerReferenceAudioPaths = current.Count == 0 ? null : current,
+        };
         SaveCurrentSession();
     }
 
-    public void SetDefaultTtsVoiceFallback(string? voice)
+    public Task<string> ExtractSpeakerReferenceFromSegmentAsync(
+        string speakerId,
+        WorkflowSegmentState segment,
+        CancellationToken cancellationToken = default)
     {
-        var normalized = string.IsNullOrWhiteSpace(voice) ? null : voice.Trim();
-        if (string.Equals(CurrentSession.DefaultTtsVoiceFallback, normalized, StringComparison.Ordinal))
-            return;
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
+        ArgumentNullException.ThrowIfNull(segment);
 
-        CurrentSession = CurrentSession with { DefaultTtsVoiceFallback = normalized };
-        SaveCurrentSession();
+        var startSeconds = Math.Max(0, segment.StartSeconds);
+        var naturalDuration = Math.Max(0.1, segment.EndSeconds - segment.StartSeconds);
+        return ExtractSpeakerReferenceFromSourceAsync(speakerId, startSeconds, naturalDuration, cancellationToken);
+    }
+
+    /// <summary>
+    /// Extracts a WAV reference clip from the session's ingested (or source) media at an arbitrary timeline window.
+    /// Duration is clamped between 3 and 15 seconds (same rules as segment-based extraction).
+    /// </summary>
+    public async Task<string> ExtractSpeakerReferenceFromSourceAsync(
+        string speakerId,
+        double startSeconds,
+        double naturalDurationSeconds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
+
+        if (_audioProcessingService is null)
+            throw new InvalidOperationException("Audio processing is unavailable, so reference extraction cannot run.");
+
+        var mediaPath = !string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath)
+            ? CurrentSession.IngestedMediaPath
+            : CurrentSession.SourceMediaPath;
+        if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
+            throw new FileNotFoundException("Cannot extract reference clip because source media is unavailable.", mediaPath);
+
+        var safeSpeakerId = string.Join("_", speakerId.Trim().Split(Path.GetInvalidFileNameChars()));
+        var refsDir = Path.Combine(GetSessionDirectory(), "tts", "references");
+        Directory.CreateDirectory(refsDir);
+
+        var start = Math.Max(0, startSeconds);
+        var naturalDuration = Math.Max(0.1, naturalDurationSeconds);
+        var durationSeconds = Math.Clamp(naturalDuration, 3.0, 15.0);
+        var outputPath = Path.Combine(
+            refsDir,
+            $"manual-ref-{safeSpeakerId}-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.wav");
+
+        await _audioProcessingService.ExtractAudioClipAsync(
+            mediaPath,
+            outputPath,
+            start,
+            durationSeconds,
+            cancellationToken).ConfigureAwait(false);
+
+        return outputPath;
+    }
+
+    /// <summary>
+    /// Plays a short audio file on the headless segment transport (stops active TTS preview first).
+    /// </summary>
+    public Task PlayWizardAudioPreviewAsync(string audioFilePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(audioFilePath);
+        if (!File.Exists(audioFilePath))
+            throw new FileNotFoundException("Preview audio file not found.", audioFilePath);
+
+        StopTtsPlayback();
+
+        var player = GetOrCreateSegmentPlayer();
+        player.Load(audioFilePath);
+        player.Volume = TtsVolume;
+        player.Seek(0);
+        _ = Task.Run(() => player.Play()).FireAndForgetAsync(_log, "Play wizard reference preview");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Stops wizard / TTS preview playback on the segment transport.
+    /// </summary>
+    public void StopWizardAudioPreview() => StopTtsPlayback();
+
+    public async Task<string?> AutoPickAlternateSpeakerReferenceAsync(
+        string speakerId,
+        IReadOnlyCollection<string>? excludePaths = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
+
+        if (_audioProcessingService is null)
+            return null;
+
+        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath) || !File.Exists(CurrentSession.TranscriptPath))
+            return null;
+
+        var mediaPath = !string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath)
+            ? CurrentSession.IngestedMediaPath
+            : CurrentSession.SourceMediaPath;
+        if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
+            return null;
+
+        var transcript = await ArtifactJson
+            .LoadTranscriptAsync(CurrentSession.TranscriptPath, cancellationToken)
+            .ConfigureAwait(false);
+        if (transcript.Segments is null || transcript.Segments.Count == 0)
+            return null;
+
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (excludePaths is not null)
+        {
+            foreach (var path in excludePaths.Where(path => !string.IsNullOrWhiteSpace(path)))
+                excluded.Add(path.Trim());
+        }
+
+        var refsDir = Path.Combine(GetSessionDirectory(), "tts", "references");
+        Directory.CreateDirectory(refsDir);
+        var safeSpeakerId = string.Join("_", speakerId.Trim().Split(Path.GetInvalidFileNameChars()));
+
+        var candidates = transcript.Segments
+            .Where(segment => string.Equals(segment.SpeakerId, speakerId, StringComparison.Ordinal))
+            .Select(segment => new
+            {
+                Start = segment.Start,
+                Duration = Math.Max(0.1, segment.End - segment.Start),
+            })
+            .Where(candidate => candidate.Duration > 0)
+            .OrderByDescending(candidate => candidate.Duration)
+            .Take(8)
+            .ToList();
+
+        foreach (var candidate in candidates)
+        {
+            var boundedDuration = Math.Clamp(candidate.Duration, 3.0, 15.0);
+            var startMs = (long)Math.Round(candidate.Start * 1000, MidpointRounding.AwayFromZero);
+            var outputPath = Path.Combine(refsDir, $"alt-ref-{safeSpeakerId}-{startMs}.wav");
+            if (excluded.Contains(outputPath))
+                continue;
+
+            try
+            {
+                await _audioProcessingService.ExtractAudioClipAsync(
+                        mediaPath,
+                        outputPath,
+                        Math.Max(0, candidate.Start),
+                        boundedDuration,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return outputPath;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Try next candidate.
+            }
+        }
+
+        return null;
     }
 
     private string ResolveVoiceForSegment(TranslationSegmentArtifact segment, string defaultVoice)
     {
-        if (!CurrentSession.MultiSpeakerEnabled)
-            return defaultVoice;
-
         var speakerId = segment.SpeakerId;
         if (string.IsNullOrWhiteSpace(speakerId))
-            return !string.IsNullOrWhiteSpace(CurrentSession.DefaultTtsVoiceFallback)
-                ? CurrentSession.DefaultTtsVoiceFallback
-                : defaultVoice;
+            return defaultVoice;
 
         if (CurrentSession.SpeakerVoiceAssignments is not null &&
             CurrentSession.SpeakerVoiceAssignments.TryGetValue(speakerId, out var mappedVoice) &&
@@ -481,9 +847,7 @@ public sealed partial class SessionWorkflowCoordinator
             return mappedVoice;
         }
 
-        return !string.IsNullOrWhiteSpace(CurrentSession.DefaultTtsVoiceFallback)
-            ? CurrentSession.DefaultTtsVoiceFallback
-            : defaultVoice;
+        return defaultVoice;
     }
 
     private string? ResolveReferenceAudioForSegment(TranslationSegmentArtifact segment)
@@ -491,22 +855,11 @@ public sealed partial class SessionWorkflowCoordinator
         if (CurrentSession.SpeakerReferenceAudioPaths is null)
             return null;
 
-        if (CurrentSession.MultiSpeakerEnabled)
-        {
-            var speakerId = segment.SpeakerId;
-            if (!string.IsNullOrWhiteSpace(speakerId) &&
-                CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var speakerPath) &&
-                !string.IsNullOrWhiteSpace(speakerPath))
-                return speakerPath;
-
-            // No per-speaker reference — fall back to the provider's default key so the
-            // provider's auto-extract fallback (or a manually placed default) can still fire.
-            var fallbackKey = QwenReferenceKeys.SingleSpeakerDefault;
-            return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(fallbackKey, out var fallbackPath) &&
-                   !string.IsNullOrWhiteSpace(fallbackPath)
-                ? fallbackPath
-                : null;
-        }
+        var speakerId = segment.SpeakerId;
+        if (!string.IsNullOrWhiteSpace(speakerId) &&
+            CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var speakerPath) &&
+            !string.IsNullOrWhiteSpace(speakerPath))
+            return speakerPath;
 
         var defaultKey = QwenReferenceKeys.SingleSpeakerDefault;
         return CurrentSession.SpeakerReferenceAudioPaths.TryGetValue(defaultKey, out var defaultPath) &&
@@ -578,8 +931,38 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="segmentId">Identifier of the segment whose TTS audio will be played.</param>
     /// <returns>A task that completes when playback has been scheduled.</returns>
     /// <exception cref="InvalidOperationException">Thrown if there is no active session or if no TTS audio path exists for the specified segment.</exception>
-    /// <exception cref="FileNotFoundException">Thrown if the resolved TTS audio file does not exist on disk.</exception>
+    /// <summary>
+        /// Queues playback of the pre-generated TTS audio for the specified translation segment.
+        /// </summary>
+        /// <param name="segmentId">The identifier of the translation segment whose TTS audio should be played.</param>
+        /// <remarks>
+        /// Entry/state requirements: a current session must be loaded and must contain a TTS audio path for <paramref name="segmentId"/> in <c>CurrentSession.TtsSegmentAudioPaths</c>.  
+        /// On success: marks the coordinator's in-memory playback state by setting <c>PlaybackState</c> to <c>PlayingSingleSegment</c> and <c>ActiveTtsSegmentId</c> to <paramref name="segmentId"/>, then schedules the actual playback.  
+        /// Persistence: does not persist the session to disk.  
+        /// Cancellation/guards: there is no cancellation token for this call; playback is started/scheduled and runs independently. If the required audio file is not present on disk, a <see cref="FileNotFoundException"/> is thrown.  
+        /// </remarks>
+        /// <exception cref="FileNotFoundException">Thrown if the resolved TTS audio file does not exist on disk.</exception>
     public Task PlayTtsForSegmentAsync(string segmentId)
+        => PlayTtsForSegmentAsync(segmentId, null, SegmentTimingMode.Off);
+
+    /// <summary>
+    /// Plays the TTS audio for a segment with the specified timing mode.
+    /// </summary>
+    /// <param name="segmentId">Segment identifier.</param>
+    /// <param name="segment">Full segment state (needed for Stretch/Pause modes to read timing windows).</param>
+    /// <summary>
+    /// Queues playback of the TTS audio associated with the specified segment and marks that segment as the active TTS segment.
+    /// </summary>
+    /// <remarks>
+    /// Requires an active session whose <c>TtsSegmentAudioPaths</c> contains an entry for <paramref name="segmentId"/> and whose audio file exists on disk; otherwise the method throws. On entry no specific session stage is required. On success the coordinator's <see cref="PlaybackState"/> is set to <c>PlayingSingleSegment</c> and <see cref="ActiveTtsSegmentId"/> is set to <paramref name="segmentId"/>. The audio playback is started in the background and this method returns immediately; it does not persist session state. This method does not accept cancellation and does not await the playback task; background failures are logged via the coordinator logger.
+    /// </remarks>
+    /// <param name="segmentId">Identifier of the translation/segment whose TTS audio will be played.</param>
+    /// <param name="segment">Optional workflow segment state used by timing modes; may be null.</param>
+    /// <param name="timingMode">Effective timing mode — resolves per-segment override then session default.</param>
+    /// <returns>A Task that completes once the playback request has been queued.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when there is no active session or when no TTS audio path exists for <paramref name="segmentId"/>.</exception>
+    /// <exception cref="System.IO.FileNotFoundException">Thrown when the resolved TTS audio file does not exist on disk.</exception>
+    public Task PlayTtsForSegmentAsync(string segmentId, WorkflowSegmentState? segment, SegmentTimingMode timingMode)
     {
         if (CurrentSession is null)
             throw new InvalidOperationException("No active session.");
@@ -593,14 +976,124 @@ public sealed partial class SessionWorkflowCoordinator
 
         StopTtsPlayback();
         PlaybackState = PlaybackState.PlayingSingleSegment;
-
-        var player = GetOrCreateSegmentPlayer();
-        player.Load(audioPath);
-        player.Volume = TtsVolume;
         ActiveTtsSegmentId = segmentId;
-        _ = Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play TTS for segment {segmentId}");
+
+        _ = PlayTtsWithTimingAsync(segmentId, audioPath, segment, timingMode).FireAndForgetAsync(
+            _log, $"Play TTS for segment {segmentId}");
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Plays the TTS audio for a segment applying the requested timing behavior (Stretch, Pause, or Off) and coordinates source-media playback as needed.
+    /// </summary>
+    /// <param name="segmentId">Identifier of the TTS segment being played; used to verify the segment remains the active TTS target.</param>
+    /// <param name="audioPath">Path to the pre-generated TTS audio file to play (used as the default effective audio).</param>
+    /// <param name="segment">Optional workflow segment timing information used for timing modes that depend on segment start/end.</param>
+    /// <param name="timingMode">Controls how TTS playback is aligned with source media: Stretch may time-stretch the audio to match segment duration; Pause pauses source media while TTS plays; Off plays without interacting with source timing.</param>
+    /// <remarks>
+    /// Preconditions: the coordinator is expected to have already set this segment as the active TTS target (ActiveTtsSegmentId) before calling this method. The method repeatedly verifies that the provided <paramref name="segmentId"/> is still the active TTS segment and will return early without side effects if it is not.
+    ///
+    /// Effects on host state:
+    /// - May update ActiveTtsSegmentId to null and set PlaybackState to Idle when <paramref name="timingMode"/> is Pause and the TTS run completes while the same segment is still active.
+    /// - May pause, seek, and resume the source media player when <paramref name="timingMode"/> is Pause and a source player is present.
+    /// - Loads and plays audio on the segment player and sets the segment player's Volume to the coordinator's TtsVolume.
+    ///
+    /// Persistence: this method does not persist session state to disk.
+    ///
+    /// Cancellation: this method does not accept a CancellationToken and does not observe external cancellation. Internal time-stretching uses CancellationToken.None and will not be cancelled by callers.
+    ///
+    /// Guard conditions: the method only proceeds when IsStillActiveTtsSegment(segmentId) returns true; if that guard fails at any point the method returns immediately and makes no further changes.
+    /// </remarks>
+    private async Task PlayTtsWithTimingAsync(
+        string segmentId,
+        string audioPath,
+        WorkflowSegmentState? segment,
+        SegmentTimingMode timingMode)
+    {
+        var effectivePath = audioPath;
+
+        if (timingMode == SegmentTimingMode.Stretch && segment is not null && _audioProcessingService is not null)
+        {
+            var targetDuration = segment.EndSeconds - segment.StartSeconds;
+            if (targetDuration > 0)
+            {
+                var stretchedPath = audioPath + ".stretched.mp3";
+                try
+                {
+                    var stretched = await _audioProcessingService.TimeStretchAsync(
+                        audioPath, stretchedPath, targetDuration,
+                        cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                    if (!IsStillActiveTtsSegment(segmentId))
+                        return;
+                    if (stretched && File.Exists(stretchedPath))
+                        effectivePath = stretchedPath;
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning($"Time-stretch failed for segment audio, playing original: {ex.Message}");
+                }
+            }
+        }
+
+        if (!IsStillActiveTtsSegment(segmentId))
+            return;
+
+        var player = GetOrCreateSegmentPlayer();
+        player.Load(effectivePath);
+        player.Volume = TtsVolume;
+
+        if (timingMode == SegmentTimingMode.Pause && segment is not null)
+        {
+            var source = SourceMediaPlayer;
+            var sourceWasPlaying = source?.IsPlaying == true;
+
+            // Pause the source video, play TTS fully, then seek to segment end and optionally resume.
+            source?.Pause();
+
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _ttsPauseModeCompletion = tcs;
+
+            try
+            {
+                await Task.Run(() => player.Play()).ConfigureAwait(false);
+                await tcs.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                if (ReferenceEquals(_ttsPauseModeCompletion, tcs))
+                    _ttsPauseModeCompletion = null;
+            }
+
+            if (!IsStillActiveTtsSegment(segmentId))
+                return;
+
+            // Seek source to segment end; only resume if it was playing before we paused for preview.
+            if (source is not null)
+            {
+                source.Seek((long)(segment.EndSeconds * 1000));
+                if (sourceWasPlaying)
+                    source.Play();
+            }
+
+            if (string.Equals(ActiveTtsSegmentId, segmentId, StringComparison.Ordinal))
+            {
+                ActiveTtsSegmentId = null;
+                PlaybackState = PlaybackState.Idle;
+            }
+        }
+        else
+        {
+            await Task.Run(() => player.Play()).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+        /// Determines whether the provided segment identifier matches the currently active TTS segment.
+        /// </summary>
+        /// <param name="segmentId">The segment identifier to compare with the active TTS segment.</param>
+        /// <returns>`true` if <paramref name="segmentId"/> is equal to the current <c>ActiveTtsSegmentId</c> using ordinal comparison; `false` otherwise.</returns>
+        private bool IsStillActiveTtsSegment(string segmentId) =>
+        string.Equals(ActiveTtsSegmentId, segmentId, StringComparison.Ordinal);
 
     /// <summary>
     /// Stops any active TTS playback and resets the coordinator's TTS playback state.
@@ -608,6 +1101,13 @@ public sealed partial class SessionWorkflowCoordinator
     /// <remarks>
     /// If a segment player exists, attempts to pause it and ignores an ObjectDisposedException (race/shutdown case).
     /// After returning, <see cref="ActiveTtsSegmentId"/> is cleared and <see cref="PlaybackState"/> is set to <see cref="PlaybackState.Idle"/>.
+    /// <summary>
+    /// Stops any in-progress TTS segment playback and resets TTS playback state.
+    /// </summary>
+    /// <remarks>
+    /// If a segment player is present, an attempt is made to pause it; an <see cref="ObjectDisposedException"/> from the pause call is swallowed (shutdown/race condition).  
+    /// Completes and clears any outstanding pause-mode completion, clears the active TTS segment identifier, and sets the coordinator's playback state to <see cref="PlaybackState.Idle"/>.  
+    /// This method does not persist session state and has no cancellation semantics. If no segment player exists, the method is a no-op.
     /// </remarks>
     public void StopTtsPlayback()
     {
@@ -619,6 +1119,8 @@ public sealed partial class SessionWorkflowCoordinator
         {
             // Shutdown/race path: segment transport was disposed while timer tick tried to stop playback.
         }
+        _ttsPauseModeCompletion?.TrySetResult(false);
+        _ttsPauseModeCompletion = null;
         ActiveTtsSegmentId = null;
         PlaybackState = PlaybackState.Idle;
     }
@@ -706,6 +1208,10 @@ public sealed partial class SessionWorkflowCoordinator
     public void Dispose()
     {
         RequestShutdown();
+        if (_containerizedProbe is not null)
+            _containerizedProbe.ProbeResultUpdated -= OnProbeResultUpdated;
+        _readinessSignals.OnCompleted();
+        _readinessSignals.Dispose();
         FlushPendingSave();
         WaitForOwnedBackgroundOperations(TimeSpan.FromSeconds(5));
 
@@ -725,12 +1231,10 @@ public sealed partial class SessionWorkflowCoordinator
             _subscribedToSourceDiagnostics = false;
         }
 
-        // Wait for all in-flight TTS operations to complete before disposing the TTS service
-        // and the inference host — disposing the host while local TTS tasks are in-flight
-        // (e.g. Qwen against the managed host) can terminate the backend mid-request.
-        // On a clean exit both _ttsService, _containerizedInferenceManager, and _transportManager
-        // are disposed below.  On timeout, only _transportManager is disposed immediately;
-        // _ttsService is handed off to background disposal and inference-host disposal is skipped.
+        // Prefer waiting for in-flight TTS before tearing down the inference host (local TTS can
+        // still be talking to the managed GPU process). If that wait times out, we still dispose
+        // the inference hosts so child Python/Docker processes do not keep the OS process alive
+        // after the main window closes.
         if (_pendingTtsTasks.Count > 0)
         {
             try
@@ -739,14 +1243,22 @@ public sealed partial class SessionWorkflowCoordinator
                 if (!completed)
                 {
                     _log.Warning("TTS shutdown timed out — scheduling background disposal of TTS service.");
-                    // Schedule background disposal so in-flight tasks can still finish but
-                    // HttpClient connections are eventually released.
                     ScheduleSafeTtsDisposal();
 
-                    // On timeout: dispose _transportManager (safe, no in-flight transport ops)
-                    // but skip inference-host disposal so the backend stays alive for still-running
-                    // local TTS tasks (e.g. Qwen against the managed host).
                     _transportManager.Dispose();
+
+                    if (_containerizedInferenceManager is IDisposable inferenceAfterTtsTimeout)
+                    {
+                        try
+                        {
+                            inferenceAfterTtsTimeout.Dispose();
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.Warning($"Failed to dispose containerized inference manager after TTS timeout: {ex.Message}");
+                        }
+                    }
+
                     _shutdownCts.Dispose();
                     return;
                 }

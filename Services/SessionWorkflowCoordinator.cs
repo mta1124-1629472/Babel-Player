@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reactive.Subjects;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
@@ -43,9 +44,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private bool _subscribedToSourceDiagnostics;
     private readonly EventHandler _segmentEndedHandler;
     private readonly EventHandler<Exception> _segmentErrorHandler;
+    /// <summary>When pause-mode TTS is waiting on segment Ended, <see cref="StopTtsPlayback"/> completes this so the wait does not hang.</summary>
+    private TaskCompletionSource<bool>? _ttsPauseModeCompletion;
     private readonly Action<VsrDiagnosticSnapshot> _vsrDiagnosticChangedHandler;
     private VsrDiagnosticSnapshot? _latestVsrDiagnostic;
     private readonly ConcurrentDictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Subject<ReadinessSignal> _readinessSignals = new();
+    private readonly ConcurrentDictionary<string, ContainerizedProbeState> _lastProbeStates =
         new(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty]
@@ -90,6 +96,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private string? _runtimeWarmupStatusText;
 
+    [ObservableProperty]
+    private DateTimeOffset _readinessLastUpdatedUtc;
+
+    [ObservableProperty]
+    private ReadinessSignal? _lastReadinessSignal;
+
     /// <summary>
     /// Set when the CTranslate2 translation provider fails and the pipeline
     /// automatically falls back to the NLLB PyTorch provider.
@@ -108,13 +120,20 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Subscribers should call SettingsService.Save() in response.
     /// </summary>
     public event Action? SettingsModified;
+    public IObservable<ReadinessSignal> ReadinessSignals => _readinessSignals;
 
     public ApiKeyStore? KeyStore { get; private set; }
 
     /// <summary>
     /// Creates a <see cref="SessionWorkflowCoordinator"/> with an explicit transport manager.
     /// Use this overload in production via <see cref="DependencyLocator"/>.
+    /// <summary>
+    /// Initializes a new <see cref="SessionWorkflowCoordinator"/> using the provided core services, media transport manager, registries, and optional components.
     /// </summary>
+    /// <param name="coreServices">Core application services and shared dependencies (settings, store, logging) required by the coordinator.</param>
+    /// <param name="transportManager">Media transport manager responsible for playback and segment transports for this coordinator.</param>
+    /// <param name="registries">Registry bundle providing per-session stores and provider registries (transcription, translation, TTS, recent sessions).</param>
+    /// <param name="options">Optional coordinator extensions and test hooks (container probe/manager, audio processing, artifact reader, session switch service, key store, diarization registry). When null, defaults are applied.</param>
     public SessionWorkflowCoordinator(
         CoordinatorCoreServices coreServices,
         IMediaTransportManager transportManager,
@@ -143,9 +162,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         KeyStore = options.KeyStore;
         _transportManager = transportManager;
 
-        _segmentEndedHandler = (_, _) => StopTtsPlayback();
-        _segmentErrorHandler = (_, ex) => StopTtsPlayback();
+        _segmentEndedHandler = OnSegmentPlayerEnded;
+        _segmentErrorHandler = (_, _) => OnSegmentPlayerError();
         _vsrDiagnosticChangedHandler = RecordVsrDiagnosticSnapshot;
+        if (_containerizedProbe is not null)
+            _containerizedProbe.ProbeResultUpdated += OnProbeResultUpdated;
 
         RefreshVideoEnhancementDiagnostics();
     }
@@ -171,8 +192,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     GpuApi:              coreServices.Settings.VideoGpuApi,
                     UseGpuNext:          coreServices.Settings.VideoUseGpuNext,
                     VsrEnabled:          coreServices.Settings.VideoVsrEnabled,
-                    HdrEnabled:          coreServices.Settings.VideoHdrEnabled,
-                    AllowHdrPassthrough: coreServices.Settings.VideoHdrEnabled && HardwareSnapshot.QueryActiveHdrDisplay(),
+                    HdrPlaybackMode:     coreServices.Settings.VideoHdrPlaybackMode,
+                    AllowHdrPassthrough: coreServices.Settings.VideoHdrPlaybackMode != VideoHdrPlaybackMode.Off
+                        && HardwareSnapshot.QueryActiveHdrDisplay(),
                     ToneMapping:         coreServices.Settings.VideoToneMapping,
                     TargetPeak:          coreServices.Settings.VideoTargetPeak,
                     HdrComputePeak:      coreServices.Settings.VideoHdrComputePeak),
@@ -183,6 +205,41 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     public string StateFilePath => _store.StateFilePath;
+
+    /// <summary>
+    /// Handles the segment-player "ended" event by either completing a pending TTS pause wait or stopping TTS playback.
+    /// </summary>
+    /// <remarks>
+    /// Expected state on entry: invoked when a media segment playback finishes. If a pause-mode TTS await is active (represented by <c>_ttsPauseModeCompletion</c>), this method completes that <c>TaskCompletionSource&lt;bool&gt;</c> with <c>true</c>, causing awaiting code to resume. If no pause-mode await is active, the method stops TTS playback by calling <c>StopTtsPlayback()</c>. This method does not persist session state and completes synchronously. It does not throw on normal operation.
+    /// </remarks>
+    private void OnSegmentPlayerEnded(object? sender, EventArgs e)
+    {
+        if (_ttsPauseModeCompletion is null)
+        {
+            StopTtsPlayback();
+            return;
+        }
+
+        _ttsPauseModeCompletion.TrySetResult(true);
+    }
+
+    /// <summary>
+    /// Handles a playback error for the currently playing segment by either stopping TTS playback or signaling a pending TTS pause-mode wait with failure.
+    /// </summary>
+    /// <remarks>
+    /// If a pause-mode TTS wait is active (indicated by <c>_ttsPauseModeCompletion</c>), the method completes that <see cref="TaskCompletionSource{bool}"/> with <c>false</c> to indicate an error. If no pause-mode wait is active, the method stops TTS playback via <see cref="StopTtsPlayback()"/>.
+    /// This method is an event handler invoked when a segment player reports an error; it does not persist session state.
+    /// </remarks>
+    private void OnSegmentPlayerError()
+    {
+        if (_ttsPauseModeCompletion is null)
+        {
+            StopTtsPlayback();
+            return;
+        }
+
+        _ttsPauseModeCompletion.TrySetResult(false);
+    }
 
     public string LogFilePath => _log.LogFilePath;
     internal AppLog Log => _log;
@@ -230,11 +287,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             }
 
             string statusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
-                ? "Resumed session with TTS. Dubbing complete."
+                    ? "Resumed session with TTS. Dubbing complete."
                 : validated.Stage >= SessionWorkflowStage.Translated
                     ? "Resumed session with translation. Ready for TTS/dubbing."
-                    : validated.Stage >= SessionWorkflowStage.Diarized
-                        ? "Resumed session after speaker mapping. Assign voices, then continue."
+                : validated.Stage >= SessionWorkflowStage.Diarized
+                    ? "Resumed session with speaker mapping. Ready to resume translation/TTS."
                     : validated.Stage >= SessionWorkflowStage.Transcribed
                         ? "Resumed session with transcript. Ready for translation."
                         : validated.Stage >= SessionWorkflowStage.MediaLoaded
@@ -255,11 +312,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             SessionSource = validated.Stage != snapshot.Stage
                 ? $"Resumed session (stage downgraded from {snapshot.Stage} to {validated.Stage}: missing artifacts)."
                 : validated.Stage >= SessionWorkflowStage.TtsGenerated
-                    ? "Resumed session with TTS."
-                    : validated.Stage >= SessionWorkflowStage.Translated
-                        ? "Resumed session with translation."
-                        : validated.Stage >= SessionWorkflowStage.Diarized
-                            ? "Resumed session awaiting speaker mapping."
+                ? "Resumed session with TTS."
+                : validated.Stage >= SessionWorkflowStage.Translated
+                    ? "Resumed session with translation."
+                    : validated.Stage >= SessionWorkflowStage.Diarized
+                        ? "Resumed session with speaker mapping."
                         : validated.Stage >= SessionWorkflowStage.Transcribed
                             ? "Resumed session with transcript."
                             : "Resumed the saved foundation session.";
@@ -285,6 +342,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     {
         BootstrapDiagnostics = warmup.Diagnostics;
         InferenceMode = warmup.ResolvedInferenceMode;
+        EmitReadinessSignal(
+            ReadinessSignalKind.BootstrapApplied,
+            summary: "Bootstrap diagnostics updated.",
+            source: nameof(ApplyBootstrapWarmupData),
+            forceRefresh: true);
 
         if (!BootstrapDiagnostics.AllDependenciesAvailable)
             _log.Warning($"Bootstrap: {BootstrapDiagnostics.DiagnosticSummary}");
@@ -376,10 +438,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     ? "Restored prior TTS. Ready for playback."
                     : validated.Stage >= SessionWorkflowStage.Translated
                         ? "Restored translation. Ready for TTS/dubbing."
-                        : validated.Stage >= SessionWorkflowStage.Diarized
-                            ? "Restored speaker mapping state. Assign voices, then continue."
-                        : validated.Stage >= SessionWorkflowStage.Transcribed
-                            ? "Restored transcript. Ready for translation."
+                    : validated.Stage >= SessionWorkflowStage.Diarized
+                        ? "Restored speaker mapping state. Ready to resume translation/TTS."
+                    : validated.Stage >= SessionWorkflowStage.Transcribed
+                        ? "Restored transcript. Ready for translation."
                     : "Media loaded. Ready for transcription.",
             };
             _log.Info($"Restored cached session for: {sourceMediaPath} (stage: {CurrentSession.Stage})");
@@ -409,6 +471,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 TranscriptPath = null,
                 SourceLanguage = null,
                 TranscribedAtUtc = null,
+                TranscriptionLanguageHint = null,
                 TranslationPath = null,
                 TargetLanguage = null,
                 TranslatedAtUtc = null,
@@ -482,6 +545,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             TranscriptionRuntime = null,
             TranscriptionProvider = null,
             TranscriptionModel = null,
+            TranscriptionLanguageHint = null,
             TranslationRuntime = null,
             TranslationProvider = null,
             TranslationModel = null,
@@ -525,7 +589,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         };
     }
 
-    private void ResetPipelineToDiarized()
+    public void ResetPipelineToDiarized()
     {
         if (CurrentSession.Stage < SessionWorkflowStage.Diarized || !HasDiarizationMarker(CurrentSession))
             return;
@@ -546,7 +610,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             TranslationModel = null,
             TtsRuntime = null,
             TtsProvider = null,
-            StatusMessage = "Pipeline reset to speaker mapping state."
+            StatusMessage = "Pipeline reset to speaker-mapped state."
         };
     }
 
@@ -566,6 +630,20 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             TtsProvider = null,
             StatusMessage = "Pipeline reset to translated state."
         };
+    }
+
+    /// <summary>
+    /// Clears translation and downstream artifacts so translation can be re-run, using the same rules as translation settings invalidation.
+    /// </summary>
+    public void ResetPipelineForTranslationRetry()
+    {
+        if (HasDiarizationMarker(CurrentSession))
+            ResetPipelineToDiarized();
+        else
+            ResetPipelineToTranscribed();
+
+        CurrentSession = CurrentSession with { StatusMessage = "Ready to re-run translation." };
+        SaveCurrentSession();
     }
 
     public void ClearPipeline()
@@ -596,13 +674,16 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         var transcriptionProviderChanged =
             CurrentSettings.TranscriptionProfile != selection.TranscriptionRuntime ||
             !string.Equals(CurrentSettings.TranscriptionProvider, selection.TranscriptionProvider, StringComparison.Ordinal) ||
-            !string.Equals(CurrentSettings.TranscriptionModel, selection.TranscriptionModel, StringComparison.Ordinal);
+            !string.Equals(CurrentSettings.TranscriptionModel, selection.TranscriptionModel, StringComparison.Ordinal) ||
+            !SessionSnapshotSemantics.TranscriptionLanguageHintsMatch(
+                CurrentSettings.TranscriptionLanguageHint,
+                selection.TranscriptionLanguageHint);
         var translationProviderChanged =
             CurrentSettings.TranslationProfile != selection.TranslationRuntime ||
             !string.Equals(CurrentSettings.TranslationProvider, selection.TranslationProvider, StringComparison.Ordinal) ||
             !string.Equals(CurrentSettings.TranslationModel, selection.TranslationModel, StringComparison.Ordinal) ||
             (!string.IsNullOrWhiteSpace(selection.TargetLanguage) &&
-             !string.Equals(CurrentSettings.TargetLanguage, selection.TargetLanguage, StringComparison.Ordinal));
+             !LanguageCode.TargetLanguagesMatch(CurrentSettings.TargetLanguage, selection.TargetLanguage));
         var ttsProviderChanged =
             CurrentSettings.TtsProfile != selection.TtsRuntime ||
             !string.Equals(CurrentSettings.TtsProvider, selection.TtsProvider, StringComparison.Ordinal) ||
@@ -630,7 +711,13 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         CurrentSettings.TtsProvider = selection.TtsProvider;
         CurrentSettings.TtsVoice = selection.TtsVoice;
         if (!string.IsNullOrWhiteSpace(selection.TargetLanguage))
-            CurrentSettings.TargetLanguage = selection.TargetLanguage;
+        {
+            CurrentSettings.TargetLanguage = LanguageCode.NormalizeForPersistence(selection.TargetLanguage)
+                ?? selection.TargetLanguage.Trim();
+        }
+
+        CurrentSettings.TranscriptionLanguageHint =
+            SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(selection.TranscriptionLanguageHint);
 
         if (transcriptionProviderChanged) _transcriptionService = null;
         if (translationProviderChanged) _translationService = null;
@@ -645,13 +732,13 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             $"ApplyPipelineSettings: stage={CurrentSession.Stage}, invalidation={invalidation}, " +
             $"selection=({selection.TranscriptionRuntime}/{selection.TranscriptionProvider}/{selection.TranscriptionModel}, " +
             $"{selection.TranslationRuntime}/{selection.TranslationProvider}/{selection.TranslationModel}, " +
-            $"{selection.TtsRuntime}/{selection.TtsProvider}/{selection.TtsVoice}, target={selection.TargetLanguage ?? "<unchanged>"}), " +
+            $"{selection.TtsRuntime}/{selection.TtsProvider}/{selection.TtsVoice}, target={selection.TargetLanguage ?? "<unchanged>"}, asrHint={selection.TranscriptionLanguageHint ?? "<auto>"}), " +
             $"provenance=({SessionSnapshotSemantics.DescribeSessionProvenance(CurrentSession)})");
         var statusMessage = invalidation switch
         {
             PipelineInvalidation.Transcription => "Transcription settings changed — pipeline reset to media-loaded state.",
             PipelineInvalidation.Translation => HasDiarizationMarker(CurrentSession)
-                ? "Translation settings changed — pipeline reset to speaker mapping state."
+                ? "Translation settings changed — pipeline reset to speaker-mapped state."
                 : "Translation settings changed — pipeline reset to transcript state.",
             PipelineInvalidation.Tts => "TTS settings changed — pipeline reset to translation state.",
             _ => "Pipeline settings updated."
@@ -911,11 +998,11 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 ? "Restored session with TTS. Ready for playback."
                 : validated.Stage >= SessionWorkflowStage.Translated
                     ? "Restored session with translation. Ready for TTS/dubbing."
-                    : validated.Stage >= SessionWorkflowStage.Diarized
-                        ? "Restored session after speaker mapping. Assign voices, then continue."
+                : validated.Stage >= SessionWorkflowStage.Diarized
+                    ? "Restored session with speaker mapping. Ready to resume translation/TTS."
                     : validated.Stage >= SessionWorkflowStage.Transcribed
                         ? "Restored session with transcript. Ready for translation."
-                        : validated.Stage >= SessionWorkflowStage.MediaLoaded
+                    : validated.Stage >= SessionWorkflowStage.MediaLoaded
                             ? "Restored session with media. Ready for transcription."
                             : "Restored foundation session.",
         };
@@ -977,6 +1064,72 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         CurrentSession = snapshot;
         PersistSnapshot(snapshot, updateStatus: true);
     }
+
+    private void OnProbeResultUpdated(ContainerizedProbeResult probeResult)
+    {
+        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(probeResult.ServiceUrl);
+        var hadPrevious = _lastProbeStates.TryGetValue(normalizedUrl, out var previousState);
+        _lastProbeStates[normalizedUrl] = probeResult.State;
+        var forceRefresh = !hadPrevious || previousState != probeResult.State || probeResult.State != ContainerizedProbeState.Checking;
+        if (RequiresContainerizedRuntime()
+            && string.Equals(
+                normalizedUrl,
+                ContainerizedInferenceClient.NormalizeBaseUrl(CurrentSettings.EffectiveGpuServiceUrl),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var warmupText = DescribeRuntimeWarmupStatus(probeResult);
+            if (!string.IsNullOrWhiteSpace(warmupText))
+                RuntimeWarmupStatusText = warmupText;
+        }
+
+        var currentBootstrap = BootstrapDiagnostics;
+        var updatedBootstrap = currentBootstrap with
+        {
+            ContainerizedServiceAvailable = probeResult.State == ContainerizedProbeState.Available,
+            ContainerizedServiceUrl = string.IsNullOrWhiteSpace(probeResult.ServiceUrl)
+                ? currentBootstrap.ContainerizedServiceUrl
+                : probeResult.ServiceUrl,
+            ContainerizedCudaAvailable = probeResult.CudaAvailable,
+            ContainerizedCudaVersion = probeResult.CudaVersion ?? currentBootstrap.ContainerizedCudaVersion,
+        };
+        if (updatedBootstrap != currentBootstrap)
+        {
+            BootstrapDiagnostics = updatedBootstrap;
+            InferenceMode = ResolveInferenceMode(updatedBootstrap);
+        }
+
+        EmitReadinessSignal(
+            ReadinessSignalKind.ProbeResultUpdated,
+            summary: $"Probe {probeResult.State}" + (probeResult.IsStale ? " (stale)" : string.Empty),
+            source: normalizedUrl,
+            forceRefresh: forceRefresh);
+    }
+
+    private void EmitReadinessSignal(
+        ReadinessSignalKind kind,
+        string summary,
+        string? source = null,
+        bool forceRefresh = false)
+    {
+        var signal = new ReadinessSignal(kind, DateTimeOffset.UtcNow, summary, source, forceRefresh);
+        LastReadinessSignal = signal;
+        ReadinessLastUpdatedUtc = signal.TimestampUtc;
+        _readinessSignals.OnNext(signal);
+    }
+
+    partial void OnRuntimeWarmupStatusTextChanged(string? value) =>
+        EmitReadinessSignal(
+            ReadinessSignalKind.RuntimeWarmupStatusChanged,
+            summary: string.IsNullOrWhiteSpace(value) ? "Runtime warmup idle." : value,
+            source: nameof(RuntimeWarmupStatusText),
+            forceRefresh: true);
+
+    partial void OnBootstrapDiagnosticsChanged(BootstrapDiagnostics value) =>
+        EmitReadinessSignal(
+            ReadinessSignalKind.BootstrapApplied,
+            summary: value.DiagnosticSummary,
+            source: nameof(BootstrapDiagnostics),
+            forceRefresh: true);
 
     private void PersistSnapshot(WorkflowSessionSnapshot snapshot, bool updateStatus)
     {

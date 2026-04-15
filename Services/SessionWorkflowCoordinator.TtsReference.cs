@@ -17,12 +17,6 @@ public sealed partial class SessionWorkflowCoordinator
         if (!string.Equals(CurrentSettings.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal))
             return;
 
-        if (CurrentSession.MultiSpeakerEnabled)
-        {
-            _log.Info("Qwen multi-speaker mode enabled; auto-bootstrap single-speaker reference is skipped.");
-            return;
-        }
-
         var references = CurrentSession.SpeakerReferenceAudioPaths;
         if (references is not null
             && references.TryGetValue(QwenReferenceKeys.SingleSpeakerDefault, out var existingPath)
@@ -75,8 +69,6 @@ public sealed partial class SessionWorkflowCoordinator
     {
         var isQwen = string.Equals(CurrentSettings.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal);
         if (!isQwen)
-            return;
-        if (!CurrentSession.MultiSpeakerEnabled)
             return;
         if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
             return;

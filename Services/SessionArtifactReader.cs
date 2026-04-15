@@ -55,6 +55,7 @@ public sealed class SessionArtifactReader
         }
 
         var ttsSegmentPaths = session.TtsSegmentAudioPaths;
+        var timingOverrides = session.SegmentTimingModeOverrides;
         var speakerVoiceAssignments = session.SpeakerVoiceAssignments;
         var speakerReferenceAudioPaths = session.SpeakerReferenceAudioPaths;
         var result = new List<WorkflowSegmentState>();
@@ -71,6 +72,13 @@ public sealed class SessionArtifactReader
             var assignedVoice = ResolveAssignedVoice(speakerId, speakerVoiceAssignments);
             var hasReferenceAudio = HasReferenceAudio(speakerId, speakerReferenceAudioPaths);
 
+            SegmentTimingMode? timingOverride = null;
+            if (timingOverrides is not null
+                && timingOverrides.TryGetValue(id, out var mappedTimingOverride))
+            {
+                timingOverride = mappedTimingOverride;
+            }
+
             result.Add(new WorkflowSegmentState(
                 id,
                 segment.Start,
@@ -81,7 +89,8 @@ public sealed class SessionArtifactReader
                 hasTtsAudio,
                 speakerId,
                 assignedVoice,
-                hasReferenceAudio));
+                hasReferenceAudio,
+                timingOverride));
         }
 
         return result;

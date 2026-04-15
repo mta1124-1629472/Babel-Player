@@ -280,7 +280,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var computeType = ManagedHostComputeTypePolicy.ResolveLaunchComputeType(hardware, ComputeProfile.Gpu);
         var uvPath = _uvResolver();
         if (string.IsNullOrWhiteSpace(uvPath))
-            return Fail("uv.exe was not found. Bundle tools\\win-x64\\uv.exe or install uv on PATH.");
+            return Fail($"uv.exe was not found. Bundle tools\\{WindowsPackagingPaths.NativeRidFolder}\\uv.exe or install uv on PATH.");
 
         var inferenceScriptPath = _inferenceScriptResolver();
         var requirementsPath = _requirementsPathResolver();
@@ -303,7 +303,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         var bootstrapVersion = await ComputeBootstrapVersionAsync(requirementsPath, constraintsPath, cancellationToken).ConfigureAwait(false);
         var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
-        var markerValue = File.Exists(markerPath) ? await File.ReadAllTextAsync(markerPath, cancellationToken) : null;
+        var markerValue = File.Exists(markerPath) ? (await File.ReadAllTextAsync(markerPath, cancellationToken)).Trim() : null;
         var needsBootstrap = !File.Exists(pythonPath) || !string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal);
         _log.Info(
             $"Managed GPU runtime bootstrap state: python_exists={File.Exists(pythonPath)}, marker_exists={File.Exists(markerPath)}, " +

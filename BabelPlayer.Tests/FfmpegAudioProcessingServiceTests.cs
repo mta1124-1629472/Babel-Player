@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Services;
@@ -206,5 +207,165 @@ public sealed class FfmpegAudioProcessingServiceTests : IDisposable
         }
 
         Assert.True(Directory.Exists(nestedOutputDir));
+    }
+
+    // ── ProbeDurationAsync ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ProbeDurationAsync_LargeStderrOutput_ReturnsDurationWithoutHanging()
+    {
+        var fakeToolsDir = Path.Combine(_dir, "fake-tools");
+        Directory.CreateDirectory(fakeToolsDir);
+        CreateFakeFfprobe(fakeToolsDir);
+
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+        var testPath = string.IsNullOrWhiteSpace(originalPath)
+            ? fakeToolsDir
+            : $"{fakeToolsDir}{Path.PathSeparator}{originalPath}";
+        Environment.SetEnvironmentVariable("PATH", testPath);
+
+        try
+        {
+            // File need not be valid media for this regression: fake ffprobe ignores it.
+            var inputPath = Path.Combine(_dir, "input.mp3");
+            await File.WriteAllTextAsync(inputPath, "placeholder");
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var duration = await _service.ProbeDurationAsync(inputPath, cts.Token);
+
+            Assert.NotNull(duration);
+            Assert.InRange(duration!.Value, 12.339, 12.341);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+        }
+    }
+
+    private static void CreateFakeFfprobe(string directory)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var scriptPath = Path.Combine(directory, "ffprobe.cmd");
+            File.WriteAllText(
+                scriptPath,
+                "@echo off\r\n" +
+                "if \"%~1\"==\"-version\" (\r\n" +
+                "  echo ffprobe version fake\r\n" +
+                "  exit /b 0\r\n" +
+                ")\r\n" +
+                "for /L %%i in (1,1,12000) do @echo simulated-error-%%i 1>&2\r\n" +
+                "echo 12.34\r\n" +
+                "exit /b 0\r\n");
+            return;
+        }
+
+        var unixScriptPath = Path.Combine(directory, "ffprobe");
+        File.WriteAllText(
+            unixScriptPath,
+            "#!/usr/bin/env sh\n" +
+            "if [ \"$1\" = \"-version\" ]; then\n" +
+            "  echo \"ffprobe version fake\"\n" +
+            "  exit 0\n" +
+            "fi\n" +
+            "i=0\n" +
+            "while [ \"$i\" -lt 12000 ]; do\n" +
+            "  echo \"simulated-error-$i\" 1>&2\n" +
+            "  i=$((i+1))\n" +
+            "done\n" +
+            "echo \"12.34\"\n");
+
+        File.SetUnixFileMode(
+            unixScriptPath,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+    }
+
+    // ── BuildAtempoFilter ───────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(1.25, "atempo=1.250000")]
+    [InlineData(2.5, "atempo=1.250000,atempo=2.000000")]
+    [InlineData(4.0, "atempo=2.000000,atempo=2.000000")]
+    [InlineData(0.4, "atempo=0.800000,atempo=0.500000")]
+    [InlineData(0.25, "atempo=0.500000,atempo=0.500000")]
+    public void BuildAtempoFilter_ProducesExpectedChain(double tempo, string expectedFilter)
+    {
+        var filter = InvokeBuildAtempoFilter(tempo);
+        Assert.Equal(expectedFilter, filter);
+    }
+
+    [Fact]
+    public void BuildAtempoFilter_NonPositiveTempo_ThrowsArgumentOutOfRangeException()
+    {
+        var method = typeof(FfmpegAudioProcessingService).GetMethod(
+            "BuildAtempoFilter",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var ex = Assert.Throws<TargetInvocationException>(() => method!.Invoke(null, [0.0]));
+        Assert.IsType<ArgumentOutOfRangeException>(ex.InnerException);
+    }
+
+    private static string InvokeBuildAtempoFilter(double tempo)
+    {
+        var method = typeof(FfmpegAudioProcessingService).GetMethod(
+            "BuildAtempoFilter",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(null, [tempo]);
+        Assert.IsType<string>(result);
+        return (string)result!;
+    }
+
+    // ── TimeStretchAsync ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task TimeStretchAsync_WhenTargetDurationIsZero_ReturnsFalse()
+    {
+        var inputPath = Path.Combine(_dir, "input.mp3");
+        var outputPath = Path.Combine(_dir, "output.mp3");
+        await File.WriteAllBytesAsync(inputPath, [0x00, 0x01, 0x02]);
+
+        var result = await _service.TimeStretchAsync(inputPath, outputPath,
+            targetDurationSeconds: 0.0, cancellationToken: CancellationToken.None);
+
+        Assert.False(result);
+        Assert.False(File.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task TimeStretchAsync_WhenFfprobeNotAvailable_ReturnsFalse()
+    {
+        if (DependencyLocator.FindFfprobe() is not null)
+            return; // Only runs when ffprobe is absent
+
+        var inputPath = Path.Combine(_dir, "input.mp3");
+        var outputPath = Path.Combine(_dir, "output.mp3");
+        await File.WriteAllBytesAsync(inputPath, [0x00, 0x01, 0x02]);
+
+        var result = await _service.TimeStretchAsync(inputPath, outputPath,
+            targetDurationSeconds: 1.0, cancellationToken: CancellationToken.None);
+
+        Assert.False(result);
+        Assert.False(File.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task ProbeDurationAsync_WhenFfprobeNotAvailable_ReturnsNull()
+    {
+        if (DependencyLocator.FindFfprobe() is not null)
+            return; // Only runs when ffprobe is absent
+
+        var filePath = Path.Combine(_dir, "audio.mp3");
+        await File.WriteAllBytesAsync(filePath, [0x00, 0x01]);
+
+        var result = await _service.ProbeDurationAsync(filePath, CancellationToken.None);
+
+        Assert.Null(result);
     }
 }

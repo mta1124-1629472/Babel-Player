@@ -200,24 +200,12 @@ public sealed class EdgeTtsProviderTests : IDisposable
 
     private static string ResolvePythonExecutablePath()
     {
-        using var process = Process.Start(new ProcessStartInfo
-        {
-            FileName = "python",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            ArgumentList = { "-c", "import sys; print(sys.executable)" },
-        }) ?? throw new InvalidOperationException("Failed to start python to resolve executable path.");
+        var located = DependencyLocator.FindPython();
+        if (!string.IsNullOrEmpty(located))
+            return located;
 
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException($"Failed to resolve python executable path: {stderr}");
-
-        return stdout.Trim();
+        throw new InvalidOperationException(
+            "Python interpreter not found. Install Python3 on PATH or bootstrap a managed runtime so DependencyLocator.FindPython() succeeds.");
     }
 
     private static string ResolveWorkerScriptPath()

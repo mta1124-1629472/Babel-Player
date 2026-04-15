@@ -3,7 +3,7 @@
 # Babel-Player — Remaining Implementation Plan
 
 **Derived from:** Milestones-Tracker-2026-04-08.md (April 8, 2026)  
-**Updated:** April 13, 2026 — code-verified audit; Tier 1 closed; execution order revised  
+**Updated:** April 15, 2026 — historical addendum: Parakeet work completed  
 **Scope:** What is still unimplemented, ordered by priority and dependency
 
 ---
@@ -22,10 +22,13 @@
 | **3.1 — NeMo-only `/diarize`** | 3 | **Verified April 13, 2026** |
 | **3.5 — pyannote + HF token removal** | 3 | **Verified April 13, 2026** |
 | **WeSpeaker GPU deprecation** | 3 | **Verified + file deleted April 13, 2026** |
+| **4.1–4.3 — Parakeet ASR provider** | 4 | **Implemented April 15, 2026 (endpoint + provider + UI exposure)** |
 
 ---
 
 ## Remaining Work
+
+> **Historical context note (April 15, 2026):** Tier 1 (6.4 constructor cleanup) and Tier 2 (6.1b ViewModel decomposition) were completed after this plan snapshot. Keep this file for chronology; use `docs/Engineering-Plan.md` for current status.
 
 ### Tier 1 — Constructor Cleanup (Phase 6.4, ~2–3 days)
 
@@ -46,27 +49,6 @@
 - **Files:** `ViewModels/EmbeddedPlaybackViewModel.cs`, `ViewModels/EmbeddedPlaybackPipelineViewModel.cs`, `ViewModels/EmbeddedPlaybackSpeakerRoutingViewModel.cs`
 - **Acceptance:** Main VM under 800 lines. All tests pass. No behavior change.
 - **Do this before streaming:** Streaming will add coordinator-to-VM surface area. A 2,473-line VM makes that work dangerous.
-
----
-
-### Tier 3 — Parakeet ASR Provider (Phase 4, ~1.5–2 weeks)
-
-#### 4.1 — Python: Implement `POST /transcribe/parakeet` in `inference/main.py`
-- **Current state:** Zero Parakeet references in the codebase.
-- **What remains:** Full endpoint implementation using NeMo Parakeet-TDT-0.6B-v3. Accepts audio file, returns timed segments with timestamps matching the existing segment schema.
-- **Files:** `inference/main.py`
-- **Dependencies:** `nemo-toolkit[asr]` already installed in GPU `.venv`. Model weights downloaded on first use.
-- **Acceptance:** `POST /transcribe/parakeet` returns JSON matching the segment schema consumed by the C# coordinator.
-
-#### 4.2 — C#: Add `ParakeetTranscriptionProvider`
-- **Current state:** No `ParakeetTranscriptionProvider.cs`, no Parakeet entry in `ProviderNames.cs` or `TranscriptionRegistry.cs`.
-- **What remains:** New provider implementing `ITranscriptionProvider`. Add `ProviderNames.Parakeet` constant. Register in `TranscriptionRegistry`.
-- **Files:** `Services/ParakeetTranscriptionProvider.cs`, `Models/ProviderNames.cs`, `Services/Registries/TranscriptionRegistry.cs`
-- **Acceptance:** Parakeet selectable in Transcription provider ComboBox, produces correct timed segments.
-
-#### 4.3 — UI: Wire Parakeet as a transcription provider option
-- **What remains:** Ensure the transcription provider ComboBox surfaces Parakeet when GPU profile is active.
-- **Acceptance:** Parakeet visible and selectable in UI when GPU compute enabled.
 
 ---
 
@@ -94,7 +76,6 @@
 |---|---|---|---|---|---|
 | 6.4 — Constructor cleanup | 6.4 | — | 2–3 days | Low | None |
 | 6.1b — Finish VM decomposition | 6.1 | — | 2–3 days | Low | None |
-| 4.1–4.3 — Parakeet ASR | 4 | ~10x ASR speed (EU langs) | 1.5–2 weeks | Medium | 6.4 done |
 | 6.2a — Channel streaming pipeline | 6.2 | ~30–50% end-to-end | 2–3 weeks | Medium | 6.4, 6.1b done |
 
 ---
@@ -106,12 +87,10 @@ Tier 1 (constructor cleanup)   → 2–3 days, unblocks everything touching coor
     ↓
 Tier 2 (VM decomposition)      → 2–3 days, reduces risk before streaming adds surface area
     ↓
-Tier 3 (Parakeet ASR)          → 1.5–2 weeks, new capability, parallel with Tier 4 if resourced
-    ↓
 Tier 4 (Channel streaming)     → 2–3 weeks, highest pipeline impact, last because highest risk
 ```
 
-Tiers 3 and 4 can run in parallel — they touch different layers (inference server vs. coordinator orchestration).
+Parakeet (former Tier 3) is complete; streaming remains the major open item.
 
 ---
 

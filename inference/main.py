@@ -4,25 +4,30 @@
 import argparse
 import asyncio
 from collections import deque
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 import importlib.util
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
+import time
+import traceback
+import wave
 from time import perf_counter
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
+import numpy as np
 import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 # Configure logging
@@ -92,10 +97,28 @@ _active_diarization_request_count = 0
 _flash_attn_available: bool | None = None
 _qwen_max_concurrency = 1
 _nemo_diarizer_construction_lock = threading.Lock()
+_nemo_restore_meta_patch_applied = False
+_parakeet_model = None
+_parakeet_model_lock = threading.Lock()
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
 TEMP_DIR.mkdir(exist_ok=True)
+
+def _resolve_debug_log_path() -> Path:
+    env_path = os.environ.get("BABEL_DEBUG_LOG_PATH")
+    if env_path:
+        return Path(env_path)
+
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "Babel-Player.sln").exists():
+            return candidate / "debug-f76224.log"
+
+    return Path.cwd() / "debug-f76224.log"
+
+
+DEBUG_LOG_PATH = _resolve_debug_log_path()
+DEBUG_SESSION_ID = "f76224"
 NEMO_DIARIZATION_DEFAULT_PROVIDER = "nemo"
 NEMO_VAD_MODEL = "vad_multilingual_marblenet"
 NEMO_SPEAKER_EMBEDDING_MODEL = "titanet_large"
@@ -111,15 +134,202 @@ NEMO_VAD_PARAMETERS = {
     "window_length_in_sec": 0.15,
     "shift_length_in_sec": 0.01,
     "smoothing": "median",
-    "overlap": 0.875,
-    "onset": 0.4,
-    "offset": 0.7,
-    "pad_onset": 0.05,
-    "pad_offset": -0.1,
-    "min_duration_on": 0.2,
+    "overlap": 0.5,
+    "onset": 0.1,
+    "offset": 0.1,
+    "pad_onset": 0.1,
+    "pad_offset": 0.0,
+    "min_duration_on": 0.0,
     "min_duration_off": 0.2,
     "filter_speech_first": True,
 }
+
+
+def _write_debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    payload = {
+        "sessionId": DEBUG_SESSION_ID,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    try:
+        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload) + "\n")
+    except Exception:
+        pass
+
+
+def _normalize_torch_device(map_location):
+    if map_location is None:
+        return torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    if isinstance(map_location, torch.device):
+        return map_location
+    return torch.device(map_location)
+
+
+def _module_has_meta_tensors(module: torch.nn.Module) -> bool:
+    for parameter in module.parameters(recurse=True):
+        if getattr(parameter, "is_meta", False):
+            return True
+    for buffer in module.buffers(recurse=True):
+        if getattr(buffer, "is_meta", False):
+            return True
+    return False
+
+
+def _move_module_for_restore(instance: torch.nn.Module, map_location):
+    normalized_map_location = _normalize_torch_device(map_location)
+    try:
+        return instance.to(normalized_map_location)
+    except NotImplementedError as exc:
+        if "meta tensor" not in str(exc).lower() or not _module_has_meta_tensors(instance):
+            raise
+
+        logger.warning(
+            "Applying NeMo meta-tensor restore compatibility fallback for %s on %s",
+            type(instance).__name__,
+            normalized_map_location,
+        )
+        return instance.to_empty(device=normalized_map_location)
+
+
+def _load_config_and_state_dict_with_meta_tensor_fallback(
+    connector_module,
+    connector,
+    calling_cls,
+    restore_path: str,
+    override_config_path=None,
+    map_location=None,
+    strict: bool = True,
+    return_config: bool = False,
+    trainer=None,
+):
+    cwd = os.getcwd()
+    normalized_map_location = _normalize_torch_device(map_location)
+    app_state = connector_module.AppState()
+
+    use_extracted_dir = connector.model_extracted_dir is not None and os.path.isdir(connector.model_extracted_dir)
+    if use_extracted_dir:
+        connector_module.logging.info(
+            f"Restoration will occur within pre-extracted directory : `{connector.model_extracted_dir}`."
+        )
+
+    dir_context = nullcontext(connector.model_extracted_dir) if use_extracted_dir else tempfile.TemporaryDirectory()
+    with dir_context as tmpdir:
+        try:
+            if not use_extracted_dir:
+                filter_fn = None
+                if return_config:
+                    filter_fn = lambda name: ".yaml" in name
+                members = connector._filtered_tar_info(restore_path, filter_fn=filter_fn)
+                connector._unpack_nemo_file(path2file=restore_path, out_folder=tmpdir, members=members)
+
+            os.chdir(tmpdir)
+            if override_config_path is None:
+                config_yaml = connector.model_config_yaml
+            else:
+                config_yaml = override_config_path
+
+            if not isinstance(config_yaml, (connector_module.OmegaConf, connector_module.DictConfig)):
+                conf = connector_module.OmegaConf.load(config_yaml)
+            else:
+                conf = config_yaml
+                if override_config_path is not None:
+                    conf = connector_module.OmegaConf.to_container(conf, resolve=True)
+                    conf = connector_module.OmegaConf.create(conf)
+
+            if "model" in conf:
+                conf = conf.model
+
+            if return_config:
+                return conf
+
+            if app_state.model_parallel_size is not None and app_state.model_parallel_size > 1:
+                model_weights = connector._inject_model_parallel_rank_for_ckpt(tmpdir, connector.model_weights_ckpt)
+            else:
+                model_weights = os.path.join(tmpdir, connector.model_weights_ckpt)
+
+            connector_module.OmegaConf.set_struct(conf, True)
+            os.chdir(cwd)
+            calling_cls._set_model_restore_state(is_being_restored=True, folder=tmpdir)
+            instance = calling_cls.from_config_dict(config=conf, trainer=trainer)
+            instance = _move_module_for_restore(instance, normalized_map_location)
+
+            if app_state.model_parallel_size is not None and app_state.model_parallel_size > 1:
+                model_weights = connector._inject_model_parallel_rank_for_ckpt(tmpdir, connector.model_weights_ckpt)
+            state_dict = connector._load_state_dict_from_disk(model_weights, map_location=normalized_map_location)
+        finally:
+            os.chdir(cwd)
+
+    return conf, instance, state_dict
+
+
+def _apply_nemo_meta_tensor_restore_patch() -> None:
+    global _nemo_restore_meta_patch_applied
+    if _nemo_restore_meta_patch_applied:
+        return
+
+    import nemo.core.connectors.save_restore_connector as save_restore_connector_module
+
+    original_load_config_and_state_dict = (
+        save_restore_connector_module.SaveRestoreConnector.load_config_and_state_dict
+    )
+
+    if getattr(original_load_config_and_state_dict, "__babel_meta_tensor_patch__", False):
+        _nemo_restore_meta_patch_applied = True
+        return
+
+    def _patched_load_config_and_state_dict(
+        self,
+        calling_cls,
+        restore_path: str,
+        override_config_path=None,
+        map_location=None,
+        strict: bool = True,
+        return_config: bool = False,
+        trainer=None,
+        validate_access_integrity: bool = True,
+    ):
+        try:
+            return original_load_config_and_state_dict(
+                self,
+                calling_cls,
+                restore_path,
+                override_config_path,
+                map_location,
+                strict,
+                return_config,
+                trainer,
+                validate_access_integrity,
+            )
+        except NotImplementedError as exc:
+            if "meta tensor" not in str(exc).lower():
+                raise
+
+            logger.warning(
+                "NeMo restore hit Torch meta-tensor move incompatibility for %s; retrying with to_empty fallback.",
+                restore_path,
+            )
+            return _load_config_and_state_dict_with_meta_tensor_fallback(
+                save_restore_connector_module,
+                self,
+                calling_cls,
+                restore_path,
+                override_config_path,
+                map_location,
+                strict,
+                return_config,
+                trainer,
+            )
+
+    _patched_load_config_and_state_dict.__babel_meta_tensor_patch__ = True
+    save_restore_connector_module.SaveRestoreConnector.load_config_and_state_dict = (
+        _patched_load_config_and_state_dict
+    )
+    _nemo_restore_meta_patch_applied = True
 
 FLORES = {
     # Latin-script European
@@ -182,35 +392,6 @@ FLORES = {
 # Pydantic Models
 # ============================================================================
 
-class HealthLiveResponse(BaseModel):
-    status: str
-    timestamp: str
-    cuda_available: bool
-    cuda_version: Optional[str] = None
-    active_requests: int = 0
-    active_qwen_requests: int = 0
-    active_diarization_requests: int = 0
-    busy: bool = False
-    busy_reason: Optional[str] = None
-    qwen_max_concurrency: int = 1
-    qwen_queue_depth: int = 0
-    qwen_last_queue_wait_ms: Optional[float] = None
-    qwen_last_generation_ms: Optional[float] = None
-    qwen_last_reference_prep_ms: Optional[float] = None
-    qwen_last_warmup_ms: Optional[float] = None
-    provider_health: Optional[dict[str, "ProviderHealthSnapshot"]] = None
-
-
-class StageCapability(BaseModel):
-    ready: bool
-    detail: Optional[str] = None
-    providers: Optional[dict[str, bool]] = None
-    provider_details: Optional[dict[str, str]] = None
-    provider_health: Optional[dict[str, "ProviderHealthSnapshot"]] = None
-    default_provider: Optional[str] = None
-    engines: Optional[list[str]] = None
-
-
 class ProviderHealthHistoryEntry(BaseModel):
     timestamp: str
     state: str
@@ -230,11 +411,41 @@ class ProviderHealthSnapshot(BaseModel):
     history: list[ProviderHealthHistoryEntry] = Field(default_factory=list)
 
 
+class HealthLiveResponse(BaseModel):
+    status: str
+    timestamp: str
+    cuda_available: bool
+    cuda_version: Optional[str] = None
+    active_requests: int = 0
+    active_qwen_requests: int = 0
+    active_diarization_requests: int = 0
+    busy: bool = False
+    busy_reason: Optional[str] = None
+    qwen_max_concurrency: int = 1
+    qwen_queue_depth: int = 0
+    qwen_last_queue_wait_ms: Optional[float] = None
+    qwen_last_generation_ms: Optional[float] = None
+    qwen_last_reference_prep_ms: Optional[float] = None
+    qwen_last_warmup_ms: Optional[float] = None
+    provider_health: Optional[dict[str, ProviderHealthSnapshot]] = None
+
+
+class StageCapability(BaseModel):
+    ready: bool
+    detail: Optional[str] = None
+    providers: Optional[dict[str, bool]] = None
+    provider_details: Optional[dict[str, str]] = None
+    provider_health: Optional[dict[str, ProviderHealthSnapshot]] = None
+    default_provider: Optional[str] = None
+    engines: Optional[list[str]] = None
+
+
 class CapabilitiesResponse(BaseModel):
     transcription: StageCapability
     translation: StageCapability
     tts: StageCapability
     diarization: StageCapability
+    vocal_separation: StageCapability
 
 
 class WordTimestampResponse(BaseModel):
@@ -314,6 +525,15 @@ class QwenReferenceResponse(BaseModel):
     error_message: Optional[str] = None
 
 
+class VocalSeparationResponse(BaseModel):
+    success: bool
+    vocals_filename: str           # retrieve via /tts/audio/{filename}
+    instrumental_filename: str     # retrieve via /tts/audio/{filename}
+    vocals_file_size_bytes: int
+    instrumental_file_size_bytes: int
+    vocals_model: str
+    instrumental_model: str
+    error_message: Optional[str] = None
 
 
 # ============================================================================
@@ -371,6 +591,12 @@ def _probe_nllb_available() -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _probe_vocal_separator_available() -> tuple[bool, str]:
+    try:
+        from audio_separator.separator import Separator  # noqa: F401
+        return True, "audio-separator available"
+    except Exception as exc:
+        return False, str(exc)
 
 
 def _find_module(module_name: str):
@@ -651,10 +877,20 @@ def _check_nemo_import_viability() -> tuple[bool, str]:
         import nemo.collections.asr  # noqa: F401
         import lightning.pytorch  # noqa: F401
         import omegaconf  # noqa: F401
+        _apply_nemo_meta_tensor_restore_patch()
     except Exception as exc:
         return False, f"NeMo import failed: {exc}"
 
     return True, "NeMo import dependencies available"
+
+
+def _require_config_attr(config_node, attr_name: str, display_name: str):
+    try:
+        return getattr(config_node, attr_name)
+    except Exception as exc:
+        raise RuntimeError(
+            f"{display_name} missing from {type(config_node).__name__}: {exc}"
+        ) from exc
 
 
 def _check_nemo_diarization_contract() -> tuple[bool, str]:
@@ -672,27 +908,59 @@ def _check_nemo_diarization_contract() -> tuple[bool, str]:
             None,
         )
         _ = (
-            config.device,
-            config.sample_rate,
-            config.verbose,
-            config.batch_size,
-            config.num_workers,
-            config.diarizer.collar,
-            config.diarizer.ignore_overlap,
-            config.diarizer.vad.model_path,
-            config.diarizer.vad.parameters.window_length_in_sec,
-            config.diarizer.vad.parameters.shift_length_in_sec,
-            config.diarizer.speaker_embeddings.model_path,
-            config.diarizer.speaker_embeddings.window_length_in_sec,
-            config.diarizer.speaker_embeddings.shift_length_in_sec,
-            config.diarizer.speaker_embeddings.multiscale_weights,
-            config.diarizer.speaker_embeddings.scale_n,
-            config.diarizer.speaker_embeddings.parameters.window_length_in_sec,
-            config.diarizer.speaker_embeddings.parameters.shift_length_in_sec,
-            config.diarizer.speaker_embeddings.parameters.multiscale_weights,
-            config.diarizer.speaker_embeddings.parameters.scale_n,
-            config.diarizer.clustering.parameters.oracle_num_speakers,
-            config.diarizer.clustering.parameters.max_num_speakers,
+            _require_config_attr(config, "device", "device"),
+            _require_config_attr(config, "sample_rate", "sample_rate"),
+            _require_config_attr(config, "verbose", "verbose"),
+            _require_config_attr(config, "batch_size", "batch_size"),
+            _require_config_attr(config, "num_workers", "num_workers"),
+            _require_config_attr(config.diarizer, "collar", "diarizer.collar"),
+            _require_config_attr(config.diarizer, "ignore_overlap", "diarizer.ignore_overlap"),
+            _require_config_attr(config.diarizer.vad, "model_path", "diarizer.vad.model_path"),
+            _require_config_attr(
+                config.diarizer.vad.parameters,
+                "window_length_in_sec",
+                "diarizer.vad.parameters.window_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.vad.parameters,
+                "shift_length_in_sec",
+                "diarizer.vad.parameters.shift_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings,
+                "model_path",
+                "diarizer.speaker_embeddings.model_path",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "window_length_in_sec",
+                "diarizer.speaker_embeddings.parameters.window_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "shift_length_in_sec",
+                "diarizer.speaker_embeddings.parameters.shift_length_in_sec",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "multiscale_weights",
+                "diarizer.speaker_embeddings.parameters.multiscale_weights",
+            ),
+            _require_config_attr(
+                config.diarizer.speaker_embeddings.parameters,
+                "save_embeddings",
+                "diarizer.speaker_embeddings.parameters.save_embeddings",
+            ),
+            _require_config_attr(
+                config.diarizer.clustering.parameters,
+                "oracle_num_speakers",
+                "diarizer.clustering.parameters.oracle_num_speakers",
+            ),
+            _require_config_attr(
+                config.diarizer.clustering.parameters,
+                "max_num_speakers",
+                "diarizer.clustering.parameters.max_num_speakers",
+            ),
         )
     except Exception as exc:
         return False, f"NeMo diarization config contract invalid: {exc}"
@@ -704,6 +972,7 @@ def _check_nemo_diarizer_construction() -> tuple[bool, str]:
     if _find_module("nemo.collections.asr") is None:
         return False, "Missing diarization dependency: nemo.collections.asr"
 
+    _apply_nemo_meta_tensor_restore_patch()
     import nemo.collections.asr as nemo_asr
 
     with tempfile.TemporaryDirectory(dir=TEMP_DIR, prefix="nemo_probe_") as work_dir_name:
@@ -1046,14 +1315,9 @@ def _build_nemo_diarization_config(
         setattr(config.diarizer.vad.parameters, key, value)
 
     config.diarizer.speaker_embeddings.model_path = NEMO_SPEAKER_EMBEDDING_MODEL
-    config.diarizer.speaker_embeddings.window_length_in_sec = NEMO_SPEAKER_WINDOW_LENGTHS
-    config.diarizer.speaker_embeddings.shift_length_in_sec = NEMO_SPEAKER_SHIFT_LENGTHS
-    config.diarizer.speaker_embeddings.multiscale_weights = NEMO_SPEAKER_MULTISCALE_WEIGHTS
-    config.diarizer.speaker_embeddings.scale_n = len(NEMO_SPEAKER_WINDOW_LENGTHS)
     config.diarizer.speaker_embeddings.parameters.window_length_in_sec = NEMO_SPEAKER_WINDOW_LENGTHS
     config.diarizer.speaker_embeddings.parameters.shift_length_in_sec = NEMO_SPEAKER_SHIFT_LENGTHS
     config.diarizer.speaker_embeddings.parameters.multiscale_weights = NEMO_SPEAKER_MULTISCALE_WEIGHTS
-    config.diarizer.speaker_embeddings.parameters.scale_n = len(NEMO_SPEAKER_WINDOW_LENGTHS)
     config.diarizer.speaker_embeddings.parameters.save_embeddings = False
 
     config.diarizer.clustering.parameters.oracle_num_speakers = clustering_parameters["oracle_num_speakers"]
@@ -1080,12 +1344,28 @@ def _run_nemo_diarization(
     Raises:
         RuntimeError: If NeMo produces no RTTM output file.
     """
+    _apply_nemo_meta_tensor_restore_patch()
     import nemo.collections.asr as nemo_asr
+    import nemo.collections.asr.parts.utils.vad_utils as nemo_vad_utils
+
+    # NeMo VAD uses tqdm progress bars that may flush to an invalid stderr handle
+    # under managed host execution on Windows ([Errno 22]). Force quiet tqdm in that path.
+    if not getattr(nemo_vad_utils, "_babel_tqdm_patched", False):
+        original_tqdm = nemo_vad_utils.tqdm
+
+        def _quiet_tqdm(*args, **kwargs):
+            kwargs["disable"] = True
+            kwargs.setdefault("file", sys.stdout)
+            return original_tqdm(*args, **kwargs)
+
+        nemo_vad_utils.tqdm = _quiet_tqdm
+        nemo_vad_utils._babel_tqdm_patched = True
 
     with tempfile.TemporaryDirectory(dir=TEMP_DIR, prefix="nemo_diar_") as work_dir_name:
         work_dir = Path(work_dir_name)
         out_dir = work_dir / "out"
         manifest_path = work_dir / "manifest.json"
+        signal_stats = _measure_wav_signal_stats(audio_path)
 
         manifest_entry = {
             "audio_filepath": str(audio_path),
@@ -1112,18 +1392,29 @@ def _run_nemo_diarization(
                 diarizer = nemo_asr.models.ClusteringDiarizer(cfg=config)
         except Exception as exc:
             logger.error(
-                "NeMo config contract mismatch during ClusteringDiarizer initialization: %s",
+                "NeMo diarizer initialization failed: %s",
                 exc,
                 exc_info=True,
             )
             raise
-        diarizer.diarize()
+        try:
+            diarize_started = time.perf_counter()
+            diarizer.diarize()
+            diarize_elapsed = time.perf_counter() - diarize_started
+        except Exception as exc:
+            raise
 
         rttm_files = sorted(out_dir.rglob("*.rttm"))
         if not rttm_files:
             raise RuntimeError("NeMo diarization did not produce an RTTM file")
+        rttm_path = rttm_files[0]
+        raw_labels: list[str] = []
+        for line in rttm_path.read_text(encoding="utf-8").splitlines():
+            parts = line.split()
+            if len(parts) >= 8 and parts[0] == "SPEAKER":
+                raw_labels.append(parts[7].strip())
 
-        return _parse_rttm_file(rttm_files[0])
+        return _parse_rttm_file(rttm_path)
 
 
 def _validate_diarization_speaker_bounds(
@@ -1281,6 +1572,7 @@ async def get_stage_capabilities():
     """
     tx_ready, tx_detail = _probe_whisper_available()
     tl_ready, tl_detail = _probe_nllb_available()
+    sep_ready, sep_detail = _probe_vocal_separator_available()
 
     qwen_ready, qwen_detail = _probe_qwen_available()
     tts_ready = qwen_ready
@@ -1317,6 +1609,11 @@ async def get_stage_capabilities():
             },
             default_provider=NEMO_DIARIZATION_DEFAULT_PROVIDER,
             engines=["nemo"],
+        ),
+        vocal_separation=StageCapability(
+            ready=sep_ready,
+            detail=sep_detail,
+            engines=["audio-separator"],
         ),
     )
 
@@ -1393,6 +1690,272 @@ def load_whisper_model(
     return whisper_model
 
 
+def load_parakeet_model():
+    global _parakeet_model
+    if _parakeet_model is not None:
+        return _parakeet_model
+    with _parakeet_model_lock:
+        if _parakeet_model is not None:
+            return _parakeet_model
+        import nemo.collections.asr as nemo_asr
+        _apply_nemo_meta_tensor_restore_patch()
+        logger.info("Loading Parakeet TDT 0.6B-v3")
+        model = nemo_asr.models.EncDecRNNTBPEModel.from_pretrained(
+            "nvidia/parakeet-tdt-0.6b-v3"
+        )
+        import torch
+        if torch.cuda.is_available():
+            model = model.cuda()
+        model.train(False)
+        _parakeet_model = model
+        logger.info("Parakeet loaded")
+        return _parakeet_model
+
+
+def _is_parakeet_manifest_lock_error(exc: Exception) -> bool:
+    message = str(exc)
+    return "WinError 32" in message and "manifest.json" in message
+
+
+def _exception_chain_contains(exc: Exception, needle: str) -> bool:
+    seen: set[int] = set()
+    current: Exception | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if needle in str(current):
+            return True
+        next_exc = current.__cause__ or current.__context__
+        current = next_exc if isinstance(next_exc, Exception) else None
+    return False
+
+
+def _is_non_retryable_parakeet_input_error(exc: Exception) -> bool:
+    return (
+        _exception_chain_contains(exc, "Input shape mismatch")
+        or _exception_chain_contains(exc, "expected = (batch, time)")
+        or _exception_chain_contains(exc, "torch.Size([1, 2,")
+    )
+
+
+def _transcribe_parakeet_with_retry(model, temp_audio_path: Path):
+    retry_delays_seconds = (0.2, 0.5)
+    max_attempts = len(retry_delays_seconds) + 1
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with torch.inference_mode():
+                hypotheses = model.transcribe([str(temp_audio_path)], timestamps=True)
+            return hypotheses[0]
+        except Exception as exc:
+            if _is_non_retryable_parakeet_input_error(exc):
+                raise
+            if not _is_parakeet_manifest_lock_error(exc) or attempt == max_attempts:
+                raise
+            delay_seconds = retry_delays_seconds[attempt - 1]
+            logger.warning(
+                "Parakeet manifest lock detected; retrying transcribe "
+                "(attempt %s/%s, delay=%.1fs): %s",
+                attempt,
+                max_attempts,
+                delay_seconds,
+                exc,
+            )
+            time.sleep(delay_seconds)
+
+
+def _extract_parakeet_word_timestamps(hypothesis) -> list:
+    for attr_name in ("timestep", "timestamp", "timestamps"):
+        attr_value = getattr(hypothesis, attr_name, None)
+        if isinstance(attr_value, dict):
+            for key in ("word", "words"):
+                candidate = attr_value.get(key)
+                if isinstance(candidate, list) and candidate:
+                    return candidate
+        elif attr_value is not None:
+            for key in ("word", "words"):
+                candidate = getattr(attr_value, key, None)
+                if isinstance(candidate, list) and candidate:
+                    return candidate
+
+    direct = getattr(hypothesis, "word_timestamps", None)
+    if isinstance(direct, list) and direct:
+        return direct
+
+    return []
+
+
+def _estimate_wav_duration_seconds(audio_path: Path) -> float:
+    try:
+        with wave.open(str(audio_path), "rb") as wav_reader:
+            frames = wav_reader.getnframes()
+            sample_rate = wav_reader.getframerate()
+            if sample_rate <= 0:
+                return 0.0
+            return float(frames) / float(sample_rate)
+    except (wave.Error, EOFError, OSError):
+        return 0.0
+
+
+def _segment_text_without_word_timestamps(
+    fallback_text: str,
+    duration_seconds: float | None,
+) -> list:
+    text = " ".join((fallback_text or "").split()).strip()
+    if not text:
+        return []
+
+    sentence_chunks = [chunk.strip() for chunk in re.split(r"(?<=[.!?])\s+", text) if chunk.strip()]
+    if len(sentence_chunks) <= 1:
+        words = text.split()
+        chunk_size = 12
+        sentence_chunks = [
+            " ".join(words[index:index + chunk_size])
+            for index in range(0, len(words), chunk_size)
+        ] or [text]
+
+    word_counts = [max(1, len(chunk.split())) for chunk in sentence_chunks]
+    total_words = max(1, sum(word_counts))
+    total_duration = duration_seconds or 0.0
+    if total_duration <= 0:
+        total_duration = max(total_words / 2.6, len(sentence_chunks) * 1.0)
+
+    segments: list = []
+    cursor = 0.0
+    for index, chunk in enumerate(sentence_chunks):
+        chunk_duration = total_duration * (word_counts[index] / total_words)
+        end = total_duration if index == len(sentence_chunks) - 1 else min(total_duration, cursor + chunk_duration)
+        segments.append(
+            TranscriptSegmentResponse(
+                start=round(cursor, 3),
+                end=round(end, 3),
+                text=chunk,
+                words=[],
+            )
+        )
+        cursor = end
+
+    return segments
+
+
+def _words_to_segments(
+    word_timestamps: list,
+    fallback_text: str,
+    duration_seconds: float | None = None,
+) -> list:
+    """Group NeMo word-timestamp objects into TranscriptSegmentResponse segments.
+
+    Splits on sentence-ending punctuation or an inter-word gap > 0.5 s.
+    Falls back to a single segment when no word timestamps are available.
+    """
+    if not word_timestamps:
+        return _segment_text_without_word_timestamps(fallback_text, duration_seconds)
+
+    segments: list = []
+    seg_words: list = []
+    seg_start: float = 0.0
+    prev_end: float = 0.0
+
+    for w in word_timestamps:
+        # NeMo word-timestamp items may be dicts or objects with attributes
+        if isinstance(w, dict):
+            w_text = w.get("word") or w.get("text") or ""
+            w_start = float(w.get("start_time") or w.get("start") or 0.0)
+            w_end = float(w.get("end_time") or w.get("end") or 0.0)
+        else:
+            w_text = getattr(w, "word", None) or getattr(w, "text", "")
+            w_start = float(getattr(w, "start_time", None) or getattr(w, "start", 0.0))
+            w_end = float(getattr(w, "end_time", None) or getattr(w, "end", 0.0))
+
+        if not w_text:
+            continue
+
+        gap = w_start - prev_end if seg_words else 0.0
+        ends_sentence = prev_end > 0 and any(
+            seg_words[-1].text.rstrip().endswith(p) for p in (".", "?", "!")
+        ) if seg_words and hasattr(seg_words[-1], "text") else False
+
+        if seg_words and (gap > 0.5 or ends_sentence):
+            segments.append(
+                TranscriptSegmentResponse(
+                    start=seg_start,
+                    end=prev_end,
+                    text=" ".join(
+                        (s.text if hasattr(s, "text") else s.get("text", ""))
+                        for s in seg_words
+                    ).strip(),
+                    words=[
+                        WordTimestampResponse(
+                            text=(s.text if hasattr(s, "text") else s.get("text", "")),
+                            start=(s.start if hasattr(s, "start") else s.get("start", 0.0)),
+                            end=(s.end if hasattr(s, "end") else s.get("end", 0.0)),
+                        )
+                        for s in seg_words
+                    ],
+                )
+            )
+            seg_words = []
+            seg_start = w_start
+
+        word_item = type("W", (), {"text": w_text, "start": w_start, "end": w_end})()
+        seg_words.append(word_item)
+        if not seg_words or len(seg_words) == 1:
+            seg_start = w_start
+        prev_end = w_end
+
+    if seg_words:
+        segments.append(
+            TranscriptSegmentResponse(
+                start=seg_start,
+                end=prev_end,
+                text=" ".join(
+                    (s.text if hasattr(s, "text") else s.get("text", ""))
+                    for s in seg_words
+                ).strip(),
+                words=[
+                    WordTimestampResponse(
+                        text=(s.text if hasattr(s, "text") else s.get("text", "")),
+                        start=(s.start if hasattr(s, "start") else s.get("start", 0.0)),
+                        end=(s.end if hasattr(s, "end") else s.get("end", 0.0)),
+                    )
+                    for s in seg_words
+                ],
+            )
+        )
+
+    return segments
+
+
+@app.post("/transcribe/parakeet", response_model=TranscriptionResponse)
+async def transcribe_parakeet(
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    temp_audio_path = None
+    try:
+        temp_audio_path = _stage_audio_upload_to_temp(file, "parakeet")
+        contents = await file.read()
+        temp_audio_path.write_bytes(contents)
+        temp_audio_path = _ensure_wav_audio(temp_audio_path, force_mono_16k=True)
+        duration_seconds = _estimate_wav_duration_seconds(temp_audio_path)
+        model = load_parakeet_model()
+        hypothesis = _transcribe_parakeet_with_retry(model, temp_audio_path)
+        word_ts = _extract_parakeet_word_timestamps(hypothesis)
+        segments = _words_to_segments(word_ts, hypothesis.text, duration_seconds)
+        background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
+        return TranscriptionResponse(
+            success=True,
+            language="en",
+            language_probability=1.0,
+            segments=segments,
+        )
+    except Exception as exc:
+        logger.error(f"Parakeet transcription failed: {exc}", exc_info=True)
+        if temp_audio_path:
+            background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe(
     file: UploadFile = File(...),
@@ -1429,6 +1992,101 @@ async def transcribe(
         logger.error(f"Transcription failed: {exc}", exc_info=True)
         if temp_audio_path:
             background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/transcribe/stream")
+async def transcribe_stream(
+    file: UploadFile = File(...),
+    model: str = Form("base"),
+    language: Optional[str] = Form(None),
+    cpu_compute_type: str = Form("int8"),
+    cpu_threads: int = Form(0),
+    num_workers: int = Form(1),
+):
+    temp_audio_path = None
+    try:
+        temp_audio_path = TEMP_DIR / f"audio_stream_{uuid4().hex}.wav"
+        contents = await file.read()
+        temp_audio_path.write_bytes(contents)
+        whisper = load_whisper_model(model, cpu_compute_type=cpu_compute_type, cpu_threads=cpu_threads, num_workers=num_workers)
+        segments_gen, info = whisper.transcribe(
+            str(temp_audio_path), language=language or None, word_timestamps=True)
+
+        def _sample_ram_mb() -> float:
+            try:
+                import psutil
+                return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+            except Exception:
+                return -1.0
+
+        def _sample_vram_mb() -> float:
+            try:
+                import pynvml
+                pynvml.nvmlInit()
+                try:
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                    info_obj = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                    return info_obj.used / (1024 * 1024)
+                finally:
+                    pynvml.nvmlShutdown()
+            except Exception:
+                return -1.0
+
+        ram_before = _sample_ram_mb()
+        vram_before = _sample_vram_mb()
+
+        async def _generate():
+            try:
+                yield json.dumps({
+                    "type": "metadata",
+                    "language": info.language or "unknown",
+                    "language_probability": info.language_probability or 0.0,
+                }, ensure_ascii=False) + "\n"
+
+                segment_count = 0
+                for seg in segments_gen:
+                    text = (seg.text or "").strip()
+                    if not text:
+                        continue
+
+                    payload = {
+                        "type": "segment",
+                        "segment": {
+                            "start": seg.start,
+                            "end": seg.end,
+                            "text": text,
+                            "words": [
+                                {
+                                    "text": word.word,
+                                    "start": word.start,
+                                    "end": word.end,
+                                }
+                                for word in (seg.words or [])
+                            ],
+                        },
+                    }
+                    yield json.dumps(payload, ensure_ascii=False) + "\n"
+                    segment_count += 1
+                    await asyncio.sleep(0)
+
+                ram_after = _sample_ram_mb()
+                vram_after = _sample_vram_mb()
+                yield json.dumps({
+                    "type": "complete",
+                    "segment_count": segment_count,
+                    "peak_ram_mb": max(ram_before, ram_after),
+                    "peak_vram_mb": max(vram_before, vram_after),
+                }, ensure_ascii=False) + "\n"
+            finally:
+                if temp_audio_path:
+                    temp_audio_path.unlink(missing_ok=True)
+
+        return StreamingResponse(_generate(), media_type="application/x-ndjson")
+    except Exception as exc:
+        logger.error(f"Streaming transcription failed: {exc}", exc_info=True)
+        if temp_audio_path:
+            temp_audio_path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -1531,22 +2189,136 @@ async def translate(
 # Diarization
 # ============================================================================
 
+
+def _requires_wav_normalization(audio_path: Path) -> bool:
+    if audio_path.suffix.lower() != ".wav":
+        return True
+    try:
+        with wave.open(str(audio_path), "rb") as wav_reader:
+            return not (
+                wav_reader.getcomptype() == "NONE"
+                and wav_reader.getnchannels() == 1
+                and wav_reader.getframerate() == 16000
+                and wav_reader.getsampwidth() == 2
+            )
+    except (wave.Error, EOFError, OSError):
+        return True
+
+
+def _ensure_wav_audio(audio_path: Path, *, force_mono_16k: bool = False) -> Path:
+    """Convert media to PCM16 mono 16 kHz WAV for NeMo-compatible inference paths."""
+    if not force_mono_16k and audio_path.suffix.lower() == ".wav":
+        return audio_path
+    if force_mono_16k and not _requires_wav_normalization(audio_path):
+        return audio_path
+
+    if audio_path.suffix.lower() == ".wav":
+        wav_path = audio_path.with_name(f"{audio_path.stem}_mono16k.wav")
+    else:
+        wav_path = audio_path.with_suffix(".wav")
+
+    proc = subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-i", str(audio_path),
+            "-vn",
+            "-acodec", "pcm_s16le",
+            "-ar", "16000",
+            "-ac", "1",
+            str(wav_path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg audio conversion failed: {proc.stderr[-500:]}")
+    if wav_path != audio_path:
+        audio_path.unlink(missing_ok=True)
+    return wav_path
+
+
+def _measure_wav_signal_stats(audio_path: Path) -> dict[str, float | int]:
+    with wave.open(str(audio_path), "rb") as wav_reader:
+        sample_width = wav_reader.getsampwidth()
+        frame_count = wav_reader.getnframes()
+        channel_count = wav_reader.getnchannels()
+        sample_rate = wav_reader.getframerate()
+        raw = wav_reader.readframes(frame_count)
+
+    if sample_width != 2 or frame_count <= 0:
+        return {
+            "sample_width_bytes": sample_width,
+            "frame_count": frame_count,
+            "channel_count": channel_count,
+            "sample_rate_hz": sample_rate,
+            "peak_abs": 0.0,
+            "rms": 0.0,
+            "non_silent_ratio": 0.0,
+        }
+
+    samples = np.frombuffer(raw, dtype=np.int16)
+    if samples.size == 0:
+        return {
+            "sample_width_bytes": sample_width,
+            "frame_count": frame_count,
+            "channel_count": channel_count,
+            "sample_rate_hz": sample_rate,
+            "peak_abs": 0.0,
+            "rms": 0.0,
+            "non_silent_ratio": 0.0,
+        }
+
+    normalized = samples.astype(np.float32) / 32768.0
+    peak_abs = float(np.max(np.abs(normalized)))
+    rms = float(np.sqrt(np.mean(np.square(normalized))))
+    non_silent_ratio = float(np.mean(np.abs(normalized) > 0.01))
+
+    return {
+        "sample_width_bytes": sample_width,
+        "frame_count": frame_count,
+        "channel_count": channel_count,
+        "sample_rate_hz": sample_rate,
+        "peak_abs": peak_abs,
+        "rms": rms,
+        "non_silent_ratio": non_silent_ratio,
+    }
+
+
+def _deferred_cleanup_temp(path: Path) -> None:
+    """Retry-based temp file cleanup for Windows file-locking resilience."""
+    for attempt in range(3):
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except PermissionError:
+            if attempt < 2:
+                time.sleep(0.5)
+    logger.warning("Could not delete temp file after retries: %s", path)
+
+
+async def _deferred_cleanup_after_delay(path: Path, delay_seconds: int = 1800) -> None:
+    """Remove a file after a delay, allowing the coordinator time to retrieve it."""
+    await asyncio.sleep(delay_seconds)
+    _deferred_cleanup_temp(path)
+
+
 @app.post("/diarize", response_model=DiarizationResponse)
 async def diarize(
     audio: UploadFile = File(...),
     min_speakers: Optional[int] = Form(None),
     max_speakers: Optional[int] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Perform speaker diarization on uploaded audio and return a structured diarization response.
-    
+
     Parameters:
         min_speakers (Optional[int]): Minimum number of speakers to detect; used as a hint when provided.
         max_speakers (Optional[int]): Maximum number of speakers to detect; used as a hint when provided.
-    
+
     Returns:
         DiarizationResponse: Object containing the list of diarization segments and the detected speaker count.
-    
+
     Raises:
         HTTPException: If diarization fails or the uploaded audio cannot be processed.
     """
@@ -1555,22 +2327,24 @@ async def diarize(
     try:
         temp_audio_path = _stage_audio_upload_to_temp(audio, "diar")
         temp_audio_path.write_bytes(await audio.read())
+        temp_audio_path = _ensure_wav_audio(temp_audio_path)
         segments, speaker_count = await asyncio.to_thread(
             _run_nemo_diarization,
             temp_audio_path,
             min_speakers,
             max_speakers,
         )
-        return _build_diarization_response(segments, speaker_count)
+        response = _build_diarization_response(segments, speaker_count)
+        background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
+        return response
 
     except HTTPException:
         raise
     except Exception as exc:
         logger.error(f"Diarization failed: {exc}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(exc))
-    finally:
         if temp_audio_path:
-            temp_audio_path.unlink(missing_ok=True)
+            background_tasks.add_task(_deferred_cleanup_temp, temp_audio_path)
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/diarize/wespeaker", response_model=DiarizationResponse)
@@ -1593,6 +2367,63 @@ async def diarize_wespeaker(
         status_code=410,
         detail="WeSpeaker moved to the managed CPU runtime and is no longer served by the managed GPU host.",
     )
+
+
+# ============================================================================
+# Vocal separation
+# ============================================================================
+
+@app.post("/separate/vocals", response_model=VocalSeparationResponse)
+async def separate_vocals(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    vocals_model: str = Form("UVR-MDX-NET-Voc_FT.onnx"),
+    instrumental_model: str = Form("MDX23C-8KFFT-InstVoc_HQ.onnx"),
+):
+    """
+    Split uploaded audio or video into a vocals stem and an instrumental stem.
+
+    vocals_filename    → download via /tts/audio/{filename}, feed to /transcribe
+    instrumental_filename → download via /tts/audio/{filename}, mix under TTS dub in final assembly
+    """
+    temp_src: Optional[Path] = None
+    try:
+        safe_name = Path(file.filename or "upload").name or "upload"
+        temp_src = TEMP_DIR / f"sep_src_{uuid4().hex}_{safe_name}"
+        temp_src.write_bytes(await file.read())
+
+        from workers.vocal_separator_worker import run_vocal_separation
+
+        vocals_path, instrumental_path = await asyncio.to_thread(
+            run_vocal_separation,
+            temp_src,
+            TEMP_DIR,
+            vocals_model,
+            instrumental_model,
+            use_gpu=(HOST_DEVICE == "cuda"),
+        )
+
+        background_tasks.add_task(_deferred_cleanup_temp, temp_src)
+        # Guard against never-downloaded stems; /tts/audio handler auto-cleans on download
+        background_tasks.add_task(_deferred_cleanup_after_delay, vocals_path, 1800)
+        background_tasks.add_task(_deferred_cleanup_after_delay, instrumental_path, 1800)
+
+        return VocalSeparationResponse(
+            success=True,
+            vocals_filename=vocals_path.name,
+            instrumental_filename=instrumental_path.name,
+            vocals_file_size_bytes=vocals_path.stat().st_size,
+            instrumental_file_size_bytes=instrumental_path.stat().st_size,
+            vocals_model=vocals_model,
+            instrumental_model=instrumental_model,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Vocal separation failed: %s", exc, exc_info=True)
+        if temp_src and temp_src.exists():
+            background_tasks.add_task(_deferred_cleanup_temp, temp_src)
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ============================================================================

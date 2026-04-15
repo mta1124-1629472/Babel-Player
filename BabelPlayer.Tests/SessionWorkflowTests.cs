@@ -39,7 +39,8 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         IMediaTransport? sourcePlayer = null,
         Babel.Player.Services.Settings.AppSettings? settings = null,
         Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null,
-        ContainerizedServiceProbe? containerizedProbe = null)
+        ContainerizedServiceProbe? containerizedProbe = null,
+        bool useRealProviderRegistries = false)
     {
         settings ??= new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
@@ -49,18 +50,27 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
             (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider()),
             (ProviderNames.WeSpeakerLocal, "WeSpeaker", new FakeDiarizationProvider()));
 
-        var registries = new Babel.Player.Models.RegistryBundle(
-            perSessionStore,
-            recentStore,
-            new Babel.Player.Services.Registries.TranscriptionRegistry(log),
-            new Babel.Player.Services.Registries.TranslationRegistry(log),
-            new Babel.Player.Services.Registries.TtsRegistry(log));
+        var registries = useRealProviderRegistries
+            ? new Babel.Player.Models.RegistryBundle(
+                perSessionStore,
+                recentStore,
+                new Babel.Player.Services.Registries.TranscriptionRegistry(log),
+                new Babel.Player.Services.Registries.TranslationRegistry(log),
+                new Babel.Player.Services.Registries.TtsRegistry(log))
+            : new Babel.Player.Models.RegistryBundle(
+                perSessionStore,
+                recentStore,
+                new FakeTranscriptionRegistry(),
+                new FakeTranslationRegistry(),
+                new FakeTtsRegistry());
 
         var options = new Babel.Player.Models.CoordinatorOptions
         {
             DiarizationRegistry    = diarizationRegistry,
             ContainerizedProbe     = containerizedProbe,
-            AudioProcessingService = new FfmpegAudioProcessingService(log),
+            AudioProcessingService = useRealProviderRegistries
+                ? new FfmpegAudioProcessingService(log)
+                : new FakeAudioProcessingService(),
         };
         var coreServices = new Babel.Player.Models.CoordinatorCoreServices(store, log, settings);
 
@@ -76,8 +86,9 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         string caseDir,
         Babel.Player.Services.Settings.AppSettings settings,
         Babel.Player.Services.Registries.IDiarizationRegistry diarizationRegistry,
-        ContainerizedServiceProbe? containerizedProbe = null) =>
-        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry, containerizedProbe);
+        ContainerizedServiceProbe? containerizedProbe = null,
+        bool useRealProviderRegistries = false) =>
+        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry, containerizedProbe, useRealProviderRegistries);
 
     private async Task<TestContext> OpenCaseFromTemplateAsync(string templateName, string caseName)
     {
@@ -95,13 +106,13 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         return new TestContext(coordinator, store, log, caseDir);
     }
 
-    private TestContext CreateFreshCase(string caseName)
+    private TestContext CreateFreshCase(string caseName, bool useRealProviderRegistries = false)
     {
         var caseDir = _fixture.CreateCaseDirectory(caseName);
         var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
         var log = new AppLog(Path.Combine(caseDir, "case.log"));
         var store = new SessionSnapshotStore(stateFilePath, log);
-        var coordinator = CreateCoordinator(store, log, caseDir);
+        var coordinator = CreateCoordinator(store, log, caseDir, useRealProviderRegistries: useRealProviderRegistries);
         coordinator.Initialize();
 
         return new TestContext(coordinator, store, log, caseDir);
@@ -257,7 +268,9 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
     [Trait("Category", "Integration")]
     public async Task EndToEndPipeline_SmokeTest()
     {
-        var ctx = CreateFreshCase(nameof(EndToEndPipeline_SmokeTest));
+        // Uses fake provider registries (same as template cases) so the full stage chain is
+        // exercised without Hugging Face / local model downloads. For live Whisper + NLLB, run manually.
+        var ctx = CreateFreshCase(nameof(EndToEndPipeline_SmokeTest), useRealProviderRegistries: false);
 
         ctx.Coordinator.LoadMedia(_fixture.TestMediaPath);
         await ctx.Coordinator.TranscribeMediaAsync();
@@ -584,6 +597,58 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
     }
 
     [Fact]
+    public async Task StopTtsPlayback_DuringPauseMode_DoesNotLeakEndedHandlerToNextSegment()
+    {
+        var caseDir = _fixture.CreateCaseDirectory(nameof(StopTtsPlayback_DuringPauseMode_DoesNotLeakEndedHandlerToNextSegment));
+        var stateFilePath = SessionWorkflowTemplateFixture.GetStateFilePath(caseDir);
+        var log = new AppLog(Path.Combine(caseDir, "case.log"));
+        var store = new SessionSnapshotStore(stateFilePath, log);
+        var segmentPlayer = new FakeMediaTransport();
+        var sourcePlayer = new FakeMediaTransport();
+        var coordinator = CreateCoordinator(store, log, caseDir, segmentPlayer, sourcePlayer);
+        coordinator.Initialize();
+        sourcePlayer.Pause();
+
+        var segment = new WorkflowSegmentState(
+            SegmentId: "segment_0.0",
+            StartSeconds: 0.0,
+            EndSeconds: 1.5,
+            SourceText: "hola",
+            HasTranslation: true,
+            TranslatedText: "hello",
+            HasTtsAudio: true);
+        var audioPath = Path.Combine(caseDir, "pause-mode-tts.mp3");
+        await File.WriteAllBytesAsync(audioPath, [0x01, 0x02, 0x03]);
+        coordinator.CurrentSession = coordinator.CurrentSession with
+        {
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                [segment.SegmentId] = audioPath,
+            },
+        };
+
+        // Start Pause mode playback, then stop before Ended is raised.
+        await coordinator.PlayTtsForSegmentAsync(segment.SegmentId, segment, SegmentTimingMode.Pause);
+        await SessionWorkflowTests.WaitUntilPlayingAsync(segmentPlayer);
+        coordinator.StopTtsPlayback();
+        await Task.Delay(50);
+
+        // Establish a sentinel source position; only a leaked handler should change this on next Ended.
+        const long sentinelSeek = 1234;
+        sourcePlayer.Seek(sentinelSeek);
+        sourcePlayer.Pause();
+
+        // Simulate a later Ended event on the shared segment player. A stale pause handler would
+        // seek to segment end and resume source playback from the stopped segment.
+        segmentPlayer.SimulateEnd();
+        await Task.Delay(50);
+
+        Assert.Equal(sentinelSeek, sourcePlayer.LastSeekPosition);
+        Assert.False(sourcePlayer.IsPlaying);
+        Assert.True(sourcePlayer.IsPaused);
+    }
+
+    [Fact]
     [Trait("Category", "RequiresPython")]
     public async Task Dispose_CleansUpSourcePlayer()
     {
@@ -841,56 +906,30 @@ public sealed class SegmentInspectionTests
     }
 
     [Fact]
-    public void EmbeddedPlaybackViewModel_DiarizationMinSpeakers_InvalidPair_RevertsAndDoesNotPersist()
+    public void EmbeddedPlaybackViewModel_RefreshDiarizationCommand_RequiresProviderAndTranscribedStage()
     {
         var playback = CreatePlaybackVm();
 
-        playback.SpeakerRouting.DiarizationMaxSpeakers = 3;
-        playback.SpeakerRouting.DiarizationMinSpeakers = 5;
+        Assert.False(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
 
-        Assert.Null(playback.SpeakerRouting.DiarizationMinSpeakers);
-        Assert.Null(playback.Coordinator.CurrentSettings.DiarizationMinSpeakers);
-        Assert.Equal(3, playback.SpeakerRouting.DiarizationMaxSpeakers);
-        Assert.Equal(3, playback.Coordinator.CurrentSettings.DiarizationMaxSpeakers);
-        Assert.Equal("Diarization min speakers cannot be greater than max speakers.", playback.StatusText);
-    }
-
-    [Fact]
-    public void EmbeddedPlaybackViewModel_DiarizationMaxSpeakers_InvalidPair_RevertsAndDoesNotPersist()
-    {
-        var playback = CreatePlaybackVm();
-
-        playback.SpeakerRouting.DiarizationMinSpeakers = 4;
-        playback.SpeakerRouting.DiarizationMaxSpeakers = 2;
-
-        Assert.Null(playback.SpeakerRouting.DiarizationMaxSpeakers);
-        Assert.Null(playback.Coordinator.CurrentSettings.DiarizationMaxSpeakers);
-        Assert.Equal(4, playback.SpeakerRouting.DiarizationMinSpeakers);
-        Assert.Equal(4, playback.Coordinator.CurrentSettings.DiarizationMinSpeakers);
-        Assert.Equal("Diarization min speakers cannot be greater than max speakers.", playback.StatusText);
-    }
-
-    [Fact]
-    public void EmbeddedPlaybackViewModel_RunDiarizationOnlyCommand_RequiresProviderAndTranscribedStage()
-    {
-        var playback = CreatePlaybackVm();
-
-        Assert.False(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
+        var transcriptPath = Path.GetTempFileName();
+        File.WriteAllText(transcriptPath, """{"language":"es","segments":[]}""");
 
         playback.Coordinator.CurrentSession = playback.Coordinator.CurrentSession with
         {
             Stage = SessionWorkflowStage.Transcribed,
+            TranscriptPath = transcriptPath,
         };
 
-        Assert.True(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.True(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
 
         playback.SpeakerRouting.DiarizationProvider = string.Empty;
 
-        Assert.False(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.False(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
     }
 
     [Fact]
-    public async Task EmbeddedPlaybackViewModel_RunDiarizationOnlyCommand_WhenAssignmentsChange_ResetsPipelineToTranslated()
+    public async Task EmbeddedPlaybackViewModel_RefreshDiarizationCommand_WhenAssignmentsChange_ResetsPipelineToTranslated()
     {
         var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}");
         var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.log"));
@@ -928,11 +967,29 @@ public sealed class SegmentInspectionTests
             TtsPath = ttsPath,
         };
 
+        // Prime BootstrapDiagnostics so RunPipelineOperationAsync does not bail on
+        // !AllDependenciesAvailable (Python/ffmpeg are not on the test runner's PATH).
+        coordinator.ApplyBootstrapWarmupData(new SessionWorkflowCoordinator.BootstrapWarmupData(
+            new BootstrapDiagnostics(
+                PythonAvailable: true,
+                PythonPath: "/fake/python",
+                FfmpegAvailable: true,
+                FfmpegPath: "/fake/ffmpeg",
+                PiperAvailable: false,
+                PiperPath: null,
+                ContainerizedServiceAvailable: false,
+                ContainerizedCudaAvailable: false,
+                ContainerizedCudaVersion: null,
+                ContainerizedServiceUrl: null,
+                CpuVectorLine: "AVX2"),
+            Snapshots: [],
+            ResolvedInferenceMode: Babel.Player.Models.InferenceMode.SubprocessCpu));
+
         var playback = new EmbeddedPlaybackViewModel(coordinator);
 
-        Assert.True(playback.Pipeline.RunDiarizationOnlyCommand.CanExecute(null));
+        Assert.True(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
 
-        await playback.Pipeline.RunDiarizationOnlyCommand.ExecuteAsync(null);
+        await playback.Pipeline.RefreshDiarizationCommand.ExecuteAsync(null);
 
         var translation = await ArtifactJson.LoadTranslationAsync(translationPath);
 

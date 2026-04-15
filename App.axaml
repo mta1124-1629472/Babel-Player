@@ -9,6 +9,7 @@
         <ResourceDictionary>
             <converters:ComputeProfileDisplayConverter x:Key="ComputeProfileDisplayConverter" />
             <converters:GpuHostBackendDisplayConverter x:Key="GpuHostBackendDisplayConverter" />
+            <converters:SegmentTimingModeDisplayConverter x:Key="SegmentTimingModeDisplayConverter" />
             <converters:DiarizationProviderDisplayConverter x:Key="DiarizationProviderDisplayConverter" />
             <converters:SpeakerIdToShortLabelConverter x:Key="SpeakerIdToShortLabelConverter" />
             <converters:SpeakerIdToColorConverter x:Key="SpeakerIdToColorConverter" />
@@ -33,6 +34,7 @@
                     <SolidColorBrush x:Key="AccentSubtleBrush"              Color="#312350" />
                     
                     <SolidColorBrush x:Key="DestructiveBrush"               Color="#6B2525" />
+                    <SolidColorBrush x:Key="DestructiveHoverBrush"         Color="#823232" />
                     <SolidColorBrush x:Key="DestructiveFgBrush"             Color="#FCA5A5" />
                     <SolidColorBrush x:Key="PositiveBrush"                  Color="#1E2E1E" />
                     <SolidColorBrush x:Key="PositiveFgBrush"                Color="#86EFAC" />
@@ -89,6 +91,18 @@
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <ScaleTransform ScaleX="1" ScaleY="1" />
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="ScaleTransform.ScaleX" Duration="0:0:0.12" />
+                    <DoubleTransition Property="ScaleTransform.ScaleY" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
         </Style>
         <Style Selector="Button.control-pill /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
@@ -96,8 +110,16 @@
         <Style Selector="Button.control-pill:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PillHoverBackgroundBrush}" />
         </Style>
+        <Style Selector="Button.control-pill:pointerover">
+            <Setter Property="ScaleTransform.ScaleX" Value="1.04" />
+            <Setter Property="ScaleTransform.ScaleY" Value="1.04" />
+        </Style>
         <Style Selector="Button.control-pill:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PillPressedBackgroundBrush}" />
+        </Style>
+        <Style Selector="Button.control-pill:pressed">
+            <Setter Property="ScaleTransform.ScaleX" Value="0.98" />
+            <Setter Property="ScaleTransform.ScaleY" Value="0.98" />
         </Style>
         <Style Selector="Button.control-pill.active">
             <Setter Property="Foreground" Value="{DynamicResource PillActiveForegroundBrush}" />
@@ -111,6 +133,26 @@
         </Style>
         <Style Selector="Button.control-pill.active:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PillActivePressedBackgroundBrush}" />
+        </Style>
+        <!-- Caption controls: no text Content; use vector icons. Win11-like: square, flush, no hover scale. -->
+        <Style Selector="Button.chrome-button">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="UseLayoutRounding" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.08" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.chrome-button:pointerover:not(.chrome-close) /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
+        </Style>
+        <Style Selector="Button.chrome-button.chrome-close:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DestructiveHoverBrush}" />
         </Style>
     </Application.Styles>
 </Application>

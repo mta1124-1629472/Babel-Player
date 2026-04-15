@@ -23,6 +23,11 @@ public sealed record WorkflowSessionSnapshot(
     DateTimeOffset? TtsGeneratedAtUtc = null,
     string? TtsSegmentsPath = null,
     Dictionary<string, string>? TtsSegmentAudioPaths = null,
+    /// <summary>
+    /// Duration in seconds of each generated TTS audio clip, keyed by segment ID.
+    /// Null or missing entries mean duration is unknown (older sessions or providers that don't report it).
+    /// </summary>
+    Dictionary<string, double>? TtsSegmentDurations = null,
     Dictionary<string, string>? SpeakerVoiceAssignments = null,
     Dictionary<string, string>? SpeakerReferenceAudioPaths = null,
     bool MultiSpeakerEnabled = true,
@@ -32,11 +37,13 @@ public sealed record WorkflowSessionSnapshot(
     InferenceRuntime? TranscriptionRuntime = null,
     string? TranscriptionProvider = null,
     string? TranscriptionModel = null,
+    string? TranscriptionLanguageHint = null,
     InferenceRuntime? TranslationRuntime = null,
     string? TranslationProvider = null,
     string? TranslationModel = null,
     InferenceRuntime? TtsRuntime = null,
-    string? TtsProvider = null)
+    string? TtsProvider = null,
+    Dictionary<string, SegmentTimingMode>? SegmentTimingModeOverrides = null)
 {
     public static WorkflowSessionSnapshot CreateNew(DateTimeOffset nowUtc)
     {

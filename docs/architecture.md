@@ -4,7 +4,7 @@
 
 This document describes the current intended structure of the app.
 
-It is not a grand design document and it is not permission to build future systems early. `PLAN.md` remains the source of truth for milestone order and product sequencing. This file exists to clarify the current structural boundaries of the app so contributors do not invent them ad hoc.
+It is not a grand design document and it is not permission to build future systems early. `docs/PLAN.md` remains the entry point for milestone order and product sequencing. This file exists to clarify the current structural boundaries of the app so contributors do not invent them ad hoc.
 
 The architecture should stay subordinate to the product chain:
 

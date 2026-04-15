@@ -1,201 +1,46 @@
-# AGENTS.md
+## Learned User Preferences
+- Prefer iterative runtime debugging loops: reproduce issue, then continue from fresh logs.
+- Prefer non-hardcoded debug log paths for instrumentation; use env var override with repo-root fallback.
+- For continual-learning runs, require strict incremental transcript processing and high-signal-only memory updates.
+- Prefer disabling/removing Cursor hooks that interrupt normal workflow (popups or cursor focus changes).
+- Prefer canonical language codes in persisted settings and pipeline artifacts (typically lowercase ISO 639-1); keep human-readable labels only in UI catalogs to avoid provider contract and strict string-compare mismatches.
+- Prefer custom window chrome that matches Windows 11 expectations: flush edge-to-edge segments, square full hit targets, and even alignment without ragged gaps between adjacent controls.
+- For NVIDIA RTX Video, bias defaults toward enabling VSR and RTX HDR when hardware and gates allow; keep RTX HDR and HDR passthrough mutually exclusive in the UI; when RTX HDR is enabled, suppress or disable conflicting secondary HDR processing options (such as tone mapping) that should apply under passthrough instead.
+- Prefer Piper and Edge TTS voice download and per-speaker voice assignment through the Speaker Reference Wizard rather than duplicating long voice lists in Settings or the main pipeline controls.
 
-> **Read this file at the start of every session.** This file contains canonical
-> guidelines for agentic coding agents operating in this repository.
+## Learned Workspace Facts
+- This workspace uses a project transcript store under the standard Cursor project transcripts location.
+- The codebase actively uses both managed CPU and managed GPU inference flows for diarization/transcription debugging.
+- The repository no longer uses Git LFS; LFS-related hook assumptions are outdated here.
+- Docker support is maintained as a power-user inference-host option; containerizing the desktop app is not the primary runtime model.
+- Forward-facing product naming uses `Babel Player` (space, no dash); dev builds append `[DEV]`.
+- On Windows, client diagnostics are commonly written to `%LocalAppData%/BabelPlayer/logs/babel-player.log`.
+- Per-provider language allowlists and multilingual capability tags are maintained in centralized catalog types in the codebase rather than ad hoc string checks scattered through the pipeline.
+- NVIDIA RTX Video features (VSR, RTX HDR) are gated on supported GPU hardware, display HDR state where applicable, and the GPU-accelerated video path (for example `VideoUseGpuNext`-style settings), not on a single flag alone.
 
-## Mission
+## Cursor Cloud specific instructions
 
-Build the best tool for taking source media through transcript → translated
-dialogue → spoken dubbed output → in-context preview and refinement.
+### Environment
 
----
+The Cloud Agent VM runs Ubuntu 24.04 (x64). .NET 10.0 SDK is installed at `$HOME/.dotnet`. In non-interactive shells, `~/.bashrc` may not be sourced automatically, so export `DOTNET_ROOT` and update `PATH` explicitly before running `dotnet` commands. Python 3.12 is available at `/usr/bin/python3`.
 
-## Build, Test, and Lint Commands
+### Build / Test / Lint
+
+The repository's standard verification commands work on this Linux VM:
 
 ```bash
-# Build solution (required before tests)
-dotnet build Babel-Player.sln
-
-# Run all tests
-dotnet test Babel-Player.sln
-
-# Run a single test class
-dotnet test Babel-Player.sln --filter "FullyQualifiedName~SessionWorkflowCoordinatorUnitTests"
-
-# Run a single test method
-dotnet test Babel-Player.sln --filter "FullyQualifiedName~SessionWorkflowCoordinatorUnitTests.ShouldAdvanceToTranslationStage"
-
-# Run tests with verbose output
-dotnet test Babel-Player.sln -v n
-
-# Run tests with coverage (uploads to Codacy if CODACY_PROJECT_TOKEN is set)
-.\scripts\run-coverage.ps1
-
-# Run coverage with specific filter
-.\scripts\run-coverage.ps1 -Filter "Category=Unit"
-
-# Run architecture linter (required after structural changes)
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$DOTNET_ROOT:$PATH"
+dotnet restore Babel-Player.sln
+dotnet build Babel-Player.sln --no-restore
+dotnet test Babel-Player.sln --no-build --filter "Category!=Integration&Category!=RequiresPython&Category!=RequiresFfmpeg&Category!=RequiresExternalTranslation"
 python3 scripts/check-architecture.py
-
-# Verify Python inference code
-python -m py_compile inference/main.py
-
-# Dev build (disables optimisations, full debug info)
-dotnet run -c Dev
+python3 -m py_compile inference/main.py
 ```
 
-### Test Categories
+### Known gotchas
 
-Tests are filtered by category. Core tests run in CI; full suite requires local environment:
-- `Integration` — end-to-end workflows
-- `RequiresPython` — Python subprocess calls
-- `RequiresFfmpeg` — audio/video processing
-- `RequiresExternalTranslation` — cloud API calls
-
----
-
-## Git Hooks
-
-The repository includes optional git hooks in `.git-hooks/` that automate verification:
-
-| Hook | When | What it runs |
-|---|---|---|
-| `pre-commit` | Before every commit | Architecture linter, Python syntax, C# build (if .cs files changed) |
-| `commit-msg` | Before every commit | Message format rules (length, no WIP, no "Merge ", PLACEHOLDER warnings) |
-| `pre-push` | Before every push | Full verification: `dotnet build`, `dotnet test` (core only), architecture linter, Python syntax |
-| `post-merge` | After pull/merge | Reminds you to `dotnet restore` if dependencies changed |
-
-**Activate:**
-```bash
-git config core.hooksPath .git-hooks
-```
-
-**Bypass a hook** (when you know what you're doing):
-```bash
-git commit --no-verify    # skip pre-commit + commit-msg
-git push --no-verify      # skip pre-push
-```
-
-CI runs the same checks independently — hooks are a developer convenience, not a gate.
-See `.git-hooks/README.md` for full documentation.
-
----
-
-## Code Style Guidelines
-
-### General
-- **Target:** .NET 10 / C# 12+ with Avalonia 12
-- **Nullable:** Enabled. **ImplicitUsings:** Not enabled project-wide; keep or add required manual `using` directives for framework and other types.
-
-### Formatting
-- Standard .NET conventions (K&R braces, 4-space indent)
-- No trailing whitespace, no extra blank lines at end of file
-
-### Naming
-- **Classes/Methods/Properties:** PascalCase
-- **Private fields:** `_camelCase`
-- **Interfaces:** `I` prefix
-- **Constants:** PascalCase (`ProviderNames.FasterWhisper`)
-- **Avoid:** Abbreviations beyond `Http` (use `HttpClient` for client types)
-
-### Types
-- Prefer `record` for immutable DTOs
-- Use `required` keyword for required properties
-- Avoid `object`; use concrete types or generics
-
-### Imports
-- No unused imports (linter catches this)
-- Group: System, third-party, project
-
-### Error Handling
-- Throw specific exceptions (`ArgumentNullException`, `InvalidOperationException`)
-- `PipelineProviderException` for provider failures with context
-- `NotImplementedException` must include `PLACEHOLDER` message
-
----
-
-## Architecture Linter
-
-`python3 scripts/check-architecture.py` enforces:
-1. `BabelPlayer.csproj` exists
-2. Test project references main project
-3. Test project has a test framework
-4. Main project is Avalonia app
-5. `OutputType=WinExe`
-6. `NotImplementedException` has `PLACEHOLDER` message
-7. Silent event stubs have `PLACEHOLDER` comments
-8. No magic provider strings outside `ProviderNames.cs`
-9. ViewModels do not call pipeline methods directly
-10. `SessionWorkflowCoordinator.cs` under 1300 lines
-
----
-
-## Core Engineering Rules
-
-### Provider identifiers are constants
-All provider strings in `Models/ProviderNames.cs` (`ProviderNames.*` and
-`CredentialKeys.*`). No inline literals in production code.
-
-### Stage progression runs through coordinator
-ViewModels must NOT call `TranscribeMediaAsync`, `TranslateTranscriptAsync`,
-or `GenerateTtsAsync` directly. All pipeline advancement must go through
-`SessionWorkflowCoordinator` entry points such as
-`AdvancePipelineAsync`, `ContinuePipelineAsync`, or `RunTtsOnlyAsync`.
-
-### Python/C# field names are explicit contracts
-Python emits snake_case or camelCase. C# must match with hardcoded strings or
-`[JsonPropertyName]` attributes. Never rely on implicit .NET casing.
-
-### Service interfaces are uniform
-Every AI inference service implements a provider interface.
-Method signatures uniform across providers — no provider-specific parameters.
-Configuration injected at construction time.
-
-### Transport lifecycle managed by MediaTransportManager
-`LibMpvHeadlessTransport` and `LibMpvEmbeddedTransport` created/owned/disposed
-by `MediaTransportManager`. Use `GetOrCreate*` accessors.
-
-### Git history is the archive
-Delete dead code. Use `git branch` for abandoned experiments, not comments.
-
----
-
-## Verification Expectations
-
-Before calling work complete:
-- Run `dotnet build Babel-Player.sln` for full consistency
-- Run relevant tests with `dotnet test Babel-Player.sln`
-- Add/update tests when change is testable
-- Perform milestone's manual smoke path
-- Record smoke note in `docs/smoke/` (filename: `milestone-XX-label.md`)
-
-### Troubleshooting
-Locked file error: `taskkill /F /IM clrdbg.exe /IM dotnet.exe`
-
-When reporting build/test instability, run the standard diagnostic sequence:
-1. `dotnet build Babel-Player.sln`
-2. `dotnet test Babel-Player.sln`
-3. `python3 scripts/check-architecture.py`
-4. `python -m py_compile inference/main.py`
-
----
-
-## Proactivity
-
-Before any non-trivial task:
-1. Read proactivity memory files if they exist
-2. Leave one clear next move in state when work is ongoing
-
-Boundaries:
-- Refactor tasks → SUGGEST mode (unless explicitly asked)
-- Git commit/push → ASK always
-- Scope expansion into future milestone → flag and discuss
-
----
-
-## Smoke Note Conventions
-
-- **Location:** `docs/smoke/`
-- **Naming:** `milestone-01-foundation.md`, lowercase, hyphen-separated
-- **Status:** `complete`, `partial`, or `failed` (no "mostly done", "substantially complete")
-- **Required sections:** Metadata, Gate Summary, What Was Verified, What Was Not Verified, Evidence, Notes, Conclusion, Deferred Items
+- **`dotnet test` hangs after completion**: The VSTest host process does not exit after all tests finish on Linux. Use `timeout 90 dotnet test ...` or background the process and kill it after ~30 seconds of inactivity. All test results are produced within the first ~15 seconds.
+- **Pre-existing test failures**: Several tests fail on `main` independent of environment: Qwen batch endpoint mock tests, timing-sensitive pipeline streaming tests (`PipelineStageProgressTests`), a settings serialization test, and a `ContainerizedServiceProbeTests` cache test. These are not caused by the Linux environment.
+- **No GUI on Linux**: This is a Windows desktop app (Avalonia + libmpv). The app cannot be launched graphically on the Cloud Agent VM. Build, test, and lint verification are the appropriate scope for CI-equivalent validation.
+- **Native binaries not needed for tests**: `libmpv-2.dll` and `uv.exe` are Windows-only and fetched via `scripts/fetch-win-native-deps.ps1`. They are not needed for building or running the core test suite on Linux.

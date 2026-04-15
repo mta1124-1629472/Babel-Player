@@ -123,6 +123,26 @@
                                       Content="Always start local GPU runtime at app start"/>
                         </StackPanel>
 
+                        <!-- Dubbing -->
+                        <Separator Margin="0,4,0,4"/>
+                        <TextBlock Text="Dubbing" FontWeight="SemiBold"/>
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Segment timing mode:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Controls how dubbed TTS audio is aligned with the original segment window."/>
+                            <ComboBox ItemsSource="{Binding DubTimingModeOptions}"
+                                      SelectedItem="{Binding DubTimingMode, Mode=TwoWay}"
+                                      Width="180"
+                                      HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Converter={StaticResource SegmentTimingModeDisplayConverter}}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Opacity="0.65" TextWrapping="Wrap"
+                                       Text="Off: play TTS as-is (source drives timing). Stretch: time-scale TTS to fit the segment window. Pause: stop source video while TTS plays, then resume."/>
+                        </StackPanel>
+
                         <!-- Advanced CPU transcription tuning (collapsed by default) -->
                         <Expander Header="Advanced: CPU Transcription"
                                   IsExpanded="False"
@@ -218,15 +238,19 @@
                                   Content="Use gpu-next video output (required for RTX enhancements)"/>
                         <TextBlock TextWrapping="Wrap"
                                    Opacity="0.6"
-                                   Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or HDR Passthrough." />
+                                   Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or HDR modes." />
 
                         <TextBlock Text="RTX Video Enhancement" FontWeight="SemiBold" Margin="0,12,0,0"/>
 
                         <CheckBox IsChecked="{Binding VideoVsrEnabled, Mode=TwoWay}"
-                                  IsEnabled="{Binding VideoUseGpuNext}"
+                                  IsEnabled="{Binding VsrSettingsAvailable}"
                                   Content="RTX Video Super Resolution (VSR)"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                    Text="AI upscaling via NVIDIA d3d11vpp. Requires RTX GPU, driver &#x2265; 551.23, and 'RTX Video Enhancement' enabled in NVIDIA Control Panel." />
+                                    Text="AI upscaling via NVIDIA d3d11vpp. Requires a detected GeForce RTX GPU, driver &#x2265; 551.23, gpu-next, and 'RTX Video Enhancement' in NVIDIA Control Panel." />
+                        <TextBlock TextWrapping="Wrap"
+                                   Opacity="0.65"
+                                   IsVisible="{Binding HasRtxVideoHardwareGateHint}"
+                                   Text="{Binding RtxVideoHardwareGateHint}" />
                         <TextBlock TextWrapping="Wrap" Opacity="0.55"
                                    Text="VSR quality is controlled in NVIDIA Control Panel. mpv's d3d11vpp filter does not expose an in-app quality setting." />
 
@@ -253,12 +277,44 @@
                             </Grid>
                         </Border>
 
-                        <CheckBox IsChecked="{Binding VideoHdrEnabled, Mode=TwoWay}"
-                                  IsEnabled="{Binding HdrSettingsAvailable}"
-                                  Content="HDR Passthrough"
-                                  Margin="0,8,0,0"/>
+                        <TextBlock Text="HDR" FontWeight="SemiBold" Margin="0,8,0,0"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                   Text="Enables mpv's HDR passthrough path so HDR source video stays HDR through the Windows display pipeline. Requires gpu-next and Windows HDR enabled on at least one connected display." />
+                                   Text="Choose one mode. RTX HDR follows NVIDIA Control Panel. HDR passthrough configures mpv (tone-mapping, etc.). Requires gpu-next and Windows HDR on the active display." />
+                        <StackPanel Spacing="4" Margin="0,6,0,0">
+                            <RadioButton GroupName="VideoHdrPlaybackMode"
+                                         Content="Off"
+                                         IsChecked="{Binding IsHdrModeOff, Mode=TwoWay}"
+                                         IsEnabled="{Binding VideoUseGpuNext}"/>
+                            <RadioButton GroupName="VideoHdrPlaybackMode"
+                                         Content="RTX HDR (NVIDIA driver)"
+                                         IsChecked="{Binding IsHdrModeNvidia, Mode=TwoWay}"
+                                         IsEnabled="{Binding RtxHdrDriverModeAvailable}"/>
+                            <RadioButton GroupName="VideoHdrPlaybackMode"
+                                         Content="HDR passthrough (mpv)"
+                                         IsChecked="{Binding IsHdrModeMpv, Mode=TwoWay}"
+                                         IsEnabled="{Binding HdrSettingsAvailable}"/>
+                        </StackPanel>
+                        <StackPanel IsVisible="{Binding IsMpvHdrPassthroughDetailsVisible}"
+                                    Margin="0,8,0,0"
+                                    Spacing="6">
+                            <TextBlock Text="mpv passthrough options" FontWeight="SemiBold" Opacity="0.85"/>
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
+                                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Tone mapping"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                          ItemsSource="{Binding HdrToneMappingOptions}"
+                                          SelectedItem="{Binding VideoToneMapping, Mode=TwoWay}"
+                                          Width="220" HorizontalAlignment="Left"/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Target peak"/>
+                                <TextBox Grid.Row="1" Grid.Column="1"
+                                         Text="{Binding VideoTargetPeak, Mode=TwoWay}"
+                                         Width="220" HorizontalAlignment="Left"
+                                         PlaceholderText="auto or nits"/>
+                                <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="HDR compute peak"/>
+                                <CheckBox Grid.Row="2" Grid.Column="1"
+                                          IsChecked="{Binding VideoHdrComputePeak, Mode=TwoWay}"
+                                          Content="Dynamic per-frame peak (mpv)"/>
+                            </Grid>
+                        </StackPanel>
                         <TextBlock TextWrapping="Wrap"
                                    Opacity="0.55"
                                    IsVisible="{Binding HasHdrAvailabilityHint}"

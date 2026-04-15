@@ -12,16 +12,179 @@
         Icon="/Assets/Icons/app.ico"
         Width="1280" Height="700"
         MinWidth="960" MinHeight="520"
+        WindowDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
         Background="{DynamicResource WindowBackgroundBrush}">
+    <Window.Styles>
+        <Style Selector="Border.left-pane">
+            <Setter Property="Width" Value="260" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Border.left-pane.collapsed">
+            <Setter Property="Width" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
 
-    <Grid ColumnDefinitions="Auto,*,Auto">
+        <Style Selector="Border.right-pane">
+            <Setter Property="Width" Value="280" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Border.right-pane.collapsed">
+            <Setter Property="Width" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <Style Selector="Border.top-chrome">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <TranslateTransform Y="0" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style Selector="Border.top-chrome.fullscreen-hidden">
+            <Setter Property="Height" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="TranslateTransform.Y" Value="-8" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*,Auto" PointerMoved="OnWindowSurfacePointerMoved">
+        <Border Grid.Row="0"
+                Classes="top-chrome"
+                Classes.fullscreen-hidden="{Binding Playback.Preview.IsFullscreen}"
+                Grid.ColumnSpan="3"
+                Background="{DynamicResource SurfaceSubtleBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="10,0,0,0"
+                PointerPressed="OnTitleBarPointerPressed">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <TextBlock Grid.Column="0"
+                           Text="Babel Player"
+                           Foreground="{DynamicResource PrimaryTextBrush}"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <!-- Win11-style: zero gap, square targets, flush to the right window edge (no right padding on chrome Border). -->
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="0"
+                            VerticalAlignment="Stretch"
+                            HorizontalAlignment="Right"
+                            UseLayoutRounding="True">
+                    <Button Classes="chrome-button"
+                            Width="40"
+                            Height="40"
+                            Background="{DynamicResource ButtonBackgroundBrush}"
+                            Foreground="{DynamicResource PrimaryTextBrush}"
+                            Click="OnMinimizeWindowClick"
+                            AutomationProperties.Name="Minimize window">
+                        <Viewbox Width="11" Height="11">
+                            <Canvas Width="24" Height="24">
+                                <Border Canvas.Left="5"
+                                        Canvas.Top="11"
+                                        Width="14"
+                                        Height="2"
+                                        Background="{DynamicResource PrimaryTextBrush}"
+                                        CornerRadius="1" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                    <Button Classes="chrome-button"
+                            Width="40"
+                            Height="40"
+                            Background="{DynamicResource ButtonBackgroundBrush}"
+                            Foreground="{DynamicResource PrimaryTextBrush}"
+                            Click="OnToggleMaximizeWindowClick"
+                            AutomationProperties.Name="Maximize or restore window">
+                        <Grid Width="24" Height="24">
+                            <Viewbox x:Name="ChromeMaximizeIcon"
+                                     Width="11"
+                                     Height="11"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center">
+                                <Canvas Width="24" Height="24">
+                                    <Rectangle Canvas.Left="6"
+                                               Canvas.Top="6"
+                                               Width="12"
+                                               Height="12"
+                                               Stroke="{DynamicResource PrimaryTextBrush}"
+                                               StrokeThickness="1.5"
+                                               Fill="Transparent" />
+                                </Canvas>
+                            </Viewbox>
+                            <Viewbox x:Name="ChromeRestoreIcon"
+                                     Width="11"
+                                     Height="11"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     IsVisible="False">
+                                <Canvas Width="24" Height="24">
+                                    <Rectangle Canvas.Left="9"
+                                               Canvas.Top="5"
+                                               Width="9"
+                                               Height="9"
+                                               Stroke="{DynamicResource PrimaryTextBrush}"
+                                               StrokeThickness="1.5"
+                                               Fill="Transparent" />
+                                    <Rectangle Canvas.Left="5"
+                                               Canvas.Top="9"
+                                               Width="9"
+                                               Height="9"
+                                               Stroke="{DynamicResource PrimaryTextBrush}"
+                                               StrokeThickness="1.5"
+                                               Fill="Transparent" />
+                                </Canvas>
+                            </Viewbox>
+                        </Grid>
+                    </Button>
+                    <Button Classes="chrome-button chrome-close"
+                            Width="40"
+                            Height="40"
+                            Background="{DynamicResource DestructiveBrush}"
+                            Foreground="{DynamicResource PrimaryTextBrush}"
+                            Click="OnCloseWindowClick"
+                            AutomationProperties.Name="Close window">
+                        <Viewbox Width="11" Height="11">
+                            <Canvas Width="24" Height="24">
+                                <Path Stroke="{DynamicResource PrimaryTextBrush}"
+                                      StrokeThickness="1.5"
+                                      StrokeLineCap="Round"
+                                      Stretch="None"
+                                      Data="M 7,7 L 17,17 M 17,7 L 7,17" />
+                            </Canvas>
+                        </Viewbox>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Close"
+                                          Click="OnCloseWindowClick" />
+                                <MenuItem Header="Force Close"
+                                          Click="OnForceCloseWindowClick" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
 
         <!-- ═══════════════════════════════════════════════════
              LEFT PANEL: Pipeline
              ═══════════════════════════════════════════════════ -->
-<Border Grid.Column="0" Width="260" Background="{DynamicResource PanelBackgroundBrush}"
+<Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}"
+        Classes="left-pane"
+        Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
-        IsVisible="{Binding Playback.Preview.IsSegmentPaneVisible}">
+        >
     <Border.Resources>
         <!-- Shadow the Application ThemeDictionary for all panel descendants.
              These values apply in both Light and Dark mode — the panel is always dark. -->
@@ -60,10 +223,47 @@
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="16,16,16,0" Spacing="20">
 
+                        <!-- TARGET LANGUAGE -->
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="TARGET LANGUAGE" FontSize="10"
+                                       Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Output (dub / subs)" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <ComboBox ItemsSource="{Binding Playback.TargetLanguageOptions}"
+                                          SelectedItem="{Binding Playback.SelectedTargetLanguageOption, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                          BorderBrush="{DynamicResource BorderBrush}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                        </StackPanel>
+
                         <!-- TRANSCRIPTION -->
                         <StackPanel Spacing="10">
-<TextBlock Text="TRANSCRIPTION" FontSize="10"
-                                        Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                <TextBlock Grid.Column="0" Text="TRANSCRIPTION" FontSize="10"
+                                           Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                                <Button Grid.Column="1"
+                                        Command="{Binding Playback.Pipeline.RefreshTranscriptionCommand}"
+                                        IsEnabled="{Binding Playback.Pipeline.CanRefreshTranscription}"
+                                        Background="Transparent" Padding="6,2"
+                                        Foreground="{DynamicResource StatusTextBrush}"
+                                        ToolTip.Tip="Re-run transcription (choose this stage only or include downstream)">
+                                    <TextBlock Text="↻" FontSize="16" />
+                                    <Button.Styles>
+                                        <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                                        </Style>
+                                    </Button.Styles>
+                                </Button>
+                            </Grid>
 
                              <StackPanel Spacing="5">
                                  <TextBlock Text="Compute" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
@@ -108,17 +308,122 @@
                                 </ComboBox>
                             </StackPanel>
 
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Spoken language (ASR hint)" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <ComboBox ItemsSource="{Binding Playback.SpokenLanguageOptions}"
+                                          SelectedItem="{Binding Playback.SelectedSpokenLanguageOption, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                          BorderBrush="{DynamicResource BorderBrush}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+
                             <TextBlock Text="{Binding Playback.TranscriptionKeyStatus}"
                                         FontSize="11" Foreground="{DynamicResource StatusTextBrush}"
                                         IsVisible="{Binding Playback.TranscriptionKeyStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                         TextWrapping="Wrap" />
                         </StackPanel>
 
+                        <!-- DIARIZATION / SPEAKERS -->
+                        <StackPanel Spacing="10">
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                    <TextBlock Grid.Column="0" Text="DIARIZATION / SPEAKERS" FontSize="10"
+                                               Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1"
+                                            Command="{Binding Playback.Pipeline.RefreshDiarizationCommand}"
+                                            IsEnabled="{Binding Playback.Pipeline.CanRefreshDiarization}"
+                                            Background="Transparent" Padding="6,2"
+                                            Foreground="{DynamicResource StatusTextBrush}"
+                                            ToolTip.Tip="Re-run speaker mapping (choose this stage only or include downstream)">
+                                        <TextBlock Text="↻" FontSize="16" />
+                                        <Button.Styles>
+                                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                                            </Style>
+                                        </Button.Styles>
+                                    </Button>
+                                </Grid>
+                            </Border>
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Diarization Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.DiarizationProviderOptions}"
+                                          SelectedItem="{Binding Playback.SpeakerRouting.DiarizationProvider, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="{DynamicResource ControlBackgroundBrush}"
+                                          Foreground="{DynamicResource PrimaryTextBrush}"
+                                          BorderBrush="{DynamicResource BorderBrush}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Converter={StaticResource DiarizationProviderDisplayConverter}}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Status -->
+                            <TextBlock Text="{Binding Playback.SpeakerRouting.AutoSpeakerDetectionStatus}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource StatusTextBrush}"
+                                       IsVisible="{Binding Playback.SpeakerRouting.HasAutoSpeakerDetectionStatus}"
+                                       TextWrapping="Wrap" />
+
+                            <!-- Per-speaker voice / reference clip assignment -->
+                            <StackPanel Spacing="5">
+
+                                <!-- Hint shown when no speaker IDs have been detected yet -->
+                                <TextBlock Text="Transcribe with a diarization provider selected to assign speaker IDs."
+                                           FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
+                                           IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerNoSpeakersYet}" />
+
+                                <TextBlock Text="Speaker assignments are managed in the speaker setup wizard."
+                                           FontSize="11"
+                                           Foreground="{DynamicResource StatusTextBrush}"
+                                           TextWrapping="Wrap" />
+
+                               <Button IsEnabled="{Binding Playback.SpeakerRouting.CanOpenSpeakerSetupWizard}"
+                                       HorizontalAlignment="Stretch"
+                                       Padding="0,7" FontSize="12"
+                                       Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                       CornerRadius="4"
+                                       Click="OnReviewSpeakerReferencesClick"
+                                       ToolTip.Tip="Opens the speaker setup wizard: per-speaker voice and (for Qwen) reference clips. Finish in the wizard saves changes."
+                                       Content="Speaker setup wizard…" />
+
+                           </StackPanel>
+
+                       </StackPanel>
+
                         <!-- TRANSLATION -->
                         <StackPanel Spacing="10">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                <TextBlock Text="TRANSLATION" FontSize="10"
-                                           Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                    <TextBlock Grid.Column="0" Text="TRANSLATION" FontSize="10"
+                                               Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1"
+                                            Command="{Binding Playback.Pipeline.RefreshTranslationCommand}"
+                                            IsEnabled="{Binding Playback.Pipeline.CanRefreshTranslation}"
+                                            Background="Transparent" Padding="6,2"
+                                            Foreground="{DynamicResource StatusTextBrush}"
+                                            ToolTip.Tip="Re-run translation (choose this stage only or include dub)">
+                                        <TextBlock Text="↻" FontSize="16" />
+                                        <Button.Styles>
+                                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                                            </Style>
+                                        </Button.Styles>
+                                    </Button>
+                                </Grid>
                             </Border>
 
                             <StackPanel Spacing="5">
@@ -168,8 +473,25 @@
                         <!-- DUB -->
                         <StackPanel Spacing="10">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                <TextBlock Text="DUB" FontSize="10"
-                                           Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                    <TextBlock Grid.Column="0" Text="DUB" FontSize="10"
+                                               Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1"
+                                            Command="{Binding Playback.Pipeline.RefreshDubCommand}"
+                                            IsEnabled="{Binding Playback.Pipeline.CanRefreshDub}"
+                                            Background="Transparent" Padding="6,2"
+                                            Foreground="{DynamicResource StatusTextBrush}"
+                                            ToolTip.Tip="Re-generate dub audio from the current translation">
+                                        <TextBlock Text="↻" FontSize="16" />
+                                        <Button.Styles>
+                                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                                            </Style>
+                                        </Button.Styles>
+                                    </Button>
+                                </Grid>
                             </Border>
 
                             <StackPanel Spacing="5">
@@ -196,8 +518,19 @@
                                           BorderBrush="{DynamicResource BorderBrush}" />
                             </StackPanel>
 
+                            <StackPanel Spacing="6" IsVisible="{Binding Playback.ShowTtsAssignmentModeSwitch}">
+                                <TextBlock Text="Voice assignment" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <CheckBox Content="Assign per speaker in Speaker Reference Wizard (fallback voice below)"
+                                          IsChecked="{Binding Playback.TtsVoiceUsePerSpeakerWizard, Mode=TwoWay}"
+                                          FontSize="12" />
+                                <TextBlock Text="Use one voice for every speaker, or turn on the option above and set a fallback plus per-speaker voices in the wizard."
+                                           FontSize="11" Opacity="0.75" TextWrapping="Wrap"
+                                           IsVisible="{Binding Playback.ShowPerSpeakerVoiceHint}" />
+                            </StackPanel>
+
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Voice / Model" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"
+                                           Text="{Binding Playback.TtsVoiceComboHeaderText}" />
                                 <ComboBox ItemsSource="{Binding Playback.AvailableTtsOptions}"
                                           SelectedItem="{Binding Playback.SelectedTtsOption, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
@@ -274,144 +607,6 @@
                                                 FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
                                  </Border>
                              </Grid>
-                        </StackPanel>
-
-                         <!-- DIARIZATION / SPEAKERS -->
-                         <StackPanel Spacing="10">
-                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                 <TextBlock Text="DIARIZATION / SPEAKERS" FontSize="10"
-                                            Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
-                             </Border>
-
-                             <!-- Multi-speaker toggle -->
-                             <CheckBox Content="Enable multi-speaker routing"
-                                       IsChecked="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled, Mode=TwoWay}"
-                                       Foreground="{DynamicResource PrimaryTextBrush}" />
-
-                             <StackPanel Spacing="5">
-                                 <TextBlock Text="Diarization Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                 <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.DiarizationProviderOptions}"
-                                           SelectedItem="{Binding Playback.SpeakerRouting.DiarizationProvider, Mode=TwoWay}"
-                                           IsEnabled="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled}"
-                                           HorizontalAlignment="Stretch" FontSize="12"
-                                           Background="{DynamicResource ControlBackgroundBrush}"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           BorderBrush="{DynamicResource BorderBrush}">
-                                     <ComboBox.ItemTemplate>
-                                         <DataTemplate>
-                                             <TextBlock Text="{Binding Converter={StaticResource DiarizationProviderDisplayConverter}}" />
-                                         </DataTemplate>
-                                     </ComboBox.ItemTemplate>
-                                 </ComboBox>
-                             </StackPanel>
-
-                             <!-- Controls that only apply when a provider is selected -->
-                             <StackPanel Spacing="5"
-                                         IsVisible="{Binding Playback.SpeakerRouting.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
-                                    <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                                    Value="{Binding Playback.SpeakerRouting.DiarizationMinSpeakers, Mode=TwoWay}"
-                                                    Minimum="1" Maximum="20"
-                                                    Width="80"
-                                                    ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Max Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
-                                    <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                                    Value="{Binding Playback.SpeakerRouting.DiarizationMaxSpeakers, Mode=TwoWay}"
-                                                    Minimum="1" Maximum="20"
-                                                    Width="80"
-                                                    ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
-                                </Grid>
-                           </StackPanel>
-
-                             <!-- Status -->
-                             <TextBlock Text="{Binding Playback.SpeakerRouting.AutoSpeakerDetectionStatus}"
-                                        FontSize="11"
-                                        Foreground="{DynamicResource StatusTextBrush}"
-                                        IsVisible="{Binding Playback.SpeakerRouting.HasAutoSpeakerDetectionStatus}"
-                                        TextWrapping="Wrap" />
-
-                             <!-- Per-speaker voice / reference clip assignment -->
-                             <StackPanel Spacing="5"
-                                         IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerEnabled}">
-
-                                 <!-- Hint shown when multi-speaker is on but no speaker IDs have been detected yet -->
-                                 <TextBlock Text="Transcribe with a diarization provider selected to assign speaker IDs."
-                                            FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
-                                            IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerNoSpeakersYet}" />
-
-                                 <TextBlock Text="Speaker" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                 <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.SpeakerIds}"
-                                           SelectedItem="{Binding Playback.SpeakerRouting.SelectedSpeakerId, Mode=TwoWay}"
-                                           IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                           HorizontalAlignment="Stretch" FontSize="12"
-                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                           BorderBrush="{DynamicResource BorderBrush}" />
-
-                                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="8">
-                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Voice" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                     <TextBlock Grid.Row="0" Grid.Column="1"
-                                                Text="{Binding Playback.SpeakerRouting.SelectedSpeakerAssignedVoice, TargetNullValue='—'}"
-                                                FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
-
-                                     <!-- Ref audio row only meaningful for voice-cloning providers (Qwen) -->
-                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Ref" FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}"
-                                                IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
-                                     <TextBlock Grid.Row="1" Grid.Column="1"
-                                                Text="{Binding Playback.SpeakerRouting.SelectedSpeakerReferenceAudioPath, TargetNullValue='—'}"
-                                                FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap"
-                                                IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}" />
-                                 </Grid>
-
-                                 <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
-                                     <Button Grid.Row="0" Grid.Column="0"
-                                             Command="{Binding Playback.SpeakerRouting.AssignSelectedSpeakerVoiceCommand}"
-                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                             HorizontalAlignment="Stretch"
-                                             Padding="0,7" FontSize="12"
-                                             Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="4"
-                                             Content="Use current voice" />
-                                     <Button Grid.Row="0" Grid.Column="1"
-                                             Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerVoiceCommand}"
-                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                             HorizontalAlignment="Stretch"
-                                             Padding="0,7" FontSize="12"
-                                             Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="4"
-                                             Content="Clear speaker voice" />
-                                     <!-- Ref clip buttons — only for voice-cloning providers -->
-                                     <Button Grid.Row="1" Grid.Column="0"
-                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                             IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
-                                             HorizontalAlignment="Stretch"
-                                             Padding="0,7" FontSize="12"
-                                             Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="4"
-                                             Click="OnBrowseReferenceClipClick"
-                                             Content="Browse ref clip" />
-                                     <Button Grid.Row="1" Grid.Column="1"
-                                             Command="{Binding Playback.SpeakerRouting.ClearSelectedSpeakerReferenceAudioCommand}"
-                                             IsEnabled="{Binding Playback.SpeakerRouting.HasSpeakers}"
-                                             IsVisible="{Binding Playback.SpeakerRouting.IsTtsCloningProvider}"
-                                             HorizontalAlignment="Stretch"
-                                             Padding="0,7" FontSize="12"
-                                             Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                             CornerRadius="4"
-                                             Content="Clear speaker ref" />
-                                </Grid>
-
-                                 <!-- Fallback voice used when a speaker has no explicit assignment -->
-                                 <StackPanel Spacing="4">
-                                     <TextBlock Text="Fallback voice" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"
-                                                ToolTip.Tip="Voice/model used for any speaker that has no explicit assignment. Leave blank to use the active TTS voice." />
-                                     <TextBox Text="{Binding Playback.SpeakerRouting.DefaultTtsVoiceFallback, Mode=TwoWay}"
-                                              PlaceholderText="same as active TTS voice"
-                                              FontSize="12" Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderBrush="{DynamicResource BorderBrush}" />
-                                 </StackPanel>
-
-                            </StackPanel>
-
                         </StackPanel>
 
                         <!-- ACTIVE CONFIGURATION -->
@@ -546,24 +741,27 @@
                             BorderThickness="0,1,0,0"
                             Padding="16,14,16,16">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="{Binding Playback.Pipeline.PipelineStageDetail}"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource PrimaryTextBrush}"
-                                       TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding Playback.Pipeline.PipelineProgressStatusLine}"
-                                       FontSize="10"
-                                       Foreground="{DynamicResource StatusTextBrush}"
-                                       TextWrapping="Wrap" />
-                            <ProgressBar Minimum="0"
-                                         Maximum="1"
-                                         Value="{Binding Playback.Pipeline.PipelineProgressPercent}"
-                                         IsIndeterminate="{Binding Playback.Pipeline.IsPipelineProgressIndeterminate}"
-                                         Height="8"
-                                         Foreground="{DynamicResource AccentSecondaryBrush}"
-                                         Background="{DynamicResource ProgressBackgroundBrush}"
-                                         HorizontalAlignment="Stretch"
-                                         Margin="0,2,0,0"
-                                         AutomationProperties.Name="Pipeline progress" />
+                            <StackPanel Spacing="6"
+                                       IsVisible="{Binding Playback.Pipeline.ShowPipelineStatusChrome}">
+                                <TextBlock Text="{Binding Playback.Pipeline.PipelineStageDetail}"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Playback.Pipeline.PipelineProgressStatusLine}"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource StatusTextBrush}"
+                                           TextWrapping="Wrap" />
+                                <ProgressBar Minimum="0"
+                                             Maximum="1"
+                                             Value="{Binding Playback.Pipeline.PipelineProgressPercent}"
+                                             IsIndeterminate="{Binding Playback.Pipeline.IsPipelineProgressIndeterminate}"
+                                             Height="8"
+                                             Foreground="{DynamicResource AccentSecondaryBrush}"
+                                             Background="{DynamicResource ProgressBackgroundBrush}"
+                                             HorizontalAlignment="Stretch"
+                                             Margin="0,2,0,0"
+                                             AutomationProperties.Name="Pipeline progress" />
+                            </StackPanel>
 
                             <Grid>
                                 <Button HorizontalAlignment="Stretch"
@@ -575,7 +773,8 @@
                                         Foreground="White"
                                         CornerRadius="8"
                                         Command="{Binding Playback.Pipeline.RunPipelineCommand}"
-                                        IsEnabled="{Binding Playback.Pipeline.CanRunPipeline}">
+                                        IsEnabled="{Binding Playback.Pipeline.CanRunPipeline}"
+                                        IsVisible="{Binding !Playback.IsBusy}">
                                     <Button.Content>
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <TextBlock Text="▶" VerticalAlignment="Center" />
@@ -634,25 +833,6 @@
                                 </Button>
                             </Grid>
 
-                            <Button HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"
-                                    VerticalContentAlignment="Center"
-                                    Padding="0,10"
-                                    FontSize="13"
-                                    FontWeight="SemiBold"
-                                    Background="{DynamicResource ButtonBackgroundBrush}"
-                                    Foreground="{DynamicResource PrimaryTextBrush}"
-                                    BorderBrush="{DynamicResource BorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Command="{Binding Playback.Pipeline.RunDiarizationOnlyCommand}"
-                                    IsEnabled="{Binding Playback.Pipeline.CanRunDiarizationOnly}">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="↻" VerticalAlignment="Center" />
-                                    <TextBlock Text="Re-diarize" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                 <TextBlock Grid.Column="0"
                                            Text="{Binding Playback.StatusText}"
@@ -687,13 +867,13 @@
         <!-- ═══════════════════════════════════════════════════
              CENTER PANEL: Video player
              ═══════════════════════════════════════════════════ -->
-        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto"
+        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto"
               Background="{DynamicResource WindowBackgroundBrush}">
 
             <!-- Diagnostics warning bar (hidden when all deps available) -->
             <Border Grid.Row="0" Background="{DynamicResource WarningBackgroundBrush}" Padding="10,5"
                     BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="0,0,0,1"
-                    IsVisible="{Binding Playback.HasDiagnosticsWarning}">
+                    IsVisible="{Binding Playback.ShowDiagnosticsWarningBanner}">
                 <TextBlock Text="{Binding Playback.DiagnosticsWarningText}"
                                 FontSize="11" Foreground="{DynamicResource StatusTextBrush}" />
             </Border>
@@ -945,10 +1125,12 @@
         <!-- ═══════════════════════════════════════════════════
              RIGHT PANEL: Segments
              ═══════════════════════════════════════════════════ -->
-        <Border Grid.Column="2" Width="280" Background="{DynamicResource PanelBackgroundBrush}"
+        <Border Grid.Row="1" Grid.Column="2" Background="{DynamicResource PanelBackgroundBrush}"
+                Classes="right-pane"
+                Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
-                IsVisible="{Binding Playback.Preview.IsSegmentPaneVisible}">
-            <Grid RowDefinitions="Auto,*">
+                >
+            <Grid RowDefinitions="Auto,*,Auto">
 
                 <!-- Header -->
                 <Border Grid.Row="0" Padding="14,11"
@@ -1081,6 +1263,54 @@
                                HorizontalAlignment="Center" />
                 </StackPanel>
                 </Panel>
+
+                <!-- Segment inspection panel (row 2) — shown when a segment with TTS audio is selected -->
+                <Border Grid.Row="2"
+                        IsVisible="{Binding Inspection.IsVisible}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                        Padding="14,10">
+                    <StackPanel Spacing="6">
+
+                        <TextBlock Text="Segment timing" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource StatusTextBrush}"/>
+
+                        <TextBlock Text="{Binding Inspection.TimingLabel}"
+                                   FontSize="11" Foreground="{DynamicResource StatusTextBrush}"/>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                            <StackPanel.Styles>
+                                <Style Selector="Button.segmentTimingButton">
+                                    <Setter Property="Padding" Value="8,3"/>
+                                    <Setter Property="FontSize" Value="11"/>
+                                    <Setter Property="CornerRadius" Value="4"/>
+                                    <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource StatusTextBrush}"/>
+                                </Style>
+                            </StackPanel.Styles>
+                            <!-- Inherit = clear override -->
+                            <Button Classes="segmentTimingButton"
+                                    Content="Inherit"
+                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                    CommandParameter="{x:Null}"
+                                    ToolTip.Tip="Use session default timing mode"/>
+                            <Button Classes="segmentTimingButton"
+                                    Content="Stretch"
+                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                    CommandParameter="{x:Static models:SegmentTimingMode.Stretch}"
+                                    ToolTip.Tip="Time-stretch TTS to fit the segment window"/>
+                            <Button Classes="segmentTimingButton"
+                                    Content="Pause"
+                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                    CommandParameter="{x:Static models:SegmentTimingMode.Pause}"
+                                    ToolTip.Tip="Pause source video while TTS plays, then resume"/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding Inspection.TimingOverrideLabel}"
+                                   FontSize="10" Foreground="{DynamicResource StatusTextBrush}"
+                                   Opacity="0.7"/>
+
+                    </StackPanel>
+                </Border>
 
             </Grid>
         </Border>

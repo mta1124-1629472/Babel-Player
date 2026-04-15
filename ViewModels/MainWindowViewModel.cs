@@ -20,6 +20,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ModelDownloader modelDownloader,
         ApiKeyStore? apiKeyStore = null,
         IErrorDialogService? errorDialogService = null,
+        IPipelineRefreshDialogService? pipelineRefreshDialogService = null,
         string? logFilePath = null)
     {
         Coordinator = coordinator;
@@ -27,7 +28,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _modelDownloader = modelDownloader;
         _apiKeyStore = apiKeyStore;
 
-        Playback = new EmbeddedPlaybackViewModel(coordinator, apiKeyStore, errorDialogService, logFilePath);
+        Playback = new EmbeddedPlaybackViewModel(
+            coordinator,
+            apiKeyStore,
+            errorDialogService,
+            pipelineRefreshDialogService,
+            logFilePath);
         Inspection = new SegmentInspectionViewModel(Playback);
 
         // Persist settings whenever the left-panel dropdowns change them in-place
@@ -35,6 +41,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     public SessionWorkflowCoordinator Coordinator { get; }
+
+    /// <summary>Local model downloads (Faster Whisper, Piper voices in wizard, etc.).</summary>
+    public ModelDownloader ModelDownloader => _modelDownloader;
 
     public EmbeddedPlaybackViewModel Playback { get; }
 
