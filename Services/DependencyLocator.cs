@@ -127,14 +127,13 @@ public static class DependencyLocator
 
     private static string? Probe(string[] candidates, string versionArg)
     {
-        foreach (var path in candidates)
+        foreach (var candidate in candidates)
         {
-            var resolved = ResolveExecutable(path);
-            if (resolved is null)
-                continue;
-
-            if (ProbeExecutable(resolved, versionArg))
-                return resolved;
+            foreach (var resolved in ResolveExecutable(candidate))
+            {
+                if (ProbeExecutable(resolved, versionArg))
+                    return resolved;
+            }
         }
         return null;
     }
@@ -143,12 +142,11 @@ public static class DependencyLocator
     {
         foreach (var candidate in candidates)
         {
-            var resolved = ResolveExecutable(candidate);
-            if (resolved is null)
-                continue;
-
-            if (ProbePythonCandidate(resolved, requirePip))
-                return resolved;
+            foreach (var resolved in ResolveExecutable(candidate))
+            {
+                if (ProbePythonCandidate(resolved, requirePip))
+                    return resolved;
+            }
         }
 
         return null;
@@ -156,11 +154,10 @@ public static class DependencyLocator
 
     private static bool ProbePythonCandidate(string candidate, bool requirePip)
     {
-        var resolved = ResolveExecutable(candidate);
-        if (resolved is null || !ProbeExecutable(resolved, "--version"))
+        if (!ProbeExecutable(candidate, "--version"))
             return false;
 
-        return !requirePip || ProbeExecutable(resolved, "-m pip --version");
+        return !requirePip || ProbeExecutable(candidate, "-m pip --version");
     }
 
     private static bool ProbeExecutable(string fileName, string arguments)
@@ -193,27 +190,29 @@ public static class DependencyLocator
     }
 
     /// <summary>
-    /// Resolves a candidate executable name or path to an existing filesystem path.
+    /// Resolves a candidate executable name or path to existing filesystem paths.
     /// </summary>
     /// <param name="candidate">An executable file path or command name; if it contains directory separators or is rooted it is treated as an explicit path, otherwise it is looked up on the system PATH (and PATHEXT on Windows).</param>
-    /// <returns>The full path to an existing executable if found, or <c>null</c> if the candidate is empty or no matching file exists.</returns>
-    private static string? ResolveExecutable(string candidate)
+    /// <returns>A sequence of full paths to existing executables.</returns>
+    private static System.Collections.Generic.IEnumerable<string> ResolveExecutable(string candidate)
     {
         if (string.IsNullOrWhiteSpace(candidate))
-            return null;
+            yield break;
 
         // Absolute or relative explicit path
         if (candidate.Contains(Path.DirectorySeparatorChar) ||
             candidate.Contains(Path.AltDirectorySeparatorChar) ||
             Path.IsPathRooted(candidate))
         {
-            return File.Exists(candidate) ? candidate : null;
+            if (File.Exists(candidate))
+                yield return candidate;
+            yield break;
         }
 
         // Command name: resolve against PATH (and PATHEXT on Windows) before spawning.
         var pathEnv = Environment.GetEnvironmentVariable("PATH");
         if (string.IsNullOrWhiteSpace(pathEnv))
-            return null;
+            yield break;
 
         var extensions = GetExecutableExtensions();
         var dirs = pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
@@ -228,11 +227,9 @@ public static class DependencyLocator
             {
                 var full = Path.Combine(trimmedDir, candidate + ext);
                 if (File.Exists(full))
-                    return full;
+                    yield return full;
             }
         }
-
-        return null;
     }
 
     /// <summary>
