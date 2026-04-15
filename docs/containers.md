@@ -113,6 +113,7 @@ Current supported implementation:
 - `INFERENCE_SERVICE_URL` overrides the saved Docker-host service URL at startup when present
 - readiness is based on `GET /health/live` plus `GET /capabilities`, not URL presence alone
 - the bundled `docker-compose.yml` is a same-machine helper for the advanced Docker backend; it is not a remote deployment or orchestration story for the desktop app
+- the repository-level `Dockerfile` is intentionally omitted; Docker support here targets the inference service boundary, not containerizing the desktop shell
 
 ## Managed Local GPU Posture
 

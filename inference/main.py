@@ -391,35 +391,6 @@ FLORES = {
 # Pydantic Models
 # ============================================================================
 
-class HealthLiveResponse(BaseModel):
-    status: str
-    timestamp: str
-    cuda_available: bool
-    cuda_version: Optional[str] = None
-    active_requests: int = 0
-    active_qwen_requests: int = 0
-    active_diarization_requests: int = 0
-    busy: bool = False
-    busy_reason: Optional[str] = None
-    qwen_max_concurrency: int = 1
-    qwen_queue_depth: int = 0
-    qwen_last_queue_wait_ms: Optional[float] = None
-    qwen_last_generation_ms: Optional[float] = None
-    qwen_last_reference_prep_ms: Optional[float] = None
-    qwen_last_warmup_ms: Optional[float] = None
-    provider_health: Optional[dict[str, "ProviderHealthSnapshot"]] = None
-
-
-class StageCapability(BaseModel):
-    ready: bool
-    detail: Optional[str] = None
-    providers: Optional[dict[str, bool]] = None
-    provider_details: Optional[dict[str, str]] = None
-    provider_health: Optional[dict[str, "ProviderHealthSnapshot"]] = None
-    default_provider: Optional[str] = None
-    engines: Optional[list[str]] = None
-
-
 class ProviderHealthHistoryEntry(BaseModel):
     timestamp: str
     state: str
@@ -437,6 +408,35 @@ class ProviderHealthSnapshot(BaseModel):
     failure_category: Optional[str] = None
     metrics: dict[str, object] = Field(default_factory=dict)
     history: list[ProviderHealthHistoryEntry] = Field(default_factory=list)
+
+
+class HealthLiveResponse(BaseModel):
+    status: str
+    timestamp: str
+    cuda_available: bool
+    cuda_version: Optional[str] = None
+    active_requests: int = 0
+    active_qwen_requests: int = 0
+    active_diarization_requests: int = 0
+    busy: bool = False
+    busy_reason: Optional[str] = None
+    qwen_max_concurrency: int = 1
+    qwen_queue_depth: int = 0
+    qwen_last_queue_wait_ms: Optional[float] = None
+    qwen_last_generation_ms: Optional[float] = None
+    qwen_last_reference_prep_ms: Optional[float] = None
+    qwen_last_warmup_ms: Optional[float] = None
+    provider_health: Optional[dict[str, ProviderHealthSnapshot]] = None
+
+
+class StageCapability(BaseModel):
+    ready: bool
+    detail: Optional[str] = None
+    providers: Optional[dict[str, bool]] = None
+    provider_details: Optional[dict[str, str]] = None
+    provider_health: Optional[dict[str, ProviderHealthSnapshot]] = None
+    default_provider: Optional[str] = None
+    engines: Optional[list[str]] = None
 
 
 class CapabilitiesResponse(BaseModel):

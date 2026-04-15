@@ -35,8 +35,8 @@
 
 # Conclusion
 - Tier 1 / 6.1b is implemented and verified at build, test, and architecture levels with no observed regression in automated coverage.
-- The next remaining implementation action in `docs/Engineering-Plan.md` is Tier 2: the Parakeet ASR provider work.
+- Historical note: this originally pointed to Parakeet as the next implementation action; Parakeet ASR was completed on April 15, 2026.
 
 # Deferred Items
 - Run the manual desktop smoke path for preview playback, subtitle reload, dub-mode behavior, fullscreen control-hide, speaker routing, and caption export.
-- Start Tier 2 by adding the Parakeet transcription endpoint, provider, and GPU-profile UI exposure.
+- (Completed later) Parakeet transcription endpoint, provider, and GPU-profile UI exposure landed on April 15, 2026.

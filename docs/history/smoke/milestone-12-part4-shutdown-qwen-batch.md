@@ -38,7 +38,7 @@
 - Manual smoke is still required before calling the shutdown and Qwen runtime path fully complete.
 
 # Deferred Items
-- Wire Qwen batch generation into coordinator pipeline stage for live dubbing throughput gains.
-- Implement `Channel<T>`-based streaming pipeline overlap.
-- Implement persistent Python worker pool for EdgeTTS and Piper.
-- Implement Parakeet ASR endpoint/provider and close remaining NeMo/WeSpeaker milestone gaps.
+- (Completed later) Qwen batch generation was wired into coordinator runtime paths.
+- (Completed later) `Channel<T>`-based streaming overlap was implemented in coordinator pipeline flow.
+- (Completed later) Persistent Python worker pool shipped for EdgeTTS and Piper.
+- (Completed later) Parakeet ASR endpoint/provider landed; NeMo/WeSpeaker diarization gaps were closed.
