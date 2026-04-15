@@ -5,6 +5,7 @@ services:
       context: ./inference
       dockerfile: Dockerfile
     container_name: babel-inference
+    image: babelplayer-inference:latest
     ports:
       - "127.0.0.1:8000:8000"
     environment:
