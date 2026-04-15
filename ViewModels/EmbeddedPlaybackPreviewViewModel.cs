@@ -726,11 +726,13 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
 
     /// <summary>
-    /// Applies a per-segment timing mode override by replacing the matching segment record in the
-    /// observable collection and the sorted cache. Called by <see cref="SegmentInspectionViewModel"/>.
+    /// Applies a per-segment timing mode override through the coordinator (session state owner),
+    /// then mirrors the result into the preview list and sorted cache.
     /// </summary>
     public void ApplySegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
     {
+        _coordinator.SetSegmentTimingOverride(segmentId, mode);
+
         for (int i = 0; i < Segments.Count; i++)
         {
             if (Segments[i].SegmentId == segmentId)

@@ -520,6 +520,32 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
+    public void SetSegmentTimingOverride_PersistsInCurrentSession()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+
+        coord.SetSegmentTimingOverride("segment_0.0", SegmentTimingMode.Pause);
+
+        Assert.NotNull(coord.CurrentSession.SegmentTimingModeOverrides);
+        Assert.True(coord.CurrentSession.SegmentTimingModeOverrides!.TryGetValue("segment_0.0", out var mode));
+        Assert.Equal(SegmentTimingMode.Pause, mode);
+    }
+
+    [Fact]
+    public void SetSegmentTimingOverride_Null_RemovesEntry()
+    {
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.SetSegmentTimingOverride("segment_0.0", SegmentTimingMode.Stretch);
+
+        coord.SetSegmentTimingOverride("segment_0.0", null);
+
+        Assert.True(coord.CurrentSession.SegmentTimingModeOverrides is null
+            || !coord.CurrentSession.SegmentTimingModeOverrides.ContainsKey("segment_0.0"));
+    }
+
+    [Fact]
     public void RemoveSpeakerVoiceAssignment_RemovesEntry()
     {
         var coord = CreateCoordinator();
