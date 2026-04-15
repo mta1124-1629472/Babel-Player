@@ -11,9 +11,25 @@ dotnet run --project BabelPlayer.csproj   # Launch the app
 python3 scripts/check-architecture.py    # Architecture linter
 ```
 
+## Running Commands as an Agent
+
+The Linux sandbox does not have `dotnet` installed. To run builds, tests, or other
+Windows-native commands, use `mcp__Desktop_Commander__start_process` (preferred) or
+`mcp__Windows-MCP__PowerShell`. Always use the full path to the solution/project:
+
+```
+dotnet build "D:\Dev\Babel-Player\Babel-Player.sln"
+```
+
+Use `mcp__Desktop_Commander__read_process_output` to read results after the process starts.
+
 ## Troubleshooting Build Issues
 
-If the build fails with a "process cannot access the file" error (typically locked by `clrdbg.exe` or `.NET Host`), run the following command to force-clear the locks:
+**Workload resolver error** (`Workload set version X has missing manifests`): this is a
+known artifact of SDK upgrades. `Directory.Build.props` sets `MSBuildEnableWorkloadResolver=false`
+to suppress it permanently — no action needed.
+
+**Locked file error** (`process cannot access the file`, locked by `clrdbg.exe` or `.NET Host`):
 
 ```powershell
 taskkill /F /IM clrdbg.exe /IM dotnet.exe
