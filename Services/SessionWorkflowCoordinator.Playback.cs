@@ -560,39 +560,6 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
     }
 
-    /// <summary>
-    /// Sets or clears a per-segment dub timing mode override in the current session snapshot.
-    /// </summary>
-    /// <param name="segmentId">Segment identifier (e.g. <c>segment_0.0</c>).</param>
-    /// <param name="mode">Override mode, or <c>null</c> to remove the entry (inherit session default).</param>
-    public void SetSegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(segmentId);
-
-        var existing = CurrentSession.SegmentTimingModeOverrides;
-        if (mode is null)
-        {
-            if (existing is null || !existing.ContainsKey(segmentId))
-                return;
-
-            var cleared = new Dictionary<string, SegmentTimingMode>(existing, StringComparer.Ordinal);
-            cleared.Remove(segmentId);
-            CurrentSession = CurrentSession with
-            {
-                SegmentTimingModeOverrides = cleared.Count == 0 ? null : cleared,
-            };
-            SaveCurrentSession();
-            return;
-        }
-
-        var updated = existing is null
-            ? new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
-            : new Dictionary<string, SegmentTimingMode>(existing, StringComparer.Ordinal);
-        updated[segmentId] = mode.Value;
-        CurrentSession = CurrentSession with { SegmentTimingModeOverrides = updated };
-        SaveCurrentSession();
-    }
-
     public void ApplySpeakerVoiceAssignmentChanges(IReadOnlyDictionary<string, string?> updates)
     {
         ArgumentNullException.ThrowIfNull(updates);

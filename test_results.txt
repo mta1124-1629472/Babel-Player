@@ -1,0 +1,67 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Avalonia Accelerate Trial requires telemetry. To opt out, please purchase a license. Learn more: https://avaloniaui.net/accelerate/
+  BabelPlayer -> D:\Dev\Babel-Player\bin\Debug\net10.0\BabelPlayer.dll
+  Avalonia Accelerate Trial requires telemetry. To opt out, please purchase a license. Learn more: https://avaloniaui.net/accelerate/
+  BabelPlayer.Tests -> D:\Dev\Babel-Player\BabelPlayer.Tests\bin\Debug\net10.0\BabelPlayer.Tests.dll
+Test run for D:\Dev\Babel-Player\BabelPlayer.Tests\bin\Debug\net10.0\BabelPlayer.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:02.75]     BabelPlayer.Tests.SettingsServiceTests.Save_DoesNotPersistLegacyRuntimeFields [FAIL]
+  Failed BabelPlayer.Tests.SettingsServiceTests.Save_DoesNotPersistLegacyRuntimeFields [13 ms]
+  Error Message:
+   Assert.Contains() Failure: Sub-string not found
+String:    "{\r\n  "TranscriptionProvider": "faster-whi"···
+Not found: ""TranscriptionProfile": "Gpu""
+  Stack Trace:
+     at BabelPlayer.Tests.SettingsServiceTests.Save_DoesNotPersistLegacyRuntimeFields() in D:\Dev\Babel-Player\BabelPlayer.Tests\SettingsServiceTests.cs:line 100
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:03.00]     BabelPlayer.Tests.SessionWorkflowCoordinatorUnitTests.GenerateTtsAsync_QwenProvider_UsesBatchEndpointAndPersistsSegmentOutputs [FAIL]
+  Failed BabelPlayer.Tests.SessionWorkflowCoordinatorUnitTests.GenerateTtsAsync_QwenProvider_UsesBatchEndpointAndPersistsSegmentOutputs [141 ms]
+  Error Message:
+   System.InvalidOperationException : Qwen synthesis failed for segment 'segment_0.0': Unhandled request: POST /tts/qwen/segment
+  Stack Trace:
+     at Babel.Player.Services.QwenContainerTtsProvider.GenerateSegmentsAsync(IReadOnlyList`1 requests, IProgress`1 progress, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\QwenContainerTtsProvider.cs:line 130
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateQwenBatchSegmentAudioAsync(QwenContainerTtsProvider qwenProvider, IReadOnlyList`1 candidateSegments, String segmentsDir, String defaultVoice, String ttsLanguage, Nullable`1 stageContext, ConcurrentDictionary`2 segmentAudioPaths, ConcurrentDictionary`2 segmentDurations, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.Pipeline.cs:line 780
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateSegmentClipsAsync(String voice, String ttsLanguage, String segmentsDir, Nullable`1 stageContext, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.Pipeline.cs:line 489
+   at Babel.Player.Services.SessionWorkflowCoordinator.GenerateTtsAsync(IProgress`1 progress, String voice, Nullable`1 stageContext, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\SessionWorkflowCoordinator.Pipeline.cs:line 254
+   at BabelPlayer.Tests.SessionWorkflowCoordinatorUnitTests.GenerateTtsAsync_QwenProvider_UsesBatchEndpointAndPersistsSegmentOutputs() in D:\Dev\Babel-Player\BabelPlayer.Tests\SessionWorkflowCoordinatorUnitTests.cs:line 916
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:03.17]     BabelPlayer.Tests.ContainerizedProvidersTests.QwenContainerTtsProvider_GenerateTtsAsync_CombinesGeneratedSegments [FAIL]
+  Failed BabelPlayer.Tests.ContainerizedProvidersTests.QwenContainerTtsProvider_GenerateTtsAsync_CombinesGeneratedSegments [56 ms]
+  Error Message:
+   System.InvalidOperationException : Qwen synthesis failed for segment 'segment_0.0': {"success":false,"error_message":"not found"}
+  Stack Trace:
+     at Babel.Player.Services.QwenContainerTtsProvider.GenerateSegmentsAsync(IReadOnlyList`1 requests, IProgress`1 progress, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\QwenContainerTtsProvider.cs:line 130
+   at Babel.Player.Services.QwenContainerTtsProvider.GenerateCombinedTtsAsync(TtsRequest request, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\QwenContainerTtsProvider.cs:line 256
+   at BabelPlayer.Tests.ContainerizedProvidersTests.QwenContainerTtsProvider_GenerateTtsAsync_CombinesGeneratedSegments() in D:\Dev\Babel-Player\BabelPlayer.Tests\ContainerizedProvidersTests.cs:line 431
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:05.39]     BabelPlayer.Tests.ContainerizedProvidersTests.QwenContainerTtsProvider_GenerateSegmentsAsync_UsesBatchEndpoint [FAIL]
+[xUnit.net 00:00:05.60]     BabelPlayer.Tests.PipelineStageProgressTests.AdvancePipelineAsync_StreamingPipeline_ReducesWallTimeAgainstSequentialStages [FAIL]
+  Failed BabelPlayer.Tests.ContainerizedProvidersTests.QwenContainerTtsProvider_GenerateSegmentsAsync_UsesBatchEndpoint [11 ms]
+  Error Message:
+   System.InvalidOperationException : Qwen synthesis failed for segment 'segment_a': {"success":false,"error_message":"not found"}
+  Stack Trace:
+     at Babel.Player.Services.QwenContainerTtsProvider.GenerateSegmentsAsync(IReadOnlyList`1 requests, IProgress`1 progress, CancellationToken cancellationToken) in D:\Dev\Babel-Player\Services\QwenContainerTtsProvider.cs:line 130
+   at BabelPlayer.Tests.ContainerizedProvidersTests.QwenContainerTtsProvider_GenerateSegmentsAsync_UsesBatchEndpoint() in D:\Dev\Babel-Player\BabelPlayer.Tests\ContainerizedProvidersTests.cs:line 480
+--- End of stack trace from previous location ---
+  Failed BabelPlayer.Tests.PipelineStageProgressTests.AdvancePipelineAsync_StreamingPipeline_ReducesWallTimeAgainstSequentialStages [2 s]
+  Error Message:
+   Expected streamed pipeline (1041 ms) to beat sequential stages (998 ms).
+  Stack Trace:
+     at BabelPlayer.Tests.PipelineStageProgressTests.AdvancePipelineAsync_StreamingPipeline_ReducesWallTimeAgainstSequentialStages() in D:\Dev\Babel-Player\BabelPlayer.Tests\PipelineStageProgressTests.cs:line 128
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:06.87]     BabelPlayer.Tests.PipelineStageProgressTests.AdvancePipelineAsync_FreshRun_StreamsStageWorkBeforeUpstreamCompletes [FAIL]
+  Failed BabelPlayer.Tests.PipelineStageProgressTests.AdvancePipelineAsync_FreshRun_StreamsStageWorkBeforeUpstreamCompletes [920 ms]
+  Error Message:
+   Expected translation to start before transcription completed, but translation=-1ms and transcriptionComplete=-1ms.
+  Stack Trace:
+     at BabelPlayer.Tests.PipelineStageProgressTests.AdvancePipelineAsync_FreshRun_StreamsStageWorkBeforeUpstreamCompletes() in D:\Dev\Babel-Player\BabelPlayer.Tests\PipelineStageProgressTests.cs:line 74
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:07.63]     BabelPlayer.Tests.PipelineStageProgressTests.ContinuePipelineAsync_FromDiarizedSession_StreamsTranslationIntoDub [FAIL]
+  Failed BabelPlayer.Tests.PipelineStageProgressTests.ContinuePipelineAsync_FromDiarizedSession_StreamsTranslationIntoDub [758 ms]
+  Error Message:
+   Expected continued TTS to start before continued translation completed, but tts=146ms and translationComplete=-1ms.
+  Stack Trace:
+     at BabelPlayer.Tests.PipelineStageProgressTests.ContinuePipelineAsync_FromDiarizedSession_StreamsTranslationIntoDub() in D:\Dev\Babel-Player\BabelPlayer.Tests\PipelineStageProgressTests.cs:line 282
+--- End of stack trace from previous location ---
