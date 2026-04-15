@@ -8,19 +8,19 @@
 [![License](https://img.shields.io/github/license/Babelworks/Babel-Player)](LICENSE)
 
 
-**Babel Player is a Windows desktop dubbing workstation**. Load source media, generate a timed transcript, translate the dialogue, produce a spoken dub, and preview the result in context. No external tools required.
-
+**Babel Player is a A high-performance .NET 10 and Avalonia 12 workstation for segment-based AI video dubbing. Local RTX-accelerated transcription, translation, and voice cloning with cloud API support. Built natively for Windows x64 and ARM.**
 
 ```
-source media → timed transcript → translated dialogue → spoken dubbed output → in-context preview
+The Pipeline: Load Media → Timed Transcript → Voice Assignment → Translated Dialogue → Voiced Dubbing → In-Context Preview
 ```
-
-> Babel Player is built and maintained by a solo developer.
-> If you find it useful, consider sponsoring:
->
-> [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/babel_player)
 
 ![Babel Player preview](Assets/preview.png)
+
+Babel Player is built and maintained by a solo developer.
+If you find it useful, consider sponsoring:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/babel_player)
+
 
 ---
 
@@ -50,13 +50,14 @@ The full loop:
 
 1. **Load** a local video or audio file
 2. **Transcribe** — generate a timed transcript using local AI or a cloud API
-3. **Translate** — adapt the transcript into a target language
-4. **Dub** — generate a spoken TTS audio track, one segment at a time
-5. **Multi-speaker routing** (optional) — assign different voices to different speakers via diarization
-6. **Preview** — play source video alongside dubbed segments; toggle between original and dub audio
-7. **Refine** — regenerate individual segments, adjust text, re-run TTS on demand
-8. **Export** — save captions as `.srt`
-9. **Persist** — sessions save automatically; reopen and continue later
+3. **Diarize & Assign**: Identify unique speakers and assign specific voices to individual segments.
+4. **Translate** — adapt the transcript into a target language
+5. **Dub** — generate a spoken TTS audio track, one segment at a time
+6. **Multi-speaker routing** (optional) — assign different voices to different speakers via diarization
+7. **Preview** — play source video alongside dubbed segments; toggle between original and dub audio
+8. **Refine** — regenerate individual segments, adjust text, re-run TTS on demand
+9. **Export** — save captions as `.srt`
+10. **Persist** — sessions save automatically; reopen and continue later
 
 ---
 
@@ -75,7 +76,7 @@ The full loop:
 Each inference stage exposes a CPU / GPU / Cloud selector with no hidden routing. If the selected compute path is unavailable, the stage blocks with a clear remediation message. There is no silent fallback.
 
 - **CPU** — local Python subprocess; works on any Windows machine; no GPU required
-- **GPU** — routes through a managed local Python venv host (default); NVIDIA GPU with CUDA required. Docker is available as an alternative backend in advanced settings
+- **GPU** — routes through a managed local Python venv host (default); NVIDIA GPU with CUDA required. 
 - **Cloud** — calls a remote API; requires the corresponding API key in Settings
 
 The GPU path bootstraps a managed local venv automatically using the bundled `uv.exe`. No manual Python installation is required.
@@ -113,7 +114,7 @@ The GPU path bootstraps a managed local venv automatically using the bundled `uv
 - In-app API key manager with live validation
 - Bootstrap diagnostics surface missing dependencies and configuration gaps at startup
 - Hardware-aware compute type policy (selects `float16` / `int8` for older GPUs, `float8` for Blackwell)
-- Container health status visible in Settings UI (for Docker inference backend)
+- Container health status visible in Settings UI 
 
 ### Export
 
@@ -128,53 +129,50 @@ The GPU path bootstraps a managed local venv automatically using the bundled `uv
 
 | Provider | Runtime | Notes |
 |---|---|---|
-| Faster-Whisper | Local (CPU / GPU) | Models: `tiny`, `base`, `small`, `medium`, `large-v3`; word-level timestamps |
-| OpenAI Whisper API | Cloud | Standard Whisper API endpoint |
-| Google Gemini | Cloud | `gemini-2.0-flash`, `gemini-2.5-flash-preview-04-17` |
-| Google Speech-to-Text | Cloud | Cloud Speech-to-Text API |
+| [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) | GPU | Models: `tiny`, `base`, `small`, `medium`, `large-v3`; word-level timestamps |
+| [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) | CPU | Same models as GPU; slower inference |
+| [Google Gemini](https://ai.google.dev/) | Cloud | `gemini-2.0-flash`, `gemini-2.5-flash-preview-04-17`; requires API key |
+| [Google Speech-to-Text](https://cloud.google.com/speech-to-text/docs) | Cloud | Requires API key |
+| [OpenAI Whisper API](https://platform.openai.com/docs/guides/speech-to-text) | Cloud | Requires API key |
 
 ### Translation
 
 | Provider | Runtime | Notes |
 |---|---|---|
-| CTranslate2 | Local (CPU / GPU) | Lightweight; fast; uses CT2 models |
-| NLLB-200 | Local (CPU / GPU) | Models: `distilled-600M`, `distilled-1.3B`, `1.3B`; covers 200+ languages |
-| DeepL API | Cloud | Requires DeepL API key |
-| OpenAI API | Cloud | Requires OpenAI API key |
-| Google Gemini | Cloud | `gemini-2.0-flash`, `gemini-2.5-flash-preview-04-17`; requires Gemini API key |
-| Google Translate (free) | Cloud | Unreliable; rate-limited web scraper; use for quick informal tests only |
+| [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) | GPU | Models: `distilled-1.3B`, `1.3B`; 200+ languages |
+| [CTranslate2](https://github.com/OpenNMT/CTranslate2) | CPU | int8-quantized; model: `distilled-600M`; fast |
+| [DeepL](https://www.deepl.com/docs-api) | Cloud | Higher quality for European languages; requires API key |
+| [Google Gemini](https://ai.google.dev/) | Cloud | `gemini-2.0-flash`, `gemini-2.5-flash-preview-04-17`; requires API key |
+| [OpenAI](https://platform.openai.com/docs/guides/text-generation) | Cloud | Requires API key |
 
 ### Text to Speech
 
 | Provider | Runtime | Notes |
 |---|---|---|
-| Piper | Local (CPU) | Fully offline; lower voice quality; fast |
-| Edge TTS | Cloud (free) | No API key required; Microsoft voices |
-| ElevenLabs | Cloud | Requires ElevenLabs API key; high quality |
-| Google Cloud TTS | Cloud | Requires Google Cloud credentials |
-| OpenAI TTS | Cloud | Requires OpenAI API key |
-| Qwen3-TTS | Local (GPU) | Voice cloning via reference audio; auto-extracts reference from source video; high quality |
-| XTTS v2 | Local (GPU) | Voice cloning; alternative GPU TTS path with vocal cloning |
+| [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS) | GPU | Voice cloning; auto-extracts reference audio from source video |
+| [Piper](https://github.com/rhasspy/piper) | CPU | Fully offline; fast; lower voice quality |
+| [Edge TTS](https://github.com/rany2/edge-tts) | Cloud | **No API key required**; Microsoft Azure voices |
+| [ElevenLabs](https://elevenlabs.io/docs) | Cloud | Highest voice quality; requires API key |
+| [Google Cloud TTS](https://cloud.google.com/text-to-speech/docs) | Cloud | Requires API key |
+| [OpenAI TTS](https://platform.openai.com/docs/guides/text-to-speech) | Cloud | Requires API key |
 
 ### Diarization (Speaker Detection)
 
-| Provider | Runtime | Notes |
-|---|---|---|
-| Pyannote | Local (CPU) | Requires HuggingFace token and model gate acceptance; detects speaker boundaries and segments transcript by speaker |
+| Provider | Runtime |
+|---|---|
+| [NeMo](https://github.com/NVIDIA/NeMo) | GPU |
+| [WeSpeaker](https://github.com/wenet-e2e/wespeaker) | CPU |
 
 ---
-
 ## Requirements
 
 | Scenario | Requirements |
-|---|---|
-| Any mode | Windows 10 or 11 x64 |
-| CPU local path | `ffmpeg.exe` (bundled); Python is managed automatically via the bundled `uv.exe` |
-| GPU path | NVIDIA GPU with CUDA support (RTX/A100 validated) |
-| GPU TTS (Qwen3-TTS, XTTS) | 8GB+ VRAM recommended; 6GB minimum |
-| Cloud providers | The relevant API key entered in Settings |
-| Source build | [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| :--- | :--- |
+| **OS Architecture** | Windows 10 or 11 (**x64** and **ARM64** natively supported) |
+| **GPU Acceleration** | NVIDIA GPU with CUDA support (RTX 30-series or newer recommended) |
+| **VRAM** | 8GB+ for high-quality local cloning; 6GB minimum for base pipelines |
 
+---
 ## First-run setup
 
 Babel Player bundles `uv.exe` and manages all Python runtimes automatically — no manual Python installation required.
@@ -183,7 +181,7 @@ Babel Player bundles `uv.exe` and manages all Python runtimes automatically — 
 |------|-------------------|--------------|
 | GPU inference | ~5 GB (torch+CUDA, faster-whisper, TTS models) | First GPU transcription/TTS use |
 | CPU inference | ~800 MB (torch CPU, faster-whisper) | First CPU transcription use |
-| Diarization | ~500 MB (pyannote.audio) | First speaker detection use (requires HF token) |
+| Diarization | ~500 MB (NeMo or WeSpeaker) | First speaker detection use |
 
 Downloads are cached in `%LOCALAPPDATA%\BabelPlayer\runtime\`. The CPU runtime bootstraps automatically in the background on first launch; progress is shown live in the status bar during install.
 
@@ -204,7 +202,6 @@ The release bundle is self-contained and includes:
 - `libmpv-2.dll`
 - `uv.exe` for managed Python venv bootstrapping
 - Inference host assets under `inference/`
-- `docker-compose.yml` for the optional Docker GPU backend
 
 No registry entries are created. To uninstall: delete the folder and optionally clear `%LOCALAPPDATA%\BabelPlayer\`.
 
@@ -238,13 +235,18 @@ Sessions save automatically. Your session will appear in the recent sessions lis
 
 ## Source Build
 
-```powershell
-git clone https://github.com/Babelworks/Babel-Player.git
-cd Babel-Player
-# Windows: fetch libmpv-2.dll and uv.exe (too large for Git; previously Git LFS)
-pwsh ./scripts/fetch-win-native-deps.ps1
-dotnet build
-dotnet run --project BabelPlayer.csproj
+1. **Clone the repository**
+   ```bash
+   git clone [https://github.com/Babelworks/Babel-Player.git](https://github.com/Babelworks/Babel-Player.git)
+   cd Babel-Player
+2. Fetch Native Binaries (Required for libmpv-2.dll and uv.exe)
+   Note: These binaries are excluded from Git to keep the repository lean.
+   pwsh ./scripts/fetch-win-native-deps.ps1
+
+3. Build and Run   
+   dotnet build Babel-Player.sln
+   dotnet run --project BabelPlayer.csproj
+   
 ```
 
 Run the full verification suite:
@@ -265,11 +267,10 @@ The architecture linter (`scripts/check-architecture.py`) enforces structural ru
 
 | Dependency | Purpose |
 |---|---|
-| [Avalonia 12.0 RC1](https://avaloniaui.net/) | Desktop UI framework with Fluent theming |
-| [libmpv](https://mpv.io/) | Native media playback (GPU-accelerated video rendering, NVDEC support) |
-| [CommunityToolkit.MVVM 8.2.1](https://github.com/CommunityToolkit/dotnet) | MVVM observables and commands |
-| [ffmpeg](https://ffmpeg.org/) | Media ingest, audio extraction, segment mixing, and format conversion |
-| [uv](https://github.com/astral-sh/uv) | Python environment and package management |
+| [**Avalonia 12.0.1**](https://avaloniaui.net/) | Desktop UI framework with Fluent theming |
+| [**libmpv**](https://mpv.io/) | Native media playback (GPU-accelerated video rendering, NVDEC support) |
+| [**ffmpeg**](https://ffmpeg.org/) | Media ingest, audio extraction, segment mixing, and format conversion |
+| [**uv**](https://github.com/astral-sh/uv) | Python environment and package management |
 
 ### Python inference host (installed on first use via `uv`)
 
@@ -286,7 +287,6 @@ The architecture linter (`scripts/check-architecture.py`) enforces structural ru
 | `fastapi` / `uvicorn` | Inference HTTP server (containerized backend) |
 | `soundfile` / `numpy` | Audio I/O and processing |
 
-> Pyannote diarization requires a **HuggingFace user access token** and acceptance of model gates before use. Instructions available in-app.
 
 ### Cloud APIs (optional, key required)
 
@@ -302,12 +302,8 @@ The architecture linter (`scripts/check-architecture.py`) enforces structural ru
 
 - **Windows only.** Linux and macOS are not supported. The architecture is designed for future portability but no cross-platform work has been done yet.
 - **No video export.** SRT caption export works. The muxed video output (dubbed audio mixed into the source container) is planned for a future release.
-- **GPU TTS validation in progress.** XTTS v2 and Qwen3-TTS are fully wired end-to-end; NVIDIA RTX path validated on real hardware. Blackwell (`float8`) dtype is wired but validation pending on real Blackwell hardware.
-- **Diarization CPU-only.** Pyannote speaker detection runs on CPU; GPU diarization is not available yet.
-- **Google Translate (free) is unreliable.** Use DeepL, OpenAI, or Gemini for production work.
+- **GPU TTS validation in progress.** Qwen3-TTS are fully wired end-to-end; NVIDIA RTX path validated on real hardware. Blackwell (`float8`) dtype is wired but validation pending on real Blackwell hardware.
 - **No real-time or streaming.** All stages process the full session; segment-level regeneration is available after the initial pass.
-- **Session restore does not auto-re-run.** If artifacts are missing on restore, the pipeline resets to the last verified stage; you re-run manually.
-- **Docker backend requires manual setup.** WSL-hosted and containerized inference paths are designed but not yet documented for end-user deployment.
 
 ---
 
@@ -315,10 +311,7 @@ The architecture linter (`scripts/check-architecture.py`) enforces structural ru
 
 ### In progress (Milestone 12)
 
-- **GPU validation on real NVIDIA hardware** — RTX path for Faster-Whisper and TTS confirmed; Blackwell validation pending
 - **Container health status** — live container status visible in Settings UI
-- **Runtime diagnostics** — surface in UI when a selected compute path is degraded or unavailable
-- **Hardware panel** — visible CPU/GPU/RAM/libraries status in Settings
 
 ### Planned (Milestone 13 and beyond)
 
@@ -333,7 +326,6 @@ The architecture linter (`scripts/check-architecture.py`) enforces structural ru
 ### Under consideration
 
 - macOS and Linux support
-- Web-based remote editor for translations
 - Collaborative workflow integration
 
 ---
@@ -398,8 +390,8 @@ Read these first:
 Minimum verification before opening a PR:
 
 ```powershell
-dotnet build
-dotnet test
+dotnet build babel-player.sln
+dotnet test babel-player.sln
 python scripts/check-architecture.py
 ```
 
