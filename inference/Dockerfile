@@ -21,14 +21,34 @@ RUN pip install --upgrade pip setuptools wheel
 
 WORKDIR /app
 
-COPY gpu-requirements.txt gpu-constraints.txt ./
+COPY gpu-constraints.txt ./
 
-# Install with aggressive retry settings and cache to resume failed downloads
-RUN pip install \
-    --retries 10 \
-    --default-timeout=1000 \
-    -c gpu-constraints.txt \
-    -r gpu-requirements.txt
+# Step 1: PyTorch from its own index. Done first and separately so the resolver
+# doesn't have to reconcile cu128 wheels against PyPI packages simultaneously.
+RUN pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cu128 \
+    torch==2.8.0+cu128 \
+    torchaudio==2.8.0+cu128 \
+    torchvision==0.23.0+cu128
+
+# Step 2: Everything else from PyPI, pinned via constraints.
+RUN pip install --no-cache-dir -c gpu-constraints.txt \
+    fastapi==0.115.4 \
+    uvicorn==0.30.6 \
+    "pydantic>=2.10.6,<3" \
+    python-multipart==0.0.9 \
+    faster-whisper==1.2.1 \
+    "numpy>=1.22.0,<2.0" \
+    scipy==1.14.1 \
+    transformers==4.57.3 \
+    sentencepiece==0.2.0 \
+    safetensors==0.6.2 \
+    accelerate==1.12.0 \
+    pydub==0.25.1 \
+    "qwen-tts>=0.1.1" \
+    "soundfile>=0.12.1" \
+    "hf_xet>=0.1.0" \
+    "nemo-toolkit[asr]==2.7.2"
 
 COPY main.py ./
 COPY workers/ ./workers/
