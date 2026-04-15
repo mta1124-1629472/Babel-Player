@@ -90,44 +90,33 @@ public sealed class PipelineStageProgressTests() : IDisposable
     [Fact]
     public async Task AdvancePipelineAsync_StreamingPipeline_ReducesWallTimeAgainstSequentialStages()
     {
+        // Wall-clock comparisons are unreliable on loaded CI runners.
+        // Instead, verify that translation starts before transcription finishes (and TTS before
+        // translation finishes), which is the structural invariant that proves streaming work.
         var streamingSettings = CreateSettings();
         streamingSettings.DiarizationProvider = string.Empty;
-        var sequentialSettings = CreateSettings();
-        sequentialSettings.DiarizationProvider = string.Empty;
         using var streamingCtx = new TestContext();
-        using var sequentialCtx = new TestContext();
 
+        var probe = new PipelineTimingProbe(expectedSegments: 3);
         var streamingCoordinator = CreateCoordinator(
             streamingSettings,
-            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
-            new FakeTranslationRegistry(new DelayedTranslationProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
-            new FakeTtsRegistry(new DelayedTtsProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
+            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(probe, perSegmentDelayMs: 40)),
+            new FakeTranslationRegistry(new DelayedTranslationProvider(probe, perSegmentDelayMs: 40)),
+            new FakeTtsRegistry(new DelayedTtsProvider(probe, perSegmentDelayMs: 40)),
             context: streamingCtx);
         streamingCoordinator.Initialize();
         streamingCoordinator.LoadMedia(streamingCtx.MediaPath);
 
-        var streamingStopwatch = Stopwatch.StartNew();
         await streamingCoordinator.AdvancePipelineAsync(progress: null, cancellationToken: CancellationToken.None);
-        streamingStopwatch.Stop();
 
-        var sequentialCoordinator = CreateCoordinator(
-            sequentialSettings,
-            new FakeTranscriptionRegistry(new DelayedTranscriptionProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
-            new FakeTranslationRegistry(new DelayedTranslationProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
-            new FakeTtsRegistry(new DelayedTtsProvider(new PipelineTimingProbe(expectedSegments: 3), perSegmentDelayMs: 100)),
-            context: sequentialCtx);
-        sequentialCoordinator.Initialize();
-        sequentialCoordinator.LoadMedia(sequentialCtx.MediaPath);
-
-        var sequentialStopwatch = Stopwatch.StartNew();
-        await sequentialCoordinator.TranscribeMediaAsync();
-        await sequentialCoordinator.TranslateTranscriptAsync();
-        await sequentialCoordinator.GenerateTtsAsync();
-        sequentialStopwatch.Stop();
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, streamingCoordinator.CurrentSession.Stage);
 
         Assert.True(
-            streamingStopwatch.Elapsed < sequentialStopwatch.Elapsed,
-            $"Expected streamed pipeline ({streamingStopwatch.ElapsedMilliseconds} ms) to beat sequential stages ({sequentialStopwatch.ElapsedMilliseconds} ms).");
+            probe.FirstStreamingTranslationStartedAt < probe.TranscriptionCompletedAt,
+            $"Expected translation to start before transcription completed, but translation={probe.FirstStreamingTranslationStartedAt}ms and transcriptionComplete={probe.TranscriptionCompletedAt}ms.");
+        Assert.True(
+            probe.FirstStreamingTtsStartedAt < probe.StreamingTranslationCompletedAt,
+            $"Expected TTS to start before translation completed, but tts={probe.FirstStreamingTtsStartedAt}ms and translationComplete={probe.StreamingTranslationCompletedAt}ms.");
     }
 
     [Fact]
@@ -577,15 +566,16 @@ public sealed class PipelineStageProgressTests() : IDisposable
                     ModelDownloadDescription: $"Download {settings.TranslationModel}")
                 : ProviderReadiness.Ready;
 
-        public Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
+        public async Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
         {
             foreach (var step in _downloadSteps)
             {
                 progress?.Report(step);
+                await Task.Yield();
             }
 
             _requiresDownload = false;
-            return Task.FromResult(true);
+            return true;
         }
 
         public async Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)

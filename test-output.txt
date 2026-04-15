@@ -1,0 +1,2 @@
+Test run for D:\Dev\Babel-Player\BabelPlayer.Tests\bin\Release\net10.0\BabelPlayer.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
