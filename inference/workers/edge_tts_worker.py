@@ -63,8 +63,12 @@ async def synthesize(payload: dict, simulate: bool) -> dict:
         import soundfile as sf
         info = sf.info(output_path)
         duration_seconds = info.duration
-    except Exception:
-        pass
+    except (ImportError, OSError, RuntimeError, ValueError) as exc:
+        print(
+            f"[edge_tts_worker] duration probe unavailable for {output_path!r}: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
 
     return {
         "output_path": output_path,

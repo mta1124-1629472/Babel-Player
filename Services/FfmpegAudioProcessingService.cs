@@ -323,8 +323,11 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
                 try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
             });
 
-            var stdout = await proc.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
             await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            _ = await stderrTask.ConfigureAwait(false);
 
             if (proc.ExitCode == 0 && double.TryParse(
                     stdout.Trim(),
@@ -421,8 +424,8 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
     }
 
     /// <summary>
-    /// Builds an atempo filter chain. atempo is bounded to [0.5, 2.0] per ffmpeg docs,
-    /// so values outside that range are achieved by chaining multiple filters.
+    /// Builds an atempo filter chain. Each <c>atempo</c> is bounded to [0.5, 2.0] per ffmpeg docs;
+    /// larger ratio changes are achieved by chaining (e.g. <c>atempo=2.0,atempo=1.25</c>).
     /// </summary>
     private static string BuildAtempoFilter(double tempo)
     {

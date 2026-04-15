@@ -45,6 +45,11 @@ public interface IMediaTransport : IDisposable
     /// Gets whether the media has ended playback.
     /// </summary>
     bool HasEnded { get; }
+
+    /// <summary>
+    /// True when media is loaded and playback is running (not paused).
+    /// </summary>
+    bool IsPlaying { get; }
     
     /// <summary>
     /// Gets or sets the playback volume (0.0 = silent, 1.0 = 100%).
