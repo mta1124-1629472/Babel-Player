@@ -1765,6 +1765,26 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         Assert.DoesNotContain(",", SessionWorkflowCoordinator.SegmentId(1.5));
     }
 
+    // ── ResolveTranscriptArtifactStem ─────────────────────────────────────────
+
+    [Fact]
+    public void ResolveTranscriptArtifactStem_PrefersIngestedMediaOverSeparationStem()
+    {
+        var stem = SessionWorkflowCoordinator.ResolveTranscriptArtifactStem(
+            @"C:\media\episode_01.mp4",
+            @"C:\session\stems\vocals.wav");
+        Assert.Equal("episode_01", stem);
+    }
+
+    [Fact]
+    public void ResolveTranscriptArtifactStem_FallsBackWhenIngestedMissing()
+    {
+        var stem = SessionWorkflowCoordinator.ResolveTranscriptArtifactStem(
+            null,
+            @"C:\session\stems\vocals.wav");
+        Assert.Equal("vocals", stem);
+    }
+
     // ── SaveCurrentSession ────────────────────────────────────────────────────
 
     [Fact]

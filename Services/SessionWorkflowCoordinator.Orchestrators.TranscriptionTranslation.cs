@@ -24,7 +24,7 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
         /// Orchestrates the transcription pipeline stage for the current session: validates preconditions, ensures the transcription provider is ready, runs transcription, commits session state, and reports progress.
         /// </summary>
         /// <remarks>
-        /// Entry state: a session with a non-empty IngestedMediaPath is required; the method verifies the file exists before proceeding. On success the session's transcription state is persisted via CommitTranscriptionSessionState and the stage is reported as complete. The method creates a "transcripts" directory under the session directory and writes the transcript as a JSON file named after the input media (without extension). The operation honors the provided <paramref name="cancellationToken"/>; when canceled the method may throw <see cref="OperationCanceledException"/> and will not commit a completed transcription state.
+        /// Entry state: a session with a non-empty IngestedMediaPath is required; the method verifies the file exists before proceeding. On success the session's transcription state is persisted via CommitTranscriptionSessionState and the stage is reported as complete. The method creates a "transcripts" directory under the session directory and writes the transcript as a JSON file named after the ingested media stem (without extension), even when vocal separation supplies a different stem file (for example vocals.wav) as the transcription input. The operation honors the provided <paramref name="cancellationToken"/>; when canceled the method may throw <see cref="OperationCanceledException"/> and will not commit a completed transcription state.
         /// Guard conditions: throws <see cref="InvalidOperationException"/> if no media is loaded; throws <see cref="FileNotFoundException"/> if the ingested media file cannot be found. The method also ensures transcription provider readiness before executing the transcription request and will surface provider errors as an <see cref="InvalidOperationException"/> if the transcription reports failure.
         /// </remarks>
         /// <param name="progress">Optional progress reporter receiving values in [0,1] to reflect stage progress.</param>
@@ -69,8 +69,10 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
                 var transcriptDir = Path.Combine(sessionDir, "transcripts");
                 Directory.CreateDirectory(transcriptDir);
 
-                var fileName = Path.GetFileNameWithoutExtension(transcriptionSourcePath);
-                var transcriptPath = Path.Combine(transcriptDir, $"{fileName}.json");
+                var transcriptStem = ResolveTranscriptArtifactStem(
+                    _c.CurrentSession.IngestedMediaPath,
+                    transcriptionSourcePath);
+                var transcriptPath = Path.Combine(transcriptDir, $"{transcriptStem}.json");
 
                 var transcriptionService = _c._transcriptionService ??= _c.CreateTranscriptionService();
                 var request = CpuTranscriptionRuntimePolicy.BuildTranscriptionRequest(

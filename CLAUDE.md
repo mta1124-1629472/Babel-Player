@@ -135,6 +135,11 @@ Babel-Player/
   - Transcripts, translations, TTS audio in session-specific subdirectories
 - On restore, coordinator validates artifacts exist and **downgrades stage** if missing
 
+## Vocal separation (containerized inference)
+
+- **Capability vs persisted flag:** `VocalSeparationEnabled` is stored in app settings. The pipeline only runs separation when the inference host reports vocal separation **ready**; otherwise the run fails with an explicit error. The UI disables the toggle when the host is not ready; the coordinator and settings UI also **coerce the flag off** once the container probe has a definitive “not ready” snapshot, so hand-edited `app-settings.json` or stale state does not stay “enabled” when it cannot work.
+- **Transcript naming:** Transcript JSON under `transcripts/` is named from the **ingested media file stem** (the file the user loaded), not from post-separation stem paths such as `vocals.wav`, so exported artifacts stay aligned with the source video/audio name.
+
 ## Testing
 
 ```bash
