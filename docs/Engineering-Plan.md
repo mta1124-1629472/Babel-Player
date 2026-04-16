@@ -105,6 +105,8 @@ Implementation milestones are complete; remaining follow-up is verification evid
 - Run manual app-shell smoke to validate streaming stage messaging/progress UX during real sessions.
 - Keep historical smoke notes synchronized so retired docs do not imply open implementation gaps.
 
+**Next engineering intent (April 2026):** See `docs/Next-Priorities-2026-04-16.md` — Gordon refactor Tier 2 (post–Tier 1), and wiring **real** fractional pipeline progress into the existing pipeline progress bar bindings.
+
 ---
 
 ## Impact Reference

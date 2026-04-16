@@ -79,6 +79,7 @@
 
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="/Styles/TactileIndustrial.axaml" />
         <!-- Corner radius scale:
              Sm = 4  (inline buttons, inputs, small chips)
              Md = 8  (cards, overlays, dialogs)
