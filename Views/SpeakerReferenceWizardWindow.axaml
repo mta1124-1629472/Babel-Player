@@ -219,6 +219,7 @@
                     BorderBrush="{DynamicResource BorderBrush}" 
                     BorderThickness="1" 
                     CornerRadius="8">
+<<<<<<< HEAD
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding VisibleDraftItems}" Margin="4">
                         <ItemsControl.ItemTemplate>
@@ -233,6 +234,14 @@
                                             </Border>
                                             <TextBlock Text="{Binding LastActionLabel}" FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
                                         </StackPanel>
+=======
+                <Grid RowDefinitions="Auto,*">
+                    <!-- Header -->
+                    <StackPanel Grid.Row="0" Margin="14,14,14,8">
+                        <TextBlock Text="Speakers" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="Select a voice for each speaker. For Qwen, also set a reference audio clip from the video." FontSize="10" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                    </StackPanel>
+>>>>>>> 654ead8 (Refactor Speaker Reference Wizard UI and add tooltips)
 
                     <!-- Speaker List -->
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -244,9 +253,15 @@
                                             <!-- Speaker Header -->
                                             <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
                                                 <TextBlock Text="{Binding SpeakerId}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+<<<<<<< HEAD
                                                 <Border Background="{DynamicResource InfoBrush}" CornerRadius="4" Padding="8,3" VerticalAlignment="Center"
                                                         ToolTip.Tip="Quality of the reference clip for this speaker">
                                                     <TextBlock Text="{Binding ConfidenceTier}" FontSize="10" FontWeight="Medium" Foreground="{DynamicResource InfoFgBrush}"/>
+=======
+                                                <Border Background="{Binding ConfidenceTier, Converter={x:Static converters:SpeakerConfidenceTierConverter.Instance}}" CornerRadius="4" Padding="8,3" VerticalAlignment="Center"
+                                                        ToolTip.Tip="Quality of the reference clip for this speaker">
+                                                    <TextBlock Text="{Binding ConfidenceTier}" FontSize="10" FontWeight="Medium"/>
+>>>>>>> 654ead8 (Refactor Speaker Reference Wizard UI and add tooltips)
                                                 </Border>
                                                 <TextBlock Text="{Binding LastActionLabel}" FontSize="11" Opacity="0.5" VerticalAlignment="Center"
                                                            ToolTip.Tip="Last action taken on this speaker"/>
