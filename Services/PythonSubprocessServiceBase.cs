@@ -236,21 +236,6 @@ public abstract class PythonSubprocessServiceBase
         }
 
         await _cpuRuntimeManager.EnsureInstalledAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        #region agent log
-        WriteDebugLog(
-            "initial",
-            "H3",
-            "PythonSubprocessServiceBase.EnsurePythonRuntimeReadyAsync:238",
-            "Managed CPU runtime readiness checked by subprocess service",
-            new
-            {
-                cpuState = _cpuRuntimeManager.State.ToString(),
-                _cpuRuntimeManager.FailureReason,
-                pythonPath = PythonPath,
-                pythonExists = File.Exists(PythonPath),
-                serviceType = GetType().FullName,
-            });
-        #endregion
 
         if (_cpuRuntimeManager.State != ManagedCpuState.Ready || !File.Exists(PythonPath))
         {
@@ -422,7 +407,7 @@ public abstract class PythonSubprocessServiceBase
     {
         var payload = new
         {
-            sessionId = "7dd085",
+            sessionId = "f76224",
             runId,
             hypothesisId,
             location,
@@ -444,6 +429,18 @@ public abstract class PythonSubprocessServiceBase
 
     private static string ResolveDebugLogPath()
     {
-        return @"d:\Dev\Babel-Player\debug-7dd085.log";
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
     }
 }
