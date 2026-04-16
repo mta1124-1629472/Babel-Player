@@ -1096,7 +1096,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             var stdoutSnippet = stdoutLines.Length > 0 ? $"\nstdout: {stdoutLines}" : string.Empty;
             throw new InvalidOperationException(
-                $"Process '{fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}' failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
+                $"Process '{fileName} {ProcessArgFormatter.FormatArgs(arguments)}' failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))

@@ -670,7 +670,7 @@ public sealed class ManagedCpuRuntimeManager
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Process '{fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}' failed with exit code {process.ExitCode}: {stderr}");
+                $"Process '{fileName} {ProcessArgFormatter.FormatArgs(arguments)}' failed with exit code {process.ExitCode}: {stderr}");
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))
@@ -707,7 +707,7 @@ public sealed class ManagedCpuRuntimeManager
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running CPU runtime capture process: {fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
+        _log.Info($"Running CPU runtime capture process: {fileName} {ProcessArgFormatter.FormatArgs(arguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
