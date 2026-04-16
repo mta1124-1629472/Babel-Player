@@ -201,14 +201,8 @@
 <Border Grid.Row="0" Padding="16,14,16,12"
         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <TextBlock Text="Pipeline" FontSize="15" FontWeight="SemiBold"
-                        Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
-            <Border Background="{DynamicResource AccentSubtleBrush}" CornerRadius="4" Padding="8,2"
-                    IsVisible="{Binding Playback.IsBusy}">
-                <TextBlock Text="{Binding Playback.Pipeline.PipelineStageDetail}" FontSize="10" Foreground="{DynamicResource AccentBrush}"/>
-            </Border>
-        </StackPanel>
+        <TextBlock Grid.Column="0" Text="Pipeline" FontSize="15" FontWeight="SemiBold"
+                    Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
         <Button Grid.Column="2"
                 Padding="10,6" FontSize="11"
                 Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
@@ -959,7 +953,7 @@
                                 Click="OnOpenMediaClick"
                                 ToolTip.Tip="Open media file"
                                 AutomationProperties.Name="Open media">
-                            <TextBlock Text="Open" FontSize="12" FontWeight="Medium"/>
+                            <TextBlock Text="\U0001F4C2" FontSize="14"/>
                         </Button>
                         <Button Content="{Binding Playback.Preview.SubtitleToggleLabel}"
                                 Classes="control-pill"
@@ -1073,7 +1067,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle mute"
                                 AutomationProperties.Name="Toggle Mute">
-                            <TextBlock Text="Vol" FontSize="11"/>
+                            <TextBlock Text="\U0001F50A" FontSize="12"/>
                         </Button>
                         <Slider x:Name="VolumeSlider"
                                 Width="70"
@@ -1091,7 +1085,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle side panels"
                                 AutomationProperties.Name="Toggle side panes">
-                            <TextBlock Text="Panel" FontSize="11"/>
+                            <TextBlock Text="\u2630" FontSize="14"/>
                         </Button>
 
                         <Button Classes="control-pill"
@@ -1100,7 +1094,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle fullscreen"
                                 AutomationProperties.Name="Toggle fullscreen">
-                            <TextBlock Text="Full" FontSize="11"/>
+                            <TextBlock Text="\u26F6" FontSize="12"/>
                         </Button>
 
                         <Button Classes="control-pill"
@@ -1108,7 +1102,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Open settings"
                                 AutomationProperties.Name="Settings">
-                            <TextBlock Text="Settings" FontSize="11"/>
+                            <TextBlock Text="\u2699" FontSize="14"/>
                         </Button>
 
                         <!--
