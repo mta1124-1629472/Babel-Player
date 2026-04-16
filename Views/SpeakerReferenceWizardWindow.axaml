@@ -77,20 +77,6 @@
                         <TextBlock Text="{Binding PoorCount, StringFormat='Poor ({0})'}" FontSize="12" Foreground="{DynamicResource DestructiveFgBrush}" FontWeight="Medium"/>
                     </Border>
                 </StackPanel>
-                    </Border>
-                    <Border Background="{DynamicResource InfoBrush}" CornerRadius="6" Padding="12,6" ToolTip.Tip="Speakers that need review">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="!" FontSize="12" Foreground="{DynamicResource InfoFgBrush}"/>
-                            <TextBlock Text="{Binding ReviewCount, StringFormat='Review ({0})'}" FontSize="12" Foreground="{DynamicResource InfoFgBrush}" FontWeight="Medium"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{DynamicResource DestructiveBrush}" CornerRadius="6" Padding="12,6" ToolTip.Tip="Speakers with poor or missing reference">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="✗" FontSize="12" Foreground="{DynamicResource DestructiveFgBrush}"/>
-                            <TextBlock Text="{Binding PoorCount, StringFormat='Poor ({0})'}" FontSize="12" Foreground="{DynamicResource DestructiveFgBrush}" FontWeight="Medium"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
 
                 <CheckBox Grid.Column="1"
                           IsChecked="{Binding ShowLowConfidenceOnly, Mode=TwoWay}"
