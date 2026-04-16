@@ -67,19 +67,10 @@ public static class SessionSnapshotSemantics
             cleared.Add("transcription");
         }
 
-        if (!string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath)
-            && !File.Exists(snapshot.VocalsAudioPath))
-        {
-            snapshot = snapshot with
-            {
-                VocalsAudioPath = null,
-                InstrumentalAudioPath = null,
-            };
-            cleared.Add("vocal_separation");
-        }
-        else if (!string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath)
-                 && !string.IsNullOrWhiteSpace(snapshot.InstrumentalAudioPath)
-                 && !File.Exists(snapshot.InstrumentalAudioPath))
+        if ((!string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath)
+             && !File.Exists(snapshot.VocalsAudioPath))
+            || (!string.IsNullOrWhiteSpace(snapshot.InstrumentalAudioPath)
+                && !File.Exists(snapshot.InstrumentalAudioPath)))
         {
             snapshot = snapshot with
             {
