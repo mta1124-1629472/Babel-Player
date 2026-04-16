@@ -486,57 +486,71 @@ public sealed class ManagedCpuRuntimeManager
         CancellationToken cancellationToken)
     {
         const string validationScript = """
-import json
-import traceback
-from importlib import metadata
+            import json
+            import traceback
+            from importlib import metadata
 
-payload = {
-    "success": False,
-    "message": None,
-    "error": None,
-    "traceback": None,
-    "packages": {},
-}
+            payload = {
+                "success": False,
+                "message": None,
+                "error": None,
+                "traceback": None,
+                "packages": {},
+            }
 
-for package_name in [
-    "torch",
-    "torchaudio",
-    "wespeaker",
-    "onnxruntime",
-    "openai-whisper",
-    "peft",
-    "scikit-learn",
-]:
-    try:
-        payload["packages"][package_name] = metadata.version(package_name)
-    except Exception:
-        payload["packages"][package_name] = None
+            for package_name in [
+                "torch",
+                "torchaudio",
+                "wespeaker",
+                "onnxruntime",
+                "openai-whisper",
+                "peft",
+                "scikit-learn",
+            ]:
+                try:
+                    payload["packages"][package_name] = metadata.version(package_name)
+                except Exception:
+                    payload["packages"][package_name] = None
 
-try:
-    import torch
-    import torchaudio
-    import wespeaker
+            try:
+                import torch
+                import torchaudio
+                import wespeaker
 
-    payload["packages"]["torch"] = getattr(torch, "__version__", payload["packages"]["torch"])
-    payload["packages"]["torchaudio"] = getattr(torchaudio, "__version__", payload["packages"]["torchaudio"])
-    payload["packages"]["wespeaker"] = getattr(wespeaker, "__version__", payload["packages"]["wespeaker"])
-    payload["success"] = True
-    payload["message"] = "Managed CPU runtime imports validated."
-except Exception as exc:
-    payload["error"] = f"{type(exc).__name__}: {exc}"
-    payload["traceback"] = traceback.format_exc()
+                payload["packages"]["torch"] = getattr(torch, "__version__", payload["packages"]["torch"])
+                payload["packages"]["torchaudio"] = getattr(torchaudio, "__version__", payload["packages"]["torchaudio"])
+                payload["packages"]["wespeaker"] = getattr(wespeaker, "__version__", payload["packages"]["wespeaker"])
+                payload["success"] = True
+                payload["message"] = "Managed CPU runtime imports validated."
+            except Exception as exc:
+                payload["error"] = f"{type(exc).__name__}: {exc}"
+                payload["traceback"] = traceback.format_exc()
 
-print(json.dumps(payload))
-""";
+            print(json.dumps(payload))
+            """;
 
         var pythonPath = GetPythonExecutablePath();
-        var result = await RunProcessCaptureAsync(
-                pythonPath,
-                AppContext.BaseDirectory,
-                cancellationToken,
-                "-c",
-                validationScript)
-            .ConfigureAwait(false);
+
+        // Write to a temp file rather than passing as -c to avoid Windows command-line
+        // quoting issues with multi-line scripts containing double-quoted string literals.
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"babel-cpu-validate_{Guid.NewGuid():N}.py");
+        ManagedCpuProcessCapture result;
+        try
+        {
+            await File.WriteAllTextAsync(scriptPath, validationScript, cancellationToken)
+                .ConfigureAwait(false);
+
+            result = await RunProcessCaptureAsync(
+                    pythonPath,
+                    AppContext.BaseDirectory,
+                    cancellationToken,
+                    scriptPath)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            try { File.Delete(scriptPath); } catch { /* best-effort cleanup */ }
+        }
 
         if (result.ExitCode != 0)
         {
@@ -685,17 +699,86 @@ print(json.dumps(payload))
         foreach (var arg in arguments)
         {
             if (sb.Length > 0) sb.Append(' ');
-            sb.Append(QuoteIfNeeded(arg));
+            AppendWindowsQuoted(sb, arg);
         }
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Appends a single argument to a Windows CreateProcess command-line string using
+    /// CommandLineToArgvW-compatible quoting:
+    /// - Wraps in " if the arg contains spaces, tabs, or quotes.
+    /// - Doubles backslashes that immediately precede a " or the closing ".
+    /// - Escapes embedded " as \".
+    /// </summary>
+    private static void AppendWindowsQuoted(StringBuilder sb, string arg)
+    {
+        if (string.IsNullOrEmpty(arg))
+        {
+            sb.Append("\"\"");
+            return;
+        }
+
+        bool needsQuoting = arg.IndexOfAny([' ', '\t', '"', '\n', '\r']) >= 0;
+        if (!needsQuoting)
+        {
+            sb.Append(arg);
+            return;
+        }
+
+        sb.Append('"');
+        int i = 0;
+        while (i < arg.Length)
+        {
+            char c = arg[i];
+            if (c == '\\')
+            {
+                int numBackslashes = 0;
+                while (i < arg.Length && arg[i] == '\\')
+                {
+                    numBackslashes++;
+                    i++;
+                }
+
+                if (i == arg.Length)
+                {
+                    // Backslashes at end of arg precede the closing " — must be doubled.
+                    sb.Append('\\', numBackslashes * 2);
+                }
+                else if (arg[i] == '"')
+                {
+                    // Backslashes before a " — double them and escape the ".
+                    sb.Append('\\', numBackslashes * 2 + 1);
+                    sb.Append('"');
+                    i++;
+                }
+                else
+                {
+                    // Backslashes not before a " — emit as-is.
+                    sb.Append('\\', numBackslashes);
+                }
+            }
+            else if (c == '"')
+            {
+                sb.Append('\\');
+                sb.Append('"');
+                i++;
+            }
+            else
+            {
+                sb.Append(c);
+                i++;
+            }
+        }
+
+        sb.Append('"');
+    }
+
     private static string QuoteIfNeeded(string arg)
     {
-        if (string.IsNullOrEmpty(arg)) return "\"\"";
-        // If it has spaces and isn't already quoted, wrap it.
-        if (arg.Contains(' ') && !arg.StartsWith('\"')) return $"\"{arg}\"";
-        return arg;
+        var sb = new StringBuilder();
+        AppendWindowsQuoted(sb, arg);
+        return sb.ToString();
     }
 
     // Marker format includes PythonVersion plus labeled requirements/constraints bodies so
