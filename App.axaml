@@ -74,6 +74,16 @@
 
     <Application.Styles>
         <FluentTheme />
+        <!-- Fluent applies a second "reveal" Background on ContentPresenter; it reads as a box on gradients / stacked fills. -->
+        <Style Selector="Button:not(.control-pill):not(.chrome-button) /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button:not(.control-pill):not(.chrome-button):pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button:not(.control-pill):not(.chrome-button):pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
         <StyleInclude Source="/Styles/TactileIndustrial.axaml" />
         <!-- Corner radius scale:
              Sm = 4  (inline buttons, inputs, small chips)

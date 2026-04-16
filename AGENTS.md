@@ -9,11 +9,10 @@
 - Prefer Piper and Edge TTS voice download and per-speaker voice assignment through the Speaker Reference Wizard rather than duplicating long voice lists in Settings or the main pipeline controls.
 - For commit/push requests that provide an explicit staged/unstaged file list, treat that list as authoritative and do not include files outside it.
 - When asked to implement from an attached plan with pre-created todos, execute the plan without editing the plan file and progress existing todos instead of creating duplicates.
+- Prefer concise, plain UI wording; avoid em dashes in user-visible copy when a short phrase, comma, or “to” for ranges reads clearly (for example “30 to 60 seconds” instead of “30–60”).
 
 ## Learned Workspace Facts
 - The desktop UI targets **Avalonia 12.x** as pinned in `BabelPlayer.csproj` (do not assume Avalonia 11 or other versions when discussing APIs or docs unless verified from the project file).
-- This workspace uses a project transcript store under the standard Cursor project transcripts location.
-- The codebase actively uses both managed CPU and managed GPU inference flows for diarization/transcription debugging.
 - The repository no longer uses Git LFS; LFS-related hook assumptions are outdated here.
 - Docker support is maintained as a power-user inference-host option; containerizing the desktop app is not the primary runtime model.
 - Forward-facing product naming uses `Babel Player` (space, no dash); dev builds append `[DEV]`.
@@ -21,3 +20,6 @@
 - Per-provider language allowlists and multilingual capability tags are maintained in centralized catalog types in the codebase rather than ad hoc string checks scattered through the pipeline.
 - NVIDIA RTX Video features (VSR, RTX HDR) are gated on supported GPU hardware, display HDR state where applicable, and the GPU-accelerated video path (for example `VideoUseGpuNext`-style settings), not on a single flag alone.
 - Public project site/docs are served via GitHub Pages at `https://babelworks.github.io/Babel-Player/`.
+- Windows native deps install **ffmpeg.exe** and **ffprobe.exe** under `tools/<rid>/`; the managed GPU host prepends those directories to **PATH** so subprocess audio tooling (for example pydub) can resolve **ffprobe**.
+- Multi-speaker detection in the main UI is **WeSpeaker**-only with diarization off by default; periodic NeMo background health on the GPU host is off unless **`BABEL_ENABLE_NEMO_BACKGROUND_HEALTH`** is enabled.
+- Transcript JSON under `transcripts/` is named from the **ingested source media** stem even when vocal separation uses a generated stem (for example `vocals.wav`); **`VocalSeparationEnabled`** is coerced off when the container reports the audio separator is not ready.
