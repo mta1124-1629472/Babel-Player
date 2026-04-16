@@ -8,7 +8,7 @@ using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
-public sealed class ContainerizedVocalSeparationProvider : IVocalSeparationProvider
+public sealed class ContainerizedVocalSeparationProvider : IVocalSeparationProvider, IDisposable
 {
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
@@ -44,4 +44,6 @@ public sealed class ContainerizedVocalSeparationProvider : IVocalSeparationProvi
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
         ContainerizedProviderReadiness.CheckVocalSeparation(settings);
+
+    public void Dispose() => _client.Dispose();
 }

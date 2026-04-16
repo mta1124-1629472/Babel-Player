@@ -14,12 +14,13 @@ using Babel.Player.Models;
 
 namespace Babel.Player.Services;
 
-public sealed class ContainerizedInferenceClient
+public sealed class ContainerizedInferenceClient : IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly AppLog _log;
     private readonly string _inferenceServiceUrl;
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
+    private readonly bool _disposeHttpClient;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = false };
     private static readonly string DebugLogPath = ResolveDebugLogPath();
 
@@ -58,6 +59,7 @@ public sealed class ContainerizedInferenceClient
     {
         _inferenceServiceUrl = NormalizeBaseUrl(inferenceServiceUrl);
         _log = log;
+        _disposeHttpClient = httpClient is null;
         _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
         _requestLeaseTracker = requestLeaseTracker;
     }
@@ -549,7 +551,7 @@ public sealed class ContainerizedInferenceClient
 
     public async Task<VocalSeparationResult> SeparateVocalsAsync(
         string audioPath,
-        string outputDirectory,
+        string? outputDirectoryPath = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -577,10 +579,22 @@ public sealed class ContainerizedInferenceClient
             if (string.IsNullOrWhiteSpace(result.VocalsFilename) || string.IsNullOrWhiteSpace(result.InstrumentalFilename))
                 throw new InvalidOperationException("Vocal separation response did not include stem filenames.");
 
-            Directory.CreateDirectory(outputDirectory);
+            var stemsDir = outputDirectoryPath;
+            if (string.IsNullOrWhiteSpace(stemsDir))
+            {
+                var audioDir = Path.GetDirectoryName(audioPath);
+                if (string.IsNullOrWhiteSpace(audioDir))
+                    throw new InvalidOperationException($"Could not resolve source audio directory from '{audioPath}'.");
 
-            var vocalsPath = Path.Combine(outputDirectory, Path.GetFileName(result.VocalsFilename));
-            var instrumentalPath = Path.Combine(outputDirectory, Path.GetFileName(result.InstrumentalFilename));
+                var sessionDir = Directory.GetParent(audioDir)?.FullName;
+                if (string.IsNullOrWhiteSpace(sessionDir))
+                    sessionDir = audioDir;
+                stemsDir = Path.Combine(sessionDir, "stems");
+            }
+            Directory.CreateDirectory(stemsDir);
+
+            var vocalsPath = Path.Combine(stemsDir, Path.GetFileName(result.VocalsFilename));
+            var instrumentalPath = Path.Combine(stemsDir, Path.GetFileName(result.InstrumentalFilename));
 
             // Downloads are separate requests — each acquires its own lease (no outer lease held).
             await DownloadTtsAudioAsync(
@@ -1477,6 +1491,12 @@ public sealed class ContainerizedInferenceClient
     /// <returns>An <see cref="IDisposable"/> representing the acquired lease that must be disposed to release it, or <c>null</c> if no lease tracker is configured.</returns>
     private IDisposable? AcquireLease(ContainerizedRequestKind kind) =>
         _requestLeaseTracker?.Acquire(kind);
+
+    public void Dispose()
+    {
+        if (_disposeHttpClient)
+            _httpClient.Dispose();
+    }
 
     private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
     {

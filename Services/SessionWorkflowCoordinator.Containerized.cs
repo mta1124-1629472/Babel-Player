@@ -49,12 +49,14 @@ public sealed partial class SessionWorkflowCoordinator
 
     private IVocalSeparationProvider CreateVocalSeparationProvider()
     {
-        var client = new ContainerizedInferenceClient(
-            CurrentSettings.EffectiveContainerizedServiceUrl,
-            _log,
-            null,
-            _requestLeaseTracker);
-        return new ContainerizedVocalSeparationProvider(client, _log);
+        _vocalSeparationProvider ??= new ContainerizedVocalSeparationProvider(
+            new ContainerizedInferenceClient(
+                CurrentSettings.EffectiveContainerizedServiceUrl,
+                _log,
+                null,
+                _requestLeaseTracker),
+            _log);
+        return _vocalSeparationProvider;
     }
 
     private void RequestContainerizedAutostartForSettings()
