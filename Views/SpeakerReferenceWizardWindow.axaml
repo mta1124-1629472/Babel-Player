@@ -120,7 +120,7 @@
                     BorderThickness="1" 
                     CornerRadius="8"
                     Margin="0,0,12,0">
-                <Grid RowDefinitions="Auto,*,Auto,Auto">
+                <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
                     <!-- Header with instructions -->
                     <StackPanel Grid.Row="0" Margin="12,12,12,8">
                         <TextBlock Text="Preview" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"/>
@@ -184,7 +184,7 @@
                     </Grid>
 
                     <!-- Status Hint -->
-                    <TextBlock Grid.Row="3"
+                    <TextBlock Grid.Row="4"
                                Text="{Binding MiniPreview.StatusHint}"
                                FontSize="10"
                                Foreground="{DynamicResource DestructiveFgBrush}"
@@ -236,9 +236,9 @@
                                             <!-- Speaker Header -->
                                             <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
                                                 <TextBlock Text="{Binding SpeakerId}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
-                                                <Border Background="{Binding ConfidenceTier, Converter={x:Static converters:SpeakerConfidenceTierConverter.Instance}}" CornerRadius="4" Padding="8,3" VerticalAlignment="Center"
+                                                <Border Background="{DynamicResource InfoBrush}" CornerRadius="4" Padding="8,3" VerticalAlignment="Center"
                                                         ToolTip.Tip="Quality of the reference clip for this speaker">
-                                                    <TextBlock Text="{Binding ConfidenceTier}" FontSize="10" FontWeight="Medium"/>
+                                                    <TextBlock Text="{Binding ConfidenceTier}" FontSize="10" FontWeight="Medium" Foreground="{DynamicResource InfoFgBrush}"/>
                                                 </Border>
                                                 <TextBlock Text="{Binding LastActionLabel}" FontSize="11" Opacity="0.5" VerticalAlignment="Center"
                                                            ToolTip.Tip="Last action taken on this speaker"/>
