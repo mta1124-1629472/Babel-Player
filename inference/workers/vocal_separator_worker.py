@@ -224,4 +224,11 @@ def run_vocal_separation(
         return vocals_path, instrumental_path
     finally:
         if temp_input is not None:
-            temp_input.unlink(missing_ok=True)
+            try:
+                temp_input.unlink(missing_ok=True)
+            except (PermissionError, OSError) as exc:
+                logger.warning(
+                    "Failed to clean up temporary normalized input %s: %s",
+                    temp_input,
+                    exc,
+                )
