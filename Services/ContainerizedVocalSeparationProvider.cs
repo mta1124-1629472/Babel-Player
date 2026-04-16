@@ -38,12 +38,12 @@ public sealed class ContainerizedVocalSeparationProvider : IVocalSeparationProvi
             throw new InvalidOperationException(
                 $"Containerized vocal separation failed: {result.ErrorMessage}");
 
-        _log.Info($"[ContainerizedVocalSeparation] Complete: vocals='{result.VocalsAudioPath}', instrumental='{result.InstrumentalAudioPath}'");
+        _log.Info($"[ContainerizedVocalSeparation] Complete: vocals='{result.VocalsAudioPath}', ambiance='{result.AmbianceAudioPath}'");
         return result;
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
-        ContainerizedProviderReadiness.CheckVocalSeparation(settings);
+        ContainerizedProviderReadiness.CheckVocalSeparation(settings, keyStore);
 
     public void Dispose() => _client.Dispose();
 }

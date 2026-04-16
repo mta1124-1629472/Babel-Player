@@ -98,6 +98,19 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             CancellationToken cancellationToken) =>
             Task.FromException(new InvalidOperationException("CombineAudioSegmentsAsync is not used in this test."));
 
+        public Task ComposeTimelineDubAsync(
+            IReadOnlyList<TimelineDubSegment> segments,
+            string outputAudioPath,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("ComposeTimelineDubAsync is not used in this test."));
+
+        public Task MixDubOverAmbianceAsync(
+            string dubbedAudioPath,
+            string ambianceAudioPath,
+            string outputAudioPath,
+            CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("MixDubOverAmbianceAsync is not used in this test."));
+
         public Task ExtractAudioClipAsync(
             string inputPath,
             string outputPath,
@@ -360,7 +373,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         coord.CurrentSession = coord.CurrentSession with
         {
             VocalsAudioPath = CreateMediaFile(".wav"),
-            InstrumentalAudioPath = CreateMediaFile(".wav"),
+            AmbianceAudioPath = CreateMediaFile(".wav"),
             Stage = SessionWorkflowStage.Transcribed,
             TranscriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}"),
         };
@@ -368,7 +381,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         coord.ResetPipelineToMediaLoaded();
 
         Assert.Null(coord.CurrentSession.VocalsAudioPath);
-        Assert.Null(coord.CurrentSession.InstrumentalAudioPath);
+        Assert.Null(coord.CurrentSession.AmbianceAudioPath);
     }
 
     [Fact]
@@ -2153,6 +2166,10 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         while (coord.ActiveTtsSegmentId is not null && DateTime.UtcNow < timeout)
             await Task.Yield();
 
+        timeout = DateTime.UtcNow.AddSeconds(5);
+        while (coord.PlaybackState != Babel.Player.Models.PlaybackState.Idle && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
         Assert.Equal(Babel.Player.Models.PlaybackState.Idle, coord.PlaybackState);
         Assert.True(fakeSourcePlayer.IsPlaying);
         Assert.Equal(0, fakeSourcePlayer.LastSeekPosition);
@@ -2186,6 +2203,10 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
 
         var timeout = DateTime.UtcNow.AddSeconds(2);
         while (coord.ActiveTtsSegmentId is not null && DateTime.UtcNow < timeout)
+            await Task.Yield();
+
+        timeout = DateTime.UtcNow.AddSeconds(2);
+        while (coord.PlaybackState != PlaybackState.Idle && DateTime.UtcNow < timeout)
             await Task.Yield();
 
         Assert.Null(coord.ActiveTtsSegmentId);

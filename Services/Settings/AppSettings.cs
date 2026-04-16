@@ -255,4 +255,7 @@ public sealed class AppSettings
 
     /// <summary>Whether to auto-save the session snapshot on app exit.</summary>
     public bool AutoSaveEnabled { get; set; } = true;
+
+    /// <summary>Whether to show both original and translated text in the subtitle track.</summary>
+    public bool BilingualSubtitlesEnabled { get; set; } = false;
 }

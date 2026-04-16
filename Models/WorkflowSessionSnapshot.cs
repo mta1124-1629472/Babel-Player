@@ -12,6 +12,8 @@ public sealed record WorkflowSessionSnapshot(
     string? SourceMediaPath = null,
     string? IngestedMediaPath = null,
     string? VocalsAudioPath = null,
+    string? AmbianceAudioPath = null,
+    [property: Obsolete("Use AmbianceAudioPath.")]
     string? InstrumentalAudioPath = null,
     DateTimeOffset? MediaLoadedAtUtc = null,
     string? TranscriptPath = null,
@@ -21,6 +23,7 @@ public sealed record WorkflowSessionSnapshot(
     string? TargetLanguage = null,
     DateTimeOffset? TranslatedAtUtc = null,
     string? TtsPath = null,
+    string? MixedDubAudioPath = null,
     string? TtsVoice = null,
     DateTimeOffset? TtsGeneratedAtUtc = null,
     string? TtsSegmentsPath = null,

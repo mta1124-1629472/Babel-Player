@@ -26,9 +26,7 @@ public sealed partial class SessionWorkflowCoordinator
             return;
         }
 
-        var mediaPath = !string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath)
-            ? CurrentSession.IngestedMediaPath!
-            : CurrentSession.SourceMediaPath;
+        var mediaPath = ResolvePreferredReferenceSourcePath();
         if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
             throw new FileNotFoundException("Cannot create Qwen reference audio: source media is unavailable.", mediaPath);
 
@@ -73,9 +71,7 @@ public sealed partial class SessionWorkflowCoordinator
         if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
             return;
 
-        var mediaPath = !string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath)
-            ? CurrentSession.IngestedMediaPath!
-            : CurrentSession.SourceMediaPath;
+        var mediaPath = ResolvePreferredReferenceSourcePath();
         if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
             return;
 
@@ -153,5 +149,14 @@ public sealed partial class SessionWorkflowCoordinator
         CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
         SaveCurrentSession();
         _log.Info($"Multi-speaker reference extraction complete: {bestBySpeaker.Count} speakers processed.");
+    }
+
+    private string? ResolvePreferredReferenceSourcePath()
+    {
+        if (!string.IsNullOrWhiteSpace(CurrentSession.VocalsAudioPath) && File.Exists(CurrentSession.VocalsAudioPath))
+            return CurrentSession.VocalsAudioPath;
+        if (!string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath) && File.Exists(CurrentSession.IngestedMediaPath))
+            return CurrentSession.IngestedMediaPath;
+        return CurrentSession.SourceMediaPath;
     }
 }

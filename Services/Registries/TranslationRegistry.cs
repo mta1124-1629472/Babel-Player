@@ -169,7 +169,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
             return new ProviderReadiness(false, $"API key missing for provider '{desc.DisplayName}'.");
 
         if (resolvedRuntime == InferenceRuntime.Containerized)
-            return ContainerizedProviderReadiness.CheckTranslation(settings, _containerizedProbe);
+            return ContainerizedProviderReadiness.CheckTranslation(settings, serviceProbe: _containerizedProbe);
 
         var provider = CreateProvider(normalizedProviderId, settings, keyStore, resolvedProfile);
         return provider.CheckReadiness(settings, keyStore);

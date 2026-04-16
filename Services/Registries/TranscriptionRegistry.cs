@@ -164,7 +164,7 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
             return new ProviderReadiness(false, $"API key missing for provider '{desc.DisplayName}'.");
 
         if (resolvedRuntime == InferenceRuntime.Containerized)
-            return ContainerizedProviderReadiness.CheckTranscription(settings, _containerizedProbe);
+            return ContainerizedProviderReadiness.CheckTranscription(settings, serviceProbe: _containerizedProbe);
 
         var provider = CreateProvider(normalizedProviderId, settings, keyStore, resolvedProfile);
         return provider.CheckReadiness(settings, keyStore);

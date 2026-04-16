@@ -84,7 +84,7 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
     /// <param name="keyStore">Optional API key store for provider authentication information.</param>
     /// <returns>A <see cref="ProviderReadiness"/> describing whether the provider is available and any configuration or authentication requirements.</returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore) =>
-        ContainerizedProviderReadiness.CheckDiarization(settings, ProviderNames.NemoLocal, _probe, keyStore);
+        ContainerizedProviderReadiness.CheckDiarization(settings, ProviderNames.NemoLocal, keyStore, _probe);
 
     /// <summary>
     /// Ensures the provider is ready to execute diarization requests against the containerized service.

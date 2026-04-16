@@ -293,14 +293,14 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             Stage = SessionWorkflowStage.MediaLoaded,
             IngestedMediaPath = mediaPath,
             VocalsAudioPath = missingVocalsPath,
-            InstrumentalAudioPath = instrumentalPath,
+            AmbianceAudioPath = instrumentalPath,
         };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
 
         Assert.Contains("vocal_separation", result.ClearedArtifacts);
         Assert.Null(result.Snapshot.VocalsAudioPath);
-        Assert.Null(result.Snapshot.InstrumentalAudioPath);
+        Assert.Null(result.Snapshot.AmbianceAudioPath);
     }
 
     [Fact]
@@ -313,14 +313,14 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             Stage = SessionWorkflowStage.MediaLoaded,
             IngestedMediaPath = mediaPath,
             VocalsAudioPath = null,
-            InstrumentalAudioPath = missingInstrumentalPath,
+            AmbianceAudioPath = missingInstrumentalPath,
         };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
 
         Assert.Contains("vocal_separation", result.ClearedArtifacts);
         Assert.Null(result.Snapshot.VocalsAudioPath);
-        Assert.Null(result.Snapshot.InstrumentalAudioPath);
+        Assert.Null(result.Snapshot.AmbianceAudioPath);
     }
 
     [Fact]
@@ -437,7 +437,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             IngestedMediaPath = mediaPath,
             TranscriptPath = transcriptPath,
             VocalsAudioPath = vocalsPath,
-            InstrumentalAudioPath = instrumentalPath,
+            AmbianceAudioPath = instrumentalPath,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
         };
@@ -574,7 +574,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             TranscriptPath = "/some/transcript.json",
             SourceLanguage = "es",
             VocalsAudioPath = "/some/vocals.wav",
-            InstrumentalAudioPath = "/some/instrumental.wav",
+            AmbianceAudioPath = "/some/instrumental.wav",
             TranslationPath = "/some/translation.json",
             TargetLanguage = "en",
             TtsPath = "/some/tts.mp3",
@@ -584,7 +584,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         Assert.Null(result.TranscriptPath);
         Assert.Null(result.SourceLanguage);
         Assert.Null(result.VocalsAudioPath);
-        Assert.Null(result.InstrumentalAudioPath);
+        Assert.Null(result.AmbianceAudioPath);
         Assert.Null(result.TranscribedAtUtc);
         Assert.Null(result.TranscriptionProvider);
         Assert.Null(result.TranscriptionModel);

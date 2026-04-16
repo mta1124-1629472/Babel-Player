@@ -130,9 +130,9 @@ public sealed record VocalSeparationRequest(
 public sealed record VocalSeparationResult(
     bool Success,
     string VocalsAudioPath,
-    string InstrumentalAudioPath,
+    string AmbianceAudioPath,
     string? ErrorMessage,
     long VocalsFileSizeBytes = 0,
-    long InstrumentalFileSizeBytes = 0,
+    long AmbianceFileSizeBytes = 0,
     string? VocalsModel = null,
-    string? InstrumentalModel = null);
+    string? AmbianceModel = null);

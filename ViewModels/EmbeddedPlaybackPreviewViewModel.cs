@@ -49,6 +49,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         _controlsHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ControlsHideDelayMs) };
         _controlsHideTimer.Tick += OnControlsHideTimerTick;
+
+        _isBilingualSubtitlesOn = coordinator.CurrentSettings.BilingualSubtitlesEnabled;
     }
 
     [ObservableProperty]
@@ -106,6 +108,20 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private bool _isSubtitleModeOn;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BilingualToggleLabel))]
+    private bool _isBilingualSubtitlesOn;
+
+    [RelayCommand]
+    private void ToggleBilingualSubtitles()
+    {
+        IsBilingualSubtitlesOn = !IsBilingualSubtitlesOn;
+        _coordinator.CurrentSettings.BilingualSubtitlesEnabled = IsBilingualSubtitlesOn;
+        _coordinator.NotifySettingsModified();
+        if (IsSubtitleModeOn)
+            ApplySubtitleState();
+    }
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SpeechRateLabel))]
     private double _speechRate = 1.0;
 
@@ -126,6 +142,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
                 : "\U0001F50A";
     public string DubModeLabel => "🎙 Dub";
     public string SubtitleToggleLabel => IsSubtitleModeOn ? "CC ✓" : "CC";
+    public string BilingualToggleLabel => IsBilingualSubtitlesOn ? "Bilingual ✓" : "Bilingual";
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
     public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
@@ -781,7 +798,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         if (IsSubtitleModeOn)
         {
-            var srt = SrtGenerator.Generate(Segments);
+            var srt = SrtGenerator.Generate(Segments, IsBilingualSubtitlesOn);
             DeleteActiveSubtitleFile();
             _activeSrtPath = Path.Combine(Path.GetTempPath(), $"subs_{Guid.NewGuid():N}.srt");
             File.WriteAllText(_activeSrtPath, srt, Encoding.UTF8);
