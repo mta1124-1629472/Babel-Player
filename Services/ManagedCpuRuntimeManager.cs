@@ -612,6 +612,18 @@ public sealed class ManagedCpuRuntimeManager
         };
     }
 
+    /// <summary>
+    /// Starts an external process, streams its standard output to the application log and to an optional status-line callback, waits for the process to exit, and fails the operation if the process cannot be started or exits with a non-zero code.
+    /// </summary>
+    /// <param name="fileName">Executable to run.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="cancellationToken">Token used to cancel reading output and waiting for process exit; cancellation will abort the operation.</param>
+    /// <param name="onStatusLine">Optional callback invoked for each non-empty stdout line produced by the process.</param>
+    /// <param name="arguments">Arguments passed to the process.</param>
+    /// <remarks>
+    /// This method logs each stdout line at info level and invokes <paramref name="onStatusLine"/> for non-empty lines. If the process cannot be started or exits with a non-zero exit code, an <see cref="InvalidOperationException"/> is thrown. Operation cancellation will propagate via the provided <paramref name="cancellationToken"/>.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the process fails to start or when it exits with a non-zero exit code.</exception>
     private async Task RunProcessAsync(
         string fileName,
         string workingDirectory,
@@ -619,19 +631,21 @@ public sealed class ManagedCpuRuntimeManager
         Action<string>? onStatusLine,
         params string[] arguments)
     {
-        var commandLine = BuildCommandLine(arguments);
+        // Use ArgumentList so the runtime handles all quoting; paths with spaces are safe.
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        foreach (var arg in arguments)
+            psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running CPU runtime process: {QuoteIfNeeded(fileName)} {commandLine}");
+        _log.Info(
+            $"Running CPU runtime process: {fileName} {ProcessArgFormatter.FormatArgs(arguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -652,32 +666,44 @@ public sealed class ManagedCpuRuntimeManager
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Process {QuoteIfNeeded(fileName)} {commandLine} failed with exit code {process.ExitCode}: {stderr}");
+                $"Process '{fileName} {ProcessArgFormatter.FormatArgs(arguments)}' failed with exit code {process.ExitCode}: {stderr}");
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))
             _log.Info(stderr.Trim());
     }
 
+    /// <summary>
+    /// Starts a process with the specified executable and arguments, waits for it to exit, and captures its exit code, standard output, and standard error.
+    /// </summary>
+    /// <param name="fileName">Path to the executable to run.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation while waiting for the process and reading its output.</param>
+    /// <param name="arguments">Arguments passed to the process; each element is added to the process argument list so quoting/escaping is handled by the runtime.</param>
+    /// <returns>
+    /// A <see cref="ManagedCpuProcessCapture"/> containing the process exit code, the full standard output, and the full standard error.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">Thrown if the process could not be started.</exception>
     private async Task<ManagedCpuProcessCapture> RunProcessCaptureAsync(
         string fileName,
         string workingDirectory,
         CancellationToken cancellationToken,
         params string[] arguments)
     {
-        var commandLine = BuildCommandLine(arguments);
+        // Use ArgumentList so the runtime handles all quoting; paths with spaces are safe.
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        foreach (var arg in arguments)
+            psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running CPU runtime capture process: {QuoteIfNeeded(fileName)} {commandLine}");
+        _log.Info($"Running CPU runtime capture process: {fileName} {ProcessArgFormatter.FormatArgs(arguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -693,93 +719,7 @@ public sealed class ManagedCpuRuntimeManager
             await stderrTask.ConfigureAwait(false));
     }
 
-    private static string BuildCommandLine(string[] arguments)
-    {
-        var sb = new StringBuilder();
-        foreach (var arg in arguments)
-        {
-            if (sb.Length > 0) sb.Append(' ');
-            AppendWindowsQuoted(sb, arg);
-        }
-        return sb.ToString();
-    }
 
-    /// <summary>
-    /// Appends a single argument to a Windows CreateProcess command-line string using
-    /// CommandLineToArgvW-compatible quoting:
-    /// - Wraps in " if the arg contains spaces, tabs, or quotes.
-    /// - Doubles backslashes that immediately precede a " or the closing ".
-    /// - Escapes embedded " as \".
-    /// </summary>
-    private static void AppendWindowsQuoted(StringBuilder sb, string arg)
-    {
-        if (string.IsNullOrEmpty(arg))
-        {
-            sb.Append("\"\"");
-            return;
-        }
-
-        bool needsQuoting = arg.IndexOfAny([' ', '\t', '"', '\n', '\r']) >= 0;
-        if (!needsQuoting)
-        {
-            sb.Append(arg);
-            return;
-        }
-
-        sb.Append('"');
-        int i = 0;
-        while (i < arg.Length)
-        {
-            char c = arg[i];
-            if (c == '\\')
-            {
-                int numBackslashes = 0;
-                while (i < arg.Length && arg[i] == '\\')
-                {
-                    numBackslashes++;
-                    i++;
-                }
-
-                if (i == arg.Length)
-                {
-                    // Backslashes at end of arg precede the closing " — must be doubled.
-                    sb.Append('\\', numBackslashes * 2);
-                }
-                else if (arg[i] == '"')
-                {
-                    // Backslashes before a " — double them and escape the ".
-                    sb.Append('\\', numBackslashes * 2 + 1);
-                    sb.Append('"');
-                    i++;
-                }
-                else
-                {
-                    // Backslashes not before a " — emit as-is.
-                    sb.Append('\\', numBackslashes);
-                }
-            }
-            else if (c == '"')
-            {
-                sb.Append('\\');
-                sb.Append('"');
-                i++;
-            }
-            else
-            {
-                sb.Append(c);
-                i++;
-            }
-        }
-
-        sb.Append('"');
-    }
-
-    private static string QuoteIfNeeded(string arg)
-    {
-        var sb = new StringBuilder();
-        AppendWindowsQuoted(sb, arg);
-        return sb.ToString();
-    }
 
     // Marker format includes PythonVersion plus labeled requirements/constraints bodies so
     // upgrades and manifest edits invalidate the venv consistently with tests.

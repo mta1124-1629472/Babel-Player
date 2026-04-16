@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Planning;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using CoordinatorOptions = Babel.Player.Models.CoordinatorOptions;
@@ -392,6 +393,9 @@ public static class DependencyLocator
             ContainerizedProbe          = containerizedProbe,
             ContainerizedInferenceManager = containerizedManager,
             AudioProcessingService      = audioProcessingService,
+            ExecutionPlanner            = DefaultExecutionPlanner.Instance,
+            InferenceExecutionEngine    = DefaultInferenceExecutionEngine.Instance,
+            RequestLeaseTracker         = requestLeaseTracker,
         };
 
         var coreServices = new CoordinatorCoreServices(snapshotStore, appLog, appSettings);

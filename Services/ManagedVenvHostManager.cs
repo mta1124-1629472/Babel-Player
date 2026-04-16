@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
@@ -907,33 +906,44 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
+    /// <summary>
+    /// Builds a ProcessStartInfo configured to launch the managed Python inference host process.
+    /// </summary>
+    /// <remarks>
+    /// The returned ProcessStartInfo redirects stdout and stderr, disables shell execution and window creation,
+    /// and sets the working directory to the directory containing <paramref name="inferenceScriptPath"/> (or the app base directory if unavailable).
+    /// Command-line arguments include the inference script path, host/port, and the specified compute type; a `--require-cuda` flag is added when the compute type requires CUDA.
+    /// The environment is configured to make CUDA kernel errors synchronous and to set HuggingFace hub cache and Qwen concurrency variables.
+    /// </remarks>
+    /// <param name="pythonPath">Full path to the Python interpreter to launch.</param>
+    /// <param name="inferenceScriptPath">Path to the inference script that the host will run; its directory is used as the process working directory when possible.</param>
+    /// <param name="computeType">Compute type to request from the host (e.g., "float16", "float8", "cpu").</param>
+    /// <returns>A ProcessStartInfo ready to start the managed host with the appropriate arguments and environment variables.</returns>
     internal static ProcessStartInfo CreateHostProcessStartInfo(
         string pythonPath,
         string inferenceScriptPath,
         string computeType)
     {
-        var commandLine = BuildCommandLine(new[]
-        {
-            inferenceScriptPath,
-            "--host",
-            "127.0.0.1",
-            "--port",
-            "18000",
-            "--compute-type",
-            computeType,
-            RequiresCuda(computeType) ? "--require-cuda" : string.Empty
-        }.Where(s => !string.IsNullOrEmpty(s)).ToArray());
-
+        // Use ArgumentList so the runtime handles all quoting; paths with spaces are safe.
         var psi = new ProcessStartInfo
         {
             FileName = pythonPath,
             WorkingDirectory = Path.GetDirectoryName(inferenceScriptPath) ?? AppContext.BaseDirectory,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+
+        psi.ArgumentList.Add(inferenceScriptPath);
+        psi.ArgumentList.Add("--host");
+        psi.ArgumentList.Add("127.0.0.1");
+        psi.ArgumentList.Add("--port");
+        psi.ArgumentList.Add("18000");
+        psi.ArgumentList.Add("--compute-type");
+        psi.ArgumentList.Add(computeType);
+        if (RequiresCuda(computeType))
+            psi.ArgumentList.Add("--require-cuda");
 
         // Make CUDA kernel errors synchronous so the Python traceback points at the
         // actual failing op rather than a random later API call.
@@ -948,24 +958,30 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         return psi;
     }
 
+    /// <summary>
+    /// Validates that the managed Python runtime at the given python executable can import PyTorch and access CUDA.
+    /// </summary>
+    /// <param name="pythonPath">Full path to the Python executable inside the managed virtual environment.</param>
+    /// <param name="cancellationToken">Cancellation token to abort the validation process.</param>
+    /// <returns>
+    /// A <see cref="ManagedGpuRuntimeValidationResult"/> describing whether CUDA is available, a human-readable message, and the detected CUDA version (or null).
+    /// </returns>
     private static async Task<ManagedGpuRuntimeValidationResult> ValidateManagedGpuRuntimeAsync(
         string pythonPath,
         CancellationToken cancellationToken)
     {
-        var commandLine = BuildCommandLine([
-            "-c",
-            "import json, torch; print(json.dumps({'cuda_available': bool(torch.cuda.is_available()), 'cuda_version': getattr(torch.version, 'cuda', None)}))"
-        ]);
-
+        // Use ArgumentList so embedded single/double quotes in the Python snippet are
+        // passed to the process verbatim without any manual escaping.
         var psi = new ProcessStartInfo
         {
             FileName = pythonPath,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("import json, torch; print(json.dumps({'cuda_available': bool(torch.cuda.is_available()), 'cuda_version': getattr(torch.version, 'cuda', None)}))");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start managed GPU runtime validation process.");
@@ -1020,6 +1036,19 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
+    /// <summary>
+    /// Runs an external process, streams its stdout/stderr for progress reporting, and fails if the process exits non‑zero.
+    /// </summary>
+    /// <remarks>
+    /// Entry state: caller must provide the executable path and a working directory where the process may run; this method does not assume any particular host lifecycle state.
+    /// Success state: the external process has exited with code 0 and any streamed stdout/stderr have been observed; no host session/state is persisted by this call.
+    /// Cancellation: honours <paramref name="cancellationToken"/> for reading streams, waiting for exit, and will throw <see cref="OperationCanceledException"/> when cancelled.
+    /// </remarks>
+    /// <param name="fileName">Path to the executable to run.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="onStatusLine">Optional callback invoked for each stdout line as it is produced (used for live bootstrap progress reporting).</param>
+    /// <param name="cancellationToken">Token to cancel stream reads and process wait operations.</param>
+    /// <param name="arguments">Command-line arguments to pass to the process; arguments are added to <see cref="ProcessStartInfo.ArgumentList"/> so no manual quoting is required.</param>
     private async Task RunProcessAsync(
         string fileName,
         string workingDirectory,
@@ -1027,19 +1056,21 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         CancellationToken cancellationToken,
         params string[] arguments)
     {
-        var commandLine = BuildCommandLine(arguments);
+        // Use ArgumentList so the runtime handles all quoting; paths with spaces are safe.
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        foreach (var arg in arguments)
+            psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running managed GPU process: {QuoteIfNeeded(fileName)} {commandLine}");
+        _log.Info(
+            $"Running managed GPU process: {fileName} {ProcessArgFormatter.FormatArgs(arguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -1065,101 +1096,22 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             var stdoutSnippet = stdoutLines.Length > 0 ? $"\nstdout: {stdoutLines}" : string.Empty;
             throw new InvalidOperationException(
-                $"Process {QuoteIfNeeded(fileName)} {commandLine} failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
+                $"Process '{fileName} {ProcessArgFormatter.FormatArgs(arguments)}' failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))
             _log.Info(stderr.Trim());
     }
 
-    private static string BuildCommandLine(string[] arguments)
-    {
-        var sb = new StringBuilder();
-        foreach (var arg in arguments)
-        {
-            if (sb.Length > 0) sb.Append(' ');
-            AppendWindowsQuoted(sb, arg);
-        }
-        return sb.ToString();
-    }
 
     /// <summary>
-    /// Appends a single argument to a Windows CreateProcess command-line string using
-    /// CommandLineToArgvW-compatible quoting:
-    /// - Wraps in " if the arg contains spaces, tabs, or quotes.
-    /// - Doubles backslashes that immediately precede a " or the closing ".
-    /// - Escapes embedded " as \".
+    /// Reads lines from the given process stream until EOF and logs non-empty lines prefixed with the provided label.
     /// </summary>
-    private static void AppendWindowsQuoted(StringBuilder sb, string arg)
-    {
-        if (string.IsNullOrEmpty(arg))
-        {
-            sb.Append("\"\"");
-            return;
-        }
-
-        bool needsQuoting = arg.IndexOfAny([' ', '\t', '"', '\n', '\r']) >= 0;
-        if (!needsQuoting)
-        {
-            sb.Append(arg);
-            return;
-        }
-
-        sb.Append('"');
-        int i = 0;
-        while (i < arg.Length)
-        {
-            char c = arg[i];
-            if (c == '\\')
-            {
-                int numBackslashes = 0;
-                while (i < arg.Length && arg[i] == '\\')
-                {
-                    numBackslashes++;
-                    i++;
-                }
-
-                if (i == arg.Length)
-                {
-                    // Backslashes at end of arg precede the closing " — must be doubled.
-                    sb.Append('\\', numBackslashes * 2);
-                }
-                else if (arg[i] == '"')
-                {
-                    // Backslashes before a " — double them and escape the ".
-                    sb.Append('\\', numBackslashes * 2 + 1);
-                    sb.Append('"');
-                    i++;
-                }
-                else
-                {
-                    // Backslashes not before a " — emit as-is.
-                    sb.Append('\\', numBackslashes);
-                }
-            }
-            else if (c == '"')
-            {
-                sb.Append('\\');
-                sb.Append('"');
-                i++;
-            }
-            else
-            {
-                sb.Append(c);
-                i++;
-            }
-        }
-
-        sb.Append('"');
-    }
-
-    private static string QuoteIfNeeded(string arg)
-    {
-        var sb = new StringBuilder();
-        AppendWindowsQuoted(sb, arg);
-        return sb.ToString();
-    }
-
+    /// <param name="reader">The redirected process stream reader (stdout or stderr) to consume until end-of-stream.</param>
+    /// <param name="prefix">A short label used as the log prefix (e.g. "stdout" or "stderr").</param>
+    /// <remarks>
+    /// This method completes when the stream reaches end-of-file. It does not observe cancellation and will run until the reader returns null.
+    /// </remarks>
     private async Task DrainProcessStreamAsync(StreamReader reader, string prefix)
     {
         while (true)

@@ -10,4 +10,7 @@ namespace Babel.Player.Services;
 public sealed class PipelineProviderException : InvalidOperationException
 {
     public PipelineProviderException(string message) : base(message) { }
+
+    public PipelineProviderException(string message, Exception innerException)
+        : base(message, innerException) { }
 }

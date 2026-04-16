@@ -8,15 +8,6 @@
       ],
       "id": "b54661543bcc4c889c1eb04eda150259",
       "headers": {}
-    },
-    "desktop-commander": {
-      "command": "cmd",
-      "args": [
-        "/c",
-        "npx",
-        "-y",
-        "@wonderwhy-er/desktop-commander@latest"
-      ]
     }
   }
 }

@@ -7,7 +7,7 @@ using Babel.Player.Models;
 
 namespace Babel.Player.Services;
 
-internal sealed record TranscriptChannelItem(
+public sealed record TranscriptChannelItem(
     string SegmentId,
     TranscriptSegmentArtifact Segment,
     string SourceLanguage,
@@ -24,9 +24,25 @@ internal sealed record TtsChannelItem(
     TranslationSegmentArtifact Segment,
     TtsResult Result);
 
-internal interface IStreamingTranscriptionProvider
+public interface IStreamingTranscriptionProvider
 {
-    Task<TranscriptionResult> TranscribeStreamingAsync(
+    /// <summary>
+        /// Starts a streaming transcription for the specified request and emits transcript updates to the provided channel writer.
+        /// </summary>
+        /// <param name="request">The transcription request describing the audio source, model options, and desired output parameters.</param>
+        /// <param name="writer">A channel writer to which incremental <see cref="TranscriptChannelItem"/> updates will be written.</param>
+        /// <param name="cancellationToken">A token to cancel the streaming operation; implementations must observe this token and stop producing new items when cancellation is requested.</param>
+        /// <returns>The final <see cref="TranscriptionResult"/> containing the aggregated transcript, language information, and any session metrics.</returns>
+        /// <remarks>
+        /// Entry/exit state:
+        /// - Entry: caller must ensure the hosting pipeline is initialized and ready to accept streaming transcription requests.
+        /// - Exit on success: the transcription session is completed and the returned <see cref="TranscriptionResult"/> represents the final transcript state; implementations will have emitted final segment updates to <paramref name="writer"/>.
+        /// Persistence:
+        /// - Implementations may persist partial artifacts as items are written to <paramref name="writer"/> and should promote any partial artifacts to final storage before returning the final result.
+        /// Cancellation:
+        /// - When <paramref name="cancellationToken"/> is signaled, implementations should stop producing further transcript updates and perform any required cleanup or finalization as quickly as possible.
+        /// </remarks>
+        Task<TranscriptionResult> TranscribeStreamingAsync(
         TranscriptionRequest request,
         ChannelWriter<TranscriptChannelItem> writer,
         CancellationToken cancellationToken = default);
@@ -187,6 +203,63 @@ internal sealed class TranslationArtifactStreamingWriter
         await PersistAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public int IndexOfSegment(string segmentId)
+    {
+        if (string.IsNullOrWhiteSpace(segmentId))
+            return -1;
+
+        var segments = _artifact.Segments;
+        if (segments is null)
+            return -1;
+
+        for (var i = 0; i < segments.Count; i++)
+        {
+            if (string.Equals(segments[i].Id, segmentId, StringComparison.Ordinal))
+                return i;
+        }
+
+        return -1;
+    }
+
+    public async Task<TranslationSegmentArtifact> ApplyTranslatedTextAsync(
+        string segmentId,
+        string translatedText,
+        string? sourceLanguage,
+        string? targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        var index = IndexOfSegment(segmentId);
+        if (index < 0)
+            throw new InvalidOperationException($"Translated segment '{segmentId}' was not found in the streaming translation artifact.");
+
+        return await ApplyTranslatedTextAsync(index, translatedText, sourceLanguage, targetLanguage, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<TranslationSegmentArtifact> ApplyTranslatedTextAsync(
+        int segmentIndex,
+        string translatedText,
+        string? sourceLanguage,
+        string? targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        var segments = _artifact.Segments;
+        if (segments == null || segmentIndex < 0 || segmentIndex >= segments.Count)
+            throw new ArgumentOutOfRangeException(nameof(segmentIndex), $"Segment index {segmentIndex} is out of range.");
+
+        _artifact.SourceLanguage = string.IsNullOrWhiteSpace(sourceLanguage)
+            ? _artifact.SourceLanguage
+            : sourceLanguage;
+        _artifact.TargetLanguage = string.IsNullOrWhiteSpace(targetLanguage)
+            ? _artifact.TargetLanguage
+            : targetLanguage;
+
+        var matched = segments[segmentIndex];
+        matched.TranslatedText = translatedText;
+
+        await PersistAsync(cancellationToken).ConfigureAwait(false);
+        return StreamingArtifactCloneHelpers.CloneTranslationSegment(matched);
+    }
+
     public async Task ReloadFromDiskAsync(CancellationToken cancellationToken)
     {
         _artifact = await ArtifactJson.LoadTranslationAsync(_partialPath, cancellationToken).ConfigureAwait(false);
@@ -200,4 +273,18 @@ internal sealed class TranslationArtifactStreamingWriter
 
     private Task PersistAsync(CancellationToken cancellationToken) =>
         System.IO.File.WriteAllTextAsync(_partialPath, ArtifactJson.SerializeTranslation(_artifact), cancellationToken);
+}
+
+internal static class StreamingArtifactCloneHelpers
+{
+    internal static TranslationSegmentArtifact CloneTranslationSegment(TranslationSegmentArtifact segment) =>
+        new()
+        {
+            Id = segment.Id,
+            Start = segment.Start,
+            End = segment.End,
+            Text = segment.Text,
+            TranslatedText = segment.TranslatedText,
+            SpeakerId = segment.SpeakerId,
+        };
 }

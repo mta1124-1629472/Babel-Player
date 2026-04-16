@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Reactive.Subjects;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Planning;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -35,10 +36,19 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranscriptionProvider? _transcriptionService;
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
+    private IVocalSeparationProvider? _vocalSeparationProvider;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private readonly ConcurrentBag<Task> _pendingTtsTasks = [];
     private readonly IAudioProcessingService? _audioProcessingService;
 
 
+    private readonly IInferenceExecutionEngine _inferenceEngine;
+    private readonly IExecutionPlanner _executionPlanner;
+    private readonly TranscriptionOrchestrator _transcriptionOrchestrator;
+    private readonly TranslationOrchestrator _translationOrchestrator;
+    private readonly DiarizationStageOrchestrator _diarizationStageOrchestrator;
+    private readonly TtsPipelineOrchestrator _ttsPipelineOrchestrator;
+    private readonly StreamingPipelineOrchestrator _streamingPipelineOrchestrator;
     private readonly IMediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
     private bool _subscribedToSourceDiagnostics;
@@ -133,7 +143,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// <param name="coreServices">Core application services and shared dependencies (settings, store, logging) required by the coordinator.</param>
     /// <param name="transportManager">Media transport manager responsible for playback and segment transports for this coordinator.</param>
     /// <param name="registries">Registry bundle providing per-session stores and provider registries (transcription, translation, TTS, recent sessions).</param>
-    /// <param name="options">Optional coordinator extensions and test hooks (container probe/manager, audio processing, artifact reader, session switch service, key store, diarization registry). When null, defaults are applied.</param>
+    /// <summary>
+    /// Initializes a new SessionWorkflowCoordinator with the provided core services, transport manager, and registries, and prepares internal orchestration, runtime, and probe wiring required to manage the session workflow.
+    /// </summary>
+    /// <param name="coreServices">Core application services and stores required by the coordinator (settings, persistence store, logging).</param>
+    /// <param name="transportManager">Media transport manager used for playback and segment transport.</param>
+    /// <param name="registries">Provider registries and per-session/recent session stores used to resolve transcription, translation, TTS, and persistence backends.</param>
+    /// <param name="options">Optional coordinator extensions and test hooks (container probe/manager, audio processing, artifact reader, session switch service, key store, diarization registry). When null, sensible defaults are applied.</param>
     public SessionWorkflowCoordinator(
         CoordinatorCoreServices coreServices,
         IMediaTransportManager transportManager,
@@ -161,6 +177,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         CurrentSettings = coreServices.Settings;
         KeyStore = options.KeyStore;
         _transportManager = transportManager;
+        _inferenceEngine = options.InferenceExecutionEngine ?? DefaultInferenceExecutionEngine.Instance;
+        _executionPlanner = options.ExecutionPlanner ?? DefaultExecutionPlanner.Instance;
+        _requestLeaseTracker = options.RequestLeaseTracker;
+        _transcriptionOrchestrator = new TranscriptionOrchestrator(this);
+        _translationOrchestrator = new TranslationOrchestrator(this);
+        _diarizationStageOrchestrator = new DiarizationStageOrchestrator(this);
+        _ttsPipelineOrchestrator = new TtsPipelineOrchestrator(this);
+        _streamingPipelineOrchestrator = new StreamingPipelineOrchestrator(this);
 
         _segmentEndedHandler = OnSegmentPlayerEnded;
         _segmentErrorHandler = (_, _) => OnSegmentPlayerError();
@@ -432,6 +456,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             CurrentSession = validated with
             {
                 IngestedMediaPath = ingestedPath,
+                VocalsAudioPath = validated.VocalsAudioPath,
+                InstrumentalAudioPath = validated.InstrumentalAudioPath,
                 MediaLoadedAtUtc = nowUtc,
                 LastUpdatedAtUtc = nowUtc,
                 StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
@@ -467,6 +493,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 Stage = SessionWorkflowStage.MediaLoaded,
                 SourceMediaPath = sourceMediaPath,
                 IngestedMediaPath = ingestedPath,
+                VocalsAudioPath = null,
+                InstrumentalAudioPath = null,
                 MediaLoadedAtUtc = nowUtc,
                 TranscriptPath = null,
                 SourceLanguage = null,
@@ -726,6 +754,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             (_ttsService as IDisposable)?.Dispose();
             _ttsService = null;
         }
+        (_vocalSeparationProvider as IDisposable)?.Dispose();
+        _vocalSeparationProvider = null;
 
         var invalidation = CheckSettingsInvalidation();
         _log.Info(
@@ -787,6 +817,15 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// Thrown when no translation is available, the specified segment cannot be found in the translation, or TTS generation fails.
     /// </exception>
     /// <exception cref="FileNotFoundException">Thrown when the session's translation file is missing on disk.</exception>
+    /// <summary>
+    /// Regenerates the TTS audio file for a single translated segment and updates the session's TTS segment audio mapping.
+    /// </summary>
+    /// <param name="segmentId">Identifier of the translated segment to regenerate TTS for.</param>
+    /// <remarks>
+    /// Preconditions: <see cref="CurrentSession.TranslationPath"/> must be set and the translation file must exist; otherwise this method throws (<see cref="InvalidOperationException"/> or <see cref="FileNotFoundException"/>). The method ensures any required containerized runtime is started and checks provider readiness before generation; if the configured TTS provider is not ready for execution and a model download is not required, a <see cref="PipelineProviderException"/> is thrown. On success the session's <c>TtsSegmentAudioPaths</c> and <c>StatusMessage</c> are updated and the session is persisted via <see cref="SaveCurrentSession"/>. This method does not accept a cancellation token and does not support cooperative cancellation.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when no translation is available, the segment is not found, or TTS generation fails.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session does not exist.</exception>
     /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider is not ready for execution and no model download is required.</exception>
     public async Task RegenerateSegmentTtsAsync(string segmentId)
     {
@@ -842,7 +881,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText[..Math.Min(30, segmentText.Length)]}...");
 
         var targetLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
-        var ttsTask = _ttsService.GenerateSegmentTtsAsync(
+        var ttsTask = _inferenceEngine.GenerateSegmentTtsAsync(
+            _ttsService,
             new SingleSegmentTtsRequest(
                 segmentText,
                 segmentAudioPath,
@@ -881,7 +921,16 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// Thrown when there is no translation available for the current session, when the source text for the specified segment is missing,
     /// when the session's source or target language is not set, or when the translation operation fails.
     /// </exception>
+    /// <summary>
+    /// Regenerates the translated text for a single segment and updates session status.
+    /// </summary>
+    /// <param name="segmentId">The identifier of the segment to regenerate (stable segment id produced by SegmentId).</param>
+    /// <remarks>
+    /// Entry state: requires a current session with <see cref="WorkflowSessionSnapshot.TranslationPath"/> set and a translation file present on disk. On success: updates the session <see cref="WorkflowSessionSnapshot.StatusMessage"/> to indicate the regenerated segment and persists the session snapshot. This method observes the coordinator's translation execution readiness and will attempt to prepare the translation runtime before invoking translation. The operation honors cooperative cancellation if the coordinator's runtime readiness checks or the underlying translation pipeline support it; callers should use external cancellation by stopping coordinator-triggered workflows where applicable.
+    /// Guard conditions: throws if the translation path is missing or the translation file is not found, if source or target language is not set, or if the segment source text cannot be located. If readiness checks indicate the translation cannot run (for example due to missing provider readiness), the method will throw an InvalidOperationException describing the failure.
+    /// </remarks>
     /// <exception cref="FileNotFoundException">Thrown when the current session's translation file cannot be found on disk.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the session lacks a translation path, when the source or target language is not set, when the segment source text is not found, or when the translation attempt fails.</exception>
     public async Task RegenerateSegmentTranslationAsync(string segmentId)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
@@ -916,7 +965,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
         _log.Info($"Regenerating translation for segment {segmentId}: {sourceText[..Math.Min(30, sourceText.Length)]}...");
 
-        var result = await _translationService.TranslateSingleSegmentAsync(
+        var result = await _inferenceEngine.TranslateSingleSegmentAsync(
+            _translationService,
             new SingleSegmentTranslationRequest(
                 sourceText,
                 segmentId,
@@ -952,6 +1002,32 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         start == (int)start
             ? FormattableString.Invariant($"segment_{start:0.0}")
             : FormattableString.Invariant($"segment_{start}");
+
+    /// <summary>
+    /// Builds TTS output file paths for a translation artifact and ensures their parent directories exist.
+    /// Sanitizes the voice identifier so that reserved path characters don't produce invalid file names.
+    /// </summary>
+    /// <param name="translationPath">Full path to the translation artifact JSON file.</param>
+    /// <param name="voice">Voice identifier used to name the combined MP3 output file.</param>
+    /// <returns>
+    /// A tuple of <c>TtsPath</c> (full path to the per-translation MP3) and <c>SegmentsDir</c>
+    /// (directory for per-segment audio files); both directories are created if they do not exist.
+    /// </returns>
+    internal static (string TtsPath, string SegmentsDir) BuildTtsOutputPaths(string translationPath, string voice)
+    {
+        var sessionDir = Path.GetDirectoryName(Path.GetDirectoryName(translationPath)!)!;
+        var ttsDir = Path.Combine(sessionDir, "tts");
+        Directory.CreateDirectory(ttsDir);
+        var fileName = Path.GetFileNameWithoutExtension(translationPath);
+        // Sanitize the voice identifier so reserved/path characters don't produce invalid file names.
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitizedVoice = string.Concat((voice ?? string.Empty).Split(invalidChars)).Trim();
+        if (sanitizedVoice.Length == 0) sanitizedVoice = "default";
+        var ttsPath = Path.Combine(ttsDir, $"{fileName}_{sanitizedVoice}.mp3");
+        var segmentsDir = Path.Combine(ttsDir, "segments", Path.GetFileNameWithoutExtension(translationPath));
+        Directory.CreateDirectory(segmentsDir);
+        return (ttsPath, segmentsDir);
+    }
 
     private string GetSessionDirectory() => SessionDirectoryFor(CurrentSession.SessionId);
 

@@ -29,12 +29,21 @@ public sealed partial class SessionWorkflowCoordinator
             || (settings.TtsProfile == ComputeProfile.Gpu
                 && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
                     || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));
+        bool vocalSeparationProviderChanged = !string.Equals(
+            settings.EffectiveContainerizedServiceUrl,
+            CurrentSettings.EffectiveContainerizedServiceUrl,
+            StringComparison.OrdinalIgnoreCase);
 
         CurrentSettings = settings;
 
         if (transcriptionProviderChanged) _transcriptionService = null;
         if (translationProviderChanged) _translationService = null;
         if (ttsProviderChanged) _ttsService = null;
+        if (vocalSeparationProviderChanged)
+        {
+            (_vocalSeparationProvider as IDisposable)?.Dispose();
+            _vocalSeparationProvider = null;
+        }
 
         RefreshVideoEnhancementDiagnostics();
     }
@@ -56,6 +65,8 @@ public sealed partial class SessionWorkflowCoordinator
         _transcriptionService = null;
         _translationService = null;
         _ttsService = null;
+        (_vocalSeparationProvider as IDisposable)?.Dispose();
+        _vocalSeparationProvider = null;
     }
 
     /// <summary>

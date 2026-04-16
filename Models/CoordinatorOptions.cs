@@ -1,4 +1,5 @@
 using Babel.Player.Services;
+using Babel.Player.Services.Planning;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 
@@ -47,6 +48,25 @@ public sealed record CoordinatorOptions
     /// Audio processing service (ffmpeg-backed). Null disables audio pre-processing steps.
     /// </summary>
     public IAudioProcessingService? AudioProcessingService { get; init; }
+
+    /// <summary>
+    /// Executes transcription, translation, TTS, and diarization provider calls. When null,
+    /// <see cref="DefaultInferenceExecutionEngine.Instance"/> is used.
+    /// </summary>
+    public IInferenceExecutionEngine? InferenceExecutionEngine { get; init; }
+
+    /// <summary>
+    /// Stage execution planner used to resolve effective provider/runtime for each pipeline stage.
+    /// When null, <see cref="DefaultExecutionPlanner.Instance"/> is used.
+    /// </summary>
+    public IExecutionPlanner? ExecutionPlanner { get; init; }
+
+    /// <summary>
+    /// Shared lease tracker for containerized inference requests. When provided, vocal separation
+    /// requests are counted as active container requests so the managed host waits for them before
+    /// restarting. Null disables lease tracking for vocal separation.
+    /// </summary>
+    public ContainerizedRequestLeaseTracker? RequestLeaseTracker { get; init; }
 
     /// <summary>Returns a <see cref="CoordinatorOptions"/> with all fields at their defaults (all null).</summary>
     public static CoordinatorOptions Empty { get; } = new();

@@ -11,6 +11,8 @@ public sealed record WorkflowSessionSnapshot(
     string StatusMessage,
     string? SourceMediaPath = null,
     string? IngestedMediaPath = null,
+    string? VocalsAudioPath = null,
+    string? InstrumentalAudioPath = null,
     DateTimeOffset? MediaLoadedAtUtc = null,
     string? TranscriptPath = null,
     DateTimeOffset? TranscribedAtUtc = null,
