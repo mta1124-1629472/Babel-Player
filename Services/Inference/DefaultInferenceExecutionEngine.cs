@@ -12,9 +12,9 @@ public sealed class DefaultInferenceExecutionEngine : IInferenceExecutionEngine
 {
     public static DefaultInferenceExecutionEngine Instance { get; } = new();
 
-    /// <summary>
-/// Prevents external instantiation to enforce the class's singleton usage.
-/// </summary>
+        /// <summary>
+    /// Prevents external instantiation to enforce the class's singleton usage.
+    /// </summary>
 private DefaultInferenceExecutionEngine() { }
 
     /// <summary>

@@ -400,10 +400,27 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     // Reload from disk so in-memory state matches what the provider wrote,
                     // then look up the segment by ID (reliable; avoids float comparison).
                     await artifactWriter.ReloadFromDiskAsync(cancellationToken).ConfigureAwait(false);
-                    var translatedSegment = artifactWriter.OrderedSegments.FirstOrDefault(segment =>
-                        string.Equals(segment.Id, item.SegmentId, StringComparison.Ordinal));
+                    // Prefer matching by ID (reliable; avoids float comparison)
+                    var translatedSegment = artifactWriter.OrderedSegments.FirstOrDefault(s =>
+                        string.Equals(s.Id, item.SegmentId, StringComparison.Ordinal));
+
+                    // Fall back to start-time heuristic only if no ID match exists
+                    if (translatedSegment == null)
+                    {
+                        translatedSegment = artifactWriter.OrderedSegments.FirstOrDefault(s =>
+                            Math.Abs(s.Start - item.Segment.Start) < 0.001);
+
+                        if (translatedSegment != null)
+                            _c.Log.Warning($"Translated segment for '{item.SegmentId}' matched by timing fallback (start={item.Segment.Start}s) instead of ID.");
+                    }
+
                     if (translatedSegment is null)
+                    {
+                        if (result.Success && result.Segments != null && result.Segments.Count > 0)
+                            _c.Log.Warning($"Provider reported success for '{item.SegmentId}' but it could not be resolved in the partial artifact (count={artifactWriter.OrderedSegments.Count}).");
+
                         throw new InvalidOperationException($"Translated segment '{item.SegmentId}' was not written to the partial artifact.");
+                    }
 
                     completed++;
                     ReportStage(
@@ -635,29 +652,8 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             return Path.Combine(translationDir, $"{fileName}_{targetLanguage}.json");
         }
 
-        /// <summary>
-        /// Builds TTS artifact file paths for a translation artifact and ensures their directories exist.
-        /// </summary>
-        /// <param name="translationPath">The full path to the translation artifact JSON file.</param>
-        /// <param name="voice">The voice identifier to include in the TTS output filename.</param>
-        /// <returns>
-        /// A tuple where `TtsPath` is the full path to the per-translation MP3 file and `SegmentsDir` is the directory for per-segment MP3 files; both directories are created if missing.
-        /// </returns>
-        private static (string TtsPath, string SegmentsDir) BuildTtsArtifacts(string translationPath, string voice)
-        {
-            var sessionDir = Path.GetDirectoryName(Path.GetDirectoryName(translationPath)!)!;
-            var ttsDir = Path.Combine(sessionDir, "tts");
-            Directory.CreateDirectory(ttsDir);
-            var fileName = Path.GetFileNameWithoutExtension(translationPath);
-            // Sanitize the voice identifier so reserved/path characters don't produce invalid file names.
-            var invalidChars = Path.GetInvalidFileNameChars();
-            var sanitizedVoice = string.Concat((voice ?? string.Empty).Split(invalidChars)).Trim();
-            if (sanitizedVoice.Length == 0) sanitizedVoice = "default";
-            var ttsPath = Path.Combine(ttsDir, $"{fileName}_{sanitizedVoice}.mp3");
-            var segmentsDir = Path.Combine(ttsDir, "segments", Path.GetFileNameWithoutExtension(translationPath));
-            Directory.CreateDirectory(segmentsDir);
-            return (ttsPath, segmentsDir);
-        }
+        private static (string TtsPath, string SegmentsDir) BuildTtsArtifacts(string translationPath, string voice) =>
+            SessionWorkflowCoordinator.BuildTtsOutputPaths(translationPath, voice);
 
         /// <summary>
                 /// Builds a successful TranslationResult from a collection of translation artifact segments.

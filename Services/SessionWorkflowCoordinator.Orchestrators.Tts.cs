@@ -58,21 +58,11 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                 progress01: 0,
                 isIndeterminate: false);
 
-            var sessionDir = _c.GetSessionDirectory();
-            var ttsDir = Path.Combine(sessionDir, "tts");
-            Directory.CreateDirectory(ttsDir);
-
-            var fileName = Path.GetFileNameWithoutExtension(_c.CurrentSession.TranslationPath);
-            // Sanitize the voice identifier so reserved/path characters don't produce invalid file names.
-            var invalidChars = Path.GetInvalidFileNameChars();
-            var sanitizedVoice = string.Concat((v ?? string.Empty).Split(invalidChars)).Trim();
-            if (sanitizedVoice.Length == 0) sanitizedVoice = "default";
-            var ttsPath = Path.Combine(ttsDir, $"{fileName}_{sanitizedVoice}.mp3");
+            var (ttsPath, segmentsDir) = SessionWorkflowCoordinator.BuildTtsOutputPaths(
+                _c.CurrentSession.TranslationPath!, v!);
             var ttsLanguage = NormalizePipelineLanguage(
                 _c.CurrentSession.TargetLanguage ?? _c.CurrentSettings.TargetLanguage,
                 _c.CurrentSettings.TargetLanguage);
-            var segmentsDir = Path.Combine(ttsDir, "segments", Path.GetFileNameWithoutExtension(_c.CurrentSession.TranslationPath!));
-            Directory.CreateDirectory(segmentsDir);
 
             _c.Log.Info($"Starting TTS generation: {_c.CurrentSession.TranslationPath} -> {ttsPath}");
 

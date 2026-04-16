@@ -991,6 +991,32 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             ? FormattableString.Invariant($"segment_{start:0.0}")
             : FormattableString.Invariant($"segment_{start}");
 
+    /// <summary>
+    /// Builds TTS output file paths for a translation artifact and ensures their parent directories exist.
+    /// Sanitizes the voice identifier so that reserved path characters don't produce invalid file names.
+    /// </summary>
+    /// <param name="translationPath">Full path to the translation artifact JSON file.</param>
+    /// <param name="voice">Voice identifier used to name the combined MP3 output file.</param>
+    /// <returns>
+    /// A tuple of <c>TtsPath</c> (full path to the per-translation MP3) and <c>SegmentsDir</c>
+    /// (directory for per-segment audio files); both directories are created if they do not exist.
+    /// </returns>
+    internal static (string TtsPath, string SegmentsDir) BuildTtsOutputPaths(string translationPath, string voice)
+    {
+        var sessionDir = Path.GetDirectoryName(Path.GetDirectoryName(translationPath)!)!;
+        var ttsDir = Path.Combine(sessionDir, "tts");
+        Directory.CreateDirectory(ttsDir);
+        var fileName = Path.GetFileNameWithoutExtension(translationPath);
+        // Sanitize the voice identifier so reserved/path characters don't produce invalid file names.
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitizedVoice = string.Concat((voice ?? string.Empty).Split(invalidChars)).Trim();
+        if (sanitizedVoice.Length == 0) sanitizedVoice = "default";
+        var ttsPath = Path.Combine(ttsDir, $"{fileName}_{sanitizedVoice}.mp3");
+        var segmentsDir = Path.Combine(ttsDir, "segments", Path.GetFileNameWithoutExtension(translationPath));
+        Directory.CreateDirectory(segmentsDir);
+        return (ttsPath, segmentsDir);
+    }
+
     private string GetSessionDirectory() => SessionDirectoryFor(CurrentSession.SessionId);
 
     private string SessionDirectoryFor(Guid sessionId) =>
