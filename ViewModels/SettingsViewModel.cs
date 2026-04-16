@@ -71,6 +71,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         PreferredLocalGpuBackend = current.PreferredLocalGpuBackend;
         AdvancedGpuServiceUrl  = current.AdvancedGpuServiceUrl;
         AlwaysStartLocalGpuRuntimeAtAppStart = current.AlwaysStartLocalGpuRuntimeAtAppStart;
+        VocalSeparationEnabled = current.VocalSeparationEnabled;
         TranscriptionCpuComputeType = current.TranscriptionCpuComputeType;
         TranscriptionCpuThreads = current.TranscriptionCpuThreads;
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
@@ -184,6 +185,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             ContainerizedProbeState.Available => TimeSpan.FromSeconds(12),
             _ => TimeSpan.FromSeconds(5)
         };
+
+        OnPropertyChanged(nameof(VocalSeparationAvailable));
+        OnPropertyChanged(nameof(VocalSeparationAvailabilityHint));
+        OnPropertyChanged(nameof(HasVocalSeparationAvailabilityHint));
+        if (VocalSeparationEnabled && !VocalSeparationAvailable)
+            VocalSeparationEnabled = false;
     }
 
     // ── Diagnostics ───────────────────────────────────────────────────────────
@@ -336,6 +343,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private bool _alwaysStartLocalGpuRuntimeAtAppStart;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(VocalSeparationAvailable))]
+    [NotifyPropertyChangedFor(nameof(VocalSeparationAvailabilityHint))]
+    [NotifyPropertyChangedFor(nameof(HasVocalSeparationAvailabilityHint))]
+    private bool _vocalSeparationEnabled;
 
     // ── Advanced transcription CPU tuning ─────────────────────────────────────
 
@@ -491,8 +504,63 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public bool HasHdrAvailabilityHint => !string.IsNullOrWhiteSpace(HdrAvailabilityHintText);
 
+    public bool VocalSeparationAvailable => TryGetVocalSeparationCapability(out var ready, out _) && ready;
+
+    public string VocalSeparationAvailabilityHint
+    {
+        get
+        {
+            _ = TryGetVocalSeparationCapability(out _, out var hint);
+            return hint ?? "Requires a ready containerized inference host with audio-separator installed.";
+        }
+    }
+
+    public bool HasVocalSeparationAvailabilityHint =>
+        !VocalSeparationAvailable && !string.IsNullOrWhiteSpace(VocalSeparationAvailabilityHint);
+
     public static string HdrDriverFeatureHintText =>
         "RTX HDR uses NVIDIA Control Panel (RTX Video / Auto HDR). HDR passthrough uses mpv instead — pick one mode; they are mutually exclusive.";
+
+    private bool TryGetVocalSeparationCapability(out bool ready, out string? hint)
+    {
+        ready = false;
+        hint = null;
+
+        var probe = _coordinator.ContainerizedProbe;
+        if (probe is null)
+        {
+            hint = "Containerized readiness probe is unavailable in this build.";
+            return false;
+        }
+
+        var probeResult = probe.GetCurrentOrStartBackgroundProbe(_coordinator.CurrentSettings.EffectiveGpuServiceUrl);
+        if (probeResult.State == ContainerizedProbeState.Checking)
+        {
+            hint = "Containerized host is still starting.";
+            return false;
+        }
+
+        if (probeResult.State == ContainerizedProbeState.Unavailable)
+        {
+            hint = string.IsNullOrWhiteSpace(probeResult.ErrorDetail)
+                ? "Containerized host is unavailable."
+                : probeResult.ErrorDetail;
+            return false;
+        }
+
+        if (probeResult.Capabilities is null)
+        {
+            hint = string.IsNullOrWhiteSpace(probeResult.CapabilitiesError)
+                ? "Containerized capabilities are unavailable."
+                : probeResult.CapabilitiesError;
+            return false;
+        }
+
+        ready = probeResult.Capabilities.IsReady(ContainerCapabilityStage.VocalSeparation);
+        hint = probeResult.Capabilities.Detail(ContainerCapabilityStage.VocalSeparation)
+            ?? (ready ? "Audio separator is ready." : "Audio separator is not ready.");
+        return true;
+    }
 
     // ── Hotkeys ───────────────────────────────────────────────────────────────
 
@@ -529,6 +597,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             ? settings.AdvancedGpuServiceUrl
             : AdvancedGpuServiceUrl.Trim();
         settings.AlwaysStartLocalGpuRuntimeAtAppStart = AlwaysStartLocalGpuRuntimeAtAppStart;
+        settings.VocalSeparationEnabled = VocalSeparationEnabled && VocalSeparationAvailable;
         settings.TranscriptionCpuComputeType = string.IsNullOrWhiteSpace(TranscriptionCpuComputeType)
             ? "int8"
             : TranscriptionCpuComputeType;

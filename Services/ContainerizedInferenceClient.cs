@@ -593,6 +593,10 @@ public sealed class ContainerizedInferenceClient
                 VocalsModel: result.VocalsModel,
                 InstrumentalModel: result.InstrumentalModel);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _log.Error($"Vocal separation failed: {ex.Message}", ex);

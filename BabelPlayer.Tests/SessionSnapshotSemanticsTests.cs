@@ -283,6 +283,27 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
+    public void ValidateArtifacts_MissingVocalsStem_ClearsVocalSeparationArtifacts()
+    {
+        var mediaPath = WriteFile("video.mp4");
+        var missingVocalsPath = Path.Combine(_dir, "missing-vocals.wav");
+        var instrumentalPath = WriteFile("instrumental.wav");
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.MediaLoaded,
+            IngestedMediaPath = mediaPath,
+            VocalsAudioPath = missingVocalsPath,
+            InstrumentalAudioPath = instrumentalPath,
+        };
+
+        var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
+
+        Assert.Contains("vocal_separation", result.ClearedArtifacts);
+        Assert.Null(result.Snapshot.VocalsAudioPath);
+        Assert.Null(result.Snapshot.InstrumentalAudioPath);
+    }
+
+    [Fact]
     public void ValidateArtifacts_MissingMedia_DegradesToFoundation()
     {
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
@@ -357,6 +378,33 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "large-v3",
         };
+        Assert.Equal(PipelineInvalidation.Transcription, SessionSnapshotSemantics.ComputeInvalidation(snap, settings));
+    }
+
+    [Fact]
+    public void ComputeInvalidation_TranscribedStage_VocalSeparationToggleChanged_ReturnsTranscription()
+    {
+        var transcriptPath = WriteFile("transcript.json");
+        var vocalsPath = WriteFile("vocals.wav");
+        var instrumentalPath = WriteFile("instrumental.wav");
+        var mediaPath = WriteFile("video.mp4");
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            VocalsAudioPath = vocalsPath,
+            InstrumentalAudioPath = instrumentalPath,
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+        };
+        var settings = new AppSettings
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            VocalSeparationEnabled = false,
+        };
+
         Assert.Equal(PipelineInvalidation.Transcription, SessionSnapshotSemantics.ComputeInvalidation(snap, settings));
     }
 
@@ -482,6 +530,8 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         {
             TranscriptPath = "/some/transcript.json",
             SourceLanguage = "es",
+            VocalsAudioPath = "/some/vocals.wav",
+            InstrumentalAudioPath = "/some/instrumental.wav",
             TranslationPath = "/some/translation.json",
             TargetLanguage = "en",
             TtsPath = "/some/tts.mp3",
@@ -490,6 +540,8 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         var result = SessionSnapshotSemantics.ClearTranscriptionOutputs(snap);
         Assert.Null(result.TranscriptPath);
         Assert.Null(result.SourceLanguage);
+        Assert.Null(result.VocalsAudioPath);
+        Assert.Null(result.InstrumentalAudioPath);
         Assert.Null(result.TranscribedAtUtc);
         Assert.Null(result.TranscriptionProvider);
         Assert.Null(result.TranscriptionModel);

@@ -118,4 +118,18 @@ public sealed class SettingsServiceTests : IDisposable
 
         Assert.Equal(SegmentTimingMode.Pause, loaded.DubTimingMode);
     }
+
+    [Fact]
+    public void SaveAndLoad_VocalSeparationEnabled_RoundTrips()
+    {
+        var service = new SettingsService(_settingsPath, _log);
+        service.Save(new AppSettings
+        {
+            VocalSeparationEnabled = true
+        });
+
+        var loaded = service.LoadOrDefault();
+
+        Assert.True(loaded.VocalSeparationEnabled);
+    }
 }

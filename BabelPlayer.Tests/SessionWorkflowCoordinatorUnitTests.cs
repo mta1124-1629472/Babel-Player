@@ -349,6 +349,29 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
+    public void ResetPipelineToMediaLoaded_ClearsVocalSeparationArtifacts()
+    {
+        if (!File.Exists(_ctx.MediaPath)) return;
+
+        var coord = CreateCoordinator();
+        coord.Initialize();
+        coord.LoadMedia(_ctx.MediaPath);
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            VocalsAudioPath = CreateMediaFile(".wav"),
+            InstrumentalAudioPath = CreateMediaFile(".wav"),
+            Stage = SessionWorkflowStage.Transcribed,
+            TranscriptPath = CreateTempFile("{\"language\":\"es\",\"segments\":[]}"),
+        };
+
+        coord.ResetPipelineToMediaLoaded();
+
+        Assert.Null(coord.CurrentSession.VocalsAudioPath);
+        Assert.Null(coord.CurrentSession.InstrumentalAudioPath);
+    }
+
+    [Fact]
     public void ResetPipelineToMediaLoaded_ClearsAllArtifactProvenance()
     {
         if (!File.Exists(_ctx.MediaPath)) return;
