@@ -6,7 +6,7 @@
 .DESCRIPTION
   - libmpv-2.dll: pinned zhongfly/mpv-winbuild libmpv dev archive (GitHub Releases)
   - uv.exe: astral-sh/uv Windows zip (x86_64 or aarch64)
-  - ffmpeg.exe: optional — GyanD codexffmpeg (x64) or BtbN FFmpeg-Builds winarm64-lgpl (ARM64); see IncludeFfmpeg block
+  - ffmpeg.exe / ffprobe.exe: optional — same archives as below (essentials/LGPL zips ship both); see IncludeFfmpeg block
 
   On ARM64 Windows, artifacts go under native/win-arm64 and tools/win-arm64.
   On x64 Windows, under native/win-x64 and tools/win-x64.
@@ -128,6 +128,13 @@ try {
         }
         Move-Item -Path $ffmpegExe.FullName -Destination (Join-Path $ToolsDir "ffmpeg.exe") -Force
         Write-Host "Wrote $(Join-Path $ToolsDir 'ffmpeg.exe')"
+
+        $ffprobeExe = Get-ChildItem -Path $ffmpegTemp -Filter "ffprobe.exe" -Recurse | Select-Object -First 1
+        if (-not $ffprobeExe) {
+            throw "Could not find ffprobe.exe in FFmpeg archive (expected next to ffmpeg in GyanD/BtbN builds)"
+        }
+        Move-Item -Path $ffprobeExe.FullName -Destination (Join-Path $ToolsDir "ffprobe.exe") -Force
+        Write-Host "Wrote $(Join-Path $ToolsDir 'ffprobe.exe')"
     }
 }
 finally {

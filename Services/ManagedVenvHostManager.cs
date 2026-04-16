@@ -955,7 +955,51 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         psi.Environment[QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable] =
             QwenRuntimePolicy.ResolveMaxConcurrency().ToString();
 
+        // NeMo diarization loads audio through pydub, which shells out to ffprobe. The app often
+        // resolves bundled ffmpeg/ffprobe via DependencyLocator without putting them on the
+        // process PATH, so the managed host would inherit a PATH that cannot find ffprobe.
+        PrependBundledFfmpegBinsToPath(psi);
+
         return psi;
+    }
+
+    /// <summary>
+    /// Prepends directories containing resolved ffmpeg and/or ffprobe to PATH so NeMo/pydub
+    /// subprocesses can locate ffprobe on Windows when the tools are bundled next to the app.
+    /// </summary>
+    internal static void PrependBundledFfmpegBinsToPath(ProcessStartInfo psi)
+    {
+        var dirs = new List<string>();
+        void TryAdd(string? toolPath)
+        {
+            if (string.IsNullOrWhiteSpace(toolPath))
+                return;
+
+            var dir = Path.GetDirectoryName(toolPath);
+            if (string.IsNullOrWhiteSpace(dir))
+                return;
+
+            foreach (var existing in dirs)
+            {
+                if (string.Equals(existing, dir, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+
+            dirs.Add(dir);
+        }
+
+        TryAdd(DependencyLocator.FindFfmpeg());
+        TryAdd(DependencyLocator.FindFfprobe());
+
+        if (dirs.Count == 0)
+            return;
+
+        const string pathKey = "PATH";
+        var prefix = string.Join(Path.PathSeparator, dirs) + Path.PathSeparator;
+        var current = psi.Environment.ContainsKey(pathKey)
+            ? psi.Environment[pathKey]
+            : Environment.GetEnvironmentVariable(pathKey);
+        psi.Environment[pathKey] = prefix + (current ?? string.Empty);
     }
 
     /// <summary>

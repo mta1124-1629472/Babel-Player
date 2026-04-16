@@ -278,6 +278,34 @@
                             </StackPanel>
                         </StackPanel>
 
+                        <!-- AUDIO + DUB (session pipeline) -->
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="AUDIO &amp; DUB" FontSize="10"
+                                       Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                            <CheckBox IsChecked="{Binding Playback.VocalSeparationEnabled, Mode=TwoWay}"
+                                      IsEnabled="{Binding Playback.VocalSeparationAvailable}"
+                                      Content="Separate vocals before transcription" />
+                            <TextBlock Text="{Binding Playback.VocalSeparationAvailabilityHint}"
+                                       IsVisible="{Binding Playback.HasVocalSeparationAvailabilityHint}"
+                                       FontSize="10" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Segment timing mode" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <ComboBox ItemsSource="{Binding Playback.DubTimingModeOptions}"
+                                          SelectedItem="{Binding Playback.DubTimingMode, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                          BorderBrush="{DynamicResource BorderBrush}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Converter={StaticResource SegmentTimingModeDisplayConverter}}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Text="Off: play TTS as-is. Stretch: time-scale TTS to fit. Pause: stop video while TTS plays."
+                                           FontSize="10" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" Opacity="0.85" />
+                            </StackPanel>
+                        </StackPanel>
+
                         <!-- TRANSCRIPTION -->
                         <StackPanel Spacing="10">
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
@@ -743,17 +771,6 @@
                                                                Foreground="{DynamicResource StatusTextBrush}"
                                                                IsVisible="{Binding IsStale}" />
                                                 </StackPanel>
-
-                                                <ItemsControl ItemsSource="{Binding History}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <TextBlock Text="{Binding}"
-                                                                       FontSize="10"
-                                                                       Foreground="{DynamicResource StatusTextBrush}"
-                                                                       TextWrapping="Wrap" />
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
@@ -784,6 +801,8 @@
                                            Foreground="{DynamicResource StatusTextBrush}"
                                            TextWrapping="Wrap" />
                                 <ProgressBar Value="{Binding Playback.Pipeline.PipelineProgressPercent}"
+                                             Minimum="0"
+                                             Maximum="1"
                                              Classes="neon-pulse"
                                              IsIndeterminate="{Binding Playback.Pipeline.IsPipelineProgressIndeterminate}"
                                              AutomationProperties.Name="Pipeline progress" />
