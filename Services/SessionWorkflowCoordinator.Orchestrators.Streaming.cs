@@ -634,8 +634,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             var fileName = Path.GetFileNameWithoutExtension(sourceAudioPath);
             return Path.Combine(transcriptDir, $"{fileName}.json");
         }
-            return Path.Combine(transcriptDir, $"{fileName}.json");
-        }
 
         /// <summary>
         /// Builds the full path for a translation artifact corresponding to a transcript file and ensures the translations directory exists.

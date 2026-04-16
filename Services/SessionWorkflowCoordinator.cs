@@ -554,8 +554,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         CurrentSession = CurrentSession with
         {
             Stage = SessionWorkflowStage.MediaLoaded,
-            VocalsAudioPath = null,
-            InstrumentalAudioPath = null,
             TranscriptPath = null,
             TranslationPath = null,
             TtsPath = null,

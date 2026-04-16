@@ -67,26 +67,18 @@ public static class SessionSnapshotSemantics
             cleared.Add("transcription");
         }
 
-        if (!string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath)
-            && !File.Exists(snapshot.VocalsAudioPath))
+        // Strict vocal validation: if metadata points to missing stems, clear them.
+        if (!string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath) && !File.Exists(snapshot.VocalsAudioPath))
         {
-            snapshot = snapshot with
-            {
-                VocalsAudioPath = null,
-                InstrumentalAudioPath = null,
-            };
+            snapshot = snapshot with { VocalsAudioPath = null, InstrumentalAudioPath = null };
             cleared.Add("vocal_separation");
+            if (stage > SessionWorkflowStage.MediaLoaded) stage = SessionWorkflowStage.MediaLoaded;
         }
-        else if (!string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath)
-                 && !string.IsNullOrWhiteSpace(snapshot.InstrumentalAudioPath)
-                 && !File.Exists(snapshot.InstrumentalAudioPath))
+        else if (!string.IsNullOrWhiteSpace(snapshot.InstrumentalAudioPath) && !File.Exists(snapshot.InstrumentalAudioPath))
         {
-            snapshot = snapshot with
-            {
-                VocalsAudioPath = null,
-                InstrumentalAudioPath = null,
-            };
+            snapshot = snapshot with { VocalsAudioPath = null, InstrumentalAudioPath = null };
             cleared.Add("vocal_separation");
+            if (stage > SessionWorkflowStage.MediaLoaded) stage = SessionWorkflowStage.MediaLoaded;
         }
 
         if (stage >= SessionWorkflowStage.MediaLoaded
@@ -114,9 +106,6 @@ public static class SessionSnapshotSemantics
             || snapshot.TranscriptionProvider != settings.TranscriptionProvider
             || snapshot.TranscriptionModel != settings.TranscriptionModel
             || !TranscriptionLanguageHintsMatch(snapshot.TranscriptionLanguageHint, settings.TranscriptionLanguageHint);
-        var hadSeparatedVocals = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
-        if (hadSeparatedVocals != settings.VocalSeparationEnabled)
-            transcriptionChanged = true;
         var hadSeparatedVocals = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
         if (hadSeparatedVocals != settings.VocalSeparationEnabled)
             transcriptionChanged = true;
@@ -192,7 +181,6 @@ public static class SessionSnapshotSemantics
         $"stage={snapshot.Stage}, " +
         $"txc={snapshot.TranscriptionRuntime?.ToString() ?? "<null>"}/{snapshot.TranscriptionProvider ?? "<null>"}/{snapshot.TranscriptionModel ?? "<null>"}/asrHint={snapshot.TranscriptionLanguageHint ?? "<auto>"}, " +
         $"vox={(string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath) ? "off" : "on")}, " +
-        $"vox={(string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath) ? "off" : "on")}, " +
         $"trn={snapshot.TranslationRuntime?.ToString() ?? "<null>"}/{snapshot.TranslationProvider ?? "<null>"}/{snapshot.TranslationModel ?? "<null>"}, " +
         $"tts={snapshot.TtsRuntime?.ToString() ?? "<null>"}/{snapshot.TtsProvider ?? "<null>"}/{snapshot.TtsVoice ?? "<null>"}, " +
         $"srcLang={snapshot.SourceLanguage ?? "<null>"}, tgtLang={snapshot.TargetLanguage ?? "<null>"}";
@@ -261,8 +249,6 @@ public static class SessionSnapshotSemantics
             TranscriptionProvider = null,
             TranscriptionModel = null,
             TranscriptionLanguageHint = null,
-            VocalsAudioPath = null,
-            InstrumentalAudioPath = null,
             VocalsAudioPath = null,
             InstrumentalAudioPath = null,
         };
