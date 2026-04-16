@@ -233,6 +233,60 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.Equal(12, result.InstrumentalFileSizeBytes);
     }
 
+    [Fact]
+    public async Task ContainerizedInferenceClient_SeparateVocalsAsync_DoesNotDoubleCountActiveLeasesDuringDownloads()
+    {
+        var tracker = new ContainerizedRequestLeaseTracker();
+        var mediaDir = Path.Combine(_ctx.Dir, "session", "media-lease");
+        Directory.CreateDirectory(mediaDir);
+        var inputPath = Path.Combine(mediaDir, "sample.wav");
+        await File.WriteAllBytesAsync(inputPath, [1, 2, 3, 4]);
+
+        var observedActiveCounts = new List<int>();
+        var vocalsBytes = Encoding.UTF8.GetBytes("vocals");
+        var instrumentalBytes = Encoding.UTF8.GetBytes("instrumental");
+        var httpClient = new HttpClient(new StubHttpMessageHandler((request, _) =>
+        {
+            observedActiveCounts.Add(tracker.ActiveRequests);
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/separate/vocals")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"vocals_filename\":\"vocals.wav\",\"instrumental_filename\":\"instrumental.wav\",\"vocals_file_size_bytes\":6,\"instrumental_file_size_bytes\":12,\"vocals_model\":\"demucs\",\"instrumental_model\":\"demucs\"}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/vocals.wav")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(vocalsBytes)
+                });
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/instrumental.wav")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(instrumentalBytes)
+                });
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        }))
+        {
+            Timeout = TimeSpan.FromSeconds(5)
+        };
+        var client = new ContainerizedInferenceClient("http://localhost:8000", _ctx.Log, httpClient, tracker);
+
+        var stemsDir = Path.Combine(_ctx.Dir, "session", "stems-lease");
+        var result = await client.SeparateVocalsAsync(inputPath, stemsDir);
+
+        Assert.True(result.Success);
+        Assert.Equal(3, observedActiveCounts.Count);
+        Assert.All(observedActiveCounts, active => Assert.Equal(1, active));
+        Assert.Equal(0, tracker.ActiveRequests);
+    }
+
     
     [Fact]
     public async Task ContainerizedTranscriptionProvider_TranscribeAsync_ThrowsWhenInputMissing()
