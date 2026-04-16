@@ -73,11 +73,11 @@ public sealed class AppSettingsTests
     }
 
     [Fact]
-    public void DiarizationProvider_DefaultsToNemo()
+    public void DiarizationProvider_DefaultsToDisabled()
     {
         var settings = new AppSettings();
 
-        Assert.Equal(ProviderNames.NemoLocal, settings.DiarizationProvider);
+        Assert.Equal(string.Empty, settings.DiarizationProvider);
     }
 
     [Fact]

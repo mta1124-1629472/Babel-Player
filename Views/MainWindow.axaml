@@ -416,20 +416,17 @@
                                 </Grid>
                             </Border>
 
-                            <StackPanel Spacing="5">
-                                <TextBlock Text="Diarization Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                <ComboBox ItemsSource="{Binding Playback.SpeakerRouting.DiarizationProviderOptions}"
-                                          SelectedItem="{Binding Playback.SpeakerRouting.DiarizationProvider, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
-                                          Background="{DynamicResource ControlBackgroundBrush}"
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Multi-speaker audio" FontSize="12"
+                                           Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock FontSize="11"
+                                           Foreground="{DynamicResource StatusTextBrush}"
+                                           TextWrapping="Wrap"
+                                           Text="Turn this on when the recording has more than one distinct speaker so lines can be labeled and dubbed separately. For a single narrator or one speaker, leave it off to avoid extra processing." />
+                                <CheckBox Content="Detect and label separate speakers"
+                                          FontSize="12"
                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                          BorderBrush="{DynamicResource BorderBrush}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding Converter={StaticResource DiarizationProviderDisplayConverter}}" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
+                                          IsChecked="{Binding Playback.SpeakerRouting.DetectMultipleSpeakers, Mode=TwoWay}" />
                             </StackPanel>
 
                             <!-- Status -->
@@ -443,7 +440,7 @@
                             <StackPanel Spacing="5">
 
                                 <!-- Hint shown when no speaker IDs have been detected yet -->
-                                <TextBlock Text="Transcribe with a diarization provider selected to assign speaker IDs."
+                                <TextBlock Text="Enable multi-speaker detection above, then transcribe, to assign speaker IDs."
                                            FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
                                            IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerNoSpeakersYet}" />
 

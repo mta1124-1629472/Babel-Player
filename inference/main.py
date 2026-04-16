@@ -845,6 +845,25 @@ def _get_provider_activity_reasons() -> list[str]:
     return reasons
 
 
+def _nemo_background_health_enabled() -> bool:
+    """When false (default), skip NeMo import/construction during scheduled provider-health refresh."""
+    raw = os.environ.get("BABEL_ENABLE_NEMO_BACKGROUND_HEALTH", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _seed_nemo_idle_when_background_disabled() -> None:
+    if _nemo_background_health_enabled():
+        return
+    _record_provider_health(
+        "nemo",
+        True,
+        "idle",
+        "NeMo /diarize is available on demand; background warm-up disabled "
+        "(set BABEL_ENABLE_NEMO_BACKGROUND_HEALTH=1 for periodic checks).",
+        failure_category=None,
+    )
+
+
 async def _ensure_provider_health_primitives() -> None:
     global _provider_health_refresh_lock, _qwen_model_load_lock, _qwen_segment_semaphore
     if _provider_health_refresh_lock is None:
@@ -859,6 +878,7 @@ async def _ensure_provider_health_primitives() -> None:
             max_concurrency=_qwen_max_concurrency,
             queue_depth=_qwen_segment_waiters,
         )
+    _seed_nemo_idle_when_background_disabled()
 
 
 def _schedule_provider_health_refresh(force: bool = False) -> None:
@@ -870,9 +890,8 @@ def _schedule_provider_health_refresh(force: bool = False) -> None:
     global _provider_health_refresh_task
     if _provider_health_refresh_task is not None and not _provider_health_refresh_task.done():
         return
-    if not force and not (
-        _provider_health_is_stale("qwen") or _provider_health_is_stale("nemo")
-    ):
+    nemo_stale = _nemo_background_health_enabled() and _provider_health_is_stale("nemo")
+    if not force and not (_provider_health_is_stale("qwen") or nemo_stale):
         return
     _provider_health_refresh_task = asyncio.create_task(_refresh_provider_health_cache(force=force))
 
@@ -1130,9 +1149,19 @@ async def _refresh_provider_health_cache(force: bool = False) -> None:
 
     async with lock:
         try:
-            # Start Qwen warmup in background; NeMo runs immediately without waiting
+            # Start Qwen warmup in background; NeMo optionally (see BABEL_ENABLE_NEMO_BACKGROUND_HEALTH)
             qwen_task = asyncio.create_task(_refresh_qwen_provider_health(force=force))
-            await _refresh_nemo_provider_health(force=force)
+            if _nemo_background_health_enabled():
+                await _refresh_nemo_provider_health(force=force)
+            else:
+                _record_provider_health(
+                    "nemo",
+                    True,
+                    "idle",
+                    "NeMo /diarize is available on demand; background warm-up disabled "
+                    "(set BABEL_ENABLE_NEMO_BACKGROUND_HEALTH=1 for periodic checks).",
+                    failure_category=None,
+                )
             # Ensure Qwen task completes and log any errors
             try:
                 await qwen_task

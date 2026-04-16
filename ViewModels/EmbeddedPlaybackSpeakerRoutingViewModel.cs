@@ -15,6 +15,7 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
     private readonly EmbeddedPlaybackViewModel _parent;
     private readonly SessionWorkflowCoordinator _coordinator;
     private string _autoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
+    private bool _detectMultipleSpeakers;
 
     internal EmbeddedPlaybackSpeakerRoutingViewModel(
         EmbeddedPlaybackViewModel parent,
@@ -24,11 +25,94 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
         _coordinator = coordinator;
     }
 
-    [ObservableProperty]
-    private IReadOnlyList<string> _diarizationProviderOptions = [string.Empty];
+    /// <summary>
+    /// When true, speaker separation runs using the on-device WeSpeaker pipeline. Maps to <see cref="ProviderNames.WeSpeakerLocal"/> in settings.
+    /// </summary>
+    public bool DetectMultipleSpeakers
+    {
+        get => _detectMultipleSpeakers;
+        set
+        {
+            if (_parent.IsSynchronizingPipelineSettings)
+            {
+                SetProperty(ref _detectMultipleSpeakers, value);
+                return;
+            }
 
-    [ObservableProperty]
-    private string _diarizationProvider = string.Empty;
+            if (_detectMultipleSpeakers == value)
+                return;
+
+            var target = value ? ProviderNames.WeSpeakerLocal : string.Empty;
+            if (!string.Equals(target, _coordinator.CurrentSettings.DiarizationProvider, StringComparison.Ordinal))
+            {
+                _coordinator.CurrentSettings.DiarizationProvider = target;
+                _coordinator.CurrentSettings.DiarizationMinSpeakers = null;
+                _coordinator.CurrentSettings.DiarizationMaxSpeakers = null;
+                _coordinator.NotifySettingsModified();
+                OnPropertyChanged(nameof(DiarizationProvider));
+                _parent.RefreshProviderHealthDiagnostics();
+                _parent.Pipeline.NotifySessionStateChanged();
+            }
+
+            SetProperty(ref _detectMultipleSpeakers, value);
+        }
+    }
+
+    /// <summary>
+    /// Backing value in session settings (empty = off). Prefer <see cref="DetectMultipleSpeakers"/> in UI.
+    /// </summary>
+    public string DiarizationProvider
+    {
+        get => _coordinator.CurrentSettings.DiarizationProvider;
+        set
+        {
+            if (_parent.IsSynchronizingPipelineSettings)
+                return;
+
+            var normalized = InferenceRuntimeCatalog.NormalizeDiarizationProvider(
+                string.IsNullOrWhiteSpace(value) ? string.Empty : value);
+
+            if (string.Equals(normalized, _coordinator.CurrentSettings.DiarizationProvider, StringComparison.Ordinal))
+            {
+                _parent.IsSynchronizingPipelineSettings = true;
+                try
+                {
+                    SetProperty(
+                        ref _detectMultipleSpeakers,
+                        !string.IsNullOrWhiteSpace(normalized),
+                        nameof(DetectMultipleSpeakers));
+                }
+                finally
+                {
+                    _parent.IsSynchronizingPipelineSettings = false;
+                }
+
+                return;
+            }
+
+            _coordinator.CurrentSettings.DiarizationProvider = normalized;
+            _coordinator.CurrentSettings.DiarizationMinSpeakers = null;
+            _coordinator.CurrentSettings.DiarizationMaxSpeakers = null;
+            _coordinator.NotifySettingsModified();
+
+            _parent.IsSynchronizingPipelineSettings = true;
+            try
+            {
+                SetProperty(
+                    ref _detectMultipleSpeakers,
+                    !string.IsNullOrWhiteSpace(normalized),
+                    nameof(DetectMultipleSpeakers));
+            }
+            finally
+            {
+                _parent.IsSynchronizingPipelineSettings = false;
+            }
+
+            OnPropertyChanged(nameof(DiarizationProvider));
+            _parent.RefreshProviderHealthDiagnostics();
+            _parent.Pipeline.NotifySessionStateChanged();
+        }
+    }
 
     [ObservableProperty]
     private decimal? _diarizationMinSpeakers;
@@ -74,8 +158,14 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
         _parent.IsSynchronizingPipelineSettings = true;
         try
         {
-            RebuildDiarizationProviderOptions();
-            DiarizationProvider = NormalizeDiarizationProviderSelection(_coordinator.CurrentSettings.DiarizationProvider);
+            var normalized = InferenceRuntimeCatalog.NormalizeDiarizationProvider(
+                _coordinator.CurrentSettings.DiarizationProvider);
+            if (!string.Equals(normalized, _coordinator.CurrentSettings.DiarizationProvider, StringComparison.Ordinal))
+                _coordinator.CurrentSettings.DiarizationProvider = normalized;
+
+            _detectMultipleSpeakers = !string.IsNullOrWhiteSpace(normalized);
+            OnPropertyChanged(nameof(DetectMultipleSpeakers));
+            OnPropertyChanged(nameof(DiarizationProvider));
             DiarizationMinSpeakers = null;
             DiarizationMaxSpeakers = null;
             RebuildSpeakerIds(_parent.Preview.Segments, _parent.Preview.SelectedSegment?.SpeakerId);
@@ -173,31 +263,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
         UpdateSelectedSpeakerDetails(value);
     }
 
-    partial void OnDiarizationProviderChanged(string value)
-    {
-        if (_parent.IsSynchronizingPipelineSettings)
-            return;
-
-        var normalized = NormalizeDiarizationProviderSelection(value);
-        _parent.IsSynchronizingPipelineSettings = true;
-        try
-        {
-            if (!string.Equals(normalized, value, StringComparison.Ordinal))
-                DiarizationProvider = normalized;
-        }
-        finally
-        {
-            _parent.IsSynchronizingPipelineSettings = false;
-        }
-
-        _coordinator.CurrentSettings.DiarizationProvider = normalized;
-        _coordinator.CurrentSettings.DiarizationMinSpeakers = null;
-        _coordinator.CurrentSettings.DiarizationMaxSpeakers = null;
-        _coordinator.NotifySettingsModified();
-        _parent.RefreshProviderHealthDiagnostics();
-        _parent.Pipeline.NotifySessionStateChanged();
-    }
-
     partial void OnDiarizationMinSpeakersChanged(decimal? value)
     {
         if (_parent.IsSynchronizingPipelineSettings)
@@ -232,35 +297,6 @@ public sealed partial class EmbeddedPlaybackSpeakerRoutingViewModel : ViewModelB
 
         _coordinator.CurrentSettings.DiarizationMaxSpeakers = normalized;
         _coordinator.NotifySettingsModified();
-    }
-
-    private void RebuildDiarizationProviderOptions()
-    {
-        var options = new List<string> { string.Empty };
-        if (_coordinator.DiarizationRegistry is not null)
-        {
-            foreach (var providerId in _coordinator.DiarizationRegistry
-                         .GetAvailableProviders()
-                         .Where(provider => provider.IsImplemented)
-                         .Select(provider => provider.Id))
-            {
-                if (!string.IsNullOrWhiteSpace(providerId) &&
-                    !options.Contains(providerId, StringComparer.Ordinal))
-                {
-                    options.Add(providerId);
-                }
-            }
-        }
-
-        DiarizationProviderOptions = options;
-    }
-
-    private string NormalizeDiarizationProviderSelection(string? value)
-    {
-        var normalized = string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
-        return DiarizationProviderOptions.Contains(normalized, StringComparer.Ordinal)
-            ? normalized
-            : string.Empty;
     }
 
     internal void UpdateSelectedSpeakerDetails(string? speakerId)

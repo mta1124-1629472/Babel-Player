@@ -169,9 +169,9 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void DefaultDiarizationProvider_ReturnsNemoLocal()
+    public void DefaultDiarizationProvider_ReturnsWeSpeakerLocal()
     {
-        Assert.Equal(ProviderNames.NemoLocal, InferenceRuntimeCatalog.DefaultDiarizationProvider());
+        Assert.Equal(ProviderNames.WeSpeakerLocal, InferenceRuntimeCatalog.DefaultDiarizationProvider());
     }
 
     // ── NormalizeTranscriptionProvider ───────────────────────────────────────
@@ -321,10 +321,10 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void NormalizeDiarizationProvider_NemoAlias_ReturnsNemoLocal()
+    public void NormalizeDiarizationProvider_NemoAlias_MigratesToWeSpeakerLocal()
     {
         var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(ProviderNames.NemoDiarizationAlias);
-        Assert.Equal(ProviderNames.NemoLocal, result);
+        Assert.Equal(ProviderNames.WeSpeakerLocal, result);
     }
 
     [Fact]
@@ -338,7 +338,7 @@ public sealed class InferenceRuntimeCatalogTests
     public void NormalizeDiarizationProvider_Null_ReturnsDefaultProvider()
     {
         var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(null);
-        Assert.Equal(ProviderNames.NemoLocal, result);
+        Assert.Equal(ProviderNames.WeSpeakerLocal, result);
     }
 
     [Theory]
@@ -480,12 +480,22 @@ public sealed class InferenceRuntimeCatalogTests
         var originalTranscription = settings.TranscriptionProvider;
         var originalTranslation = settings.TranslationProvider;
         var originalTts = settings.TtsProvider;
+        var originalDiarization = settings.DiarizationProvider;
 
         InferenceRuntimeCatalog.NormalizeSettings(settings);
 
         Assert.Equal(originalTranscription, settings.TranscriptionProvider);
         Assert.Equal(originalTranslation, settings.TranslationProvider);
         Assert.Equal(originalTts, settings.TtsProvider);
+        Assert.Equal(originalDiarization, settings.DiarizationProvider);
+    }
+
+    [Fact]
+    public void NormalizeSettings_LegacyNemoDiarization_MigratesToWeSpeaker()
+    {
+        var settings = new AppSettings { DiarizationProvider = ProviderNames.NemoLocal };
+        InferenceRuntimeCatalog.NormalizeSettings(settings);
+        Assert.Equal(ProviderNames.WeSpeakerLocal, settings.DiarizationProvider);
     }
 
     // ── Infer*Runtime convenience wrappers ────────────────────────────────────

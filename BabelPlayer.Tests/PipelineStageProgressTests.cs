@@ -189,8 +189,9 @@ public sealed class PipelineStageProgressTests() : IDisposable
     public async Task AdvancePipelineAsync_MultiSpeakerRun_ContinuesPastDiarizedIntoTranslationAndDub()
     {
         var settings = CreateSettings();
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
         var diarizationRegistry = new FakeDiarizationRegistry(
-            (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider(_ =>
+            (ProviderNames.WeSpeakerLocal, "WeSpeaker", new FakeDiarizationProvider(_ =>
                 new DiarizationResult(
                     true,
                     [
@@ -222,9 +223,10 @@ public sealed class PipelineStageProgressTests() : IDisposable
     public async Task ContinuePipelineAsync_FromDiarizedSession_StreamsTranslationIntoDub()
     {
         var settings = CreateSettings();
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
         var probe = new PipelineTimingProbe(expectedSegments: 3);
         var diarizationRegistry = new FakeDiarizationRegistry(
-            (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider(_ =>
+            (ProviderNames.WeSpeakerLocal, "WeSpeaker", new FakeDiarizationProvider(_ =>
                 new DiarizationResult(
                     true,
                     [

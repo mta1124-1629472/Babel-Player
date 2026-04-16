@@ -84,10 +84,10 @@ public static class InferenceRuntimeCatalog
         DefaultTtsProvider(MapLegacyRuntimeToProfile(runtime));
 
     /// <summary>
-    /// Gets the canonical provider identifier used as the default for diarization.
+    /// Gets the canonical provider identifier used when diarization is enabled but the stored value is missing or unrecognized.
     /// </summary>
-    /// <returns>The provider ID for the default diarization provider: <c>ProviderNames.NemoLocal</c>.</returns>
-    public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
+    /// <returns>The provider ID for the default on-device diarization engine: <see cref="ProviderNames.WeSpeakerLocal"/>.</returns>
+    public static string DefaultDiarizationProvider() => ProviderNames.WeSpeakerLocal;
 
     /// <summary>
     /// Determines the effective InferenceRuntime for a diarization provider identifier.
@@ -225,12 +225,17 @@ public static class InferenceRuntimeCatalog
         if (string.IsNullOrWhiteSpace(providerId))
             return string.Empty;
 
-        var normalized = providerId switch
+        var normalized = providerId.Trim();
+        normalized = normalized switch
         {
             ProviderNames.NemoDiarizationAlias => ProviderNames.NemoLocal,
             ProviderNames.WeSpeakerDiarizationAlias => ProviderNames.WeSpeakerLocal,
-            _ => providerId,
+            _ => normalized,
         };
+
+        // Product UI only offers WeSpeaker; migrate legacy NeMo selections without dropping the registry entry.
+        if (string.Equals(normalized, ProviderNames.NemoLocal, StringComparison.Ordinal))
+            return ProviderNames.WeSpeakerLocal;
 
         return IsKnownDiarizationProvider(normalized)
             ? normalized

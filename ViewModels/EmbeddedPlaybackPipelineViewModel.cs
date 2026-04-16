@@ -63,7 +63,7 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
     public bool CanRefreshDiarization =>
         !_parent.IsBusy &&
         _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed &&
-        !string.IsNullOrWhiteSpace(_parent.SpeakerRouting.DiarizationProvider) &&
+        !string.IsNullOrWhiteSpace(_coordinator.CurrentSettings.DiarizationProvider) &&
         !string.IsNullOrWhiteSpace(_coordinator.CurrentSession.TranscriptPath) &&
         File.Exists(_coordinator.CurrentSession.TranscriptPath!);
 
