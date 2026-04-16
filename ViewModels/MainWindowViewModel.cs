@@ -82,8 +82,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         panel.Children.Add(new TextBlock
         {
             Text =
-                "The local inference host can take about 30–60 seconds to warm up the first time after install or update, " +
-                "or when it starts with the app. This is normal — wait until the status shows Ready before running the pipeline.",
+                "The first time after install, an update, or app startup, the local host may need about 30 to 60 seconds before it is ready. " +
+                "Wait until the status shows Ready, then run the pipeline.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
             MaxWidth = 440,
         });
