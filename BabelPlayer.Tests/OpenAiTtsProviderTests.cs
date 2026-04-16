@@ -288,6 +288,22 @@ public sealed class OpenAiTtsProviderTests : IDisposable
             await File.WriteAllBytesAsync(outputAudioPath, bytes, cancellationToken);
         }
 
+        public async Task ComposeTimelineDubAsync(
+            IReadOnlyList<TimelineDubSegment> segments,
+            string outputAudioPath,
+            CancellationToken cancellationToken)
+        {
+            var bytes = segments.SelectMany(segment => File.ReadAllBytes(segment.AudioPath)).ToArray();
+            await File.WriteAllBytesAsync(outputAudioPath, bytes, cancellationToken);
+        }
+
+        public Task MixDubOverAmbianceAsync(
+            string dubbedAudioPath,
+            string ambianceAudioPath,
+            string outputAudioPath,
+            CancellationToken cancellationToken) =>
+            File.WriteAllBytesAsync(outputAudioPath, File.ReadAllBytes(dubbedAudioPath), cancellationToken);
+
         public Task ExtractAudioClipAsync(string inputPath, string outputPath, double startTimeSeconds, double durationSeconds, CancellationToken cancellationToken) =>
             Task.CompletedTask;
 

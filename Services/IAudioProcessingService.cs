@@ -4,6 +4,13 @@ using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
+public sealed record TimelineDubSegment(
+    string SegmentId,
+    string AudioPath,
+    double StartSeconds,
+    double SegmentDurationSeconds,
+    bool TrimToSegmentWindow);
+
 /// <summary>
 /// Provides audio processing capabilities such as concatenation and clipping.
 /// Abstracting this allows unit tests to run in environments without ffmpeg.
@@ -18,6 +25,24 @@ public interface IAudioProcessingService
     /// <param name="cancellationToken">Cancellation token.</param>
     Task CombineAudioSegmentsAsync(
         IReadOnlyList<string> segmentAudioPaths,
+        string outputAudioPath,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Places generated per-segment TTS clips onto an absolute timeline and renders
+    /// a single dubbed track.
+    /// </summary>
+    Task ComposeTimelineDubAsync(
+        IReadOnlyList<TimelineDubSegment> segments,
+        string outputAudioPath,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Mixes a rendered dubbed track over a non-vocal ambiance/background bed.
+    /// </summary>
+    Task MixDubOverAmbianceAsync(
+        string dubbedAudioPath,
+        string ambianceAudioPath,
         string outputAudioPath,
         CancellationToken cancellationToken);
 

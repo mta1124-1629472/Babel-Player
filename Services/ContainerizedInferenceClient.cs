@@ -594,7 +594,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
             Directory.CreateDirectory(stemsDir);
 
             var vocalsPath = Path.Combine(stemsDir, Path.GetFileName(result.VocalsFilename));
-            var instrumentalPath = Path.Combine(stemsDir, Path.GetFileName(result.InstrumentalFilename));
+            var ambiancePath = Path.Combine(stemsDir, Path.GetFileName(result.InstrumentalFilename));
 
             // Downloads are separate requests — each acquires its own lease (no outer lease held).
             await DownloadTtsAudioAsync(
@@ -604,19 +604,19 @@ public sealed class ContainerizedInferenceClient : IDisposable
                 requestKind: ContainerizedRequestKind.Other).ConfigureAwait(false);
             await DownloadTtsAudioAsync(
                 result.InstrumentalFilename,
-                instrumentalPath,
+                ambiancePath,
                 cancellationToken,
                 requestKind: ContainerizedRequestKind.Other).ConfigureAwait(false);
 
             return new VocalSeparationResult(
                 Success: true,
                 VocalsAudioPath: vocalsPath,
-                InstrumentalAudioPath: instrumentalPath,
+                AmbianceAudioPath: ambiancePath,
                 ErrorMessage: null,
                 VocalsFileSizeBytes: result.VocalsFileSizeBytes,
-                InstrumentalFileSizeBytes: result.InstrumentalFileSizeBytes,
+                AmbianceFileSizeBytes: result.InstrumentalFileSizeBytes,
                 VocalsModel: result.VocalsModel,
-                InstrumentalModel: result.InstrumentalModel);
+                AmbianceModel: result.InstrumentalModel);
         }
         catch (OperationCanceledException)
         {

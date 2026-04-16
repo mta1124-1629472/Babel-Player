@@ -368,6 +368,31 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
             return Task.CompletedTask;
         }
 
+        public Task ComposeTimelineDubAsync(
+            IReadOnlyList<TimelineDubSegment> segments,
+            string outputAudioPath,
+            CancellationToken cancellationToken)
+        {
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            File.WriteAllBytes(outputAudioPath, [0x04, 0x05, 0x06]);
+            return Task.CompletedTask;
+        }
+
+        public Task MixDubOverAmbianceAsync(
+            string dubbedAudioPath,
+            string ambianceAudioPath,
+            string outputAudioPath,
+            CancellationToken cancellationToken)
+        {
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            File.WriteAllBytes(outputAudioPath, [0x07, 0x08, 0x09]);
+            return Task.CompletedTask;
+        }
+
         public Task ExtractAudioClipAsync(
             string inputPath,
             string outputPath,

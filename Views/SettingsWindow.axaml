@@ -4,15 +4,47 @@
         xmlns:v="using:Babel.Player.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="780"
+        mc:Ignorable="d" d:DesignWidth="720" d:DesignHeight="640"
         x:Class="Babel.Player.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Icon="/Assets/Icons/app.ico"
         Title="Babel Player - Settings"
-        Width="640" Height="740"
-        MinWidth="520" MinHeight="540">
+        Width="740" Height="680"
+        MinWidth="600" MinHeight="500">
 
-    <Grid Margin="20">
+    <Window.Styles>
+        <Style Selector="RadioButton.sidebar-item">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource StatusTextBrush}"/>
+            <Setter Property="Padding" Value="16,12"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Margin" Value="8,2"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+        <Style Selector="RadioButton.sidebar-item:pointerover">
+            <Setter Property="Background" Value="{DynamicResource PillHoverBackgroundBrush}"/>
+        </Style>
+        <Style Selector="RadioButton.sidebar-item:checked">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+        </Style>
+        <Style Selector="Border.settings-card">
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+        <Style Selector="Border.settings-card:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="180"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -20,372 +52,273 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <TextBlock Grid.Row="0" FontSize="24" FontWeight="SemiBold" Text="Settings" Margin="0,0,0,20"/>
+        <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" 
+                   FontSize="22" FontWeight="SemiBold" Text="Settings" 
+                   Margin="0,0,0,16"/>
 
-        <!-- Main content area -->
-        <TabControl Grid.Row="1" Margin="0,0,0,20">
+        <!-- Sidebar -->
+        <Border Grid.Row="1" Grid.Column="0" 
+                Background="{DynamicResource SurfaceSubtleBrush}"
+                CornerRadius="8"
+                Padding="4"
+                Margin="0,0,12,0">
+            <StackPanel>
+                <RadioButton Classes="sidebar-item" GroupName="SettingsNav" Content="General" IsChecked="{Binding IsGeneralSelected, Mode=TwoWay}" Tag="General"/>
+                <RadioButton Classes="sidebar-item" GroupName="SettingsNav" Content="Hotkeys" IsChecked="{Binding IsHotkeysSelected, Mode=TwoWay}" Tag="Hotkeys"/>
+                <RadioButton Classes="sidebar-item" GroupName="SettingsNav" Content="Video" IsChecked="{Binding IsVideoSelected, Mode=TwoWay}" Tag="Video"/>
+                <RadioButton Classes="sidebar-item" GroupName="SettingsNav" Content="Models" IsChecked="{Binding IsModelsSelected, Mode=TwoWay}" Tag="Models"/>
+                <RadioButton Classes="sidebar-item" GroupName="SettingsNav" Content="About" IsChecked="{Binding IsAboutSelected, Mode=TwoWay}" Tag="About"/>
+                <RadioButton Classes="sidebar-item" GroupName="SettingsNav" Content="Diagnostics" IsChecked="{Binding IsDiagnosticsSelected, Mode=TwoWay}" Tag="Diagnostics"/>
+            </StackPanel>
+        </Border>
 
-            <!-- General Tab -->
-            <TabItem Header="General">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="20" Spacing="12">
-
-                        <!-- Theme (hidden — app is forced to Dark) -->
-                        <StackPanel Orientation="Horizontal" Spacing="20" IsVisible="False">
-                            <TextBlock Text="Theme:" VerticalAlignment="Center"/>
-                            <ComboBox ItemsSource="{Binding ThemeOptions}"
-                                      SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
-                                      Width="150"/>
-                        </StackPanel>
-
-                        <!-- Default TTS Voice (hidden — wiring kept, not shown in UI) -->
-                        <StackPanel Orientation="Horizontal" Spacing="20" IsVisible="False">
-                            <TextBlock Text="Default TTS Voice:" VerticalAlignment="Center"/>
-                            <ComboBox ItemsSource="{Binding TtsVoiceOptions}"
-                                      SelectedItem="{Binding SelectedVoice, Mode=TwoWay}"
-                                      Width="200"/>
-                        </StackPanel>
-
-                        <!-- Recent Sessions -->
-                        <StackPanel Orientation="Horizontal" Spacing="20">
-                            <TextBlock Text="Recent session history limit:"
-                                       VerticalAlignment="Center"
-                                       ToolTip.Tip="Maximum number of recent sessions kept in the file menu (1–20)."/>
-                            <TextBox Text="{Binding MaxRecentSessions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="60"
-                                     ToolTip.Tip="Maximum number of recent sessions kept in the file menu (1–20)."/>
-                        </StackPanel>
-
-                        <!-- Auto-save -->
-                        <StackPanel Orientation="Horizontal" Spacing="20">
-                            <CheckBox IsChecked="{Binding AutoSaveEnabled}"
-                                      Content="Auto-save session on exit"/>
-                        </StackPanel>
-
-                        <!-- Advanced GPU host settings -->
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="Preferred Local GPU Backend:" VerticalAlignment="Center"/>
-                            <ComboBox ItemsSource="{Binding GpuBackendOptions}"
-                                      SelectedItem="{Binding PreferredLocalGpuBackend, Mode=TwoWay}"
-                                      Width="240"
-                                      HorizontalAlignment="Left">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding Converter={StaticResource GpuHostBackendDisplayConverter}}"/>
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                            <TextBlock Opacity="0.65"
-                                       TextWrapping="Wrap"
-                                       Text="Managed local GPU is the default low-friction path. Docker GPU host is available as an advanced backend."/>
-                        </StackPanel>
-
-                        <!-- Backend restart row -->
-                        <Border Padding="10,8"
-                                Background="{DynamicResource ControlBackgroundBrush}"
-                                CornerRadius="8">
-                            <StackPanel Spacing="6">
-                                <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
-                                    <Ellipse Width="8" Height="8" Fill="{Binding BackendStatusBrush}"
-                                             VerticalAlignment="Center"
-                                             ToolTip.Tip="{Binding BackendStatusText}"/>
-                                    <TextBlock Text="Backend status:"
-                                               VerticalAlignment="Center"
-                                               Opacity="0.75"
-                                               FontSize="12"/>
-                                    <TextBlock Text="{Binding BackendStatusText}"
-                                               VerticalAlignment="Center"
-                                               FontSize="12"
-                                               FontWeight="Medium"/>
-                                    <Button Content="&#x27F3; Restart"
-                                            Command="{Binding RestartBackendCommand}"
-                                            IsEnabled="{Binding CanRestartBackend}"
-                                            Padding="10,4"
-                                            FontSize="12"
-                                            ToolTip.Tip="Kill and restart the active GPU backend process (venv or Docker). Useful after changing providers or after a timeout."/>
-                                </StackPanel>
-                                <TextBlock Text="{Binding BackendErrorDetail}"
-                                           IsVisible="{Binding BackendErrorDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                           FontSize="11" Foreground="{DynamicResource SystemErrorForeground}" Opacity="0.8" TextWrapping="Wrap"/>
+        <!-- Content Area -->
+        <Border Grid.Row="1" Grid.Column="1" 
+                Background="{DynamicResource PanelBackgroundBrush}"
+                CornerRadius="8"
+                Padding="20">
+            <Grid>
+                <!-- General Panel -->
+                <ScrollViewer IsVisible="{Binding IsGeneralSelected}" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="16">
+                        <!-- Session Settings Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Session" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                    <StackPanel Grid.Column="0" Grid.Row="0" Spacing="4">
+                                        <TextBlock Text="Recent session history limit" FontSize="12" Foreground="{DynamicResource StatusTextBrush}"/>
+                                        <TextBlock Text="Maximum number of recent sessions kept in the file menu (1–20)." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <TextBox Grid.Column="1" Grid.Row="0" Text="{Binding MaxRecentSessions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center"/>
+                                </Grid>
+                                <CheckBox IsChecked="{Binding AutoSaveEnabled}" Content="Auto-save session on exit"/>
                             </StackPanel>
                         </Border>
 
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="Advanced GPU Service URL:" VerticalAlignment="Center"/>
-                            <TextBox Text="{Binding AdvancedGpuServiceUrl, Mode=TwoWay}"
-                                     IsEnabled="{Binding IsDockerBackend}"
-                                     Width="320"
-                                     HorizontalAlignment="Left"/>
-                            <TextBlock Opacity="0.65"
-                                       TextWrapping="Wrap"
-                                       Text="Only editable when the Docker GPU backend is selected. Automatic Docker startup only runs for loopback URLs such as http://localhost:8000."/>
-                            <CheckBox IsChecked="{Binding AlwaysStartLocalGpuRuntimeAtAppStart}"
-                                      Content="Always start local GPU runtime at app start"/>
-                        </StackPanel>
-
-                        <StackPanel Spacing="6" Margin="0,4,0,0">
-                            <CheckBox IsChecked="{Binding VocalSeparationEnabled, Mode=TwoWay}"
-                                      Content="Separate vocals before transcription (containerized host)"/>
-                            <TextBlock Opacity="0.65"
-                                       TextWrapping="Wrap"
-                                       IsVisible="{Binding HasVocalSeparationAvailabilityHint}"
-                                       Text="{Binding VocalSeparationAvailabilityHint}"/>
-                        </StackPanel>
-
-                        <!-- Dubbing -->
-                        <Separator Margin="0,4,0,4"/>
-                        <TextBlock Text="Dubbing" FontWeight="SemiBold"/>
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="Segment timing mode:" VerticalAlignment="Center"
-                                       ToolTip.Tip="Controls how dubbed TTS audio is aligned with the original segment window."/>
-                            <ComboBox ItemsSource="{Binding DubTimingModeOptions}"
-                                      SelectedItem="{Binding DubTimingMode, Mode=TwoWay}"
-                                      Width="180"
-                                      HorizontalAlignment="Left">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding Converter={StaticResource SegmentTimingModeDisplayConverter}}"/>
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                            <TextBlock Opacity="0.65" TextWrapping="Wrap"
-                                       Text="Off: play TTS as-is (source drives timing). Stretch: time-scale TTS to fit the segment window. Pause: stop source video while TTS plays, then resume."/>
-                        </StackPanel>
-
-                        <!-- Advanced CPU transcription tuning (collapsed by default) -->
-                        <Expander Header="Advanced: CPU Transcription"
-                                  IsExpanded="False"
-                                  Margin="0,6,0,0">
-                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                <TextBlock Opacity="0.65" TextWrapping="Wrap"
-                                           Text="These options tune CPU-only transcription. 0 threads means auto selection by the runtime. 'auto' compute type selects int8_float16 on AVX2-capable CPUs, int8 otherwise."/>
-                                <StackPanel Orientation="Horizontal" Spacing="20">
-                                    <TextBlock Text="CPU Compute Type:" VerticalAlignment="Center"/>
-                                    <ComboBox ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}"
-                                              SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}"
-                                              Width="150"/>
+                        <!-- GPU Backend Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="GPU Backend" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Preferred Local GPU Backend" FontSize="12" Foreground="{DynamicResource StatusTextBrush}"/>
+                                    <ComboBox ItemsSource="{Binding GpuBackendOptions}"
+                                              SelectedItem="{Binding PreferredLocalGpuBackend, Mode=TwoWay}"
+                                              Width="220"
+                                              HorizontalAlignment="Left">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Converter={StaticResource GpuHostBackendDisplayConverter}}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <TextBlock Text="Managed local GPU is the default low-friction path. Docker GPU host is available as an advanced backend." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="20">
-                                    <TextBlock Text="CPU Threads (0=auto):" VerticalAlignment="Center"/>
-                                    <TextBox Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             Width="80"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Backend Status Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Backend Status" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <Ellipse Width="10" Height="10" Fill="{Binding BackendStatusBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding BackendStatusText}" FontSize="12" FontWeight="Medium" VerticalAlignment="Center"/>
+                                    <Button Content="Restart" Command="{Binding RestartBackendCommand}" IsEnabled="{Binding CanRestartBackend}" Padding="12,6" FontSize="11"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="20">
-                                    <TextBlock Text="Workers:" VerticalAlignment="Center"/>
-                                    <TextBox Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             Width="80"/>
+                                <TextBlock Text="{Binding BackendErrorDetail}" IsVisible="{Binding BackendErrorDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" FontSize="11" Foreground="{DynamicResource SystemErrorForeground}" Opacity="0.8" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Docker GPU Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Docker GPU Service" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Advanced GPU Service URL" FontSize="12" Foreground="{DynamicResource StatusTextBrush}"/>
+                                    <TextBox Text="{Binding AdvancedGpuServiceUrl, Mode=TwoWay}" IsEnabled="{Binding IsDockerBackend}" Width="280" HorizontalAlignment="Left"/>
+                                    <TextBlock Text="Only editable when the Docker GPU backend is selected." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
                                 </StackPanel>
+                                <CheckBox IsChecked="{Binding AlwaysStartLocalGpuRuntimeAtAppStart}" Content="Always start local GPU runtime at app start"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Vocal Separation Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Audio Processing" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <CheckBox IsChecked="{Binding VocalSeparationEnabled, Mode=TwoWay}" IsEnabled="{Binding VocalSeparationAvailable}" Content="Separate vocals before transcription"/>
+                                <TextBlock Text="{Binding VocalSeparationAvailabilityHint}" IsVisible="{Binding HasVocalSeparationAvailabilityHint}" FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Dubbing Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Dubbing" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Segment timing mode" FontSize="12" Foreground="{DynamicResource StatusTextBrush}"/>
+                                    <ComboBox ItemsSource="{Binding DubTimingModeOptions}"
+                                              SelectedItem="{Binding DubTimingMode, Mode=TwoWay}"
+                                              Width="180"
+                                              HorizontalAlignment="Left">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Converter={StaticResource SegmentTimingModeDisplayConverter}}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <TextBlock Text="Off: play TTS as-is. Stretch: time-scale TTS to fit. Pause: stop video while TTS plays." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Advanced CPU Expander -->
+                        <Expander Header="Advanced: CPU Transcription" IsExpanded="False">
+                            <StackPanel Spacing="12" Margin="0,12,0,0">
+                                <TextBlock Text="These options tune CPU-only transcription. 0 threads means auto selection." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="CPU Compute Type:" VerticalAlignment="Center" FontSize="12"/>
+                                    <ComboBox Grid.Column="1" Grid.Row="0" ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}" SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}" Width="150"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="CPU Threads (0=auto):" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="1" Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="Workers:" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="2" Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="0,8,0,0"/>
+                                </Grid>
                             </StackPanel>
                         </Expander>
-
                     </StackPanel>
                 </ScrollViewer>
-            </TabItem>
 
-            <!-- Hotkeys Tab -->
-            <TabItem Header="Hotkeys">
-                <Grid Margin="20">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Opacity="0.5" FontStyle="Italic" Margin="0,0,0,12"
-                               Text="Hotkey customisation is not yet available. Shown values are the current defaults." />
-
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="Play/Pause:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding PlayPauseHotkey}" IsReadOnly="True"
-                                 Width="100" Opacity="0.6"/>
+                <!-- Hotkeys Panel -->
+                <ScrollViewer IsVisible="{Binding IsHotkeysSelected}" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="16">
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Keyboard Shortcuts" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Hotkey customisation is not yet available. Shown values are the current defaults." FontSize="11" Opacity="0.5" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="Play/Pause:" VerticalAlignment="Center" FontSize="12"/>
+                                    <TextBox Grid.Column="1" Grid.Row="0" Text="{Binding PlayPauseHotkey}" IsReadOnly="True" Width="120"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="Toggle Segment Panel:" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="1" Text="{Binding ToggleSegmentPanelHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="Toggle Dub Mode:" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="2" Text="{Binding ToggleDubModeHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="3" Text="Toggle Fullscreen:" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="3" Text="{Binding ToggleFullscreenHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
+                </ScrollViewer>
 
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="Toggle Segment Panel:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding ToggleSegmentPanelHotkey}" IsReadOnly="True"
-                                 Width="100" Opacity="0.6"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="Toggle Dub Mode:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding ToggleDubModeHotkey}" IsReadOnly="True"
-                                 Width="100" Opacity="0.6"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="Toggle Fullscreen:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding ToggleFullscreenHotkey}" IsReadOnly="True"
-                                 Width="100" Opacity="0.6"/>
-                    </StackPanel>
-                </Grid>
-            </TabItem>
-
-            <!-- Video Tab -->
-            <TabItem Header="Video">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="20" Spacing="12">
-
-                        <TextBlock Text="Hardware Decode" FontWeight="SemiBold" />
-                        <ComboBox ItemsSource="{Binding HwdecOptions}"
-                                  SelectedItem="{Binding VideoHwdec, Mode=TwoWay}"
-                                  Width="220" HorizontalAlignment="Left" />
-
-                        <TextBlock Text="GPU Rendering API" FontWeight="SemiBold" />
-                        <ComboBox ItemsSource="{Binding GpuApiOptions}"
-                                  SelectedItem="{Binding VideoGpuApi, Mode=TwoWay}"
-                                  Width="220" HorizontalAlignment="Left" />
-
-                        <TextBlock Text="Export Encoder (future)" FontWeight="SemiBold" />
-                        <ComboBox ItemsSource="{Binding ExportEncoderOptions}"
-                                  SelectedItem="{Binding VideoExportEncoder, Mode=TwoWay}"
-                                  Width="220" HorizontalAlignment="Left" />
-
-                        <TextBlock Text="GPU-Next Backend" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <CheckBox IsChecked="{Binding VideoUseGpuNext, Mode=TwoWay}"
-                                  Content="Use gpu-next video output (required for RTX enhancements)"/>
-                        <TextBlock TextWrapping="Wrap"
-                                   Opacity="0.6"
-                                   Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or HDR modes." />
-
-                        <TextBlock Text="RTX Video Enhancement" FontWeight="SemiBold" Margin="0,12,0,0"/>
-
-                        <CheckBox IsChecked="{Binding VideoVsrEnabled, Mode=TwoWay}"
-                                  IsEnabled="{Binding VsrSettingsAvailable}"
-                                  Content="RTX Video Super Resolution (VSR)"/>
-                        <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                    Text="AI upscaling via NVIDIA d3d11vpp. Requires a detected GeForce RTX GPU, driver &#x2265; 551.23, gpu-next, and 'RTX Video Enhancement' in NVIDIA Control Panel." />
-                        <TextBlock TextWrapping="Wrap"
-                                   Opacity="0.65"
-                                   IsVisible="{Binding HasRtxVideoHardwareGateHint}"
-                                   Text="{Binding RtxVideoHardwareGateHint}" />
-                        <TextBlock TextWrapping="Wrap" Opacity="0.55"
-                                   Text="VSR quality is controlled in NVIDIA Control Panel. mpv's d3d11vpp filter does not expose an in-app quality setting." />
-
-                        <Border Background="{DynamicResource SurfaceRaisedBrush}"
-                                BorderBrush="{DynamicResource BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="12,10"
-                                Margin="0,8,0,0">
-                            <Grid ColumnDefinitions="118,*"
-                                  RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-                                  ColumnSpacing="10"
-                                  RowSpacing="6">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Support" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding VsrSupportHintText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Requested" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding VsrRequestedStateText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Resolved" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding VsrResolvedStateText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Last reason" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
-                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding VsrReasonText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Last filter" FontWeight="SemiBold" Foreground="{DynamicResource StatusTextBrush}" />
-                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding VsrFilterText}" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" />
-                            </Grid>
+                <!-- Video Panel -->
+                <ScrollViewer IsVisible="{Binding IsVideoSelected}" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="16">
+                        <!-- Hardware Decode Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Hardware Decode" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="Hardware Decoder:" VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1" Grid.Row="0" ItemsSource="{Binding HwdecOptions}" SelectedItem="{Binding VideoHwdec, Mode=TwoWay}" Width="200"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="GPU Rendering API:" VerticalAlignment="Center" Margin="0,8,0,0"/>
+                                    <ComboBox Grid.Column="1" Grid.Row="1" ItemsSource="{Binding GpuApiOptions}" SelectedItem="{Binding VideoGpuApi, Mode=TwoWay}" Width="200" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="Export Encoder:" VerticalAlignment="Center" Margin="0,8,0,0"/>
+                                    <ComboBox Grid.Column="1" Grid.Row="2" ItemsSource="{Binding ExportEncoderOptions}" SelectedItem="{Binding VideoExportEncoder, Mode=TwoWay}" Width="200" Margin="0,8,0,0"/>
+                                </Grid>
+                            </StackPanel>
                         </Border>
 
-                        <TextBlock Text="HDR" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                   Text="Choose one mode. RTX HDR follows NVIDIA Control Panel. HDR passthrough configures mpv (tone-mapping, etc.). Requires gpu-next and Windows HDR on the active display." />
-                        <StackPanel Spacing="4" Margin="0,6,0,0">
-                            <RadioButton GroupName="VideoHdrPlaybackMode"
-                                         Content="Off"
-                                         IsChecked="{Binding IsHdrModeOff, Mode=TwoWay}"
-                                         IsEnabled="{Binding VideoUseGpuNext}"/>
-                            <RadioButton GroupName="VideoHdrPlaybackMode"
-                                         Content="RTX HDR (NVIDIA driver)"
-                                         IsChecked="{Binding IsHdrModeNvidia, Mode=TwoWay}"
-                                         IsEnabled="{Binding RtxHdrDriverModeAvailable}"/>
-                            <RadioButton GroupName="VideoHdrPlaybackMode"
-                                         Content="HDR passthrough (mpv)"
-                                         IsChecked="{Binding IsHdrModeMpv, Mode=TwoWay}"
-                                         IsEnabled="{Binding HdrSettingsAvailable}"/>
-                        </StackPanel>
-                        <StackPanel IsVisible="{Binding IsMpvHdrPassthroughDetailsVisible}"
-                                    Margin="0,8,0,0"
-                                    Spacing="6">
-                            <TextBlock Text="mpv passthrough options" FontWeight="SemiBold" Opacity="0.85"/>
-                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
-                                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Tone mapping"/>
-                                <ComboBox Grid.Row="0" Grid.Column="1"
-                                          ItemsSource="{Binding HdrToneMappingOptions}"
-                                          SelectedItem="{Binding VideoToneMapping, Mode=TwoWay}"
-                                          Width="220" HorizontalAlignment="Left"/>
-                                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Target peak"/>
-                                <TextBox Grid.Row="1" Grid.Column="1"
-                                         Text="{Binding VideoTargetPeak, Mode=TwoWay}"
-                                         Width="220" HorizontalAlignment="Left"
-                                         PlaceholderText="auto or nits"/>
-                                <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="HDR compute peak"/>
-                                <CheckBox Grid.Row="2" Grid.Column="1"
-                                          IsChecked="{Binding VideoHdrComputePeak, Mode=TwoWay}"
-                                          Content="Dynamic per-frame peak (mpv)"/>
-                            </Grid>
-                        </StackPanel>
-                        <TextBlock TextWrapping="Wrap"
-                                   Opacity="0.55"
-                                   IsVisible="{Binding HasHdrAvailabilityHint}"
-                                   Text="{Binding HdrAvailabilityHintText}" />
-                        <TextBlock TextWrapping="Wrap"
-                                   Opacity="0.5"
-                                   Text="{x:Static vm:SettingsViewModel.HdrDriverFeatureHintText}" />
+                        <!-- GPU-Next Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="GPU-Next Backend" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <CheckBox IsChecked="{Binding VideoUseGpuNext, Mode=TwoWay}" Content="Use gpu-next video output (required for RTX enhancements)"/>
+                                <TextBlock Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or HDR modes." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
 
-                        <TextBlock TextWrapping="Wrap"
-                                   Opacity="0.6"
-                                   Margin="0,12,0,0"
-                                   Text="All video settings take effect after restarting the app." />
+                        <!-- RTX Video Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="RTX Video Enhancement" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <CheckBox IsChecked="{Binding VideoVsrEnabled, Mode=TwoWay}" IsEnabled="{Binding VsrSettingsAvailable}" Content="RTX Video Super Resolution (VSR)"/>
+                                <TextBlock Text="AI upscaling via NVIDIA d3d11vpp. Requires a detected GeForce RTX GPU, driver ≥ 551.23, gpu-next, and 'RTX Video Enhancement' in NVIDIA Control Panel." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding RtxVideoHardwareGateHint}" IsVisible="{Binding HasRtxVideoHardwareGateHint}" FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                
+                                <Border Background="{DynamicResource SurfaceRaisedBrush}" CornerRadius="6" Padding="12" Margin="0,8,0,0">
+                                    <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
+                                        <TextBlock Grid.Column="0" Grid.Row="0" Text="Support:" FontWeight="Medium" FontSize="11"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding VsrSupportHintText}" FontSize="11" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="1" Text="Requested:" FontWeight="Medium" FontSize="11"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding VsrRequestedStateText}" FontSize="11" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="2" Text="Resolved:" FontWeight="Medium" FontSize="11"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding VsrResolvedStateText}" FontSize="11" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="3" Text="Last reason:" FontWeight="Medium" FontSize="11"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="3" Text="{Binding VsrReasonText}" FontSize="11" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="4" Text="Last filter:" FontWeight="Medium" FontSize="11"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="4" Text="{Binding VsrFilterText}" FontSize="11" TextWrapping="Wrap"/>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
 
+                        <!-- HDR Card -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="HDR Playback" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Choose one mode. RTX HDR follows NVIDIA Control Panel. HDR passthrough configures mpv. Requires gpu-next and Windows HDR." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                <StackPanel Spacing="8" Margin="0,4,0,0">
+                                    <RadioButton GroupName="VideoHdrPlaybackMode" Content="Off" IsChecked="{Binding IsHdrModeOff, Mode=TwoWay}" IsEnabled="{Binding VideoUseGpuNext}"/>
+                                    <RadioButton GroupName="VideoHdrPlaybackMode" Content="RTX HDR (NVIDIA driver)" IsChecked="{Binding IsHdrModeNvidia, Mode=TwoWay}" IsEnabled="{Binding RtxHdrDriverModeAvailable}"/>
+                                    <RadioButton GroupName="VideoHdrPlaybackMode" Content="HDR passthrough (mpv)" IsChecked="{Binding IsHdrModeMpv, Mode=TwoWay}" IsEnabled="{Binding HdrSettingsAvailable}"/>
+                                </StackPanel>
+                                
+                                <StackPanel IsVisible="{Binding IsMpvHdrPassthroughDetailsVisible}" Spacing="8" Margin="0,8,0,0">
+                                    <TextBlock Text="mpv passthrough options" FontWeight="SemiBold" FontSize="12"/>
+                                    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto">
+                                        <TextBlock Grid.Column="0" Grid.Row="0" Text="Tone mapping:" VerticalAlignment="Center"/>
+                                        <ComboBox Grid.Column="1" Grid.Row="0" ItemsSource="{Binding HdrToneMappingOptions}" SelectedItem="{Binding VideoToneMapping, Mode=TwoWay}" Width="200" HorizontalAlignment="Left"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="1" Text="Target peak:" VerticalAlignment="Center" Margin="0,8,0,0"/>
+                                        <TextBox Grid.Column="1" Grid.Row="1" Text="{Binding VideoTargetPeak, Mode=TwoWay}" Width="200" HorizontalAlignment="Left" PlaceholderText="auto or nits" Margin="0,8,0,0"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="2" Text="HDR compute peak:" VerticalAlignment="Center" Margin="0,8,0,0"/>
+                                        <CheckBox Grid.Column="1" Grid.Row="2" IsChecked="{Binding VideoHdrComputePeak, Mode=TwoWay}" Content="Dynamic per-frame peak (mpv)" Margin="0,8,0,0"/>
+                                    </Grid>
+                                </StackPanel>
+                                
+                                <TextBlock Text="{Binding HdrAvailabilityHintText}" IsVisible="{Binding HasHdrAvailabilityHint}" FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="{x:Static vm:SettingsViewModel.HdrDriverFeatureHintText}" FontSize="10" Opacity="0.4" TextWrapping="Wrap"/>
+                                <TextBlock Text="All video settings take effect after restarting the app." FontSize="10" Opacity="0.4" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
-            </TabItem>
 
-            <!-- Models Tab -->
-            <TabItem Header="Models">
-                <Grid RowDefinitions="Auto,*" Margin="0,12,0,0">
-
-                    <TextBlock Grid.Row="0"
-                               Text="Manage locally-hosted models. Cloud providers (OpenAI, DeepL, etc.) do not require downloads."
-                               FontSize="11" Opacity="0.55" TextWrapping="Wrap" Margin="0,0,0,12"/>
-
+                <!-- Models Panel -->
+                <Grid IsVisible="{Binding IsModelsSelected}" RowDefinitions="Auto,*">
+                    <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                        <TextBlock Text="Models" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="Manage locally-hosted models. Cloud providers do not require downloads." FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
+                    </StackPanel>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding ModelsTab.Models}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ModelDownloadEntry">
-                                    <Border Margin="0,0,0,6" Padding="10,8"
-                                            Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="8">
-                                        <Grid ColumnDefinitions="Auto,*,Auto">
-
-                                            <StackPanel Grid.Column="0" Spacing="2" Width="180">
-                                                <TextBlock Text="{Binding ProviderLabel}"
-                                                           FontSize="9" Opacity="0.45" FontWeight="SemiBold"/>
-                                                <TextBlock Text="{Binding ModelId}"
-                                                           FontSize="12" FontWeight="Medium"/>
+                                    <Border Margin="0,0,0,8" Padding="12" Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="8">
+                                        <Grid ColumnDefinitions="160,*,Auto">
+                                            <StackPanel Grid.Column="0" Spacing="2">
+                                                <TextBlock Text="{Binding ProviderLabel}" FontSize="10" Opacity="0.5" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding ModelId}" FontSize="13" FontWeight="Medium"/>
                                             </StackPanel>
-
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4" Margin="12,0">
-                                                <TextBlock Text="{Binding StatusLabel}"
-                                                           FontSize="11"
-                                                           Foreground="{DynamicResource StatusTextBrush}"/>
-                                                <ProgressBar Value="{Binding DownloadProgress}"
-                                                             Minimum="0" Maximum="1"
-                                                             Height="4"
-                                                             IsVisible="{Binding IsProgressVisible}"
-                                                             AutomationProperties.Name="Model download progress" />
+                                                <TextBlock Text="{Binding StatusLabel}" FontSize="11"/>
+                                                <ProgressBar Value="{Binding DownloadProgress}" Minimum="0" Maximum="1" Height="4" IsVisible="{Binding IsProgressVisible}"/>
                                             </StackPanel>
-
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                <Button Content="Download"
-                                                        IsVisible="{Binding CanDownload}"
-                                                        Command="{Binding DownloadCommand}"
-                                                        FontSize="11" Padding="8,4"/>
-                                                <Button Content="Cancel"
-                                                        IsVisible="{Binding CanCancel}"
-                                                        Command="{Binding CancelCommand}"
-                                                        FontSize="11" Padding="8,4"/>
+                                                <Button Content="Download" IsVisible="{Binding CanDownload}" Command="{Binding DownloadCommand}" FontSize="11" Padding="10,6"/>
+                                                <Button Content="Cancel" IsVisible="{Binding CanCancel}" Command="{Binding CancelCommand}" FontSize="11" Padding="10,6"/>
                                             </StackPanel>
-
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
@@ -393,145 +326,92 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </Grid>
-            </TabItem>
 
-            <!-- About Tab -->
-            <TabItem Header="About">
-                <Grid Margin="20">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" FontSize="18" FontWeight="SemiBold" Text="Babel Player" Margin="0,0,0,10"/>
-                    <TextBlock Grid.Row="1" Text="{Binding AppVersion}" Opacity="0.7"/>
-                    <TextBlock Grid.Row="2" Text="{Binding AppBuildDate}" Opacity="0.7"/>
-                    <TextBlock Grid.Row="3" Text="AGPL-3.0 License" Opacity="0.7"/>
-                    
-                    <StackPanel Grid.Row="4" Margin="0,20,0,0">
-                        <TextBlock Text="Support the project:" Opacity="0.7" Margin="0,0,0,8"/>
-                        <StackPanel Orientation="Horizontal">
-                            <Border Background="#EAE7E3"
-                                    BorderBrush="#1D2027"
-                                    BorderThickness="3"
-                                    CornerRadius="22"
-                                    Padding="8,6"
-                                    Margin="0,0,10,0"
-                                    HorizontalAlignment="Left">
-                                <Button Command="{Binding OpenKofiCommand}"
-                                        ToolTip.Tip="Support this project on Ko-fi"
-                                        Background="Transparent"
-                                        BorderBrush="Transparent"
-                                        HorizontalAlignment="Left"
-                                        Padding="12,4">
-                                    <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <TextBlock Text="☕"
-                                                   FontSize="20"
-                                                   Foreground="#1A1A2A"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock Text="Support me on Ko-fi"
-                                                   FontSize="16"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="#151820"
-                                                   VerticalAlignment="Center"/>
+                <!-- About Panel -->
+                <ScrollViewer IsVisible="{Binding IsAboutSelected}" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="16" HorizontalAlignment="Center">
+                        <StackPanel HorizontalAlignment="Center" Spacing="8">
+                            <TextBlock Text="Babel Player" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding AppVersion}" FontSize="13" HorizontalAlignment="Center" Opacity="0.7"/>
+                            <TextBlock Text="{Binding AppBuildDate}" FontSize="12" HorizontalAlignment="Center" Opacity="0.5"/>
+                            <TextBlock Text="AGPL-3.0 License" FontSize="11" HorizontalAlignment="Center" Opacity="0.5"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="12" Margin="0,20,0,0">
+                            <TextBlock Text="Support the project:" FontSize="13" HorizontalAlignment="Center" Opacity="0.7"/>
+                            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+                                <Button Command="{Binding OpenKofiCommand}" Padding="16,10" Background="{DynamicResource ButtonBackgroundBrush}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="☕" FontSize="16"/>
+                                        <TextBlock Text="Ko-fi" FontSize="13" FontWeight="Medium"/>
                                     </StackPanel>
                                 </Button>
-                            </Border>
-
-                            <Border Background="#F6F8FA"
-                                    BorderBrush="#1F2328"
-                                    BorderThickness="3"
-                                    CornerRadius="22"
-                                    Padding="8,6"
-                                    HorizontalAlignment="Left">
-                                <Button Command="{Binding OpenGitHubSponsorsCommand}"
-                                        ToolTip.Tip="Support this project on GitHub Sponsors"
-                                        Background="Transparent"
-                                        BorderBrush="Transparent"
-                                        HorizontalAlignment="Left"
-                                        Padding="12,4">
-                                    <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <TextBlock Text="❤"
-                                                   FontSize="18"
-                                                   Foreground="#BF3989"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock Text="Sponsor on GitHub"
-                                                   FontSize="16"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="#1F2328"
-                                                   VerticalAlignment="Center"/>
+                                <Button Command="{Binding OpenGitHubSponsorsCommand}" Padding="16,10" Background="{DynamicResource ButtonBackgroundBrush}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="❤" FontSize="16" Foreground="#BF3989"/>
+                                        <TextBlock Text="GitHub Sponsors" FontSize="13" FontWeight="Medium"/>
                                     </StackPanel>
                                 </Button>
-                            </Border>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                </Grid>
-            </TabItem>
-
-            <!-- Diagnostics Tab -->
-            <TabItem Header="Diagnostics">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="20" Spacing="16">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Hardware Snapshot" FontWeight="SemiBold" FontSize="14"/>
-                            <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="CPU:" Opacity="0.65"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CpuInfo}"/>
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU:" Opacity="0.65"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GpuInfo}"/>
-
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="System RAM:" Opacity="0.65"/>
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RamInfo}"/>
-                            </Grid>
-                        </StackPanel>
-
-                        <Separator/>
-
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Runtime Routing" FontWeight="SemiBold" FontSize="14"/>
-                            <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Inference Host:" Opacity="0.65"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding InferenceModeInfo}"/>
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Warmup Status:" Opacity="0.65"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RuntimeWarmupInfo}"/>
-
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="NMT Fallback:" Opacity="0.65"/>
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TranslationFallbackInfo}"/>
-                            </Grid>
-                        </StackPanel>
-
-                        <Separator/>
-
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Environment" FontWeight="SemiBold" FontSize="14"/>
-                            <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto" RowSpacing="6">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Python Path:" Opacity="0.65"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding PythonInfo}" TextWrapping="Wrap" FontSize="11"/>
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="ffmpeg Path:" Opacity="0.65"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FfmpegInfo}" TextWrapping="Wrap" FontSize="11"/>
-                            </Grid>
-                        </StackPanel>
-
-                        <Button Content="Refresh Diagnostics"
-                                Command="{Binding RefreshDiagnosticsCommand}"
-                                HorizontalAlignment="Left"
-                                Margin="0,10,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
-            </TabItem>
-        </TabControl>
 
-        <!-- Footer buttons -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
-            <Button Content="Cancel" Click="OnCancelClick"/>
-            <Button Content="Save &amp; Close" Click="OnOKClick"/>
+                <!-- Diagnostics Panel -->
+                <ScrollViewer IsVisible="{Binding IsDiagnosticsSelected}" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="16">
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Hardware Snapshot" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="CPU:" Opacity="0.65"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding CpuInfo}" TextWrapping="Wrap"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="GPU:" Opacity="0.65" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding GpuInfo}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="System RAM:" Opacity="0.65" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding RamInfo}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Runtime Routing" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="Inference Host:" Opacity="0.65"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding InferenceModeInfo}" TextWrapping="Wrap"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="Warmup Status:" Opacity="0.65" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding RuntimeWarmupInfo}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="NMT Fallback:" Opacity="0.65" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding TranslationFallbackInfo}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Environment" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto">
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="Python Path:" Opacity="0.65"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding PythonInfo}" TextWrapping="Wrap" FontSize="11"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="ffmpeg Path:" Opacity="0.65" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding FfmpegInfo}" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        
+                        <Button Content="Refresh Diagnostics" Command="{Binding RefreshDiagnosticsCommand}" HorizontalAlignment="Left" Padding="12,8"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" 
+                    Orientation="Horizontal" HorizontalAlignment="Right" 
+                    Spacing="10" Margin="0,16,0,0">
+            <Button Content="Cancel" Click="OnCancelClick" Padding="16,8"/>
+            <Button Content="Save &amp; Close" Click="OnOKClick" Padding="16,8"/>
         </StackPanel>
     </Grid>
 </Window>

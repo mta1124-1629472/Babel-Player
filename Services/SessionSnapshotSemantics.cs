@@ -69,10 +69,10 @@ public static class SessionSnapshotSemantics
 
         // Strict vocal validation: both stems must be present and valid on disk; any mismatch clears the pair.
         var hasVocalsStem = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
-        var hasInstrumentalStem = !string.IsNullOrWhiteSpace(snapshot.InstrumentalAudioPath);
-        if (hasVocalsStem != hasInstrumentalStem
+        var hasAmbianceStem = !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath);
+        if (hasVocalsStem != hasAmbianceStem
             || (hasVocalsStem && !File.Exists(snapshot.VocalsAudioPath!))
-            || (hasInstrumentalStem && !File.Exists(snapshot.InstrumentalAudioPath!)))
+            || (hasAmbianceStem && !File.Exists(snapshot.AmbianceAudioPath!)))
         {
             snapshot = ClearTranscriptionOutputs(snapshot);
             cleared.Add("vocal_separation");
@@ -184,7 +184,7 @@ public static class SessionSnapshotSemantics
         $"srcLang={snapshot.SourceLanguage ?? "<null>"}, tgtLang={snapshot.TargetLanguage ?? "<null>"}";
 
     public static WorkflowSessionSnapshot NormalizeRuntimeProvenance(WorkflowSessionSnapshot snapshot) =>
-        snapshot with
+        NormalizeStemAlias(snapshot) with
         {
             TranscriptionRuntime = ResolveRuntime(snapshot.TranscriptionRuntime, snapshot.TranscriptionProvider, InferenceRuntimeCatalog.InferTranscriptionRuntime),
             TranslationRuntime = ResolveRuntime(snapshot.TranslationRuntime, snapshot.TranslationProvider, InferenceRuntimeCatalog.InferTranslationRuntime),
@@ -207,6 +207,7 @@ public static class SessionSnapshotSemantics
         snapshot with
         {
             TtsPath = null,
+            MixedDubAudioPath = null,
             TtsVoice = null,
             TtsGeneratedAtUtc = null,
             TtsSegmentsPath = null,
@@ -248,6 +249,7 @@ public static class SessionSnapshotSemantics
             TranscriptionModel = null,
             TranscriptionLanguageHint = null,
             VocalsAudioPath = null,
+            AmbianceAudioPath = null,
             InstrumentalAudioPath = null,
         };
 
@@ -280,4 +282,16 @@ public static class SessionSnapshotSemantics
     internal static bool HasDiarizationMarker(WorkflowSessionSnapshot snapshot) =>
         !string.IsNullOrWhiteSpace(snapshot.DiarizationProvider)
         && snapshot.SpeakersDetectedAtUtc.HasValue;
+
+    private static WorkflowSessionSnapshot NormalizeStemAlias(WorkflowSessionSnapshot snapshot)
+    {
+        var ambiancePath = !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath)
+            ? snapshot.AmbianceAudioPath
+            : snapshot.InstrumentalAudioPath;
+        return snapshot with
+        {
+            AmbianceAudioPath = ambiancePath,
+            InstrumentalAudioPath = ambiancePath,
+        };
+    }
 }

@@ -8,7 +8,7 @@ using Babel.Player.Services.Settings;
 namespace Babel.Player.Services;
 
 /// <summary>
-/// Separates an input track into vocals and instrumental stems.
+/// Separates an input track into vocals and non-vocal ambiance stems.
 /// </summary>
 public interface IVocalSeparationProvider
 {

@@ -325,6 +325,25 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private int _maxRecentSessions;
 
+    // ── Navigation selection ─────────────────────────────────────────────────
+    [ObservableProperty]
+    private bool _isGeneralSelected = true;
+
+    [ObservableProperty]
+    private bool _isHotkeysSelected;
+
+    [ObservableProperty]
+    private bool _isVideoSelected;
+
+    [ObservableProperty]
+    private bool _isModelsSelected;
+
+    [ObservableProperty]
+    private bool _isAboutSelected;
+
+    [ObservableProperty]
+    private bool _isDiagnosticsSelected;
+
     // ── Auto-save ─────────────────────────────────────────────────────────────
 
     [ObservableProperty]
@@ -512,7 +531,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         get
         {
             _ = TryGetVocalSeparationCapability(out _, out var hint);
-            return hint ?? "Requires a ready containerized inference host with audio-separator installed.";
+            return hint ?? "Requires a ready containerized inference host with audio-separator installed (produces vocals + ambiance stems).";
         }
     }
 

@@ -193,6 +193,27 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         await File.WriteAllBytesAsync(outputAudioPath, [0xAA, 0xBB], cancellationToken);
     }
 
+    public async Task ComposeTimelineDubAsync(
+        IReadOnlyList<TimelineDubSegment> segments,
+        string outputAudioPath,
+        CancellationToken cancellationToken)
+    {
+        var dir = Path.GetDirectoryName(outputAudioPath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        await File.WriteAllBytesAsync(outputAudioPath, [0xAB, 0xCD], cancellationToken);
+    }
+
+    public async Task MixDubOverAmbianceAsync(
+        string dubbedAudioPath,
+        string ambianceAudioPath,
+        string outputAudioPath,
+        CancellationToken cancellationToken)
+    {
+        var dir = Path.GetDirectoryName(outputAudioPath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        await File.WriteAllBytesAsync(outputAudioPath, [0xDE, 0xAD], cancellationToken);
+    }
+
     public async Task ExtractAudioClipAsync(string inputPath, string outputPath, double startTimeSeconds, double durationSeconds, CancellationToken cancellationToken)
     {
         var dir = Path.GetDirectoryName(outputPath);

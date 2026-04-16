@@ -226,11 +226,11 @@ public sealed class ContainerizedProvidersTests() : IDisposable
 
         Assert.True(result.Success);
         Assert.True(File.Exists(result.VocalsAudioPath));
-        Assert.True(File.Exists(result.InstrumentalAudioPath));
+        Assert.True(File.Exists(result.AmbianceAudioPath));
         Assert.Equal(vocalsBytes, await File.ReadAllBytesAsync(result.VocalsAudioPath));
-        Assert.Equal(instrumentalBytes, await File.ReadAllBytesAsync(result.InstrumentalAudioPath));
+        Assert.Equal(instrumentalBytes, await File.ReadAllBytesAsync(result.AmbianceAudioPath));
         Assert.Equal(6, result.VocalsFileSizeBytes);
-        Assert.Equal(12, result.InstrumentalFileSizeBytes);
+        Assert.Equal(12, result.AmbianceFileSizeBytes);
     }
 
     [Fact]
@@ -790,7 +790,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             ContainerizedServiceUrl = "http://localhost:8000"
         };
 
-        var checking = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+        var checking = ContainerizedProviderReadiness.CheckTranslation(settings, serviceProbe: probe);
         Assert.False(checking.IsReady);
         Assert.Contains("starting", checking.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
@@ -798,7 +798,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         for (var i = 0; i < 40; i++)
         {
             await Task.Delay(50);
-            unavailable = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+            unavailable = ContainerizedProviderReadiness.CheckTranslation(settings, serviceProbe: probe);
             if (!string.IsNullOrWhiteSpace(unavailable.BlockingReason) &&
                 !unavailable.BlockingReason.Contains("starting", StringComparison.OrdinalIgnoreCase))
                 break;
@@ -831,12 +831,12 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
             ContainerizedServiceUrl = "http://localhost:8000"
         };
-        _ = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+        _ = ContainerizedProviderReadiness.CheckTranslation(settings, serviceProbe: probe);
         ProviderReadiness readiness;
         var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
         do
         {
-            readiness = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+            readiness = ContainerizedProviderReadiness.CheckTranslation(settings, serviceProbe: probe);
             if (readiness.BlockingReason?.Contains("is starting at", StringComparison.OrdinalIgnoreCase) != true)
                 break;
             Thread.Sleep(10);
@@ -879,12 +879,12 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             ContainerizedServiceUrl = "http://localhost:8000",
             TtsProvider = ProviderNames.Qwen,
         };
-        _ = ContainerizedProviderReadiness.CheckTts(settings, probe);
+        _ = ContainerizedProviderReadiness.CheckTts(settings, serviceProbe: probe);
         ProviderReadiness readiness;
         var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
         do
         {
-            readiness = ContainerizedProviderReadiness.CheckTts(settings, probe);
+            readiness = ContainerizedProviderReadiness.CheckTts(settings, serviceProbe: probe);
             if (readiness.IsReady) break;
             Thread.Sleep(10);
         } while (DateTimeOffset.UtcNow < deadline);
@@ -1424,7 +1424,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
 
         ExpireCachedProbeResult(probe, AppSettings.ManagedGpuServiceUrl);
 
-        var readiness = ContainerizedProviderReadiness.CheckDiarization(settings, ProviderNames.NemoLocal, probe);
+        var readiness = ContainerizedProviderReadiness.CheckDiarization(settings, ProviderNames.NemoLocal, serviceProbe: probe);
         await WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
 
         Assert.False(readiness.IsReady);

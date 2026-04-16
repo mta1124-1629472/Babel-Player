@@ -457,7 +457,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             {
                 IngestedMediaPath = ingestedPath,
                 VocalsAudioPath = validated.VocalsAudioPath,
-                InstrumentalAudioPath = validated.InstrumentalAudioPath,
+                AmbianceAudioPath = validated.AmbianceAudioPath,
+                InstrumentalAudioPath = validated.AmbianceAudioPath,
                 MediaLoadedAtUtc = nowUtc,
                 LastUpdatedAtUtc = nowUtc,
                 StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
@@ -494,6 +495,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 SourceMediaPath = sourceMediaPath,
                 IngestedMediaPath = ingestedPath,
                 VocalsAudioPath = null,
+                AmbianceAudioPath = null,
                 InstrumentalAudioPath = null,
                 MediaLoadedAtUtc = nowUtc,
                 TranscriptPath = null,
@@ -559,9 +561,13 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         CurrentSession = CurrentSession with
         {
             Stage = SessionWorkflowStage.MediaLoaded,
+            VocalsAudioPath = null,
+            AmbianceAudioPath = null,
+            InstrumentalAudioPath = null,
             TranscriptPath = null,
             TranslationPath = null,
             TtsPath = null,
+            MixedDubAudioPath = null,
             TtsVoice = null,
             TtsSegmentsPath = null,
             TtsSegmentAudioPaths = null,
@@ -597,6 +603,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             Stage = SessionWorkflowStage.Transcribed,
             TranslationPath = null,
             TtsPath = null,
+            MixedDubAudioPath = null,
             TtsVoice = null,
             TtsSegmentsPath = null,
             TtsSegmentAudioPaths = null,
@@ -627,6 +634,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             Stage = SessionWorkflowStage.Diarized,
             TranslationPath = null,
             TtsPath = null,
+            MixedDubAudioPath = null,
             TtsVoice = null,
             TtsSegmentsPath = null,
             TtsSegmentAudioPaths = null,
@@ -650,6 +658,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         {
             Stage = SessionWorkflowStage.Translated,
             TtsPath = null,
+            MixedDubAudioPath = null,
             TtsVoice = null,
             TtsSegmentsPath = null,
             TtsSegmentAudioPaths = null,

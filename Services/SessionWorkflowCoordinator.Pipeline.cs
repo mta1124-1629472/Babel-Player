@@ -29,9 +29,9 @@ public sealed partial class SessionWorkflowCoordinator
             throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
 
         if (!string.IsNullOrWhiteSpace(CurrentSession.VocalsAudioPath)
-            && !string.IsNullOrWhiteSpace(CurrentSession.InstrumentalAudioPath)
+            && !string.IsNullOrWhiteSpace(CurrentSession.AmbianceAudioPath)
             && File.Exists(CurrentSession.VocalsAudioPath)
-            && File.Exists(CurrentSession.InstrumentalAudioPath))
+            && File.Exists(CurrentSession.AmbianceAudioPath))
         {
             return CurrentSession.VocalsAudioPath;
         }
@@ -52,7 +52,7 @@ public sealed partial class SessionWorkflowCoordinator
                 CurrentSettings,
                 _containerizedProbe,
                 cancellationToken).ConfigureAwait(false)
-            : ContainerizedProviderReadiness.CheckVocalSeparation(CurrentSettings, _containerizedProbe);
+            : ContainerizedProviderReadiness.CheckVocalSeparation(CurrentSettings, serviceProbe: _containerizedProbe);
 
         if (!readiness.IsReady)
             throw new PipelineProviderException(readiness.BlockingReason ?? "Vocal separation is not ready.");
@@ -74,7 +74,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (!result.Success
             || string.IsNullOrWhiteSpace(result.VocalsAudioPath)
-            || string.IsNullOrWhiteSpace(result.InstrumentalAudioPath))
+            || string.IsNullOrWhiteSpace(result.AmbianceAudioPath))
         {
             throw new InvalidOperationException(
                 $"Vocal separation failed: {result.ErrorMessage ?? "Unknown vocal separation error"}");
@@ -83,14 +83,15 @@ public sealed partial class SessionWorkflowCoordinator
         if (!File.Exists(result.VocalsAudioPath))
             throw new InvalidOperationException($"Vocal separation completed but vocals artifact was not found: {result.VocalsAudioPath}");
 
-        if (!File.Exists(result.InstrumentalAudioPath))
-            throw new InvalidOperationException($"Vocal separation completed but instrumental artifact was not found: {result.InstrumentalAudioPath}");
+        if (!File.Exists(result.AmbianceAudioPath))
+            throw new InvalidOperationException($"Vocal separation completed but ambiance artifact was not found: {result.AmbianceAudioPath}");
 
         CurrentSession = CurrentSession with
         {
             VocalsAudioPath = result.VocalsAudioPath,
-            InstrumentalAudioPath = result.InstrumentalAudioPath,
-            StatusMessage = "Vocal and instrumental stems prepared for transcription.",
+            AmbianceAudioPath = result.AmbianceAudioPath,
+            InstrumentalAudioPath = result.AmbianceAudioPath,
+            StatusMessage = "Vocal and ambiance stems prepared for transcription.",
         };
         SaveCurrentSession();
 
@@ -307,14 +308,15 @@ public sealed partial class SessionWorkflowCoordinator
         // had separation enabled. When separation is enabled, SeparateVocalsAsync already wrote
         // fresh stem paths into CurrentSession before this method is called, so we preserve them.
         var vocalsPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.VocalsAudioPath : null;
-        var instrumentalPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.InstrumentalAudioPath : null;
+        var ambiancePath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.AmbianceAudioPath : null;
         CurrentSession = CurrentSession with
         {
             Stage = SessionWorkflowStage.Transcribed,
             TranscriptPath = transcriptPath,
             SourceLanguage = result.Language,
             VocalsAudioPath = vocalsPath,
-            InstrumentalAudioPath = instrumentalPath,
+            AmbianceAudioPath = ambiancePath,
+            InstrumentalAudioPath = ambiancePath,
             TranscribedAtUtc = nowUtc,
             TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
@@ -619,7 +621,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// <paramref name="orderedSegments"/> comes from <see cref="GenerateSegmentClipsAsync"/> to avoid
     /// a redundant disk read of the translation artifact.
     /// </summary>
-    private async Task StitchSegmentClipsAsync(
+    private async Task<string?> StitchSegmentClipsAsync(
         ConcurrentDictionary<string, string> segmentAudioPaths,
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         string ttsPath,
@@ -642,13 +644,29 @@ public sealed partial class SessionWorkflowCoordinator
             progress01: 1,
             isIndeterminate: true);
 
-        if (_audioProcessingService is not null)
+        string? mixedDubPath = null;
+        if (_audioProcessingService is null)
         {
-            await _audioProcessingService.CombineAudioSegmentsAsync(orderedPaths, ttsPath, cancellationToken);
+            throw new InvalidOperationException("Audio processing service unavailable. Unable to compose dub audio.");
         }
-        else
+
+        var timelineSegments = await BuildTimelineDubSegmentsAsync(
+            orderedSegments,
+            segmentAudioPaths,
+            cancellationToken).ConfigureAwait(false);
+        await _audioProcessingService.ComposeTimelineDubAsync(timelineSegments, ttsPath, cancellationToken).ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(CurrentSession.AmbianceAudioPath)
+            && File.Exists(CurrentSession.AmbianceAudioPath))
         {
-            _log.Warning("Audio processing service unavailable. Skipping audio concatenation.");
+            var outputDir = Path.GetDirectoryName(ttsPath) ?? GetSessionDirectory();
+            var fileName = Path.GetFileNameWithoutExtension(ttsPath);
+            mixedDubPath = Path.Combine(outputDir, $"{fileName}_mixed.mp3");
+            await _audioProcessingService.MixDubOverAmbianceAsync(
+                ttsPath,
+                CurrentSession.AmbianceAudioPath,
+                mixedDubPath,
+                cancellationToken).ConfigureAwait(false);
         }
 
         if (!File.Exists(ttsPath))
@@ -656,6 +674,7 @@ public sealed partial class SessionWorkflowCoordinator
                 $"Stitching completed but combined dub file was not created at '{ttsPath}'. Check ffmpeg output and disk permissions.");
 
         _log.Info($"TTS combined complete: {ttsPath}");
+        return mixedDubPath;
     }
 
     /// <summary>
@@ -674,6 +693,7 @@ public sealed partial class SessionWorkflowCoordinator
     private void CommitTtsSessionState(
         string voice,
         string ttsPath,
+        string? mixedDubPath,
         string segmentsDir,
         ConcurrentDictionary<string, string> segmentAudioPaths,
         ConcurrentDictionary<string, double>? segmentDurations,
@@ -697,6 +717,7 @@ public sealed partial class SessionWorkflowCoordinator
         {
             Stage = SessionWorkflowStage.TtsGenerated,
             TtsPath = ttsPath,
+            MixedDubAudioPath = mixedDubPath,
             TtsVoice = voice,
             TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
             TtsSegmentsPath = segmentsDir,
@@ -716,6 +737,63 @@ public sealed partial class SessionWorkflowCoordinator
             $"Dub complete. {succeeded}/{totalSegments} segment clips are ready with voice {voice}.",
             progress01: 1,
             isIndeterminate: false);
+    }
+
+    private async Task<List<TimelineDubSegment>> BuildTimelineDubSegmentsAsync(
+        IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
+        ConcurrentDictionary<string, string> segmentAudioPaths,
+        CancellationToken cancellationToken)
+    {
+        var timelineSegments = new List<TimelineDubSegment>(orderedSegments.Count);
+        var stretchDir = Path.Combine(GetSessionDirectory(), "tts", "segments", "_timeline");
+        Directory.CreateDirectory(stretchDir);
+
+        foreach (var segment in orderedSegments)
+        {
+            if (string.IsNullOrWhiteSpace(segment.Id))
+                continue;
+            if (!segmentAudioPaths.TryGetValue(segment.Id, out var sourcePath) || !File.Exists(sourcePath))
+                continue;
+
+            var segmentDuration = Math.Max(0.05, segment.End - segment.Start);
+            var timingMode = ResolveSegmentTimingMode(segment.Id);
+            var effectivePath = sourcePath;
+
+            if (timingMode == SegmentTimingMode.Stretch && _audioProcessingService is not null)
+            {
+                var stretchedPath = Path.Combine(stretchDir, $"{segment.Id}.stretch.mp3");
+                var stretched = await _audioProcessingService.TimeStretchAsync(
+                    sourcePath,
+                    stretchedPath,
+                    segmentDuration,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (stretched && File.Exists(stretchedPath))
+                    effectivePath = stretchedPath;
+            }
+
+            timelineSegments.Add(new TimelineDubSegment(
+                segment.Id,
+                effectivePath,
+                Math.Max(0, segment.Start),
+                segmentDuration,
+                TrimToSegmentWindow: timingMode != SegmentTimingMode.Pause));
+        }
+
+        if (timelineSegments.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No eligible segment audio files were produced for timeline composition.");
+        }
+
+        return timelineSegments;
+    }
+
+    private SegmentTimingMode ResolveSegmentTimingMode(string segmentId)
+    {
+        if (CurrentSession.SegmentTimingModeOverrides is not null
+            && CurrentSession.SegmentTimingModeOverrides.TryGetValue(segmentId, out var overrideMode))
+            return overrideMode;
+        return CurrentSettings.DubTimingMode;
     }
 
     /// <summary>

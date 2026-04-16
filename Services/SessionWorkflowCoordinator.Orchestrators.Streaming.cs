@@ -203,8 +203,13 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 await ttsStageTask.ConfigureAwait(false);
                 var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
-                await _c.StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, pipelineToken).ConfigureAwait(false);
-                _c.CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+                var mixedDubPath = await _c.StitchSegmentClipsAsync(
+                    segmentAudioPaths,
+                    translationWriter.OrderedSegments,
+                    ttsPath,
+                    ttsStageContext,
+                    pipelineToken).ConfigureAwait(false);
+                _c.CommitTtsSessionState(voice, ttsPath, mixedDubPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
             }
             catch (Exception ex)
             {
@@ -370,8 +375,13 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 await ttsStageTask.ConfigureAwait(false);
                 var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
-                await _c.StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, pipelineToken).ConfigureAwait(false);
-                _c.CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+                var mixedDubPath = await _c.StitchSegmentClipsAsync(
+                    segmentAudioPaths,
+                    translationWriter.OrderedSegments,
+                    ttsPath,
+                    ttsStageContext,
+                    pipelineToken).ConfigureAwait(false);
+                _c.CommitTtsSessionState(voice, ttsPath, mixedDubPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
             }
             catch (Exception ex)
             {

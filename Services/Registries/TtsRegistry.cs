@@ -159,7 +159,7 @@ public sealed class TtsRegistry : ITtsRegistry
             return new ProviderReadiness(false, $"API key missing for provider '{desc.DisplayName}'.");
 
         if (resolvedRuntime == InferenceRuntime.Containerized)
-            return ContainerizedProviderReadiness.CheckTts(settings, _containerizedProbe);
+            return ContainerizedProviderReadiness.CheckTts(settings, serviceProbe: _containerizedProbe);
 
         var provider = CreateProvider(normalizedProviderId, settings, keyStore, resolvedProfile);
         return provider.CheckReadiness(settings, keyStore);

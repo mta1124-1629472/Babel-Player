@@ -12,16 +12,35 @@ public static class SrtGenerator
 {
     /// <summary>
     /// Converts a segment list to SRT format text.
-    /// Uses TranslatedText when available, falls back to SourceText.
+    /// If <paramref name="bilingual"/> is true, shows both source and translated text.
+    /// Otherwise, uses TranslatedText when available, falling back to SourceText.
     /// Segments with no displayable text are skipped.
     /// </summary>
-    public static string Generate(IEnumerable<WorkflowSegmentState> segments)
+    public static string Generate(IEnumerable<WorkflowSegmentState> segments, bool bilingual = false)
     {
         var sb = new StringBuilder();
         int index = 1;
         foreach (var seg in segments)
         {
-            var text = seg.TranslatedText ?? seg.SourceText;
+            string text;
+            if (bilingual)
+            {
+                var source = seg.SourceText?.Trim();
+                var translated = seg.TranslatedText?.Trim();
+                if (!string.IsNullOrEmpty(source) && !string.IsNullOrEmpty(translated) && source != translated)
+                {
+                    text = $"{source}\n{translated}";
+                }
+                else
+                {
+                    text = translated ?? source ?? "";
+                }
+            }
+            else
+            {
+                text = seg.TranslatedText ?? seg.SourceText ?? "";
+            }
+
             if (string.IsNullOrWhiteSpace(text)) continue;
 
             // SRT spec uses LF line endings; explicit \n avoids CRLF on Windows.

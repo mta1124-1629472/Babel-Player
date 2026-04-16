@@ -966,6 +966,14 @@
                                 Background="Transparent"
                                 ToolTip.Tip="Toggle subtitles (CC)"
                                 AutomationProperties.Name="Toggle subtitles" />
+                        <Button Content="{Binding Playback.Preview.BilingualToggleLabel}"
+                                Classes="control-pill"
+                                Command="{Binding Playback.Preview.ToggleBilingualSubtitlesCommand}"
+                                IsEnabled="{Binding Playback.Preview.HasSegments}"
+                                Padding="6,5" FontSize="14"
+                                Background="Transparent"
+                                ToolTip.Tip="Toggle Bilingual Subtitles (shows both source and target)"
+                                AutomationProperties.Name="Toggle Bilingual Subtitles" />
                         <Button Content="{Binding Playback.Preview.DubModeLabel}"
                                 Classes="control-pill"
                                 Classes.active="{Binding Playback.Preview.IsDubModeOn}"

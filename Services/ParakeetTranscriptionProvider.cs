@@ -72,5 +72,5 @@ public sealed class ParakeetTranscriptionProvider : ITranscriptionProvider
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
-        ContainerizedProviderReadiness.CheckTranscription(settings);
+        ContainerizedProviderReadiness.CheckTranscription(settings, keyStore);
 }

@@ -924,6 +924,24 @@ public sealed class PipelineStageProgressTests() : IDisposable
             return Task.CompletedTask;
         }
 
+        public Task ComposeTimelineDubAsync(IReadOnlyList<TimelineDubSegment> segments, string outputAudioPath, CancellationToken cancellationToken)
+        {
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            File.WriteAllText(outputAudioPath, "fake timeline dub");
+            return Task.CompletedTask;
+        }
+
+        public Task MixDubOverAmbianceAsync(string dubbedAudioPath, string ambianceAudioPath, string outputAudioPath, CancellationToken cancellationToken)
+        {
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            File.WriteAllText(outputAudioPath, "fake mixed dub");
+            return Task.CompletedTask;
+        }
+
 
         public Task ExtractAudioClipAsync(string sourcePath, string outputPath, double startTimeSeconds, double durationSeconds, CancellationToken cancellationToken)
         {

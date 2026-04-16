@@ -156,6 +156,119 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         }
     }
 
+    public async Task ComposeTimelineDubAsync(
+        IReadOnlyList<TimelineDubSegment> segments,
+        string outputAudioPath,
+        CancellationToken cancellationToken)
+    {
+        if (segments.Count == 0)
+            throw new InvalidOperationException("Cannot compose timeline dub without segments.");
+
+        foreach (var segment in segments)
+        {
+            if (!File.Exists(segment.AudioPath))
+                throw new FileNotFoundException($"Timeline segment audio not found: {segment.AudioPath}");
+        }
+
+        var ffmpegPath = DependencyLocator.FindFfmpeg()
+            ?? throw new InvalidOperationException("ffmpeg not found. Timeline dub composition requires ffmpeg.");
+
+        var outputDir = Path.GetDirectoryName(outputAudioPath);
+        if (!string.IsNullOrEmpty(outputDir))
+            Directory.CreateDirectory(outputDir);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffmpegPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        psi.ArgumentList.Add("-y");
+        for (var index = 0; index < segments.Count; index++)
+        {
+            psi.ArgumentList.Add("-i");
+            psi.ArgumentList.Add(segments[index].AudioPath);
+        }
+
+        var filterParts = new List<string>(segments.Count + 1);
+        for (var index = 0; index < segments.Count; index++)
+        {
+            var segment = segments[index];
+            var delayMs = Math.Max(0, (int)Math.Round(segment.StartSeconds * 1000, MidpointRounding.AwayFromZero));
+            var escapedDuration = Math.Max(0, segment.SegmentDurationSeconds)
+                .ToString("0.###", CultureInfo.InvariantCulture);
+            var label = $"s{index}";
+            filterParts.Add(segment.TrimToSegmentWindow
+                ? $"[{index}:a]atrim=0:{escapedDuration},adelay={delayMs}|{delayMs}[{label}]"
+                : $"[{index}:a]adelay={delayMs}|{delayMs}[{label}]");
+        }
+
+        var mixedInputs = string.Concat(Enumerable.Range(0, segments.Count).Select(index => $"[s{index}]"));
+        filterParts.Add($"{mixedInputs}amix=inputs={segments.Count}:normalize=0:dropout_transition=0[outa]");
+
+        psi.ArgumentList.Add("-filter_complex");
+        psi.ArgumentList.Add(string.Join(";", filterParts));
+        psi.ArgumentList.Add("-map");
+        psi.ArgumentList.Add("[outa]");
+        psi.ArgumentList.Add("-vn");
+        psi.ArgumentList.Add("-c:a");
+        psi.ArgumentList.Add("libmp3lame");
+        psi.ArgumentList.Add("-q:a");
+        psi.ArgumentList.Add("3");
+        psi.ArgumentList.Add(outputAudioPath);
+
+        await RunFfmpegProcessAsync(psi, outputAudioPath, "timeline dub composition", cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task MixDubOverAmbianceAsync(
+        string dubbedAudioPath,
+        string ambianceAudioPath,
+        string outputAudioPath,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(dubbedAudioPath))
+            throw new FileNotFoundException($"Dubbed track not found: {dubbedAudioPath}");
+        if (!File.Exists(ambianceAudioPath))
+            throw new FileNotFoundException($"Ambiance track not found: {ambianceAudioPath}");
+
+        var ffmpegPath = DependencyLocator.FindFfmpeg()
+            ?? throw new InvalidOperationException("ffmpeg not found. Ambiance mixing requires ffmpeg.");
+
+        var outputDir = Path.GetDirectoryName(outputAudioPath);
+        if (!string.IsNullOrEmpty(outputDir))
+            Directory.CreateDirectory(outputDir);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffmpegPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        psi.ArgumentList.Add("-y");
+        psi.ArgumentList.Add("-i");
+        psi.ArgumentList.Add(dubbedAudioPath);
+        psi.ArgumentList.Add("-i");
+        psi.ArgumentList.Add(ambianceAudioPath);
+        psi.ArgumentList.Add("-filter_complex");
+        psi.ArgumentList.Add("[1:a]volume=1.0[bg];[0:a][bg]amix=inputs=2:normalize=0:dropout_transition=0[outa]");
+        psi.ArgumentList.Add("-map");
+        psi.ArgumentList.Add("[outa]");
+        psi.ArgumentList.Add("-vn");
+        psi.ArgumentList.Add("-c:a");
+        psi.ArgumentList.Add("libmp3lame");
+        psi.ArgumentList.Add("-q:a");
+        psi.ArgumentList.Add("3");
+        psi.ArgumentList.Add(outputAudioPath);
+
+        await RunFfmpegProcessAsync(psi, outputAudioPath, "dub over ambiance mix", cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task ExtractAudioClipAsync(
         string inputPath,
         string outputPath,
@@ -526,4 +639,39 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
             private static string EscapeConcatListPath(string path) =>
         path.Replace("\\", "/", StringComparison.Ordinal)
             .Replace("'", "'\\''", StringComparison.Ordinal);
+
+    private static async Task RunFfmpegProcessAsync(
+        ProcessStartInfo startInfo,
+        string expectedOutputPath,
+        string operationName,
+        CancellationToken cancellationToken)
+    {
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Failed to start ffmpeg for {operationName}.");
+
+        using var registration = cancellationToken.Register(() =>
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+                // Best-effort termination.
+            }
+        });
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var stdout = await stdoutTask.ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0 || !File.Exists(expectedOutputPath))
+        {
+            throw new InvalidOperationException(
+                $"ffmpeg {operationName} failed or produced no output file (exit code {process.ExitCode}): {stderr} {stdout}".Trim());
+        }
+    }
 }

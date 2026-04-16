@@ -25,7 +25,8 @@ public sealed class VideoExportPlanner
         if (string.IsNullOrWhiteSpace(options.OutputPath))
             issues.Add("Output path is required.");
 
-        if (options.IncludeTtsAudio && (string.IsNullOrWhiteSpace(session.TtsPath) || !File.Exists(session.TtsPath)))
+        var preferredDubPath = ResolvePreferredDubPath(session);
+        if (options.IncludeTtsAudio && (string.IsNullOrWhiteSpace(preferredDubPath) || !File.Exists(preferredDubPath)))
             issues.Add("No combined TTS audio is available for export.");
 
         if ((options.IncludeSoftCaptions || options.BurnInCaptions) && segments.Count == 0)
@@ -45,6 +46,8 @@ public sealed class VideoExportPlanner
         var validation = Validate(session, segments, options);
         if (!validation.CanExport)
             throw new InvalidOperationException(string.Join(" ", validation.Issues));
+        var preferredDubPath = ResolvePreferredDubPath(session);
+
 
         var inputFiles = new List<string> { session.SourceMediaPath! };
         var args = new List<string>();
@@ -59,9 +62,9 @@ public sealed class VideoExportPlanner
 
         if (options.IncludeTtsAudio)
         {
-            inputFiles.Add(session.TtsPath!);
+            inputFiles.Add(preferredDubPath!);
             args.Add("-i");
-            args.Add(session.TtsPath!);
+            args.Add(preferredDubPath!);
         }
 
         var subtitleFilePath = (options.IncludeSoftCaptions || options.BurnInCaptions)
@@ -130,6 +133,13 @@ public sealed class VideoExportPlanner
             inputFiles,
             args,
             subtitleFilePath);
+    }
+
+    private static string? ResolvePreferredDubPath(WorkflowSessionSnapshot session)
+    {
+        if (!string.IsNullOrWhiteSpace(session.MixedDubAudioPath) && File.Exists(session.MixedDubAudioPath))
+            return session.MixedDubAudioPath;
+        return session.TtsPath;
     }
 
     public string BuildSubtitleText(IReadOnlyList<WorkflowSegmentState> segments) =>
