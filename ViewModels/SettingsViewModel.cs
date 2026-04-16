@@ -16,6 +16,7 @@ using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
+using Babel.Player.Services.Transcription;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SettingsService = Babel.Player.Services.Settings.SettingsService;
@@ -74,6 +75,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         VocalSeparationEnabled = current.VocalSeparationEnabled;
         TranscriptionCpuComputeType = current.TranscriptionCpuComputeType;
         TranscriptionCpuThreads = current.TranscriptionCpuThreads;
+        TranscriptionNumWorkersUseAuto = current.TranscriptionNumWorkersUseAuto;
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
         DubTimingMode = current.DubTimingMode;
 
@@ -147,30 +149,50 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public bool CanRestartBackend => !IsRestartingBackend;
 
+    private int _backendUnavailableStreak;
+
+    /// <summary>Diagnostics: counts consecutive probe results where the host was unavailable (resets on any other state).</summary>
+    public string GpuHostProbeDiagnostics =>
+        $"Unavailable probe streak: {_backendUnavailableStreak} (resets when the host responds).";
+
     private void UpdateBackendStatus()
     {
         if (IsRestartingBackend) return;
 
         var status = _containerizedManager.GetCurrentStatus(_coordinator.CurrentSettings);
+        if (status.State == ContainerizedProbeState.Unavailable)
+            _backendUnavailableStreak++;
+        else
+            _backendUnavailableStreak = 0;
+
         var age = DateTimeOffset.UtcNow - status.CheckedAtUtc;
         var freshness = age < TimeSpan.FromSeconds(1)
             ? "updated just now"
             : $"updated {Math.Max(1, (int)age.TotalSeconds).ToString(CultureInfo.CurrentCulture)}s ago";
         var staleTag = status.IsStale ? " (stale)" : string.Empty;
+        var coldStart = DateTimeOffset.UtcNow - _coordinator.ProcessStartedAtUtc < TimeSpan.FromSeconds(90);
+        const string warmHint = " Typical first warm-up after launch: 30–60 seconds.";
 
         BackendStatusText = status is { Busy: true, BusyReason: not null }
-            ? $"Busy: {status.BusyReason} · {freshness}"
+            ? $"Warming — busy: {status.BusyReason} · {freshness}{warmHint}"
             : status.State switch
             {
                 ContainerizedProbeState.Available => $"Ready{staleTag} · {freshness}",
-                ContainerizedProbeState.Unavailable => $"Unavailable · {freshness}",
-                ContainerizedProbeState.Checking => "Checking\u2026",
-                _ => $"{status.State} · {freshness}"
+                ContainerizedProbeState.Unavailable when coldStart && _backendUnavailableStreak < 6 =>
+                    $"Warming / waiting — host not reachable yet. " +
+                    $"{(string.IsNullOrWhiteSpace(status.ErrorDetail) ? "If this persists for several minutes, use Restart below." : status.ErrorDetail)}" +
+                    $"{warmHint} · {freshness}",
+                ContainerizedProbeState.Unavailable =>
+                    $"Unavailable — {status.ErrorDetail ?? "Use Restart inference backend or verify the service URL."} · {freshness}",
+                ContainerizedProbeState.Checking =>
+                    $"Warming — checking local inference host…{warmHint} · {freshness}",
+                _ => $"{status.State} · {freshness}",
             };
 
         BackendStatusBrush = status.State switch
         {
             ContainerizedProbeState.Available => Brushes.Green,
+            ContainerizedProbeState.Unavailable when coldStart && _backendUnavailableStreak < 6 => Brushes.Orange,
             ContainerizedProbeState.Unavailable => Brushes.Red,
             ContainerizedProbeState.Checking => Brushes.Orange,
             _ => Brushes.Gray
@@ -189,9 +211,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(VocalSeparationAvailable));
         OnPropertyChanged(nameof(VocalSeparationAvailabilityHint));
         OnPropertyChanged(nameof(HasVocalSeparationAvailabilityHint));
-        // Do not clear the user's preference on transient readiness loss —
-        // VocalSeparationAvailable already surfaces the blocked state in the UI.
-        // Readiness is enforced at runtime when the pipeline runs.
+        OnPropertyChanged(nameof(GpuHostProbeDiagnostics));
     }
 
     // ── Diagnostics ───────────────────────────────────────────────────────────
@@ -226,6 +246,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(TranslationFallbackInfo));
             OnPropertyChanged(nameof(PythonInfo));
             OnPropertyChanged(nameof(FfmpegInfo));
+            OnPropertyChanged(nameof(GpuHostProbeDiagnostics));
         }
         catch (Exception ex)
         {
@@ -313,8 +334,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public SegmentTimingMode[] DubTimingModeOptions { get; } =
         [SegmentTimingMode.Off, SegmentTimingMode.Stretch, SegmentTimingMode.Pause];
 
-    public string[] TranscriptionCpuComputeTypeOptions { get; } =
-        ["auto", "int8", "int8_float16", "float32"];
+    /// <summary>CPU compute types available for the current hardware (AVX-512-only entries hidden when unsupported).</summary>
+    public string[] TranscriptionCpuComputeTypeOptions =>
+        TranscriptionCpuSettingsSanitizer.GetSelectableComputeTypes(_coordinator.HardwareSnapshot);
 
     // ── Models tab ────────────────────────────────────────────────────────────
 
@@ -379,7 +401,18 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private int _transcriptionCpuThreads;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TranscriptionNumWorkersManualEnabled))]
+    private bool _transcriptionNumWorkersUseAuto = true;
+
+    /// <summary>When false, the Workers field is editable; when true, worker count is derived from hardware.</summary>
+    public bool TranscriptionNumWorkersManualEnabled => !TranscriptionNumWorkersUseAuto;
+
+    [ObservableProperty]
     private int _transcriptionNumWorkers = 1;
+
+    /// <summary>Non-empty after Apply when CPU settings were corrected.</summary>
+    [ObservableProperty]
+    private string? _cpuAdvancedSettingsNotice;
 
     // ── Video hardware decode & encode ────────────────────────────────────────
 
@@ -619,10 +652,18 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.AlwaysStartLocalGpuRuntimeAtAppStart = AlwaysStartLocalGpuRuntimeAtAppStart;
         settings.VocalSeparationEnabled = VocalSeparationEnabled;
         settings.TranscriptionCpuComputeType = string.IsNullOrWhiteSpace(TranscriptionCpuComputeType)
-            ? "int8"
+            ? "auto"
             : TranscriptionCpuComputeType;
         settings.TranscriptionCpuThreads = Math.Max(0, TranscriptionCpuThreads);
+        settings.TranscriptionNumWorkersUseAuto = TranscriptionNumWorkersUseAuto;
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
+
+        var corrections = TranscriptionCpuSettingsSanitizer.Sanitize(settings, _coordinator.HardwareSnapshot);
+        CpuAdvancedSettingsNotice = corrections.Count > 0 ? string.Join(" ", corrections) : null;
+
+        TranscriptionCpuComputeType = settings.TranscriptionCpuComputeType;
+        TranscriptionCpuThreads = settings.TranscriptionCpuThreads;
+        TranscriptionNumWorkers = settings.TranscriptionNumWorkers;
 
         settings.DubTimingMode       = DubTimingMode;
 
@@ -724,6 +765,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CpuInfo));
             OnPropertyChanged(nameof(GpuInfo));
             OnPropertyChanged(nameof(RamInfo));
+            OnPropertyChanged(nameof(TranscriptionCpuComputeTypeOptions));
+            var allowed = TranscriptionCpuComputeTypeOptions;
+            if (allowed.Length > 0 && !allowed.Contains(TranscriptionCpuComputeType, StringComparer.OrdinalIgnoreCase))
+                TranscriptionCpuComputeType = allowed[0];
             OnPropertyChanged(nameof(VsrSettingsAvailable));
             OnPropertyChanged(nameof(RtxHdrDriverModeAvailable));
             OnPropertyChanged(nameof(RtxVideoHardwareGateHint));
