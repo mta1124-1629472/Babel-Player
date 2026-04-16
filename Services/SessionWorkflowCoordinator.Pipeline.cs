@@ -955,6 +955,8 @@ public sealed partial class SessionWorkflowCoordinator
                         GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
                         GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                         cancellationToken);
+                    if (CurrentSession.Stage <= stageBeforeAction)
+                        throw new InvalidOperationException($"Pipeline stalled: stage did not advance after {action} (still at {CurrentSession.Stage}).");
                     return;
                 case PipelineAdvanceAction.GenerateTts:
                     await GenerateTtsAsync(
@@ -962,6 +964,8 @@ public sealed partial class SessionWorkflowCoordinator
                         null,
                         GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                         cancellationToken);
+                    if (CurrentSession.Stage <= stageBeforeAction)
+                        throw new InvalidOperationException($"Pipeline stalled: stage did not advance after {action} (still at {CurrentSession.Stage}).");
                     return;
                 default:
                     throw new InvalidOperationException($"Unexpected pipeline advance action: {action}");
@@ -1023,6 +1027,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         var remainingStages = GetContinuationPipelineStages(CurrentSession.Stage);
 
+        var continuationStageBeforeAction = CurrentSession.Stage;
         switch (PipelineStateMachine.GetContinuationActionAfterDiarized(CurrentSession.Stage))
         {
             case null:
@@ -1033,6 +1038,8 @@ public sealed partial class SessionWorkflowCoordinator
                     GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
                     GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                     cancellationToken);
+                if (CurrentSession.Stage <= continuationStageBeforeAction)
+                    throw new InvalidOperationException($"Pipeline stalled: stage did not advance after {PipelineAdvanceAction.TranslateAndDubFromTranscript} (still at {CurrentSession.Stage}).");
                 return;
             case PipelineAdvanceAction.GenerateTts:
                 await GenerateTtsAsync(
@@ -1040,6 +1047,8 @@ public sealed partial class SessionWorkflowCoordinator
                     null,
                     GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
                     cancellationToken);
+                if (CurrentSession.Stage <= continuationStageBeforeAction)
+                    throw new InvalidOperationException($"Pipeline stalled: stage did not advance after {PipelineAdvanceAction.GenerateTts} (still at {CurrentSession.Stage}).");
                 return;
             default:
                 throw new InvalidOperationException("Unexpected continuation pipeline action.");

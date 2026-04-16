@@ -36,6 +36,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
     private IVocalSeparationProvider? _vocalSeparationProvider;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private readonly ConcurrentBag<Task> _pendingTtsTasks = [];
     private readonly IAudioProcessingService? _audioProcessingService;
 
@@ -175,6 +176,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         KeyStore = options.KeyStore;
         _transportManager = transportManager;
         _inferenceEngine = options.InferenceExecutionEngine ?? DefaultInferenceExecutionEngine.Instance;
+        _requestLeaseTracker = options.RequestLeaseTracker;
         _transcriptionOrchestrator = new TranscriptionOrchestrator(this);
         _translationOrchestrator = new TranslationOrchestrator(this);
         _diarizationStageOrchestrator = new DiarizationStageOrchestrator(this);

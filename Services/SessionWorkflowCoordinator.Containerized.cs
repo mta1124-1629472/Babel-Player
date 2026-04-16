@@ -51,7 +51,9 @@ public sealed partial class SessionWorkflowCoordinator
     {
         var client = new ContainerizedInferenceClient(
             CurrentSettings.EffectiveContainerizedServiceUrl,
-            _log);
+            _log,
+            null,
+            _requestLeaseTracker);
         return new ContainerizedVocalSeparationProvider(client, _log);
     }
 

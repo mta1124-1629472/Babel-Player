@@ -189,8 +189,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(VocalSeparationAvailable));
         OnPropertyChanged(nameof(VocalSeparationAvailabilityHint));
         OnPropertyChanged(nameof(HasVocalSeparationAvailabilityHint));
-        if (VocalSeparationEnabled && !VocalSeparationAvailable)
-            VocalSeparationEnabled = false;
+        // Do not clear the user's preference on transient readiness loss —
+        // VocalSeparationAvailable already surfaces the blocked state in the UI.
+        // Readiness is enforced at runtime when the pipeline runs.
     }
 
     // ── Diagnostics ───────────────────────────────────────────────────────────
@@ -597,7 +598,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             ? settings.AdvancedGpuServiceUrl
             : AdvancedGpuServiceUrl.Trim();
         settings.AlwaysStartLocalGpuRuntimeAtAppStart = AlwaysStartLocalGpuRuntimeAtAppStart;
-        settings.VocalSeparationEnabled = VocalSeparationEnabled && VocalSeparationAvailable;
+        settings.VocalSeparationEnabled = VocalSeparationEnabled;
         settings.TranscriptionCpuComputeType = string.IsNullOrWhiteSpace(TranscriptionCpuComputeType)
             ? "int8"
             : TranscriptionCpuComputeType;

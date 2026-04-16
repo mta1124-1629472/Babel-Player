@@ -54,6 +54,13 @@ public sealed record CoordinatorOptions
     /// </summary>
     public IInferenceExecutionEngine? InferenceExecutionEngine { get; init; }
 
+    /// <summary>
+    /// Shared lease tracker for containerized inference requests. When provided, vocal separation
+    /// requests are counted as active container requests so the managed host waits for them before
+    /// restarting. Null disables lease tracking for vocal separation.
+    /// </summary>
+    public ContainerizedRequestLeaseTracker? RequestLeaseTracker { get; init; }
+
     /// <summary>Returns a <see cref="CoordinatorOptions"/> with all fields at their defaults (all null).</summary>
     public static CoordinatorOptions Empty { get; } = new();
 }

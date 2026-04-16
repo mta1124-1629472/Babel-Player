@@ -67,14 +67,12 @@ public static class SessionSnapshotSemantics
             cleared.Add("transcription");
         }
 
-        // Strict vocal validation: if metadata points to missing stems, clear them.
-        if (!string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath) && !File.Exists(snapshot.VocalsAudioPath))
-        {
-            snapshot = snapshot with { VocalsAudioPath = null, InstrumentalAudioPath = null };
-            cleared.Add("vocal_separation");
-            if (stage > SessionWorkflowStage.MediaLoaded) stage = SessionWorkflowStage.MediaLoaded;
-        }
-        else if (!string.IsNullOrWhiteSpace(snapshot.InstrumentalAudioPath) && !File.Exists(snapshot.InstrumentalAudioPath))
+        // Strict vocal validation: both stems must be present and valid on disk; any mismatch clears the pair.
+        var hasVocalsStem = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
+        var hasInstrumentalStem = !string.IsNullOrWhiteSpace(snapshot.InstrumentalAudioPath);
+        if (hasVocalsStem != hasInstrumentalStem
+            || (hasVocalsStem && !File.Exists(snapshot.VocalsAudioPath!))
+            || (hasInstrumentalStem && !File.Exists(snapshot.InstrumentalAudioPath!)))
         {
             snapshot = snapshot with { VocalsAudioPath = null, InstrumentalAudioPath = null };
             cleared.Add("vocal_separation");

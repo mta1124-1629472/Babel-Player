@@ -392,6 +392,7 @@ public static class DependencyLocator
             ContainerizedProbe          = containerizedProbe,
             ContainerizedInferenceManager = containerizedManager,
             AudioProcessingService      = audioProcessingService,
+            RequestLeaseTracker         = requestLeaseTracker,
         };
 
         var coreServices = new CoordinatorCoreServices(snapshotStore, appLog, appSettings);

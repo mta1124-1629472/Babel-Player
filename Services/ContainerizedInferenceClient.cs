@@ -554,32 +554,35 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
-            using var lease = AcquireLease(ContainerizedRequestKind.Other);
-
             if (!File.Exists(audioPath))
                 throw new FileNotFoundException($"Audio file not found: {audioPath}");
 
             _log.Info($"Separating vocals with containerized service: {audioPath}");
 
-            using var content = new MultipartFormDataContent();
-            await using var fileStream = new FileStream(audioPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
-            content.Add(new StreamContent(fileStream), "file", Path.GetFileName(audioPath));
+            SeparateVocalsApiResponseDto result;
+            using (var lease = AcquireLease(ContainerizedRequestKind.Other))
+            {
+                using var content = new MultipartFormDataContent();
+                await using var fileStream = new FileStream(audioPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
+                content.Add(new StreamContent(fileStream), "file", Path.GetFileName(audioPath));
 
-            using var response = await _httpClient.PostAsync(
-                $"{_inferenceServiceUrl}/separate/vocals",
-                content,
-                cancellationToken).ConfigureAwait(false);
+                using var response = await _httpClient.PostAsync(
+                    $"{_inferenceServiceUrl}/separate/vocals",
+                    content,
+                    cancellationToken).ConfigureAwait(false);
 
-            var result = await DeserializeResponseAsync<SeparateVocalsApiResponseDto>(response, cancellationToken).ConfigureAwait(false);
+                result = await DeserializeResponseAsync<SeparateVocalsApiResponseDto>(response, cancellationToken).ConfigureAwait(false);
+            }
+
             if (string.IsNullOrWhiteSpace(result.VocalsFilename) || string.IsNullOrWhiteSpace(result.InstrumentalFilename))
                 throw new InvalidOperationException("Vocal separation response did not include stem filenames.");
 
-            var stemsDir = outputDirectory;
-            Directory.CreateDirectory(stemsDir);
+            Directory.CreateDirectory(outputDirectory);
 
-            var vocalsPath = Path.Combine(stemsDir, Path.GetFileName(result.VocalsFilename));
-            var instrumentalPath = Path.Combine(stemsDir, Path.GetFileName(result.InstrumentalFilename));
+            var vocalsPath = Path.Combine(outputDirectory, Path.GetFileName(result.VocalsFilename));
+            var instrumentalPath = Path.Combine(outputDirectory, Path.GetFileName(result.InstrumentalFilename));
 
+            // Downloads are separate requests — each acquires its own lease (no outer lease held).
             await DownloadTtsAudioAsync(
                 result.VocalsFilename,
                 vocalsPath,
