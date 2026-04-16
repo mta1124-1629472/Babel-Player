@@ -57,8 +57,8 @@ COPY main.py ./
 COPY workers/ ./workers/
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "import sys; import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=5); sys.exit(0)" || exit 1
+    CMD python3 -c "import sys; import urllib.request; urllib.request.urlopen('http://localhost:8001/health/live', timeout=5); sys.exit(0)" || exit 1
 
-EXPOSE 8000
+EXPOSE 8001
 
-CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

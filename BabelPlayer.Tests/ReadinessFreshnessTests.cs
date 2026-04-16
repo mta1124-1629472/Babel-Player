@@ -122,12 +122,14 @@ public sealed class ReadinessFreshnessTests : IDisposable
 
     private SessionWorkflowCoordinator CreateCoordinator(ContainerizedServiceProbe? probe = null)
     {
+        // Use fake registries so the VM's background health probe does not call
+        // CheckReadiness on real providers (which would spawn Python probes and hang in CI).
         var registries = new RegistryBundle(
             _perSessionStore,
             _recentStore,
-            new TranscriptionRegistry(_log),
-            new TranslationRegistry(_log),
-            new TtsRegistry(_log));
+            new FakeTranscriptionRegistry(),
+            new FakeTranslationRegistry(),
+            new FakeTtsRegistry());
         var coreServices = new CoordinatorCoreServices(_store, _log, _settings);
         var options = new CoordinatorOptions
         {

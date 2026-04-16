@@ -121,9 +121,7 @@ native/win-x64/libmpv-2.dll
 tools/win-x64/uv.exe
 tools/win-x64/ffmpeg.exe
 ffmpeg.exe
-.codex/environments/environment.toml
 inference/__pycache__/
-scripts/run-local-release-dry-run.ps1
 .vscode/settings.json
 .qwen/
 gha-creds-*.json
@@ -149,9 +147,7 @@ gha-creds-*.json
 /patch.diff
 /patch2.diff
 /patch3.diff
-/opencode.json
 /test_ignore.sh
-/gemini.md
 /fix-constructor.ps1
 /fix-duplicates.ps1
 /fix-syntax.ps1
@@ -164,7 +160,4 @@ gha-creds-*.json
 
 # APM dependencies
 apm_modules/
-/.github/instructions
-/.github/prompts
-/.github/agents
-/.github/skills
+

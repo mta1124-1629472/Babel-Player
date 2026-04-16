@@ -395,11 +395,15 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                 return await Json(HttpStatusCode.OK, "{\"success\":true,\"reference_id\":\"ref-123\"}");
             }
 
-            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/batch")
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
             {
                 batchCount++;
-                return await Json(HttpStatusCode.OK,
-                    "{\"success\":true,\"voice\":\"qwen\",\"segments\":[{\"segment_id\":\"segment_0.0\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/segment-1.mp3\",\"file_size_bytes\":3},{\"segment_id\":\"segment_1.0\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/segment-2.mp3\",\"file_size_bytes\":3}]}");
+                var content = await request.Content!.ReadAsStringAsync();
+                if (content.Contains("name=\"text\"\r\n\r\nhello"))
+                {
+                    return await Json(HttpStatusCode.OK, "{\"success\":true,\"audio_path\":\"/tmp/segment-1.mp3\",\"file_size_bytes\":3}");
+                }
+                return await Json(HttpStatusCode.OK, "{\"success\":true,\"audio_path\":\"/tmp/segment-2.mp3\",\"file_size_bytes\":3}");
             }
 
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
@@ -446,7 +450,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
-    public async Task QwenContainerTtsProvider_GenerateSegmentsAsync_UsesBatchEndpoint()
+    public async Task QwenContainerTtsProvider_GenerateSegmentsAsync_ProcessesSegmentsSequentially()
     {
         var referencePath = Path.Combine(_ctx.Dir, "reference-batch.wav");
         await File.WriteAllBytesAsync(referencePath, [0x01, 0x02, 0x03]);
@@ -462,11 +466,16 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                 return await Json(HttpStatusCode.OK, "{\"success\":true,\"reference_id\":\"ref-batch\"}");
             }
 
-            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/batch")
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
             {
                 batchCount++;
-                return await Json(HttpStatusCode.OK,
-                    "{\"success\":true,\"voice\":\"qwen\",\"segments\":[{\"segment_id\":\"segment_a\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/batch-a.mp3\",\"file_size_bytes\":3},{\"segment_id\":\"segment_b\",\"voice\":\"qwen\",\"audio_path\":\"/tmp/batch-b.mp3\",\"file_size_bytes\":3}]}");
+                // Check if text is "hello" or "world" to return appropriate segment
+                var content = await request.Content!.ReadAsStringAsync();
+                if (content.Contains("name=\"text\"\r\n\r\nhello"))
+                {
+                    return await Json(HttpStatusCode.OK, "{\"success\":true,\"audio_path\":\"/tmp/batch-a.mp3\",\"file_size_bytes\":3}");
+                }
+                return await Json(HttpStatusCode.OK, "{\"success\":true,\"audio_path\":\"/tmp/batch-b.mp3\",\"file_size_bytes\":3}");
             }
 
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")

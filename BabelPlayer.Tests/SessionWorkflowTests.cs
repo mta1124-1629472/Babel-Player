@@ -967,6 +967,24 @@ public sealed class SegmentInspectionTests
             TtsPath = ttsPath,
         };
 
+        // Prime BootstrapDiagnostics so RunPipelineOperationAsync does not bail on
+        // !AllDependenciesAvailable (Python/ffmpeg are not on the test runner's PATH).
+        coordinator.ApplyBootstrapWarmupData(new SessionWorkflowCoordinator.BootstrapWarmupData(
+            new BootstrapDiagnostics(
+                PythonAvailable: true,
+                PythonPath: "/fake/python",
+                FfmpegAvailable: true,
+                FfmpegPath: "/fake/ffmpeg",
+                PiperAvailable: false,
+                PiperPath: null,
+                ContainerizedServiceAvailable: false,
+                ContainerizedCudaAvailable: false,
+                ContainerizedCudaVersion: null,
+                ContainerizedServiceUrl: null,
+                CpuVectorLine: "AVX2"),
+            Snapshots: [],
+            ResolvedInferenceMode: Babel.Player.Models.InferenceMode.SubprocessCpu));
+
         var playback = new EmbeddedPlaybackViewModel(coordinator);
 
         Assert.True(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
