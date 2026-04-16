@@ -7,7 +7,7 @@ using Babel.Player.Models;
 
 namespace Babel.Player.Services;
 
-internal sealed record TranscriptChannelItem(
+public sealed record TranscriptChannelItem(
     string SegmentId,
     TranscriptSegmentArtifact Segment,
     string SourceLanguage,
@@ -24,7 +24,7 @@ internal sealed record TtsChannelItem(
     TranslationSegmentArtifact Segment,
     TtsResult Result);
 
-internal interface IStreamingTranscriptionProvider
+public interface IStreamingTranscriptionProvider
 {
     Task<TranscriptionResult> TranscribeStreamingAsync(
         TranscriptionRequest request,

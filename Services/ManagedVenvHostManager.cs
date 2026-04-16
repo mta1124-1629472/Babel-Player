@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
@@ -912,28 +911,26 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string inferenceScriptPath,
         string computeType)
     {
-        var commandLine = BuildCommandLine(new[]
-        {
-            inferenceScriptPath,
-            "--host",
-            "127.0.0.1",
-            "--port",
-            "18000",
-            "--compute-type",
-            computeType,
-            RequiresCuda(computeType) ? "--require-cuda" : string.Empty
-        }.Where(s => !string.IsNullOrEmpty(s)).ToArray());
-
+        // Use ArgumentList so the runtime handles all quoting; paths with spaces are safe.
         var psi = new ProcessStartInfo
         {
             FileName = pythonPath,
             WorkingDirectory = Path.GetDirectoryName(inferenceScriptPath) ?? AppContext.BaseDirectory,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+
+        psi.ArgumentList.Add(inferenceScriptPath);
+        psi.ArgumentList.Add("--host");
+        psi.ArgumentList.Add("127.0.0.1");
+        psi.ArgumentList.Add("--port");
+        psi.ArgumentList.Add("18000");
+        psi.ArgumentList.Add("--compute-type");
+        psi.ArgumentList.Add(computeType);
+        if (RequiresCuda(computeType))
+            psi.ArgumentList.Add("--require-cuda");
 
         // Make CUDA kernel errors synchronous so the Python traceback points at the
         // actual failing op rather than a random later API call.
@@ -952,20 +949,18 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string pythonPath,
         CancellationToken cancellationToken)
     {
-        var commandLine = BuildCommandLine([
-            "-c",
-            "import json, torch; print(json.dumps({'cuda_available': bool(torch.cuda.is_available()), 'cuda_version': getattr(torch.version, 'cuda', None)}))"
-        ]);
-
+        // Use ArgumentList so embedded single/double quotes in the Python snippet are
+        // passed to the process verbatim without any manual escaping.
         var psi = new ProcessStartInfo
         {
             FileName = pythonPath,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("import json, torch; print(json.dumps({'cuda_available': bool(torch.cuda.is_available()), 'cuda_version': getattr(torch.version, 'cuda', None)}))");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start managed GPU runtime validation process.");
@@ -1027,19 +1022,20 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         CancellationToken cancellationToken,
         params string[] arguments)
     {
-        var commandLine = BuildCommandLine(arguments);
+        // Use ArgumentList so the runtime handles all quoting; paths with spaces are safe.
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        foreach (var arg in arguments)
+            psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running managed GPU process: {QuoteIfNeeded(fileName)} {commandLine}");
+        _log.Info($"Running managed GPU process: {fileName} {string.Join(' ', arguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -1065,100 +1061,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             var stdoutSnippet = stdoutLines.Length > 0 ? $"\nstdout: {stdoutLines}" : string.Empty;
             throw new InvalidOperationException(
-                $"Process {QuoteIfNeeded(fileName)} {commandLine} failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
+                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))
             _log.Info(stderr.Trim());
     }
 
-    private static string BuildCommandLine(string[] arguments)
-    {
-        var sb = new StringBuilder();
-        foreach (var arg in arguments)
-        {
-            if (sb.Length > 0) sb.Append(' ');
-            AppendWindowsQuoted(sb, arg);
-        }
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// Appends a single argument to a Windows CreateProcess command-line string using
-    /// CommandLineToArgvW-compatible quoting:
-    /// - Wraps in " if the arg contains spaces, tabs, or quotes.
-    /// - Doubles backslashes that immediately precede a " or the closing ".
-    /// - Escapes embedded " as \".
-    /// </summary>
-    private static void AppendWindowsQuoted(StringBuilder sb, string arg)
-    {
-        if (string.IsNullOrEmpty(arg))
-        {
-            sb.Append("\"\"");
-            return;
-        }
-
-        bool needsQuoting = arg.IndexOfAny([' ', '\t', '"', '\n', '\r']) >= 0;
-        if (!needsQuoting)
-        {
-            sb.Append(arg);
-            return;
-        }
-
-        sb.Append('"');
-        int i = 0;
-        while (i < arg.Length)
-        {
-            char c = arg[i];
-            if (c == '\\')
-            {
-                int numBackslashes = 0;
-                while (i < arg.Length && arg[i] == '\\')
-                {
-                    numBackslashes++;
-                    i++;
-                }
-
-                if (i == arg.Length)
-                {
-                    // Backslashes at end of arg precede the closing " — must be doubled.
-                    sb.Append('\\', numBackslashes * 2);
-                }
-                else if (arg[i] == '"')
-                {
-                    // Backslashes before a " — double them and escape the ".
-                    sb.Append('\\', numBackslashes * 2 + 1);
-                    sb.Append('"');
-                    i++;
-                }
-                else
-                {
-                    // Backslashes not before a " — emit as-is.
-                    sb.Append('\\', numBackslashes);
-                }
-            }
-            else if (c == '"')
-            {
-                sb.Append('\\');
-                sb.Append('"');
-                i++;
-            }
-            else
-            {
-                sb.Append(c);
-                i++;
-            }
-        }
-
-        sb.Append('"');
-    }
-
-    private static string QuoteIfNeeded(string arg)
-    {
-        var sb = new StringBuilder();
-        AppendWindowsQuoted(sb, arg);
-        return sb.ToString();
-    }
 
     private async Task DrainProcessStreamAsync(StreamReader reader, string prefix)
     {

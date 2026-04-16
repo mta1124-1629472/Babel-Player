@@ -234,7 +234,7 @@ public sealed partial class SessionWorkflowCoordinator
                       $"minSpeakers={effectiveMinSpeakers?.ToString() ?? "auto"}, " +
                       $"maxSpeakers={effectiveMaxSpeakers?.ToString() ?? "auto"}");
             var providerCallStopwatch = Stopwatch.StartNew();
-            var result = await provider.DiarizeAsync(request, ct);
+            var result = await _inferenceEngine.DiarizeAsync(provider, request, ct);
             providerCallStopwatch.Stop();
 
             if (!result.Success)

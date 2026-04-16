@@ -48,6 +48,12 @@ public sealed record CoordinatorOptions
     /// </summary>
     public IAudioProcessingService? AudioProcessingService { get; init; }
 
+    /// <summary>
+    /// Executes transcription, translation, TTS, and diarization provider calls. When null,
+    /// <see cref="DefaultInferenceExecutionEngine.Instance"/> is used.
+    /// </summary>
+    public IInferenceExecutionEngine? InferenceExecutionEngine { get; init; }
+
     /// <summary>Returns a <see cref="CoordinatorOptions"/> with all fields at their defaults (all null).</summary>
     public static CoordinatorOptions Empty { get; } = new();
 }

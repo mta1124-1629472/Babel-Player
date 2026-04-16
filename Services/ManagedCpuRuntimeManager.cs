@@ -619,19 +619,20 @@ public sealed class ManagedCpuRuntimeManager
         Action<string>? onStatusLine,
         params string[] arguments)
     {
-        var commandLine = BuildCommandLine(arguments);
+        // Use ArgumentList so the runtime handles all quoting; paths with spaces are safe.
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        foreach (var arg in arguments)
+            psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running CPU runtime process: {QuoteIfNeeded(fileName)} {commandLine}");
+        _log.Info($"Running CPU runtime process: {fileName} {string.Join(' ', arguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -652,7 +653,7 @@ public sealed class ManagedCpuRuntimeManager
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Process {QuoteIfNeeded(fileName)} {commandLine} failed with exit code {process.ExitCode}: {stderr}");
+                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}");
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))
@@ -665,19 +666,20 @@ public sealed class ManagedCpuRuntimeManager
         CancellationToken cancellationToken,
         params string[] arguments)
     {
-        var commandLine = BuildCommandLine(arguments);
+        // Use ArgumentList so the runtime handles all quoting; paths with spaces are safe.
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
-            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        foreach (var arg in arguments)
+            psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running CPU runtime capture process: {QuoteIfNeeded(fileName)} {commandLine}");
+        _log.Info($"Running CPU runtime capture process: {fileName} {string.Join(' ', arguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -693,93 +695,7 @@ public sealed class ManagedCpuRuntimeManager
             await stderrTask.ConfigureAwait(false));
     }
 
-    private static string BuildCommandLine(string[] arguments)
-    {
-        var sb = new StringBuilder();
-        foreach (var arg in arguments)
-        {
-            if (sb.Length > 0) sb.Append(' ');
-            AppendWindowsQuoted(sb, arg);
-        }
-        return sb.ToString();
-    }
 
-    /// <summary>
-    /// Appends a single argument to a Windows CreateProcess command-line string using
-    /// CommandLineToArgvW-compatible quoting:
-    /// - Wraps in " if the arg contains spaces, tabs, or quotes.
-    /// - Doubles backslashes that immediately precede a " or the closing ".
-    /// - Escapes embedded " as \".
-    /// </summary>
-    private static void AppendWindowsQuoted(StringBuilder sb, string arg)
-    {
-        if (string.IsNullOrEmpty(arg))
-        {
-            sb.Append("\"\"");
-            return;
-        }
-
-        bool needsQuoting = arg.IndexOfAny([' ', '\t', '"', '\n', '\r']) >= 0;
-        if (!needsQuoting)
-        {
-            sb.Append(arg);
-            return;
-        }
-
-        sb.Append('"');
-        int i = 0;
-        while (i < arg.Length)
-        {
-            char c = arg[i];
-            if (c == '\\')
-            {
-                int numBackslashes = 0;
-                while (i < arg.Length && arg[i] == '\\')
-                {
-                    numBackslashes++;
-                    i++;
-                }
-
-                if (i == arg.Length)
-                {
-                    // Backslashes at end of arg precede the closing " — must be doubled.
-                    sb.Append('\\', numBackslashes * 2);
-                }
-                else if (arg[i] == '"')
-                {
-                    // Backslashes before a " — double them and escape the ".
-                    sb.Append('\\', numBackslashes * 2 + 1);
-                    sb.Append('"');
-                    i++;
-                }
-                else
-                {
-                    // Backslashes not before a " — emit as-is.
-                    sb.Append('\\', numBackslashes);
-                }
-            }
-            else if (c == '"')
-            {
-                sb.Append('\\');
-                sb.Append('"');
-                i++;
-            }
-            else
-            {
-                sb.Append(c);
-                i++;
-            }
-        }
-
-        sb.Append('"');
-    }
-
-    private static string QuoteIfNeeded(string arg)
-    {
-        var sb = new StringBuilder();
-        AppendWindowsQuoted(sb, arg);
-        return sb.ToString();
-    }
 
     // Marker format includes PythonVersion plus labeled requirements/constraints bodies so
     // upgrades and manifest edits invalidate the venv consistently with tests.

@@ -39,6 +39,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly IAudioProcessingService? _audioProcessingService;
 
 
+    private readonly IInferenceExecutionEngine _inferenceEngine;
+    private readonly TranscriptionOrchestrator _transcriptionOrchestrator;
+    private readonly TranslationOrchestrator _translationOrchestrator;
+    private readonly DiarizationStageOrchestrator _diarizationStageOrchestrator;
+    private readonly TtsPipelineOrchestrator _ttsPipelineOrchestrator;
     private readonly IMediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
     private bool _subscribedToSourceDiagnostics;
@@ -161,6 +166,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         CurrentSettings = coreServices.Settings;
         KeyStore = options.KeyStore;
         _transportManager = transportManager;
+        _inferenceEngine = options.InferenceExecutionEngine ?? DefaultInferenceExecutionEngine.Instance;
+        _transcriptionOrchestrator = new TranscriptionOrchestrator(this);
+        _translationOrchestrator = new TranslationOrchestrator(this);
+        _diarizationStageOrchestrator = new DiarizationStageOrchestrator(this);
+        _ttsPipelineOrchestrator = new TtsPipelineOrchestrator(this);
 
         _segmentEndedHandler = OnSegmentPlayerEnded;
         _segmentErrorHandler = (_, _) => OnSegmentPlayerError();
@@ -842,7 +852,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText[..Math.Min(30, segmentText.Length)]}...");
 
         var targetLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
-        var ttsTask = _ttsService.GenerateSegmentTtsAsync(
+        var ttsTask = _inferenceEngine.GenerateSegmentTtsAsync(
+            _ttsService,
             new SingleSegmentTtsRequest(
                 segmentText,
                 segmentAudioPath,
@@ -916,7 +927,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
         _log.Info($"Regenerating translation for segment {segmentId}: {sourceText[..Math.Min(30, sourceText.Length)]}...");
 
-        var result = await _translationService.TranslateSingleSegmentAsync(
+        var result = await _inferenceEngine.TranslateSingleSegmentAsync(
+            _translationService,
             new SingleSegmentTranslationRequest(
                 sourceText,
                 segmentId,

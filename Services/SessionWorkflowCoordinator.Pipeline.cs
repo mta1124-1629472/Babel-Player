@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Pipeline;
 
 namespace Babel.Player.Services;
 
@@ -28,75 +29,11 @@ public sealed partial class SessionWorkflowCoordinator
     /// </exception>
     /// <exception cref="FileNotFoundException">Thrown when the ingested media file cannot be found on disk.</exception>
     /// <exception cref="PipelineProviderException">Thrown when the configured transcription provider/runtime is not ready for execution and the blocking reason prevents continuation.</exception>
-    internal async Task TranscribeMediaAsync(
+    internal Task TranscribeMediaAsync(
         IProgress<double>? progress,
         PipelineStageContext? stageContext,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrEmpty(CurrentSession.IngestedMediaPath))
-            throw new InvalidOperationException("No media loaded. Please load media first.");
-
-        if (!File.Exists(CurrentSession.IngestedMediaPath))
-            throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
-
-        await EnsureTranscriptionProviderReadyAsync(progress, stageContext, cancellationToken);
-
-        ReportStage(
-            stageContext,
-            $"Starting transcription with {CurrentSettings.TranscriptionProvider} / {CurrentSettings.TranscriptionModel}. Audio will be segmented and the spoken language will be detected before translation.",
-            progress01: 0,
-            isIndeterminate: true);
-
-        var sessionDir = GetSessionDirectory();
-        var transcriptDir = Path.Combine(sessionDir, "transcripts");
-        Directory.CreateDirectory(transcriptDir);
-
-        var fileName = Path.GetFileNameWithoutExtension(CurrentSession.IngestedMediaPath);
-        var transcriptPath = Path.Combine(transcriptDir, $"{fileName}.json");
-
-        var cpuThreads = CurrentSettings.TranscriptionCpuThreads > 0
-            ? CurrentSettings.TranscriptionCpuThreads.ToString()
-            : "auto";
-        var cpuWorkers = Math.Max(1, CurrentSettings.TranscriptionNumWorkers);
-        var routeSummary =
-            $"provider={CurrentSettings.TranscriptionProvider}, model={CurrentSettings.TranscriptionModel}, " +
-            $"cpu_compute={CurrentSettings.TranscriptionCpuComputeType}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers}";
-        var hwSummary =
-            $"avx2={(HardwareSnapshot.HasAvx2 ? "yes" : "no")}, " +
-            $"avx512={(HardwareSnapshot.HasAvx512F ? "yes" : "no")}, " +
-            $"cuda={(HardwareSnapshot.HasCuda ? "yes" : "no")}";
-
-        _log.Info($"Starting transcription: {CurrentSession.IngestedMediaPath} " +
-                  $"[{CurrentSettings.TranscriptionProvider}/{CurrentSettings.TranscriptionModel}] " +
-                  $"route=({routeSummary}) hw=({hwSummary})");
-
-        var transcriptionService = _transcriptionService ??= CreateTranscriptionService();
-        var result = await transcriptionService.TranscribeAsync(
-            new TranscriptionRequest(
-                CurrentSession.IngestedMediaPath,
-                transcriptPath,
-                CurrentSettings.TranscriptionModel,
-                SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(CurrentSettings.TranscriptionLanguageHint),
-                CurrentSettings.TranscriptionCpuComputeType,
-                CurrentSettings.TranscriptionCpuThreads,
-                CurrentSettings.TranscriptionNumWorkers),
-            cancellationToken);
-
-        if (!result.Success)
-        {
-            var errorMsg = result.ErrorMessage ?? "Unknown transcription error";
-            _log.Error($"Transcription failed: {errorMsg}", new Exception(errorMsg));
-            throw new InvalidOperationException($"Transcription failed: {errorMsg}");
-        }
-
-        CommitTranscriptionSessionState(result, transcriptPath);
-
-        ReportStage(
-            stageContext,
-            $"Transcription complete. {result.Segments.Count} segments were detected in {result.Language}.",
-            progress01: 1,
-            isIndeterminate: false);
-    }
+        CancellationToken cancellationToken) =>
+        _transcriptionOrchestrator.ExecuteAsync(progress, stageContext, cancellationToken);
 
     public Task TranslateTranscriptAsync(
         IProgress<double>? progress = null,
@@ -105,79 +42,13 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken = default) =>
         TranslateTranscriptAsync(progress, targetLanguage, sourceLanguage, stageContext: null, cancellationToken);
 
-    internal async Task TranslateTranscriptAsync(
+    internal Task TranslateTranscriptAsync(
         IProgress<double>? progress,
         string? targetLanguage,
         string? sourceLanguage,
         PipelineStageContext? stageContext,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrEmpty(CurrentSession.TranscriptPath))
-            throw new InvalidOperationException("No transcript available. Please transcribe media first.");
-
-        if (!File.Exists(CurrentSession.TranscriptPath))
-            throw new FileNotFoundException($"Transcript file not found: {CurrentSession.TranscriptPath}");
-
-        var rawLang = targetLanguage ?? CurrentSettings.TargetLanguage;
-        var lang = NormalizePipelineLanguage(rawLang, CurrentSettings.TargetLanguage);
-        var rawSrc = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
-        var src = string.Equals(rawSrc, "auto", StringComparison.OrdinalIgnoreCase)
-            ? "auto"
-            : NormalizePipelineLanguage(rawSrc, rawSrc);
-
-        ReportStage(
-            stageContext,
-            $"Checking translation runtime, provider readiness, language routing, and model availability for {CurrentSettings.TranslationProvider} / {CurrentSettings.TranslationModel}…",
-            progress01: 0,
-            isIndeterminate: true);
-
-        var downloadProgress = CreateStageDownloadProgress(
-            stageContext,
-            progress,
-            $"Preparing translation model '{CurrentSettings.TranslationModel}'");
-        await EnsureTranslationExecutionReadyAsync(downloadProgress, cancellationToken);
-
-        _translationService ??= CreateTranslationService();
-
-        ReportStage(
-            stageContext,
-            $"Running translation from {src} to {lang} with {CurrentSettings.TranslationProvider} / {CurrentSettings.TranslationModel}. Segment text will be rewritten into the target language for dubbing.",
-            progress01: 0,
-            isIndeterminate: true);
-
-        var sessionDir = GetSessionDirectory();
-        var translationDir = Path.Combine(sessionDir, "translations");
-        Directory.CreateDirectory(translationDir);
-
-        var fileName = Path.GetFileNameWithoutExtension(CurrentSession.TranscriptPath);
-        var translationPath = Path.Combine(translationDir, $"{fileName}_{lang}.json");
-
-        _log.Info($"Starting translation: {CurrentSession.TranscriptPath} ({src} -> {lang})");
-
-        var result = await _translationService.TranslateAsync(
-            new TranslationRequest(
-                CurrentSession.TranscriptPath,
-                translationPath,
-                src,
-                lang,
-                CurrentSettings.TranslationModel),
-            cancellationToken);
-
-        if (!result.Success)
-        {
-            var errorMsg = result.ErrorMessage ?? "Unknown translation error";
-            _log.Error($"Translation failed: {errorMsg}", new Exception(errorMsg));
-            throw new InvalidOperationException($"Translation failed: {errorMsg}");
-        }
-
-        CommitTranslationSessionState(result, translationPath, src, lang);
-
-        ReportStage(
-            stageContext,
-            $"Translation complete. {result.Segments.Count} segments were translated from {src} to {lang}.",
-            progress01: 1,
-            isIndeterminate: false);
-    }
+        CancellationToken cancellationToken) =>
+        _translationOrchestrator.ExecuteAsync(progress, targetLanguage, sourceLanguage, stageContext, cancellationToken);
 
     public Task GenerateTtsAsync(
         IProgress<double>? progress = null,
@@ -211,53 +82,12 @@ public sealed partial class SessionWorkflowCoordinator
     /// <exception cref="InvalidOperationException">Thrown when no translation path is available on the current session.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the translation artifact file cannot be found on disk.</exception>
     /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider/runtime is not ready and cannot proceed.</exception>
-    internal async Task GenerateTtsAsync(
+    internal Task GenerateTtsAsync(
         IProgress<double>? progress,
         string? voice,
         PipelineStageContext? stageContext,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
-            throw new InvalidOperationException("No translation available. Please translate first.");
-
-        if (!File.Exists(CurrentSession.TranslationPath))
-            throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
-
-        var v = voice ?? CurrentSettings.TtsVoice;
-
-        await EnsureTtsProviderReadyAsync(v, progress, stageContext, cancellationToken);
-
-        _ttsService ??= CreateTtsService();
-        await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
-        await EnsureMultiSpeakerReferenceClipsAsync(cancellationToken);
-
-        ReportStage(
-            stageContext,
-            $"Starting TTS synthesis with {CurrentSettings.TtsProvider} / {v}. Generating combined dub audio — progress will appear below.",
-            progress01: 0,
-            isIndeterminate: false);
-
-        var sessionDir = GetSessionDirectory();
-        var ttsDir = Path.Combine(sessionDir, "tts");
-        Directory.CreateDirectory(ttsDir);
-
-        var fileName = Path.GetFileNameWithoutExtension(CurrentSession.TranslationPath);
-        var ttsPath = Path.Combine(ttsDir, $"{fileName}_{v}.mp3");
-        var ttsLanguage = NormalizePipelineLanguage(
-            CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage,
-            CurrentSettings.TargetLanguage);
-        var segmentsDir = Path.Combine(ttsDir, "segments", Path.GetFileNameWithoutExtension(CurrentSession.TranslationPath!));
-        Directory.CreateDirectory(segmentsDir);
-
-        _log.Info($"Starting TTS generation: {CurrentSession.TranslationPath} -> {ttsPath}");
-
-        var (segmentAudioPaths, segmentDurations, totalSegments, orderedSegments) = await GenerateSegmentClipsAsync(
-            v, ttsLanguage, segmentsDir, stageContext, cancellationToken);
-
-        await StitchSegmentClipsAsync(segmentAudioPaths, orderedSegments, ttsPath, stageContext, cancellationToken);
-
-        CommitTtsSessionState(v, ttsPath, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
-    }
+        CancellationToken cancellationToken) =>
+        _ttsPipelineOrchestrator.ExecuteAsync(progress, voice, stageContext, cancellationToken);
 
     /// <summary>
     /// Verifies the transcription runtime/provider is ready for execution and ensures any required transcription model is available.
@@ -579,7 +409,8 @@ public sealed partial class SessionWorkflowCoordinator
 
         try
         {
-            var segTask = _ttsService!.GenerateSegmentTtsAsync(
+            var segTask = _inferenceEngine.GenerateSegmentTtsAsync(
+                _ttsService!,
                 new SingleSegmentTtsRequest(
                     text,
                     segmentAudioPath,
@@ -938,7 +769,8 @@ public sealed partial class SessionWorkflowCoordinator
         TranscriptionResult transcriptionResult;
         try
         {
-            transcriptionResult = await streamingProvider.TranscribeStreamingAsync(
+            transcriptionResult = await _inferenceEngine.TranscribeStreamingAsync(
+                streamingProvider,
                 new TranscriptionRequest(
                     CurrentSession.IngestedMediaPath!,
                     transcriptPath,
@@ -1161,7 +993,8 @@ public sealed partial class SessionWorkflowCoordinator
                 sourceLanguage ??= item.SourceLanguage;
                 await artifactWriter.AppendPendingSegmentAsync(item, cancellationToken).ConfigureAwait(false);
 
-                var result = await _translationService!.TranslateSingleSegmentAsync(
+                var result = await _inferenceEngine.TranslateSingleSegmentAsync(
+                    _translationService!,
                     new SingleSegmentTranslationRequest(
                         item.Segment.Text ?? string.Empty,
                         item.SegmentId,
@@ -1306,7 +1139,8 @@ public sealed partial class SessionWorkflowCoordinator
 
         try
         {
-            var task = _ttsService!.GenerateSegmentTtsAsync(
+            var task = _inferenceEngine.GenerateSegmentTtsAsync(
+                _ttsService!,
                 new SingleSegmentTtsRequest(
                     text,
                     segmentAudioPath,
@@ -1433,7 +1267,7 @@ public sealed partial class SessionWorkflowCoordinator
         var shouldRunDiarization = ShouldRunDiarization();
         var remainingStages = GetAdvancePipelineStages(CurrentSession.Stage, shouldRunDiarization);
 
-        if (CurrentSession.Stage < SessionWorkflowStage.Transcribed && !shouldRunDiarization)
+        if (PipelineStateMachine.ShouldRunFullStreamingPipelineFirst(CurrentSession.Stage, shouldRunDiarization))
         {
             await ExecuteStreamingPipelineAsync(
                 progress,
@@ -1444,38 +1278,42 @@ public sealed partial class SessionWorkflowCoordinator
             return;
         }
 
-        if (CurrentSession.Stage < SessionWorkflowStage.Transcribed)
+        while (true)
         {
-            await TranscribeMediaAsync(
-                progress,
-                GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress),
-                cancellationToken);
-        }
-
-        if (shouldRunDiarization && CurrentSession.Stage < SessionWorkflowStage.Diarized)
-        {
-            await ExecuteDiarizationStageAsync(
-                GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress),
-                cancellationToken);
-        }
-
-        if (CurrentSession.Stage < SessionWorkflowStage.Translated)
-        {
-            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
-                progress,
-                GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
-                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
-                cancellationToken);
-            return;
-        }
-
-        if (CurrentSession.Stage < SessionWorkflowStage.TtsGenerated)
-        {
-            await GenerateTtsAsync(
-                progress,
-                null,
-                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
-                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            var action = PipelineStateMachine.GetNextAdvanceAction(CurrentSession.Stage, shouldRunDiarization);
+            switch (action)
+            {
+                case null:
+                    return;
+                case PipelineAdvanceAction.Transcribe:
+                    await TranscribeMediaAsync(
+                        progress,
+                        GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress),
+                        cancellationToken);
+                    break;
+                case PipelineAdvanceAction.Diarize:
+                    await _diarizationStageOrchestrator.ExecuteAsync(
+                        GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress),
+                        cancellationToken);
+                    break;
+                case PipelineAdvanceAction.TranslateAndDubFromTranscript:
+                    await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
+                        progress,
+                        GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                        GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+                        cancellationToken);
+                    return;
+                case PipelineAdvanceAction.GenerateTts:
+                    await GenerateTtsAsync(
+                        progress,
+                        null,
+                        GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+                        cancellationToken);
+                    return;
+                default:
+                    throw new InvalidOperationException($"Unexpected pipeline advance action: {action}");
+            }
         }
     }
 
@@ -1518,23 +1356,26 @@ public sealed partial class SessionWorkflowCoordinator
 
         var remainingStages = GetContinuationPipelineStages(CurrentSession.Stage);
 
-        if (CurrentSession.Stage < SessionWorkflowStage.Translated)
+        switch (PipelineStateMachine.GetContinuationActionAfterDiarized(CurrentSession.Stage))
         {
-            await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
-                progress,
-                GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
-                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
-                cancellationToken);
-            return;
-        }
-
-        if (CurrentSession.Stage < SessionWorkflowStage.TtsGenerated)
-        {
-            await GenerateTtsAsync(
-                progress,
-                null,
-                GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
-                cancellationToken);
+            case null:
+                return;
+            case PipelineAdvanceAction.TranslateAndDubFromTranscript:
+                await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
+                    progress,
+                    GetStageContext(remainingStages, SessionWorkflowStage.Translated, stageProgress),
+                    GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+                    cancellationToken);
+                return;
+            case PipelineAdvanceAction.GenerateTts:
+                await GenerateTtsAsync(
+                    progress,
+                    null,
+                    GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
+                    cancellationToken);
+                return;
+            default:
+                throw new InvalidOperationException("Unexpected continuation pipeline action.");
         }
     }
 
@@ -1582,35 +1423,6 @@ public sealed partial class SessionWorkflowCoordinator
             voice,
             GetStageContext(remainingStages, SessionWorkflowStage.TtsGenerated, stageProgress),
             cancellationToken);
-    }
-
-    private async Task ExecuteDiarizationStageAsync(
-        PipelineStageContext? stageContext,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
-            throw new InvalidOperationException("No ingested media is available for speaker mapping.");
-        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
-            throw new InvalidOperationException("No transcript is available for speaker mapping.");
-
-        ReportStage(
-            stageContext,
-            $"Running {CurrentSettings.DiarizationProvider} diarization to identify speakers before translation and dubbing…",
-            progress01: 0,
-            isIndeterminate: true);
-
-        var outcome = await ExecuteDiarizationAsync(
-            CurrentSession.IngestedMediaPath,
-            CurrentSession.TranscriptPath,
-            cancellationToken,
-            resultingStage: SessionWorkflowStage.Diarized,
-            statusMessage: "Speaker mapping complete. Continuing translation and dubbing.");
-
-        ReportStage(
-            stageContext,
-            $"Speaker mapping complete. Identified {outcome.SpeakerCount} speakers across {outcome.SegmentCount} segments.",
-            progress01: 1,
-            isIndeterminate: false);
     }
 
     private bool ShouldRunDiarization() =>
