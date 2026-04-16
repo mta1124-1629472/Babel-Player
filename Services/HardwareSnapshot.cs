@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
 using System.Text.RegularExpressions;
@@ -29,7 +31,8 @@ public sealed record HardwareSnapshot(
     bool IsRtxCapable,
     bool IsVsrDriverSufficient,
     string? NvidiaDriverVersion,
-    string? GpuComputeCapability = null)
+    string? GpuComputeCapability = null,
+    int? CpuPhysicalCores = null)
 {
     /// <summary>Placeholder shown while background detection is still running.</summary>
     public static HardwareSnapshot Detecting { get; } = new(
@@ -44,7 +47,8 @@ public sealed record HardwareSnapshot(
         IsRtxCapable: false,
         IsVsrDriverSufficient: false,
         NvidiaDriverVersion: null,
-        GpuComputeCapability: null);
+        GpuComputeCapability: null,
+        CpuPhysicalCores: null);
 
     // ── Formatted display lines ────────────────────────────────────────────────
 
@@ -166,6 +170,7 @@ public sealed record HardwareSnapshot(
         var (driverVer, isVsrSufficient)  = DetectNvidiaDriver();
         var isRtx                         = IsRtxGpu(gpuName);
         var gpuComputeCapability          = DetectGpuComputeCapability(hasCuda, findPython);
+        var cpuPhysicalCores              = DetectCpuPhysicalCoreCount();
 
         return new HardwareSnapshot(
             IsDetecting: false,
@@ -179,7 +184,94 @@ public sealed record HardwareSnapshot(
             IsRtxCapable: isRtx,
             IsVsrDriverSufficient: isVsrSufficient,
             NvidiaDriverVersion: driverVer,
-            GpuComputeCapability: gpuComputeCapability);
+            GpuComputeCapability: gpuComputeCapability,
+            CpuPhysicalCores: cpuPhysicalCores);
+    }
+
+    /// <summary>Best-effort physical core count. Returns null if the probe fails.</summary>
+    private static int? DetectCpuPhysicalCoreCount()
+    {
+        if (OperatingSystem.IsWindows())
+            return DetectCpuPhysicalCoreCountWindows();
+        if (OperatingSystem.IsLinux())
+            return DetectCpuPhysicalCoreCountLinux();
+        return null;
+    }
+
+    private static int? DetectCpuPhysicalCoreCountWindows()
+    {
+        // Sum NumberOfCores across sockets (Win32_Processor).
+        var output = RunAndCapture(
+            "powershell",
+            "-NoProfile -NonInteractive -Command \"$n=0; Get-CimInstance -ClassName Win32_Processor " +
+            "| ForEach-Object { $n += [int]$_.NumberOfCores }; Write-Output $n\"",
+            timeoutMs: 8000);
+        if (string.IsNullOrWhiteSpace(output)) return null;
+        var line = output.Trim().Split('\n')[0].Trim();
+        return int.TryParse(line, out var n) && n > 0 ? n : null;
+    }
+
+    private static int? DetectCpuPhysicalCoreCountLinux()
+    {
+        try
+        {
+            var path = "/proc/cpuinfo";
+            if (!File.Exists(path)) return null;
+
+            var lines = File.ReadAllLines(path);
+            var corePairs = new HashSet<(int Phys, int Core)>();
+            int? physId = null;
+            int? coreId = null;
+
+            void FlushBlock()
+            {
+                if (coreId is int c)
+                    corePairs.Add((physId ?? 0, c));
+                physId = null;
+                coreId = null;
+            }
+
+            foreach (var raw in lines)
+            {
+                var line = raw.Trim();
+                if (line.StartsWith("processor", StringComparison.OrdinalIgnoreCase) && line.Contains(':'))
+                    FlushBlock();
+
+                if (line.StartsWith("physical id", StringComparison.OrdinalIgnoreCase))
+                {
+                    var idx = line.IndexOf(':');
+                    if (idx >= 0 && int.TryParse(line[(idx + 1)..].Trim(), out var pid))
+                        physId = pid;
+                }
+                else if (line.StartsWith("core id", StringComparison.OrdinalIgnoreCase))
+                {
+                    var idx = line.IndexOf(':');
+                    if (idx >= 0 && int.TryParse(line[(idx + 1)..].Trim(), out var cid))
+                        coreId = cid;
+                }
+            }
+
+            FlushBlock();
+
+            if (corePairs.Count > 0)
+                return corePairs.Count;
+
+            // Single-socket ARM / simple layouts: one "cpu cores" line.
+            foreach (var raw in lines)
+            {
+                var line = raw.Trim();
+                if (!line.StartsWith("cpu cores", StringComparison.OrdinalIgnoreCase)) continue;
+                var idx = line.IndexOf(':');
+                if (idx >= 0 && int.TryParse(line[(idx + 1)..].Trim(), out var perSocket) && perSocket > 0)
+                    return perSocket;
+            }
+        }
+        catch
+        {
+            /* best-effort */
+        }
+
+        return null;
     }
 
     // ── CPU ────────────────────────────────────────────────────────────────────

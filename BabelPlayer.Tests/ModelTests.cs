@@ -357,6 +357,7 @@ public sealed class ModelTests
         var settings = new Babel.Player.Services.Settings.AppSettings();
         Assert.Equal("auto", settings.TranscriptionCpuComputeType);
         Assert.Equal(0, settings.TranscriptionCpuThreads);
+        Assert.True(settings.TranscriptionNumWorkersUseAuto);
         Assert.Equal(1, settings.TranscriptionNumWorkers);
     }
 

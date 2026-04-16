@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Registries;
+using Babel.Player.Services.Transcription;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Babel.Player.ViewModels;
@@ -23,8 +24,6 @@ public partial class EmbeddedPlaybackViewModel
     private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _translationProviderIdsByRuntime = [];
     private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _ttsProviderIdsByRuntime = [];
     private readonly ObservableCollection<ProviderHealthSnapshot> _providerHealthSnapshots = [];
-    private readonly Dictionary<string, Queue<string>> _providerHealthHistoryByKey = new(StringComparer.Ordinal);
-    private readonly object _providerHealthHistoryLock = new();
     private CancellationTokenSource? _providerHealthRefreshCts;
     private int _providerHealthRefreshVersion;
     private ProviderDiagnosticsSelectionSnapshot? _lastQueuedProviderHealthSnapshot;
@@ -125,8 +124,12 @@ public partial class EmbeddedPlaybackViewModel
         get
         {
             var settings = _coordinator.CurrentSettings;
+            var hw = _coordinator.HardwareSnapshot;
             var threads = settings.TranscriptionCpuThreads > 0 ? settings.TranscriptionCpuThreads.ToString() : "auto";
-            return $"{settings.TranscriptionCpuComputeType} · threads {threads} · workers {Math.Max(1, settings.TranscriptionNumWorkers)}";
+            var w = settings.TranscriptionNumWorkersUseAuto
+                ? $"auto (~{CpuTranscriptionRuntimePolicy.ComputeAutoNumWorkers(hw)})"
+                : CpuTranscriptionRuntimePolicy.ClampManualNumWorkers(settings.TranscriptionNumWorkers, hw).ToString();
+            return $"{settings.TranscriptionCpuComputeType} · threads {threads} · workers {w}";
         }
     }
 
@@ -158,6 +161,100 @@ public partial class EmbeddedPlaybackViewModel
     public IReadOnlyList<PipelineTargetLanguageOption> TargetLanguageOptions => PipelineTargetLanguageOption.All;
 
     public IReadOnlyList<SpokenLanguageOption> SpokenLanguageOptions => SpokenLanguageOption.All;
+
+    public SegmentTimingMode[] DubTimingModeOptions { get; } =
+        [SegmentTimingMode.Off, SegmentTimingMode.Stretch, SegmentTimingMode.Pause];
+
+    public SegmentTimingMode DubTimingMode
+    {
+        get => _coordinator.CurrentSettings.DubTimingMode;
+        set
+        {
+            if (_coordinator.CurrentSettings.DubTimingMode == value)
+                return;
+
+            _coordinator.CurrentSettings.DubTimingMode = value;
+            _coordinator.NotifySettingsModified();
+            OnPropertyChanged();
+        }
+    }
+
+    public bool VocalSeparationEnabled
+    {
+        get => _coordinator.CurrentSettings.VocalSeparationEnabled;
+        set
+        {
+            if (_coordinator.CurrentSettings.VocalSeparationEnabled == value)
+                return;
+
+            _coordinator.CurrentSettings.VocalSeparationEnabled = value;
+            _coordinator.NotifySettingsModified();
+            OnPropertyChanged();
+            NotifyVocalSeparationCapabilityProperties();
+        }
+    }
+
+    public bool VocalSeparationAvailable => TryGetVocalSeparationCapability(out var ready, out _) && ready;
+
+    public string VocalSeparationAvailabilityHint
+    {
+        get
+        {
+            _ = TryGetVocalSeparationCapability(out _, out var hint);
+            return hint ?? "Requires a ready containerized inference host with audio-separator installed (produces vocals + ambiance stems).";
+        }
+    }
+
+    public bool HasVocalSeparationAvailabilityHint =>
+        !VocalSeparationAvailable && !string.IsNullOrWhiteSpace(VocalSeparationAvailabilityHint);
+
+    private void NotifyVocalSeparationCapabilityProperties()
+    {
+        OnPropertyChanged(nameof(VocalSeparationAvailable));
+        OnPropertyChanged(nameof(VocalSeparationAvailabilityHint));
+        OnPropertyChanged(nameof(HasVocalSeparationAvailabilityHint));
+    }
+
+    private bool TryGetVocalSeparationCapability(out bool ready, out string? hint)
+    {
+        ready = false;
+        hint = null;
+
+        var probe = _coordinator.ContainerizedProbe;
+        if (probe is null)
+        {
+            hint = "Containerized readiness probe is unavailable in this build.";
+            return false;
+        }
+
+        var probeResult = probe.GetCurrentOrStartBackgroundProbe(_coordinator.CurrentSettings.EffectiveGpuServiceUrl);
+        if (probeResult.State == ContainerizedProbeState.Checking)
+        {
+            hint = "Containerized host is still starting.";
+            return false;
+        }
+
+        if (probeResult.State == ContainerizedProbeState.Unavailable)
+        {
+            hint = string.IsNullOrWhiteSpace(probeResult.ErrorDetail)
+                ? "Containerized host is unavailable."
+                : probeResult.ErrorDetail;
+            return false;
+        }
+
+        if (probeResult.Capabilities is null)
+        {
+            hint = string.IsNullOrWhiteSpace(probeResult.CapabilitiesError)
+                ? "Containerized capabilities are unavailable."
+                : probeResult.CapabilitiesError;
+            return false;
+        }
+
+        ready = probeResult.Capabilities.IsReady(ContainerCapabilityStage.VocalSeparation);
+        hint = probeResult.Capabilities.Detail(ContainerCapabilityStage.VocalSeparation)
+            ?? (ready ? "Audio separator is ready." : "Audio separator is not ready.");
+        return true;
+    }
 
     /// <summary>True when Piper/Edge show the global vs per-speaker voice UI.</summary>
     public bool ShowTtsAssignmentModeSwitch =>
@@ -424,6 +521,9 @@ public partial class EmbeddedPlaybackViewModel
             OnPropertyChanged(nameof(AvailableTranslationModels));
             OnPropertyChanged(nameof(AvailableTtsOptions));
             NotifyTtsAssignmentModeUi();
+            OnPropertyChanged(nameof(VocalSeparationEnabled));
+            OnPropertyChanged(nameof(DubTimingMode));
+            NotifyVocalSeparationCapabilityProperties();
             SpeakerRouting.SyncFromSettings();
             SpeakerRouting.NotifyTtsProviderChanged();
             RefreshProviderHealthDiagnostics();
@@ -962,8 +1062,7 @@ public partial class EmbeddedPlaybackViewModel
             IsLive: false,
             IsStale: false,
             CheckedAtText: DateTimeOffset.UtcNow.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture),
-            History: AppendProviderHealthHistory(
-                $"Diarization|{ProviderNames.Manual}|Manual speaker mapping|Local",
+            History: CreateSingleProviderHealthHistoryLine(
                 DateTimeOffset.UtcNow,
                 "Not configured",
                 "No diarization provider selected.",
@@ -994,8 +1093,7 @@ public partial class EmbeddedPlaybackViewModel
                 : $"{hostLabel} ({runtimeLabel})";
             var statusLineText = $"⚠ {section} readiness check failed";
             var inlineStatusText = $"⚠ {section} readiness check failed: {ex.Message}";
-            var historyEntries = AppendProviderHealthHistory(
-                $"{section}|{providerId}|{selectionLabel}|{runtimeLabel}",
+            var historyEntries = CreateSingleProviderHealthHistoryLine(
                 checkedAtUtc,
                 statusLineText,
                 hostStateText,
@@ -1034,9 +1132,11 @@ public partial class EmbeddedPlaybackViewModel
         var hostState = BuildHostStateText(hostLabel, runtimeLabel, probeResult, isContainerized);
         var metricsText = BuildMetricsText(section, providerId, probeResult, remoteProviderHealth);
         var history = remoteProviderHealth is { History.Count: > 0 }
-            ? remoteProviderHealth.History.Select(FormatProviderHistoryEntry).ToArray()
-            : AppendProviderHealthHistory(
-                $"{section}|{providerId}|{selectionLabel}|{runtimeLabel}",
+            ? new[]
+            {
+                FormatProviderHistoryEntry(remoteProviderHealth.History[^1]),
+            }
+            : CreateSingleProviderHealthHistoryLine(
                 checkedAt,
                 statusLine,
                 hostState,
@@ -1178,8 +1278,8 @@ public partial class EmbeddedPlaybackViewModel
         return parsed.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture);
     }
 
-    private IReadOnlyList<string> AppendProviderHealthHistory(
-        string key,
+    /// <summary>Single latest line for tests/diagnostics; main UI uses Detail/HostState/StatusLine only.</summary>
+    private static IReadOnlyList<string> CreateSingleProviderHealthHistoryLine(
         DateTimeOffset checkedAtUtc,
         string statusLine,
         string hostState,
@@ -1188,20 +1288,7 @@ public partial class EmbeddedPlaybackViewModel
         var entry =
             $"{checkedAtUtc.ToLocalTime():HH:mm:ss} · {(isReady ? "ready" : "not ready")} · {statusLine}" +
             (string.IsNullOrWhiteSpace(hostState) ? string.Empty : $" · {hostState}");
-        lock (_providerHealthHistoryLock)
-        {
-            if (!_providerHealthHistoryByKey.TryGetValue(key, out var queue))
-            {
-                queue = new Queue<string>();
-                _providerHealthHistoryByKey[key] = queue;
-            }
-
-            if (queue.Count >= 3)
-                queue.Dequeue();
-
-            queue.Enqueue(entry);
-            return queue.ToArray();
-        }
+        return [entry];
     }
 
     private bool UsesContainerizedRuntime(ProviderDiagnosticsSelectionSnapshot snapshot) =>
