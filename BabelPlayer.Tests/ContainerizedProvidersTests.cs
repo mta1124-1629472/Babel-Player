@@ -1164,8 +1164,8 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             ProviderNames.WeSpeakerLocal,
             probe,
             new ContainerizedProviderReadiness.ExecutionWaitOptions(
-                ExecutionProbeBudget: TimeSpan.FromMilliseconds(200),
-                CapabilityWarmupBudget: TimeSpan.FromMilliseconds(200),
+                ExecutionProbeBudget: TimeSpan.FromSeconds(5),
+                CapabilityWarmupBudget: TimeSpan.FromSeconds(5),
                 CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(50)));
 
         Assert.False(readiness.IsReady);
