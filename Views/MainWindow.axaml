@@ -943,10 +943,8 @@
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled"
                               HorizontalAlignment="Stretch">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Disabled"
-                              HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" MinWidth="0">
+                    <Grid ColumnDefinitions="Auto,*,Auto,*,Auto"
+                          MinWidth="{Binding $parent[ScrollViewer].Bounds.Width}">
 
                     <!-- Left: open media + CC + dub mode toggle -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"

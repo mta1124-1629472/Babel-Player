@@ -2457,7 +2457,8 @@ def _safe_separation_upload_suffix(filename: str) -> str:
         ".mov",
         ".wmv",
     }
-    return ext if ext in allowed else ".wav"
+    # Keep unknown uploads on a non-audio suffix so the worker forces ffmpeg decode.
+    return ext if ext in allowed else ".bin"
 
 
 @app.post("/separate/vocals", response_model=VocalSeparationResponse)
