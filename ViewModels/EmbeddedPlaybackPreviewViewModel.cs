@@ -133,16 +133,10 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     public bool IsPullTabVisible => !IsFullscreen || IsControlsVisible;
     public bool IsPanePullTabVisible => !IsSegmentPaneVisible && IsPullTabVisible;
     public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6" : "\u23F8";
-    public string VolumeIconLabel => IsMuted || SourceVolume == 0
-        ? "\U0001F507"
-        : SourceVolume < 0.10
-            ? "\U0001F508"
-            : SourceVolume < 0.51
-                ? "\U0001F509"
-                : "\U0001F50A";
-    public string DubModeLabel => "🎙 Dub";
-    public string SubtitleToggleLabel => IsSubtitleModeOn ? "CC ✓" : "CC";
-    public string BilingualToggleLabel => IsBilingualSubtitlesOn ? "Bilingual ✓" : "Bilingual";
+    public string VolumeIconLabel => IsMuted || SourceVolume == 0 ? "X" : "Vol";
+    public string DubModeLabel => "Dub";
+    public string SubtitleToggleLabel => IsSubtitleModeOn ? "CC" : "CC";
+    public string BilingualToggleLabel => IsBilingualSubtitlesOn ? "Bi-lang" : "Bi-lang";
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
     public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);

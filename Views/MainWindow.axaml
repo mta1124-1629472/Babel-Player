@@ -959,7 +959,7 @@
                                 Click="OnOpenMediaClick"
                                 ToolTip.Tip="Open media file"
                                 AutomationProperties.Name="Open media">
-                            <TextBlock Text="📂" FontSize="14"/>
+                            <TextBlock Text="Open" FontSize="12" FontWeight="Medium"/>
                         </Button>
                         <Button Content="{Binding Playback.Preview.SubtitleToggleLabel}"
                                 Classes="control-pill"
@@ -1073,7 +1073,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle mute"
                                 AutomationProperties.Name="Toggle Mute">
-                            <TextBlock Text="🔊" FontSize="12"/>
+                            <TextBlock Text="Vol" FontSize="11"/>
                         </Button>
                         <Slider x:Name="VolumeSlider"
                                 Width="70"
@@ -1091,7 +1091,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle side panels"
                                 AutomationProperties.Name="Toggle side panes">
-                            <TextBlock Text="☰" FontSize="14"/>
+                            <TextBlock Text="Panel" FontSize="11"/>
                         </Button>
 
                         <Button Classes="control-pill"
@@ -1100,7 +1100,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle fullscreen"
                                 AutomationProperties.Name="Toggle fullscreen">
-                            <TextBlock Text="⛶" FontSize="12"/>
+                            <TextBlock Text="Full" FontSize="11"/>
                         </Button>
 
                         <Button Classes="control-pill"
@@ -1108,7 +1108,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Open settings"
                                 AutomationProperties.Name="Settings">
-                            <TextBlock Text="⚙" FontSize="14"/>
+                            <TextBlock Text="Settings" FontSize="11"/>
                         </Button>
 
                         <!--
