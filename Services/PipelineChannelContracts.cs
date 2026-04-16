@@ -228,8 +228,23 @@ internal sealed class TranslationArtifactStreamingWriter
         string? targetLanguage,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(segmentId))
-            throw new ArgumentException("Segment ID cannot be null or empty.", nameof(segmentId));
+        var index = IndexOfSegment(segmentId);
+        if (index < 0)
+            throw new InvalidOperationException($"Translated segment '{segmentId}' was not found in the streaming translation artifact.");
+
+        return await ApplyTranslatedTextAsync(index, translatedText, sourceLanguage, targetLanguage, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<TranslationSegmentArtifact> ApplyTranslatedTextAsync(
+        int segmentIndex,
+        string translatedText,
+        string? sourceLanguage,
+        string? targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        var segments = _artifact.Segments;
+        if (segments == null || segmentIndex < 0 || segmentIndex >= segments.Count)
+            throw new ArgumentOutOfRangeException(nameof(segmentIndex), $"Segment index {segmentIndex} is out of range.");
 
         _artifact.SourceLanguage = string.IsNullOrWhiteSpace(sourceLanguage)
             ? _artifact.SourceLanguage
@@ -238,20 +253,8 @@ internal sealed class TranslationArtifactStreamingWriter
             ? _artifact.TargetLanguage
             : targetLanguage;
 
-        var segments = _artifact.Segments ?? [];
-        TranslationSegmentArtifact? matched = null;
-        foreach (var segment in segments)
-        {
-            if (!string.Equals(segment.Id, segmentId, StringComparison.Ordinal))
-                continue;
-
-            segment.TranslatedText = translatedText;
-            matched = segment;
-            break;
-        }
-
-        if (matched is null)
-            throw new InvalidOperationException($"Translated segment '{segmentId}' was not found in the streaming translation artifact.");
+        var matched = segments[segmentIndex];
+        matched.TranslatedText = translatedText;
 
         await PersistAsync(cancellationToken).ConfigureAwait(false);
         return CloneTranslationSegment(matched);
