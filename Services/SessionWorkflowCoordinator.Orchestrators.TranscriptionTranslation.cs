@@ -1,9 +1,9 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 using Babel.Player.Services.Transcription;
 
 namespace Babel.Player.Services;
@@ -106,6 +106,7 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
                     cancellationToken);
 
                 if (!result.Success
+                    && string.Equals(_c.CurrentSettings.TranscriptionProvider, ProviderNames.FasterWhisper, StringComparison.Ordinal)
                     && CpuTranscriptionRuntimePolicy.IsRecoverableCpuTranscriptionFailure(result.ErrorMessage))
                 {
                     var safeRequest = CpuTranscriptionRuntimePolicy.WithSafeCpuFallback(request);

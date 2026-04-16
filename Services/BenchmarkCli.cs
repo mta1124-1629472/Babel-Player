@@ -156,6 +156,7 @@ public static class BenchmarkCli
             TranscriptionModel          = model,
             TranscriptionCpuComputeType = "int8",
             TranscriptionCpuThreads     = 0,   // auto
+            TranscriptionNumWorkersUseAuto = false,
             TranscriptionNumWorkers     = 1,
         };
 

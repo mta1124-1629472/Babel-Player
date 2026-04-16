@@ -93,6 +93,7 @@ public sealed class SettingsService
         public string? TranscriptionModel { get; set; }
         public string? TranscriptionCpuComputeType { get; set; }
         public int? TranscriptionCpuThreads { get; set; }
+        public bool? TranscriptionNumWorkersUseAuto { get; set; }
         public int? TranscriptionNumWorkers { get; set; }
         public string? DiarizationProvider { get; set; }
         public int? DiarizationMinSpeakers { get; set; }
@@ -158,6 +159,7 @@ public sealed class SettingsService
             settings.TranscriptionModel = TranscriptionModel ?? settings.TranscriptionModel;
             settings.TranscriptionCpuComputeType = TranscriptionCpuComputeType ?? settings.TranscriptionCpuComputeType;
             settings.TranscriptionCpuThreads = TranscriptionCpuThreads ?? settings.TranscriptionCpuThreads;
+            settings.TranscriptionNumWorkersUseAuto = TranscriptionNumWorkersUseAuto ?? false;
             settings.TranscriptionNumWorkers = TranscriptionNumWorkers ?? settings.TranscriptionNumWorkers;
 
             settings.DiarizationProvider = DiarizationProvider ?? settings.DiarizationProvider;
@@ -237,6 +239,7 @@ public sealed class SettingsService
             TranscriptionModel = settings.TranscriptionModel,
             TranscriptionCpuComputeType = settings.TranscriptionCpuComputeType,
             TranscriptionCpuThreads = settings.TranscriptionCpuThreads,
+            TranscriptionNumWorkersUseAuto = settings.TranscriptionNumWorkersUseAuto,
             TranscriptionNumWorkers = settings.TranscriptionNumWorkers,
             TranscriptionLanguageHint = settings.TranscriptionLanguageHint,
             DiarizationProvider = settings.DiarizationProvider,

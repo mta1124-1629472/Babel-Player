@@ -23,7 +23,7 @@ public sealed class AppSettings
 
     /// <summary>
     /// CPU compute type used by transcription providers when running on CPU.
-    /// "auto" selects int8_float16 on AVX2-capable CPUs, int8 otherwise.
+    /// "auto" resolves to int8_float16 when AVX-512F is available, otherwise int8.
     /// </summary>
     public string TranscriptionCpuComputeType { get; set; } = "auto";
 
@@ -34,8 +34,14 @@ public sealed class AppSettings
     public int TranscriptionCpuThreads { get; set; } = 0;
 
     /// <summary>
-    /// Number of worker threads/processes used by transcription runtime internals.
-    /// Keep conservative default to avoid oversubscription on low-core machines.
+    /// When true, <see cref="TranscriptionNumWorkers"/> is derived from hardware (cores + RAM).
+    /// When false, <see cref="TranscriptionNumWorkers"/> is used and clamped to safe bounds.
+    /// Legacy settings files without this field deserialize as false (manual).
+    /// </summary>
+    public bool TranscriptionNumWorkersUseAuto { get; set; } = true;
+
+    /// <summary>
+    /// Manual worker count when <see cref="TranscriptionNumWorkersUseAuto"/> is false; ignored when auto.
     /// </summary>
     public int TranscriptionNumWorkers { get; set; } = 1;
 
@@ -258,4 +264,7 @@ public sealed class AppSettings
 
     /// <summary>Whether to show both original and translated text in the subtitle track.</summary>
     public bool BilingualSubtitlesEnabled { get; set; } = false;
+
+    /// <summary>When false, the app may show a one-time notice about managed GPU host warm-up time.</summary>
+    public bool ShownManagedBackendWarmupNotice { get; set; }
 }

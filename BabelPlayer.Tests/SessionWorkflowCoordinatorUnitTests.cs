@@ -174,6 +174,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             TranscriptionModel = _ctx.Settings.TranscriptionModel,
             TranscriptionCpuComputeType = _ctx.Settings.TranscriptionCpuComputeType,
             TranscriptionCpuThreads = _ctx.Settings.TranscriptionCpuThreads,
+            TranscriptionNumWorkersUseAuto = _ctx.Settings.TranscriptionNumWorkersUseAuto,
             TranscriptionNumWorkers = _ctx.Settings.TranscriptionNumWorkers,
             TranslationRuntime = _ctx.Settings.TranslationRuntime,
             TranslationProvider = _ctx.Settings.TranslationProvider,

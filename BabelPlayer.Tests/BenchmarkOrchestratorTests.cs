@@ -130,6 +130,7 @@ public sealed class BenchmarkOrchestratorTests : IDisposable
         TranscriptionModel          = model,
         TranscriptionCpuComputeType = "int8",
         TranscriptionCpuThreads     = 0,
+        TranscriptionNumWorkersUseAuto = false,
         TranscriptionNumWorkers     = 1,
     };
 
