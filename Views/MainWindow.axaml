@@ -14,7 +14,7 @@
         MinWidth="960" MinHeight="520"
         WindowDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
-        Background="{DynamicResource WindowBackgroundBrush}">
+        Background="{DynamicResource IndustrialBackgroundBrush}">
     <Window.Styles>
         <Style Selector="Border.left-pane">
             <Setter Property="Width" Value="260" />
@@ -180,10 +180,11 @@
         <!-- ═══════════════════════════════════════════════════
              LEFT PANEL: Pipeline
              ═══════════════════════════════════════════════════ -->
-<Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}"
-        Classes="left-pane"
+<Border Grid.Row="1" Grid.Column="0"
+        Classes="left-pane glass-rack"
         Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
+        Margin="8,0,0,8"
         >
     <Border.Resources>
         <!-- Shadow the Application ThemeDictionary for all panel descendants.
@@ -204,9 +205,7 @@
         <TextBlock Grid.Column="0" Text="Pipeline" FontSize="15" FontWeight="SemiBold"
                     Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
         <Button Grid.Column="2"
-                Padding="10,6" FontSize="11"
-                Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                CornerRadius="6"
+                Classes="console-button"
                 Command="{Binding Playback.Pipeline.ClearPipelineCommand}"
                 ToolTip.Tip="Clear pipeline and start fresh">
             <TextBlock Text="Clear" FontWeight="Medium"/>
@@ -388,9 +387,7 @@
 
                                <Button IsEnabled="{Binding Playback.SpeakerRouting.CanOpenSpeakerSetupWizard}"
                                        HorizontalAlignment="Stretch"
-                                       Padding="0,7" FontSize="12"
-                                       Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                       CornerRadius="4"
+                                       Classes="console-button"
                                        Click="OnReviewSpeakerReferencesClick"
                                        ToolTip.Tip="Opens the speaker setup wizard: per-speaker voice and (for Qwen) reference clips. Finish in the wizard saves changes."
                                        Content="Speaker setup wizard…" />
@@ -747,83 +744,30 @@
                                            FontSize="10"
                                            Foreground="{DynamicResource StatusTextBrush}"
                                            TextWrapping="Wrap" />
-                                <ProgressBar Minimum="0"
-                                             Maximum="1"
-                                             Value="{Binding Playback.Pipeline.PipelineProgressPercent}"
+                                <ProgressBar Value="{Binding Playback.Pipeline.PipelineProgressPercent}"
+                                             Classes="neon-pulse"
                                              IsIndeterminate="{Binding Playback.Pipeline.IsPipelineProgressIndeterminate}"
-                                             Height="8"
-                                             Foreground="{DynamicResource AccentSecondaryBrush}"
-                                             Background="{DynamicResource ProgressBackgroundBrush}"
-                                             HorizontalAlignment="Stretch"
-                                             Margin="0,2,0,0"
                                              AutomationProperties.Name="Pipeline progress" />
                             </StackPanel>
 
                             <Grid>
                                 <Button HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Center"
-                                        VerticalContentAlignment="Center"
-                                        Padding="0,10"
-                                        FontSize="13"
-                                        FontWeight="SemiBold"
-                                        Foreground="White"
-                                        CornerRadius="8"
+                                        Classes="glow-button"
                                         Command="{Binding Playback.Pipeline.RunPipelineCommand}"
                                         IsEnabled="{Binding Playback.Pipeline.CanRunPipeline}"
                                         IsVisible="{Binding !Playback.IsBusy}">
-                                    <Button.Content>
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="▶" VerticalAlignment="Center" />
-                                            <TextBlock Text="Run Pipeline" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </Button.Content>
-                                    <Button.Styles>
-                                        <Style Selector="Button">
-                                            <Setter Property="Background">
-                                                <Setter.Value>
-                                                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
-                                                        <GradientStop Color="{DynamicResource AccentColor}" Offset="0" />
-                                                        <GradientStop Color="{DynamicResource AccentSecondaryColor}" Offset="1" />
-                                                    </LinearGradientBrush>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                        <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                            <Setter Property="Background">
-                                                <Setter.Value>
-                                                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
-                                                        <GradientStop Color="#5B52F0" Offset="0" />
-                                                        <GradientStop Color="#8B4DF8" Offset="1" />
-                                                    </LinearGradientBrush>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                        <Style Selector="Button:pressed /template/ ContentPresenter">
-                                            <Setter Property="Background">
-                                                <Setter.Value>
-                                                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
-                                                        <GradientStop Color="#3D35C8" Offset="0" />
-                                                        <GradientStop Color="#6A2FCC" Offset="1" />
-                                                    </LinearGradientBrush>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                    </Button.Styles>
+                                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                        <TextBlock Text="▶" VerticalAlignment="Center" />
+                                        <TextBlock Text="Run Pipeline" VerticalAlignment="Center" />
+                                    </StackPanel>
                                 </Button>
 
                                 <Button HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Center"
-                                        VerticalContentAlignment="Center"
-                                        Padding="0,10"
-                                        FontSize="13"
-                                        FontWeight="SemiBold"
-                                        Background="{DynamicResource DestructiveBrush}"
-                                        Foreground="White"
-                                        CornerRadius="8"
+                                        Classes="destructive-glow"
                                         Command="{Binding Playback.Pipeline.CancelPipelineCommand}"
                                         IsVisible="{Binding Playback.IsBusy}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <TextBlock Text="⏹" VerticalAlignment="Center" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                        <Border Width="12" Height="12" Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" CornerRadius="2" VerticalAlignment="Center"/>
                                         <TextBlock Text="Cancel Pipeline" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
@@ -953,7 +897,7 @@
                                 Click="OnOpenMediaClick"
                                 ToolTip.Tip="Open media file"
                                 AutomationProperties.Name="Open media">
-                            <TextBlock Text="\U0001F4C2" FontSize="14"/>
+                            <TextBlock Text="📁" FontSize="14"/>
                         </Button>
                         <Button Content="{Binding Playback.Preview.SubtitleToggleLabel}"
                                 Classes="control-pill"
@@ -1002,7 +946,7 @@
                     </StackPanel>
 
                     <!-- Center: playback buttons in a unified transport capsule -->
-                    <Border Grid.Column="2" Background="{DynamicResource SurfaceSubtleBrush}" CornerRadius="10" Padding="6,4"
+                    <Border Grid.Column="2" Classes="glass-rack" Padding="6,4"
                             VerticalAlignment="Center" HorizontalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="4">
                             <Button Classes="control-pill"
@@ -1067,7 +1011,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle mute"
                                 AutomationProperties.Name="Toggle Mute">
-                            <TextBlock Text="\U0001F50A" FontSize="12"/>
+                            <TextBlock Text="🔊" FontSize="12"/>
                         </Button>
                         <Slider x:Name="VolumeSlider"
                                 Width="70"
@@ -1085,7 +1029,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle side panels"
                                 AutomationProperties.Name="Toggle side panes">
-                            <TextBlock Text="\u2630" FontSize="14"/>
+                            <TextBlock Text="☰" FontSize="14"/>
                         </Button>
 
                         <Button Classes="control-pill"
@@ -1094,7 +1038,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle fullscreen"
                                 AutomationProperties.Name="Toggle fullscreen">
-                            <TextBlock Text="\u26F6" FontSize="12"/>
+                            <TextBlock Text="⛶" FontSize="12"/>
                         </Button>
 
                         <Button Classes="control-pill"
@@ -1102,7 +1046,7 @@
                                 Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Open settings"
                                 AutomationProperties.Name="Settings">
-                            <TextBlock Text="\u2699" FontSize="14"/>
+                            <TextBlock Text="⚙" FontSize="14"/>
                         </Button>
 
                         <!--
@@ -1144,10 +1088,11 @@
         <!-- ═══════════════════════════════════════════════════
              RIGHT PANEL: Segments
              ═══════════════════════════════════════════════════ -->
-        <Border Grid.Row="1" Grid.Column="2" Background="{DynamicResource PanelBackgroundBrush}"
-                Classes="right-pane"
+        <Border Grid.Row="1" Grid.Column="2"
+                Classes="right-pane glass-rack"
                 Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
+                Margin="0,0,8,8"
                 >
             <Grid RowDefinitions="Auto,*,Auto">
 
@@ -1168,19 +1113,15 @@
 
                         <Button Grid.Column="1"
                                 Click="OnExportCaptionsClick"
-                                Padding="10,6"
-                                FontSize="11"
-                                Background="{DynamicResource ButtonBackgroundBrush}"
-                                Foreground="#C0C0D0"
-                                CornerRadius="6"
+                                Classes="console-button"
                                 ToolTip.Tip="Export captions as SRT">
                             <TextBlock Text="Export" />
                         </Button>
 
                         <Button Grid.Column="2"
                                 Command="{Binding Playback.Preview.RefreshSegmentsCommand}"
-                                Background="Transparent" Padding="8,6"
-                                Foreground="#A0A0B0" ToolTip.Tip="Refresh segments">
+                                Classes="console-button"
+                                ToolTip.Tip="Refresh segments">
                             <TextBlock Text="↻" FontSize="14" />
                         </Button>
 

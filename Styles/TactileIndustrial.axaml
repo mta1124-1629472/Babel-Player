@@ -1,0 +1,232 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <!-- Obsidian & Charcoal Palette -->
+                    <Color x:Key="IndustrialObsidian">#0A0A0F</Color>
+                    <Color x:Key="IndustrialCharcoal">#121218</Color>
+                    <Color x:Key="IndustrialSlateBlue">#1A1A2E</Color>
+                    
+                    <!-- Neon Accents -->
+                    <Color x:Key="NeonCyan">#00F5FF</Color>
+                    <Color x:Key="NeonAmber">#FFB800</Color>
+                    <Color x:Key="NeonMagenta">#FF00E5</Color>
+                    <Color x:Key="NeonRed">#FF3B3B</Color>
+                    
+                    <SolidColorBrush x:Key="IndustrialBackgroundBrush" Color="{StaticResource IndustrialObsidian}" />
+                    <SolidColorBrush x:Key="IndustrialSurfaceBrush" Color="{StaticResource IndustrialCharcoal}" />
+                    <SolidColorBrush x:Key="IndustrialBorderBrush" Color="#222230" />
+                    
+                    <!-- Tactile Shadows/Highlights -->
+                    <BoxShadows x:Key="TactileOuterShadow">0 4 12 0 #000000</BoxShadows>
+                    <BoxShadows x:Key="TactileInnerGlow">inset 0 0 10 0 #333344</BoxShadows>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+
+    <!-- 1. The Console Button Style -->
+    <Style Selector="Button.console-button">
+        <Setter Property="Background" Value="{DynamicResource IndustrialSurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource IndustrialBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="FontFamily" Value="JetBrains Mono, Courier New, Consolas" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="#A0A0B8" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border x:Name="PART_Border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.1" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.1" />
+                <BrushTransition Property="Foreground" Duration="0:0:0.1" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.console-button:pointerover">
+        <Setter Property="Background" Value="#1A1A28" />
+        <Setter Property="BorderBrush" Value="{DynamicResource NeonCyan}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.console-button:pointerover /template/ Border#PART_Border">
+        <Setter Property="BoxShadow" Value="0 0 8 0 #4000F5FF" />
+    </Style>
+
+    <Style Selector="Button.console-button:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.98)" />
+    </Style>
+    <Style Selector="Button.console-button:pressed /template/ Border#PART_Border">
+        <Setter Property="BoxShadow" Value="inset 0 0 6 0 #000000" />
+    </Style>
+
+    <!-- 1.1 The Primary Glow Button Style -->
+    <Style Selector="Button.glow-button">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="#2000F5FF" Offset="0" />
+                    <GradientStop Color="#20FF00E5" Offset="1" />
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="BorderBrush" Value="#4000F5FF" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="16,10" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="FontFamily" Value="JetBrains Mono, Courier New, Consolas" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border x:Name="PART_Border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}"
+                        BoxShadow="0 0 15 0 #2000F5FF">
+                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.2" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.glow-button:pointerover">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="#4000F5FF" Offset="0" />
+                    <GradientStop Color="#40FF00E5" Offset="1" />
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="BorderBrush" Value="{DynamicResource NeonCyan}" />
+    </Style>
+    <Style Selector="Button.glow-button:pointerover /template/ Border#PART_Border">
+        <Setter Property="BoxShadow" Value="0 0 25 0 #4000F5FF" />
+    </Style>
+
+    <Style Selector="Button.glow-button:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+    </Style>
+
+    <!-- 1.2 Destructive Glow Button Style -->
+    <Style Selector="Button.destructive-glow">
+        <Setter Property="Background" Value="#15FF3B3B" />
+        <Setter Property="BorderBrush" Value="#40FF3B3B" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="16,10" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="FontFamily" Value="JetBrains Mono, Courier New, Consolas" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource NeonRed}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border x:Name="PART_Border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}"
+                        BoxShadow="0 0 10 0 #20FF3B3B">
+                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.2" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.destructive-glow:pointerover">
+        <Setter Property="Background" Value="#30FF3B3B" />
+        <Setter Property="BorderBrush" Value="{DynamicResource NeonRed}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.destructive-glow:pointerover /template/ Border#PART_Border">
+        <Setter Property="BoxShadow" Value="0 0 20 0 #40FF3B3B" />
+    </Style>
+
+    <!-- 2. Neon Breathing ProgressBar -->
+    <Style Selector="ProgressBar.neon-pulse">
+        <Setter Property="Height" Value="2" />
+        <Setter Property="Background" Value="#0A0A0F" />
+        <Setter Property="Foreground" Value="{DynamicResource NeonCyan}" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    
+    <Style Selector="ProgressBar.neon-pulse /template/ Border#PART_Indicator">
+        <Setter Property="BoxShadow" Value="0 0 10 0 #8000F5FF" />
+    </Style>
+
+    <!-- 3. Industrial Fader (Slider) -->
+    <Style Selector="Slider.console-fader">
+        <Setter Property="Background" Value="#1A1A20" />
+    </Style>
+    
+    <Style Selector="Slider.console-fader /template/ Thumb">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="12" />
+        <Setter Property="Background" Value="#2A2A3A" />
+        <Setter Property="BorderBrush" Value="#4A4A5A" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                    <Rectangle Width="2" Height="8" Fill="#101015" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <!-- 4. Glass Rack Panel (Border) -->
+    <Style Selector="Border.glass-rack">
+        <Setter Property="Background" Value="#10FFFFFF" />
+        <Setter Property="BorderBrush" Value="#20FFFFFF" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="BoxShadow" Value="0 8 32 0 #000000" />
+    </Style>
+
+</Styles>
