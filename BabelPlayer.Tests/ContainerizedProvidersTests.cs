@@ -406,13 +406,6 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                 return await Json(HttpStatusCode.OK, "{\"success\":true,\"audio_path\":\"/tmp/segment-2.mp3\",\"file_size_bytes\":3}");
             }
 
-            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
-            {
-                batchCount++;
-                return await Json(HttpStatusCode.OK,
-                    "{\"success\":true,\"voice\":\"qwen\",\"audio_path\":\"/tmp/qwen-segment.mp3\",\"file_size_bytes\":3}");
-            }
-
             if (request.Method == HttpMethod.Get && request.RequestUri is not null && request.RequestUri.AbsolutePath.StartsWith("/tts/audio/", StringComparison.Ordinal))
             {
                 downloadCount++;
