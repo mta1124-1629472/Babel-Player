@@ -580,8 +580,16 @@ public sealed class ContainerizedInferenceClient
             var vocalsPath = Path.Combine(stemsDir, Path.GetFileName(result.VocalsFilename));
             var instrumentalPath = Path.Combine(stemsDir, Path.GetFileName(result.InstrumentalFilename));
 
-            await DownloadTtsAudioAsync(result.VocalsFilename, vocalsPath, cancellationToken).ConfigureAwait(false);
-            await DownloadTtsAudioAsync(result.InstrumentalFilename, instrumentalPath, cancellationToken).ConfigureAwait(false);
+            await DownloadTtsAudioAsync(
+                result.VocalsFilename,
+                vocalsPath,
+                cancellationToken,
+                requestKind: ContainerizedRequestKind.Other).ConfigureAwait(false);
+            await DownloadTtsAudioAsync(
+                result.InstrumentalFilename,
+                instrumentalPath,
+                cancellationToken,
+                requestKind: ContainerizedRequestKind.Other).ConfigureAwait(false);
 
             return new VocalSeparationResult(
                 Success: true,
@@ -770,13 +778,15 @@ public sealed class ContainerizedInferenceClient
     /// <param name="filename">The remote audio filename to request from the service.</param>
     /// <param name="localOutputPath">The local filesystem path where the downloaded audio will be saved (created or overwritten).</param>
     /// <param name="cancellationToken">Token to cancel the download operation.</param>
+    /// <param name="requestKind">Lease tracker request kind associated with this download.</param>
     /// <exception cref="InvalidOperationException">Thrown when the service responds with a non-success status; the exception message contains the response body.</exception>
     public async Task DownloadTtsAudioAsync(
         string filename,
         string localOutputPath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ContainerizedRequestKind requestKind = ContainerizedRequestKind.Tts)
     {
-        using var lease = AcquireLease(ContainerizedRequestKind.Tts);
+        using var lease = AcquireLease(requestKind);
 
         using var response = await _httpClient.GetAsync(
             $"{_inferenceServiceUrl}/tts/audio/{Uri.EscapeDataString(filename)}",
@@ -1455,19 +1465,6 @@ public sealed class ContainerizedInferenceClient
         }
 
         return speakers.Count;
-    }
-
-    private static string ResolveSessionStemsDirectory(string sourceAudioPath)
-    {
-        var audioDir = Path.GetDirectoryName(sourceAudioPath);
-        if (string.IsNullOrWhiteSpace(audioDir))
-            throw new InvalidOperationException($"Could not resolve source audio directory from '{sourceAudioPath}'.");
-
-        var sessionDir = Directory.GetParent(audioDir)?.FullName;
-        if (string.IsNullOrWhiteSpace(sessionDir))
-            sessionDir = audioDir;
-
-        return Path.Combine(sessionDir, "stems");
     }
 
     /// <summary>
