@@ -956,16 +956,18 @@
                                 VerticalAlignment="Center">
                         <Button Classes="control-pill"
                                 Padding="10,8"
-                                FontSize="15"
+                                FontSize="14"
                                 Background="Transparent"
                                 Click="OnOpenMediaClick"
                                 ToolTip.Tip="Open media file"
-                                AutomationProperties.Name="Open media" />
+                                AutomationProperties.Name="Open media">
+                            <TextBlock Text="📂" FontSize="14"/>
+                        </Button>
                         <Button Content="{Binding Playback.Preview.SubtitleToggleLabel}"
                                 Classes="control-pill"
                                 Command="{Binding Playback.Preview.ToggleSubtitlesCommand}"
                                 IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                Padding="8,6" FontSize="12"
+                                Padding="8,6" FontSize="11"
                                 Background="Transparent"
                                 ToolTip.Tip="Toggle subtitles"
                                 AutomationProperties.Name="Toggle subtitles" />
@@ -973,7 +975,7 @@
                                 Classes="control-pill"
                                 Command="{Binding Playback.Preview.ToggleBilingualSubtitlesCommand}"
                                 IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                Padding="8,6" FontSize="12"
+                                Padding="8,6" FontSize="11"
                                 Background="Transparent"
                                 ToolTip.Tip="Toggle Bilingual Subtitles"
                                 AutomationProperties.Name="Toggle Bilingual Subtitles" />
@@ -982,7 +984,7 @@
                                 Classes.active="{Binding Playback.Preview.IsDubModeOn}"
                                 Command="{Binding Playback.Preview.ToggleDubModeCommand}"
                                 IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                Padding="8,6" FontSize="12"
+                                Padding="8,6" FontSize="11"
                                 Background="Transparent"
                                 ToolTip.Tip="Toggle Dub Mode"
                                 AutomationProperties.Name="Toggle Dub Mode" />
@@ -1008,64 +1010,73 @@
                     </StackPanel>
 
                     <!-- Center: playback buttons in a unified transport capsule -->
-                    <Border Grid.Column="2" Background="{DynamicResource SurfaceSubtleBrush}" CornerRadius="10" Padding="4,4"
+                    <Border Grid.Column="2" Background="{DynamicResource SurfaceSubtleBrush}" CornerRadius="10" Padding="6,4"
                             VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="2">
-                            <Button Classes="control-pill" Content="⏮"
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Button Classes="control-pill"
                                     Command="{Binding Playback.Preview.SkipBackwardCommand}"
                                     IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                    Padding="8,6" FontSize="13"
+                                    Padding="10,6" FontSize="12"
                                     ToolTip.Tip="Skip to previous segment"
-                                    AutomationProperties.Name="Skip to previous segment" />
-                            <Button Classes="control-pill" Content="⏪"
+                                    AutomationProperties.Name="Skip to previous segment">
+                                <TextBlock Text="|◀" FontSize="12"/>
+                            </Button>
+                            <Button Classes="control-pill"
                                     Command="{Binding Playback.Preview.RewindCommand}"
                                     IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                    Padding="8,6" FontSize="13"
+                                    Padding="10,6" FontSize="12"
                                     ToolTip.Tip="Rewind 10 seconds"
-                                    AutomationProperties.Name="Rewind 10 seconds" />
+                                    AutomationProperties.Name="Rewind 10 seconds">
+                                <TextBlock Text="◀◀" FontSize="12"/>
+                            </Button>
                             <Button Command="{Binding Playback.Preview.PlayPauseSourceCommand}"
                                     IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                    Width="40" Height="40" Padding="0" Margin="4,0"
-                                    CornerRadius="20" Background="{DynamicResource ButtonBackgroundBrush}"
+                                    Width="46" Height="46" Padding="0" Margin="4,0"
+                                    CornerRadius="23" Background="{DynamicResource AccentBrush}"
                                     ToolTip.Tip="Play / Pause (Space)"
                                     AutomationProperties.Name="Play or pause">
                                 <Button.Styles>
                                     <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                        <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
-                                    </Style>
-                                    <Style Selector="Button:pressed /template/ ContentPresenter">
-                                        <Setter Property="Background" Value="#252545" />
+                                        <Setter Property="Background" Value="{DynamicResource AccentSecondaryBrush}" />
                                     </Style>
                                 </Button.Styles>
                                 <TextBlock Text="{Binding Playback.Preview.PlayPauseSourceLabel}"
                                            FontSize="14"
+                                           FontWeight="SemiBold"
+                                           Foreground="White"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center" />
                             </Button>
-                            <Button Classes="control-pill" Content="⏩"
+                            <Button Classes="control-pill"
                                     Command="{Binding Playback.Preview.FastForwardCommand}"
                                     IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                    Padding="8,6" FontSize="13"
+                                    Padding="10,6" FontSize="12"
                                     ToolTip.Tip="Fast forward 10 seconds"
-                                    AutomationProperties.Name="Fast forward 10 seconds" />
-                            <Button Classes="control-pill" Content="⏭"
+                                    AutomationProperties.Name="Fast forward 10 seconds">
+                                <TextBlock Text="▶▶" FontSize="12"/>
+                            </Button>
+                            <Button Classes="control-pill"
                                     Command="{Binding Playback.Preview.SkipForwardCommand}"
                                     IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                    Padding="8,6" FontSize="13"
+                                    Padding="10,6" FontSize="12"
                                     ToolTip.Tip="Skip to next segment"
-                                    AutomationProperties.Name="Skip to next segment" />
+                                    AutomationProperties.Name="Skip to next segment">
+                                <TextBlock Text="▶|" FontSize="12"/>
+                            </Button>
                         </StackPanel>
                     </Border>
 
                     <!-- Right: volume + fullscreen + settings [+ dev toolbar] -->
                     <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4"
                                 VerticalAlignment="Center" HorizontalAlignment="Right">
-                        <Button Classes="control-pill" x:Name="MuteButton"
+                        <Button Classes="control-pill"
                                 Command="{Binding Playback.Preview.ToggleMuteCommand}"
                                 IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                Padding="8,6" FontSize="12"
+                                Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle mute"
-                                AutomationProperties.Name="Toggle Mute" />
+                                AutomationProperties.Name="Toggle Mute">
+                            <TextBlock Text="🔊" FontSize="12"/>
+                        </Button>
                         <Slider x:Name="VolumeSlider"
                                 Width="70"
                                 Orientation="Horizontal"
@@ -1077,24 +1088,30 @@
                                 Margin="2,0,6,0"
                                 ToolTip.Tip="Volume" />
 
-                        <Button Classes="control-pill" Content="⛶"
+                        <Button Classes="control-pill"
                                 Command="{Binding Playback.Preview.ToggleSegmentPaneCommand}"
-                                Padding="8,6" FontSize="12"
+                                Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle side panels"
-                                AutomationProperties.Name="Toggle side panes" />
+                                AutomationProperties.Name="Toggle side panes">
+                            <TextBlock Text="☰" FontSize="14"/>
+                        </Button>
 
-                        <Button Classes="control-pill" Content="⛶"
+                        <Button Classes="control-pill"
                                 Command="{Binding Playback.Preview.ToggleFullscreenCommand}"
                                 IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                Padding="8,6" FontSize="12"
+                                Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Toggle fullscreen"
-                                AutomationProperties.Name="Toggle fullscreen" />
+                                AutomationProperties.Name="Toggle fullscreen">
+                            <TextBlock Text="⛶" FontSize="12"/>
+                        </Button>
 
-                        <Button Classes="control-pill" Content="⚙"
+                        <Button Classes="control-pill"
                                 Click="OnSettingsClick"
-                                Padding="8,6" FontSize="12"
+                                Padding="8,6" FontSize="11"
                                 ToolTip.Tip="Open settings"
-                                AutomationProperties.Name="Settings" />
+                                AutomationProperties.Name="Settings">
+                            <TextBlock Text="⚙" FontSize="14"/>
+                        </Button>
 
                         <!--
                             ╔══════════════════════════════╗

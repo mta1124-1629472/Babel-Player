@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -42,6 +43,10 @@ public partial class MainWindow : Window
 
         // Keep the title in sync with the build configuration.
         Title = AppIdentity.AppName;
+
+        // Enable drag & drop on the window
+        DragDrop.AddDragOverHandler(this, OnDragEnter);
+        DragDrop.AddDropHandler(this, OnFileDrop);
 
 #if BABEL_DEV
         var devLogButton = this.FindControl<Button>("DevLogButton");
@@ -253,6 +258,74 @@ public partial class MainWindow : Window
             vm.Playback.Preview.IsFullscreen = false;
             e.Handled = true;
         }
+    }
+
+    // ── Drag & Drop file support ──────────────────────────────────────────────────
+    private static readonly string[] SupportedVideoExtensions = ["mp4", "mkv", "avi", "webm", "mov"];
+    private static readonly string[] SupportedAudioExtensions = ["wav", "mp3", "flac", "ogg", "m4a"];
+
+    private async void OnFileDrop(object? sender, DragEventArgs e)
+    {
+        var dataTransfer = e.DataTransfer;
+        if (dataTransfer == null) return;
+        
+        var files = dataTransfer.TryGetFiles();
+        if (files == null) return;
+        
+        foreach (var file in files)
+        {
+            var path = file.TryGetLocalPath();
+            if (path == null) continue;
+            
+            var ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+            if (SupportedVideoExtensions.Contains(ext) || SupportedAudioExtensions.Contains(ext))
+            {
+                if (DataContext is MainWindowViewModel vm)
+                {
+                    try
+                    {
+                        vm.Coordinator.LoadMedia(path);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        vm.Playback.StatusText = $"Failed to open: {ex.Message}";
+                    }
+                }
+            }
+        }
+    }
+
+    private void OnDragEnter(object? sender, DragEventArgs e)
+    {
+        var dataTransfer = e.DataTransfer;
+        if (dataTransfer == null) 
+        {
+            e.DragEffects = DragDropEffects.None;
+            return;
+        }
+        
+        var files = dataTransfer.TryGetFiles();
+        if (files != null)
+        {
+            foreach (var file in files)
+            {
+                var path = file.TryGetLocalPath();
+                if (path == null) continue;
+                
+                var ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+                if (SupportedVideoExtensions.Contains(ext) || SupportedAudioExtensions.Contains(ext))
+                {
+                    e.DragEffects = DragDropEffects.Copy;
+                    return;
+                }
+            }
+        }
+        e.DragEffects = DragDropEffects.None;
+    }
+
+    private void OnDragLeave(object? sender, DragEventArgs e)
+    {
     }
 
     // ── Video handle + media loading ───────────────────────────────────────────
