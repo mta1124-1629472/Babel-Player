@@ -1078,17 +1078,86 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         foreach (var arg in arguments)
         {
             if (sb.Length > 0) sb.Append(' ');
-            sb.Append(QuoteIfNeeded(arg));
+            AppendWindowsQuoted(sb, arg);
         }
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Appends a single argument to a Windows CreateProcess command-line string using
+    /// CommandLineToArgvW-compatible quoting:
+    /// - Wraps in " if the arg contains spaces, tabs, or quotes.
+    /// - Doubles backslashes that immediately precede a " or the closing ".
+    /// - Escapes embedded " as \".
+    /// </summary>
+    private static void AppendWindowsQuoted(StringBuilder sb, string arg)
+    {
+        if (string.IsNullOrEmpty(arg))
+        {
+            sb.Append("\"\"");
+            return;
+        }
+
+        bool needsQuoting = arg.IndexOfAny([' ', '\t', '"', '\n', '\r']) >= 0;
+        if (!needsQuoting)
+        {
+            sb.Append(arg);
+            return;
+        }
+
+        sb.Append('"');
+        int i = 0;
+        while (i < arg.Length)
+        {
+            char c = arg[i];
+            if (c == '\\')
+            {
+                int numBackslashes = 0;
+                while (i < arg.Length && arg[i] == '\\')
+                {
+                    numBackslashes++;
+                    i++;
+                }
+
+                if (i == arg.Length)
+                {
+                    // Backslashes at end of arg precede the closing " — must be doubled.
+                    sb.Append('\\', numBackslashes * 2);
+                }
+                else if (arg[i] == '"')
+                {
+                    // Backslashes before a " — double them and escape the ".
+                    sb.Append('\\', numBackslashes * 2 + 1);
+                    sb.Append('"');
+                    i++;
+                }
+                else
+                {
+                    // Backslashes not before a " — emit as-is.
+                    sb.Append('\\', numBackslashes);
+                }
+            }
+            else if (c == '"')
+            {
+                sb.Append('\\');
+                sb.Append('"');
+                i++;
+            }
+            else
+            {
+                sb.Append(c);
+                i++;
+            }
+        }
+
+        sb.Append('"');
+    }
+
     private static string QuoteIfNeeded(string arg)
     {
-        if (string.IsNullOrEmpty(arg)) return "\"\"";
-        // If it has spaces and isn't already quoted, wrap it.
-        if (arg.Contains(' ') && !arg.StartsWith('\"')) return $"\"{arg}\"";
-        return arg;
+        var sb = new StringBuilder();
+        AppendWindowsQuoted(sb, arg);
+        return sb.ToString();
     }
 
     private async Task DrainProcessStreamAsync(StreamReader reader, string prefix)
