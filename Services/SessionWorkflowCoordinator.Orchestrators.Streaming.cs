@@ -357,13 +357,13 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
         /// </summary>
         /// <remarks>
         /// Entry state: expects <paramref name="artifactWriter"/> to be initialized for the current session and the translation provider to be ready (translation model/service prepared by the caller).  
-        /// Exit state on success: returns a <see cref="TranslationResult"/> built from the final artifact; <paramref name="translationWriter"/> is completed; the method does not commit or persist session state (persistence/commit is performed by the caller).  
-        /// Failure behavior: on a translation failure or if a translated segment is not found in the artifact, the method completes <paramref name="translationWriter"/> with the exception and rethrows; callers should handle transaction/commit accordingly.  
+        /// Exit state on success: returns a <see cref="TranslationResult"/> built from the in-memory streaming artifact; <paramref name="translationWriter"/> is completed; the method does not commit or persist session state (persistence/commit is performed by the caller).  
+        /// Failure behavior: on a translation failure or if a translated segment cannot be resolved from the provider response, the method completes <paramref name="translationWriter"/> with the exception and rethrows; callers should handle transaction/commit accordingly.  
         /// Cancellation: honors <paramref name="cancellationToken"/> for reading, writing and artifact operations and will stop processing when canceled.
         /// </remarks>
         /// <param name="transcriptReader">Reader that yields transcript channel items to translate.</param>
         /// <param name="translationWriter">Writer that receives translated channel items; will be completed by this method.</param>
-        /// <param name="artifactWriter">Streaming translation artifact writer used to append pending segments and reload partial results.</param>
+        /// <param name="artifactWriter">Streaming translation artifact writer used to append pending segments and persist translated segment updates.</param>
         /// <param name="targetLanguage">Normalized target language code used for translation outputs.</param>
         /// <param name="stageContext">Optional context used for progress/stage reporting.</param>
         /// <param name="cancellationToken">Token to cancel ongoing reads, writes and artifact operations.</param>
@@ -385,6 +385,9 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 {
                     sourceLanguage ??= item.SourceLanguage;
                     await artifactWriter.AppendPendingSegmentAsync(item, cancellationToken).ConfigureAwait(false);
+                    var segmentIndex = artifactWriter.IndexOfSegment(item.SegmentId);
+                    if (segmentIndex < 0)
+                        throw new InvalidOperationException($"Pending segment '{item.SegmentId}' was not found in the streaming translation artifact.");
 
                     var result = await _c._inferenceEngine.TranslateSingleSegmentAsync(
                         _c._translationService!,
@@ -405,12 +408,17 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         throw new InvalidOperationException($"Translation failed: {errorMsg}");
                     }
 
-                    // Reload the artifact the provider just updated and resolve by stable segment id.
-                    await artifactWriter.ReloadFromDiskAsync(cancellationToken).ConfigureAwait(false);
-                    var translatedSegment = artifactWriter.OrderedSegments.FirstOrDefault(s =>
-                        string.Equals(s.Id, item.SegmentId, StringComparison.Ordinal));
-                    if (translatedSegment is null)
-                        throw new InvalidOperationException($"Translated segment '{item.SegmentId}' was not found in the translation artifact.");
+                    var translatedText = ResolveTranslatedText(
+                        result,
+                        segmentIndex,
+                        item.Segment.Text ?? string.Empty,
+                        item.SegmentId);
+                    var translatedSegment = await artifactWriter.ApplyTranslatedTextAsync(
+                        item.SegmentId,
+                        translatedText,
+                        result.SourceLanguage,
+                        result.TargetLanguage,
+                        cancellationToken).ConfigureAwait(false);
 
                     completed++;
                     ReportStage(
@@ -422,13 +430,12 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     await translationWriter.WriteAsync(
                         new TranslationChannelItem(
                             item.SegmentId,
-                            CloneTranslationSegment(translatedSegment),
+                            translatedSegment,
                             item.SourceLanguage,
                             targetLanguage),
                         cancellationToken).ConfigureAwait(false);
                 }
 
-                await artifactWriter.ReloadFromDiskAsync(cancellationToken).ConfigureAwait(false);
                 var source = sourceLanguage ?? _c.CurrentSession.SourceLanguage ?? "unknown";
                 return BuildTranslationResult(artifactWriter.OrderedSegments, source, targetLanguage);
             }
@@ -669,6 +676,35 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 sourceLanguage,
                 targetLanguage,
                 null);
+
+        private static string ResolveTranslatedText(
+            TranslationResult result,
+            int segmentIndex,
+            string sourceText,
+            string segmentId)
+        {
+            if (result.Segments.Count == 0)
+                throw new InvalidOperationException($"Translation result for segment '{segmentId}' did not contain any segments.");
+
+            if (segmentIndex >= 0 && segmentIndex < result.Segments.Count)
+            {
+                var indexed = result.Segments[segmentIndex];
+                if (!string.IsNullOrWhiteSpace(indexed.TranslatedText))
+                    return indexed.TranslatedText;
+            }
+
+            if (result.Segments.Count == 1 && !string.IsNullOrWhiteSpace(result.Segments[0].TranslatedText))
+                return result.Segments[0].TranslatedText;
+
+            var byText = result.Segments.FirstOrDefault(segment =>
+                string.Equals(segment.Text, sourceText, StringComparison.Ordinal) &&
+                !string.IsNullOrWhiteSpace(segment.TranslatedText));
+            if (byText is not null)
+                return byText.TranslatedText;
+
+            throw new InvalidOperationException(
+                $"Translation result did not contain a translated value for segment '{segmentId}'.");
+        }
 
         /// <summary>
             /// Create a copy of the provided transcript segment artifact.

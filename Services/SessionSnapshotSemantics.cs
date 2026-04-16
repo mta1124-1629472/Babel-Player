@@ -117,6 +117,9 @@ public static class SessionSnapshotSemantics
         var hadSeparatedVocals = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
         if (hadSeparatedVocals != settings.VocalSeparationEnabled)
             transcriptionChanged = true;
+        var hadSeparatedVocals = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
+        if (hadSeparatedVocals != settings.VocalSeparationEnabled)
+            transcriptionChanged = true;
         bool translationChanged = snapshot.TranslationRuntime != settings.TranslationRuntime
             || snapshot.TranslationProvider != settings.TranslationProvider
             || snapshot.TranslationModel != settings.TranslationModel
@@ -189,6 +192,7 @@ public static class SessionSnapshotSemantics
         $"stage={snapshot.Stage}, " +
         $"txc={snapshot.TranscriptionRuntime?.ToString() ?? "<null>"}/{snapshot.TranscriptionProvider ?? "<null>"}/{snapshot.TranscriptionModel ?? "<null>"}/asrHint={snapshot.TranscriptionLanguageHint ?? "<auto>"}, " +
         $"vox={(string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath) ? "off" : "on")}, " +
+        $"vox={(string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath) ? "off" : "on")}, " +
         $"trn={snapshot.TranslationRuntime?.ToString() ?? "<null>"}/{snapshot.TranslationProvider ?? "<null>"}/{snapshot.TranslationModel ?? "<null>"}, " +
         $"tts={snapshot.TtsRuntime?.ToString() ?? "<null>"}/{snapshot.TtsProvider ?? "<null>"}/{snapshot.TtsVoice ?? "<null>"}, " +
         $"srcLang={snapshot.SourceLanguage ?? "<null>"}, tgtLang={snapshot.TargetLanguage ?? "<null>"}";
@@ -257,6 +261,8 @@ public static class SessionSnapshotSemantics
             TranscriptionProvider = null,
             TranscriptionModel = null,
             TranscriptionLanguageHint = null,
+            VocalsAudioPath = null,
+            InstrumentalAudioPath = null,
             VocalsAudioPath = null,
             InstrumentalAudioPath = null,
         };

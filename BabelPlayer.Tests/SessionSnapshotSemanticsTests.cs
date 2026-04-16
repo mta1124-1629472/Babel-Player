@@ -304,6 +304,26 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
+    public void ValidateArtifacts_MissingInstrumentalStem_WithNoVocalsPath_ClearsVocalSeparationArtifacts()
+    {
+        var mediaPath = WriteFile("video.mp4");
+        var missingInstrumentalPath = Path.Combine(_dir, "missing-instrumental.wav");
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.MediaLoaded,
+            IngestedMediaPath = mediaPath,
+            VocalsAudioPath = null,
+            InstrumentalAudioPath = missingInstrumentalPath,
+        };
+
+        var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
+
+        Assert.Contains("vocal_separation", result.ClearedArtifacts);
+        Assert.Null(result.Snapshot.VocalsAudioPath);
+        Assert.Null(result.Snapshot.InstrumentalAudioPath);
+    }
+
+    [Fact]
     public void ValidateArtifacts_MissingMedia_DegradesToFoundation()
     {
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
