@@ -132,7 +132,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     public string SegmentPaneToggleLabel => IsSegmentPaneVisible ? "\u25C4" : "\u25BA";
     public bool IsPullTabVisible => !IsFullscreen || IsControlsVisible;
     public bool IsPanePullTabVisible => !IsSegmentPaneVisible && IsPullTabVisible;
-    public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6\uFE0E" : "\u23F8\uFE0E";
+    public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6" : "\u23F8";
     public string VolumeIconLabel => IsMuted || SourceVolume == 0
         ? "\U0001F507"
         : SourceVolume < 0.10
