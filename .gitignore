@@ -170,3 +170,4 @@ test-timeout.sh
 test-output2.txt
 test-output.txt
 test_results.txt
+.gemini/
