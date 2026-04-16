@@ -48,6 +48,12 @@ public static class ContainerizedProviderReadiness
         ApiKeyStore? keyStore = null) =>
         Check(settings, ContainerCapabilityStage.Translation, probe);
 
+    public static ProviderReadiness CheckVocalSeparation(
+        AppSettings settings,
+        ContainerizedServiceProbe? probe = null,
+        ApiKeyStore? keyStore = null) =>
+        Check(settings, ContainerCapabilityStage.VocalSeparation, probe);
+
     /// <summary>
         /// Determines whether the configured containerized GPU host is ready to perform TTS (text-to-speech) operations.
         /// </summary>
@@ -90,6 +96,12 @@ public static class ContainerizedProviderReadiness
         ContainerizedServiceProbe probe,
         CancellationToken cancellationToken = default) =>
         CheckForExecutionAsync(settings, ContainerCapabilityStage.Translation, probe, cancellationToken, waitOptions: ExecutionWaitOptions.Default);
+
+    public static Task<ProviderReadiness> CheckVocalSeparationForExecutionAsync(
+        AppSettings settings,
+        ContainerizedServiceProbe probe,
+        CancellationToken cancellationToken = default) =>
+        CheckForExecutionAsync(settings, ContainerCapabilityStage.VocalSeparation, probe, cancellationToken, waitOptions: ExecutionWaitOptions.Default);
 
     /// <summary>
         /// Checks whether the containerized TTS capability is ready for execution by waiting for the provided probe to report readiness.
@@ -332,6 +344,7 @@ public static class ContainerizedProviderReadiness
                 ContainerCapabilityStage.Transcription => "transcription",
                 ContainerCapabilityStage.Translation => "translation",
                 ContainerCapabilityStage.Tts => "TTS",
+                ContainerCapabilityStage.VocalSeparation => "vocal separation",
                 _ => "diarization",
             };
             return new ProviderReadiness(
@@ -447,6 +460,7 @@ public static class ContainerizedProviderReadiness
             ContainerCapabilityStage.Transcription => "transcription",
             ContainerCapabilityStage.Translation => "translation",
             ContainerCapabilityStage.Tts => "TTS",
+            ContainerCapabilityStage.VocalSeparation => "vocal separation",
             _ => "diarization",
         };
 

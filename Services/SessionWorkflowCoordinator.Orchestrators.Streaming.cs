@@ -49,6 +49,13 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             PipelineStageContext? ttsStageContext,
             CancellationToken cancellationToken)
         {
+            var transcriptionSourcePath = _c.CurrentSession.IngestedMediaPath!;
+            if (_c.CurrentSettings.VocalSeparationEnabled)
+            {
+                transcriptionSourcePath = await _c.SeparateVocalsAsync(progress, transcriptionStageContext, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             await _c.EnsureTranscriptionProviderReadyAsync(progress, transcriptionStageContext, cancellationToken);
 
             if (_c._transcriptionService is not IStreamingTranscriptionProvider streamingProvider)
@@ -69,7 +76,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 isIndeterminate: true,
                 streamingStatus: "Downstream translation and dubbing will overlap with ASR output.");
 
-            var transcriptPath = BuildTranscriptArtifactPath();
+            var transcriptPath = BuildTranscriptArtifactPath(transcriptionSourcePath);
             var transcriptPartialPath = TranscriptArtifactStreamingWriter.GetPartialPath(transcriptPath);
             var targetLanguage = NormalizePipelineLanguage(_c.CurrentSettings.TargetLanguage, _c.CurrentSettings.TargetLanguage);
             var translationPath = BuildTranslationArtifactPath(transcriptPath, targetLanguage);
@@ -158,7 +165,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 transcriptionResult = await _c._inferenceEngine.TranscribeStreamingAsync(
                     streamingProvider,
                     new TranscriptionRequest(
-                        _c.CurrentSession.IngestedMediaPath!,
+                        transcriptionSourcePath,
                         transcriptPath,
                         _c.CurrentSettings.TranscriptionModel,
                         SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),
@@ -629,12 +636,12 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
         /// Builds the filesystem path for the current session's transcript artifact and ensures its directory exists.
         /// </summary>
         /// <returns>The full path to the transcript JSON file for the current session, based on the ingested media filename.</returns>
-        private string BuildTranscriptArtifactPath()
+        private string BuildTranscriptArtifactPath(string sourceAudioPath)
         {
             var sessionDir = _c.GetSessionDirectory();
             var transcriptDir = Path.Combine(sessionDir, "transcripts");
             Directory.CreateDirectory(transcriptDir);
-            var fileName = Path.GetFileNameWithoutExtension(_c.CurrentSession.IngestedMediaPath);
+            var fileName = Path.GetFileNameWithoutExtension(sourceAudioPath);
             return Path.Combine(transcriptDir, $"{fileName}.json");
         }
 

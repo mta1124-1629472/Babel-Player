@@ -547,6 +547,58 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    public async Task<VocalSeparationResult> SeparateVocalsAsync(
+        string audioPath,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var lease = AcquireLease(ContainerizedRequestKind.Other);
+
+            if (!File.Exists(audioPath))
+                throw new FileNotFoundException($"Audio file not found: {audioPath}");
+
+            _log.Info($"Separating vocals with containerized service: {audioPath}");
+
+            using var content = new MultipartFormDataContent();
+            await using var fileStream = new FileStream(audioPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
+            content.Add(new StreamContent(fileStream), "file", Path.GetFileName(audioPath));
+
+            using var response = await _httpClient.PostAsync(
+                $"{_inferenceServiceUrl}/separate/vocals",
+                content,
+                cancellationToken).ConfigureAwait(false);
+
+            var result = await DeserializeResponseAsync<SeparateVocalsApiResponseDto>(response, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(result.VocalsFilename) || string.IsNullOrWhiteSpace(result.InstrumentalFilename))
+                throw new InvalidOperationException("Vocal separation response did not include stem filenames.");
+
+            var stemsDir = ResolveSessionStemsDirectory(audioPath);
+            Directory.CreateDirectory(stemsDir);
+
+            var vocalsPath = Path.Combine(stemsDir, Path.GetFileName(result.VocalsFilename));
+            var instrumentalPath = Path.Combine(stemsDir, Path.GetFileName(result.InstrumentalFilename));
+
+            await DownloadTtsAudioAsync(result.VocalsFilename, vocalsPath, cancellationToken).ConfigureAwait(false);
+            await DownloadTtsAudioAsync(result.InstrumentalFilename, instrumentalPath, cancellationToken).ConfigureAwait(false);
+
+            return new VocalSeparationResult(
+                Success: true,
+                VocalsAudioPath: vocalsPath,
+                InstrumentalAudioPath: instrumentalPath,
+                ErrorMessage: null,
+                VocalsFileSizeBytes: result.VocalsFileSizeBytes,
+                InstrumentalFileSizeBytes: result.InstrumentalFileSizeBytes,
+                VocalsModel: result.VocalsModel,
+                InstrumentalModel: result.InstrumentalModel);
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Vocal separation failed: {ex.Message}", ex);
+            return new VocalSeparationResult(false, string.Empty, string.Empty, ex.Message);
+        }
+    }
+
     /// <summary>
     /// Registers a Qwen voice reference audio for a speaker and returns the created reference ID.
     /// </summary>
@@ -787,7 +839,9 @@ public sealed class ContainerizedInferenceClient
                     NormalizeDiarizationProviderDetails(capabilitiesDto.Diarization?.ProviderDetails),
                     NormalizeDiarizationDefaultProvider(capabilitiesDto.Diarization?.DefaultProvider),
                     TtsProviderHealth: NormalizeProviderHealthMap(capabilitiesDto.Tts?.ProviderHealth),
-                    DiarizationProviderHealth: NormalizeDiarizationProviderHealth(capabilitiesDto.Diarization?.ProviderHealth));
+                    DiarizationProviderHealth: NormalizeDiarizationProviderHealth(capabilitiesDto.Diarization?.ProviderHealth),
+                    VocalSeparationReady: capabilitiesDto.VocalSeparation?.Ready ?? false,
+                    VocalSeparationDetail: capabilitiesDto.VocalSeparation?.Detail);
             }
             catch (Exception ex)
             {
@@ -911,6 +965,9 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("diarization")]
         public StageCapabilityDto? Diarization { get; set; }
+
+        [JsonPropertyName("vocal_separation")]
+        public StageCapabilityDto? VocalSeparation { get; set; }
     }
 
     private sealed class StageCapabilityDto
@@ -1109,6 +1166,27 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("error_message")]
         public string? ErrorMessage { get; set; }
+    }
+
+    private sealed class SeparateVocalsApiResponseDto
+    {
+        [JsonPropertyName("vocals_filename")]
+        public string? VocalsFilename { get; set; }
+
+        [JsonPropertyName("instrumental_filename")]
+        public string? InstrumentalFilename { get; set; }
+
+        [JsonPropertyName("vocals_file_size_bytes")]
+        public long VocalsFileSizeBytes { get; set; }
+
+        [JsonPropertyName("instrumental_file_size_bytes")]
+        public long InstrumentalFileSizeBytes { get; set; }
+
+        [JsonPropertyName("vocals_model")]
+        public string? VocalsModel { get; set; }
+
+        [JsonPropertyName("instrumental_model")]
+        public string? InstrumentalModel { get; set; }
     }
 
     private sealed class QwenReferenceResponseDto
@@ -1374,6 +1452,19 @@ public sealed class ContainerizedInferenceClient
         return speakers.Count;
     }
 
+    private static string ResolveSessionStemsDirectory(string sourceAudioPath)
+    {
+        var audioDir = Path.GetDirectoryName(sourceAudioPath);
+        if (string.IsNullOrWhiteSpace(audioDir))
+            throw new InvalidOperationException($"Could not resolve source audio directory from '{sourceAudioPath}'.");
+
+        var sessionDir = Directory.GetParent(audioDir)?.FullName;
+        if (string.IsNullOrWhiteSpace(sessionDir))
+            sessionDir = audioDir;
+
+        return Path.Combine(sessionDir, "stems");
+    }
+
     /// <summary>
     /// Acquires a per-request lease for the specified request kind when a lease tracker is configured.
     /// </summary>
@@ -1441,6 +1532,7 @@ public enum ContainerCapabilityStage
     Translation,
     Tts,
     Diarization,
+    VocalSeparation,
 }
 
 public sealed record ContainerCapabilitiesSnapshot(
@@ -1458,7 +1550,9 @@ public sealed record ContainerCapabilitiesSnapshot(
     IReadOnlyDictionary<string, string>? DiarizationProviderDetails = null,
     string? DiarizationDefaultProvider = null,
     IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? TtsProviderHealth = null,
-    IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? DiarizationProviderHealth = null)
+    IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? DiarizationProviderHealth = null,
+    bool VocalSeparationReady = false,
+    string? VocalSeparationDetail = null)
 {
     /// <summary>
     /// Indicates whether the given capability stage is ready.
@@ -1471,6 +1565,7 @@ public sealed record ContainerCapabilitiesSnapshot(
         ContainerCapabilityStage.Translation => TranslationReady,
         ContainerCapabilityStage.Tts => TtsReady,
         ContainerCapabilityStage.Diarization => DiarizationReady,
+        ContainerCapabilityStage.VocalSeparation => VocalSeparationReady,
         _ => false,
     };
 
@@ -1485,6 +1580,7 @@ public sealed record ContainerCapabilitiesSnapshot(
         ContainerCapabilityStage.Translation => TranslationDetail,
         ContainerCapabilityStage.Tts => TtsDetail,
         ContainerCapabilityStage.Diarization => DiarizationDetail,
+        ContainerCapabilityStage.VocalSeparation => VocalSeparationDetail,
         _ => null,
     };
 
@@ -1624,7 +1720,7 @@ public sealed record ContainerHealthStatus(
                     : $"Healthy ({cuda}){activity} · capabilities unavailable";
             }
 
-            return $"Healthy ({cuda}){activity} · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")} · diar={(Capabilities.DiarizationReady ? "✓" : "x")}";
+            return $"Healthy ({cuda}){activity} · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")} · diar={(Capabilities.DiarizationReady ? "✓" : "x")} · vox={(Capabilities.VocalSeparationReady ? "✓" : "x")}";
         }
     }
 

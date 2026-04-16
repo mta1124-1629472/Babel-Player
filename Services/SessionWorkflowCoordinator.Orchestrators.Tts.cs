@@ -42,7 +42,7 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
             if (!File.Exists(_c.CurrentSession.TranslationPath))
                 throw new FileNotFoundException($"Translation file not found: {_c.CurrentSession.TranslationPath}");
 
-            var v = voice ?? _c.CurrentSettings.TtsVoice;
+            var v = (voice ?? _c.CurrentSettings.TtsVoice)?.Trim();
             if (string.IsNullOrWhiteSpace(v))
                 throw new InvalidOperationException("No TTS voice configured. Please configure a voice in Settings before generating TTS.");
 

@@ -119,4 +119,9 @@ public interface IInferenceExecutionEngine
         IDiarizationProvider provider,
         DiarizationRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<VocalSeparationResult> SeparateVocalsAsync(
+        IVocalSeparationProvider provider,
+        VocalSeparationRequest request,
+        CancellationToken cancellationToken = default);
 }

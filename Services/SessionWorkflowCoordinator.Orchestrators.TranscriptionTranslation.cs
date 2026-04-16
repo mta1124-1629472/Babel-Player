@@ -41,6 +41,13 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
             if (!File.Exists(_c.CurrentSession.IngestedMediaPath))
                 throw new FileNotFoundException($"Ingested media file not found: {_c.CurrentSession.IngestedMediaPath}");
 
+            var transcriptionSourcePath = _c.CurrentSession.IngestedMediaPath;
+            if (_c.CurrentSettings.VocalSeparationEnabled)
+            {
+                transcriptionSourcePath = await _c.SeparateVocalsAsync(progress, stageContext, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             await _c.EnsureTranscriptionProviderReadyAsync(progress, stageContext, cancellationToken);
 
             ReportStage(
@@ -53,7 +60,7 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
             var transcriptDir = Path.Combine(sessionDir, "transcripts");
             Directory.CreateDirectory(transcriptDir);
 
-            var fileName = Path.GetFileNameWithoutExtension(_c.CurrentSession.IngestedMediaPath);
+            var fileName = Path.GetFileNameWithoutExtension(transcriptionSourcePath);
             var transcriptPath = Path.Combine(transcriptDir, $"{fileName}.json");
 
             var cpuThreads = _c.CurrentSettings.TranscriptionCpuThreads > 0
@@ -68,7 +75,7 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
                 $"avx512={(_c.HardwareSnapshot.HasAvx512F ? "yes" : "no")}, " +
                 $"cuda={(_c.HardwareSnapshot.HasCuda ? "yes" : "no")}";
 
-            _c.Log.Info($"Starting transcription: {_c.CurrentSession.IngestedMediaPath} " +
+            _c.Log.Info($"Starting transcription: {transcriptionSourcePath} " +
                       $"[{_c.CurrentSettings.TranscriptionProvider}/{_c.CurrentSettings.TranscriptionModel}] " +
                       $"route=({routeSummary}) hw=({hwSummary})");
 
@@ -76,7 +83,7 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
             var result = await _c._inferenceEngine.TranscribeAsync(
                 transcriptionService,
                 new TranscriptionRequest(
-                    _c.CurrentSession.IngestedMediaPath,
+                    transcriptionSourcePath,
                     transcriptPath,
                     _c.CurrentSettings.TranscriptionModel,
                     SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),

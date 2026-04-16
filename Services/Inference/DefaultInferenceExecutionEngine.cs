@@ -12,10 +12,10 @@ public sealed class DefaultInferenceExecutionEngine : IInferenceExecutionEngine
 {
     public static DefaultInferenceExecutionEngine Instance { get; } = new();
 
-        /// <summary>
-    /// Prevents external instantiation to enforce the class's singleton usage.
-    /// </summary>
-private DefaultInferenceExecutionEngine() { }
+    /// <summary>
+        /// Prevents external instantiation to enforce the class's singleton usage.
+        /// </summary>
+    private DefaultInferenceExecutionEngine() { }
 
     /// <summary>
         /// Forwards a transcription request to the specified transcription provider.
@@ -101,4 +101,10 @@ private DefaultInferenceExecutionEngine() { }
         DiarizationRequest request,
         CancellationToken cancellationToken = default) =>
         provider.DiarizeAsync(request, cancellationToken);
+
+    public Task<VocalSeparationResult> SeparateVocalsAsync(
+        IVocalSeparationProvider provider,
+        VocalSeparationRequest request,
+        CancellationToken cancellationToken = default) =>
+        provider.SeparateVocalsAsync(request, cancellationToken);
 }

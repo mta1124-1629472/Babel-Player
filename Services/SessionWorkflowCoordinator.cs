@@ -450,6 +450,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             CurrentSession = validated with
             {
                 IngestedMediaPath = ingestedPath,
+                VocalsAudioPath = validated.VocalsAudioPath,
+                InstrumentalAudioPath = validated.InstrumentalAudioPath,
                 MediaLoadedAtUtc = nowUtc,
                 LastUpdatedAtUtc = nowUtc,
                 StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
@@ -485,6 +487,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 Stage = SessionWorkflowStage.MediaLoaded,
                 SourceMediaPath = sourceMediaPath,
                 IngestedMediaPath = ingestedPath,
+                VocalsAudioPath = null,
+                InstrumentalAudioPath = null,
                 MediaLoadedAtUtc = nowUtc,
                 TranscriptPath = null,
                 SourceLanguage = null,
@@ -549,6 +553,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         CurrentSession = CurrentSession with
         {
             Stage = SessionWorkflowStage.MediaLoaded,
+            VocalsAudioPath = null,
+            InstrumentalAudioPath = null,
             TranscriptPath = null,
             TranslationPath = null,
             TtsPath = null,

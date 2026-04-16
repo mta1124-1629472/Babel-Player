@@ -13,6 +13,90 @@ namespace Babel.Player.Services;
 
 public sealed partial class SessionWorkflowCoordinator
 {
+    public Task SeparateVocalsAsync(
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        SeparateVocalsAsync(progress, stageContext: null, cancellationToken);
+
+    internal async Task<string> SeparateVocalsAsync(
+        IProgress<double>? progress,
+        PipelineStageContext? stageContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
+            throw new InvalidOperationException("No ingested media is available for vocal separation.");
+        if (!File.Exists(CurrentSession.IngestedMediaPath))
+            throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
+
+        if (!string.IsNullOrWhiteSpace(CurrentSession.VocalsAudioPath)
+            && !string.IsNullOrWhiteSpace(CurrentSession.InstrumentalAudioPath)
+            && File.Exists(CurrentSession.VocalsAudioPath)
+            && File.Exists(CurrentSession.InstrumentalAudioPath))
+        {
+            return CurrentSession.VocalsAudioPath;
+        }
+
+        ReportStage(
+            stageContext,
+            "Checking vocal-separation readiness on the local GPU host…",
+            progress01: 0,
+            isIndeterminate: true);
+
+        await EnsureContainerizedExecutionRuntimeStartedAsync(
+            InferenceRuntime.Containerized,
+            "Vocal separation",
+            cancellationToken).ConfigureAwait(false);
+
+        var readiness = _containerizedProbe is not null
+            ? await ContainerizedProviderReadiness.CheckVocalSeparationForExecutionAsync(
+                CurrentSettings,
+                _containerizedProbe,
+                cancellationToken).ConfigureAwait(false)
+            : ContainerizedProviderReadiness.CheckVocalSeparation(CurrentSettings, _containerizedProbe);
+
+        if (!readiness.IsReady)
+            throw new PipelineProviderException(readiness.BlockingReason ?? "Vocal separation is not ready.");
+
+        var stemsDir = Path.Combine(GetSessionDirectory(), "stems");
+        Directory.CreateDirectory(stemsDir);
+
+        ReportStage(
+            stageContext,
+            "Separating vocals from backing track before transcription…",
+            progress01: 0.05,
+            isIndeterminate: true);
+
+        var separationProvider = CreateVocalSeparationProvider();
+        var result = await _inferenceEngine.SeparateVocalsAsync(
+            separationProvider,
+            new VocalSeparationRequest(CurrentSession.IngestedMediaPath, stemsDir),
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Success
+            || string.IsNullOrWhiteSpace(result.VocalsAudioPath)
+            || string.IsNullOrWhiteSpace(result.InstrumentalAudioPath))
+        {
+            throw new InvalidOperationException(
+                $"Vocal separation failed: {result.ErrorMessage ?? "Unknown vocal separation error"}");
+        }
+
+        CurrentSession = CurrentSession with
+        {
+            VocalsAudioPath = result.VocalsAudioPath,
+            InstrumentalAudioPath = result.InstrumentalAudioPath,
+            StatusMessage = "Vocal and instrumental stems prepared for transcription.",
+        };
+        SaveCurrentSession();
+
+        ReportStage(
+            stageContext,
+            "Vocal separation complete. Transcription will use the isolated vocals stem.",
+            progress01: 0.1,
+            isIndeterminate: false);
+
+        return result.VocalsAudioPath;
+    }
+
     public Task TranscribeMediaAsync(
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default) =>

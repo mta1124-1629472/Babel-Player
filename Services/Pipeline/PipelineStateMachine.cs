@@ -44,6 +44,9 @@ internal static class PipelineStateMachine
         SessionWorkflowStage currentStage,
         bool shouldRunDiarization)
     {
+        if (currentStage < SessionWorkflowStage.MediaLoaded)
+            return null;
+
         if (currentStage < SessionWorkflowStage.Transcribed)
             return PipelineAdvanceAction.Transcribe;
 
