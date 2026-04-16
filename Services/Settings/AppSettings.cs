@@ -50,6 +50,11 @@ public sealed class AppSettings
     public string DiarizationProvider { get; set; } = ProviderNames.NemoLocal;
 
     /// <summary>
+    /// Enables optional vocal separation before transcription when container capability is available.
+    /// </summary>
+    public bool VocalSeparationEnabled { get; set; } = false;
+
+    /// <summary>
     /// Optional lower bound on the number of speakers to detect.
     /// null means no lower bound hint.
     /// </summary>

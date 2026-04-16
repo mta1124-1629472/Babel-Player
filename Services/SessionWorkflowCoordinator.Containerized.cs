@@ -47,6 +47,18 @@ public sealed partial class SessionWorkflowCoordinator
             KeyStore,
             CurrentSettings.TtsProfile);
 
+    private IVocalSeparationProvider CreateVocalSeparationProvider()
+    {
+        _vocalSeparationProvider ??= new ContainerizedVocalSeparationProvider(
+            new ContainerizedInferenceClient(
+                CurrentSettings.EffectiveContainerizedServiceUrl,
+                _log,
+                null,
+                _requestLeaseTracker),
+            _log);
+        return _vocalSeparationProvider;
+    }
+
     private void RequestContainerizedAutostartForSettings()
     {
         if (!RequiresContainerizedRuntime())

@@ -123,6 +123,15 @@
                                       Content="Always start local GPU runtime at app start"/>
                         </StackPanel>
 
+                        <StackPanel Spacing="6" Margin="0,4,0,0">
+                            <CheckBox IsChecked="{Binding VocalSeparationEnabled, Mode=TwoWay}"
+                                      Content="Separate vocals before transcription (containerized host)"/>
+                            <TextBlock Opacity="0.65"
+                                       TextWrapping="Wrap"
+                                       IsVisible="{Binding HasVocalSeparationAvailabilityHint}"
+                                       Text="{Binding VocalSeparationAvailabilityHint}"/>
+                        </StackPanel>
+
                         <!-- Dubbing -->
                         <Separator Margin="0,4,0,4"/>
                         <TextBlock Text="Dubbing" FontWeight="SemiBold"/>

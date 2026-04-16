@@ -14,12 +14,13 @@ using Babel.Player.Models;
 
 namespace Babel.Player.Services;
 
-public sealed class ContainerizedInferenceClient
+public sealed class ContainerizedInferenceClient : IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly AppLog _log;
     private readonly string _inferenceServiceUrl;
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
+    private readonly bool _disposeHttpClient;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = false };
     private static readonly string DebugLogPath = ResolveDebugLogPath();
 
@@ -58,6 +59,7 @@ public sealed class ContainerizedInferenceClient
     {
         _inferenceServiceUrl = NormalizeBaseUrl(inferenceServiceUrl);
         _log = log;
+        _disposeHttpClient = httpClient is null;
         _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
         _requestLeaseTracker = requestLeaseTracker;
     }
@@ -547,6 +549,86 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    public async Task<VocalSeparationResult> SeparateVocalsAsync(
+        string audioPath,
+        string? outputDirectoryPath = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (!File.Exists(audioPath))
+                throw new FileNotFoundException($"Audio file not found: {audioPath}");
+
+            _log.Info($"Separating vocals with containerized service: {audioPath}");
+
+            SeparateVocalsApiResponseDto result;
+            using (var lease = AcquireLease(ContainerizedRequestKind.Other))
+            {
+                using var content = new MultipartFormDataContent();
+                await using var fileStream = new FileStream(audioPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
+                content.Add(new StreamContent(fileStream), "file", Path.GetFileName(audioPath));
+
+                using var response = await _httpClient.PostAsync(
+                    $"{_inferenceServiceUrl}/separate/vocals",
+                    content,
+                    cancellationToken).ConfigureAwait(false);
+
+                result = await DeserializeResponseAsync<SeparateVocalsApiResponseDto>(response, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (string.IsNullOrWhiteSpace(result.VocalsFilename) || string.IsNullOrWhiteSpace(result.InstrumentalFilename))
+                throw new InvalidOperationException("Vocal separation response did not include stem filenames.");
+
+            var stemsDir = outputDirectoryPath;
+            if (string.IsNullOrWhiteSpace(stemsDir))
+            {
+                var audioDir = Path.GetDirectoryName(audioPath);
+                if (string.IsNullOrWhiteSpace(audioDir))
+                    throw new InvalidOperationException($"Could not resolve source audio directory from '{audioPath}'.");
+
+                var sessionDir = Directory.GetParent(audioDir)?.FullName;
+                if (string.IsNullOrWhiteSpace(sessionDir))
+                    sessionDir = audioDir;
+                stemsDir = Path.Combine(sessionDir, "stems");
+            }
+            Directory.CreateDirectory(stemsDir);
+
+            var vocalsPath = Path.Combine(stemsDir, Path.GetFileName(result.VocalsFilename));
+            var instrumentalPath = Path.Combine(stemsDir, Path.GetFileName(result.InstrumentalFilename));
+
+            // Downloads are separate requests — each acquires its own lease (no outer lease held).
+            await DownloadTtsAudioAsync(
+                result.VocalsFilename,
+                vocalsPath,
+                cancellationToken,
+                requestKind: ContainerizedRequestKind.Other).ConfigureAwait(false);
+            await DownloadTtsAudioAsync(
+                result.InstrumentalFilename,
+                instrumentalPath,
+                cancellationToken,
+                requestKind: ContainerizedRequestKind.Other).ConfigureAwait(false);
+
+            return new VocalSeparationResult(
+                Success: true,
+                VocalsAudioPath: vocalsPath,
+                InstrumentalAudioPath: instrumentalPath,
+                ErrorMessage: null,
+                VocalsFileSizeBytes: result.VocalsFileSizeBytes,
+                InstrumentalFileSizeBytes: result.InstrumentalFileSizeBytes,
+                VocalsModel: result.VocalsModel,
+                InstrumentalModel: result.InstrumentalModel);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Vocal separation failed: {ex.Message}", ex);
+            return new VocalSeparationResult(false, string.Empty, string.Empty, ex.Message);
+        }
+    }
+
     /// <summary>
     /// Registers a Qwen voice reference audio for a speaker and returns the created reference ID.
     /// </summary>
@@ -713,13 +795,15 @@ public sealed class ContainerizedInferenceClient
     /// <param name="filename">The remote audio filename to request from the service.</param>
     /// <param name="localOutputPath">The local filesystem path where the downloaded audio will be saved (created or overwritten).</param>
     /// <param name="cancellationToken">Token to cancel the download operation.</param>
+    /// <param name="requestKind">Lease tracker request kind associated with this download.</param>
     /// <exception cref="InvalidOperationException">Thrown when the service responds with a non-success status; the exception message contains the response body.</exception>
     public async Task DownloadTtsAudioAsync(
         string filename,
         string localOutputPath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ContainerizedRequestKind requestKind = ContainerizedRequestKind.Tts)
     {
-        using var lease = AcquireLease(ContainerizedRequestKind.Tts);
+        using var lease = AcquireLease(requestKind);
 
         using var response = await _httpClient.GetAsync(
             $"{_inferenceServiceUrl}/tts/audio/{Uri.EscapeDataString(filename)}",
@@ -787,7 +871,9 @@ public sealed class ContainerizedInferenceClient
                     NormalizeDiarizationProviderDetails(capabilitiesDto.Diarization?.ProviderDetails),
                     NormalizeDiarizationDefaultProvider(capabilitiesDto.Diarization?.DefaultProvider),
                     TtsProviderHealth: NormalizeProviderHealthMap(capabilitiesDto.Tts?.ProviderHealth),
-                    DiarizationProviderHealth: NormalizeDiarizationProviderHealth(capabilitiesDto.Diarization?.ProviderHealth));
+                    DiarizationProviderHealth: NormalizeDiarizationProviderHealth(capabilitiesDto.Diarization?.ProviderHealth),
+                    VocalSeparationReady: capabilitiesDto.VocalSeparation?.Ready ?? false,
+                    VocalSeparationDetail: capabilitiesDto.VocalSeparation?.Detail);
             }
             catch (Exception ex)
             {
@@ -911,6 +997,9 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("diarization")]
         public StageCapabilityDto? Diarization { get; set; }
+
+        [JsonPropertyName("vocal_separation")]
+        public StageCapabilityDto? VocalSeparation { get; set; }
     }
 
     private sealed class StageCapabilityDto
@@ -1109,6 +1198,27 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("error_message")]
         public string? ErrorMessage { get; set; }
+    }
+
+    private sealed class SeparateVocalsApiResponseDto
+    {
+        [JsonPropertyName("vocals_filename")]
+        public string? VocalsFilename { get; set; }
+
+        [JsonPropertyName("instrumental_filename")]
+        public string? InstrumentalFilename { get; set; }
+
+        [JsonPropertyName("vocals_file_size_bytes")]
+        public long VocalsFileSizeBytes { get; set; }
+
+        [JsonPropertyName("instrumental_file_size_bytes")]
+        public long InstrumentalFileSizeBytes { get; set; }
+
+        [JsonPropertyName("vocals_model")]
+        public string? VocalsModel { get; set; }
+
+        [JsonPropertyName("instrumental_model")]
+        public string? InstrumentalModel { get; set; }
     }
 
     private sealed class QwenReferenceResponseDto
@@ -1382,6 +1492,12 @@ public sealed class ContainerizedInferenceClient
     private IDisposable? AcquireLease(ContainerizedRequestKind kind) =>
         _requestLeaseTracker?.Acquire(kind);
 
+    public void Dispose()
+    {
+        if (_disposeHttpClient)
+            _httpClient.Dispose();
+    }
+
     private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
     {
         var payload = new
@@ -1441,6 +1557,7 @@ public enum ContainerCapabilityStage
     Translation,
     Tts,
     Diarization,
+    VocalSeparation,
 }
 
 public sealed record ContainerCapabilitiesSnapshot(
@@ -1458,7 +1575,9 @@ public sealed record ContainerCapabilitiesSnapshot(
     IReadOnlyDictionary<string, string>? DiarizationProviderDetails = null,
     string? DiarizationDefaultProvider = null,
     IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? TtsProviderHealth = null,
-    IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? DiarizationProviderHealth = null)
+    IReadOnlyDictionary<string, ContainerProviderHealthSnapshot>? DiarizationProviderHealth = null,
+    bool VocalSeparationReady = false,
+    string? VocalSeparationDetail = null)
 {
     /// <summary>
     /// Indicates whether the given capability stage is ready.
@@ -1471,6 +1590,7 @@ public sealed record ContainerCapabilitiesSnapshot(
         ContainerCapabilityStage.Translation => TranslationReady,
         ContainerCapabilityStage.Tts => TtsReady,
         ContainerCapabilityStage.Diarization => DiarizationReady,
+        ContainerCapabilityStage.VocalSeparation => VocalSeparationReady,
         _ => false,
     };
 
@@ -1485,6 +1605,7 @@ public sealed record ContainerCapabilitiesSnapshot(
         ContainerCapabilityStage.Translation => TranslationDetail,
         ContainerCapabilityStage.Tts => TtsDetail,
         ContainerCapabilityStage.Diarization => DiarizationDetail,
+        ContainerCapabilityStage.VocalSeparation => VocalSeparationDetail,
         _ => null,
     };
 
@@ -1624,7 +1745,7 @@ public sealed record ContainerHealthStatus(
                     : $"Healthy ({cuda}){activity} · capabilities unavailable";
             }
 
-            return $"Healthy ({cuda}){activity} · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")} · diar={(Capabilities.DiarizationReady ? "✓" : "x")}";
+            return $"Healthy ({cuda}){activity} · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")} · diar={(Capabilities.DiarizationReady ? "✓" : "x")} · vox={(Capabilities.VocalSeparationReady ? "✓" : "x")}";
         }
     }
 
