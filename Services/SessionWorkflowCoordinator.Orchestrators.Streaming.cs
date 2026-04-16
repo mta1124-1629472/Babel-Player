@@ -397,16 +397,13 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         throw new InvalidOperationException($"Translation failed: {errorMsg}");
                     }
 
-                    // Extract the translated text for this segment from the provider result.
-                    // result.Segments is ordered by timing; match on start time to find ours.
-                    var providerSegment = result.Segments.FirstOrDefault(s =>
-                        Math.Abs(s.StartSeconds - item.Segment.Start) < 0.001);
-                    var translatedText = providerSegment?.TranslatedText ?? string.Empty;
-
-                    // Patch in-memory state directly — avoids a disk round-trip per segment.
-                    var translatedSegment = artifactWriter.UpdateTranslatedText(item.SegmentId, translatedText);
+                    // Reload from disk so in-memory state matches what the provider wrote,
+                    // then look up the segment by ID (reliable; avoids float comparison).
+                    await artifactWriter.ReloadFromDiskAsync(cancellationToken).ConfigureAwait(false);
+                    var translatedSegment = artifactWriter.OrderedSegments.FirstOrDefault(segment =>
+                        string.Equals(segment.Id, item.SegmentId, StringComparison.Ordinal));
                     if (translatedSegment is null)
-                        throw new InvalidOperationException($"Translated segment '{item.SegmentId}' was not found in the in-memory artifact.");
+                        throw new InvalidOperationException($"Translated segment '{item.SegmentId}' was not written to the partial artifact.");
 
                     completed++;
                     ReportStage(
@@ -652,7 +649,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             var ttsDir = Path.Combine(sessionDir, "tts");
             Directory.CreateDirectory(ttsDir);
             var fileName = Path.GetFileNameWithoutExtension(translationPath);
-            var ttsPath = Path.Combine(ttsDir, $"{fileName}_{voice}.mp3");
+            // Sanitize the voice identifier so reserved/path characters don't produce invalid file names.
+            var invalidChars = Path.GetInvalidFileNameChars();
+            var sanitizedVoice = string.Concat((voice ?? string.Empty).Split(invalidChars)).Trim();
+            if (sanitizedVoice.Length == 0) sanitizedVoice = "default";
+            var ttsPath = Path.Combine(ttsDir, $"{fileName}_{sanitizedVoice}.mp3");
             var segmentsDir = Path.Combine(ttsDir, "segments", Path.GetFileNameWithoutExtension(translationPath));
             Directory.CreateDirectory(segmentsDir);
             return (ttsPath, segmentsDir);
