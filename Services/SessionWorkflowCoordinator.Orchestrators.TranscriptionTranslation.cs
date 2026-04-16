@@ -71,8 +71,9 @@ public sealed partial class SessionWorkflowCoordinator
             if (!result.Success)
             {
                 var errorMsg = result.ErrorMessage ?? "Unknown transcription error";
-                _c.Log.Error($"Transcription failed: {errorMsg}", new Exception(errorMsg));
-                throw new InvalidOperationException($"Transcription failed: {errorMsg}");
+                var ex = new InvalidOperationException($"Transcription failed: {errorMsg}");
+                _c.Log.Error(ex.Message, ex);
+                throw ex;
             }
 
             _c.CommitTranscriptionSessionState(result, transcriptPath);
@@ -153,8 +154,9 @@ public sealed partial class SessionWorkflowCoordinator
             if (!result.Success)
             {
                 var errorMsg = result.ErrorMessage ?? "Unknown translation error";
-                _c.Log.Error($"Translation failed: {errorMsg}", new Exception(errorMsg));
-                throw new InvalidOperationException($"Translation failed: {errorMsg}");
+                var ex = new InvalidOperationException($"Translation failed: {errorMsg}");
+                _c.Log.Error(ex.Message, ex);
+                throw ex;
             }
 
             _c.CommitTranslationSessionState(result, translationPath, src, lang);

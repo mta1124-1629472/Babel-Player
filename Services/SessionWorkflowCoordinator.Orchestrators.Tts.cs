@@ -44,7 +44,11 @@ public sealed partial class SessionWorkflowCoordinator
             Directory.CreateDirectory(ttsDir);
 
             var fileName = Path.GetFileNameWithoutExtension(_c.CurrentSession.TranslationPath);
-            var ttsPath = Path.Combine(ttsDir, $"{fileName}_{v}.mp3");
+            // Sanitize the voice identifier so reserved/path characters don't produce invalid file names.
+            var invalidChars = Path.GetInvalidFileNameChars();
+            var sanitizedVoice = string.Concat((v ?? string.Empty).Split(invalidChars)).Trim();
+            if (sanitizedVoice.Length == 0) sanitizedVoice = "default";
+            var ttsPath = Path.Combine(ttsDir, $"{fileName}_{sanitizedVoice}.mp3");
             var ttsLanguage = NormalizePipelineLanguage(
                 _c.CurrentSession.TargetLanguage ?? _c.CurrentSettings.TargetLanguage,
                 _c.CurrentSettings.TargetLanguage);

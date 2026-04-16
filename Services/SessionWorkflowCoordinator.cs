@@ -44,6 +44,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly TranslationOrchestrator _translationOrchestrator;
     private readonly DiarizationStageOrchestrator _diarizationStageOrchestrator;
     private readonly TtsPipelineOrchestrator _ttsPipelineOrchestrator;
+    private readonly StreamingPipelineOrchestrator _streamingPipelineOrchestrator;
     private readonly IMediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
     private bool _subscribedToSourceDiagnostics;
@@ -171,6 +172,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _translationOrchestrator = new TranslationOrchestrator(this);
         _diarizationStageOrchestrator = new DiarizationStageOrchestrator(this);
         _ttsPipelineOrchestrator = new TtsPipelineOrchestrator(this);
+        _streamingPipelineOrchestrator = new StreamingPipelineOrchestrator(this);
 
         _segmentEndedHandler = OnSegmentPlayerEnded;
         _segmentErrorHandler = (_, _) => OnSegmentPlayerError();

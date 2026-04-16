@@ -23,6 +23,10 @@ public sealed class PipelineStateMachineTests
         Assert.Equal(PipelineAdvanceAction.Diarize,
             PipelineStateMachine.GetNextAdvanceAction(SessionWorkflowStage.Transcribed, shouldRunDiarization: true));
 
+        // When diarization is disabled the Transcribed stage should jump straight to translation.
+        Assert.Equal(PipelineAdvanceAction.TranslateAndDubFromTranscript,
+            PipelineStateMachine.GetNextAdvanceAction(SessionWorkflowStage.Transcribed, shouldRunDiarization: false));
+
         Assert.Equal(PipelineAdvanceAction.TranslateAndDubFromTranscript,
             PipelineStateMachine.GetNextAdvanceAction(SessionWorkflowStage.Diarized, shouldRunDiarization: true));
 
