@@ -59,7 +59,25 @@ def _normalize_input_for_separator(src: Path, work_dir: Path) -> tuple[Path, Opt
     def _ffmpeg_to_wav(out: Path) -> None:
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
-            raise RuntimeError(
+        proc = subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-i",
+                str(resolved),
+                "-vn",
+                "-acodec",
+                "pcm_s16le",
+                "-ar",
+                "44100",
+                "-ac",
+                "2",
+                str(out),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout
+        )
                 "ffmpeg not found on PATH; required to decode this media for vocal separation."
             )
         proc = subprocess.run(
