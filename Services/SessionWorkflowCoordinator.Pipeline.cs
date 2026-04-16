@@ -297,16 +297,22 @@ public sealed partial class SessionWorkflowCoordinator
     private void CommitTranscriptionSessionState(TranscriptionResult result, string transcriptPath)
     {
         var nowUtc = DateTimeOffset.UtcNow;
-        // If vocal separation was not used for this transcription run, clear any stale stem
-        // paths from a previous run so ComputeInvalidation does not perpetually flag a mismatch.
-        var vocalsPath       = CurrentSettings.VocalSeparationEnabled ? CurrentSession.VocalsAudioPath       : null;
+        // When vocal separation is disabled, clear any stale stem paths from a previous run that
+        // had separation enabled. When separation is enabled, SeparateVocalsAsync already wrote
+        // fresh stem paths into CurrentSession before this method is called, so we preserve them.
+        var vocalsPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.VocalsAudioPath : null;
         var instrumentalPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.InstrumentalAudioPath : null;
-
         CurrentSession = CurrentSession with
         {
             Stage = SessionWorkflowStage.Transcribed,
             TranscriptPath = transcriptPath,
             SourceLanguage = result.Language,
+            VocalsAudioPath = CurrentSettings.VocalSeparationEnabled
+                ? CurrentSession.VocalsAudioPath
+                : null,
+            InstrumentalAudioPath = CurrentSettings.VocalSeparationEnabled
+                ? CurrentSession.InstrumentalAudioPath
+                : null,
             TranscribedAtUtc = nowUtc,
             TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
