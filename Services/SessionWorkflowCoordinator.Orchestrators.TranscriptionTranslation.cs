@@ -48,74 +48,73 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
                 if (!File.Exists(_c.CurrentSession.IngestedMediaPath))
                     throw new FileNotFoundException($"Ingested media file not found: {_c.CurrentSession.IngestedMediaPath}");
 
-            var transcriptionSourcePath = _c.CurrentSession.IngestedMediaPath;
-            if (_c.CurrentSettings.VocalSeparationEnabled)
-            {
-                transcriptionSourcePath = await _c.SeparateVocalsAsync(progress, stageContext, cancellationToken)
-                    .ConfigureAwait(false);
-            }
+                var transcriptionSourcePath = _c.CurrentSession.IngestedMediaPath;
+                if (_c.CurrentSettings.VocalSeparationEnabled)
+                {
+                    transcriptionSourcePath = await _c.SeparateVocalsAsync(progress, stageContext, cancellationToken)
+                        .ConfigureAwait(false);
+                }
 
-            await _c.EnsureTranscriptionProviderReadyAsync(progress, stageContext, cancellationToken);
+                await _c.EnsureTranscriptionProviderReadyAsync(progress, stageContext, cancellationToken);
 
-            ReportStage(
-                stageContext,
-                $"Starting transcription with {_c.CurrentSettings.TranscriptionProvider} / {_c.CurrentSettings.TranscriptionModel}. Audio will be segmented and the spoken language will be detected before translation.",
-                progress01: 0,
-                isIndeterminate: true);
+                ReportStage(
+                    stageContext,
+                    $"Starting transcription with {_c.CurrentSettings.TranscriptionProvider} / {_c.CurrentSettings.TranscriptionModel}. Audio will be segmented and the spoken language will be detected before translation.",
+                    progress01: 0,
+                    isIndeterminate: true);
 
-            var sessionDir = _c.GetSessionDirectory();
-            var transcriptDir = Path.Combine(sessionDir, "transcripts");
-            Directory.CreateDirectory(transcriptDir);
+                var sessionDir = _c.GetSessionDirectory();
+                var transcriptDir = Path.Combine(sessionDir, "transcripts");
+                Directory.CreateDirectory(transcriptDir);
 
-            var fileName = Path.GetFileNameWithoutExtension(transcriptionSourcePath);
-            var transcriptPath = Path.Combine(transcriptDir, $"{fileName}.json");
+                var fileName = Path.GetFileNameWithoutExtension(transcriptionSourcePath);
+                var transcriptPath = Path.Combine(transcriptDir, $"{fileName}.json");
 
-            var cpuThreads = _c.CurrentSettings.TranscriptionCpuThreads > 0
-                ? _c.CurrentSettings.TranscriptionCpuThreads.ToString()
-                : "auto";
-            var cpuWorkers = Math.Max(1, _c.CurrentSettings.TranscriptionNumWorkers);
-            var routeSummary =
-                $"provider={_c.CurrentSettings.TranscriptionProvider}, model={_c.CurrentSettings.TranscriptionModel}, " +
-                $"cpu_compute={_c.CurrentSettings.TranscriptionCpuComputeType}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers}";
-            var hwSummary =
-                $"avx2={(_c.HardwareSnapshot.HasAvx2 ? "yes" : "no")}, " +
-                $"avx512={(_c.HardwareSnapshot.HasAvx512F ? "yes" : "no")}, " +
-                $"cuda={(_c.HardwareSnapshot.HasCuda ? "yes" : "no")}";
+                var cpuThreads = _c.CurrentSettings.TranscriptionCpuThreads > 0
+                    ? _c.CurrentSettings.TranscriptionCpuThreads.ToString()
+                    : "auto";
+                var cpuWorkers = Math.Max(1, _c.CurrentSettings.TranscriptionNumWorkers);
+                var routeSummary =
+                    $"provider={_c.CurrentSettings.TranscriptionProvider}, model={_c.CurrentSettings.TranscriptionModel}, " +
+                    $"cpu_compute={_c.CurrentSettings.TranscriptionCpuComputeType}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers}";
+                var hwSummary =
+                    $"avx2={(_c.HardwareSnapshot.HasAvx2 ? "yes" : "no")}, " +
+                    $"avx512={(_c.HardwareSnapshot.HasAvx512F ? "yes" : "no")}, " +
+                    $"cuda={(_c.HardwareSnapshot.HasCuda ? "yes" : "no")}";
 
-            _c.Log.Info($"Starting transcription: {transcriptionSourcePath} " +
-                      $"[{_c.CurrentSettings.TranscriptionProvider}/{_c.CurrentSettings.TranscriptionModel}] " +
-                      $"route=({routeSummary}) hw=({hwSummary})");
+                _c.Log.Info($"Starting transcription: {transcriptionSourcePath} " +
+                          $"[{_c.CurrentSettings.TranscriptionProvider}/{_c.CurrentSettings.TranscriptionModel}] " +
+                          $"route=({routeSummary}) hw=({hwSummary})");
 
-            var transcriptionService = _c._transcriptionService ??= _c.CreateTranscriptionService();
-            var result = await _c._inferenceEngine.TranscribeAsync(
-                transcriptionService,
-                new TranscriptionRequest(
-                    transcriptionSourcePath,
-                    transcriptPath,
-                    _c.CurrentSettings.TranscriptionModel,
-                    SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),
-                    _c.CurrentSettings.TranscriptionCpuComputeType,
-                    _c.CurrentSettings.TranscriptionCpuThreads,
-                    _c.CurrentSettings.TranscriptionNumWorkers),
-                cancellationToken);
+                var transcriptionService = _c._transcriptionService ??= _c.CreateTranscriptionService();
+                var result = await _c._inferenceEngine.TranscribeAsync(
+                    transcriptionService,
+                    new TranscriptionRequest(
+                        transcriptionSourcePath,
+                        transcriptPath,
+                        _c.CurrentSettings.TranscriptionModel,
+                        SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),
+                        _c.CurrentSettings.TranscriptionCpuComputeType,
+                        _c.CurrentSettings.TranscriptionCpuThreads,
+                        _c.CurrentSettings.TranscriptionNumWorkers),
+                    cancellationToken);
 
-            if (!result.Success)
-            {
-                var errorMsg = result.ErrorMessage ?? "Unknown transcription error";
-                var ex = new InvalidOperationException($"Transcription failed: {errorMsg}");
-                _c.Log.Error(ex.Message, ex);
-                throw ex;
-            }
+                if (!result.Success)
+                {
+                    var errorMsg = result.ErrorMessage ?? "Unknown transcription error";
+                    var ex = new InvalidOperationException($"Transcription failed: {errorMsg}");
+                    _c.Log.Error(ex.Message, ex);
+                    throw ex;
+                }
 
-            _c.CommitTranscriptionSessionState(result, transcriptPath);
-            stageSucceeded = true;
+                _c.CommitTranscriptionSessionState(result, transcriptPath);
+                stageSucceeded = true;
 
-            ReportStage(
-                stageContext,
-                $"Transcription complete. {result.Segments.Count} segments were detected in {result.Language}.",
-                progress01: 1,
-                isIndeterminate: false);
-
+                ReportStage(
+                    stageContext,
+                    $"Transcription complete. {result.Segments.Count} segments were detected in {result.Language}.",
+                    progress01: 1,
+                    isIndeterminate: false);
             }
             finally
             {

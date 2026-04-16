@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -146,24 +147,28 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 isIndeterminate: true,
                 streamingStatus: "Segment clips are generated as translation continues.");
 
-            var ttsCollectorTask = CollectStreamingTtsResultsAsync(ttsResultChannel.Reader, ttsStageContext, cancellationToken);
+            using var pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var pipelineToken = pipelineCts.Token;
+
+            var ttsCollectorTask = CollectStreamingTtsResultsAsync(ttsResultChannel.Reader, ttsStageContext, pipelineToken);
             var ttsStageTask = RunStreamingTtsStageAsync(
                 translationChannel.Reader,
                 ttsResultChannel.Writer,
                 voice,
                 ttsLanguage,
                 segmentsDir,
-                cancellationToken);
+                pipelineToken);
             var translationTask = RunStreamingTranslationStageAsync(
                 transcriptChannel.Reader,
                 translationChannel.Writer,
                 translationWriter,
                 targetLanguage,
                 translationStageContext,
-                cancellationToken);
+                pipelineToken);
 
             var forwardingWriter = new TranscriptChannelForwardingWriter(transcriptArtifactWriter, transcriptChannel.Writer);
-            TranscriptionResult transcriptionResult;
+            ExceptionDispatchInfo? capturedFailure = null;
+            TranscriptionResult? transcriptionResult = null;
             try
             {
                 transcriptionResult = await _c._inferenceEngine.TranscribeStreamingAsync(
@@ -177,39 +182,45 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         _c.CurrentSettings.TranscriptionCpuThreads,
                         _c.CurrentSettings.TranscriptionNumWorkers),
                     forwardingWriter,
-                    cancellationToken).ConfigureAwait(false);
+                    pipelineToken).ConfigureAwait(false);
+
+                await transcriptArtifactWriter.CompleteAsync(transcriptionResult, transcriptPath, pipelineToken).ConfigureAwait(false);
+                _c.CommitTranscriptionSessionState(transcriptionResult, transcriptPath);
+                ReportStage(
+                    transcriptionStageContext,
+                    $"Transcription complete. {transcriptionResult.Segments.Count} segments were detected in {transcriptionResult.Language}.",
+                    progress01: 1,
+                    isIndeterminate: false);
+
+                var translationResult = await translationTask.ConfigureAwait(false);
+                await translationWriter.CompleteAsync(translationPath, pipelineToken).ConfigureAwait(false);
+                _c.CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
+                ReportStage(
+                    translationStageContext,
+                    $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
+                    progress01: 1,
+                    isIndeterminate: false);
+
+                await ttsStageTask.ConfigureAwait(false);
+                var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
+                await _c.StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, pipelineToken).ConfigureAwait(false);
+                _c.CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
             }
             catch (Exception ex)
             {
+                pipelineCts.Cancel();
                 forwardingWriter.TryComplete(ex);
-                throw;
+                capturedFailure = ExceptionDispatchInfo.Capture(ex);
             }
             finally
             {
                 forwardingWriter.TryComplete();
+                capturedFailure = await ObserveStreamingTaskCompletionAsync(translationTask, "translation", capturedFailure, pipelineCts).ConfigureAwait(false);
+                capturedFailure = await ObserveStreamingTaskCompletionAsync(ttsStageTask, "tts-stage", capturedFailure, pipelineCts).ConfigureAwait(false);
+                capturedFailure = await ObserveStreamingTaskCompletionAsync(ttsCollectorTask, "tts-collector", capturedFailure, pipelineCts).ConfigureAwait(false);
             }
 
-            await transcriptArtifactWriter.CompleteAsync(transcriptionResult, transcriptPath, cancellationToken).ConfigureAwait(false);
-            _c.CommitTranscriptionSessionState(transcriptionResult, transcriptPath);
-            ReportStage(
-                transcriptionStageContext,
-                $"Transcription complete. {transcriptionResult.Segments.Count} segments were detected in {transcriptionResult.Language}.",
-                progress01: 1,
-                isIndeterminate: false);
-
-            var translationResult = await translationTask.ConfigureAwait(false);
-            await translationWriter.CompleteAsync(translationPath, cancellationToken).ConfigureAwait(false);
-            _c.CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
-            ReportStage(
-                translationStageContext,
-                $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
-                progress01: 1,
-                isIndeterminate: false);
-
-            await ttsStageTask.ConfigureAwait(false);
-            var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
-            await _c.StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, cancellationToken).ConfigureAwait(false);
-            _c.CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+            capturedFailure?.Throw();
         }
 
         /// <summary>
@@ -325,36 +336,59 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 FullMode = BoundedChannelFullMode.Wait,
             });
 
-            var ttsCollectorTask = CollectStreamingTtsResultsAsync(ttsResultChannel.Reader, ttsStageContext, cancellationToken);
+            using var pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var pipelineToken = pipelineCts.Token;
+
+            var ttsCollectorTask = CollectStreamingTtsResultsAsync(ttsResultChannel.Reader, ttsStageContext, pipelineToken);
             var ttsStageTask = RunStreamingTtsStageAsync(
                 translationChannel.Reader,
                 ttsResultChannel.Writer,
                 voice,
                 ttsLanguage,
                 segmentsDir,
-                cancellationToken);
+                pipelineToken);
             var translationTask = RunStreamingTranslationStageAsync(
                 transcriptChannel.Reader,
                 translationChannel.Writer,
                 translationWriter,
                 targetLanguage,
                 translationStageContext,
-                cancellationToken);
+                pipelineToken);
 
-            await producerTask.ConfigureAwait(false);
-            var translationResult = await translationTask.ConfigureAwait(false);
-            await translationWriter.CompleteAsync(translationPath, cancellationToken).ConfigureAwait(false);
-            _c.CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
-            ReportStage(
-                translationStageContext,
-                $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
-                progress01: 1,
-                isIndeterminate: false);
+            ExceptionDispatchInfo? capturedFailure = null;
+            try
+            {
+                await producerTask.ConfigureAwait(false);
+                var translationResult = await translationTask.ConfigureAwait(false);
+                await translationWriter.CompleteAsync(translationPath, pipelineToken).ConfigureAwait(false);
+                _c.CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
+                ReportStage(
+                    translationStageContext,
+                    $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
+                    progress01: 1,
+                    isIndeterminate: false);
 
-            await ttsStageTask.ConfigureAwait(false);
-            var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
-            await _c.StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, cancellationToken).ConfigureAwait(false);
-            _c.CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+                await ttsStageTask.ConfigureAwait(false);
+                var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
+                await _c.StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, pipelineToken).ConfigureAwait(false);
+                _c.CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+            }
+            catch (Exception ex)
+            {
+                pipelineCts.Cancel();
+                transcriptChannel.Writer.TryComplete(ex);
+                capturedFailure = ExceptionDispatchInfo.Capture(ex);
+            }
+            finally
+            {
+                transcriptChannel.Writer.TryComplete();
+                capturedFailure = await ObserveStreamingTaskCompletionAsync(producerTask, "transcript-producer", capturedFailure, pipelineCts).ConfigureAwait(false);
+                capturedFailure = await ObserveStreamingTaskCompletionAsync(translationTask, "translation", capturedFailure, pipelineCts).ConfigureAwait(false);
+                capturedFailure = await ObserveStreamingTaskCompletionAsync(ttsStageTask, "tts-stage", capturedFailure, pipelineCts).ConfigureAwait(false);
+                capturedFailure = await ObserveStreamingTaskCompletionAsync(ttsCollectorTask, "tts-collector", capturedFailure, pipelineCts).ConfigureAwait(false);
+            }
+
+            capturedFailure?.Throw();
         }
 
         /// <summary>
@@ -621,10 +655,42 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     _c.Log.Warning($"Streaming TTS failed or file missing for segment {id}.");
                 }
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _c.Log.Error($"Streaming TTS generation failed for {id}: {ex.Message}", ex);
             }
+        }
+
+        private async Task<ExceptionDispatchInfo?> ObserveStreamingTaskCompletionAsync(
+            Task task,
+            string taskName,
+            ExceptionDispatchInfo? currentFailure,
+            CancellationTokenSource linkedCts)
+        {
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (linkedCts.IsCancellationRequested)
+            {
+                // Expected when upstream failure cancels linked downstream work.
+            }
+            catch (Exception ex)
+            {
+                if (currentFailure is null)
+                {
+                    linkedCts.Cancel();
+                    return ExceptionDispatchInfo.Capture(ex);
+                }
+
+                _c.Log.Warning($"Streaming downstream task '{taskName}' failed after an earlier error: {ex.Message}");
+            }
+
+            return currentFailure;
         }
 
         /// <summary>
