@@ -79,4 +79,12 @@ public sealed class AppSettingsTests
 
         Assert.Equal(ProviderNames.NemoLocal, settings.DiarizationProvider);
     }
+
+    [Fact]
+    public void VocalSeparationEnabled_DefaultsToFalse()
+    {
+        var settings = new AppSettings();
+
+        Assert.False(settings.VocalSeparationEnabled);
+    }
 }

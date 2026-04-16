@@ -49,7 +49,8 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             PipelineStageContext? ttsStageContext,
             CancellationToken cancellationToken)
         {
-            var transcriptionSourcePath = _c.CurrentSession.IngestedMediaPath!;
+            var transcriptionSourcePath = _c.CurrentSession.IngestedMediaPath
+                ?? throw new InvalidOperationException("Ingested media path is required to start the streaming pipeline.");
             if (_c.CurrentSettings.VocalSeparationEnabled)
             {
                 transcriptionSourcePath = await _c.SeparateVocalsAsync(progress, transcriptionStageContext, cancellationToken)
@@ -617,13 +618,15 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
         /// <summary>
         /// Builds the filesystem path for the current session's transcript artifact and ensures its directory exists.
         /// </summary>
-        /// <returns>The full path to the transcript JSON file for the current session, based on the ingested media filename.</returns>
         private string BuildTranscriptArtifactPath(string sourceAudioPath)
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(sourceAudioPath);
             var sessionDir = _c.GetSessionDirectory();
             var transcriptDir = Path.Combine(sessionDir, "transcripts");
             Directory.CreateDirectory(transcriptDir);
             var fileName = Path.GetFileNameWithoutExtension(sourceAudioPath);
+            return Path.Combine(transcriptDir, $"{fileName}.json");
+        }
             return Path.Combine(transcriptDir, $"{fileName}.json");
         }
 

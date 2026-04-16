@@ -11,5 +11,5 @@ namespace Babel.Player.Services;
 internal static class ProcessArgFormatter
 {
     internal static string FormatArgs(IEnumerable<string> arguments) =>
-        string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a));
+        string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a.Replace("\"", "\\\"")}\"" : a));
 }

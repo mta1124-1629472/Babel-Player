@@ -97,6 +97,7 @@ public sealed class SettingsService
         public string? DiarizationProvider { get; set; }
         public int? DiarizationMinSpeakers { get; set; }
         public int? DiarizationMaxSpeakers { get; set; }
+        public bool? VocalSeparationEnabled { get; set; }
         public string? TranslationProvider { get; set; }
         public ComputeProfile? TranslationProfile { get; set; }
         public InferenceRuntime? TranslationRuntime { get; set; }
@@ -163,6 +164,7 @@ public sealed class SettingsService
             // Legacy diarization speaker bounds are ignored; providers auto-detect by default.
             settings.DiarizationMinSpeakers = null;
             settings.DiarizationMaxSpeakers = null;
+            settings.VocalSeparationEnabled = VocalSeparationEnabled ?? settings.VocalSeparationEnabled;
 
             settings.TranslationProvider = TranslationProvider ?? settings.TranslationProvider;
             settings.TranslationProfile = ResolveProfile(
@@ -240,6 +242,7 @@ public sealed class SettingsService
             DiarizationProvider = settings.DiarizationProvider,
             DiarizationMinSpeakers = null,
             DiarizationMaxSpeakers = null,
+            VocalSeparationEnabled = settings.VocalSeparationEnabled,
             TranslationProvider = settings.TranslationProvider,
             TranslationProfile = settings.TranslationProfile,
             TranslationModel = settings.TranslationModel,
