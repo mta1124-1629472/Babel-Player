@@ -393,6 +393,7 @@ public static class DependencyLocator
             ContainerizedProbe          = containerizedProbe,
             ContainerizedInferenceManager = containerizedManager,
             AudioProcessingService      = audioProcessingService,
+            InferenceExecutionEngine    = DefaultInferenceExecutionEngine.Instance,
             ExecutionPlanner            = DefaultExecutionPlanner.Instance,
             RequestLeaseTracker         = requestLeaseTracker,
         };

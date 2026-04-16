@@ -40,6 +40,7 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
             var stagePlan = _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Tts);
             var stageTimer = Stopwatch.StartNew();
             var stageSucceeded = false;
+
             try
             {
                 if (string.IsNullOrEmpty(_c.CurrentSession.TranslationPath))
@@ -48,34 +49,34 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                 if (!File.Exists(_c.CurrentSession.TranslationPath))
                     throw new FileNotFoundException($"Translation file not found: {_c.CurrentSession.TranslationPath}");
 
-            var v = (voice ?? _c.CurrentSettings.TtsVoice)?.Trim();
-            if (string.IsNullOrWhiteSpace(v))
-                throw new InvalidOperationException("No TTS voice configured. Please configure a voice in Settings before generating TTS.");
+                var v = (voice ?? _c.CurrentSettings.TtsVoice)?.Trim();
+                if (string.IsNullOrWhiteSpace(v))
+                    throw new InvalidOperationException("No TTS voice configured. Please configure a voice in Settings before generating TTS.");
 
-            await _c.EnsureTtsProviderReadyAsync(v, progress, stageContext, cancellationToken);
+                await _c.EnsureTtsProviderReadyAsync(v, progress, stageContext, cancellationToken);
 
-            _c._ttsService ??= _c.CreateTtsService();
-            await _c.EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
-            await _c.EnsureMultiSpeakerReferenceClipsAsync(cancellationToken);
+                _c._ttsService ??= _c.CreateTtsService();
+                await _c.EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
+                await _c.EnsureMultiSpeakerReferenceClipsAsync(cancellationToken);
 
-            ReportStage(
-                stageContext,
-                $"Starting TTS synthesis with {_c.CurrentSettings.TtsProvider} / {v}. Generating combined dub audio — progress will appear below.",
-                progress01: 0,
-                isIndeterminate: false);
+                ReportStage(
+                    stageContext,
+                    $"Starting TTS synthesis with {_c.CurrentSettings.TtsProvider} / {v}. Generating combined dub audio — progress will appear below.",
+                    progress01: 0,
+                    isIndeterminate: false);
 
-            var (ttsPath, segmentsDir) = SessionWorkflowCoordinator.BuildTtsOutputPaths(
-                _c.CurrentSession.TranslationPath!, v!);
-            var ttsLanguage = NormalizePipelineLanguage(
-                _c.CurrentSession.TargetLanguage ?? _c.CurrentSettings.TargetLanguage,
-                _c.CurrentSettings.TargetLanguage);
+                var (ttsPath, segmentsDir) = SessionWorkflowCoordinator.BuildTtsOutputPaths(
+                    _c.CurrentSession.TranslationPath!, v!);
+                var ttsLanguage = NormalizePipelineLanguage(
+                    _c.CurrentSession.TargetLanguage ?? _c.CurrentSettings.TargetLanguage,
+                    _c.CurrentSettings.TargetLanguage);
 
-            _c.Log.Info($"Starting TTS generation: {_c.CurrentSession.TranslationPath} -> {ttsPath}");
+                _c.Log.Info($"Starting TTS generation: {_c.CurrentSession.TranslationPath} -> {ttsPath}");
 
-            var (segmentAudioPaths, segmentDurations, totalSegments, orderedSegments) = await _c.GenerateSegmentClipsAsync(
-                v!, ttsLanguage, segmentsDir, stageContext, cancellationToken);
+                var (segmentAudioPaths, segmentDurations, totalSegments, orderedSegments) = await _c.GenerateSegmentClipsAsync(
+                    v!, ttsLanguage, segmentsDir, stageContext, cancellationToken);
 
-            await _c.StitchSegmentClipsAsync(segmentAudioPaths, orderedSegments, ttsPath, stageContext, cancellationToken);
+                await _c.StitchSegmentClipsAsync(segmentAudioPaths, orderedSegments, ttsPath, stageContext, cancellationToken);
 
                 _c.CommitTtsSessionState(v!, ttsPath, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
                 stageSucceeded = true;
