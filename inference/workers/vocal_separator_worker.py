@@ -162,7 +162,7 @@ def run_vocal_separation(
     """
     from audio_separator.separator import Separator
 
-    work_audio, temp_input = _normalize_input_for_separator(Path(audio_path), output_dir)
+    work_audio, temp_input = _normalize_input_for_separator(audio_path, output_dir)
 
     mdx_params = {
         "hop_length": _MDX_HOP_LENGTH,
