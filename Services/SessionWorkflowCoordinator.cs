@@ -35,6 +35,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranscriptionProvider? _transcriptionService;
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
+    private IVocalSeparationProvider? _vocalSeparationProvider;
     private readonly ConcurrentBag<Task> _pendingTtsTasks = [];
     private readonly IAudioProcessingService? _audioProcessingService;
 
@@ -750,6 +751,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             (_ttsService as IDisposable)?.Dispose();
             _ttsService = null;
         }
+        (_vocalSeparationProvider as IDisposable)?.Dispose();
+        _vocalSeparationProvider = null;
 
         var invalidation = CheckSettingsInvalidation();
         _log.Info(

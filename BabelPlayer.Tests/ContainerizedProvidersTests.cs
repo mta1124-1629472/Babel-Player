@@ -184,6 +184,55 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.Equal(audioBytes, await File.ReadAllBytesAsync(outputPath));
     }
 
+    [Fact]
+    public async Task ContainerizedInferenceClient_SeparateVocalsAsync_DownloadsBothStems()
+    {
+        var mediaDir = Path.Combine(_ctx.Dir, "session", "media");
+        Directory.CreateDirectory(mediaDir);
+        var inputPath = Path.Combine(mediaDir, "sample.wav");
+        await File.WriteAllBytesAsync(inputPath, [1, 2, 3, 4]);
+        var vocalsBytes = Encoding.UTF8.GetBytes("vocals");
+        var instrumentalBytes = Encoding.UTF8.GetBytes("instrumental");
+
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/separate/vocals")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"vocals_filename\":\"vocals.wav\",\"instrumental_filename\":\"instrumental.wav\",\"vocals_file_size_bytes\":6,\"instrumental_file_size_bytes\":12,\"vocals_model\":\"demucs\",\"instrumental_model\":\"demucs\"}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/vocals.wav")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(vocalsBytes)
+                });
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/tts/audio/instrumental.wav")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(instrumentalBytes)
+                });
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var stemsDir = Path.Combine(_ctx.Dir, "session", "stems");
+        var result = await client.SeparateVocalsAsync(inputPath, stemsDir);
+
+        Assert.True(result.Success);
+        Assert.True(File.Exists(result.VocalsAudioPath));
+        Assert.True(File.Exists(result.InstrumentalAudioPath));
+        Assert.Equal(vocalsBytes, await File.ReadAllBytesAsync(result.VocalsAudioPath));
+        Assert.Equal(instrumentalBytes, await File.ReadAllBytesAsync(result.InstrumentalAudioPath));
+        Assert.Equal(6, result.VocalsFileSizeBytes);
+        Assert.Equal(12, result.InstrumentalFileSizeBytes);
+    }
+
     
     [Fact]
     public async Task ContainerizedTranscriptionProvider_TranscribeAsync_ThrowsWhenInputMissing()
@@ -603,6 +652,37 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
+    public async Task ContainerizedProviderReadiness_CheckVocalSeparationForExecutionAsync_ReturnsReadyWhenCapabilityPresent()
+    {
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+            true,
+            false,
+            null,
+            "http://localhost:8000",
+            null,
+            new ContainerCapabilitiesSnapshot(
+                TranscriptionReady: true,
+                TranscriptionDetail: null,
+                TranslationReady: true,
+                TranslationDetail: null,
+                TtsReady: true,
+                TtsDetail: null,
+                VocalSeparationReady: true,
+                VocalSeparationDetail: "audio-separator ready"))));
+
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+            ContainerizedServiceUrl = "http://localhost:8000"
+        };
+
+        var readiness = await ContainerizedProviderReadiness.CheckVocalSeparationForExecutionAsync(settings, probe);
+
+        Assert.True(readiness.IsReady);
+        Assert.Null(readiness.BlockingReason);
+    }
+
+    [Fact]
     public async Task ContainerizedProviderReadiness_CheckTtsForExecutionAsync_ReturnsNotReadyWhenCapabilityMissing()
     {
         var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
@@ -888,6 +968,34 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.False(health.Capabilities.TryGetDiarizationProviderReadiness(ProviderNames.WeSpeakerLocal, out var wespeakerReady, out var wespeakerDetail));
         Assert.False(wespeakerReady);
         Assert.Null(wespeakerDetail);
+    }
+
+    [Fact]
+    public async Task ContainerizedInferenceClient_CheckHealthAsync_ParsesVocalSeparationCapability()
+    {
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/health/live")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"status\":\"healthy\",\"cuda_available\":true,\"cuda_version\":\"12.8\"}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true},\"diarization\":{\"ready\":true},\"vocal_separation\":{\"ready\":false,\"detail\":\"audio-separator missing\"}}");
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"status\":\"not-found\"}");
+        });
+
+        var health = await client.CheckHealthAsync();
+
+        Assert.NotNull(health.Capabilities);
+        Assert.False(health.Capabilities!.VocalSeparationReady);
+        Assert.Equal("audio-separator missing", health.Capabilities.VocalSeparationDetail);
+        Assert.False(health.Capabilities.IsReady(ContainerCapabilityStage.VocalSeparation));
     }
 
     [Fact]

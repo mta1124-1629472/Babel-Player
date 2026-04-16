@@ -66,9 +66,9 @@ public sealed partial class SessionWorkflowCoordinator
             progress01: 0.05,
             isIndeterminate: true);
 
-        var separationProvider = CreateVocalSeparationProvider();
+        _vocalSeparationProvider ??= CreateVocalSeparationProvider();
         var result = await _inferenceEngine.SeparateVocalsAsync(
-            separationProvider,
+            _vocalSeparationProvider,
             new VocalSeparationRequest(CurrentSession.IngestedMediaPath, stemsDir),
             cancellationToken).ConfigureAwait(false);
 

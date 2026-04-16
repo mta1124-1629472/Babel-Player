@@ -549,6 +549,7 @@ public sealed class ContainerizedInferenceClient
 
     public async Task<VocalSeparationResult> SeparateVocalsAsync(
         string audioPath,
+        string outputDirectory,
         CancellationToken cancellationToken = default)
     {
         try
@@ -573,7 +574,7 @@ public sealed class ContainerizedInferenceClient
             if (string.IsNullOrWhiteSpace(result.VocalsFilename) || string.IsNullOrWhiteSpace(result.InstrumentalFilename))
                 throw new InvalidOperationException("Vocal separation response did not include stem filenames.");
 
-            var stemsDir = ResolveSessionStemsDirectory(audioPath);
+            var stemsDir = outputDirectory;
             Directory.CreateDirectory(stemsDir);
 
             var vocalsPath = Path.Combine(stemsDir, Path.GetFileName(result.VocalsFilename));

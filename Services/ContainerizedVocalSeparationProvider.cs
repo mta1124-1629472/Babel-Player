@@ -31,6 +31,7 @@ public sealed class ContainerizedVocalSeparationProvider : IVocalSeparationProvi
 
         var result = await _client.SeparateVocalsAsync(
             request.SourceAudioPath,
+            request.OutputDirectoryPath,
             cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
