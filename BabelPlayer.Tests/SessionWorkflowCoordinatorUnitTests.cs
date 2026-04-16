@@ -139,8 +139,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         public double Volume { get; set; } = 1.0;
         public double PlaybackRate { get; set; } = 1.0;
         public bool SubtitlesVisible { get; set; }
-        public event EventHandler? Ended;
-        public event EventHandler<Exception>? ErrorOccurred;
+        public event EventHandler? Ended { add { } remove { } }
+        public event EventHandler<Exception>? ErrorOccurred { add { } remove { } }
 
         public void Dispose() { }
         public void Load(string filePath) { }
