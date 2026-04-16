@@ -211,6 +211,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(VocalSeparationAvailable));
         OnPropertyChanged(nameof(VocalSeparationAvailabilityHint));
         OnPropertyChanged(nameof(HasVocalSeparationAvailabilityHint));
+        MaybeCoerceVocalSeparationDraftAndCoordinator();
         OnPropertyChanged(nameof(GpuHostProbeDiagnostics));
     }
 
@@ -615,6 +616,35 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         return true;
     }
 
+    /// <summary>
+    /// When the container reports a definitive capability snapshot and vocal separation is not ready,
+    /// clear both the coordinator flag and this dialog draft so JSON edits cannot leave "on" in the UI.
+    /// </summary>
+    private void MaybeCoerceVocalSeparationDraftAndCoordinator()
+    {
+        if (!TryGetVocalSeparationCapability(out var ready, out _))
+            return;
+        if (ready)
+            return;
+
+        var changed = false;
+        if (_coordinator.CurrentSettings.VocalSeparationEnabled)
+        {
+            _coordinator.CurrentSettings.VocalSeparationEnabled = false;
+            _coordinator.NotifySettingsModified();
+            changed = true;
+        }
+
+        if (VocalSeparationEnabled)
+        {
+            VocalSeparationEnabled = false;
+            changed = true;
+        }
+
+        if (changed)
+            _coordinator.Log.Info("Vocal separation disabled: audio separator is not ready on the inference host.");
+    }
+
     // ── Hotkeys ───────────────────────────────────────────────────────────────
 
     [ObservableProperty]
@@ -807,6 +837,17 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsMpvHdrPassthroughDetailsVisible));
         if (VideoHdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr && !RtxHdrDriverModeAvailable)
             VideoHdrPlaybackMode = VideoHdrPlaybackMode.Off;
+    }
+
+    partial void OnVocalSeparationEnabledChanged(bool value)
+    {
+        if (!value)
+            return;
+        if (!TryGetVocalSeparationCapability(out var ready, out _))
+            return;
+        if (ready)
+            return;
+        VocalSeparationEnabled = false;
     }
 
     partial void OnVideoUseGpuNextChanged(bool value)

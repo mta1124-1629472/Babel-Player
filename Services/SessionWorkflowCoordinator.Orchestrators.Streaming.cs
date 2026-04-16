@@ -714,8 +714,10 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             var sessionDir = _c.GetSessionDirectory();
             var transcriptDir = Path.Combine(sessionDir, "transcripts");
             Directory.CreateDirectory(transcriptDir);
-            var fileName = Path.GetFileNameWithoutExtension(sourceAudioPath);
-            return Path.Combine(transcriptDir, $"{fileName}.json");
+            var transcriptStem = SessionWorkflowCoordinator.ResolveTranscriptArtifactStem(
+                _c.CurrentSession.IngestedMediaPath,
+                sourceAudioPath);
+            return Path.Combine(transcriptDir, $"{transcriptStem}.json");
         }
 
         /// <summary>

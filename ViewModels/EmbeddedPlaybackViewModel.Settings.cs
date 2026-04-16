@@ -184,10 +184,14 @@ public partial class EmbeddedPlaybackViewModel
         get => _coordinator.CurrentSettings.VocalSeparationEnabled;
         set
         {
-            if (_coordinator.CurrentSettings.VocalSeparationEnabled == value)
+            var effective = value;
+            if (effective && TryGetVocalSeparationCapability(out var ready, out _) && !ready)
+                effective = false;
+
+            if (_coordinator.CurrentSettings.VocalSeparationEnabled == effective)
                 return;
 
-            _coordinator.CurrentSettings.VocalSeparationEnabled = value;
+            _coordinator.CurrentSettings.VocalSeparationEnabled = effective;
             _coordinator.NotifySettingsModified();
             OnPropertyChanged();
             NotifyVocalSeparationCapabilityProperties();
@@ -213,6 +217,26 @@ public partial class EmbeddedPlaybackViewModel
         OnPropertyChanged(nameof(VocalSeparationAvailable));
         OnPropertyChanged(nameof(VocalSeparationAvailabilityHint));
         OnPropertyChanged(nameof(HasVocalSeparationAvailabilityHint));
+        CoerceVocalSeparationSettingWhenHostReportsNotReady();
+    }
+
+    /// <summary>
+    /// When the container probe has a definitive capability snapshot and vocal separation is not ready,
+    /// turn off the persisted flag so hand-edited settings or stale UI do not keep "enabled" while the run will fail.
+    /// </summary>
+    private void CoerceVocalSeparationSettingWhenHostReportsNotReady()
+    {
+        if (!_coordinator.CurrentSettings.VocalSeparationEnabled)
+            return;
+        if (!TryGetVocalSeparationCapability(out var ready, out _))
+            return;
+        if (ready)
+            return;
+
+        _coordinator.CurrentSettings.VocalSeparationEnabled = false;
+        _coordinator.NotifySettingsModified();
+        _coordinator.Log.Info("Vocal separation disabled: audio separator is not ready on the inference host.");
+        OnPropertyChanged(nameof(VocalSeparationEnabled));
     }
 
     private bool TryGetVocalSeparationCapability(out bool ready, out string? hint)

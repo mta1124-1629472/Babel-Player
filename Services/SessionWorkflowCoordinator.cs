@@ -1016,6 +1016,18 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             : FormattableString.Invariant($"segment_{start}");
 
     /// <summary>
+    /// Base filename (no extension) for transcript JSON under <c>transcripts/</c>.
+    /// Prefers the ingested media file name so vocal-separation stem paths (for example <c>vocals.wav</c>)
+    /// do not replace the user-visible artifact name derived from the original loaded file.
+    /// </summary>
+    internal static string ResolveTranscriptArtifactStem(string? ingestedMediaPath, string transcriptionSourcePath)
+    {
+        if (!string.IsNullOrWhiteSpace(ingestedMediaPath))
+            return Path.GetFileNameWithoutExtension(ingestedMediaPath);
+        return Path.GetFileNameWithoutExtension(transcriptionSourcePath);
+    }
+
+    /// <summary>
     /// Builds TTS output file paths for a translation artifact and ensures their parent directories exist.
     /// Sanitizes the voice identifier so that reserved path characters don't produce invalid file names.
     /// </summary>
