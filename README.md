@@ -28,6 +28,7 @@ If you find it useful, consider sponsoring:
 
 - [What It Does](#what-it-does)
 - [Features](#features)
+- [Interface screenshots](#interface-screenshots)
 - [Provider Support](#provider-support)
 - [Language support](#language-support)
 - [Requirements](#requirements)
@@ -71,6 +72,20 @@ The full loop:
 - Individual segments can be regenerated at any stage without re-running everything
 - Stage gating: downstream stages only enable when upstream results are present and artifacts are on disk
 - Word-level timestamps from transcription enable fine-grained segment editing
+
+### Interface screenshots
+
+![Babel Player — transcription through diarization stages](Assets/Pipeline%201.png)
+
+*Source media through transcription, optional vocal separation, and diarization — each stage shows explicit CPU / GPU / Cloud routing and readiness.*
+
+![Babel Player — translation, TTS, and export](Assets/Pipeline%202.png)
+
+*Translation, per-segment text-to-speech, and caption export — downstream stages stay gated until upstream artifacts exist.*
+
+![Speaker reference wizard — reference clips for multi-speaker routing](Assets/wizard.png)
+
+*Multi-speaker flow: record or choose reference audio so diarization, voice assignment, and cloning stay consistent per speaker.*
 
 ### Compute Selection
 
