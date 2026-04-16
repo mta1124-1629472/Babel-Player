@@ -219,7 +219,9 @@ internal TranslationOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                 var errorMsg = result.ErrorMessage ?? "Unknown translation error";
                 var ex = new InvalidOperationException($"Translation failed: {errorMsg}");
                 _c.Log.Error(ex.Message, ex);
-                throw ex;
+                throw new PipelineProviderException(
+                    $"Translation provider '{_c.CurrentSettings.TranslationProvider}' failed during translation stage: {errorMsg}",
+                    ex);
             }
 
             _c.CommitTranslationSessionState(result, translationPath, src, lang);
