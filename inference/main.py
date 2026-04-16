@@ -105,6 +105,27 @@ _parakeet_model_lock = threading.Lock()
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
 TEMP_DIR.mkdir(exist_ok=True)
 
+
+def _ensure_ffprobe_on_path_for_pydub() -> None:
+    """
+    NeMo's clustering diarizer loads audio via pydub, which shells out to ffprobe.
+    If ffmpeg is discoverable but ffprobe is not on PATH (common when tools are bundled),
+    prepend ffmpeg's directory so ffprobe.exe is found on Windows.
+    """
+    if shutil.which("ffprobe") is not None:
+        return
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg:
+        os.environ["PATH"] = (
+            str(Path(ffmpeg).resolve().parent)
+            + os.pathsep
+            + os.environ.get("PATH", "")
+        )
+
+
+_ensure_ffprobe_on_path_for_pydub()
+
+
 def _resolve_debug_log_path() -> Path:
     env_path = os.environ.get("BABEL_DEBUG_LOG_PATH")
     if env_path:
@@ -2378,7 +2399,7 @@ async def separate_vocals(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     vocals_model: str = Form("UVR-MDX-NET-Voc_FT.onnx"),
-    instrumental_model: str = Form("MDX23C-8KFFT-InstVoc_HQ.onnx"),
+    instrumental_model: Optional[str] = Form(None),
 ):
     """
     Split uploaded audio or video into a vocals stem and an instrumental stem.
@@ -2394,12 +2415,15 @@ async def separate_vocals(
 
         from workers.vocal_separator_worker import run_vocal_separation
 
+        inst = instrumental_model.strip() if instrumental_model else None
+        effective_instrumental_model = inst or vocals_model
+
         vocals_path, instrumental_path = await asyncio.to_thread(
             run_vocal_separation,
             temp_src,
             TEMP_DIR,
             vocals_model,
-            instrumental_model,
+            inst,
             use_gpu=(HOST_DEVICE == "cuda"),
         )
 
@@ -2415,7 +2439,7 @@ async def separate_vocals(
             vocals_file_size_bytes=vocals_path.stat().st_size,
             instrumental_file_size_bytes=instrumental_path.stat().st_size,
             vocals_model=vocals_model,
-            instrumental_model=instrumental_model,
+            instrumental_model=effective_instrumental_model,
         )
     except HTTPException:
         raise

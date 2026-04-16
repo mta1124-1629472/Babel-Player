@@ -10,7 +10,9 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 DEFAULT_VOCALS_MODEL = "UVR-MDX-NET-Voc_FT.onnx"
-DEFAULT_INSTRUMENTAL_MODEL = "MDX23C-8KFFT-InstVoc_HQ.onnx"
+# None = single-pass separation using vocals_model only (avoids requiring a second ONNX that may
+# not ship with audio-separator's bundled model list, e.g. MDX23C-8KFFT-InstVoc_HQ.onnx).
+DEFAULT_INSTRUMENTAL_MODEL: Optional[str] = None
 
 # Stable model cache directory — shared across requests, never inside TEMP_DIR
 _default_model_dir = Path(tempfile.gettempdir()) / "babel_separator_models"

@@ -282,6 +282,12 @@ public partial class App : Application
         CopyIfExists(
             Path.Combine(repoRoot, "tools", rid, "uv.exe"),
             Path.Combine(appDir, "tools", rid, "uv.exe"));
+        CopyIfExists(
+            Path.Combine(repoRoot, "tools", rid, "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", rid, "ffmpeg.exe"));
+        CopyIfExists(
+            Path.Combine(repoRoot, "tools", rid, "ffprobe.exe"),
+            Path.Combine(appDir, "tools", rid, "ffprobe.exe"));
     }
 
     private static void CopyIfExists(string source, string destination)

@@ -334,8 +334,9 @@ public sealed class PipelineStageProgressTests() : IDisposable
         Assert.Equal("Stage 2 of 3: Translation", playback.Pipeline.PipelineStageTitle);
         Assert.Contains("language routing", playback.Pipeline.PipelineStageDetail, StringComparison.Ordinal);
         Assert.False(playback.Pipeline.IsPipelineProgressIndeterminate);
-        Assert.Equal(0.45, playback.Pipeline.PipelineProgressPercent, 3);
-        Assert.Contains("45", playback.Pipeline.PipelineProgressStatusLine, StringComparison.Ordinal);
+        var expectedOverall = (2 - 1 + 0.45) / 3.0;
+        Assert.Equal(expectedOverall, playback.Pipeline.PipelineProgressPercent, 3);
+        Assert.Contains("48", playback.Pipeline.PipelineProgressStatusLine, StringComparison.Ordinal);
 
         playback.Pipeline.ShowRefreshDetail("Loading segments and refreshing playback data…");
         Assert.Equal("Loading segments and refreshing playback data…", playback.Pipeline.PipelineStageDetail);
