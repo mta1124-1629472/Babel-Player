@@ -497,11 +497,29 @@ public sealed partial class SessionWorkflowCoordinator
             ? new Dictionary<string, string>()
             : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
 
-    public IReadOnlyDictionary<string, SegmentTimingMode> GetSegmentTimingModeOverrides() =>
+    /// <summary>
+            /// Gets the per-segment dub timing mode overrides from the current session snapshot.
+            /// </summary>
+            /// <remarks>
+            /// Returns a new, shallow copy of the overrides so callers may inspect or iterate without affecting session state.
+            /// </remarks>
+            /// <returns>
+            /// A read-only dictionary mapping segment IDs to their <see cref="SegmentTimingMode"/> override; empty if no overrides are set. The returned dictionary uses ordinal key comparison.
+            /// </returns>
+            public IReadOnlyDictionary<string, SegmentTimingMode> GetSegmentTimingModeOverrides() =>
         CurrentSession.SegmentTimingModeOverrides is null
             ? new Dictionary<string, SegmentTimingMode>()
             : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
 
+    /// <summary>
+    /// Sets or clears a per-segment timing mode override in the current session snapshot. Updates <c>CurrentSession.SegmentTimingModeOverrides</c> and calls <c>SaveCurrentSession()</c>.
+    /// </summary>
+    /// <remarks>
+    /// Expects an active session to be loaded (reads and mutates <c>CurrentSession</c>); on success it updates <c>CurrentSession.SegmentTimingModeOverrides</c> and persists the session by calling <c>SaveCurrentSession()</c>. If the supplied override does not change the stored value, the method returns without persisting. This method performs no asynchronous work and does not accept cancellation.
+    /// </remarks>
+    /// <param name="segmentId">The identifier of the segment to modify; must be non-empty and is trimmed before use.</param>
+    /// <param name="mode">Override mode, or <c>null</c> to remove the entry (inherit session default).</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="segmentId"/> is null, empty, or whitespace.</exception>
     public void SetSegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(segmentId);
@@ -1003,6 +1021,21 @@ public sealed partial class SessionWorkflowCoordinator
     /// Cancellation: this method does not accept a CancellationToken and does not observe external cancellation. Internal time-stretching uses CancellationToken.None and will not be cancelled by callers.
     ///
     /// Guard conditions: the method only proceeds when IsStillActiveTtsSegment(segmentId) returns true; if that guard fails at any point the method returns immediately and makes no further changes.
+    /// <summary>
+    /// Plays a TTS audio file for a queued segment, applying optional timing behavior (stretch or pause) and guarding against inactive segments.
+    /// </summary>
+    /// <param name="segmentId">The identifier of the active TTS segment; used as the active-segment guard.</param>
+    /// <param name="audioPath">Path to the TTS audio file to play.</param>
+    /// <param name="segment">Optional segment timing metadata; required for timing behaviors that depend on segment start/end.</param>
+    /// <param name="timingMode">Controls timing behavior: plain playback, stretch to match segment duration, or pause-source semantics.</param>
+    /// <returns>A task that completes when playback (and any timing behavior) finishes or is aborted.</returns>
+    /// <remarks>
+    /// Entry state: expects the coordinator to be running with an active session; the method requires that the caller has set ActiveTtsSegmentId to the segment being played when appropriate.
+    /// On success: leaves playback state equivalent to idle for single-segment playback; for pause-mode it will seek the source player to the segment end and resume source playback only if it was playing before the pause; it clears ActiveTtsSegmentId and sets PlaybackState to Idle when appropriate.
+    /// Persistence: does not modify or persist session state to disk.
+    /// Guards: the method repeatedly checks the active-segment guard via IsStillActiveTtsSegment(segmentId) and returns early without side effects when the guard fails. For pause-mode, if the pause-mode completion does not succeed the method attempts to resume the source player only if the segment is still active and the source had been playing, then clears active TTS state.
+    /// Cancellation: this method does not accept a CancellationToken and does not honor external cancellation; internal time-stretching is invoked with CancellationToken.None.
+    /// Side effects: may seek and resume the source media player, change ActiveTtsSegmentId, and set PlaybackState to Idle. Exceptions during timing operations are caught and logged; OperationCanceledException from invoked services is propagated where thrown by those services.
     /// </remarks>
     private async Task PlayTtsWithTimingAsync(
         string segmentId,
@@ -1052,16 +1085,44 @@ public sealed partial class SessionWorkflowCoordinator
 
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _ttsPauseModeCompletion = tcs;
+            var pauseModeCompletedSuccessfully = false;
 
             try
             {
                 await Task.Run(() => player.Play()).ConfigureAwait(false);
-                await tcs.Task.ConfigureAwait(false);
+                pauseModeCompletedSuccessfully = await tcs.Task.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log.Warning($"Pause-mode TTS playback failed for segment '{segmentId}': {ex.Message}");
             }
             finally
             {
                 if (ReferenceEquals(_ttsPauseModeCompletion, tcs))
                     _ttsPauseModeCompletion = null;
+            }
+
+            if (!pauseModeCompletedSuccessfully)
+            {
+                if (IsStillActiveTtsSegment(segmentId))
+                {
+                    if (source is not null && sourceWasPlaying)
+                    {
+                        try
+                        {
+                            source.Play();
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.Warning($"Failed to resume source playback after pause-mode failure for segment '{segmentId}': {ex.Message}");
+                        }
+                    }
+
+                    ActiveTtsSegmentId = null;
+                    PlaybackState = PlaybackState.Idle;
+                }
+
+                return;
             }
 
             if (!IsStillActiveTtsSegment(segmentId))
