@@ -1,4 +1,6 @@
 using System;
+using System.Threading.Tasks;
+using Avalonia.Controls;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Credentials;
@@ -61,6 +63,47 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             new ModelsTabViewModel(_modelDownloader, Coordinator),
             containerizedManager: Coordinator.ContainerizedInferenceManager,
             apiKeyStore: _apiKeyStore);
+
+    /// <summary>One-time tip after install: managed GPU host warm-up duration.</summary>
+    public async Task TryShowManagedBackendWarmupNoticeAsync(Window owner)
+    {
+        var settings = Coordinator.CurrentSettings;
+        if (settings.ShownManagedBackendWarmupNotice)
+            return;
+
+        if (!settings.AlwaysStartLocalGpuRuntimeAtAppStart)
+            return;
+
+        var panel = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(20),
+            Spacing = 14,
+        };
+        panel.Children.Add(new TextBlock
+        {
+            Text =
+                "The local inference host can take about 30–60 seconds to warm up the first time after install or update, " +
+                "or when it starts with the app. This is normal — wait until the status shows Ready before running the pipeline.",
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            MaxWidth = 440,
+        });
+        var ok = new Button { Content = "OK", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, MinWidth = 96 };
+        panel.Children.Add(ok);
+        var dialog = new Window
+        {
+            Title = "Local inference host",
+            Content = panel,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        ok.Click += (_, _) => dialog.Close();
+
+        await dialog.ShowDialog(owner).ConfigureAwait(true);
+
+        settings.ShownManagedBackendWarmupNotice = true;
+        _settingsService.Save(settings);
+    }
 
     [RelayCommand]
     private void RestoreSession(RecentSessionEntry entry) =>

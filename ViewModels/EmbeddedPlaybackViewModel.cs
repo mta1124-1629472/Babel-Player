@@ -70,6 +70,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             {
                 OnPropertyChanged(nameof(DiagnosticsWarningText));
                 RefreshProviderHealthDiagnostics(payload.Signal.ForceRefresh);
+                NotifyVocalSeparationCapabilityProperties();
             }));
     }
 
