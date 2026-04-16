@@ -1023,9 +1023,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
                 [new DiarizedSegment(0.0, 1.0, "spk_01")],
                 1,
                 null));
-        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.WeSpeakerLocal, "WeSpeaker", fakeProvider));
         var settings = CreateMatchingSettings();
-        settings.DiarizationProvider = ProviderNames.NemoLocal;
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
         var coord = CreateCoordinator(settings, diarizationRegistry: fakeRegistry);
         coord.Initialize();
@@ -1051,7 +1051,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         Assert.Equal("spk_01", transcript.Segments![0].SpeakerId);
         Assert.Equal("spk_01", translation.Segments![0].SpeakerId);
         Assert.Equal(SessionWorkflowStage.Translated, coord.CurrentSession.Stage);
-        Assert.Equal(ProviderNames.NemoLocal, coord.CurrentSession.DiarizationProvider);
+        Assert.Equal(ProviderNames.WeSpeakerLocal, coord.CurrentSession.DiarizationProvider);
         Assert.NotNull(fakeProvider.LastRequest);
         Assert.Equal(mediaPath, fakeProvider.LastRequest!.SourceAudioPath);
     }
@@ -1065,9 +1065,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
                 [new DiarizedSegment(0.0, 1.0, "spk_01")],
                 1,
                 null));
-        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.WeSpeakerLocal, "WeSpeaker", fakeProvider));
         var settings = CreateMatchingSettings();
-        settings.DiarizationProvider = ProviderNames.NemoLocal;
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
         var coord = CreateCoordinator(settings, diarizationRegistry: fakeRegistry);
         coord.Initialize();
@@ -1098,9 +1098,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
                 [],
                 0,
                 "diarization failed"));
-        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.WeSpeakerLocal, "WeSpeaker", fakeProvider));
         var settings = CreateMatchingSettings();
-        settings.DiarizationProvider = ProviderNames.NemoLocal;
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
         var coord = CreateCoordinator(settings, diarizationRegistry: fakeRegistry);
         coord.Initialize();
@@ -1129,9 +1129,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
                 [new DiarizedSegment(0.0, 1.0, "spk_00")],
                 1,
                 null));
-        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.WeSpeakerLocal, "WeSpeaker", fakeProvider));
         var settings = CreateMatchingSettings();
-        settings.DiarizationProvider = ProviderNames.NemoLocal;
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
         settings.DiarizationMinSpeakers = 5;
         settings.DiarizationMaxSpeakers = 1;
 
@@ -1159,7 +1159,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     public async Task RunDiarizationAsync_WhenRegistryIsMissing_Throws()
     {
         var settings = CreateMatchingSettings();
-        settings.DiarizationProvider = ProviderNames.NemoLocal;
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
         var coord = CreateCoordinator(settings, diarizationRegistry: null);
         coord.Initialize();
@@ -1184,9 +1184,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     {
         var fakeProvider = new FakeDiarizationProvider(
             readiness: new ProviderReadiness(false, "host is warming"));
-        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.WeSpeakerLocal, "WeSpeaker", fakeProvider));
         var settings = CreateMatchingSettings();
-        settings.DiarizationProvider = ProviderNames.NemoLocal;
+        settings.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
         var coord = CreateCoordinator(settings, diarizationRegistry: fakeRegistry);
         coord.Initialize();

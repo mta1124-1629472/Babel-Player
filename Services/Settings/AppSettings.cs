@@ -51,9 +51,9 @@ public sealed class AppSettings
     public string? TranscriptionLanguageHint { get; set; }
 
     /// <summary>
-    /// Diarization provider identifier (e.g. "nemo-local"). Defaults to NeMo; empty string disables diarization.
+    /// When non-empty, enables speaker separation using the on-device WeSpeaker pipeline. Empty string skips diarization (recommended for single-speaker media).
     /// </summary>
-    public string DiarizationProvider { get; set; } = ProviderNames.NemoLocal;
+    public string DiarizationProvider { get; set; } = string.Empty;
 
     /// <summary>
     /// Enables optional vocal separation before transcription when container capability is available.

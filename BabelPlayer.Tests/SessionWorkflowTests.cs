@@ -815,24 +815,6 @@ public sealed class SegmentInspectionTests
         ProbeTestHelpers.ExpireCachedProbeResult(probe, serviceUrl);
 
     [Fact]
-    public void EmbeddedPlaybackViewModel_DiarizationProviderOptions_ShowOffNeMoAndWeSpeaker()
-    {
-        var playback = CreatePlaybackVm();
-
-        Assert.Equal(
-            [string.Empty, ProviderNames.NemoLocal, ProviderNames.WeSpeakerLocal],
-            playback.SpeakerRouting.DiarizationProviderOptions);
-    }
-
-    [Fact]
-    public void EmbeddedPlaybackViewModel_DiarizationProviderOptions_UseRegistryOnly()
-    {
-        var playback = CreatePlaybackVm(new FakeDiarizationRegistry());
-
-        Assert.Equal([string.Empty], playback.SpeakerRouting.DiarizationProviderOptions);
-    }
-
-    [Fact]
     public void EmbeddedPlaybackViewModel_ComposesPipelineAndSpeakerRoutingViewModels()
     {
         using var playback = CreatePlaybackVm();
@@ -847,7 +829,7 @@ public sealed class SegmentInspectionTests
     {
         using var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
 
-        playback.SpeakerRouting.DiarizationProvider = ProviderNames.WeSpeakerLocal;
+        playback.SpeakerRouting.DetectMultipleSpeakers = true;
 
         Assert.Equal(ProviderNames.WeSpeakerLocal, playback.Coordinator.CurrentSettings.DiarizationProvider);
         Assert.Equal(ProviderNames.WeSpeakerLocal, playback.SpeakerRouting.DiarizationProvider);
@@ -858,7 +840,7 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm();
 
-        playback.SpeakerRouting.DiarizationProvider = string.Empty;
+        playback.SpeakerRouting.DetectMultipleSpeakers = false;
 
         Assert.Equal(string.Empty, playback.Coordinator.CurrentSettings.DiarizationProvider);
         Assert.Equal("Manual speaker mapping is the default release flow.", playback.SpeakerRouting.AutoSpeakerDetectionStatus);
@@ -869,7 +851,7 @@ public sealed class SegmentInspectionTests
     {
         var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
 
-        playback.SpeakerRouting.DiarizationProvider = ProviderNames.WeSpeakerLocal;
+        playback.SpeakerRouting.DetectMultipleSpeakers = true;
 
         var selectionSnapshot = playback.CaptureProviderHealthSelectionSnapshot();
         var snapshot = playback.BuildDiarizationHealthSnapshot(selectionSnapshot);
@@ -923,7 +905,7 @@ public sealed class SegmentInspectionTests
 
         Assert.True(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
 
-        playback.SpeakerRouting.DiarizationProvider = string.Empty;
+        playback.SpeakerRouting.DetectMultipleSpeakers = false;
 
         Assert.False(playback.Pipeline.RefreshDiarizationCommand.CanExecute(null));
     }
@@ -937,7 +919,7 @@ public sealed class SegmentInspectionTests
         var store = new SessionSnapshotStore(storePath, log);
         var settings = new Babel.Player.Services.Settings.AppSettings
         {
-            DiarizationProvider = ProviderNames.NemoLocal,
+            DiarizationProvider = ProviderNames.WeSpeakerLocal,
         };
         var fakeProvider = new FakeDiarizationProvider(_ =>
             new DiarizationResult(
@@ -945,7 +927,7 @@ public sealed class SegmentInspectionTests
                 [new DiarizedSegment(0.0, 1.0, "spk_02")],
                 1,
                 null));
-        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.WeSpeakerLocal, "WeSpeaker", fakeProvider));
         var coordinator = CreateCoordinator(store, log, caseDir, settings, fakeRegistry);
         coordinator.Initialize();
 
