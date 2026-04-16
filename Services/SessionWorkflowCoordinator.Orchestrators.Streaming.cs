@@ -726,14 +726,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             /// <param name="segment">The source segment to clone.</param>
             /// <returns>A new <see cref="TranslationSegmentArtifact"/> with the same Id, Start, End, Text, TranslatedText, and SpeakerId as <paramref name="segment"/>.</returns>
             private static TranslationSegmentArtifact CloneTranslationSegment(TranslationSegmentArtifact segment) =>
-            new()
-            {
-                Id = segment.Id,
-                Start = segment.Start,
-                End = segment.End,
-                Text = segment.Text,
-                TranslatedText = segment.TranslatedText,
-                SpeakerId = segment.SpeakerId,
-            };
+                TranslationArtifactStreamingWriter.CloneTranslationSegment(segment);
     }
 }

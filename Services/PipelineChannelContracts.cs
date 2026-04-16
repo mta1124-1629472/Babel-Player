@@ -274,7 +274,7 @@ internal sealed class TranslationArtifactStreamingWriter
     private Task PersistAsync(CancellationToken cancellationToken) =>
         System.IO.File.WriteAllTextAsync(_partialPath, ArtifactJson.SerializeTranslation(_artifact), cancellationToken);
 
-    private static TranslationSegmentArtifact CloneTranslationSegment(TranslationSegmentArtifact segment) =>
+    internal static TranslationSegmentArtifact CloneTranslationSegment(TranslationSegmentArtifact segment) =>
         new()
         {
             Id = segment.Id,
