@@ -43,6 +43,38 @@ Babel Player is a **dubbing workstation**, not a one-off subtitle utility. Every
   <li><strong>Refine</strong> any line, then <strong>export</strong> captions to <code>.srt</code></li>
 </ol>
 
+## Interface gallery
+
+<figure class="hero-shot">
+  <img
+    src="https://raw.githubusercontent.com/Babelworks/Babel-Player/main/Assets/Pipeline%201.png"
+    alt="Pipeline view: source media through transcription, vocal separation, and diarization"
+    width="1152"
+    loading="lazy"
+    decoding="async">
+  <figcaption>Transcription through diarization — each stage shows explicit CPU / GPU / Cloud routing and readiness.</figcaption>
+</figure>
+
+<figure class="hero-shot">
+  <img
+    src="https://raw.githubusercontent.com/Babelworks/Babel-Player/main/Assets/Pipeline%202.png"
+    alt="Pipeline view: translation, text-to-speech, and export"
+    width="1152"
+    loading="lazy"
+    decoding="async">
+  <figcaption>Translation, per-segment speech synthesis, and caption export — downstream stages stay gated until upstream artifacts exist.</figcaption>
+</figure>
+
+<figure class="hero-shot">
+  <img
+    src="https://raw.githubusercontent.com/Babelworks/Babel-Player/main/Assets/wizard.png"
+    alt="Speaker reference wizard for multi-speaker routing and voice cloning"
+    width="1152"
+    loading="lazy"
+    decoding="async">
+  <figcaption>Speaker reference wizard — capture reference audio so diarization, voice assignment, and cloning stay consistent per speaker.</figcaption>
+</figure>
+
 Sessions **auto-save** under `%LOCALAPPDATA%\BabelPlayer\` so you can close the app and pick up later.
 
 ## Why teams and hobbyists use it
