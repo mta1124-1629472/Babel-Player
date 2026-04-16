@@ -307,6 +307,12 @@ public sealed partial class SessionWorkflowCoordinator
             Stage = SessionWorkflowStage.Transcribed,
             TranscriptPath = transcriptPath,
             SourceLanguage = result.Language,
+            VocalsAudioPath = CurrentSettings.VocalSeparationEnabled
+                ? CurrentSession.VocalsAudioPath
+                : null,
+            InstrumentalAudioPath = CurrentSettings.VocalSeparationEnabled
+                ? CurrentSession.InstrumentalAudioPath
+                : null,
             TranscribedAtUtc = nowUtc,
             TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
