@@ -324,7 +324,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_MissingVocalsStem_AtTranscribedStage_PreservesTranscriptionStage()
+    public void ValidateArtifacts_MissingVocalsStem_AtTranscribedStage_DegradesToMediaLoaded()
     {
         var mediaPath = WriteFile("video.mp4");
         var transcriptPath = WriteFile("transcript.json");
@@ -340,9 +340,10 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
 
         Assert.Contains("vocal_separation", result.ClearedArtifacts);
-        Assert.Equal(SessionWorkflowStage.Transcribed, result.Snapshot.Stage);
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, result.Snapshot.Stage);
         Assert.Null(result.Snapshot.VocalsAudioPath);
-        Assert.Equal(transcriptPath, result.Snapshot.TranscriptPath);
+        Assert.Null(result.Snapshot.TranscriptPath);
+        Assert.Null(result.Snapshot.SourceLanguage);
     }
 
     [Fact]

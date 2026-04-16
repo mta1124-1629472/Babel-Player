@@ -646,7 +646,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     await resultWriter.WriteAsync(
                         new TtsChannelItem(
                             id,
-                            CloneTranslationSegment(item.Segment),
+                            StreamingArtifactCloneHelpers.CloneTranslationSegment(item.Segment),
                             result with { AudioPath = segmentAudioPath }),
                         cancellationToken).ConfigureAwait(false);
                 }
@@ -776,11 +776,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
         }
 
         /// <summary>
-            /// Create a copy of the provided transcript segment artifact.
-            /// </summary>
-            /// <param name="segment">The segment to clone.</param>
-            /// <returns>A new <see cref="TranscriptSegmentArtifact"/> with the same Start, End, Text, SpeakerId, and OriginalStart values, and a cloned `Words` list if the original had one.</returns>
-            private static TranscriptSegmentArtifact CloneTranscriptSegment(TranscriptSegmentArtifact segment) =>
+        /// Create a copy of the provided transcript segment artifact.
+        /// </summary>
+        /// <param name="segment">The segment to clone.</param>
+        /// <returns>A new <see cref="TranscriptSegmentArtifact"/> with the same Start, End, Text, SpeakerId, and OriginalStart values, and a cloned `Words` list if the original had one.</returns>
+        private static TranscriptSegmentArtifact CloneTranscriptSegment(TranscriptSegmentArtifact segment) =>
             new()
             {
                 Start = segment.Start,
@@ -790,13 +790,5 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 OriginalStart = segment.OriginalStart,
                 Words = segment.Words is null ? null : [.. segment.Words],
             };
-
-        /// <summary>
-            /// Creates a new TranslationSegmentArtifact that copies the identifying, timing, text, translation, and speaker fields from the provided segment.
-            /// </summary>
-            /// <param name="segment">The source segment to clone.</param>
-            /// <returns>A new <see cref="TranslationSegmentArtifact"/> with the same Id, Start, End, Text, TranslatedText, and SpeakerId as <paramref name="segment"/>.</returns>
-            private static TranslationSegmentArtifact CloneTranslationSegment(TranslationSegmentArtifact segment) =>
-                StreamingArtifactCloneHelpers.CloneTranslationSegment(segment);
     }
 }
