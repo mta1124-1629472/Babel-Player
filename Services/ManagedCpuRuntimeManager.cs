@@ -111,6 +111,19 @@ public sealed class ManagedCpuRuntimeManager
     {
         var ensureInstalledStopwatch = Stopwatch.StartNew();
         var inspection = InspectRuntimeState();
+        #region agent log
+        WriteDebugLog(
+            "initial",
+            "H1",
+            "ManagedCpuRuntimeManager.EnsureInstalledAsync:113",
+            "Initial managed CPU inspection",
+            new
+            {
+                state = inspection.State.ToString(),
+                inspection.NeedsBootstrap,
+                detail = inspection.Detail,
+            });
+        #endregion
         CacheNeedsBootstrap(inspection.NeedsBootstrap);
         if (!inspection.NeedsBootstrap)
         {
@@ -268,10 +281,26 @@ public sealed class ManagedCpuRuntimeManager
 
         if (!validationRecord.IsValid)
         {
+            #region agent log
+            WriteDebugLog(
+                "initial",
+                "H1",
+                "ManagedCpuRuntimeManager.InspectRuntimeState:269",
+                "Managed CPU validation record is invalid",
+                new
+                {
+                    validationRecord.MarkerHash,
+                    validationRecord.IsValid,
+                    validationRecord.FailureReason,
+                    expectedHash,
+                });
+            #endregion
             return new ManagedCpuRuntimeInspection(
-                ManagedCpuState.Failed,
-                NeedsBootstrap: false,
-                validationRecord.FailureReason ?? "Managed CPU runtime validation failed.",
+                ManagedCpuState.NotInstalled,
+                // Invalid validation records must trigger re-bootstrap so stale failures
+                // (for example from prior validator script regressions) can self-heal.
+                NeedsBootstrap: true,
+                validationRecord.FailureReason ?? "Managed CPU runtime validation failed; reinstall required.",
                 validationRecord);
         }
 
@@ -537,6 +566,19 @@ public sealed class ManagedCpuRuntimeManager
         ManagedCpuProcessCapture result;
         try
         {
+            #region agent log
+            WriteDebugLog(
+                "initial",
+                "H2",
+                "ManagedCpuRuntimeManager.ValidateInstalledRuntimeAsync:540",
+                "CPU validation script emitted to temp file",
+                new
+                {
+                    scriptPath,
+                    usesInlineScript = false,
+                    hasQuotedMessageAssignment = validationScript.Contains("payload[\"message\"]"),
+                });
+            #endregion
             await File.WriteAllTextAsync(scriptPath, validationScript, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -773,26 +815,14 @@ public sealed class ManagedCpuRuntimeManager
 
     private static string ResolveDebugLogPath()
     {
-        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
-        if (!string.IsNullOrWhiteSpace(envPath))
-            return envPath;
-
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
-                return Path.Combine(dir.FullName, "debug-f76224.log");
-            dir = dir.Parent;
-        }
-
-        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
+        return @"d:\Dev\Babel-Player\debug-7dd085.log";
     }
 
     private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
     {
         var payload = new
         {
-            sessionId = "f76224",
+            sessionId = "7dd085",
             runId,
             hypothesisId,
             location,

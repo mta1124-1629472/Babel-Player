@@ -136,4 +136,5 @@ public sealed partial class SessionWorkflowCoordinator
             _ => RuntimeRole.CpuNlp,
         };
     }
+
 }
