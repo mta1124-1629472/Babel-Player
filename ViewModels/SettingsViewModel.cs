@@ -171,7 +171,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             : $"updated {Math.Max(1, (int)age.TotalSeconds).ToString(CultureInfo.CurrentCulture)}s ago";
         var staleTag = status.IsStale ? " (stale)" : string.Empty;
         var coldStart = DateTimeOffset.UtcNow - _coordinator.ProcessStartedAtUtc < TimeSpan.FromSeconds(90);
-        const string warmHint = " Typical first warm-up after launch: 30–60 seconds.";
+        const string warmHint = " Typical first warm-up after launch: 30 to 60 seconds.";
 
         BackendStatusText = status is { Busy: true, BusyReason: not null }
             ? $"Warming — busy: {status.BusyReason} · {freshness}{warmHint}"

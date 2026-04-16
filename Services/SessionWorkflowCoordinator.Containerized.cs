@@ -257,7 +257,7 @@ public sealed partial class SessionWorkflowCoordinator
                 return message;
         }
 
-        const string hint = " Typical first warm-up after launch or install: 30–60 seconds.";
+        const string hint = " Typical first warm-up after launch or install: 30 to 60 seconds.";
         return message.EndsWith(hint, StringComparison.Ordinal) ? message : message + hint;
     }
 
