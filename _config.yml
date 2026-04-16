@@ -1,6 +1,9 @@
 theme: jekyll-theme-cayman
 title: Babel Player
-description: Local-first video transcription, translation, and dubbing workstation for Windows
+description: >-
+  A high-performance Windows workstation for segment-based AI dubbing —
+  local RTX transcription, translation, and voice tools, with optional cloud APIs.
+  Built with .NET 10 and Avalonia 12.
 url: "https://babelworks.github.io"
 baseurl: "/Babel-Player"
 
@@ -9,13 +12,13 @@ author: Babelworks
 github_username: Babelworks
 repository: Babelworks/Babel-Player
 
-# Navigation — rendered by _layouts/default.html in the page header
+# Navigation — extra header buttons (Download + GitHub are in the layout)
 nav_links:
-  - title: GitHub
-    url: https://github.com/Babelworks/Babel-Player
-  - title: Releases
-    url: https://github.com/Babelworks/Babel-Player/releases/latest
-  - title: Privacy Policy
+  - title: Full documentation
+    url: https://github.com/Babelworks/Babel-Player#readme
+  - title: Contributing
+    url: https://github.com/Babelworks/Babel-Player/blob/main/CONTRIBUTING.md
+  - title: Privacy
     url: /Babel-Player/privacy/
 
 # Build settings
