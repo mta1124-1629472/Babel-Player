@@ -215,33 +215,59 @@ public sealed partial class SessionWorkflowCoordinator
     private string? DescribeRuntimeWarmupStatus(ContainerizedProbeResult probeResult)
     {
         var hostLabel = GetConfiguredGpuHostLabel();
+        string message;
         if (probeResult.State == ContainerizedProbeState.Checking)
-            return $"{hostLabel} is starting…";
-
-        if (probeResult.State == ContainerizedProbeState.Unavailable)
+            message = $"{hostLabel} is starting…";
+        else if (probeResult.State == ContainerizedProbeState.Unavailable)
         {
-            return string.IsNullOrWhiteSpace(probeResult.ErrorDetail)
+            message = string.IsNullOrWhiteSpace(probeResult.ErrorDetail)
                 ? $"{hostLabel} is unavailable."
                 : $"{hostLabel} is unavailable: {probeResult.ErrorDetail}";
         }
+        else if (probeResult.IsStale)
+            message = $"{hostLabel} status is cached while a fresh probe is running.";
+        else
+        {
+            var providerWarmup = FindActiveWarmupDetail(probeResult);
+            if (!string.IsNullOrWhiteSpace(providerWarmup))
+                message = providerWarmup;
+            else if (probeResult.Busy && !string.IsNullOrWhiteSpace(probeResult.BusyReason))
+                message = $"{hostLabel} is busy: {probeResult.BusyReason}";
+            else
+                message = $"{hostLabel} is ready.";
+        }
 
-        if (probeResult.IsStale)
-            return $"{hostLabel} status is cached while a fresh probe is running.";
+        return AppendWarmupExpectationHint(probeResult, message);
+    }
 
-        var providerWarmup = FindActiveWarmupDetail(probeResult);
-        if (!string.IsNullOrWhiteSpace(providerWarmup))
-            return providerWarmup;
+    private string AppendWarmupExpectationHint(ContainerizedProbeResult probeResult, string message)
+    {
+        if (probeResult.State == ContainerizedProbeState.Available
+            && !probeResult.IsStale
+            && string.IsNullOrWhiteSpace(FindActiveWarmupDetail(probeResult))
+            && !probeResult.Busy)
+        {
+            return message;
+        }
 
-        if (probeResult.Busy && !string.IsNullOrWhiteSpace(probeResult.BusyReason))
-            return $"{hostLabel} is busy: {probeResult.BusyReason}";
+        if (probeResult.State == ContainerizedProbeState.Unavailable)
+        {
+            var coldBudget = TimeSpan.FromSeconds(90);
+            if (DateTimeOffset.UtcNow - ProcessStartedAtUtc >= coldBudget)
+                return message;
+        }
 
-        return $"{hostLabel} is ready.";
+        const string hint = " Typical first warm-up after launch or install: 30–60 seconds.";
+        return message.EndsWith(hint, StringComparison.Ordinal) ? message : message + hint;
     }
 
     private string? FindActiveWarmupDetail(ContainerizedProbeResult probeResult)
     {
-        foreach (var snapshot in EnumerateProviderHealth(probeResult))
+        foreach (var (providerKey, snapshot) in EnumerateKeyedProviderHealth(probeResult))
         {
+            if (!IsProviderWarmupRelevantToCurrentSelection(providerKey))
+                continue;
+
             var state = snapshot?.State;
             if (snapshot is null
                 || string.IsNullOrWhiteSpace(snapshot.Detail)
@@ -258,24 +284,87 @@ public sealed partial class SessionWorkflowCoordinator
         return null;
     }
 
-    private static IEnumerable<ContainerProviderHealthSnapshot?> EnumerateProviderHealth(ContainerizedProbeResult probeResult)
+    /// <summary>
+    /// The GPU host refreshes background provider health for NeMo and Qwen even when the user
+    /// selected WeSpeaker diarization or Edge TTS. Only surface warmup text for providers that
+    /// match the active pipeline selection.
+    /// </summary>
+    private bool IsProviderWarmupRelevantToCurrentSelection(string providerKey)
+    {
+        if (providerKey.StartsWith("tts:", StringComparison.OrdinalIgnoreCase))
+        {
+            var id = providerKey[4..];
+            if (CurrentSettings.TtsRuntime != InferenceRuntime.Containerized)
+                return false;
+
+            var selected = InferenceRuntimeCatalog.NormalizeTtsProvider(
+                CurrentSettings.TtsProfile,
+                CurrentSettings.TtsProvider);
+            var probeId = InferenceRuntimeCatalog.NormalizeTtsProvider(CurrentSettings.TtsProfile, id);
+            return string.Equals(selected, probeId, StringComparison.Ordinal);
+        }
+
+        if (providerKey.StartsWith("diar:", StringComparison.OrdinalIgnoreCase))
+        {
+            var id = providerKey[5..];
+            if (InferenceRuntimeCatalog.InferDiarizationRuntime(CurrentSettings.DiarizationProvider)
+                != InferenceRuntime.Containerized)
+                return false;
+
+            var selected = InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(
+                CurrentSettings.DiarizationProvider);
+            var probeId = InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(id);
+            return string.Equals(selected, probeId, StringComparison.Ordinal);
+        }
+
+        if (string.Equals(providerKey, "nemo", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider))
+                return false;
+
+            if (InferenceRuntimeCatalog.InferDiarizationRuntime(CurrentSettings.DiarizationProvider)
+                != InferenceRuntime.Containerized)
+                return false;
+
+            return string.Equals(
+                InferenceRuntimeCatalog.NormalizeDiarizationProvider(CurrentSettings.DiarizationProvider),
+                ProviderNames.NemoLocal,
+                StringComparison.Ordinal);
+        }
+
+        if (string.Equals(providerKey, "qwen", StringComparison.OrdinalIgnoreCase))
+        {
+            if (CurrentSettings.TtsRuntime != InferenceRuntime.Containerized)
+                return false;
+
+            return string.Equals(
+                InferenceRuntimeCatalog.NormalizeTtsProvider(CurrentSettings.TtsProfile, CurrentSettings.TtsProvider),
+                ProviderNames.Qwen,
+                StringComparison.Ordinal);
+        }
+
+        return true;
+    }
+
+    private static IEnumerable<(string ProviderKey, ContainerProviderHealthSnapshot Snapshot)> EnumerateKeyedProviderHealth(
+        ContainerizedProbeResult probeResult)
     {
         if (probeResult.ProviderHealth is not null)
         {
-            foreach (var snapshot in probeResult.ProviderHealth.Values)
-                yield return snapshot;
+            foreach (var kv in probeResult.ProviderHealth)
+                yield return (kv.Key, kv.Value);
         }
 
         if (probeResult.Capabilities?.TtsProviderHealth is not null)
         {
-            foreach (var snapshot in probeResult.Capabilities.TtsProviderHealth.Values)
-                yield return snapshot;
+            foreach (var kv in probeResult.Capabilities.TtsProviderHealth)
+                yield return ($"tts:{kv.Key}", kv.Value);
         }
 
         if (probeResult.Capabilities?.DiarizationProviderHealth is not null)
         {
-            foreach (var snapshot in probeResult.Capabilities.DiarizationProviderHealth.Values)
-                yield return snapshot;
+            foreach (var kv in probeResult.Capabilities.DiarizationProviderHealth)
+                yield return ($"diar:{kv.Key}", kv.Value);
         }
     }
 

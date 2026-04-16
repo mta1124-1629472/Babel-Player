@@ -336,6 +336,27 @@ public abstract class PythonSubprocessServiceBase
                 try
                 {
                     proc.Kill(entireProcessTree: true);
+                    var terminated = false;
+                    for (var attempt = 0; attempt < ProcessTerminationRetryAttempts && !terminated; attempt++)
+                    {
+                        try
+                        {
+                            using var cts = new CancellationTokenSource(ProcessTerminationTimeout);
+                            await proc.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+                            terminated = true;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            if (attempt < ProcessTerminationRetryAttempts - 1)
+                                proc.Kill(entireProcessTree: true);
+                        }
+                    }
+
+                    if (!terminated)
+                    {
+                        try { proc.Kill(entireProcessTree: true); }
+                        catch { /* best effort */ }
+                    }
                 }
                 catch
                 {

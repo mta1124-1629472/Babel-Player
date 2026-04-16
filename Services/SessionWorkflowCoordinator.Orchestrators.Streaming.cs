@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Transcription;
 
 namespace Babel.Player.Services;
 
@@ -171,16 +172,17 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             TranscriptionResult? transcriptionResult = null;
             try
             {
+                var streamRequest = CpuTranscriptionRuntimePolicy.BuildTranscriptionRequest(
+                    _c.CurrentSettings,
+                    _c.HardwareSnapshot,
+                    transcriptionSourcePath,
+                    transcriptPath,
+                    _c.CurrentSettings.TranscriptionModel,
+                    SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),
+                    _c.Log);
                 transcriptionResult = await _c._inferenceEngine.TranscribeStreamingAsync(
                     streamingProvider,
-                    new TranscriptionRequest(
-                        transcriptionSourcePath,
-                        transcriptPath,
-                        _c.CurrentSettings.TranscriptionModel,
-                        SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),
-                        _c.CurrentSettings.TranscriptionCpuComputeType,
-                        _c.CurrentSettings.TranscriptionCpuThreads,
-                        _c.CurrentSettings.TranscriptionNumWorkers),
+                    streamRequest,
                     forwardingWriter,
                     pipelineToken).ConfigureAwait(false);
 

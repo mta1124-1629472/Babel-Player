@@ -125,6 +125,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public AppSettings CurrentSettings { get; private set; }
 
+    /// <summary>UTC time when this coordinator instance was created — used for cold-start UX (warm-up hints).</summary>
+    public DateTimeOffset ProcessStartedAtUtc { get; } = DateTimeOffset.UtcNow;
+
     /// <summary>
     /// Raised when AppSettings are modified in-place (e.g. by left-panel dropdowns).
     /// Subscribers should call SettingsService.Save() in response.

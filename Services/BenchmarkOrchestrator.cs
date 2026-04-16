@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services.Settings;
+using Babel.Player.Services.Transcription;
 
 namespace Babel.Player.Services;
 
@@ -151,13 +152,14 @@ public sealed class BenchmarkOrchestrator
                     audioDurationSeconds: clip.DurationSeconds,
                     runFn: async (runIndex, runType, ct) =>
                     {
-                        var request = new TranscriptionRequest(
-                            SourceAudioPath: audioPath,
-                            OutputJsonPath:  outputJsonPath,
-                            ModelName:       settings.TranscriptionModel,
-                            CpuComputeType:  settings.TranscriptionCpuComputeType,
-                            CpuThreads:      settings.TranscriptionCpuThreads,
-                            NumWorkers:      settings.TranscriptionNumWorkers);
+                        var request = CpuTranscriptionRuntimePolicy.BuildTranscriptionRequest(
+                            settings,
+                            _hardware,
+                            audioPath,
+                            outputJsonPath,
+                            settings.TranscriptionModel,
+                            languageHint: null,
+                            _log);
 
                         var (elapsedMs, hypothesis, peakVramMb, peakRamMb) =
                             await RunSingleAsync(provider, request, ct);
