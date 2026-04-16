@@ -297,6 +297,11 @@ public sealed partial class SessionWorkflowCoordinator
     private void CommitTranscriptionSessionState(TranscriptionResult result, string transcriptPath)
     {
         var nowUtc = DateTimeOffset.UtcNow;
+        // When vocal separation is disabled, clear any stale stem paths from a previous run that
+        // had separation enabled. When separation is enabled, SeparateVocalsAsync already wrote
+        // fresh stem paths into CurrentSession before this method is called, so we preserve them.
+        var vocalsPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.VocalsAudioPath : null;
+        var instrumentalPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.InstrumentalAudioPath : null;
         CurrentSession = CurrentSession with
         {
             Stage = SessionWorkflowStage.Transcribed,
@@ -308,6 +313,8 @@ public sealed partial class SessionWorkflowCoordinator
             TranscriptionModel = CurrentSettings.TranscriptionModel,
             TranscriptionLanguageHint = SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
                 CurrentSettings.TranscriptionLanguageHint),
+            VocalsAudioPath = vocalsPath,
+            InstrumentalAudioPath = instrumentalPath,
             StatusMessage = ShouldRunDiarization()
                 ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
                 : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
