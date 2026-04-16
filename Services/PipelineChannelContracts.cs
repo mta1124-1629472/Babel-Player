@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -206,6 +207,21 @@ internal sealed class TranslationArtifactStreamingWriter
     public async Task ReloadFromDiskAsync(CancellationToken cancellationToken)
     {
         _artifact = await ArtifactJson.LoadTranslationAsync(_partialPath, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Patches the translated text for a single segment in the in-memory artifact without a disk round-trip.
+    /// Call this after <see cref="AppendPendingSegmentAsync"/> and a successful provider translation to keep
+    /// in-memory state consistent with what the provider wrote to disk.
+    /// </summary>
+    /// <returns>The updated segment, or null if the segment ID was not found.</returns>
+    public TranslationSegmentArtifact? UpdateTranslatedText(string segmentId, string translatedText)
+    {
+        var segment = _artifact.Segments?.FirstOrDefault(s =>
+            string.Equals(s.Id, segmentId, StringComparison.Ordinal));
+        if (segment is not null)
+            segment.TranslatedText = translatedText;
+        return segment;
     }
 
     public async Task CompleteAsync(string finalPath, CancellationToken cancellationToken)

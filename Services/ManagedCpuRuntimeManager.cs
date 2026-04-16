@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -644,7 +645,7 @@ public sealed class ManagedCpuRuntimeManager
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running CPU runtime process: {fileName} {string.Join(' ', arguments)}");
+        _log.Info($"Running CPU runtime process: {fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -665,7 +666,7 @@ public sealed class ManagedCpuRuntimeManager
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}");
+                $"Process '{fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}' failed with exit code {process.ExitCode}: {stderr}");
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))
@@ -702,7 +703,7 @@ public sealed class ManagedCpuRuntimeManager
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running CPU runtime capture process: {fileName} {string.Join(' ', arguments)}");
+        _log.Info($"Running CPU runtime capture process: {fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");

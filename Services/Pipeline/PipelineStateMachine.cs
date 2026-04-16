@@ -28,7 +28,9 @@ internal static class PipelineStateMachine
     internal static bool ShouldRunFullStreamingPipelineFirst(
         SessionWorkflowStage currentStage,
         bool shouldRunDiarization) =>
-        currentStage < SessionWorkflowStage.Transcribed && !shouldRunDiarization;
+        currentStage >= SessionWorkflowStage.MediaLoaded
+        && currentStage < SessionWorkflowStage.Transcribed
+        && !shouldRunDiarization;
 
     /// <summary>
     /// Next action after re-reading <see cref="SessionWorkflowCoordinator.CurrentSession"/>.Stage, or null when nothing left to advance.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -1069,7 +1070,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running managed GPU process: {fileName} {string.Join(' ', arguments)}");
+        _log.Info($"Running managed GPU process: {fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -1095,7 +1096,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             var stdoutSnippet = stdoutLines.Length > 0 ? $"\nstdout: {stdoutLines}" : string.Empty;
             throw new InvalidOperationException(
-                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
+                $"Process '{fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}' failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))

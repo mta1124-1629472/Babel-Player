@@ -397,11 +397,16 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         throw new InvalidOperationException($"Translation failed: {errorMsg}");
                     }
 
-                    await artifactWriter.ReloadFromDiskAsync(cancellationToken).ConfigureAwait(false);
-                    var translatedSegment = artifactWriter.OrderedSegments.FirstOrDefault(segment =>
-                        string.Equals(segment.Id, item.SegmentId, StringComparison.Ordinal));
+                    // Extract the translated text for this segment from the provider result.
+                    // result.Segments is ordered by timing; match on start time to find ours.
+                    var providerSegment = result.Segments.FirstOrDefault(s =>
+                        Math.Abs(s.StartSeconds - item.Segment.Start) < 0.001);
+                    var translatedText = providerSegment?.TranslatedText ?? string.Empty;
+
+                    // Patch in-memory state directly — avoids a disk round-trip per segment.
+                    var translatedSegment = artifactWriter.UpdateTranslatedText(item.SegmentId, translatedText);
                     if (translatedSegment is null)
-                        throw new InvalidOperationException($"Translated segment '{item.SegmentId}' was not written to the partial artifact.");
+                        throw new InvalidOperationException($"Translated segment '{item.SegmentId}' was not found in the in-memory artifact.");
 
                     completed++;
                     ReportStage(
