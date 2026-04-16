@@ -512,11 +512,7 @@ public sealed partial class SessionWorkflowCoordinator
             : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
 
     /// <summary>
-    /// Sets or clears a per-segment dub timing mode override in the current session snapshot.
-    /// </summary>
-    /// <param name="segmentId">Segment identifier (e.g. <c>segment_0.0</c>).</param>
-    /// <summary>
-    /// Set or clear a per-segment timing mode override in the current session snapshot.
+    /// Sets or clears a per-segment timing mode override in the current session snapshot. Updates <c>CurrentSession.SegmentTimingModeOverrides</c> and calls <c>SaveCurrentSession()</c>.
     /// </summary>
     /// <remarks>
     /// Expects an active session to be loaded (reads and mutates <c>CurrentSession</c>); on success it updates <c>CurrentSession.SegmentTimingModeOverrides</c> and persists the session by calling <c>SaveCurrentSession()</c>. If the supplied override does not change the stored value, the method returns without persisting. This method performs no asynchronous work and does not accept cancellation.

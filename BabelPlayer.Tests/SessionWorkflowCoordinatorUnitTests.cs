@@ -139,7 +139,9 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         public double Volume { get; set; } = 1.0;
         public double PlaybackRate { get; set; } = 1.0;
         public bool SubtitlesVisible { get; set; }
+        // PLACEHOLDER(test-mock): Mock media transport for unit tests
         public event EventHandler? Ended { add { } remove { } }
+        // PLACEHOLDER(test-mock): Mock media transport for unit tests
         public event EventHandler<Exception>? ErrorOccurred { add { } remove { } }
 
         public void Dispose() { }
