@@ -941,8 +941,7 @@
                     </Style>
                 </Border.Styles>
 
-                <ScrollViewer x:Name="ControlsBarScrollViewer"
-                              HorizontalScrollBarVisibility="Auto"
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled"
                               HorizontalAlignment="Stretch">
                     <!-- Keep star spacer columns finite inside ScrollViewer so left/center/right groups stay distributed. -->
