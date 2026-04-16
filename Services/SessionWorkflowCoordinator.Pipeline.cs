@@ -80,6 +80,18 @@ public sealed partial class SessionWorkflowCoordinator
                 $"Vocal separation failed: {result.ErrorMessage ?? "Unknown vocal separation error"}");
         }
 
+        if (!File.Exists(result.VocalsAudioPath))
+            throw new InvalidOperationException($"Vocal separation completed but vocals artifact was not found: {result.VocalsAudioPath}");
+
+        if (!File.Exists(result.InstrumentalAudioPath))
+            throw new InvalidOperationException($"Vocal separation completed but instrumental artifact was not found: {result.InstrumentalAudioPath}");
+
+        if (!File.Exists(result.VocalsAudioPath))
+            throw new InvalidOperationException($"Vocal separation completed but vocals artifact was not found: {result.VocalsAudioPath}");
+
+        if (!File.Exists(result.InstrumentalAudioPath))
+            throw new InvalidOperationException($"Vocal separation completed but instrumental artifact was not found: {result.InstrumentalAudioPath}");
+
         CurrentSession = CurrentSession with
         {
             VocalsAudioPath = result.VocalsAudioPath,
@@ -307,20 +319,14 @@ public sealed partial class SessionWorkflowCoordinator
             Stage = SessionWorkflowStage.Transcribed,
             TranscriptPath = transcriptPath,
             SourceLanguage = result.Language,
-            VocalsAudioPath = CurrentSettings.VocalSeparationEnabled
-                ? CurrentSession.VocalsAudioPath
-                : null,
-            InstrumentalAudioPath = CurrentSettings.VocalSeparationEnabled
-                ? CurrentSession.InstrumentalAudioPath
-                : null,
+            VocalsAudioPath = vocalsPath,
+            InstrumentalAudioPath = instrumentalPath,
             TranscribedAtUtc = nowUtc,
             TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
             TranscriptionModel = CurrentSettings.TranscriptionModel,
             TranscriptionLanguageHint = SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
                 CurrentSettings.TranscriptionLanguageHint),
-            VocalsAudioPath = vocalsPath,
-            InstrumentalAudioPath = instrumentalPath,
             StatusMessage = ShouldRunDiarization()
                 ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
                 : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",

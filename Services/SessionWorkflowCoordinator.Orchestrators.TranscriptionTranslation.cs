@@ -104,9 +104,14 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
                     var errorMsg = result.ErrorMessage ?? "Unknown transcription error";
                     var ex = new InvalidOperationException($"Transcription failed: {errorMsg}");
                     _c.Log.Error(ex.Message, ex);
-                throw new PipelineProviderException(
-                    $"Transcription provider '{_c.CurrentSettings.TranscriptionProvider}' failed during transcription stage: {errorMsg}",
-                    ex);
+                    throw new PipelineProviderException(
+                        $"Transcription provider '{_c.CurrentSettings.TranscriptionProvider}' failed during transcription stage: {errorMsg}",
+                        ex);
+                }
+
+                _c.CommitTranscriptionSessionState(result, transcriptPath);
+                stageSucceeded = true;
+
                 ReportStage(
                     stageContext,
                     $"Transcription complete. {result.Segments.Count} segments were detected in {result.Language}.",
