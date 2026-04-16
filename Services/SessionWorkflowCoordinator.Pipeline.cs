@@ -86,12 +86,6 @@ public sealed partial class SessionWorkflowCoordinator
         if (!File.Exists(result.InstrumentalAudioPath))
             throw new InvalidOperationException($"Vocal separation completed but instrumental artifact was not found: {result.InstrumentalAudioPath}");
 
-        if (!File.Exists(result.VocalsAudioPath))
-            throw new InvalidOperationException($"Vocal separation completed but vocals artifact was not found: {result.VocalsAudioPath}");
-
-        if (!File.Exists(result.InstrumentalAudioPath))
-            throw new InvalidOperationException($"Vocal separation completed but instrumental artifact was not found: {result.InstrumentalAudioPath}");
-
         CurrentSession = CurrentSession with
         {
             VocalsAudioPath = result.VocalsAudioPath,

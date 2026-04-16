@@ -17,6 +17,10 @@ public sealed class PipelineStateMachineTests
     [Fact]
     public void GetNextAdvanceAction_FollowsTranscribeDiarizeTranslateTtsOrdering()
     {
+        // Foundation (pre-MediaLoaded) must not advance to Transcribe.
+        Assert.Null(PipelineStateMachine.GetNextAdvanceAction(SessionWorkflowStage.Foundation, shouldRunDiarization: false));
+        Assert.Null(PipelineStateMachine.GetNextAdvanceAction(SessionWorkflowStage.Foundation, shouldRunDiarization: true));
+
         Assert.Equal(PipelineAdvanceAction.Transcribe,
             PipelineStateMachine.GetNextAdvanceAction(SessionWorkflowStage.MediaLoaded, shouldRunDiarization: true));
 
