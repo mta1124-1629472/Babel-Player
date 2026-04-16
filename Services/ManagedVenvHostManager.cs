@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
@@ -911,39 +912,34 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string inferenceScriptPath,
         string computeType)
     {
+        var commandLine = BuildCommandLine(new[]
+        {
+            inferenceScriptPath,
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "18000",
+            "--compute-type",
+            computeType,
+            RequiresCuda(computeType) ? "--require-cuda" : string.Empty
+        }.Where(s => !string.IsNullOrEmpty(s)).ToArray());
+
         var psi = new ProcessStartInfo
         {
             FileName = pythonPath,
             WorkingDirectory = Path.GetDirectoryName(inferenceScriptPath) ?? AppContext.BaseDirectory,
+            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
 
-        psi.ArgumentList.Add(inferenceScriptPath);
-        psi.ArgumentList.Add("--host");
-        psi.ArgumentList.Add("127.0.0.1");
-        psi.ArgumentList.Add("--port");
-        psi.ArgumentList.Add("18000");
-        psi.ArgumentList.Add("--compute-type");
-        psi.ArgumentList.Add(computeType);
-
-        // Any GPU compute type requires CUDA at host startup.
-        if (RequiresCuda(computeType))
-        {
-            psi.ArgumentList.Add("--require-cuda");
-        }
-
         // Make CUDA kernel errors synchronous so the Python traceback points at the
         // actual failing op rather than a random later API call.
         psi.Environment["CUDA_LAUNCH_BLOCKING"] = "1";
 
         // Redirect the HuggingFace hub model cache into the app data directory.
-        // This isolates our models from the user's global HF cache and prevents
-        // the "Unable to open file 'model.bin'" failure that occurs on Windows when
-        // huggingface_hub is upgraded between releases and fails to re-validate
-        // cache files created by a prior version.
         psi.Environment["HUGGINGFACE_HUB_CACHE"] = ManagedRuntimeLayout.GetModelCacheDir();
         psi.Environment["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1";
         psi.Environment[QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable] =
@@ -956,18 +952,20 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string pythonPath,
         CancellationToken cancellationToken)
     {
+        var commandLine = BuildCommandLine([
+            "-c",
+            "import json, torch; print(json.dumps({'cuda_available': bool(torch.cuda.is_available()), 'cuda_version': getattr(torch.version, 'cuda', None)}))"
+        ]);
+
         var psi = new ProcessStartInfo
         {
             FileName = pythonPath,
+            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-
-        psi.ArgumentList.Add("-c");
-        psi.ArgumentList.Add(
-            "import json, torch; print(json.dumps({'cuda_available': bool(torch.cuda.is_available()), 'cuda_version': getattr(torch.version, 'cuda', None)}))");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start managed GPU runtime validation process.");
@@ -1029,21 +1027,19 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         CancellationToken cancellationToken,
         params string[] arguments)
     {
+        var commandLine = BuildCommandLine(arguments);
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
+            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
 
-        foreach (var argument in arguments)
-            psi.ArgumentList.Add(argument);
-
-        _log.Info(
-            $"Running managed GPU process: file={fileName}, working_directory={workingDirectory}, args={string.Join(' ', arguments)}");
+        _log.Info($"Running managed GPU process: {QuoteIfNeeded(fileName)} {commandLine}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -1069,11 +1065,30 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             var stdoutSnippet = stdoutLines.Length > 0 ? $"\nstdout: {stdoutLines}" : string.Empty;
             throw new InvalidOperationException(
-                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
+                $"Process {QuoteIfNeeded(fileName)} {commandLine} failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))
             _log.Info(stderr.Trim());
+    }
+
+    private static string BuildCommandLine(string[] arguments)
+    {
+        var sb = new StringBuilder();
+        foreach (var arg in arguments)
+        {
+            if (sb.Length > 0) sb.Append(' ');
+            sb.Append(QuoteIfNeeded(arg));
+        }
+        return sb.ToString();
+    }
+
+    private static string QuoteIfNeeded(string arg)
+    {
+        if (string.IsNullOrEmpty(arg)) return "\"\"";
+        // If it has spaces and isn't already quoted, wrap it.
+        if (arg.Contains(' ') && !arg.StartsWith('\"')) return $"\"{arg}\"";
+        return arg;
     }
 
     private async Task DrainProcessStreamAsync(StreamReader reader, string prefix)

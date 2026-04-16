@@ -605,21 +605,19 @@ print(json.dumps(payload))
         Action<string>? onStatusLine,
         params string[] arguments)
     {
+        var commandLine = BuildCommandLine(arguments);
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
+            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
 
-        foreach (var argument in arguments)
-            psi.ArgumentList.Add(argument);
-
-        _log.Info(
-            $"Running CPU runtime process: file={fileName}, args={string.Join(' ', arguments)}");
+        _log.Info($"Running CPU runtime process: {QuoteIfNeeded(fileName)} {commandLine}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -638,8 +636,10 @@ print(json.dumps(payload))
         _log.Info($"CPU runtime process exited: file={fileName}, exit_code={process.ExitCode}");
 
         if (process.ExitCode != 0)
+        {
             throw new InvalidOperationException(
-                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}");
+                $"Process {QuoteIfNeeded(fileName)} {commandLine} failed with exit code {process.ExitCode}: {stderr}");
+        }
 
         if (!string.IsNullOrWhiteSpace(stderr))
             _log.Info(stderr.Trim());
@@ -651,21 +651,19 @@ print(json.dumps(payload))
         CancellationToken cancellationToken,
         params string[] arguments)
     {
+        var commandLine = BuildCommandLine(arguments);
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
+            Arguments = commandLine,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
 
-        foreach (var argument in arguments)
-            psi.ArgumentList.Add(argument);
-
-        _log.Info(
-            $"Running CPU runtime capture process: file={fileName}, args={string.Join(' ', arguments)}");
+        _log.Info($"Running CPU runtime capture process: {QuoteIfNeeded(fileName)} {commandLine}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
@@ -679,6 +677,25 @@ print(json.dumps(payload))
             process.ExitCode,
             await stdoutTask.ConfigureAwait(false),
             await stderrTask.ConfigureAwait(false));
+    }
+
+    private static string BuildCommandLine(string[] arguments)
+    {
+        var sb = new StringBuilder();
+        foreach (var arg in arguments)
+        {
+            if (sb.Length > 0) sb.Append(' ');
+            sb.Append(QuoteIfNeeded(arg));
+        }
+        return sb.ToString();
+    }
+
+    private static string QuoteIfNeeded(string arg)
+    {
+        if (string.IsNullOrEmpty(arg)) return "\"\"";
+        // If it has spaces and isn't already quoted, wrap it.
+        if (arg.Contains(' ') && !arg.StartsWith('\"')) return $"\"{arg}\"";
+        return arg;
     }
 
     // Marker format includes PythonVersion plus labeled requirements/constraints bodies so
