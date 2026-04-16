@@ -200,8 +200,8 @@
                 <!-- Header -->
 <Border Grid.Row="0" Padding="16,14,16,12"
         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
-    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <TextBlock Text="Pipeline" FontSize="15" FontWeight="SemiBold"
                         Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
             <Border Background="{DynamicResource AccentSubtleBrush}" CornerRadius="4" Padding="8,2"
@@ -209,15 +209,13 @@
                 <TextBlock Text="{Binding Playback.Pipeline.PipelineStageDetail}" FontSize="10" Foreground="{DynamicResource AccentBrush}"/>
             </Border>
         </StackPanel>
-        <Button Grid.Column="1"
-                Padding="8,6" FontSize="11"
+        <Button Grid.Column="2"
+                Padding="10,6" FontSize="11"
                 Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                 CornerRadius="6"
                 Command="{Binding Playback.Pipeline.ClearPipelineCommand}"
                 ToolTip.Tip="Clear pipeline and start fresh">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-                <TextBlock Text="Clear" />
-            </StackPanel>
+            <TextBlock Text="Clear" FontWeight="Medium"/>
         </Button>
     </Grid>
 </Border>

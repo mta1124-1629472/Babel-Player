@@ -269,10 +269,11 @@
                             <StackPanel Spacing="12">
                                 <TextBlock Text="HDR Playback" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <TextBlock Text="Choose one mode. RTX HDR follows NVIDIA Control Panel. HDR passthrough configures mpv. Requires gpu-next and Windows HDR." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
-                                <StackPanel Spacing="8" Margin="0,4,0,0">
-                                    <RadioButton GroupName="VideoHdrPlaybackMode" Content="Off" IsChecked="{Binding IsHdrModeOff, Mode=TwoWay}" IsEnabled="{Binding VideoUseGpuNext}"/>
-                                    <RadioButton GroupName="VideoHdrPlaybackMode" Content="RTX HDR (NVIDIA driver)" IsChecked="{Binding IsHdrModeNvidia, Mode=TwoWay}" IsEnabled="{Binding RtxHdrDriverModeAvailable}"/>
-                                    <RadioButton GroupName="VideoHdrPlaybackMode" Content="HDR passthrough (mpv)" IsChecked="{Binding IsHdrModeMpv, Mode=TwoWay}" IsEnabled="{Binding HdrSettingsAvailable}"/>
+                                
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                    <RadioButton GroupName="VideoHdrPlaybackMode" Content="Off" IsChecked="{Binding IsHdrModeOff, Mode=TwoWay}" IsEnabled="{Binding VideoUseGpuNext}" Padding="12,8"/>
+                                    <RadioButton GroupName="VideoHdrPlaybackMode" Content="RTX HDR" IsChecked="{Binding IsHdrModeNvidia, Mode=TwoWay}" IsEnabled="{Binding RtxHdrDriverModeAvailable}" Padding="12,8"/>
+                                    <RadioButton GroupName="VideoHdrPlaybackMode" Content="HDR passthrough" IsChecked="{Binding IsHdrModeMpv, Mode=TwoWay}" IsEnabled="{Binding HdrSettingsAvailable}" Padding="12,8"/>
                                 </StackPanel>
                                 
                                 <StackPanel IsVisible="{Binding IsMpvHdrPassthroughDetailsVisible}" Spacing="8" Margin="0,8,0,0">
