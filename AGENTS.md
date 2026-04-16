@@ -11,6 +11,7 @@
 - When asked to implement from an attached plan with pre-created todos, execute the plan without editing the plan file and progress existing todos instead of creating duplicates.
 
 ## Learned Workspace Facts
+- The desktop UI targets **Avalonia 12.x** as pinned in `BabelPlayer.csproj` (do not assume Avalonia 11 or other versions when discussing APIs or docs unless verified from the project file).
 - This workspace uses a project transcript store under the standard Cursor project transcripts location.
 - The codebase actively uses both managed CPU and managed GPU inference flows for diarization/transcription debugging.
 - The repository no longer uses Git LFS; LFS-related hook assumptions are outdated here.

@@ -78,7 +78,7 @@ That combination means Avalonia opportunities should be judged by:
 11. **Page-oriented shell decomposition**
     - Adopt page primitives (`ContentPage`, `NavigationPage`, `DrawerPage`, `TabbedPage`) to break up monolithic `MainWindow`.
     - Benefit: modularity and maintainability for growing feature set.
-    - Integration anchor: `Views/MainWindow.axaml`, `ViewLocator.cs`, `ViewModels/MainWindowViewModel.cs`.
+    - Integration anchor: `Views/MainWindow.axaml`, `ViewModels/MainWindowViewModel.cs`.
 
 12. **Transitioning content host for section swaps**
     - Wrap major center-panel section swaps in `TransitioningContentControl`.
