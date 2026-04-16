@@ -203,6 +203,60 @@ internal sealed class TranslationArtifactStreamingWriter
         await PersistAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public int IndexOfSegment(string segmentId)
+    {
+        if (string.IsNullOrWhiteSpace(segmentId))
+            return -1;
+
+        var segments = _artifact.Segments;
+        if (segments is null)
+            return -1;
+
+        for (var i = 0; i < segments.Count; i++)
+        {
+            if (string.Equals(segments[i].Id, segmentId, StringComparison.Ordinal))
+                return i;
+        }
+
+        return -1;
+    }
+
+    public async Task<TranslationSegmentArtifact> ApplyTranslatedTextAsync(
+        string segmentId,
+        string translatedText,
+        string? sourceLanguage,
+        string? targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(segmentId))
+            throw new ArgumentException("Segment ID cannot be null or empty.", nameof(segmentId));
+
+        _artifact.SourceLanguage = string.IsNullOrWhiteSpace(sourceLanguage)
+            ? _artifact.SourceLanguage
+            : sourceLanguage;
+        _artifact.TargetLanguage = string.IsNullOrWhiteSpace(targetLanguage)
+            ? _artifact.TargetLanguage
+            : targetLanguage;
+
+        var segments = _artifact.Segments ?? [];
+        TranslationSegmentArtifact? matched = null;
+        foreach (var segment in segments)
+        {
+            if (!string.Equals(segment.Id, segmentId, StringComparison.Ordinal))
+                continue;
+
+            segment.TranslatedText = translatedText;
+            matched = segment;
+            break;
+        }
+
+        if (matched is null)
+            throw new InvalidOperationException($"Translated segment '{segmentId}' was not found in the streaming translation artifact.");
+
+        await PersistAsync(cancellationToken).ConfigureAwait(false);
+        return CloneTranslationSegment(matched);
+    }
+
     public async Task ReloadFromDiskAsync(CancellationToken cancellationToken)
     {
         _artifact = await ArtifactJson.LoadTranslationAsync(_partialPath, cancellationToken).ConfigureAwait(false);
@@ -216,4 +270,15 @@ internal sealed class TranslationArtifactStreamingWriter
 
     private Task PersistAsync(CancellationToken cancellationToken) =>
         System.IO.File.WriteAllTextAsync(_partialPath, ArtifactJson.SerializeTranslation(_artifact), cancellationToken);
+
+    private static TranslationSegmentArtifact CloneTranslationSegment(TranslationSegmentArtifact segment) =>
+        new()
+        {
+            Id = segment.Id,
+            Start = segment.Start,
+            End = segment.End,
+            Text = segment.Text,
+            TranslatedText = segment.TranslatedText,
+            SpeakerId = segment.SpeakerId,
+        };
 }
