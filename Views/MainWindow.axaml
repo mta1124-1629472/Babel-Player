@@ -918,7 +918,8 @@
             </Border>
 
             <!-- Controls bar: horizontal scroll when narrow so transport + toolbars never overlap. -->
-            <Border Grid.Row="3" Padding="12,7"
+            <Border x:Name="ControlsBarContainer"
+                    Grid.Row="3" Padding="12,7"
                     IsVisible="{Binding Playback.Preview.IsControlsVisible}">
                 <Border.Styles>
                     <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
@@ -940,11 +941,13 @@
                     </Style>
                 </Border.Styles>
 
-                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                <ScrollViewer x:Name="ControlsBarScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled"
                               HorizontalAlignment="Stretch">
+                    <!-- Keep star spacer columns finite inside ScrollViewer so left/center/right groups stay distributed. -->
                     <Grid ColumnDefinitions="Auto,*,Auto,*,Auto"
-                          MinWidth="{Binding $parent[ScrollViewer].Bounds.Width}">
+                          MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource AncestorType=Border}}">
 
                     <!-- Left: open media + CC + dub mode toggle -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
