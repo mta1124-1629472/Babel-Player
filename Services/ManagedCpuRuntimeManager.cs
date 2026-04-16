@@ -612,6 +612,18 @@ public sealed class ManagedCpuRuntimeManager
         };
     }
 
+    /// <summary>
+    /// Starts an external process, streams its standard output to the application log and to an optional status-line callback, waits for the process to exit, and fails the operation if the process cannot be started or exits with a non-zero code.
+    /// </summary>
+    /// <param name="fileName">Executable to run.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="cancellationToken">Token used to cancel reading output and waiting for process exit; cancellation will abort the operation.</param>
+    /// <param name="onStatusLine">Optional callback invoked for each non-empty stdout line produced by the process.</param>
+    /// <param name="arguments">Arguments passed to the process.</param>
+    /// <remarks>
+    /// This method logs each stdout line at info level and invokes <paramref name="onStatusLine"/> for non-empty lines. If the process cannot be started or exits with a non-zero exit code, an <see cref="InvalidOperationException"/> is thrown. Operation cancellation will propagate via the provided <paramref name="cancellationToken"/>.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the process fails to start or when it exits with a non-zero exit code.</exception>
     private async Task RunProcessAsync(
         string fileName,
         string workingDirectory,
@@ -660,6 +672,17 @@ public sealed class ManagedCpuRuntimeManager
             _log.Info(stderr.Trim());
     }
 
+    /// <summary>
+    /// Starts a process with the specified executable and arguments, waits for it to exit, and captures its exit code, standard output, and standard error.
+    /// </summary>
+    /// <param name="fileName">Path to the executable to run.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation while waiting for the process and reading its output.</param>
+    /// <param name="arguments">Arguments passed to the process; each element is added to the process argument list so quoting/escaping is handled by the runtime.</param>
+    /// <returns>
+    /// A <see cref="ManagedCpuProcessCapture"/> containing the process exit code, the full standard output, and the full standard error.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">Thrown if the process could not be started.</exception>
     private async Task<ManagedCpuProcessCapture> RunProcessCaptureAsync(
         string fileName,
         string workingDirectory,

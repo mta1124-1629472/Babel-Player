@@ -145,6 +145,22 @@ public sealed partial class SessionWorkflowCoordinator
     /// </returns>
     private static readonly string[] VideoExtensions = [".mp4", ".avi", ".mkv", ".mov"];
 
+    /// <summary>
+    /// Runs diarization for the given audio/transcript, merges speaker assignments into transcript (and translation if present), advances and persists session stage, and returns the execution outcome.
+    /// </summary>
+    /// <remarks>
+    /// Expected entry state: the session must already have a transcribed transcript available (caller responsibility). On success the session <see cref="SessionWorkflowStage"/> is advanced to <see cref="SessionWorkflowStage.Diarized"/> unless a different <paramref name="resultingStage"/> is provided or the session is already at or beyond <c>Translated</c>. This method persists the updated session via <c>SaveCurrentSession()</c>. The operation observes <paramref name="ct"/> for cancellation and will fail fast if the configured diarization registry or provider readiness checks fail.
+    /// </remarks>
+    /// <param name="audioPath">Path to the source audio (or video) file to diarize. Video containers will have audio extracted to a temporary WAV file for processing.</param>
+    /// <param name="transcriptPath">Path to the transcript JSON file into which speaker assignments will be merged.</param>
+    /// <param name="ct">Cancellation token to observe for the diarization operation.</param>
+    /// <param name="resultingStage">Optional explicit stage to set on success; if omitted, the stage is set to <c>Diarized</c> unless the session is already at or beyond <c>Translated</c>.</param>
+    /// <param name="statusMessage">Optional status message to set on the session; if omitted a default message is selected based on the resulting stage.</param>
+    /// <returns>
+    /// A <see cref="DiarizationExecutionOutcome"/> describing whether speaker assignments changed, the detected speaker count, and the number of diarized segments.
+    /// </returns>
+    /// <exception cref="PipelineProviderException">Thrown when no diarization registry is configured, when audio processing is required but unavailable for video inputs, or when the selected diarization provider is not ready to execute.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the diarization provider reports an unsuccessful result.</exception>
     private async Task<DiarizationExecutionOutcome> ExecuteDiarizationAsync(
         string audioPath,
         string transcriptPath,

@@ -139,7 +139,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// <param name="coreServices">Core application services and shared dependencies (settings, store, logging) required by the coordinator.</param>
     /// <param name="transportManager">Media transport manager responsible for playback and segment transports for this coordinator.</param>
     /// <param name="registries">Registry bundle providing per-session stores and provider registries (transcription, translation, TTS, recent sessions).</param>
-    /// <param name="options">Optional coordinator extensions and test hooks (container probe/manager, audio processing, artifact reader, session switch service, key store, diarization registry). When null, defaults are applied.</param>
+    /// <summary>
+    /// Initializes a new SessionWorkflowCoordinator with the provided core services, transport manager, and registries, and prepares internal orchestration, runtime, and probe wiring required to manage the session workflow.
+    /// </summary>
+    /// <param name="coreServices">Core application services and stores required by the coordinator (settings, persistence store, logging).</param>
+    /// <param name="transportManager">Media transport manager used for playback and segment transport.</param>
+    /// <param name="registries">Provider registries and per-session/recent session stores used to resolve transcription, translation, TTS, and persistence backends.</param>
+    /// <param name="options">Optional coordinator extensions and test hooks (container probe/manager, audio processing, artifact reader, session switch service, key store, diarization registry). When null, sensible defaults are applied.</param>
     public SessionWorkflowCoordinator(
         CoordinatorCoreServices coreServices,
         IMediaTransportManager transportManager,
@@ -799,6 +805,15 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// Thrown when no translation is available, the specified segment cannot be found in the translation, or TTS generation fails.
     /// </exception>
     /// <exception cref="FileNotFoundException">Thrown when the session's translation file is missing on disk.</exception>
+    /// <summary>
+    /// Regenerates the TTS audio file for a single translated segment and updates the session's TTS segment audio mapping.
+    /// </summary>
+    /// <param name="segmentId">Identifier of the translated segment to regenerate TTS for.</param>
+    /// <remarks>
+    /// Preconditions: <see cref="CurrentSession.TranslationPath"/> must be set and the translation file must exist; otherwise this method throws (<see cref="InvalidOperationException"/> or <see cref="FileNotFoundException"/>). The method ensures any required containerized runtime is started and checks provider readiness before generation; if the configured TTS provider is not ready for execution and a model download is not required, a <see cref="PipelineProviderException"/> is thrown. On success the session's <c>TtsSegmentAudioPaths</c> and <c>StatusMessage</c> are updated and the session is persisted via <see cref="SaveCurrentSession"/>. This method does not accept a cancellation token and does not support cooperative cancellation.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when no translation is available, the segment is not found, or TTS generation fails.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session does not exist.</exception>
     /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider is not ready for execution and no model download is required.</exception>
     public async Task RegenerateSegmentTtsAsync(string segmentId)
     {
@@ -894,7 +909,16 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// Thrown when there is no translation available for the current session, when the source text for the specified segment is missing,
     /// when the session's source or target language is not set, or when the translation operation fails.
     /// </exception>
+    /// <summary>
+    /// Regenerates the translated text for a single segment and updates session status.
+    /// </summary>
+    /// <param name="segmentId">The identifier of the segment to regenerate (stable segment id produced by SegmentId).</param>
+    /// <remarks>
+    /// Entry state: requires a current session with <see cref="WorkflowSessionSnapshot.TranslationPath"/> set and a translation file present on disk. On success: updates the session <see cref="WorkflowSessionSnapshot.StatusMessage"/> to indicate the regenerated segment and persists the session snapshot. This method observes the coordinator's translation execution readiness and will attempt to prepare the translation runtime before invoking translation. The operation honors cooperative cancellation if the coordinator's runtime readiness checks or the underlying translation pipeline support it; callers should use external cancellation by stopping coordinator-triggered workflows where applicable.
+    /// Guard conditions: throws if the translation path is missing or the translation file is not found, if source or target language is not set, or if the segment source text cannot be located. If readiness checks indicate the translation cannot run (for example due to missing provider readiness), the method will throw an InvalidOperationException describing the failure.
+    /// </remarks>
     /// <exception cref="FileNotFoundException">Thrown when the current session's translation file cannot be found on disk.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the session lacks a translation path, when the source or target language is not set, when the segment source text is not found, or when the translation attempt fails.</exception>
     public async Task RegenerateSegmentTranslationAsync(string segmentId)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))

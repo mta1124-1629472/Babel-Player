@@ -906,6 +906,19 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
+    /// <summary>
+    /// Builds a ProcessStartInfo configured to launch the managed Python inference host process.
+    /// </summary>
+    /// <remarks>
+    /// The returned ProcessStartInfo redirects stdout and stderr, disables shell execution and window creation,
+    /// and sets the working directory to the directory containing <paramref name="inferenceScriptPath"/> (or the app base directory if unavailable).
+    /// Command-line arguments include the inference script path, host/port, and the specified compute type; a `--require-cuda` flag is added when the compute type requires CUDA.
+    /// The environment is configured to make CUDA kernel errors synchronous and to set HuggingFace hub cache and Qwen concurrency variables.
+    /// </remarks>
+    /// <param name="pythonPath">Full path to the Python interpreter to launch.</param>
+    /// <param name="inferenceScriptPath">Path to the inference script that the host will run; its directory is used as the process working directory when possible.</param>
+    /// <param name="computeType">Compute type to request from the host (e.g., "float16", "float8", "cpu").</param>
+    /// <returns>A ProcessStartInfo ready to start the managed host with the appropriate arguments and environment variables.</returns>
     internal static ProcessStartInfo CreateHostProcessStartInfo(
         string pythonPath,
         string inferenceScriptPath,
@@ -945,6 +958,14 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         return psi;
     }
 
+    /// <summary>
+    /// Validates that the managed Python runtime at the given python executable can import PyTorch and access CUDA.
+    /// </summary>
+    /// <param name="pythonPath">Full path to the Python executable inside the managed virtual environment.</param>
+    /// <param name="cancellationToken">Cancellation token to abort the validation process.</param>
+    /// <returns>
+    /// A <see cref="ManagedGpuRuntimeValidationResult"/> describing whether CUDA is available, a human-readable message, and the detected CUDA version (or null).
+    /// </returns>
     private static async Task<ManagedGpuRuntimeValidationResult> ValidateManagedGpuRuntimeAsync(
         string pythonPath,
         CancellationToken cancellationToken)
@@ -1015,6 +1036,19 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
     }
 
+    /// <summary>
+    /// Runs an external process, streams its stdout/stderr for progress reporting, and fails if the process exits non‑zero.
+    /// </summary>
+    /// <remarks>
+    /// Entry state: caller must provide the executable path and a working directory where the process may run; this method does not assume any particular host lifecycle state.
+    /// Success state: the external process has exited with code 0 and any streamed stdout/stderr have been observed; no host session/state is persisted by this call.
+    /// Cancellation: honours <paramref name="cancellationToken"/> for reading streams, waiting for exit, and will throw <see cref="OperationCanceledException"/> when cancelled.
+    /// </remarks>
+    /// <param name="fileName">Path to the executable to run.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="onStatusLine">Optional callback invoked for each stdout line as it is produced (used for live bootstrap progress reporting).</param>
+    /// <param name="cancellationToken">Token to cancel stream reads and process wait operations.</param>
+    /// <param name="arguments">Command-line arguments to pass to the process; arguments are added to <see cref="ProcessStartInfo.ArgumentList"/> so no manual quoting is required.</param>
     private async Task RunProcessAsync(
         string fileName,
         string workingDirectory,
@@ -1069,6 +1103,14 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     }
 
 
+    /// <summary>
+    /// Reads lines from the given process stream until EOF and logs non-empty lines prefixed with the provided label.
+    /// </summary>
+    /// <param name="reader">The redirected process stream reader (stdout or stderr) to consume until end-of-stream.</param>
+    /// <param name="prefix">A short label used as the log prefix (e.g. "stdout" or "stderr").</param>
+    /// <remarks>
+    /// This method completes when the stream reaches end-of-file. It does not observe cancellation and will run until the reader returns null.
+    /// </remarks>
     private async Task DrainProcessStreamAsync(StreamReader reader, string prefix)
     {
         while (true)

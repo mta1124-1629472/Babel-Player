@@ -19,7 +19,12 @@ internal static class PipelineStateMachine
 {
     /// <summary>
     /// Full streaming ASR → translation → TTS path (skips separate transcribe/diarize steps in this invocation).
-    /// </summary>
+    /// <summary>
+        /// Determines whether the pipeline should run the full streaming path (ASR → translation → TTS) before performing diarization.
+        /// </summary>
+        /// <param name="currentStage">The session's current workflow stage.</param>
+        /// <param name="shouldRunDiarization">Whether diarization is scheduled for the session.</param>
+        /// <returns>`true` if the session is earlier than <see cref="SessionWorkflowStage.Transcribed"/> and diarization is not requested; `false` otherwise.</returns>
     internal static bool ShouldRunFullStreamingPipelineFirst(
         SessionWorkflowStage currentStage,
         bool shouldRunDiarization) =>
@@ -27,7 +32,14 @@ internal static class PipelineStateMachine
 
     /// <summary>
     /// Next action after re-reading <see cref="SessionWorkflowCoordinator.CurrentSession"/>.Stage, or null when nothing left to advance.
+    /// <summary>
+    /// Selects the next pipeline advance action based on the current workflow stage and whether diarization should run.
     /// </summary>
+    /// <param name="currentStage">The current session workflow stage used to determine the next action.</param>
+    /// <param name="shouldRunDiarization">If true, diarization will be scheduled when applicable before translation-related actions.</param>
+    /// <returns>
+    /// A <see cref="PipelineAdvanceAction"/> representing the next action to perform, or <c>null</c> if no further advancement is required.
+    /// </returns>
     internal static PipelineAdvanceAction? GetNextAdvanceAction(
         SessionWorkflowStage currentStage,
         bool shouldRunDiarization)
@@ -49,7 +61,15 @@ internal static class PipelineStateMachine
 
     /// <summary>
     /// Continuation after diarization: translation+dub or TTS-only.
+    /// <summary>
+    /// Determines the next pipeline action to perform after diarization based on the current workflow stage.
     /// </summary>
+    /// <param name="currentStage">The current session workflow stage to evaluate.</param>
+    /// <returns>
+    /// `PipelineAdvanceAction.TranslateAndDubFromTranscript` if `currentStage` is before `Translated`;
+    /// `PipelineAdvanceAction.GenerateTts` if `currentStage` is before `TtsGenerated`;
+    /// `null` if no further action is required.
+    /// </returns>
     internal static PipelineAdvanceAction? GetContinuationActionAfterDiarized(SessionWorkflowStage currentStage)
     {
         if (currentStage < SessionWorkflowStage.Translated)

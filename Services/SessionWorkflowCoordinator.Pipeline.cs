@@ -27,21 +27,50 @@ public sealed partial class SessionWorkflowCoordinator
     /// Thrown when no media is loaded, when a required model download fails, or when transcription itself fails.
     /// </exception>
     /// <exception cref="FileNotFoundException">Thrown when the ingested media file cannot be found on disk.</exception>
-    /// <exception cref="PipelineProviderException">Thrown when the configured transcription provider/runtime is not ready for execution and the blocking reason prevents continuation.</exception>
+    /// <summary>
+        /// Runs the transcription pipeline for the current session.
+        /// Expects the session to have media loaded on entry and, on success, updates the session to the Transcribed stage and persists the session state.
+        /// </summary>
+        /// <param name="progress">Optional progress reporter for overall pipeline progress updates.</param>
+        /// <param name="stageContext">Optional stage context that constrains or targets the pipeline stage; if provided, the pipeline will use it to mark or report stage-specific progress.</param>
+        /// <param name="cancellationToken">Cancellation token to cancel the operation; when canceled, the method will honor the request and propagate <see cref="OperationCanceledException"/>.</param>
+        /// <exception cref="PipelineProviderException">Thrown when the configured transcription provider or runtime is not ready for execution and the blocking reason prevents continuation.</exception>
     internal Task TranscribeMediaAsync(
         IProgress<double>? progress,
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken) =>
         _transcriptionOrchestrator.ExecuteAsync(progress, stageContext, cancellationToken);
 
-    public Task TranslateTranscriptAsync(
+    /// <summary>
+        /// Advances the current session by translating the existing transcript into the specified target language.
+        /// </summary>
+        /// <remarks>
+        /// Entry state: requires a session with a completed transcript (stage at or after <c>Transcribed</c>).
+        /// On success: updates the session to the <c>Translated</c> stage and persists session metadata.
+        /// Cancellation: honors <paramref name="cancellationToken"/> and will throw <see cref="OperationCanceledException"/> when canceled.
+        /// </remarks>
+        /// <param name="progress">Optional progress reporter for overall stage progress (0.0–1.0).</param>
+        /// <param name="targetLanguage">Optional BCP-47 language code to translate into; when null, the session or settings default is used.</param>
+        /// <param name="sourceLanguage">Optional source language hint; when null, the session or settings default is used.</param>
+        /// <param name="cancellationToken">Token to cancel the operation.</param>
+        /// <returns>A task that completes when the translation stage finishes and session state has been persisted.</returns>
+        public Task TranslateTranscriptAsync(
         IProgress<double>? progress = null,
         string? targetLanguage = null,
         string? sourceLanguage = null,
         CancellationToken cancellationToken = default) =>
         TranslateTranscriptAsync(progress, targetLanguage, sourceLanguage, stageContext: null, cancellationToken);
 
-    internal Task TranslateTranscriptAsync(
+    /// <summary>
+        /// Translates the current transcript into the specified target language and advances the session to the Translated stage.
+        /// </summary>
+        /// <param name="progress">Optional progress reporter for stage progress updates.</param>
+        /// <param name="targetLanguage">Target language code for translation (e.g., "en", "fr").</param>
+        /// <param name="sourceLanguage">Optional source language hint; if null the system will use the session's detected language.</param>
+        /// <param name="stageContext">Optional stage context controlling persistence/visibility of intermediate stage updates.</param>
+        /// <param name="cancellationToken">Token to observe for cancellation; operation honors cancellation and will throw <see cref="OperationCanceledException"/> when requested.</param>
+        /// <returns>A task that completes when translation finishes. On success the session's stage is set to Translated and translation metadata are persisted.</returns>
+        internal Task TranslateTranscriptAsync(
         IProgress<double>? progress,
         string? targetLanguage,
         string? sourceLanguage,
@@ -49,7 +78,20 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken) =>
         _translationOrchestrator.ExecuteAsync(progress, targetLanguage, sourceLanguage, stageContext, cancellationToken);
 
-    public Task GenerateTtsAsync(
+    /// <summary>
+        /// Runs the TTS generation pipeline for the current session using the provided voice and progress reporter.
+        /// </summary>
+        /// <param name="progress">Optional progress reporter that receives stage progress values (0.0–1.0).</param>
+        /// <param name="voice">Optional voice identifier to use for TTS; if null the session/default voice is used.</param>
+        /// <param name="cancellationToken">Token to observe for cancelling the operation.</param>
+        /// <remarks>
+        /// Entry state: requires the session to be at or beyond the Translated stage (a translation must exist).  
+        /// Exit state: on success the session will be advanced to the TtsGenerated stage and TTS-related metadata will be persisted.  
+        /// Persistence: this operation updates and saves the current session state on successful completion.  
+        /// Cancellation: honoring <paramref name="cancellationToken"/> will cancel the operation; if cancelled the session may be left unchanged or partially updated depending on progress.
+        /// </remarks>
+        /// <returns>Completion of the TTS generation operation.</returns>
+        public Task GenerateTtsAsync(
         IProgress<double>? progress = null,
         string? voice = null,
         CancellationToken cancellationToken = default) =>
@@ -80,7 +122,20 @@ public sealed partial class SessionWorkflowCoordinator
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when no translation path is available on the current session.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the translation artifact file cannot be found on disk.</exception>
-    /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider/runtime is not ready and cannot proceed.</exception>
+    /// <summary>
+        /// Executes the TTS generation pipeline for the current session using the specified voice.
+        /// </summary>
+        /// <remarks>
+        /// Entry state: requires the session to contain a completed translation (session stage at or after Translated).  
+        /// Exit state on success: updates the session to indicate TTS has been generated (TtsGenerated) and persists session metadata.  
+        /// Cancellation: honors <paramref name="cancellationToken"/> and will throw <see cref="OperationCanceledException"/> when cancelled.  
+        /// Provider readiness: verifies the configured TTS runtime/voice is available; a readiness failure may result in a <see cref="PipelineProviderException"/> or an <see cref="InvalidOperationException"/> if required model download fails.
+        /// </remarks>
+        /// <param name="progress">Optional progress reporter for overall pipeline progress (0.0–1.0).</param>
+        /// <param name="voice">Optional voice identifier to use for generation; if null the pipeline resolves a default voice.</param>
+        /// <param name="stageContext">Optional stage context that targets a specific stage marker or controls stage persistence behavior; when provided the pipeline uses it to scope progress and completion reporting.</param>
+        /// <param name="cancellationToken">Cancellation token to abort pipeline execution.</param>
+        /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider/runtime is not ready and cannot proceed.</exception>
     internal Task GenerateTtsAsync(
         IProgress<double>? progress,
         string? voice,
@@ -378,7 +433,22 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="totalSegments">Total number of segments being generated (used for progress reporting).</param>
     /// <param name="stageContext">Optional pipeline stage context used for progress reporting.</param>
     /// <param name="cancellationToken">Token to observe for cooperative cancellation of the generation operation.</param>
-    /// <param name="onSucceeded">Callback invoked when a segment is recorded as succeeded; returns the new count of completed segments.</param>
+    /// <summary>
+    /// Generates TTS audio for a single translation segment, records generated artifact paths/durations, and reports per-segment progress.
+    /// </summary>
+    /// <param name="seg">The translation segment to synthesize; its <see cref="TranslationSegmentArtifact.Id"/> and <see cref="TranslationSegmentArtifact.TranslatedText"/> must be non-empty.</param>
+    /// <param name="defaultVoice">Fallback voice to use when the segment does not specify one.</param>
+    /// <param name="ttsLanguage">Optional language hint for the TTS engine.</param>
+    /// <param name="segmentsDir">Directory where the segment audio file will be written (file named "{id}.mp3").</param>
+    /// <param name="segmentAudioPaths">Concurrent map updated with the segment id → output audio path on successful generation.</param>
+    /// <param name="segmentDurations">Concurrent map updated with the segment id → duration in seconds when the TTS result provides it.</param>
+    /// <param name="totalSegments">Total number of candidate segments used to compute progress reporting.</param>
+    /// <param name="stageContext">Optional stage context used for progress and status reporting.</param>
+    /// <param name="cancellationToken">Cancellation token that will be passed to the TTS provider call; operation observes cancellation prior to awaiting the provider.</param>
+    /// <param name="onSucceeded">Callback invoked when this segment is recorded as succeeded; should return the updated completed-segment count.</param>
+    /// <remarks>
+    /// Entry state: any pipeline stage that has a valid translation artifact containing this segment. On success this method updates <paramref name="segmentAudioPaths"/> and optionally <paramref name="segmentDurations"/>, invokes <paramref name="onSucceeded"/>, and reports stage progress; it does not persist session state. Failures from the TTS provider are logged and suppressed (do not propagate), while cancellation is honored via <paramref name="cancellationToken"/>. If the segment has empty text or id the method returns without performing work.
+    /// </remarks>
     private async Task GenerateSingleSegmentAsync(
         TranslationSegmentArtifact seg,
         string defaultVoice,
@@ -568,6 +638,24 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="stageContext">Optional pipeline stage context used for progress reporting.</param>
     /// <param name="segmentAudioPaths">Thread-safe map that will be filled with segmentId -> generated audio file path for successful outputs.</param>
     /// <param name="segmentDurations">Thread-safe map that will be filled with segmentId -> duration in seconds when the provider returns duration metadata.</param>
+    /// <summary>
+    /// Generates TTS audio for multiple translation segments in a single Qwen batch request and records produced audio file paths.
+    /// </summary>
+    /// <remarks>
+    /// Entry state: caller must supply translation segments (typically loaded from the session's translation artifact); no session stage changes are performed by this method.
+    /// Exit state: records any successfully produced segment audio paths into <paramref name="segmentAudioPaths"/>; does not persist session state.
+    /// Guard: returns immediately when no eligible segments (non-empty Id and TranslatedText) are present.
+    /// Cancellation: honors <paramref name="cancellationToken"/> and will observe cancellation propagated from the provider; provider exceptions and other errors propagate to the caller.
+    /// Note: this method records produced audio paths into <paramref name="segmentAudioPaths"/>; it does not populate <paramref name="segmentDurations"/> in the current implementation.
+    /// </remarks>
+    /// <param name="qwenProvider">The Qwen TTS provider used to generate segments in batch.</param>
+    /// <param name="candidateSegments">Translation segments to consider for batch generation; segments with empty Id or TranslatedText are skipped.</param>
+    /// <param name="segmentsDir">Directory where per-segment output files will be written (each output is {Id}.mp3).</param>
+    /// <param name="defaultVoice">Fallback voice to use when a segment does not specify one.</param>
+    /// <param name="ttsLanguage">Optional language hint for TTS generation.</param>
+    /// <param name="stageContext">Optional stage context used for progress reporting.</param>
+    /// <param name="segmentAudioPaths">Concurrent map that will be populated with segment id → output audio path for successfully generated segments.</param>
+    /// <param name="segmentDurations">Concurrent map accepted for durations but not populated by this method.</param>
     /// <param name="cancellationToken">Cancellation token to observe while performing the batch operation.</param>
     private async Task GenerateQwenBatchSegmentAudioAsync(
         QwenContainerTtsProvider qwenProvider,
@@ -635,7 +723,21 @@ public sealed partial class SessionWorkflowCoordinator
 
     /// <summary>
     /// Delegates to <see cref="StreamingPipelineOrchestrator.ExecuteFullPipelineAsync"/>.
-    /// </summary>
+    /// <summary>
+            /// Runs the full streaming pipeline (transcription, translation, and TTS) via the streaming orchestrator.
+            /// </summary>
+            /// <remarks>
+            /// Entry state: can be invoked from any pipeline stage; the orchestrator will execute the remaining streaming stages as appropriate.
+            /// Exit state on success: the session will have progressed through transcription, translation, and TTS stages and end at the TtsGenerated stage when applicable.
+            /// Persistence: stage progress and session updates are persisted by the orchestrator as each stage completes.
+            /// Cancellation: honors <paramref name="cancellationToken"/> and will observe cancellation requests (may throw <see cref="OperationCanceledException"/>).
+            /// </remarks>
+            /// <param name="progress">Optional progress reporter receiving values between 0.0 and 1.0 for overall pipeline progress.</param>
+            /// <param name="transcriptionStageContext">Optional context for the transcription stage; when provided, it customizes how the transcription stage is executed.</param>
+            /// <param name="translationStageContext">Optional context for the translation stage; when provided, it customizes how the translation stage is executed.</param>
+            /// <param name="ttsStageContext">Optional context for the TTS stage; when provided, it customizes how the TTS stage is executed.</param>
+            /// <param name="cancellationToken">Token to observe for cancellation.</param>
+            /// <returns>A task that completes when the orchestrator finishes executing the full streaming pipeline.</returns>
     private Task ExecuteStreamingPipelineAsync(
         IProgress<double>? progress,
         PipelineStageContext? transcriptionStageContext,
@@ -651,7 +753,20 @@ public sealed partial class SessionWorkflowCoordinator
 
     /// <summary>
     /// Delegates to <see cref="StreamingPipelineOrchestrator.ExecuteTranslationAndTtsFromTranscriptAsync"/>.
-    /// </summary>
+    /// <summary>
+            /// Runs a streaming pipeline that translates the existing transcript and generates corresponding TTS output from that transcript.
+            /// </summary>
+            /// <param name="progress">Optional progress reporter for overall pipeline progress.</param>
+            /// <param name="translationStageContext">Optional stage context to control translation stage behavior (e.g., target/override language); may be null.</param>
+            /// <param name="ttsStageContext">Optional stage context to control TTS stage behavior (e.g., target voice); may be null.</param>
+            /// <param name="cancellationToken">Cancellation token to cancel the operation; cancellation is honored and will propagate.</param>
+            /// <returns>Completes when translation and TTS generation finish and the session has been advanced to the TtsGenerated stage.</returns>
+            /// <remarks>
+            /// Entry state: expects a transcript to be available (session at or beyond the Transcribed stage).  
+            /// On success: advances session state to include translation and generated TTS artifacts (TtsGenerated).  
+            /// Persistence: session state for translation and TTS is persisted by the pipeline/orchestrator on successful completion.  
+            /// Guard conditions: throws <see cref="InvalidOperationException"/> if a required transcript is not available; throws <see cref="OperationCanceledException"/> when cancelled; other exceptions propagate from the orchestrator.
+            /// </remarks>
     private Task ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
         IProgress<double>? progress,
         PipelineStageContext? translationStageContext,
@@ -663,7 +778,18 @@ public sealed partial class SessionWorkflowCoordinator
             ttsStageContext,
             cancellationToken);
 
-    public Task AdvancePipelineAsync(
+    /// <summary>
+        /// Advances the session pipeline from its current stage through any remaining stages (transcription, diarization, translation, and/or TTS) according to the pipeline state machine and current settings.
+        /// </summary>
+        /// <remarks>
+        /// Entry state: any valid session stage; the method determines the next actions based on the current <see cref="CurrentSession.Stage"/> and whether diarization is enabled.
+        /// Success state: the session is advanced to the next completed stage(s) determined by the state machine; the method persists session state for stages it commits.
+        /// Cancellation: honors <paramref name="cancellationToken"/> and will throw <see cref="OperationCanceledException"/> when cancelled.
+        /// </remarks>
+        /// <param name="progress">Optional overall progress reporter for the pipeline advance.</param>
+        /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+        /// <returns>A task that completes when pipeline advancement finishes.</returns>
+        public Task AdvancePipelineAsync(
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default) =>
         AdvancePipelineAsync(progress, stageProgress: null, cancellationToken);
@@ -682,7 +808,20 @@ public sealed partial class SessionWorkflowCoordinator
     /// <see cref="SessionWorkflowStage.TtsGenerated"/>. State changes are persisted by the invoked stage methods
     /// (for example via <see cref="SaveCurrentSession"/>). Cancellation is respected and propagated via
     /// <paramref name="cancellationToken"/>.
+    /// <summary>
+    /// Advances the session pipeline from its current stage through the remaining stages (transcription, diarization, translation, and TTS) according to the pipeline state machine.
+    /// </summary>
+    /// <remarks>
+    /// Entry state: the method expects CurrentSession.Stage to reflect the pipeline's current persisted stage.
+    /// On success: the session will be advanced to the next terminal or intermediate stage(s) determined by the state machine; individual stage handlers invoked by this method are responsible for updating and persisting CurrentSession as they complete.
+    /// Behavior: if the state machine indicates the full streaming pipeline should run first, the method delegates to the streaming orchestrator; otherwise it drives stage-by-stage advancement using the state machine decisions. The method may return early after initiating streaming translation+TTS or TTS-only actions when those paths are chosen.
     /// </remarks>
+    /// <param name="progress">Optional overall progress reporter for long-running operations; may be null.</param>
+    /// <param name="stageProgress">Optional per-stage progress reporter used to report stage messages and progress; may be null.</param>
+    /// <param name="cancellationToken">Cancellation token that will be observed; the method throws <see cref="OperationCanceledException"/> when cancellation is requested.</param>
+    /// <returns>A task that completes when the pipeline advancement (and any delegated orchestration it synchronously awaits) has finished.</returns>
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled during execution.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if the pipeline state machine returns an unexpected advance action.</exception>
     internal async Task AdvancePipelineAsync(
         IProgress<double>? progress = null,
         IProgress<PipelineStageUpdate>? stageProgress = null,
@@ -769,7 +908,22 @@ public sealed partial class SessionWorkflowCoordinator
     /// <see cref="SessionWorkflowStage.Translated"/> and then running TTS when below
     /// <see cref="SessionWorkflowStage.TtsGenerated"/>. Successful stage completions persist updates to
     /// <see cref="CurrentSession"/>. Cancellation propagates via <paramref name="cancellationToken"/>.
+    /// <summary>
+    /// Continues the pipeline from a diarized session toward translation and/or TTS according to the pipeline state machine.
+    /// </summary>
+    /// <remarks>
+    /// Entry requirements: CurrentSession.Stage must be at or after <see cref="SessionWorkflowStage.Diarized"/>; otherwise an <see cref="InvalidOperationException"/> is thrown.
+    /// On success:
+    /// - If the state machine chooses <see cref="PipelineAdvanceAction.TranslateAndDubFromTranscript"/>, the method advances through translation and TTS, leaving the session at <see cref="SessionWorkflowStage.TtsGenerated"/> (translation and TTS stage contexts are used as provided).
+    /// - If the state machine chooses <see cref="PipelineAdvanceAction.GenerateTts"/>, the method advances to <see cref="SessionWorkflowStage.TtsGenerated"/>.
+    /// - If there is no continuation action, the session stage is unchanged.
+    /// Persistence: this method does not directly persist session state; the invoked orchestrators/stage handlers are responsible for persisting changes.
+    /// Cancellation: respects <paramref name="cancellationToken"/> and will observe cancellation propagated to the invoked orchestrators.
     /// </remarks>
+    /// <param name="progress">Optional overall numeric progress reporter (0.0–1.0) used by invoked orchestrators.</param>
+    /// <param name="stageProgress">Optional per-stage progress reporter used to build stage contexts for downstream orchestrators.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the continuation operation.</param>
+    /// <returns>Completion of the pipeline continuation operation.</returns>
     internal async Task ContinuePipelineAsync(
         IProgress<double>? progress = null,
         IProgress<PipelineStageUpdate>? stageProgress = null,
@@ -831,6 +985,18 @@ public sealed partial class SessionWorkflowCoordinator
     /// TTS and advances toward terminal stage <see cref="SessionWorkflowStage.TtsGenerated"/>; persistence occurs
     /// when TTS completes and updates <see cref="CurrentSession"/>. Cancellation propagates via
     /// <paramref name="cancellationToken"/>.
+    /// <summary>
+    /// Runs only the TTS stage using the existing translation; requires a translated session and results in the session reaching the TtsGenerated stage on success.
+    /// </summary>
+    /// <param name="progress">Optional overall progress reporter for the TTS pipeline.</param>
+    /// <param name="voice">Optional voice override to use for synthesis.</param>
+    /// <param name="stageProgress">Optional per-stage progress updates.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the current session has not been translated (i.e., <see cref="SessionWorkflowStage"/> is less than <c>Translated</c>).</exception>
+    /// <remarks>
+    /// Entry state: requires <see cref="CurrentSession.Stage"/> >= <c>Translated</c>.
+    /// Exit state on success: <see cref="CurrentSession.Stage"/> will be set to <c>TtsGenerated</c> and session state will be persisted.
+    /// Cancellation: honors <paramref name="cancellationToken"/> and may throw <see cref="OperationCanceledException"/> if canceled.
     /// </remarks>
     internal async Task RunTtsOnlyAsync(
         IProgress<double>? progress,
@@ -849,7 +1015,11 @@ public sealed partial class SessionWorkflowCoordinator
             cancellationToken);
     }
 
-    private bool ShouldRunDiarization() =>
+    /// <summary>
+        /// Determines whether diarization is enabled in the current session settings.
+        /// </summary>
+        /// <returns>`true` if the current settings contain a non-empty diarization provider identifier; `false` otherwise.</returns>
+        private bool ShouldRunDiarization() =>
         !string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider);
 
     private static string NormalizePipelineLanguage(string? raw, string nonNormalizedFallback)

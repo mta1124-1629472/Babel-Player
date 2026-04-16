@@ -11,8 +11,25 @@ public sealed partial class SessionWorkflowCoordinator
     {
         private readonly SessionWorkflowCoordinator _c;
 
-        internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c = coordinator;
+        /// <summary>
+/// Initializes a TranscriptionOrchestrator bound to the given session workflow coordinator.
+/// </summary>
+/// <param name="coordinator">The parent <see cref="SessionWorkflowCoordinator"/> used to access session state, settings, services, and helper operations.</param>
+internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c = coordinator;
 
+        /// <summary>
+        /// Orchestrates the transcription pipeline stage for the current session: validates preconditions, ensures the transcription provider is ready, runs transcription, commits session state, and reports progress.
+        /// </summary>
+        /// <remarks>
+        /// Entry state: a session with a non-empty IngestedMediaPath is required; the method verifies the file exists before proceeding. On success the session's transcription state is persisted via CommitTranscriptionSessionState and the stage is reported as complete. The method creates a "transcripts" directory under the session directory and writes the transcript as a JSON file named after the input media (without extension). The operation honors the provided <paramref name="cancellationToken"/>; when canceled the method may throw <see cref="OperationCanceledException"/> and will not commit a completed transcription state.
+        /// Guard conditions: throws <see cref="InvalidOperationException"/> if no media is loaded; throws <see cref="FileNotFoundException"/> if the ingested media file cannot be found. The method also ensures transcription provider readiness before executing the transcription request and will surface provider errors as an <see cref="InvalidOperationException"/> if the transcription reports failure.
+        /// </remarks>
+        /// <param name="progress">Optional progress reporter receiving values in [0,1] to reflect stage progress.</param>
+        /// <param name="stageContext">Optional pipeline stage context used for stage reporting and download progress tracking.</param>
+        /// <param name="cancellationToken">Token used to cancel provider readiness checks and the transcription operation.</param>
+        /// <exception cref="InvalidOperationException">Thrown when no media is loaded or when transcription fails with an error message from the provider.</exception>
+        /// <exception cref="FileNotFoundException">Thrown when the ingested media file specified by the session does not exist.</exception>
+        /// <exception cref="OperationCanceledException">Thrown if the provided <paramref name="cancellationToken"/> is canceled during preparation or transcription.</exception>
         internal async Task ExecuteAsync(
             IProgress<double>? progress,
             PipelineStageContext? stageContext,
@@ -90,8 +107,28 @@ public sealed partial class SessionWorkflowCoordinator
     {
         private readonly SessionWorkflowCoordinator _c;
 
-        internal TranslationOrchestrator(SessionWorkflowCoordinator coordinator) => _c = coordinator;
+        /// <summary>
+/// Creates a TranslationOrchestrator associated with the given SessionWorkflowCoordinator.
+/// </summary>
+/// <param name="coordinator">The parent SessionWorkflowCoordinator used to access session state, configuration, and services.</param>
+internal TranslationOrchestrator(SessionWorkflowCoordinator coordinator) => _c = coordinator;
 
+        /// <summary>
+        /// Orchestrates translation of the current session's transcript into a target language and persists the translated transcript.
+        /// </summary>
+        /// <remarks>
+        /// Entry state: expects <see cref="_c.CurrentSession.TranscriptPath"/> to be set and the transcript file to exist.
+        /// On success: commits translation state via <c>CommitTranslationSessionState</c> and writes a translation JSON file under the session's <c>translations</c> directory.
+        /// This method ensures the translation provider/model and runtime are ready before execution; readiness checks and any required model downloads are awaited. If readiness or execution fails, the corresponding exception is propagated and no translation state is committed. Progress and stage reporting are emitted via the provided <paramref name="progress"/> and <paramref name="stageContext"/>.
+        /// Cancellation: honoring <paramref name="cancellationToken"/> will abort waiting and in-flight inference; if cancelled before commit, the session's persisted translation state will not be updated.
+        /// </remarks>
+        /// <param name="progress">Optional progress reporter used for stage-level progress updates.</param>
+        /// <param name="targetLanguage">Optional target language code; if null, the coordinator's configured target language is used. The value is normalized before use.</param>
+        /// <param name="sourceLanguage">Optional source language hint; if null, the session's source language is used or "auto" if unavailable. The special value "auto" is preserved and routed as automatic language detection.</param>
+        /// <param name="stageContext">Optional pipeline stage context used for stage reporting and download-scoped progress creation.</param>
+        /// <param name="cancellationToken">Token to cancel readiness checks and translation execution; cancelling will abort the operation and prevent session state commit if not already completed.</param>
+        /// <exception cref="InvalidOperationException">Thrown when no transcript path is set or when translation execution fails.</exception>
+        /// <exception cref="System.IO.FileNotFoundException">Thrown when the transcript file does not exist at the configured transcript path.</exception>
         internal async Task ExecuteAsync(
             IProgress<double>? progress,
             string? targetLanguage,

@@ -26,7 +26,23 @@ internal sealed record TtsChannelItem(
 
 public interface IStreamingTranscriptionProvider
 {
-    Task<TranscriptionResult> TranscribeStreamingAsync(
+    /// <summary>
+        /// Starts a streaming transcription for the specified request and emits transcript updates to the provided channel writer.
+        /// </summary>
+        /// <param name="request">The transcription request describing the audio source, model options, and desired output parameters.</param>
+        /// <param name="writer">A channel writer to which incremental <see cref="TranscriptChannelItem"/> updates will be written.</param>
+        /// <param name="cancellationToken">A token to cancel the streaming operation; implementations must observe this token and stop producing new items when cancellation is requested.</param>
+        /// <returns>The final <see cref="TranscriptionResult"/> containing the aggregated transcript, language information, and any session metrics.</returns>
+        /// <remarks>
+        /// Entry/exit state:
+        /// - Entry: caller must ensure the hosting pipeline is initialized and ready to accept streaming transcription requests.
+        /// - Exit on success: the transcription session is completed and the returned <see cref="TranscriptionResult"/> represents the final transcript state; implementations will have emitted final segment updates to <paramref name="writer"/>.
+        /// Persistence:
+        /// - Implementations may persist partial artifacts as items are written to <paramref name="writer"/> and should promote any partial artifacts to final storage before returning the final result.
+        /// Cancellation:
+        /// - When <paramref name="cancellationToken"/> is signaled, implementations should stop producing further transcript updates and perform any required cleanup or finalization as quickly as possible.
+        /// </remarks>
+        Task<TranscriptionResult> TranscribeStreamingAsync(
         TranscriptionRequest request,
         ChannelWriter<TranscriptChannelItem> writer,
         CancellationToken cancellationToken = default);
