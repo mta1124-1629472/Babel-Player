@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Reactive.Subjects;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Planning;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -42,6 +43,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
 
     private readonly IInferenceExecutionEngine _inferenceEngine;
+    private readonly IExecutionPlanner _executionPlanner;
     private readonly TranscriptionOrchestrator _transcriptionOrchestrator;
     private readonly TranslationOrchestrator _translationOrchestrator;
     private readonly DiarizationStageOrchestrator _diarizationStageOrchestrator;
@@ -176,6 +178,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         KeyStore = options.KeyStore;
         _transportManager = transportManager;
         _inferenceEngine = options.InferenceExecutionEngine ?? DefaultInferenceExecutionEngine.Instance;
+        _executionPlanner = options.ExecutionPlanner ?? DefaultExecutionPlanner.Instance;
         _requestLeaseTracker = options.RequestLeaseTracker;
         _transcriptionOrchestrator = new TranscriptionOrchestrator(this);
         _translationOrchestrator = new TranslationOrchestrator(this);

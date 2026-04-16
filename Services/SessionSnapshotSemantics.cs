@@ -74,7 +74,7 @@ public static class SessionSnapshotSemantics
             || (hasVocalsStem && !File.Exists(snapshot.VocalsAudioPath!))
             || (hasInstrumentalStem && !File.Exists(snapshot.InstrumentalAudioPath!)))
         {
-            snapshot = ClearTranscriptionOutputs(snapshot);
+            snapshot = snapshot with { VocalsAudioPath = null, InstrumentalAudioPath = null };
             cleared.Add("vocal_separation");
             if (stage > SessionWorkflowStage.MediaLoaded) stage = SessionWorkflowStage.MediaLoaded;
         }

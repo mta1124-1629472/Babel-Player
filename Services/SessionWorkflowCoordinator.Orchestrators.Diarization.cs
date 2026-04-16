@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -30,10 +31,15 @@ internal DiarizationStageOrchestrator(SessionWorkflowCoordinator coordinator) =>
         /// <exception cref="InvalidOperationException">Thrown if the current session lacks an ingested media path or a transcript path required for speaker mapping.</exception>
         internal async Task ExecuteAsync(PipelineStageContext? stageContext, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(_c.CurrentSession.IngestedMediaPath))
-                throw new InvalidOperationException("No ingested media is available for speaker mapping.");
-            if (string.IsNullOrWhiteSpace(_c.CurrentSession.TranscriptPath))
-                throw new InvalidOperationException("No transcript is available for speaker mapping.");
+            var stagePlan = _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Diarization);
+            var stageTimer = Stopwatch.StartNew();
+            var stageSucceeded = false;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(_c.CurrentSession.IngestedMediaPath))
+                    throw new InvalidOperationException("No ingested media is available for speaker mapping.");
+                if (string.IsNullOrWhiteSpace(_c.CurrentSession.TranscriptPath))
+                    throw new InvalidOperationException("No transcript is available for speaker mapping.");
 
             ReportStage(
                 stageContext,
@@ -48,11 +54,20 @@ internal DiarizationStageOrchestrator(SessionWorkflowCoordinator coordinator) =>
                 resultingStage: SessionWorkflowStage.Diarized,
                 statusMessage: "Speaker mapping complete. Continuing translation and dubbing.");
 
-            ReportStage(
-                stageContext,
-                $"Speaker mapping complete. Identified {outcome.SpeakerCount} speakers across {outcome.SegmentCount} segments.",
-                progress01: 1,
-                isIndeterminate: false);
+                ReportStage(
+                    stageContext,
+                    $"Speaker mapping complete. Identified {outcome.SpeakerCount} speakers across {outcome.SegmentCount} segments.",
+                    progress01: 1,
+                    isIndeterminate: false);
+                stageSucceeded = true;
+            }
+            finally
+            {
+                _c.Log.Info(
+                    $"Stage telemetry stage=diarization success={(stageSucceeded ? "true" : "false")} " +
+                    $"provider={stagePlan.ProviderId} runtime={stagePlan.Runtime} role={stagePlan.Role} " +
+                    $"elapsed_ms={stageTimer.ElapsedMilliseconds}");
+            }
         }
     }
 }

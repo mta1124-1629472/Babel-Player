@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,11 +36,17 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
             PipelineStageContext? stageContext,
             CancellationToken cancellationToken)
         {
-            if (string.IsNullOrEmpty(_c.CurrentSession.IngestedMediaPath))
-                throw new InvalidOperationException("No media loaded. Please load media first.");
+            var stagePlan = _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Transcription);
+            var stageTimer = Stopwatch.StartNew();
+            var stageSucceeded = false;
 
-            if (!File.Exists(_c.CurrentSession.IngestedMediaPath))
-                throw new FileNotFoundException($"Ingested media file not found: {_c.CurrentSession.IngestedMediaPath}");
+            try
+            {
+                if (string.IsNullOrEmpty(_c.CurrentSession.IngestedMediaPath))
+                    throw new InvalidOperationException("No media loaded. Please load media first.");
+
+                if (!File.Exists(_c.CurrentSession.IngestedMediaPath))
+                    throw new FileNotFoundException($"Ingested media file not found: {_c.CurrentSession.IngestedMediaPath}");
 
             var transcriptionSourcePath = _c.CurrentSession.IngestedMediaPath;
             if (_c.CurrentSettings.VocalSeparationEnabled)
@@ -101,12 +108,22 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
             }
 
             _c.CommitTranscriptionSessionState(result, transcriptPath);
+            stageSucceeded = true;
 
             ReportStage(
                 stageContext,
                 $"Transcription complete. {result.Segments.Count} segments were detected in {result.Language}.",
                 progress01: 1,
                 isIndeterminate: false);
+
+            }
+            finally
+            {
+                _c.Log.Info(
+                    $"Stage telemetry stage=transcription success={(stageSucceeded ? "true" : "false")} " +
+                    $"provider={stagePlan.ProviderId} runtime={stagePlan.Runtime} role={stagePlan.Role} " +
+                    $"elapsed_ms={stageTimer.ElapsedMilliseconds}");
+            }
         }
     }
 
@@ -143,11 +160,17 @@ internal TranslationOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
             PipelineStageContext? stageContext,
             CancellationToken cancellationToken)
         {
-            if (string.IsNullOrEmpty(_c.CurrentSession.TranscriptPath))
-                throw new InvalidOperationException("No transcript available. Please transcribe media first.");
+            var stagePlan = _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Translation);
+            var stageTimer = Stopwatch.StartNew();
+            var stageSucceeded = false;
 
-            if (!File.Exists(_c.CurrentSession.TranscriptPath))
-                throw new FileNotFoundException($"Transcript file not found: {_c.CurrentSession.TranscriptPath}");
+            try
+            {
+                if (string.IsNullOrEmpty(_c.CurrentSession.TranscriptPath))
+                    throw new InvalidOperationException("No transcript available. Please transcribe media first.");
+
+                if (!File.Exists(_c.CurrentSession.TranscriptPath))
+                    throw new FileNotFoundException($"Transcript file not found: {_c.CurrentSession.TranscriptPath}");
 
             var rawLang = targetLanguage ?? _c.CurrentSettings.TargetLanguage;
             var lang = NormalizePipelineLanguage(rawLang, _c.CurrentSettings.TargetLanguage);
@@ -204,12 +227,22 @@ internal TranslationOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
             }
 
             _c.CommitTranslationSessionState(result, translationPath, src, lang);
+            stageSucceeded = true;
 
             ReportStage(
                 stageContext,
                 $"Translation complete. {result.Segments.Count} segments were translated from {src} to {lang}.",
                 progress01: 1,
                 isIndeterminate: false);
+
+            }
+            finally
+            {
+                _c.Log.Info(
+                    $"Stage telemetry stage=translation success={(stageSucceeded ? "true" : "false")} " +
+                    $"provider={stagePlan.ProviderId} runtime={stagePlan.Runtime} role={stagePlan.Role} " +
+                    $"elapsed_ms={stageTimer.ElapsedMilliseconds}");
+            }
         }
     }
 }

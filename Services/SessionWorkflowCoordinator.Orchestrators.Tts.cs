@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,11 +37,16 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
             PipelineStageContext? stageContext,
             CancellationToken cancellationToken)
         {
-            if (string.IsNullOrEmpty(_c.CurrentSession.TranslationPath))
-                throw new InvalidOperationException("No translation available. Please translate first.");
+            var stagePlan = _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Tts);
+            var stageTimer = Stopwatch.StartNew();
+            var stageSucceeded = false;
+            try
+            {
+                if (string.IsNullOrEmpty(_c.CurrentSession.TranslationPath))
+                    throw new InvalidOperationException("No translation available. Please translate first.");
 
-            if (!File.Exists(_c.CurrentSession.TranslationPath))
-                throw new FileNotFoundException($"Translation file not found: {_c.CurrentSession.TranslationPath}");
+                if (!File.Exists(_c.CurrentSession.TranslationPath))
+                    throw new FileNotFoundException($"Translation file not found: {_c.CurrentSession.TranslationPath}");
 
             var v = (voice ?? _c.CurrentSettings.TtsVoice)?.Trim();
             if (string.IsNullOrWhiteSpace(v))
@@ -71,7 +77,16 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
 
             await _c.StitchSegmentClipsAsync(segmentAudioPaths, orderedSegments, ttsPath, stageContext, cancellationToken);
 
-            _c.CommitTtsSessionState(v!, ttsPath, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
+                _c.CommitTtsSessionState(v!, ttsPath, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
+                stageSucceeded = true;
+            }
+            finally
+            {
+                _c.Log.Info(
+                    $"Stage telemetry stage=tts success={(stageSucceeded ? "true" : "false")} " +
+                    $"provider={stagePlan.ProviderId} runtime={stagePlan.Runtime} role={stagePlan.Role} " +
+                    $"elapsed_ms={stageTimer.ElapsedMilliseconds}");
+            }
         }
     }
 }

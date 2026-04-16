@@ -1,4 +1,5 @@
 using Babel.Player.Services;
+using Babel.Player.Services.Planning;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 
@@ -53,6 +54,12 @@ public sealed record CoordinatorOptions
     /// <see cref="DefaultInferenceExecutionEngine.Instance"/> is used.
     /// </summary>
     public IInferenceExecutionEngine? InferenceExecutionEngine { get; init; }
+
+    /// <summary>
+    /// Stage execution planner used to resolve effective provider/runtime for each pipeline stage.
+    /// When null, <see cref="DefaultExecutionPlanner.Instance"/> is used.
+    /// </summary>
+    public IExecutionPlanner? ExecutionPlanner { get; init; }
 
     /// <summary>
     /// Shared lease tracker for containerized inference requests. When provided, vocal separation

@@ -49,6 +49,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             PipelineStageContext? ttsStageContext,
             CancellationToken cancellationToken)
         {
+            _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Transcription);
             var transcriptionSourcePath = _c.CurrentSession.IngestedMediaPath
                 ?? throw new InvalidOperationException("Ingested media path is required to start the streaming pipeline.");
             if (_c.CurrentSettings.VocalSeparationEnabled)
@@ -123,8 +124,10 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 translationStageContext,
                 progress,
                 $"Preparing translation model '{_c.CurrentSettings.TranslationModel}'");
+            _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Translation);
             await _c.EnsureTranslationExecutionReadyAsync(translationDownloadProgress, cancellationToken).ConfigureAwait(false);
             _c._translationService ??= _c.CreateTranslationService();
+            _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Tts);
             await _c.EnsureTtsProviderReadyAsync(voice, progress, ttsStageContext, cancellationToken).ConfigureAwait(false);
             _c._ttsService ??= _c.CreateTtsService();
             await _c.EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken).ConfigureAwait(false);
@@ -281,8 +284,10 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 translationStageContext,
                 progress,
                 $"Preparing translation model '{_c.CurrentSettings.TranslationModel}'");
+            _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Translation);
             await _c.EnsureTranslationExecutionReadyAsync(translationDownloadProgress, cancellationToken).ConfigureAwait(false);
             _c._translationService ??= _c.CreateTranslationService();
+            _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Tts);
             await _c.EnsureTtsProviderReadyAsync(voice, progress, ttsStageContext, cancellationToken).ConfigureAwait(false);
             _c._ttsService ??= _c.CreateTtsService();
             await _c.EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken).ConfigureAwait(false);
@@ -476,7 +481,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             CancellationToken cancellationToken)
         {
             var parallelism = Math.Max(1, _c._ttsService?.MaxConcurrency ?? 1);
-            var semaphore = new SemaphoreSlim(parallelism, parallelism);
+            using var semaphore = new SemaphoreSlim(parallelism, parallelism);
             var tasks = new List<Task>();
 
             try
