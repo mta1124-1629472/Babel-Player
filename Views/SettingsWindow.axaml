@@ -121,10 +121,10 @@
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
                                 <TextBlock Text="Backend Status" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                    <Ellipse Width="10" Height="10" Fill="{Binding BackendStatusBrush}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding BackendStatusText}" FontSize="12" FontWeight="Medium" VerticalAlignment="Center"/>
-                                    <Button Content="Restart" Command="{Binding RestartBackendCommand}" IsEnabled="{Binding CanRestartBackend}" Padding="12,6" FontSize="11"/>
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Top">
+                                    <Ellipse Width="10" Height="10" Fill="{Binding BackendStatusBrush}" VerticalAlignment="Top" Margin="0,3,0,0"/>
+                                    <TextBlock Text="{Binding BackendStatusText}" FontSize="12" FontWeight="Medium" TextWrapping="Wrap" MaxWidth="480"/>
+                                    <Button Content="Restart" Command="{Binding RestartBackendCommand}" IsEnabled="{Binding CanRestartBackend}" Padding="12,6" FontSize="11" VerticalAlignment="Top"/>
                                 </StackPanel>
                                 <TextBlock Text="{Binding BackendErrorDetail}" IsVisible="{Binding BackendErrorDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" FontSize="11" Foreground="{DynamicResource SystemErrorForeground}" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>
@@ -143,47 +143,26 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Vocal Separation Card -->
                         <Border Classes="settings-card">
-                            <StackPanel Spacing="8">
-                                <TextBlock Text="Audio Processing" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <CheckBox IsChecked="{Binding VocalSeparationEnabled, Mode=TwoWay}" IsEnabled="{Binding VocalSeparationAvailable}" Content="Separate vocals before transcription"/>
-                                <TextBlock Text="{Binding VocalSeparationAvailabilityHint}" IsVisible="{Binding HasVocalSeparationAvailabilityHint}" FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Dubbing Card -->
-                        <Border Classes="settings-card">
-                            <StackPanel Spacing="12">
-                                <TextBlock Text="Dubbing" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="Segment timing mode" FontSize="12" Foreground="{DynamicResource StatusTextBrush}"/>
-                                    <ComboBox ItemsSource="{Binding DubTimingModeOptions}"
-                                              SelectedItem="{Binding DubTimingMode, Mode=TwoWay}"
-                                              Width="180"
-                                              HorizontalAlignment="Left">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Converter={StaticResource SegmentTimingModeDisplayConverter}}"/>
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                    <TextBlock Text="Off: play TTS as-is. Stretch: time-scale TTS to fit. Pause: stop video while TTS plays." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
-                                </StackPanel>
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Pipeline audio &amp; dubbing" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Vocal separation and segment timing (dub) are configured in the main window → Pipeline panel, so they stay next to the run controls." FontSize="11" Opacity="0.65" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
 
                         <!-- Advanced CPU Expander -->
                         <Expander Header="Advanced: CPU Transcription" IsExpanded="False">
                             <StackPanel Spacing="12" Margin="0,12,0,0">
-                                <TextBlock Text="These options tune CPU-only transcription. 0 threads means auto selection." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
-                                <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto">
+                                <TextBlock Text="These options tune CPU-only transcription. 0 threads means auto selection. Worker count can follow hardware (cores + RAM) or a manual value (clamped)." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding CpuAdvancedSettingsNotice}" FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"/>
+                                <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto">
                                     <TextBlock Grid.Column="0" Grid.Row="0" Text="CPU Compute Type:" VerticalAlignment="Center" FontSize="12"/>
                                     <ComboBox Grid.Column="1" Grid.Row="0" ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}" SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}" Width="150"/>
                                     <TextBlock Grid.Column="0" Grid.Row="1" Text="CPU Threads (0=auto):" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
                                     <TextBox Grid.Column="1" Grid.Row="1" Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="0,8,0,0"/>
-                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="Workers:" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
-                                    <TextBox Grid.Column="1" Grid.Row="2" Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="0,8,0,0"/>
+                                    <CheckBox Grid.Column="1" Grid.Row="2" Content="Automatic worker count (from CPU cores and RAM)" IsChecked="{Binding TranscriptionNumWorkersUseAuto, Mode=TwoWay}" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="3" Text="Workers (manual):" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="3" Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="0,8,0,0" IsEnabled="{Binding TranscriptionNumWorkersManualEnabled}"/>
                                 </Grid>
                             </StackPanel>
                         </Expander>
@@ -385,6 +364,8 @@
                                     <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding RuntimeWarmupInfo}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                     <TextBlock Grid.Column="0" Grid.Row="2" Text="NMT Fallback:" Opacity="0.65" Margin="0,4,0,0"/>
                                     <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding TranslationFallbackInfo}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="3" Text="GPU probe streak:" Opacity="0.65" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="3" Text="{Binding GpuHostProbeDiagnostics}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                 </Grid>
                             </StackPanel>
                         </Border>

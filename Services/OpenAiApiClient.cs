@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Services.Http;
 
 namespace Babel.Player.Services;
 
@@ -35,107 +36,116 @@ public sealed class OpenAiApiClient : IDisposable
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 
-    public async Task<IReadOnlyList<string>> ListModelsAsync(CancellationToken cancellationToken = default)
-    {
-        using var response = await _httpClient.GetAsync("models", cancellationToken);
-        var payload = await ReadJsonAsync<ModelsResponseDto>(response, cancellationToken);
+    public Task<IReadOnlyList<string>> ListModelsAsync(CancellationToken cancellationToken = default) =>
+        HttpResilience.ExecuteAsync(async () =>
+        {
+            using var response = await _httpClient.GetAsync("models", cancellationToken).ConfigureAwait(false);
+            var payload = await ReadJsonAsync<ModelsResponseDto>(response, cancellationToken).ConfigureAwait(false);
 
-        return [..
-            (payload.Data ?? [])
-                .Select(model => model.Id)
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Cast<string>()];
-    }
+            return (IReadOnlyList<string>)[..
+                (payload.Data ?? [])
+                    .Select(model => model.Id)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Cast<string>()];
+        }, cancellationToken);
 
-    public async Task<string> CreateChatCompletionAsync(
+    public Task<string> CreateChatCompletionAsync(
         string model,
         string systemPrompt,
         string userPrompt,
-        CancellationToken cancellationToken = default)
-    {
-        var request = new ChatCompletionRequestDto
+        CancellationToken cancellationToken = default) =>
+        HttpResilience.ExecuteAsync(async () =>
         {
-            Model = model,
-            Temperature = 0.2,
-            Messages =
-            [
-                new ChatMessageDto { Role = "system", Content = systemPrompt },
-                new ChatMessageDto { Role = "user", Content = userPrompt },
-            ],
-        };
+            var request = new ChatCompletionRequestDto
+            {
+                Model = model,
+                Temperature = 0.2,
+                Messages =
+                [
+                    new ChatMessageDto { Role = "system", Content = systemPrompt },
+                    new ChatMessageDto { Role = "user", Content = userPrompt },
+                ],
+            };
 
-        var json = JsonSerializer.Serialize(request, JsonOptions);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("chat/completions", content, cancellationToken);
-        var payload = await ReadJsonAsync<ChatCompletionResponseDto>(response, cancellationToken);
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var response = await _httpClient.PostAsync("chat/completions", content, cancellationToken)
+                .ConfigureAwait(false);
+            var payload = await ReadJsonAsync<ChatCompletionResponseDto>(response, cancellationToken).ConfigureAwait(false);
 
-        var message = payload.Choices?.FirstOrDefault()?.Message?.Content;
-        if (string.IsNullOrWhiteSpace(message))
-            throw new InvalidOperationException("OpenAI returned an empty chat completion response.");
+            var message = payload.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(message))
+                throw new InvalidOperationException("OpenAI returned an empty chat completion response.");
 
-        return message;
-    }
+            return message;
+        }, cancellationToken);
 
     /// <summary>
     /// Calls OpenAI speech synthesis endpoint and streams MP3 bytes to a file.
     /// </summary>
-    public async Task DownloadSpeechAsync(
+    public Task DownloadSpeechAsync(
         string inputText,
         string model,
         string voice,
         string outputPath,
-        CancellationToken cancellationToken = default)
-    {
-        var request = new SpeechRequestDto
+        CancellationToken cancellationToken = default) =>
+        HttpResilience.ExecuteAsync(async () =>
         {
-            Model = model,
-            Voice = voice ?? "alloy",
-            Input = inputText,
-            Format = "mp3",
-        };
-
-        var json = JsonSerializer.Serialize(request, JsonOptions);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "audio/speech") { Content = content };
-        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            throw CreateApiException(response.StatusCode, payload);
-        }
-
-        var tempPath = outputPath + ".tmp";
-        try
-        {
-            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using (var fileStream = System.IO.File.Create(tempPath))
+            var request = new SpeechRequestDto
             {
-                await stream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
+                Model = model,
+                Voice = voice ?? "alloy",
+                Input = inputText,
+                Format = "mp3",
+            };
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "audio/speech") { Content = content };
+            using var response = await _httpClient
+                .SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                throw CreateApiException(response.StatusCode, payload);
             }
-            System.IO.File.Move(tempPath, outputPath, overwrite: true);
-        }
-        catch
-        {
+
+            var tempPath = outputPath + ".tmp";
             try
             {
-                if (System.IO.File.Exists(tempPath))
-                    System.IO.File.Delete(tempPath);
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                await using (var fileStream = System.IO.File.Create(tempPath))
+                {
+                    await stream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
+                }
+
+                System.IO.File.Move(tempPath, outputPath, overwrite: true);
             }
             catch
             {
-                // Best-effort cleanup
-            }
-            throw;
-        }
-    }
+                try
+                {
+                    if (System.IO.File.Exists(tempPath))
+                        System.IO.File.Delete(tempPath);
+                }
+                catch
+                {
+                    // Best-effort cleanup
+                }
 
-    public async Task<OpenAiTranscriptionPayload> TranscribeAudioAsync(
+                throw;
+            }
+        }, cancellationToken);
+
+    public Task<OpenAiTranscriptionPayload> TranscribeAudioAsync(
         string audioFilePath,
         string model,
         string? languageHint = null,
-        CancellationToken cancellationToken = default)
-    {
+        CancellationToken cancellationToken = default) =>
+        HttpResilience.ExecuteAsync(async () =>
+        {
         if (!System.IO.File.Exists(audioFilePath))
             throw new System.IO.FileNotFoundException($"Audio file not found: {audioFilePath}");
 
@@ -154,8 +164,9 @@ public sealed class OpenAiApiClient : IDisposable
             content.Add(new StringContent(languageHint), "language");
         }
 
-        using var response = await _httpClient.PostAsync("audio/transcriptions", content, cancellationToken);
-        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var response = await _httpClient.PostAsync("audio/transcriptions", content, cancellationToken)
+            .ConfigureAwait(false);
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException(response.StatusCode, payload);
 
@@ -186,7 +197,7 @@ public sealed class OpenAiApiClient : IDisposable
         }
 
         return new OpenAiTranscriptionPayload(language, text, segments);
-    }
+        }, cancellationToken);
 
     private static async Task<T> ReadJsonAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
     {

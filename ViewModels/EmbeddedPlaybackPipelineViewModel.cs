@@ -31,6 +31,9 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
     [NotifyPropertyChangedFor(nameof(ShowPipelineStatusChrome))]
     private double _pipelineProgressPercent;
 
+    private int _pipelineStageIndex;
+    private int _pipelineStageCount = 1;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PipelineProgressStatusLine))]
     [NotifyPropertyChangedFor(nameof(ShowPipelineStatusChrome))]
@@ -80,8 +83,8 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
         !IsPipelineProgressVisible
             ? string.Empty
             : IsPipelineProgressIndeterminate
-                ? "Current stage progress is active, but this provider has not reported a numeric percentage yet."
-                : $"Current stage progress: {PipelineProgressPercent:P0}. The bar resets for each remaining pipeline stage.";
+                ? "Pipeline is active; this stage has not reported a numeric percentage yet."
+                : $"Overall pipeline progress: {PipelineProgressPercent:P0} (stage {_pipelineStageIndex} of {_pipelineStageCount}).";
 
     [RelayCommand(CanExecute = nameof(CanRunPipeline))]
     public async Task RunPipelineAsync()
@@ -304,11 +307,26 @@ public sealed partial class EmbeddedPlaybackPipelineViewModel : ViewModelBase, I
 
     internal void ApplyStageUpdate(SessionWorkflowCoordinator.PipelineStageUpdate update)
     {
+        _pipelineStageIndex = update.StageIndex;
+        _pipelineStageCount = Math.Max(1, update.StageCount);
         PipelineStageTitle = $"Stage {update.StageIndex} of {update.StageCount}: {update.Title}";
         PipelineStageDetail = string.IsNullOrWhiteSpace(update.StreamingStatus)
             ? update.Detail
             : $"{update.Detail} {update.StreamingStatus}";
-        PipelineProgressPercent = update.Progress01;
+        if (update.IsIndeterminate)
+        {
+            PipelineProgressPercent = _pipelineStageCount > 0
+                ? (_pipelineStageIndex - 1d) / _pipelineStageCount
+                : 0d;
+        }
+        else
+        {
+            var stageFrac = Math.Clamp(update.Progress01, 0d, 1d);
+            PipelineProgressPercent = _pipelineStageCount > 0
+                ? ((_pipelineStageIndex - 1d) + stageFrac) / _pipelineStageCount
+                : stageFrac;
+        }
+
         IsPipelineProgressIndeterminate = update.IsIndeterminate;
         IsPipelineProgressVisible = true;
     }

@@ -1,8 +1,10 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Services.Transcription;
 
 namespace Babel.Player.Services;
 
@@ -70,34 +72,56 @@ internal TranscriptionOrchestrator(SessionWorkflowCoordinator coordinator) => _c
                 var fileName = Path.GetFileNameWithoutExtension(transcriptionSourcePath);
                 var transcriptPath = Path.Combine(transcriptDir, $"{fileName}.json");
 
-                var cpuThreads = _c.CurrentSettings.TranscriptionCpuThreads > 0
-                    ? _c.CurrentSettings.TranscriptionCpuThreads.ToString()
-                    : "auto";
-                var cpuWorkers = Math.Max(1, _c.CurrentSettings.TranscriptionNumWorkers);
+                var transcriptionService = _c._transcriptionService ??= _c.CreateTranscriptionService();
+                var request = CpuTranscriptionRuntimePolicy.BuildTranscriptionRequest(
+                    _c.CurrentSettings,
+                    _c.HardwareSnapshot,
+                    transcriptionSourcePath,
+                    transcriptPath,
+                    _c.CurrentSettings.TranscriptionModel,
+                    SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),
+                    _c.Log,
+                    out var cpuParams);
+
+                var cpuThreads = request.CpuThreads > 0 ? request.CpuThreads.ToString() : "auto";
                 var routeSummary =
                     $"provider={_c.CurrentSettings.TranscriptionProvider}, model={_c.CurrentSettings.TranscriptionModel}, " +
-                    $"cpu_compute={_c.CurrentSettings.TranscriptionCpuComputeType}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers}";
+                    $"cpu_compute={request.CpuComputeType}, cpu_threads={cpuThreads}, cpu_workers={request.NumWorkers}";
                 var hwSummary =
                     $"avx2={(_c.HardwareSnapshot.HasAvx2 ? "yes" : "no")}, " +
                     $"avx512={(_c.HardwareSnapshot.HasAvx512F ? "yes" : "no")}, " +
-                    $"cuda={(_c.HardwareSnapshot.HasCuda ? "yes" : "no")}";
+                    $"cuda={(_c.HardwareSnapshot.HasCuda ? "yes" : "no")}, " +
+                    $"phys_cores={(_c.HardwareSnapshot.CpuPhysicalCores?.ToString() ?? "?")}";
+
+                if (cpuParams.ResolutionNotes.Count > 0)
+                    _c.Log.Info($"CPU transcription policy: {string.Join("; ", cpuParams.ResolutionNotes)}");
 
                 _c.Log.Info($"Starting transcription: {transcriptionSourcePath} " +
                           $"[{_c.CurrentSettings.TranscriptionProvider}/{_c.CurrentSettings.TranscriptionModel}] " +
                           $"route=({routeSummary}) hw=({hwSummary})");
 
-                var transcriptionService = _c._transcriptionService ??= _c.CreateTranscriptionService();
                 var result = await _c._inferenceEngine.TranscribeAsync(
                     transcriptionService,
-                    new TranscriptionRequest(
-                        transcriptionSourcePath,
-                        transcriptPath,
-                        _c.CurrentSettings.TranscriptionModel,
-                        SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),
-                        _c.CurrentSettings.TranscriptionCpuComputeType,
-                        _c.CurrentSettings.TranscriptionCpuThreads,
-                        _c.CurrentSettings.TranscriptionNumWorkers),
+                    request,
                     cancellationToken);
+
+                if (!result.Success
+                    && CpuTranscriptionRuntimePolicy.IsRecoverableCpuTranscriptionFailure(result.ErrorMessage))
+                {
+                    var safeRequest = CpuTranscriptionRuntimePolicy.WithSafeCpuFallback(request);
+                    ReportStage(
+                        stageContext,
+                        "Transcription failed with the current CPU settings. Retrying once with a safe CPU profile (int8, single worker).",
+                        progress01: 0,
+                        isIndeterminate: true);
+                    _c.Log.Warning(
+                        $"Transcription retry after recoverable error: {result.ErrorMessage}. " +
+                        $"Retrying with cpu_compute={safeRequest.CpuComputeType}, workers={safeRequest.NumWorkers}.");
+                    result = await _c._inferenceEngine.TranscribeAsync(
+                        transcriptionService,
+                        safeRequest,
+                        cancellationToken);
+                }
 
                 if (!result.Success)
                 {
