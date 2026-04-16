@@ -47,6 +47,7 @@
                         CornerRadius="{TemplateBinding CornerRadius}"
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Background="Transparent"
                                       Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}"
                                       HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -79,6 +80,17 @@
         <Setter Property="BoxShadow" Value="inset 0 0 6 0 #000000" />
     </Style>
 
+    <!-- FluentTheme can paint a hover/reveal plate on ContentPresenter — strip it so gradients stay uniform. -->
+    <Style Selector="Button.console-button /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.console-button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.console-button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
     <!-- 1.1 The Primary Glow Button Style -->
     <Style Selector="Button.glow-button">
         <Setter Property="Background">
@@ -107,6 +119,7 @@
                         Padding="{TemplateBinding Padding}"
                         BoxShadow="0 0 15 0 #2000F5FF">
                     <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Background="Transparent"
                                       Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}"
                                       HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -139,6 +152,15 @@
     <Style Selector="Button.glow-button:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
     </Style>
+    <Style Selector="Button.glow-button /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.glow-button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.glow-button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
 
     <!-- 1.2 Destructive Glow Button Style -->
     <Style Selector="Button.destructive-glow">
@@ -161,6 +183,7 @@
                         Padding="{TemplateBinding Padding}"
                         BoxShadow="0 0 10 0 #20FF3B3B">
                     <ContentPresenter x:Name="PART_ContentPresenter"
+                                      Background="Transparent"
                                       Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}"
                                       HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -182,6 +205,15 @@
     </Style>
     <Style Selector="Button.destructive-glow:pointerover /template/ Border#PART_Border">
         <Setter Property="BoxShadow" Value="0 0 20 0 #40FF3B3B" />
+    </Style>
+    <Style Selector="Button.destructive-glow /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.destructive-glow:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.destructive-glow:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
     </Style>
 
     <!-- 2. Neon Breathing ProgressBar -->

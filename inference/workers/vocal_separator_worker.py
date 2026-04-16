@@ -25,6 +25,22 @@ _MDX_OVERLAP = 0.25
 _MDX_BATCH_SIZE = 1
 
 
+def _resolve_stem_path(raw: str | Path, output_dir: Path) -> Path:
+    """
+    audio-separator may return basename-only or cwd-relative paths. Always resolve against output_dir.
+    (See audio_separator.separator: chunked path uses join(temp_dir, stem_path) for the same reason.)
+    """
+    p = Path(raw)
+    if p.is_file():
+        return p.resolve()
+    alt = output_dir / p.name
+    if alt.is_file():
+        return alt.resolve()
+    raise FileNotFoundError(
+        f"Stem output not found after separation: {raw!r} (tried {p.resolve()!s} and {alt!s})"
+    )
+
+
 def run_vocal_separation(
     audio_path: Path,
     output_dir: Path,
@@ -78,7 +94,10 @@ def run_vocal_separation(
 
     if vocals_model == effective_instrumental_model:
         # Single pass — both stems come from the same model run
-        stems = [Path(p) for p in make_separator(vocals_model).separate(str(audio_path))]
+        stems = [
+            _resolve_stem_path(p, output_dir)
+            for p in make_separator(vocals_model).separate(str(audio_path))
+        ]
         if len(stems) < 2:
             raise RuntimeError(
                 f"Expected 2 stems from {vocals_model}, got {len(stems)}: {stems}"
@@ -88,10 +107,11 @@ def run_vocal_separation(
     else:
         # Two-pass — optimise each stem independently
         vocals_stems = [
-            Path(p) for p in make_separator(vocals_model).separate(str(audio_path))
+            _resolve_stem_path(p, output_dir)
+            for p in make_separator(vocals_model).separate(str(audio_path))
         ]
         instrumental_stems = [
-            Path(p)
+            _resolve_stem_path(p, output_dir)
             for p in make_separator(effective_instrumental_model).separate(str(audio_path))
         ]
         if len(vocals_stems) < 2 or len(instrumental_stems) < 2:

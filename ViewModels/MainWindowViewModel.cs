@@ -83,12 +83,34 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             Text =
                 "The first time after install, an update, or app startup, the local host may need about 30 to 60 seconds before it is ready. " +
-                "Wait until the status shows Ready, then run the pipeline.",
+                "Wait until the status shows Ready, then run the pipeline.\n\n" +
+                "OK closes this message for now. Use Don't show again if you do not want this tip when the app starts.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
             MaxWidth = 440,
         });
-        var ok = new Button { Content = "OK", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, MinWidth = 96 };
-        panel.Children.Add(ok);
+        var persistDontShowAgain = false;
+
+        var buttonRow = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            Spacing = 10,
+        };
+        var dontShowAgain = new Button
+        {
+            Content = "Don't show again",
+            MinWidth = 140,
+        };
+        var ok = new Button
+        {
+            Content = "OK",
+            MinWidth = 96,
+            IsDefault = true,
+        };
+        buttonRow.Children.Add(dontShowAgain);
+        buttonRow.Children.Add(ok);
+        panel.Children.Add(buttonRow);
+
         var dialog = new Window
         {
             Title = "Local inference host",
@@ -97,12 +119,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
+
+        dontShowAgain.Click += (_, _) =>
+        {
+            persistDontShowAgain = true;
+            dialog.Close();
+        };
         ok.Click += (_, _) => dialog.Close();
 
         await dialog.ShowDialog(owner).ConfigureAwait(true);
 
-        settings.ShownManagedBackendWarmupNotice = true;
-        _settingsService.Save(settings);
+        if (persistDontShowAgain)
+        {
+            settings.ShownManagedBackendWarmupNotice = true;
+            _settingsService.Save(settings);
+        }
     }
 
     [RelayCommand]
