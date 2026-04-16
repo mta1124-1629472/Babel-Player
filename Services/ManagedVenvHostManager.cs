@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -1070,7 +1069,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running managed GPU process: {fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
+        _log.Info($"Running managed GPU process: {fileName} {ProcessCommandLineFormatter.FormatArguments(arguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
