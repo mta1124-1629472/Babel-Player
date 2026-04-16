@@ -114,7 +114,13 @@ tasks.json
 .windsurf/
 .Benchmarks/
 *.lscache
+.gitignore
+apm.lock.yaml
+TestResults/
+obj/
 
+.tmp-obj/Debug/net10.0/
+.tmp-build/
 
 # External binaries (fetched by scripts/fetch-win-native-deps.ps1; too large for Git without LFS)
 native/win-x64/libmpv-2.dll
@@ -156,8 +162,11 @@ gha-creds-*.json
 /fix_merge_conflict.sh
 /add-bootstrap-mocks.ps1
 /setup-qwen-coder.ps1
-
+opencode.jsonc
 
 # APM dependencies
 apm_modules/
-
+test-timeout.sh
+test-output2.txt
+test-output.txt
+test_results.txt
