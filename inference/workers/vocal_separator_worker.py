@@ -59,25 +59,7 @@ def _normalize_input_for_separator(src: Path, work_dir: Path) -> tuple[Path, Opt
     def _ffmpeg_to_wav(out: Path) -> None:
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
-        proc = subprocess.run(
-            [
-                ffmpeg,
-                "-y",
-                "-i",
-                str(resolved),
-                "-vn",
-                "-acodec",
-                "pcm_s16le",
-                "-ar",
-                "44100",
-                "-ac",
-                "2",
-                str(out),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 minute timeout
-        )
+            raise RuntimeError(
                 "ffmpeg not found on PATH; required to decode this media for vocal separation."
             )
         proc = subprocess.run(
@@ -97,6 +79,7 @@ def _normalize_input_for_separator(src: Path, work_dir: Path) -> tuple[Path, Opt
             ],
             capture_output=True,
             text=True,
+            timeout=300,
         )
         if proc.returncode != 0:
             tail = (proc.stderr or "")[-800:]
@@ -111,17 +94,6 @@ def _normalize_input_for_separator(src: Path, work_dir: Path) -> tuple[Path, Opt
     if suffix in {".wav", ".flac", ".mp3", ".ogg"}:
         if not unsafe_path:
             return resolved, None
-        out = work_dir / f"sep_in_{uid}{suffix}"
-        shutil.copy2(resolved, out)
-        return out, out
-
-    if suffix in {".wav", ".flac", ".mp3", ".ogg"}:
-        if not unsafe_path:
-            return resolved, None
-        if suffix == ".wav":
-            out = work_dir / f"sep_in_{uid}.wav"
-            shutil.copy2(resolved, out)
-            return out, out
         out = work_dir / f"sep_in_{uid}{suffix}"
         shutil.copy2(resolved, out)
         return out, out

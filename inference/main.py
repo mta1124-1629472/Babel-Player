@@ -2423,9 +2423,6 @@ async def diarize_wespeaker(
 # Vocal separation
 # ============================================================================
 
-def _safe_separation_upload_suffix(filename: str) -> str:
-    """Use only a short extension for temp paths — avoids spaces/special chars in Windows APIs."""
-    ext = Path(filename or "").suffix.lower()
 _ALLOWED_SEPARATION_EXTENSIONS = {
     ".wav",
     ".mp3",
@@ -2438,27 +2435,16 @@ _ALLOWED_SEPARATION_EXTENSIONS = {
     ".avi",
     ".mov",
     ".wmv",
+    ".mpg",
+    ".mpeg",
 }
 
 
 def _safe_separation_upload_suffix(filename: str) -> str:
     """Use only a short extension for temp paths — avoids spaces/special chars in Windows APIs."""
     ext = Path(filename or "").suffix.lower()
-    return ext if ext in _ALLOWED_SEPARATION_EXTENSIONS else ".wav"
-        ".wav",
-        ".mp3",
-        ".flac",
-        ".m4a",
-        ".mp4",
-        ".mkv",
-        ".webm",
-        ".ogg",
-        ".avi",
-        ".mov",
-        ".wmv",
-    }
-    # Keep unknown uploads on a non-audio suffix so the worker forces ffmpeg decode.
-    return ext if ext in allowed else ".bin"
+    # Unknown extensions use .bin so the worker does not treat bytes as native WAV.
+    return ext if ext in _ALLOWED_SEPARATION_EXTENSIONS else ".bin"
 
 
 @app.post("/separate/vocals", response_model=VocalSeparationResponse)
