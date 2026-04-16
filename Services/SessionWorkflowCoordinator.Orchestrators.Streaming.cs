@@ -404,30 +404,12 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         throw new InvalidOperationException($"Translation failed: {errorMsg}");
                     }
 
-                    // Reload from disk so in-memory state matches what the provider wrote,
-                    // then look up the segment by ID (reliable; avoids float comparison).
+                    // Reload the artifact the provider just updated and resolve by stable segment id.
                     await artifactWriter.ReloadFromDiskAsync(cancellationToken).ConfigureAwait(false);
-                    // Prefer matching by ID (reliable; avoids float comparison)
                     var translatedSegment = artifactWriter.OrderedSegments.FirstOrDefault(s =>
                         string.Equals(s.Id, item.SegmentId, StringComparison.Ordinal));
-
-                    // Fall back to start-time heuristic only if no ID match exists
-                    if (translatedSegment == null)
-                    {
-                        translatedSegment = artifactWriter.OrderedSegments.FirstOrDefault(s =>
-                            Math.Abs(s.Start - item.Segment.Start) < 0.001);
-
-                        if (translatedSegment != null)
-                            _c.Log.Warning($"Translated segment for '{item.SegmentId}' matched by timing fallback (start={item.Segment.Start}s) instead of ID.");
-                    }
-
                     if (translatedSegment is null)
-                    {
-                        if (result.Success && result.Segments != null && result.Segments.Count > 0)
-                            _c.Log.Warning($"Provider reported success for '{item.SegmentId}' but it could not be resolved in the partial artifact (count={artifactWriter.OrderedSegments.Count}).");
-
-                        throw new InvalidOperationException($"Translated segment '{item.SegmentId}' was not written to the partial artifact.");
-                    }
+                        throw new InvalidOperationException($"Translated segment '{item.SegmentId}' was not found in the translation artifact.");
 
                     completed++;
                     ReportStage(
