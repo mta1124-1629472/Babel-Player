@@ -645,7 +645,11 @@ public sealed class ManagedCpuRuntimeManager
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running CPU runtime process: {fileName} {string.Join(' ', arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
+        _log.Info($"Running CPU runtime process: {fileName}");
+        foreach (var arg in arguments)
+        {
+            _log.Info($"  {arg}");
+        }
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");

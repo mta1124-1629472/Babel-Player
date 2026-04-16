@@ -43,6 +43,8 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                 throw new FileNotFoundException($"Translation file not found: {_c.CurrentSession.TranslationPath}");
 
             var v = voice ?? _c.CurrentSettings.TtsVoice;
+            if (string.IsNullOrWhiteSpace(v))
+                throw new InvalidOperationException("No TTS voice configured. Please configure a voice in Settings before generating TTS.");
 
             await _c.EnsureTtsProviderReadyAsync(v, progress, stageContext, cancellationToken);
 
@@ -75,11 +77,11 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
             _c.Log.Info($"Starting TTS generation: {_c.CurrentSession.TranslationPath} -> {ttsPath}");
 
             var (segmentAudioPaths, segmentDurations, totalSegments, orderedSegments) = await _c.GenerateSegmentClipsAsync(
-                v, ttsLanguage, segmentsDir, stageContext, cancellationToken);
+                v!, ttsLanguage, segmentsDir, stageContext, cancellationToken);
 
             await _c.StitchSegmentClipsAsync(segmentAudioPaths, orderedSegments, ttsPath, stageContext, cancellationToken);
 
-            _c.CommitTtsSessionState(v, ttsPath, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
+            _c.CommitTtsSessionState(v!, ttsPath, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
         }
     }
 }
