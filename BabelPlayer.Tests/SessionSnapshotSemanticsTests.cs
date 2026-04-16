@@ -342,6 +342,8 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         Assert.Contains("vocal_separation", result.ClearedArtifacts);
         Assert.Equal(SessionWorkflowStage.MediaLoaded, result.Snapshot.Stage);
         Assert.Null(result.Snapshot.VocalsAudioPath);
+        Assert.Null(result.Snapshot.TranscriptPath);
+        Assert.Null(result.Snapshot.SourceLanguage);
     }
 
     [Fact]

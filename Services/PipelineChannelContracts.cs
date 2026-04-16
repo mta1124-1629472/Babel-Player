@@ -257,7 +257,7 @@ internal sealed class TranslationArtifactStreamingWriter
         matched.TranslatedText = translatedText;
 
         await PersistAsync(cancellationToken).ConfigureAwait(false);
-        return CloneTranslationSegment(matched);
+        return StreamingArtifactCloneHelpers.CloneTranslationSegment(matched);
     }
 
     public async Task ReloadFromDiskAsync(CancellationToken cancellationToken)
@@ -273,7 +273,10 @@ internal sealed class TranslationArtifactStreamingWriter
 
     private Task PersistAsync(CancellationToken cancellationToken) =>
         System.IO.File.WriteAllTextAsync(_partialPath, ArtifactJson.SerializeTranslation(_artifact), cancellationToken);
+}
 
+internal static class StreamingArtifactCloneHelpers
+{
     internal static TranslationSegmentArtifact CloneTranslationSegment(TranslationSegmentArtifact segment) =>
         new()
         {
