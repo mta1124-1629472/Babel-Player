@@ -107,6 +107,11 @@ def _normalize_input_for_separator(src: Path, work_dir: Path) -> tuple[Path, Opt
     if video_like or suffix == ".m4a":
         out = work_dir / f"sep_in_{uid}.wav"
         _ffmpeg_to_wav(out)
+    if suffix in {".wav", ".flac", ".mp3", ".ogg"}:
+        if not unsafe_path:
+            return resolved, None
+        out = work_dir / f"sep_in_{uid}{suffix}"
+        shutil.copy2(resolved, out)
         return out, out
 
     if suffix in {".wav", ".flac", ".mp3", ".ogg"}:
