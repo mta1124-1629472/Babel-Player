@@ -2426,7 +2426,25 @@ async def diarize_wespeaker(
 def _safe_separation_upload_suffix(filename: str) -> str:
     """Use only a short extension for temp paths — avoids spaces/special chars in Windows APIs."""
     ext = Path(filename or "").suffix.lower()
-    allowed = {
+_ALLOWED_SEPARATION_EXTENSIONS = {
+    ".wav",
+    ".mp3",
+    ".flac",
+    ".m4a",
+    ".mp4",
+    ".mkv",
+    ".webm",
+    ".ogg",
+    ".avi",
+    ".mov",
+    ".wmv",
+}
+
+
+def _safe_separation_upload_suffix(filename: str) -> str:
+    """Use only a short extension for temp paths — avoids spaces/special chars in Windows APIs."""
+    ext = Path(filename or "").suffix.lower()
+    return ext if ext in _ALLOWED_SEPARATION_EXTENSIONS else ".wav"
         ".wav",
         ".mp3",
         ".flac",
