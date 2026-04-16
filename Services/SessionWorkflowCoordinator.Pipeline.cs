@@ -844,7 +844,8 @@ public sealed partial class SessionWorkflowCoordinator
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var action = PipelineStateMachine.GetNextAdvanceAction(CurrentSession.Stage, shouldRunDiarization);
+            var stageBeforeAction = CurrentSession.Stage;
+            var action = PipelineStateMachine.GetNextAdvanceAction(stageBeforeAction, shouldRunDiarization);
             switch (action)
             {
                 case null:
@@ -854,11 +855,15 @@ public sealed partial class SessionWorkflowCoordinator
                         progress,
                         GetStageContext(remainingStages, SessionWorkflowStage.Transcribed, stageProgress),
                         cancellationToken);
+                    if (CurrentSession.Stage <= stageBeforeAction)
+                        throw new InvalidOperationException($"Pipeline stalled: stage did not advance after {action} (still at {CurrentSession.Stage}).");
                     break;
                 case PipelineAdvanceAction.Diarize:
                     await _diarizationStageOrchestrator.ExecuteAsync(
                         GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress),
                         cancellationToken);
+                    if (CurrentSession.Stage <= stageBeforeAction)
+                        throw new InvalidOperationException($"Pipeline stalled: stage did not advance after {action} (still at {CurrentSession.Stage}).");
                     break;
                 case PipelineAdvanceAction.TranslateAndDubFromTranscript:
                     await ExecuteStreamingTranslationAndTtsFromTranscriptAsync(
