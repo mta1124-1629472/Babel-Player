@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
@@ -33,5 +34,62 @@ public static class HardwareEncoderHelper
 
         // Software fallback — always available wherever ffmpeg is installed
         return "libx264";
+    }
+
+    /// <summary>
+    /// Appends encoder-specific quality / rate-control flags after <c>-c:v &lt;encoder&gt;</c>.
+    /// Also appends <c>-pix_fmt yuv420p</c> for broad player compatibility.
+    /// </summary>
+    public static void AppendRecommendedVideoQualityArgs(IList<string> args, string encoder)
+    {
+        switch (encoder)
+        {
+            case "libx264":
+                args.Add("-crf");
+                args.Add("20");
+                args.Add("-preset");
+                args.Add("medium");
+                break;
+            case "libx265":
+                args.Add("-crf");
+                args.Add("22");
+                args.Add("-preset");
+                args.Add("medium");
+                break;
+            case "h264_nvenc":
+                args.Add("-preset");
+                args.Add("p4");
+                args.Add("-rc");
+                args.Add("vbr");
+                args.Add("-cq");
+                args.Add("23");
+                break;
+            case "hevc_nvenc":
+                args.Add("-preset");
+                args.Add("p4");
+                args.Add("-rc");
+                args.Add("vbr");
+                args.Add("-cq");
+                args.Add("26");
+                break;
+            case "h264_amf":
+            case "hevc_amf":
+                args.Add("-quality");
+                args.Add("balanced");
+                break;
+            case "h264_qsv":
+            case "hevc_qsv":
+                args.Add("-preset");
+                args.Add("medium");
+                args.Add("-global_quality");
+                args.Add("25");
+                break;
+            default:
+                // Unknown / future encoder — rely on ffmpeg defaults for that codec.
+                break;
+        }
+
+        args.Add("-pix_fmt");
+        args.Add("yuv420p");
     }
 }

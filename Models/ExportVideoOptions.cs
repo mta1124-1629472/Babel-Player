@@ -6,4 +6,6 @@ public sealed record ExportVideoOptions(
     bool IncludeSoftCaptions = true,
     bool BurnInCaptions = false,
     bool OverwriteExisting = false,
-    string? Encoder = null);
+    string? Encoder = null,
+    /// <summary>When set, mux this file as the dubbed audio track instead of session TTS/mixed paths.</summary>
+    string? DubAudioPathOverride = null);

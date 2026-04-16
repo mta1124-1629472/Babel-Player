@@ -4,6 +4,7 @@
         xmlns:v="using:Babel.Player.Views"
         xmlns:bp="using:Babel.Player"
         xmlns:models="using:Babel.Player.Models"
+        xmlns:chrome="using:Avalonia.Controls.Chrome"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="700"
@@ -12,6 +13,7 @@
         Icon="/Assets/Icons/app.ico"
         Width="1280" Height="700"
         MinWidth="960" MinHeight="520"
+        CanResize="True"
         WindowDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
         Background="{DynamicResource IndustrialBackgroundBrush}">
@@ -58,7 +60,44 @@
         </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*,Auto" PointerMoved="OnWindowSurfacePointerMoved">
+    <!-- Borderless window: OS resize hit-targets at edges/corners (client content reflows via inner * grid columns). -->
+    <Grid RowDefinitions="6,*,6" ColumnDefinitions="6,*,6" PointerMoved="OnWindowSurfacePointerMoved">
+        <Panel Grid.Row="0" Grid.Column="0"
+               Width="6" Height="6"
+               Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeNW" />
+        <Panel Grid.Row="0" Grid.Column="1"
+               Height="6"
+               Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeN" />
+        <Panel Grid.Row="0" Grid.Column="2"
+               Width="6" Height="6"
+               Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeNE" />
+
+        <Panel Grid.Row="1" Grid.Column="0"
+               Width="6"
+               Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeW" />
+        <Panel Grid.Row="1" Grid.Column="2"
+               Width="6"
+               Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeE" />
+
+        <Panel Grid.Row="2" Grid.Column="0"
+               Width="6" Height="6"
+               Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeSW" />
+        <Panel Grid.Row="2" Grid.Column="1"
+               Height="6"
+               Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeS" />
+        <Panel Grid.Row="2" Grid.Column="2"
+               Width="6" Height="6"
+               Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeSE" />
+
+    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*" ColumnDefinitions="Auto,*,Auto">
         <Border Grid.Row="0"
                 Classes="top-chrome"
                 Classes.fullscreen-hidden="{Binding Playback.Preview.IsFullscreen}"
@@ -1112,10 +1151,20 @@
                         </StackPanel>
 
                         <Button Grid.Column="1"
-                                Click="OnExportCaptionsClick"
+                                Click="OnExportMenuButtonClick"
                                 Classes="console-button"
-                                ToolTip.Tip="Export captions as SRT">
+                                ToolTip.Tip="Export captions (.srt), dubbed audio only (.mp3), or video with dub + soft subs (.mp4) — audio matches current timings and mix.">
                             <TextBlock Text="Export" />
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="to .srt"
+                                              Click="OnExportToSrtClick" />
+                                    <MenuItem Header="to .mp3"
+                                              Click="OnExportToMp3Click" />
+                                    <MenuItem Header="to .mp4"
+                                              Click="OnExportToMp4Click" />
+                                </ContextMenu>
+                            </Button.ContextMenu>
                         </Button>
 
                         <Button Grid.Column="2"
@@ -1278,6 +1327,7 @@
             </Grid>
         </Border>
 
+    </Grid>
     </Grid>
 
 </Window>

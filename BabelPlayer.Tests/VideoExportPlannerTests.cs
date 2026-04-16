@@ -9,6 +9,17 @@ namespace BabelPlayer.Tests;
 
 public sealed class VideoExportPlannerTests
 {
+    private static int CountEq(IReadOnlyList<string> args, string value)
+    {
+        var n = 0;
+        foreach (var a in args)
+        {
+            if (a == value)
+                n++;
+        }
+        return n;
+    }
+
     private static WorkflowSessionSnapshot CreateSession(string workDir)
     {
         var source = Path.Combine(workDir, "source.mp4");
@@ -71,6 +82,8 @@ public sealed class VideoExportPlannerTests
             Assert.NotNull(plan.SubtitleFilePath);
             Assert.True(File.Exists(plan.SubtitleFilePath));
             Assert.Contains(plan.SubtitleFilePath!, plan.InputFiles);
+            Assert.Contains(plan.SubtitleFilePath!, plan.FfmpegArguments);
+            Assert.Equal(2, CountEq(plan.FfmpegArguments, "-i"));
         }
         finally
         {

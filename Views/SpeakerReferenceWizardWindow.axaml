@@ -3,6 +3,7 @@
         xmlns:vm="using:Babel.Player.ViewModels"
         xmlns:model="using:Babel.Player.Models"
         xmlns:v="using:Babel.Player.Views"
+        xmlns:chrome="using:Avalonia.Controls.Chrome"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
@@ -15,6 +16,8 @@
         MinWidth="900"
         MinHeight="650"
         CanResize="True"
+        WindowDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource PanelBackgroundBrush}">
 
@@ -48,7 +51,62 @@
         </Style>
     </Window.Styles>
 
-    <Grid Margin="18">
+    <Grid RowDefinitions="6,*,6" ColumnDefinitions="6,*,6">
+        <Panel Grid.Row="0" Grid.Column="0" Width="6" Height="6" Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeNW" />
+        <Panel Grid.Row="0" Grid.Column="1" Height="6" Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeN" />
+        <Panel Grid.Row="0" Grid.Column="2" Width="6" Height="6" Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeNE" />
+        <Panel Grid.Row="1" Grid.Column="0" Width="6" Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeW" />
+        <Panel Grid.Row="1" Grid.Column="2" Width="6" Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeE" />
+        <Panel Grid.Row="2" Grid.Column="0" Width="6" Height="6" Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeSW" />
+        <Panel Grid.Row="2" Grid.Column="1" Height="6" Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeS" />
+        <Panel Grid.Row="2" Grid.Column="2" Width="6" Height="6" Background="Transparent"
+               chrome:WindowDecorationProperties.ElementRole="ResizeSE" />
+
+        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*">
+            <!-- Custom title bar (drag + close); content below -->
+            <Border Grid.Row="0"
+                    Background="{DynamicResource SurfaceSubtleBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="12,0,0,0"
+                    chrome:WindowDecorationProperties.ElementRole="TitleBar">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0"
+                               Text="Speaker Reference Wizard"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1"
+                            Classes="chrome-button chrome-close"
+                            Width="40"
+                            Height="40"
+                            Background="{DynamicResource DestructiveBrush}"
+                            Foreground="{DynamicResource PrimaryTextBrush}"
+                            Click="OnCancelClick"
+                            ToolTip.Tip="Close wizard (discard changes)"
+                            AutomationProperties.Name="Close wizard">
+                        <Viewbox Width="11" Height="11">
+                            <Canvas Width="24" Height="24">
+                                <Path Stroke="{DynamicResource PrimaryTextBrush}"
+                                      StrokeThickness="1.5"
+                                      StrokeLineCap="Round"
+                                      Stretch="None"
+                                      Data="M 7,7 L 17,17 M 17,7 L 7,17" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                </Grid>
+            </Border>
+
+    <Grid Grid.Row="1" Margin="18,14,18,18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -56,9 +114,8 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
+        <!-- Intro -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
-            <TextBlock Text="Speaker Reference Wizard" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"/>
             <TextBlock Text="Assign voices to speakers and set reference audio clips. Use the preview to find good clips, then click 'Use Playhead' to grab the current moment." FontSize="12" Opacity="0.6" TextWrapping="Wrap"/>
         </StackPanel>
 
@@ -375,6 +432,8 @@
                     FontSize="12"
                     FontWeight="SemiBold"
                     ToolTip.Tip="Apply voice and reference changes to the session"/>
+        </Grid>
+    </Grid>
         </Grid>
     </Grid>
 </Window>

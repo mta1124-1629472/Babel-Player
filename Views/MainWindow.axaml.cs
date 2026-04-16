@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -477,6 +478,12 @@ public partial class MainWindow : Window
         wizard.Show(this);
     }
 
+    private void OnExportMenuButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { ContextMenu: { } menu })
+            menu.Open(sender as Control);
+    }
+
     /// <summary>
     /// Prompts the user to choose an output .srt file and exports the current playback segments as SubRip subtitles.
     /// </summary>
@@ -485,7 +492,7 @@ public partial class MainWindow : Window
     /// On success sets the playback status to "Exported captions to {file.Name}." 
     /// On failure sets the playback status to "Failed to export captions: {error message}".
     /// </remarks>
-    public async void OnExportCaptionsClick(object? sender, RoutedEventArgs e)
+    public async void OnExportToSrtClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm)
             return;
@@ -528,6 +535,202 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             vm.Playback.StatusText = $"Failed to export captions: {ex.Message}";
+        }
+    }
+
+    private static readonly string[] Mp3Patterns = ["*.mp3"];
+    private static readonly string[] Mp4Patterns = ["*.mp4"];
+
+    /// <summary>
+    /// Exports dubbed audio as MP3 using a fresh timeline render (segment timings, stretch/pause, ambiance mix)
+    /// so the file matches current session configuration — not an older on-disk dub artifact.
+    /// </summary>
+    public async void OnExportToMp3Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        vm.Playback.StatusText = "Rendering dubbed audio for export…";
+
+        DubExportRenderResult? render;
+        try
+        {
+            render = await vm.Coordinator.TryRenderDubAudioForExportAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            vm.Playback.StatusText = $"Dub render failed: {ex.Message}";
+            return;
+        }
+
+        if (render is null)
+        {
+            vm.Playback.StatusText =
+                "Cannot export dub audio: need a saved translation, per-segment TTS clips, and ffmpeg.";
+            return;
+        }
+
+        var srcPath = render.MixedWithAmbiancePath ?? render.DubTimelinePath;
+
+        var sourceMediaPath = vm.Coordinator.CurrentSession.SourceMediaPath;
+        var suggestedName = string.IsNullOrWhiteSpace(sourceMediaPath)
+            ? "babel-dub.mp3"
+            : $"{Path.GetFileNameWithoutExtension(sourceMediaPath)}-dub.mp3";
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export dubbed audio",
+            DefaultExtension = "mp3",
+            SuggestedFileName = suggestedName,
+            FileTypeChoices =
+            [
+                new FilePickerFileType("MP3 audio") { Patterns = Mp3Patterns },
+            ],
+        });
+
+        if (file is null)
+        {
+            vm.Playback.StatusText = string.Empty;
+            return;
+        }
+
+        var destPath = file.TryGetLocalPath();
+        if (string.IsNullOrEmpty(destPath))
+        {
+            vm.Playback.StatusText = "Could not resolve a local path for the export file.";
+            return;
+        }
+
+        try
+        {
+            File.Copy(srcPath, destPath, overwrite: true);
+            vm.Playback.StatusText = $"Exported dubbed audio to {Path.GetFileName(destPath)}.";
+        }
+        catch (Exception ex)
+        {
+            vm.Playback.StatusText = $"Failed to export MP3: {ex.Message}";
+        }
+        finally
+        {
+            TryDeleteQuiet(render.DubTimelinePath);
+            if (!string.Equals(render.MixedWithAmbiancePath, render.DubTimelinePath, StringComparison.OrdinalIgnoreCase))
+                TryDeleteQuiet(render.MixedWithAmbiancePath);
+        }
+    }
+
+    /// <summary>
+    /// Muxes the source video with a freshly rendered dub track (plus optional soft subs from the current segment list).
+    /// </summary>
+    public async void OnExportToMp4Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        vm.Playback.StatusText = "Rendering dubbed audio for video export…";
+
+        DubExportRenderResult? render;
+        try
+        {
+            render = await vm.Coordinator.TryRenderDubAudioForExportAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            vm.Playback.StatusText = $"Dub render failed: {ex.Message}";
+            return;
+        }
+
+        if (render is null)
+        {
+            vm.Playback.StatusText =
+                "Cannot export video: need a saved translation, per-segment TTS clips, and ffmpeg.";
+            return;
+        }
+
+        var dubPath = render.MixedWithAmbiancePath ?? render.DubTimelinePath;
+
+        var sourceMediaPath = vm.Coordinator.CurrentSession.SourceMediaPath;
+        var suggestedName = string.IsNullOrWhiteSpace(sourceMediaPath)
+            ? "babel-export.mp4"
+            : $"{Path.GetFileNameWithoutExtension(sourceMediaPath)}-dub.mp4";
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export video with dubbed track",
+            DefaultExtension = "mp4",
+            SuggestedFileName = suggestedName,
+            FileTypeChoices =
+            [
+                new FilePickerFileType("MP4 video") { Patterns = Mp4Patterns },
+            ],
+        });
+
+        if (file is null)
+        {
+            vm.Playback.StatusText = string.Empty;
+            return;
+        }
+
+        var destPath = file.TryGetLocalPath();
+        if (string.IsNullOrEmpty(destPath))
+        {
+            vm.Playback.StatusText = "Could not resolve a local path for the export file.";
+            return;
+        }
+
+        var session = vm.Coordinator.CurrentSession;
+        var segments = vm.Playback.Preview.Segments.ToArray();
+        var settings = vm.Coordinator.CurrentSettings;
+        var encoder = HardwareEncoderHelper.ResolveEncoder(settings, vm.Coordinator.HardwareSnapshot);
+
+        var planner = new VideoExportPlanner();
+        var options = new ExportVideoOptions(
+            destPath,
+            IncludeTtsAudio: true,
+            IncludeSoftCaptions: vm.Playback.Preview.HasSegments,
+            BurnInCaptions: false,
+            OverwriteExisting: true,
+            Encoder: encoder,
+            DubAudioPathOverride: dubPath);
+
+        var validation = planner.Validate(session, segments, options);
+        if (!validation.CanExport)
+        {
+            vm.Playback.StatusText = "Cannot export video: " + string.Join(" ", validation.Issues);
+            TryDeleteQuiet(render.DubTimelinePath);
+            TryDeleteQuiet(render.MixedWithAmbiancePath);
+            return;
+        }
+
+        try
+        {
+            var plan = planner.BuildPlan(session, segments, options);
+            await FfmpegVideoExportRunner.RunPlanAsync(plan).ConfigureAwait(true);
+            vm.Playback.StatusText = $"Exported video to {Path.GetFileName(destPath)}.";
+        }
+        catch (Exception ex)
+        {
+            vm.Playback.StatusText = $"Failed to export MP4: {ex.Message}";
+        }
+        finally
+        {
+            TryDeleteQuiet(render.DubTimelinePath);
+            if (!string.Equals(render.MixedWithAmbiancePath, render.DubTimelinePath, StringComparison.OrdinalIgnoreCase))
+                TryDeleteQuiet(render.MixedWithAmbiancePath);
+        }
+    }
+
+    private static void TryDeleteQuiet(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // Best-effort cleanup of temp render outputs.
         }
     }
 

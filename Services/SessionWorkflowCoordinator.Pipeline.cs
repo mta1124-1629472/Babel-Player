@@ -741,7 +741,7 @@ public sealed partial class SessionWorkflowCoordinator
 
     private async Task<List<TimelineDubSegment>> BuildTimelineDubSegmentsAsync(
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
-        ConcurrentDictionary<string, string> segmentAudioPaths,
+        IReadOnlyDictionary<string, string> segmentAudioPaths,
         CancellationToken cancellationToken)
     {
         var timelineSegments = new List<TimelineDubSegment>(orderedSegments.Count);

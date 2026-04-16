@@ -235,7 +235,7 @@ public sealed class AppSettings
     public bool VideoHdrComputePeak { get; set; } = true;
 
     /// <summary>
-    /// ffmpeg encoder used by the video export stage (not yet implemented).
+    /// ffmpeg video encoder used for MP4 export (main window → Export → to .mp4).
     /// "auto" = resolve at export time from hardware detection.
     /// Options: auto, h264_nvenc, hevc_nvenc, h264_amf, hevc_amf, h264_qsv, hevc_qsv, libx264, libx265.
     /// </summary>

@@ -19,15 +19,16 @@ public sealed class VideoExportPlanner
 
         var issues = new List<string>();
 
-        if (string.IsNullOrWhiteSpace(session.SourceMediaPath) || !File.Exists(session.SourceMediaPath))
+        var videoIn = ResolveVideoInputPath(session);
+        if (string.IsNullOrWhiteSpace(videoIn) || !File.Exists(videoIn))
             issues.Add("Source media is missing.");
 
         if (string.IsNullOrWhiteSpace(options.OutputPath))
             issues.Add("Output path is required.");
 
-        var preferredDubPath = ResolvePreferredDubPath(session);
+        var preferredDubPath = ResolvePreferredDubPath(session, options);
         if (options.IncludeTtsAudio && (string.IsNullOrWhiteSpace(preferredDubPath) || !File.Exists(preferredDubPath)))
-            issues.Add("No combined TTS audio is available for export.");
+            issues.Add("No dubbed audio is available for export.");
 
         if ((options.IncludeSoftCaptions || options.BurnInCaptions) && segments.Count == 0)
             issues.Add("No segment data is available for captions.");
@@ -46,10 +47,10 @@ public sealed class VideoExportPlanner
         var validation = Validate(session, segments, options);
         if (!validation.CanExport)
             throw new InvalidOperationException(string.Join(" ", validation.Issues));
-        var preferredDubPath = ResolvePreferredDubPath(session);
+        var preferredDubPath = ResolvePreferredDubPath(session, options);
+        var videoIn = ResolveVideoInputPath(session)!;
 
-
-        var inputFiles = new List<string> { session.SourceMediaPath! };
+        var inputFiles = new List<string> { videoIn };
         var args = new List<string>();
 
         if (options.OverwriteExisting)
@@ -58,7 +59,7 @@ public sealed class VideoExportPlanner
             args.Add("-n");
 
         args.Add("-i");
-        args.Add(session.SourceMediaPath!);
+        args.Add(videoIn);
 
         if (options.IncludeTtsAudio)
         {
@@ -67,54 +68,24 @@ public sealed class VideoExportPlanner
             args.Add(preferredDubPath!);
         }
 
-        var subtitleFilePath = (options.IncludeSoftCaptions || options.BurnInCaptions)
-            ? WriteSubtitleFile(session, segments)
-            : null;
+        string? subtitleFilePath = null;
+        if (options.IncludeSoftCaptions || options.BurnInCaptions)
+            subtitleFilePath = WriteSubtitleFile(session, segments);
 
-        if (subtitleFilePath is not null)
+        // Burn-in and soft-mux use the same SRT; avoid muxing a second text track when burning in.
+        var muxSoftSubs = options.IncludeSoftCaptions && !options.BurnInCaptions && subtitleFilePath is not null;
+
+        // Soft-muxed subtitles need a dedicated input; burn-in reads the file via -vf only.
+        if (muxSoftSubs)
         {
-            inputFiles.Add(subtitleFilePath);
+            inputFiles.Add(subtitleFilePath!);
+            args.Add("-i");
+            args.Add(subtitleFilePath!);
         }
 
-        if (options.IncludeTtsAudio)
-        {
-            args.Add("-map");
-            args.Add("0:v:0");
-            args.Add("-map");
-            args.Add("1:a:0");
+        var encoder = options.Encoder ?? "libx264";
 
-            if (subtitleFilePath is not null && options.IncludeSoftCaptions)
-            {
-                args.Add("-map");
-                args.Add("2");
-                args.Add("-c:s");
-                args.Add("mov_text");
-            }
-
-            args.Add("-c:v");
-            args.Add(options.Encoder ?? "libx264");
-            args.Add("-c:a");
-            args.Add("aac");
-        }
-        else
-        {
-            args.Add("-map");
-            args.Add("0:v:0");
-            args.Add("-map");
-            args.Add("0:a?");
-
-            if (subtitleFilePath is not null && options.IncludeSoftCaptions)
-            {
-                args.Add("-map");
-                args.Add("1");
-                args.Add("-c:s");
-                args.Add("mov_text");
-            }
-
-            args.Add("-c:v");
-            args.Add(options.Encoder ?? "libx264");
-        }
-
+        // Input indices: 0 = video, 1 = dub (optional), last = soft subs (optional)
         if (options.BurnInCaptions && subtitleFilePath is not null)
         {
             var escaped = EscapeForFfmpegFilter(subtitleFilePath);
@@ -122,10 +93,49 @@ public sealed class VideoExportPlanner
             args.Add($"subtitles={escaped}");
         }
 
+        const int VideoIn = 0;
+        var softSubIn = muxSoftSubs
+            ? (options.IncludeTtsAudio ? 2 : 1)
+            : (int?)null;
+
+        args.Add("-map");
+        args.Add($"{VideoIn}:v:0");
+
+        if (options.IncludeTtsAudio)
+        {
+            args.Add("-map");
+            args.Add("1:a:0");
+        }
+        else
+        {
+            args.Add("-map");
+            args.Add($"{VideoIn}:a?");
+        }
+
+        if (softSubIn is not null)
+        {
+            args.Add("-map");
+            args.Add($"{softSubIn}:s:0");
+            args.Add("-c:s");
+            args.Add("mov_text");
+        }
+
+        args.Add("-c:v");
+        args.Add(encoder);
+        HardwareEncoderHelper.AppendRecommendedVideoQualityArgs(args, encoder);
+
+        if (options.IncludeTtsAudio)
+        {
+            args.Add("-c:a");
+            args.Add("aac");
+        }
+
+        args.Add("-movflags");
+        args.Add("+faststart");
         args.Add(options.OutputPath);
 
         return new ExportVideoPlan(
-            session.SourceMediaPath!,
+            videoIn,
             options.OutputPath,
             options.IncludeTtsAudio,
             options.IncludeSoftCaptions,
@@ -135,8 +145,20 @@ public sealed class VideoExportPlanner
             subtitleFilePath);
     }
 
-    private static string? ResolvePreferredDubPath(WorkflowSessionSnapshot session)
+    /// <summary>Prefer ingested media (what the player loads) over the original source path.</summary>
+    public static string? ResolveVideoInputPath(WorkflowSessionSnapshot session)
     {
+        if (!string.IsNullOrWhiteSpace(session.IngestedMediaPath) && File.Exists(session.IngestedMediaPath))
+            return session.IngestedMediaPath;
+        if (!string.IsNullOrWhiteSpace(session.SourceMediaPath) && File.Exists(session.SourceMediaPath))
+            return session.SourceMediaPath;
+        return null;
+    }
+
+    private static string? ResolvePreferredDubPath(WorkflowSessionSnapshot session, ExportVideoOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.DubAudioPathOverride) && File.Exists(options.DubAudioPathOverride))
+            return options.DubAudioPathOverride;
         if (!string.IsNullOrWhiteSpace(session.MixedDubAudioPath) && File.Exists(session.MixedDubAudioPath))
             return session.MixedDubAudioPath;
         return session.TtsPath;
