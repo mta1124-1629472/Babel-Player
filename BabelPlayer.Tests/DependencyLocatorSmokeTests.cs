@@ -79,32 +79,32 @@ public sealed class DependencyLocatorSmokeTests : IDisposable
             ? Path.Combine(toolDir, $"{toolName}.cmd")
             : Path.Combine(toolDir, toolName);
 
-        if (!File.Exists(commandPath))
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                File.WriteAllText(
-                    commandPath,
-                    "@echo off\r\n" +
-                    "if /I \"%~1\"==\"-version\" exit /b 0\r\n" +
-                    "exit /b 0\r\n");
-            }
-            else
-            {
-                File.WriteAllText(
-                    commandPath,
-                    "#!/usr/bin/env sh\n" +
-                    "if [ \"$1\" = \"-version\" ]; then\n" +
-                    "  exit 0\n" +
-                    "fi\n" +
-                    "exit 0\n");
+        if (File.Exists(commandPath))
+            return;
 
-                File.SetUnixFileMode(
-                    commandPath,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
-                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
-                    UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-            }
+        if (OperatingSystem.IsWindows())
+        {
+            File.WriteAllText(
+                commandPath,
+                "@echo off\r\n" +
+                "if /I \"%~1\"==\"-version\" exit /b 0\r\n" +
+                "exit /b 0\r\n");
+        }
+        else
+        {
+            File.WriteAllText(
+                commandPath,
+                "#!/usr/bin/env sh\n" +
+                "if [ \"$1\" = \"-version\" ]; then\n" +
+                "  exit 0\n" +
+                "fi\n" +
+                "exit 0\n");
+
+            File.SetUnixFileMode(
+                commandPath,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
         }
 
         _createdPaths.Add(commandPath);
