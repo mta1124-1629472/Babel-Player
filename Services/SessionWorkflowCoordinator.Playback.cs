@@ -670,15 +670,15 @@ public sealed partial class SessionWorkflowCoordinator
     public void RemoveSpeakerReferenceAudioPath(string speakerId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
-        if (CurrentSession.SpeakerReferenceAudioPaths is null)
-            return;
-
-        var updated = new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
-        if (!updated.Remove(speakerId))
-            return;
-
         lock (_sessionLock)
         {
+            if (CurrentSession.SpeakerReferenceAudioPaths is null)
+                return;
+
+            var updated = new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
+            if (!updated.Remove(speakerId))
+                return;
+
             CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated.Count == 0 ? null : updated };
         }
         SaveCurrentSession();
