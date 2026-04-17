@@ -72,10 +72,14 @@ public static class DependencyLocator
     public static string? FindFfmpeg()
     {
         var appDir = AppContext.BaseDirectory;
+        var rid = WindowsPackagingPaths.NativeRidFolder;
         var candidates = new[]
         {
             Path.Combine(appDir, "ffmpeg.exe"),
             Path.Combine(appDir, "tools", "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", rid, "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", "win-x64", "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffmpeg.exe"),
             "ffmpeg",
         };
         return Probe(candidates, "-version");
@@ -88,10 +92,14 @@ public static class DependencyLocator
     public static string? FindFfprobe()
     {
         var appDir = AppContext.BaseDirectory;
+        var rid = WindowsPackagingPaths.NativeRidFolder;
         var candidates = new[]
         {
             Path.Combine(appDir, "ffprobe.exe"),
             Path.Combine(appDir, "tools", "ffprobe.exe"),
+            Path.Combine(appDir, "tools", rid, "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "win-x64", "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffprobe.exe"),
             "ffprobe",
         };
         return Probe(candidates, "-version");

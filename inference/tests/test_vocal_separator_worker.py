@@ -471,3 +471,139 @@ class TestRunVocalSeparationCleanup:
         assert str(safe_copy) in separated_paths[0], (
             f"Expected safe copy path in separate() call, got {separated_paths[0]!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# _resolve_stem_path — regression coverage for #233 (vocal stem path handling)
+# ---------------------------------------------------------------------------
+
+class TestResolveStemPath:
+    """
+    Regression: audio-separator occasionally returns stem paths as basenames or
+    cwd-relative strings instead of absolute paths (see
+    audio_separator.separator chunked code path, which joins temp_dir + stem_path
+    for the same reason). Before the fix landed in commit 44d7eef, the caller
+    wrapped these values in plain ``Path(raw)`` and subsequent reads (``.stat()``,
+    ``.unlink()``) failed with FileNotFoundError whenever cwd differed from
+    output_dir.
+
+    These tests pin the contract of ``_resolve_stem_path``:
+
+      1. Absolute paths that already point to a real file are returned as-is.
+      2. Bare basenames are resolved against output_dir.
+      3. Cwd-relative paths that do not resolve against cwd still resolve when
+         the file exists in output_dir.
+      4. str and Path inputs are both accepted.
+      5. When neither candidate exists, a FileNotFoundError is raised with both
+         attempted paths in the message for debugging.
+    """
+
+    @pytest.fixture
+    def resolve_fn(self, worker):
+        return worker._resolve_stem_path
+
+    @pytest.fixture
+    def output_dir_with_stem(self, tmp_path):
+        """Create an output_dir containing a realistic Separator stem filename."""
+        output_dir = tmp_path / "stems"
+        output_dir.mkdir()
+        stem = output_dir / "source_(Vocals)_UVR-MDX-NET-Voc_FT.wav"
+        stem.write_bytes(b"fake wav bytes")
+        return output_dir, stem
+
+    # ---- happy path: absolute input ---------------------------------------
+
+    def test_absolute_existing_path_returned_resolved(self, resolve_fn, output_dir_with_stem):
+        output_dir, stem = output_dir_with_stem
+        result = resolve_fn(str(stem), output_dir)
+        assert result == stem.resolve()
+        assert result.is_absolute()
+
+    def test_path_object_input_accepted(self, resolve_fn, output_dir_with_stem):
+        """The signature is ``str | Path``; both forms must work identically."""
+        output_dir, stem = output_dir_with_stem
+        result = resolve_fn(stem, output_dir)
+        assert result == stem.resolve()
+
+    # ---- regression: basename-only paths ----------------------------------
+
+    def test_basename_only_path_resolves_against_output_dir(
+        self, resolve_fn, output_dir_with_stem, tmp_path, monkeypatch
+    ):
+        """
+        Regression for the original bug: audio-separator may return a bare
+        filename (no directory component). Naive ``Path(raw).is_file()`` is
+        evaluated against cwd, so the stem is not found unless cwd happens to
+        equal output_dir. ``_resolve_stem_path`` must fall back to
+        ``output_dir / p.name``.
+        """
+        output_dir, stem = output_dir_with_stem
+        raw = stem.name  # "source_(Vocals)_UVR-MDX-NET-Voc_FT.wav"
+
+        # Run from a cwd that is guaranteed not to contain the stem so the
+        # bare-name lookup against cwd fails the way it does in production.
+        unrelated_cwd = tmp_path / "elsewhere"
+        unrelated_cwd.mkdir()
+        monkeypatch.chdir(unrelated_cwd)
+
+        # Precondition: reproduce the pre-fix failure mode — the naive wrapping
+        # the old code performed (``Path(raw)``) does NOT point at a real file.
+        assert not Path(raw).is_file(), (
+            "Regression precondition failed: bare basename unexpectedly "
+            "resolved against cwd; the test cannot prove the fix."
+        )
+
+        # Fix under test: fall back to output_dir / basename.
+        result = resolve_fn(raw, output_dir)
+        assert result == stem.resolve()
+        assert result.is_file()
+
+    def test_cwd_relative_path_resolves_against_output_dir(
+        self, resolve_fn, output_dir_with_stem, tmp_path, monkeypatch
+    ):
+        """
+        audio-separator's non-chunked path sometimes returns paths that are
+        relative to its own working directory (e.g. ``./source_(Vocals).wav``).
+        When that relative path does not resolve against cwd, we must still
+        locate the file via ``output_dir / p.name``.
+        """
+        output_dir, stem = output_dir_with_stem
+        raw = f"./{stem.name}"
+
+        unrelated_cwd = tmp_path / "runner_cwd"
+        unrelated_cwd.mkdir()
+        monkeypatch.chdir(unrelated_cwd)
+
+        assert not Path(raw).is_file()
+
+        result = resolve_fn(raw, output_dir)
+        assert result == stem.resolve()
+
+    def test_result_is_always_absolute(self, resolve_fn, output_dir_with_stem):
+        """Callers downstream pass the result into .stat()/.unlink() — absolute only."""
+        output_dir, stem = output_dir_with_stem
+        result = resolve_fn(stem.name, output_dir)
+        assert result.is_absolute()
+
+    # ---- error path -------------------------------------------------------
+
+    def test_missing_stem_raises_filenotfounderror(self, resolve_fn, tmp_path):
+        output_dir = tmp_path / "empty_stems"
+        output_dir.mkdir()
+
+        with pytest.raises(FileNotFoundError, match="Stem output not found"):
+            resolve_fn("does_not_exist_(Vocals).wav", output_dir)
+
+    def test_missing_stem_error_mentions_both_candidates(self, resolve_fn, tmp_path):
+        """Error message should list both the raw path and the output_dir fallback
+        so on-call debugging does not require guessing which lookup failed."""
+        output_dir = tmp_path / "empty_stems_2"
+        output_dir.mkdir()
+        raw = "ghost_(Vocals).wav"
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            resolve_fn(raw, output_dir)
+
+        message = str(exc_info.value)
+        assert "ghost_(Vocals).wav" in message
+        assert str(output_dir / raw) in message

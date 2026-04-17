@@ -1,5 +1,6 @@
 using System;
 using Babel.Player.Models;
+using Babel.Player.Services;
 using Babel.Player.Services.Settings;
 
 namespace BabelPlayer.Tests;
@@ -86,5 +87,16 @@ public sealed class AppSettingsTests
         var settings = new AppSettings();
 
         Assert.False(settings.VocalSeparationEnabled);
+    }
+
+    [Theory]
+    [InlineData(SegmentTimingMode.Pause, SegmentTimingMode.Off)]
+    [InlineData(SegmentTimingMode.Off, SegmentTimingMode.Off)]
+    [InlineData(SegmentTimingMode.Stretch, SegmentTimingMode.Stretch)]
+    public void NormalizeRenderTimingMode_MapsPreviewOnlyModesForRender(
+        SegmentTimingMode input,
+        SegmentTimingMode expected)
+    {
+        Assert.Equal(expected, DubTimingDefaults.NormalizeRenderTimingMode(input));
     }
 }
