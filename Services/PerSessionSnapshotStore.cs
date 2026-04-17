@@ -78,7 +78,7 @@ public sealed class PerSessionSnapshotStore
         try
         {
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<WorkflowSessionSnapshot>(json, SerializerOptions);
+            return SessionSnapshotJsonCompat.Deserialize(json, SerializerOptions);
         }
         catch (Exception ex)
         {
