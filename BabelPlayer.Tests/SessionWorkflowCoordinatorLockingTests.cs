@@ -65,7 +65,6 @@ public sealed class SessionWorkflowCoordinatorLockingTests
         }
         return false;
     }
-    }
 
     private static string FindRepoDirectory(string name)
     {
