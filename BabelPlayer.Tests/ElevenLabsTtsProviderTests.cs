@@ -179,7 +179,7 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
     [Fact]
     public async Task GenerateTtsAsync_GeneratesCombinedAudio()
     {
-        var mockAudioService = new MockAudioProcessingService();
+        var mockAudioService = new FakeAudioProcessingService();
         using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient, audioProcessingService: mockAudioService);
         var translationPath = WriteTranslationJson(twoSegments: true);
         var outputPath = Path.Combine(_testDir, "out.mp3");
@@ -342,87 +342,4 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
         }
     }
 
-    /// <summary>
-    /// Manual mock implementation of IAudioProcessingService for testing.
-    /// Writes dummy audio data to the output path when CombineAudioSegmentsAsync is called.
-    /// </summary>
-    private sealed class MockAudioProcessingService : IAudioProcessingService
-    {
-        public bool CombineAudioSegmentsAsyncCalled { get; private set; }
-
-        public Task CombineAudioSegmentsAsync(
-            IReadOnlyList<string> segmentAudioPaths,
-            string outputAudioPath,
-            CancellationToken cancellationToken)
-        {
-            CombineAudioSegmentsAsyncCalled = true;
-            
-            // Create output directory if it doesn't exist
-            var outputDir = Path.GetDirectoryName(outputAudioPath);
-            if (!string.IsNullOrEmpty(outputDir))
-                Directory.CreateDirectory(outputDir);
-            
-            // Write dummy audio data (3 bytes) to simulate concatenated audio
-            File.WriteAllBytes(outputAudioPath, [0x01, 0x02, 0x03]);
-            
-            return Task.CompletedTask;
-        }
-
-        public Task ComposeTimelineDubAsync(
-            IReadOnlyList<TimelineDubSegment> segments,
-            string outputAudioPath,
-            CancellationToken cancellationToken)
-        {
-            var outputDir = Path.GetDirectoryName(outputAudioPath);
-            if (!string.IsNullOrEmpty(outputDir))
-                Directory.CreateDirectory(outputDir);
-            File.WriteAllBytes(outputAudioPath, [0x04, 0x05, 0x06]);
-            return Task.CompletedTask;
-        }
-
-        public Task MixDubOverAmbianceAsync(
-            string dubbedAudioPath,
-            string ambianceAudioPath,
-            string outputAudioPath,
-            double ambianceGainDb,
-            CancellationToken cancellationToken)
-        {
-            var outputDir = Path.GetDirectoryName(outputAudioPath);
-            if (!string.IsNullOrEmpty(outputDir))
-                Directory.CreateDirectory(outputDir);
-            File.WriteAllBytes(outputAudioPath, [0x07, 0x08, 0x09]);
-            return Task.CompletedTask;
-        }
-
-        public Task ExtractAudioClipAsync(
-            string inputPath,
-            string outputPath,
-            double startTimeSeconds,
-            double durationSeconds,
-            CancellationToken cancellationToken)
-        {
-            // Create output directory if it doesn't exist
-            var outputDir = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(outputDir))
-                Directory.CreateDirectory(outputDir);
-            
-            // Write dummy audio data
-            File.WriteAllBytes(outputPath, [0x01, 0x02, 0x03]);
-
-            return Task.CompletedTask;
-        }
-
-        public Task ExtractFullAudioAsync(
-            string inputPath,
-            string outputPath,
-            CancellationToken cancellationToken) =>
-            Task.CompletedTask;
-
-        public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
-            double minRatio = DubTimingDefaults.StretchMinTempoRatio, double maxRatio = DubTimingDefaults.StretchMaxTempoRatio, CancellationToken cancellationToken = default)
-            => Task.FromResult(false);
-
-        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
-            => Task.FromResult<double?>(null);
-    }
 }

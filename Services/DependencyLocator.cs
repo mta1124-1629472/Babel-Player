@@ -99,10 +99,20 @@ public static class DependencyLocator
         var candidates = new[]
         {
             Path.Combine(appDir, "ffmpeg.exe"),
+            Path.Combine(appDir, "ffmpeg.cmd"),
+            Path.Combine(appDir, "ffmpeg.bat"),
             Path.Combine(appDir, "tools", "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", "ffmpeg.cmd"),
+            Path.Combine(appDir, "tools", "ffmpeg.bat"),
             Path.Combine(appDir, "tools", rid, "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", rid, "ffmpeg.cmd"),
+            Path.Combine(appDir, "tools", rid, "ffmpeg.bat"),
             Path.Combine(appDir, "tools", "win-x64", "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", "win-x64", "ffmpeg.cmd"),
+            Path.Combine(appDir, "tools", "win-x64", "ffmpeg.bat"),
             Path.Combine(appDir, "tools", "win-arm64", "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffmpeg.cmd"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffmpeg.bat"),
             "ffmpeg",
         };
         return Probe(candidates, "-version");
@@ -119,10 +129,20 @@ public static class DependencyLocator
         var candidates = new[]
         {
             Path.Combine(appDir, "ffprobe.exe"),
+            Path.Combine(appDir, "ffprobe.cmd"),
+            Path.Combine(appDir, "ffprobe.bat"),
             Path.Combine(appDir, "tools", "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "ffprobe.cmd"),
+            Path.Combine(appDir, "tools", "ffprobe.bat"),
             Path.Combine(appDir, "tools", rid, "ffprobe.exe"),
+            Path.Combine(appDir, "tools", rid, "ffprobe.cmd"),
+            Path.Combine(appDir, "tools", rid, "ffprobe.bat"),
             Path.Combine(appDir, "tools", "win-x64", "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "win-x64", "ffprobe.cmd"),
+            Path.Combine(appDir, "tools", "win-x64", "ffprobe.bat"),
             Path.Combine(appDir, "tools", "win-arm64", "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffprobe.cmd"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffprobe.bat"),
             "ffprobe",
         };
         return Probe(candidates, "-version");
