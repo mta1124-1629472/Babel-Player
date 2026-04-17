@@ -1,8 +1,12 @@
 # Agent / IDE context
 
-Optional context files for tools that are not tied to the default repo-root locations:
+All AI assistants should read these files:
 
-- [GEMINI.md](GEMINI.md) — notes for Gemini-oriented assistants
-- [QWEN.md](QWEN.md) — notes for Qwen Coder–style setups
+1. [docs/AI-CONTEXT.md](../AI-CONTEXT.md) — single source of truth for project context
+2. [AGENTS.md](../../AGENTS.md) — operating rules and learned preferences
 
-[AGENTS.md](../../AGENTS.md) and [CLAUDE.md](../../CLAUDE.md) stay at the repository root (common defaults for Cursor and Claude Code).
+Agent-specific stubs (contain only tool-specific instructions, point to AI-CONTEXT.md for everything else):
+
+- [CLAUDE.md](../../CLAUDE.md) — Claude Code / Cursor (MCP sandbox instructions, active skills)
+- [GEMINI.md](GEMINI.md) — Gemini-oriented assistants
+- [QWEN.md](QWEN.md) — Qwen Coder-style setups
