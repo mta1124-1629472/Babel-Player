@@ -44,15 +44,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// Immediately persists the current session snapshot and updates its last-updated timestamp.
     /// Used by callers that need a synchronous flush during shutdown or media-switch handoffs.
     /// </summary>
-    public void FlushPendingSave()
-    {
-        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-        lock (_sessionLock)
-        {
-            CurrentSession = snapshot;
-        }
-        PersistSnapshot(snapshot, updateStatus: true);
-    }
+    public void FlushPendingSave() => SaveCurrentSession();
 
     private void PersistSnapshot(WorkflowSessionSnapshot snapshot, bool updateStatus)
     {

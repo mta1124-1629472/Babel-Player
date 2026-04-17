@@ -157,20 +157,28 @@ public sealed class OpenAiApiClient : IDisposable
             {
                 // Rebuild the multipart content (and its FileStream) per attempt: HttpContent is single-use.
                 var content = new MultipartFormDataContent();
-                var stream = new System.IO.FileStream(audioFilePath, new System.IO.FileStreamOptions { Mode = System.IO.FileMode.Open, Access = System.IO.FileAccess.Read, Share = System.IO.FileShare.Read, BufferSize = 4096, Options = System.IO.FileOptions.Asynchronous | System.IO.FileOptions.SequentialScan });
-                var streamContent = new StreamContent(stream);
-                streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                content.Add(streamContent, "file", System.IO.Path.GetFileName(audioFilePath));
-                content.Add(new StringContent(model), "model");
-                content.Add(new StringContent("verbose_json"), "response_format");
-                content.Add(new StringContent("segment"), "timestamp_granularities[]");
-                if (!string.IsNullOrWhiteSpace(languageHint)
-                    && !string.Equals(languageHint, "auto", StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    content.Add(new StringContent(languageHint), "language");
-                }
+                    var stream = new System.IO.FileStream(audioFilePath, new System.IO.FileStreamOptions { Mode = System.IO.FileMode.Open, Access = System.IO.FileAccess.Read, Share = System.IO.FileShare.Read, BufferSize = 4096, Options = System.IO.FileOptions.Asynchronous | System.IO.FileOptions.SequentialScan });
+                    var streamContent = new StreamContent(stream);
+                    streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                    content.Add(streamContent, "file", System.IO.Path.GetFileName(audioFilePath));
+                    content.Add(new StringContent(model), "model");
+                    content.Add(new StringContent("verbose_json"), "response_format");
+                    content.Add(new StringContent("segment"), "timestamp_granularities[]");
+                    if (!string.IsNullOrWhiteSpace(languageHint)
+                        && !string.Equals(languageHint, "auto", StringComparison.OrdinalIgnoreCase))
+                    {
+                        content.Add(new StringContent(languageHint), "language");
+                    }
 
-                return _httpClient.PostAsync("audio/transcriptions", content, cancellationToken);
+                    return _httpClient.PostAsync("audio/transcriptions", content, cancellationToken);
+                }
+                catch
+                {
+                    content.Dispose();
+                    throw;
+                }
             },
             cancellationToken: cancellationToken).ConfigureAwait(false);
         var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);

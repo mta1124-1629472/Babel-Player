@@ -1,12 +1,10 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,12 +19,6 @@ namespace Babel.Player.Services;
 public sealed class GeminiApiClient : IDisposable
 {
     private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta/";
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNameCaseInsensitive = false,
-    };
 
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
@@ -76,21 +68,7 @@ public sealed class GeminiApiClient : IDisposable
         };
 
         var json = JsonSerializer.Serialize(requestBody);
-        var url = $"models/{model}:generateContent?key={_apiKey}";
-
-        using var response = await HttpRetryHelper.SendAsync(
-            () =>
-            {
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-                return _httpClient.PostAsync(url, content, cancellationToken);
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-            throw new GeminiApiException($"Gemini generateContent failed ({(int)response.StatusCode}): {payload}", response.StatusCode);
-
-        return ExtractTextFromGenerateContentResponse(payload);
+        return await GenerateContentAsync(model, json, cancellationToken).ConfigureAwait(false);
     }
 
     // ── Audio transcription (Files API + generateContent) ─────────────────────
@@ -139,21 +117,7 @@ public sealed class GeminiApiClient : IDisposable
         };
 
         var json = JsonSerializer.Serialize(requestBody);
-        var url = $"models/{model}:generateContent?key={_apiKey}";
-
-        using var response = await HttpRetryHelper.SendAsync(
-            () =>
-            {
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-                return _httpClient.PostAsync(url, content, cancellationToken);
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-            throw new GeminiApiException($"Gemini transcription generateContent failed ({(int)response.StatusCode}): {payload}", response.StatusCode);
-
-        return ExtractTextFromGenerateContentResponse(payload);
+        return await GenerateContentAsync(model, json, cancellationToken).ConfigureAwait(false);
     }
 
     // ── Files API ─────────────────────────────────────────────────────────────
@@ -230,6 +194,22 @@ public sealed class GeminiApiClient : IDisposable
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private async Task<string> GenerateContentAsync(string model, string json, CancellationToken cancellationToken)
+    {
+        var url = $"models/{model}:generateContent?key={_apiKey}";
+        using var response = await HttpRetryHelper.SendAsync(
+            () =>
+            {
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                return _httpClient.PostAsync(url, content, cancellationToken);
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new GeminiApiException($"Gemini generateContent failed ({(int)response.StatusCode}): {payload}", response.StatusCode);
+        return ExtractTextFromGenerateContentResponse(payload);
+    }
 
     private static string ExtractTextFromGenerateContentResponse(string payload)
     {
