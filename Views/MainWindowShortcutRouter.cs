@@ -27,14 +27,15 @@ internal static class MainWindowShortcutRouter
     {
         action = MainWindowShortcutAction.None;
 
-        if (modifiers != KeyModifiers.None)
-            return false;
-
+        // Escape is a safety shortcut: always exit fullscreen regardless of modifiers.
         if (key == Key.Escape && isFullscreen)
         {
             action = MainWindowShortcutAction.ExitFullscreen;
             return true;
         }
+
+        if (modifiers != KeyModifiers.None)
+            return false;
 
         if (key == Key.F11)
         {

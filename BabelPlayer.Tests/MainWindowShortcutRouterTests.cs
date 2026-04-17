@@ -45,6 +45,14 @@ public sealed class MainWindowShortcutRouterTests
         Assert.Equal(MainWindowShortcutAction.None, action);
     }
 
+    [Fact]
+    public void TryMap_EscapeExitsFullscreen_EvenWithModifiersHeld()
+    {
+        AssertShortcut(Key.Escape, KeyModifiers.Shift, new Button(), isFullscreen: true, MainWindowShortcutAction.ExitFullscreen);
+        AssertShortcut(Key.Escape, KeyModifiers.Control, new Button(), isFullscreen: true, MainWindowShortcutAction.ExitFullscreen);
+        AssertShortcut(Key.Escape, KeyModifiers.Alt, new Button(), isFullscreen: true, MainWindowShortcutAction.ExitFullscreen);
+    }
+
     private static void AssertShortcut(
         Key key,
         KeyModifiers modifiers,
