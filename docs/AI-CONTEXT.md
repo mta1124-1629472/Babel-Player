@@ -43,7 +43,7 @@ Each stage is **gated** — downstream stages only enable when upstream artifact
 | **Transcribe** | Timed transcript with word-level timestamps | CPU / GPU / Cloud | Faster-Whisper, Gemini, OpenAI Whisper, Google STT |
 | **Diarize** | Identify speakers, assign voices | CPU / GPU | WeSpeaker (CPU), NeMo (GPU/container) |
 | **Translate** | Adapt transcript to target language | CPU / GPU / Cloud | NLLB-200, CTranslate2, DeepL, Gemini, OpenAI |
-| **Dub (TTS)** | Generate spoken audio per segment | CPU / GPU / Cloud | Piper, Qwen3-TTS, Edge TTS, ElevenLabs, OpenAI TTS, Google TTS |
+| **Dub (TTS)** | Generate spoken audio per segment | CPU / GPU / Cloud | Piper, Qwen3-TTS, XTTS v2, Edge TTS, ElevenLabs, OpenAI TTS, Google TTS |
 | **Preview** | In-context playback, toggle source/dub audio | — | libmpv embedded transport |
 
 Compute selection is explicit (CPU / GPU / Cloud selector per stage). No silent fallbacks — if a path is unavailable, the stage blocks with a remediation message.
@@ -108,6 +108,47 @@ Babel-Player/
 4. **Vertical slices over abstractions.** No provider matrices, factory systems, plugin architectures, or runtime selection systems until milestones earn them.
 5. **Persistent artifacts.** Generated outputs (transcripts, translations, TTS audio) are first-class and cached per-session. Users should not recompute everything on reopen.
 6. **Narrow service seams.** AI/inference services sit behind explicit contracts. The desktop app and inference runtime are separated by process/HTTP boundaries.
+
+---
+
+## Code Style
+
+| Convention | Rule |
+|------------|------|
+| Formatting | K&R braces, 4-space indent, no trailing whitespace |
+| Naming | PascalCase for classes/methods/properties; `_camelCase` for private fields; `I` prefix for interfaces |
+| Types | Prefer `record` for immutable DTOs; use `required` for required properties |
+| Imports | No unused imports; group order: System, third-party, project |
+| Errors | Throw specific exceptions; `PipelineProviderException` for provider failures with context |
+| Constants | PascalCase (e.g., `ProviderNames.FasterWhisper`) |
+
+---
+
+## Architecture Linter Rules
+
+`scripts/check-architecture.py` enforces structural discipline. Run it after any structural change:
+
+1. `BabelPlayer.csproj` exists with `OutputType=WinExe`.
+2. Test project references the main project.
+3. `NotImplementedException` must include a `PLACEHOLDER` message.
+4. Silent event stubs have `PLACEHOLDER` comments.
+5. No magic provider strings outside `Models/ProviderNames.cs`.
+6. ViewModels do not call pipeline methods directly (all pipeline advancement routes through `SessionWorkflowCoordinator`).
+7. `SessionWorkflowCoordinator.cs` must be under 1300 lines (partial classes are used to split responsibilities).
+8. Every AI inference service implements a provider interface with uniform method signatures (no provider-specific parameters; configuration injected at construction).
+9. `LibMpvHeadlessTransport` and `LibMpvEmbeddedTransport` are created/owned/disposed by `MediaTransportManager` via `GetOrCreate*` accessors.
+
+---
+
+## Testing
+
+- Integration tests live in `BabelPlayer.Tests/` (xUnit 2.9.3 + coverlet).
+- Maintained suite command: `dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release` (do not treat `dotnet test Babel-Player.sln` as the routine verification path).
+- Shared fixture: `SessionWorkflowTemplateFixture` (temp dirs, reusable templates).
+- xUnit collection `"Media transport"` runs non-parallel (hardware resource contention).
+- Test assets live under `test-assets/` (e.g., `test-assets/video/sample.mp4`).
+- Categories: `Integration`, `RequiresPython`, `RequiresFfmpeg`, `RequiresExternalTranslation`, `Smoke`.
+- `BabelPlayer.Tests` must stay fast and deterministic. Do not add real Python, ffmpeg, container, libmpv, manual, or performance-dependent tests to the compiled suite. Before adding or modifying tests, read `docs/testing-requirements.md`.
 
 ---
 
@@ -185,7 +226,13 @@ Use canonical lowercase ISO 639-1 codes in persisted settings and pipeline artif
 
 ## Current Milestone Status
 
-Milestones 1–9 are complete. Milestones 10–11 are partially complete (settings/bootstrap and local-offline expansion). Milestone 12 (Runtime Optimization and Hardware Routing) is in progress.
+| Milestone | Status | Summary |
+|-----------|--------|---------|
+| 1–9 | Complete | Foundation through subtitle/inspection |
+| 10 | Complete | Settings and bootstrap (core M10 gate evidence still valid; only hardware video decode additions are partial) |
+| 11 | Substantially complete | Local/offline expansion |
+| **12** | **In progress** | Runtime optimization, hardware routing, compute profiles (CPU/GPU/Cloud), managed local GPU host; real NVIDIA validation and live container smoke tests still pending |
+| 13 | Future | Release hardening, clean-machine validation |
 
 See `docs/PLAN.md` for milestone gates and `docs/history/smoke/` for completion evidence.
 
@@ -193,18 +240,25 @@ See `docs/PLAN.md` for milestone gates and `docs/history/smoke/` for completion 
 
 ## Non-Negotiable Rules (from AGENTS.md)
 
+> This is a summary; `AGENTS.md` remains the authoritative source for operating rules and learned preferences. Consult it before non-trivial changes.
+
 - Prefer iterative runtime debugging: reproduce issue, then continue from fresh logs
-- Prefer canonical language codes in persisted settings (lowercase ISO 639-1)
+- Prefer non-hardcoded debug log paths (env var override with repo-root fallback)
+- Prefer canonical language codes in persisted settings (lowercase ISO 639-1); human-readable labels only in UI catalogs
 - Custom window chrome matching Windows 11 expectations
 - Piper and Edge TTS voice assignment through the Speaker Reference Wizard
 - For commit/push with explicit file lists, treat that list as authoritative
 - Concise, plain UI wording; avoid em dashes in user-visible copy
-- Hardware-informed defaults over fixed ultra-conservative baselines
+- Hardware-informed defaults over fixed ultra-conservative baselines; notify the user explicitly when clamping/falling back
 - Avoid UI verbosity: prefer concise status messages ("Ready") over internal technical explanations
 - Multi-speaker detection is WeSpeaker-only with diarization off by default
 - NeMo background health is off unless `BABEL_ENABLE_NEMO_BACKGROUND_HEALTH` is set
 - Transcript JSON is named from the ingested source media stem, not from post-separation stems
 - `VocalSeparationEnabled` is coerced off when the container reports audio separator not ready
+- **NVIDIA RTX Video:** bias defaults toward enabling VSR and RTX HDR when hardware and gates allow; keep RTX HDR and HDR passthrough mutually exclusive in the UI; suppress conflicting secondary HDR processing when RTX HDR is on
+- **Avalonia 12.x** is pinned in `BabelPlayer.csproj` — do not assume Avalonia 11 or other versions
+- **Docker** is maintained as a power-user inference-host option; containerizing the desktop app is not the primary runtime model
+- Public project site/docs: <https://babelworks.github.io/Babel-Player/>
 
 ---
 
