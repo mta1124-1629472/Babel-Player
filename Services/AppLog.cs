@@ -163,6 +163,10 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         {
             try
             {
+        if (batch.Length > 0)
+        {
+            try
+            {
                 File.AppendAllText(LogFilePath, batch.ToString());
             }
             catch (Exception ex)
