@@ -95,6 +95,7 @@ public sealed class DependencyLocatorSmokeTests : IDisposable
             ? Path.Combine(toolDir, $"{toolName}.cmd")
             : Path.Combine(toolDir, toolName);
 
+        var created = false;
         if (!File.Exists(commandPath))
         {
             if (OperatingSystem.IsWindows())
@@ -121,8 +122,11 @@ public sealed class DependencyLocatorSmokeTests : IDisposable
                     UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
                     UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
             }
+
+            created = true;
         }
 
-        _createdPaths.Add(commandPath);
+        if (created)
+            _createdPaths.Add(commandPath);
     }
 }

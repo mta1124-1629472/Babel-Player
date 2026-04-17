@@ -202,11 +202,16 @@ public sealed class ContainerizedServiceProbeTests
         var result = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
         Assert.Equal(ContainerizedProbeState.Checking, result.State);
 
-        await Task.Delay(500);
+        // Wait for probe to complete with polling
+        for (int i = 0; i < 40; i++)
+        {
+            await Task.Delay(25);
+            var secondResult = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
+            if (secondResult.State == ContainerizedProbeState.Available)
+                return;
+        }
 
-        // Verify the probe still works despite any observer issues
-        var secondResult = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
-        Assert.Equal(ContainerizedProbeState.Available, secondResult.State);
+        throw new Xunit.Sdk.XunitException("Probe did not complete within expected time.");
     }
 
     [Fact]

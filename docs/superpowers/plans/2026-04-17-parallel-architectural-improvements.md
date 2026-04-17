@@ -781,7 +781,9 @@ public static class HttpRetryHelper
         || ex is TaskCanceledException tce && tce.CancellationToken != cancellationToken;
 
     private static TimeSpan GetDelay(HttpResponseMessage response, int attempt) =>
-        response.Headers.RetryAfter?.Delta ?? GetDelay(attempt);
+        response.Headers.RetryAfter?.Delta is { } delay && delay <= TimeSpan.FromSeconds(30)
+            ? delay
+            : GetDelay(attempt);
 
     private static TimeSpan GetDelay(int attempt) =>
         TimeSpan.FromMilliseconds(Math.Pow(2, attempt - 1) * 200);

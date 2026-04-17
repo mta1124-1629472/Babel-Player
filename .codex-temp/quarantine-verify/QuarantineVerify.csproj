@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.assert" Version="2.9.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\BabelPlayer.csproj" />
+    <Compile Include="..\..\BabelPlayer.Tests\MarkerHashHelper.cs" Link="MarkerHashHelper.cs" />
+    <Compile Include="..\..\BabelPlayer.Tests\Quarantined\WeSpeakerCpuDiarizationProviderTests.cs" Link="WeSpeakerCpuDiarizationProviderTests.cs" />
+    <Compile Include="..\..\BabelPlayer.Tests\Quarantined\PythonSubprocessServiceBaseTests.cs" Link="PythonSubprocessServiceBaseTests.cs" />
+  </ItemGroup>
+</Project>
