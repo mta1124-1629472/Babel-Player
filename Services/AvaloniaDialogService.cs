@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -10,7 +11,7 @@ namespace Babel.Player.Services;
 
 public sealed class AvaloniaDialogService : IDialogService
 {
-    public async Task<bool> ShowWarmupNoticeAsync()
+    public async Task<bool> ShowWarmupNoticeAsync(CancellationToken cancellationToken = default)
     {
         if (Dispatcher.UIThread.CheckAccess())
             return await ShowWarmupNoticeUiAsync().ConfigureAwait(true);
