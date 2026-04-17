@@ -163,7 +163,7 @@ public partial class EmbeddedPlaybackViewModel
     public IReadOnlyList<SpokenLanguageOption> SpokenLanguageOptions => SpokenLanguageOption.All;
 
     public SegmentTimingMode[] DubTimingModeOptions { get; } =
-        [SegmentTimingMode.Off, SegmentTimingMode.Stretch, SegmentTimingMode.Pause];
+        [SegmentTimingMode.Off, SegmentTimingMode.Stretch];
 
     public SegmentTimingMode DubTimingMode
     {
@@ -479,6 +479,7 @@ public partial class EmbeddedPlaybackViewModel
     private void OnCoordinatorSettingsModified()
     {
         Preview.SyncBilingualSubtitlesFromSettings();
+        Preview.SyncDubMixControlFromSettings();
         SyncProviderModelFieldsFromSettings();
         NotifyActiveConfigChanged();
         OnPropertyChanged(nameof(VoiceModelLabel));

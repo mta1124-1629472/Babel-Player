@@ -596,7 +596,7 @@ public partial class MainWindow : Window
 
         vm.Playback.StatusText = "Rendering dubbed audio for export…";
 
-        DubExportRenderResult? render;
+        DubRenderResult? render;
         try
         {
             render = await vm.Coordinator.TryRenderDubAudioForExportAsync().ConfigureAwait(true);
@@ -672,7 +672,7 @@ public partial class MainWindow : Window
 
         vm.Playback.StatusText = "Rendering dubbed audio for video export…";
 
-        DubExportRenderResult? render;
+        DubRenderResult? render;
         try
         {
             render = await vm.Coordinator.TryRenderDubAudioForExportAsync().ConfigureAwait(true);

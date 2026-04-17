@@ -161,6 +161,8 @@ public sealed class VideoExportPlanner
             return options.DubAudioPathOverride;
         if (!string.IsNullOrWhiteSpace(session.MixedDubAudioPath) && File.Exists(session.MixedDubAudioPath))
             return session.MixedDubAudioPath;
+        if (!string.IsNullOrWhiteSpace(session.AmbianceAudioPath) && File.Exists(session.AmbianceAudioPath))
+            return null;
         return session.TtsPath;
     }
 

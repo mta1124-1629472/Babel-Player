@@ -72,6 +72,7 @@ public partial class App : Application
             _startupLog = appLog;
 
             TryEnsureWindowsNativeDependencies(appLog, appDataRoot);
+            LogResolvedAudioToolPaths(appLog, "startup");
 
             // Initialize Settings and other stores
             var settingsFilePath = Path.Combine(appDataRoot, "settings", "app-settings.json");
@@ -196,6 +197,7 @@ public partial class App : Application
             {
                 CopyRepoNativeDepsToOutput(repoRoot, rid);
                 log.Info("Startup native deps bootstrap completed.");
+                LogResolvedAudioToolPaths(log, "post-bootstrap");
             }
             else
             {
@@ -208,7 +210,9 @@ public partial class App : Application
     {
         var appDir = AppContext.BaseDirectory;
         return File.Exists(Path.Combine(appDir, "native", rid, "libmpv-2.dll"))
-            && File.Exists(Path.Combine(appDir, "tools", rid, "uv.exe"));
+            && File.Exists(Path.Combine(appDir, "tools", rid, "uv.exe"))
+            && File.Exists(Path.Combine(appDir, "tools", rid, "ffmpeg.exe"))
+            && File.Exists(Path.Combine(appDir, "tools", rid, "ffprobe.exe"));
     }
 
     private static bool ShouldAttemptNativeDepsBootstrap(string markerPath)
@@ -300,6 +304,13 @@ public partial class App : Application
             Directory.CreateDirectory(destinationDirectory);
 
         File.Copy(source, destination, overwrite: true);
+    }
+
+    private static void LogResolvedAudioToolPaths(AppLog log, string context)
+    {
+        var ffmpeg = DependencyLocator.FindFfmpeg() ?? "<missing>";
+        var ffprobe = DependencyLocator.FindFfprobe() ?? "<missing>";
+        log.Info($"Audio tool resolution ({context}): ffmpeg={ffmpeg}; ffprobe={ffprobe}");
     }
 
     private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
