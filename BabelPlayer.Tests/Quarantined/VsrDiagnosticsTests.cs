@@ -117,7 +117,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
             isVsrDriverSufficient: true,
             nvidiaDriverVersion: "572.16");
 
-        var playback = new EmbeddedPlaybackViewModel(coordinator);
+        using var playback = new EmbeddedPlaybackViewModel(coordinator);
         using var settingsVm = new SettingsViewModel(
             new SettingsService(_settingsPath, _log),
             coordinator,

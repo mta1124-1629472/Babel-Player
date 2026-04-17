@@ -13,13 +13,13 @@ public enum SegmentTimingMode
 
     /// <summary>
     /// Time-stretch the TTS clip to exactly fill the original segment duration using ffmpeg
-    /// atempo. Ratios outside [0.75, 1.35] are skipped (clip would sound unnatural).
+    /// atempo. Ratios outside [0.75, 1.75] are skipped.
     /// </summary>
     Stretch,
 
     /// <summary>
-    /// Pause the source video while TTS plays, then seek to the segment end and resume.
-    /// Guarantees the full dub is heard at the cost of de-syncing real-time video position.
+    /// Preview-only behavior: pause the source video while TTS plays, then seek to the
+    /// segment end and resume. This mode is not applied to rendered dub/export output.
     /// </summary>
     Pause,
 }

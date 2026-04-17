@@ -308,6 +308,9 @@ public partial class App : Application
 
     private static void LogResolvedAudioToolPaths(AppLog log, string context)
     {
+        // Delegate to DependencyLocator so the logged path matches the actual
+        // runtime resolution (including the `-version` probe that filters out
+        // binaries that exist but aren't runnable).
         var ffmpeg = DependencyLocator.FindFfmpeg() ?? "<missing>";
         var ffprobe = DependencyLocator.FindFfprobe() ?? "<missing>";
         log.Info($"Audio tool resolution ({context}): ffmpeg={ffmpeg}; ffprobe={ffprobe}");
