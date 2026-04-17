@@ -595,7 +595,7 @@ public sealed partial class SessionWorkflowCoordinator
                     Language: ttsLanguage,
                     SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
                 cancellationToken);
-            _pendingTtsTasks.Add(segTask);
+            TrackPendingTtsTask(segTask);
             var segResult = await segTask;
 
             if (segResult.Success && File.Exists(segmentAudioPath))
