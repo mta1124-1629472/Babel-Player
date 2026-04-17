@@ -38,7 +38,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITtsProvider? _ttsService;
     private IVocalSeparationProvider? _vocalSeparationProvider;
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
-    private readonly ConcurrentBag<Task> _pendingTtsTasks = [];
+    private readonly List<Task> _pendingTtsTasks = [];
+    private readonly object _pendingTtsTasksLock = new();
     private readonly IAudioProcessingService? _audioProcessingService;
     private readonly object _sessionLock = new();
 
@@ -317,17 +318,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     $"cleared={string.Join(",", validation.ClearedArtifacts)}; provenance={SessionSnapshotSemantics.DescribeSessionProvenance(validated)}");
             }
 
-            string statusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
-                    ? "Ready."
-                : validated.Stage >= SessionWorkflowStage.Translated
-                    ? "Ready."
-                : validated.Stage >= SessionWorkflowStage.Diarized
-                    ? "Ready."
-                    : validated.Stage >= SessionWorkflowStage.Transcribed
-                        ? "Ready."
-                        : validated.Stage >= SessionWorkflowStage.MediaLoaded
-                            ? "Ready."
-                            : "Ready.";
+            const string statusMessage = "Ready.";
 
             lock (_sessionLock)
             {
@@ -938,7 +929,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 targetSegment?.SpeakerId,
                 referenceAudioPath,
                 Language: targetLanguage));
-        _pendingTtsTasks.Add(ttsTask);
+        TrackPendingTtsTask(ttsTask);
         var result = await ttsTask;
 
         if (!result.Success)
@@ -1216,9 +1207,23 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         PersistSnapshot(snapshot, updateStatus: true);
     }
 
-    internal void TrackPendingTtsTask(Task task) => _pendingTtsTasks.Add(task);
+    internal void TrackPendingTtsTask(Task task)
+    {
+        lock (_pendingTtsTasksLock)
+        {
+            _pendingTtsTasks.RemoveAll(static t => t.IsCompleted);
+            _pendingTtsTasks.Add(task);
+        }
+    }
 
-    internal Task[] SnapshotPendingTtsTasks() => _pendingTtsTasks.ToArray();
+    internal Task[] SnapshotPendingTtsTasks()
+    {
+        lock (_pendingTtsTasksLock)
+        {
+            _pendingTtsTasks.RemoveAll(static t => t.IsCompleted);
+            return _pendingTtsTasks.ToArray();
+        }
+    }
 
     private void OnProbeResultUpdated(ContainerizedProbeResult probeResult)
     {
