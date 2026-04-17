@@ -777,17 +777,14 @@ public sealed partial class SessionWorkflowCoordinator
             {
                 _log.Info(
                     $"Ignoring preview-only Pause timing override for render on segment '{segmentId}'; using session default timing mode.");
-                return NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
+                return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
             }
 
-            return NormalizeRenderTimingMode(overrideMode);
+            return DubTimingDefaults.NormalizeRenderTimingMode(overrideMode);
         }
 
-        return NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
+        return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
     }
-
-    private static SegmentTimingMode NormalizeRenderTimingMode(SegmentTimingMode mode) =>
-        mode == SegmentTimingMode.Pause ? SegmentTimingMode.Off : mode;
 
     /// <summary>
     /// Generates TTS audio for multiple translated segments in a single batch using the Qwen container TTS provider and records produced file paths and durations.
