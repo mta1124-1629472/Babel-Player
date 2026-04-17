@@ -4,9 +4,11 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using Babel.Player.Models;
 using Babel.Player.ViewModels;
 
@@ -28,6 +30,48 @@ public partial class SpeakerReferenceWizardWindow : Window
         }
 
         PositionChanged += (_, _) => UpdateWizardVideoViewport();
+    }
+
+    public void OnMinimizeWindowClick(object? sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    public void OnToggleMaximizeWindowClick(object? sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    public void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            return;
+
+        if (e.Source is Visual sourceVisual && sourceVisual.FindAncestorOfType<Button>() is not null)
+            return;
+
+        if (e.ClickCount == 2)
+        {
+            OnToggleMaximizeWindowClick(sender, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        BeginMoveDrag(e);
+    }
+
+    private void SyncChromeWindowState()
+    {
+        if (this.FindControl<Control>("ChromeMaximizeIcon") is not { } maxIcon ||
+            this.FindControl<Control>("ChromeRestoreIcon") is not { } restoreIcon)
+            return;
+
+        var maximized = WindowState == WindowState.Maximized;
+        maxIcon.IsVisible = !maximized;
+        restoreIcon.IsVisible = maximized;
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == WindowStateProperty)
+            SyncChromeWindowState();
     }
 
     private void OnWizardVideoHandleReady(object? sender, IntPtr hwnd)
@@ -61,6 +105,7 @@ public partial class SpeakerReferenceWizardWindow : Window
     protected override async void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+        SyncChromeWindowState();
         if (DataContext is SpeakerReferenceWizardViewModel vm)
             await vm.LoadAsync();
     }

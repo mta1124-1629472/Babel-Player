@@ -75,13 +75,16 @@ The full loop:
 
 ### Interface screenshots
 
-![Babel Player — transcription through diarization stages](Assets/Pipeline%201.png)
-
-*Source media through transcription, optional vocal separation, and diarization — each stage shows explicit CPU / GPU / Cloud routing and readiness.*
-
-![Babel Player — translation, TTS, and export](Assets/Pipeline%202.png)
-
-*Translation, per-segment text-to-speech, and caption export — downstream stages stay gated until upstream artifacts exist.*
+<table>
+  <tr>
+    <td><img src="Assets/Pipeline%201.png" alt="Babel Player — Pipeline stage 1"></td>
+    <td><img src="Assets/Pipeline%202.png" alt="Babel Player — Pipeline stage 2"></td>
+  </tr>
+  <tr>
+    <td><em>Source media through transcription, optional vocal separation, and diarization — each stage shows explicit CPU / GPU / Cloud routing and readiness.</em></td>
+    <td><em>Translation, per-segment text-to-speech, and caption export — downstream stages stay gated until upstream artifacts exist.</em></td>
+  </tr>
+</table>
 
 ![Speaker reference wizard — reference clips for multi-speaker routing](Assets/wizard.png)
 
