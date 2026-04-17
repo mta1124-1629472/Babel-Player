@@ -142,6 +142,8 @@ Persistent artifacts matter because the product is iterative. Users should not h
 
 ## State Ownership
 
+> For the concrete key-files table and services reference, see [docs/AI-CONTEXT.md](AI-CONTEXT.md).
+
 The default rule is simple:
 
 - the shell displays state

@@ -13,24 +13,17 @@ This repo should not drift into a shell-first, framework-first, or abstraction-f
 
 Read:
 
+- [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md) for the full project context (tech stack, architecture, commands, conventions)
 - `docs/PLAN.md` for milestone order and gates
 - `docs/architecture.md` for the current structural map and major boundaries
 - `AGENTS.md` for repo behavior rules
-- `docs/testing-requirements.md` before writing or modifying tests
 - any milestone-specific docs relevant to the area you are touching
 
 If your intended work does not clearly support the current milestone, it is probably out of scope.
 
 ### Naming conventions
 
-Use names consistently by context:
-
-- Product / branding: `Babel Player`
-- Repository name: `Babel-Player`
-- .NET namespaces and assembly-style identifiers: `BabelPlayer` or `Babel.Player`
-- Filenames and folders: follow the local convention already used in that area rather than inventing a new one midstream
-
-Do not mix branding names and code identifiers casually inside the same surface.
+For naming conventions, see [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#naming-conventions).
 
 ### Scope discipline
 
@@ -62,11 +55,7 @@ If something is incomplete, it should be obviously incomplete.
 
 Before opening or merging a PR, contributors should verify changes at the appropriate level.
 
-Minimum expectation:
-
-- `dotnet build`
-- `dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release`
-- `dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Category=Smoke"` when the change affects PR-gated smoke behavior
+See [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#build--test-commands) for the full verification sequence.
 
 If the change affects behavior that can be manually exercised, also run the relevant smoke path for the current milestone and note what was verified.
 
@@ -75,12 +64,7 @@ It is done when the milestone gate it touches is actually demonstrated.
 
 ### Troubleshooting script (`/troubleshoot`)
 
-When a contributor or agent reports build/test instability, run `/troubleshoot` as a standard diagnostic script:
-
-1. `dotnet build`
-2. `dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release`
-3. `python scripts/check-architecture.py`
-4. `python -m py_compile inference/main.py`
+For the standard diagnostic sequence, see [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#build--test-commands).
 
 Treat this output as required evidence in bug reports and fix PRs:
 
@@ -182,24 +166,7 @@ If the abstraction mainly serves imagined future needs, do not add it yet.
 
 ### Python and inference environment hygiene
 
-When touching Python-backed inference work:
-
-- keep the desktop app and inference runtime separated by an explicit contract
-- document Torch, CUDA, driver, WSL, and runtime assumptions when adding or changing them
-- avoid baking WSL-only assumptions into the main app unless the current milestone explicitly requires them
-- treat containers and NVIDIA-managed serving as optional deployment paths until the local workflow has been proven
-- keep model downloads, runtime assets, and application source concerns separate
-- **JSON field contracts:** Python/C# boundary field names are explicit serialization contracts — not implementation details. Do not rely on implicit .NET casing. When Python emits snake_case or camelCase, C# must match deliberately. Any change to cross-language JSON field names must be updated on both sides together.
-
-### JSON artifact contracts
-
-When Python writes JSON that C# reads, the field names form an explicit contract:
-
-- Python: writes `translatedText`, `sourceLanguage`, `segments`
-- C#: reads via `GetProperty("translatedText")` or typed DTOs with matching names
-
-Changes to these field names must be made on both Python (producer) and C# (consumer) sides simultaneously.
-Do not use implicit .NET PascalCase conventions at Python/C# boundaries.
+For Python/C# serialization contracts and inference conventions, see [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#pythonc-serialization-contract).
 
 ### Historical preservation
 
@@ -217,7 +184,6 @@ A good PR is:
 - honest about what it does and does not complete
 - accompanied by build/test results
 - accompanied by smoke results when relevant
-- confirms that any new or modified tests follow `docs/testing-requirements.md`
 
 A bad PR:
 

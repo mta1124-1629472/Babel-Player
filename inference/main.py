@@ -3202,13 +3202,27 @@ app.router.lifespan_context = lifespan
 if __name__ == "__main__":
     import uvicorn
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default="0.0.0.0")
+    # Security: bind to loopback by default. This service exposes unauthenticated
+    # endpoints (transcription, translation, TTS, file uploads, arbitrary model
+    # load/warmup) that are only safe to reach from the local desktop client.
+    # Callers that need a non-loopback bind (e.g. the Docker CMD) must pass
+    # --host explicitly so the exposure is an affirmative, reviewable decision
+    # rather than an accidental default.
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--compute-type", default=None,
                         help="Override compute type (float16, int8, etc.)")
     parser.add_argument("--require-cuda", action="store_true",
                         help="Exit non-zero if CUDA is not available")
     args = parser.parse_args()
+    # Make the exposure boundary loud when operators opt in to a non-loopback bind.
+    if args.host.lower() not in ("127.0.0.1", "localhost", "::1", "[::1]"):
+        logger.warning(
+            "Inference service binding to non-loopback host '%s' — endpoints are "
+            "unauthenticated; ensure the port is firewalled or reachable only by "
+            "trusted callers.",
+            args.host,
+        )
     if args.require_cuda and not torch.cuda.is_available():
         logger.error("--require-cuda specified but CUDA is not available")
         sys.exit(1)

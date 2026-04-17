@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -53,38 +55,81 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         await tcs.Task.ConfigureAwait(false);
     }
 
+    private const int MaxBatchSize = 50;
+
     private async Task BackgroundWriterAsync()
     {
         var reader = _channel.Reader;
+        var batch = new StringBuilder();
+        var flushSignals = new List<TaskCompletionSource<bool>>();
+
         try
         {
-            await foreach (var item in reader.ReadAllAsync(_cts.Token))
+            while (await reader.WaitToReadAsync(_cts.Token).ConfigureAwait(false))
             {
-                if (item is string line)
+                // Drain up to MaxBatchSize items in one pass so we can issue a single I/O call.
+                while (batch.Length < MaxBatchSize * 256 // soft cap on batched bytes
+                    && flushSignals.Count < MaxBatchSize
+                    && reader.TryRead(out var item))
                 {
-                    try { await File.AppendAllTextAsync(LogFilePath, line); }
-                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to write log line to '{LogFilePath}': {ex}"); }
+                    if (item is string line)
+                    {
+                        batch.Append(line);
+                    }
+                    else if (item is TaskCompletionSource<bool> tcs)
+                    {
+                        flushSignals.Add(tcs);
+                    }
                 }
-                else if (item is TaskCompletionSource<bool> tcs)
-                {
-                    tcs.TrySetResult(true);
-                }
+
+                await WriteBatchAsync(batch, flushSignals).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { }
 
-        // Drain remaining entries after cancellation.
+        // Drain remaining entries after cancellation (best effort, synchronous is fine during shutdown).
         while (reader.TryRead(out var remaining))
         {
             if (remaining is string line)
             {
-                try { File.AppendAllText(LogFilePath, line); }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to drain log line to '{LogFilePath}': {ex}"); }
+                batch.Append(line);
             }
             else if (remaining is TaskCompletionSource<bool> tcs)
             {
+                flushSignals.Add(tcs);
+            }
+        }
+
+        if (batch.Length > 0)
+        {
+            try { File.AppendAllText(LogFilePath, batch.ToString()); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to drain log batch to '{LogFilePath}': {ex}"); }
+            batch.Clear();
+        }
+
+        foreach (var tcs in flushSignals)
+        {
+            tcs.TrySetResult(true);
+        }
+        flushSignals.Clear();
+    }
+
+    private async Task WriteBatchAsync(StringBuilder batch, List<TaskCompletionSource<bool>> flushSignals)
+    {
+        if (batch.Length > 0)
+        {
+            try { await File.AppendAllTextAsync(LogFilePath, batch.ToString()).ConfigureAwait(false); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to write log batch to '{LogFilePath}': {ex}"); }
+            batch.Clear();
+        }
+
+        if (flushSignals.Count > 0)
+        {
+            foreach (var tcs in flushSignals)
+            {
                 tcs.TrySetResult(true);
             }
+            flushSignals.Clear();
         }
     }
 
