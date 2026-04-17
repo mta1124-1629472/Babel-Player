@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Reactive.Subjects;
 using Babel.Player.Models;
+using Babel.Player.Services.Orchestration;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Planning;
 using Babel.Player.Services.Registries;
@@ -212,9 +213,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _inferenceEngine = options.InferenceExecutionEngine ?? DefaultInferenceExecutionEngine.Instance;
         _executionPlanner = options.ExecutionPlanner ?? DefaultExecutionPlanner.Instance;
         _requestLeaseTracker = options.RequestLeaseTracker;
-        _transcriptionOrchestrator = new TranscriptionOrchestrator(this);
-        _translationOrchestrator = new TranslationOrchestrator(this);
-        _diarizationStageOrchestrator = new DiarizationStageOrchestrator(this);
+        _transcriptionOrchestrator = new TranscriptionOrchestrator(this, this, this, this, _inferenceEngine, _log);
+        _translationOrchestrator = new TranslationOrchestrator(this, this, this, this, _inferenceEngine, _log);
+        _diarizationStageOrchestrator = new DiarizationStageOrchestrator(this, this, this, _log);
         _ttsPipelineOrchestrator = new TtsPipelineOrchestrator(this);
         _streamingPipelineOrchestrator = new StreamingPipelineOrchestrator(this);
 
