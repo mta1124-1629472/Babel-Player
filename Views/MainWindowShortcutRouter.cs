@@ -35,9 +35,6 @@ internal static class MainWindowShortcutRouter
     {
         action = MainWindowShortcutAction.None;
 
-        if (modifiers != KeyModifiers.None)
-            return false;
-
         if (key == Key.Escape && isFullscreen)
         {
             action = MainWindowShortcutAction.ExitFullscreen;
@@ -49,6 +46,9 @@ internal static class MainWindowShortcutRouter
             action = MainWindowShortcutAction.ToggleFullscreen;
             return true;
         }
+
+        if (modifiers != KeyModifiers.None)
+            return false;
 
         if (ShouldSuppressCharacterShortcut(focusedElement))
             return false;
