@@ -90,10 +90,9 @@ public sealed partial class SessionWorkflowCoordinator
         {
             VocalsAudioPath = result.VocalsAudioPath,
             AmbianceAudioPath = result.AmbianceAudioPath,
-            InstrumentalAudioPath = result.AmbianceAudioPath,
             StatusMessage = "Audio prepared for transcription.",
         };
-        SaveCurrentSession();
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
 
         ReportStage(
             stageContext,
@@ -316,7 +315,6 @@ public sealed partial class SessionWorkflowCoordinator
             SourceLanguage = result.Language,
             VocalsAudioPath = vocalsPath,
             AmbianceAudioPath = ambiancePath,
-            InstrumentalAudioPath = ambiancePath,
             TranscribedAtUtc = nowUtc,
             TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
@@ -588,7 +586,7 @@ public sealed partial class SessionWorkflowCoordinator
                     Language: ttsLanguage,
                     SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
                 cancellationToken);
-            _pendingTtsTasks.Add(segTask);
+            TrackPendingTtsTask(segTask);
             var segResult = await segTask;
 
             if (segResult.Success && File.Exists(segmentAudioPath))
@@ -1220,7 +1218,7 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken)
     {
         ResetPipelineToMediaLoaded();
-        SaveCurrentSession();
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
 
         if (remainingDownstream)
         {
@@ -1251,7 +1249,7 @@ public sealed partial class SessionWorkflowCoordinator
             if (speakerAssignmentsChanged && hadTranslatableOutput)
             {
                 ResetPipelineToTranslated();
-                SaveCurrentSession();
+                await SaveCurrentSessionAsync().ConfigureAwait(false);
             }
 
             return;
@@ -1260,13 +1258,13 @@ public sealed partial class SessionWorkflowCoordinator
         if (HasDiarizationMarker(CurrentSession))
         {
             ResetPipelineToDiarized();
-            SaveCurrentSession();
+            await SaveCurrentSessionAsync().ConfigureAwait(false);
             await ContinuePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
         }
         else
         {
             ResetPipelineToTranscribed();
-            SaveCurrentSession();
+            await SaveCurrentSessionAsync().ConfigureAwait(false);
             await AdvancePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
         }
     }

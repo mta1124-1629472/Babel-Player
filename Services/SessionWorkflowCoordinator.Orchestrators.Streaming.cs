@@ -651,7 +651,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         Language: ttsLanguage,
                         SourceVideoPath: _c.CurrentSession.IngestedMediaPath ?? _c.CurrentSession.SourceMediaPath),
                     cancellationToken);
-                _c._pendingTtsTasks.Add(task);
+                _c.TrackPendingTtsTask(task);
                 var result = await task.ConfigureAwait(false);
                 if (result.Success && File.Exists(segmentAudioPath))
                 {

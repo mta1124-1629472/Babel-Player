@@ -184,7 +184,7 @@ public static class SessionSnapshotSemantics
         $"srcLang={snapshot.SourceLanguage ?? "<null>"}, tgtLang={snapshot.TargetLanguage ?? "<null>"}";
 
     public static WorkflowSessionSnapshot NormalizeRuntimeProvenance(WorkflowSessionSnapshot snapshot) =>
-        NormalizeStemAlias(snapshot) with
+        snapshot with
         {
             TranscriptionRuntime = ResolveRuntime(snapshot.TranscriptionRuntime, snapshot.TranscriptionProvider, InferenceRuntimeCatalog.InferTranscriptionRuntime),
             TranslationRuntime = ResolveRuntime(snapshot.TranslationRuntime, snapshot.TranslationProvider, InferenceRuntimeCatalog.InferTranslationRuntime),
@@ -250,7 +250,6 @@ public static class SessionSnapshotSemantics
             TranscriptionLanguageHint = null,
             VocalsAudioPath = null,
             AmbianceAudioPath = null,
-            InstrumentalAudioPath = null,
         };
 
     public static WorkflowSessionSnapshot ClearMediaLoadedOutputs(WorkflowSessionSnapshot snapshot) =>
@@ -282,16 +281,4 @@ public static class SessionSnapshotSemantics
     internal static bool HasDiarizationMarker(WorkflowSessionSnapshot snapshot) =>
         !string.IsNullOrWhiteSpace(snapshot.DiarizationProvider)
         && snapshot.SpeakersDetectedAtUtc.HasValue;
-
-    private static WorkflowSessionSnapshot NormalizeStemAlias(WorkflowSessionSnapshot snapshot)
-    {
-        var ambiancePath = !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath)
-            ? snapshot.AmbianceAudioPath
-            : snapshot.InstrumentalAudioPath;
-        return snapshot with
-        {
-            AmbianceAudioPath = ambiancePath,
-            InstrumentalAudioPath = ambiancePath,
-        };
-    }
 }
