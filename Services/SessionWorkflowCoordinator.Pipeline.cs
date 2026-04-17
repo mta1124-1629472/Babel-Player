@@ -88,13 +88,13 @@ public sealed partial class SessionWorkflowCoordinator
 
         lock (_sessionLock)
         {
-                CurrentSession = CurrentSession with
-                {
-                    VocalsAudioPath = result.VocalsAudioPath,
-                    AmbianceAudioPath = result.AmbianceAudioPath,
-                    StatusMessage = "Audio prepared for transcription.",
-                };
-            }
+            CurrentSession = CurrentSession with
+            {
+                VocalsAudioPath = result.VocalsAudioPath,
+                AmbianceAudioPath = result.AmbianceAudioPath,
+                StatusMessage = "Audio prepared for transcription.",
+            };
+        }
         SaveCurrentSession();
 
         ReportStage(
