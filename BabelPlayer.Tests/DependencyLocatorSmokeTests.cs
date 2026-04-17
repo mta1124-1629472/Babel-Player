@@ -13,23 +13,26 @@ public sealed class DependencyLocatorSmokeTests : IDisposable
 
     public void Dispose()
     {
-        Environment.SetEnvironmentVariable("PATH", _originalPath);
-        // DependencyLocator caches positive probe results for the session; drop
-        // any entries this test installed so later tests in the same process
-        // don't resolve our shim paths.
-        DependencyLocator.ClearProbeCache();
-
-        foreach (var path in _createdPaths)
+        try
         {
-            try
+            Environment.SetEnvironmentVariable("PATH", _originalPath);
+
+            foreach (var path in _createdPaths)
             {
-                if (File.Exists(path))
-                    File.Delete(path);
+                try
+                {
+                    if (File.Exists(path))
+                        File.Delete(path);
+                }
+                catch
+                {
+                    // Best-effort cleanup for test-created shims.
+                }
             }
-            catch
-            {
-                // Best-effort cleanup for test-created shims.
-            }
+        }
+        finally
+        {
+            DependencyLocator.ClearProbeCache();
         }
     }
 

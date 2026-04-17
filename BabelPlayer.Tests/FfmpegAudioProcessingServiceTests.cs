@@ -14,10 +14,6 @@ namespace BabelPlayer.Tests;
 /// Tests that can run without an ffmpeg binary cover edge cases (empty list, single-file copy).
 /// Tests that require ffmpeg are skipped when the binary is absent.
 /// </summary>
-// Several tests below mutate the process-wide PATH to inject fake ffmpeg/ffprobe
-// shims; xUnit otherwise runs test classes in parallel, so unrelated tests can
-// accidentally resolve those shims. The "Environment" collection disables
-// parallelization for tests that touch global environment state.
 [Collection("Environment")]
 public sealed class FfmpegAudioProcessingServiceTests : IDisposable
 {
