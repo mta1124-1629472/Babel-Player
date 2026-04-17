@@ -41,7 +41,7 @@
         </Style>
 
         <Style Selector="Border.top-chrome">
-            <Setter Property="Height" Value="40" />
+            <Setter Property="Height" Value="32" />
             <Setter Property="Opacity" Value="1" />
             <Setter Property="ClipToBounds" Value="True" />
             <Setter Property="RenderTransform">
@@ -122,49 +122,49 @@
                             HorizontalAlignment="Right"
                             UseLayoutRounding="True">
                     <Button Classes="chrome-button"
-                            Width="40"
-                            Height="40"
+                            Width="32"
+                            Height="32"
                             Background="{DynamicResource ButtonBackgroundBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
                             Click="OnMinimizeWindowClick"
                             AutomationProperties.Name="Minimize window">
-                        <Viewbox Width="11" Height="11">
+                        <Viewbox Width="14" Height="14">
                             <Canvas Width="24" Height="24">
-                                <Border Canvas.Left="5"
+                                <Border Canvas.Left="4"
                                         Canvas.Top="11"
-                                        Width="14"
-                                        Height="2"
+                                        Width="16"
+                                        Height="2.5"
                                         Background="{DynamicResource PrimaryTextBrush}"
                                         CornerRadius="1" />
                             </Canvas>
                         </Viewbox>
                     </Button>
                     <Button Classes="chrome-button"
-                            Width="40"
-                            Height="40"
+                            Width="32"
+                            Height="32"
                             Background="{DynamicResource ButtonBackgroundBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
                             Click="OnToggleMaximizeWindowClick"
                             AutomationProperties.Name="Maximize or restore window">
                         <Grid Width="24" Height="24">
                             <Viewbox x:Name="ChromeMaximizeIcon"
-                                     Width="11"
-                                     Height="11"
+                                     Width="14"
+                                     Height="14"
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center">
                                 <Canvas Width="24" Height="24">
-                                    <Rectangle Canvas.Left="6"
-                                               Canvas.Top="6"
-                                               Width="12"
-                                               Height="12"
+                                    <Rectangle Canvas.Left="5.5"
+                                               Canvas.Top="5.5"
+                                               Width="13"
+                                               Height="13"
                                                Stroke="{DynamicResource PrimaryTextBrush}"
-                                               StrokeThickness="1.5"
+                                               StrokeThickness="1.75"
                                                Fill="Transparent" />
                                 </Canvas>
                             </Viewbox>
                             <Viewbox x:Name="ChromeRestoreIcon"
-                                     Width="11"
-                                     Height="11"
+                                     Width="14"
+                                     Height="14"
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"
                                      IsVisible="False">
@@ -174,33 +174,33 @@
                                                Width="9"
                                                Height="9"
                                                Stroke="{DynamicResource PrimaryTextBrush}"
-                                               StrokeThickness="1.5"
+                                               StrokeThickness="1.75"
                                                Fill="Transparent" />
                                     <Rectangle Canvas.Left="5"
                                                Canvas.Top="9"
                                                Width="9"
                                                Height="9"
                                                Stroke="{DynamicResource PrimaryTextBrush}"
-                                               StrokeThickness="1.5"
+                                               StrokeThickness="1.75"
                                                Fill="Transparent" />
                                 </Canvas>
                             </Viewbox>
                         </Grid>
                     </Button>
                     <Button Classes="chrome-button chrome-close"
-                            Width="40"
-                            Height="40"
+                            Width="32"
+                            Height="32"
                             Background="{DynamicResource DestructiveBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
                             Click="OnCloseWindowClick"
                             AutomationProperties.Name="Close window">
-                        <Viewbox Width="11" Height="11">
+                        <Viewbox Width="14" Height="14">
                             <Canvas Width="24" Height="24">
                                 <Path Stroke="{DynamicResource PrimaryTextBrush}"
-                                      StrokeThickness="1.5"
+                                      StrokeThickness="1.75"
                                       StrokeLineCap="Round"
                                       Stretch="None"
-                                      Data="M 7,7 L 17,17 M 17,7 L 7,17" />
+                                      Data="M 6.5,6.5 L 17.5,17.5 M 17.5,6.5 L 6.5,17.5" />
                             </Canvas>
                         </Viewbox>
                         <Button.ContextMenu>
@@ -917,8 +917,9 @@
                 </Grid>
             </Border>
 
-            <!-- Controls bar -->
-            <Border Grid.Row="3" Padding="12,9"
+            <!-- Controls bar: horizontal scroll when narrow so transport + toolbars never overlap. -->
+            <Border x:Name="ControlsBarContainer"
+                    Grid.Row="3" Padding="12,7"
                     IsVisible="{Binding Playback.Preview.IsControlsVisible}">
                 <Border.Styles>
                     <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
@@ -940,7 +941,13 @@
                     </Style>
                 </Border.Styles>
 
-                <Grid ColumnDefinitions="Auto,*,Auto,*,Auto">
+                <ScrollViewer x:Name="ControlsBarScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled"
+                              HorizontalAlignment="Stretch">
+                    <!-- Keep star spacer columns finite inside ScrollViewer so left/center/right groups stay distributed. -->
+                    <Grid ColumnDefinitions="Auto,*,Auto,*,Auto"
+                          MinWidth="{Binding Viewport.Width, ElementName=ControlsBarScrollViewer}">
 
                     <!-- Left: open media + CC + dub mode toggle -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
@@ -1136,6 +1143,7 @@
                     </StackPanel>
 
                 </Grid>
+                </ScrollViewer>
             </Border>
 
         </Grid>
