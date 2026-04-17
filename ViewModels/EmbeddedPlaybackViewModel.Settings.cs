@@ -478,6 +478,7 @@ public partial class EmbeddedPlaybackViewModel
 
     private void OnCoordinatorSettingsModified()
     {
+        Preview.SyncBilingualSubtitlesFromSettings();
         SyncProviderModelFieldsFromSettings();
         NotifyActiveConfigChanged();
         OnPropertyChanged(nameof(VoiceModelLabel));

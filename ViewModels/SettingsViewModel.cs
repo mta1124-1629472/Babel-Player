@@ -69,6 +69,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         SelectedTheme          = current.Theme;
         MaxRecentSessions      = current.MaxRecentSessions;
         AutoSaveEnabled        = current.AutoSaveEnabled;
+        BilingualSubtitlesEnabled = current.BilingualSubtitlesEnabled;
         PreferredLocalGpuBackend = current.PreferredLocalGpuBackend;
         AdvancedGpuServiceUrl  = current.AdvancedGpuServiceUrl;
         AlwaysStartLocalGpuRuntimeAtAppStart = current.AlwaysStartLocalGpuRuntimeAtAppStart;
@@ -371,6 +372,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private bool _autoSaveEnabled;
+
+    /// <summary>When true, exported/embedded subtitles include both source and translated lines (see Settings ▸ Video).</summary>
+    [ObservableProperty]
+    private bool _bilingualSubtitlesEnabled;
 
     // ── Containerized local inference ─────────────────────────────────────────
 
@@ -675,6 +680,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.Theme              = SelectedTheme ?? settings.Theme;
         settings.MaxRecentSessions  = MaxRecentSessions;
         settings.AutoSaveEnabled    = AutoSaveEnabled;
+        settings.BilingualSubtitlesEnabled = BilingualSubtitlesEnabled;
         settings.PreferredLocalGpuBackend = PreferredLocalGpuBackend;
         settings.AdvancedGpuServiceUrl = string.IsNullOrWhiteSpace(AdvancedGpuServiceUrl)
             ? settings.AdvancedGpuServiceUrl

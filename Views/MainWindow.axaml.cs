@@ -32,6 +32,8 @@ public partial class MainWindow : Window
     private EventHandler<PixelPointEventArgs>? _windowPositionChangedHandler;
     private EventHandler? _windowScalingChangedHandler;
     private EventHandler? _screensChangedHandler;
+    private EventHandler<SizeChangedEventArgs>? _videoSegmentsChromeHostSizeChangedHandler;
+    private bool _videoSegmentsChromeHostSizeHooked;
     private Screens? _subscribedScreens;
     private long _lastControlsActivityTickMs;
     private bool _isApplyingWindowStateFromViewModel;
@@ -50,12 +52,10 @@ public partial class MainWindow : Window
         DragDrop.AddDropHandler(this, OnFileDrop);
 
 #if BABEL_DEV
-        var devLogButton = this.FindControl<Button>("DevLogButton");
-        if (devLogButton is not null)
-            devLogButton.Click += OnDevLogClick;
-        var freshStartButton = this.FindControl<Button>("FreshStartButton");
-        if (freshStartButton is not null)
-            freshStartButton.Click += OnFreshStartClick;
+        WireDevToolbarClick("DevLogButton", OnDevLogClick);
+        WireDevToolbarClick("DevLogButtonCompact", OnDevLogClick);
+        WireDevToolbarClick("FreshStartButton", OnFreshStartClick);
+        WireDevToolbarClick("FreshStartButtonCompact", OnFreshStartClick);
 #endif
 
         var videoView = this.FindControl<MpvVideoView>("VideoView");
@@ -110,6 +110,7 @@ public partial class MainWindow : Window
             UpdateEmbeddedTransportViewportMetrics(videoView);
 
         SyncChromeWindowState();
+        WireVideoChromeCompactState();
     }
 
     private void SyncChromeWindowState()
@@ -185,6 +186,10 @@ public partial class MainWindow : Window
                 videoView.NativePointerActivity -= _videoNativePointerActivityHandler;
         }
 
+        var chromeHost = this.FindControl<Control>("VideoSegmentsChromeHost");
+        if (chromeHost is not null && _videoSegmentsChromeHostSizeChangedHandler is not null)
+            chromeHost.SizeChanged -= _videoSegmentsChromeHostSizeChangedHandler;
+
         _playbackPropertyChangedHandler = null;
         _coordinatorPropertyChangedHandler = null;
         _videoOverlayPointerMovedHandler = null;
@@ -194,6 +199,42 @@ public partial class MainWindow : Window
         _windowScalingChangedHandler = null;
         _screensChangedHandler = null;
         _subscribedScreens = null;
+        _videoSegmentsChromeHostSizeChangedHandler = null;
+    }
+
+    private void WireVideoChromeCompactState()
+    {
+        var host = this.FindControl<Control>("VideoSegmentsChromeHost");
+        if (host is null)
+            return;
+
+        _videoSegmentsChromeHostSizeChangedHandler ??= OnVideoSegmentsChromeHostSizeChanged;
+        if (!_videoSegmentsChromeHostSizeHooked)
+        {
+            host.SizeChanged += _videoSegmentsChromeHostSizeChangedHandler;
+            _videoSegmentsChromeHostSizeHooked = true;
+        }
+
+        UpdateVideoChromeCompactState(host);
+    }
+
+    private void OnVideoSegmentsChromeHostSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (sender is Control c)
+            UpdateVideoChromeCompactState(c);
+    }
+
+    private void UpdateVideoChromeCompactState(Control host)
+    {
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        const double thresholdPx = 540;
+        var w = host.Bounds.Width;
+        if (w <= 0)
+            return;
+
+        vm.Playback.Preview.IsCompactVideoChrome = w < thresholdPx;
     }
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
@@ -872,6 +913,13 @@ public partial class MainWindow : Window
     }
 
 #if BABEL_DEV
+    private void WireDevToolbarClick(string name, EventHandler<RoutedEventArgs> handler)
+    {
+        var b = FindControl<Button>(name);
+        if (b is not null)
+            b.Click += handler;
+    }
+
     public void OnDevLogClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;

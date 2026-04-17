@@ -140,9 +140,33 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             : SourceVolume < 0.51
                 ? "🔉"
                 : "🔊";
-    public string DubModeLabel => "🎙 Dub";
+    [ObservableProperty]
+    private bool _isCompactVideoChrome;
+
+    /// <summary>Inverse of <see cref="IsCompactVideoChrome"/> for toolbar visibility bindings.</summary>
+    public bool IsWideVideoChrome => !IsCompactVideoChrome;
+
+    public string DubModeLabel => IsCompactVideoChrome ? "🎙" : "🎙 Dub";
+
+    partial void OnIsCompactVideoChromeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(DubModeLabel));
+        OnPropertyChanged(nameof(IsWideVideoChrome));
+    }
     public string SubtitleToggleLabel => IsSubtitleModeOn ? "CC ✓" : "CC";
     public string BilingualToggleLabel => IsBilingualSubtitlesOn ? "Bi-lang ✓" : "Bi-lang";
+
+    /// <summary>Applies coordinator bilingual subtitle preference after Settings save or other coordinator updates.</summary>
+    public void SyncBilingualSubtitlesFromSettings()
+    {
+        var enabled = _coordinator.CurrentSettings.BilingualSubtitlesEnabled;
+        if (IsBilingualSubtitlesOn == enabled)
+            return;
+
+        IsBilingualSubtitlesOn = enabled;
+        if (IsSubtitleModeOn)
+            ApplySubtitleState();
+    }
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
     public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);

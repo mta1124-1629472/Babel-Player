@@ -52,7 +52,7 @@ internal DiarizationStageOrchestrator(SessionWorkflowCoordinator coordinator) =>
                     _c.CurrentSession.TranscriptPath,
                     cancellationToken,
                     resultingStage: SessionWorkflowStage.Diarized,
-                    statusMessage: "Speaker mapping complete. Continuing translation and dubbing.");
+                    statusMessage: "Speaker analysis complete.");
 
                 ReportStage(
                     stageContext,

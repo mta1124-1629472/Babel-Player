@@ -36,20 +36,20 @@
         </Style>
         <Style Selector="Button.action-btn">
             <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}"/>
         </Style>
         <Style Selector="Button.primary-action">
             <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeTitle}"/>
             <Setter Property="FontWeight" Value="Medium"/>
         </Style>
         <Style Selector="TextBlock.section-header">
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeTitle}"/>
+            <Setter Property="FontWeight" Value="Medium"/>
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
         </Style>
         <Style Selector="TextBlock.help-text">
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}"/>
             <Setter Property="Opacity" Value="0.55"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
@@ -85,9 +85,8 @@
                     chrome:WindowDecorationProperties.ElementRole="TitleBar">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                     <TextBlock Grid.Column="0"
+                               Classes="text-title"
                                Text="Speaker Reference Wizard"
-                               FontSize="13"
-                               FontWeight="SemiBold"
                                Foreground="{DynamicResource PrimaryTextBrush}"
                                VerticalAlignment="Center" />
                     <StackPanel Grid.Column="2"
@@ -194,7 +193,7 @@
 
         <!-- Intro -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
-            <TextBlock Text="Assign voices to speakers and set reference audio clips. Use the preview to find good clips, then click 'Use Playhead' to grab the current moment." FontSize="12" Opacity="0.6" TextWrapping="Wrap"/>
+            <TextBlock Text="Assign voices to speakers and set reference audio clips. Use the preview to find good clips, then click 'Use Playhead' to grab the current moment." Classes="text-secondary" Opacity="0.6" TextWrapping="Wrap"/>
         </StackPanel>
 
         <!-- Progress & Quick Actions -->
@@ -203,13 +202,13 @@
                 <!-- Status Badges -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                     <Border Background="{DynamicResource PositiveBrush}" CornerRadius="6" Padding="12,6">
-                        <TextBlock Text="{Binding GoodCount, StringFormat='Good ({0})'}" FontSize="12" Foreground="{DynamicResource PositiveFgBrush}" FontWeight="Medium"/>
+                        <TextBlock Text="{Binding GoodCount, StringFormat='Good ({0})'}" Classes="text-secondary" Foreground="{DynamicResource PositiveFgBrush}" FontWeight="Medium"/>
                     </Border>
                     <Border Background="{DynamicResource InfoBrush}" CornerRadius="6" Padding="12,6">
-                        <TextBlock Text="{Binding ReviewCount, StringFormat='Review ({0})'}" FontSize="12" Foreground="{DynamicResource InfoFgBrush}" FontWeight="Medium"/>
+                        <TextBlock Text="{Binding ReviewCount, StringFormat='Review ({0})'}" Classes="text-secondary" Foreground="{DynamicResource InfoFgBrush}" FontWeight="Medium"/>
                     </Border>
                     <Border Background="{DynamicResource DestructiveBrush}" CornerRadius="6" Padding="12,6">
-                        <TextBlock Text="{Binding PoorCount, StringFormat='Poor ({0})'}" FontSize="12" Foreground="{DynamicResource DestructiveFgBrush}" FontWeight="Medium"/>
+                        <TextBlock Text="{Binding PoorCount, StringFormat='Poor ({0})'}" Classes="text-secondary" Foreground="{DynamicResource DestructiveFgBrush}" FontWeight="Medium"/>
                     </Border>
                 </StackPanel>
 
@@ -218,7 +217,6 @@
                           Content="Show needs attention"
                           VerticalAlignment="Center"
                           Margin="16,0,0,0"
-                          FontSize="12"
                           ToolTip.Tip="Only show speakers that need review or have poor reference"/>
 
                 <Button Grid.Column="2"
@@ -226,14 +224,13 @@
                         Content="Reset All"
                         Padding="10,6"
                         Margin="12,0,0,0"
-                        FontSize="11"
                         ToolTip.Tip="Clear all draft changes and start fresh"/>
 
                 <TextBlock Grid.Column="4"
                            Text="{Binding StatusText}"
                            VerticalAlignment="Center"
                            HorizontalAlignment="Right"
-                           FontSize="11"
+                           Classes="text-caption"
                            Opacity="0.6"/>
             </Grid>
         </Border>
@@ -249,8 +246,8 @@
                 <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
                     <!-- Header with instructions -->
                     <StackPanel Grid.Row="0" Margin="12,12,12,8">
-                        <TextBlock Text="Preview" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                        <TextBlock Text="Scrub through the video to find good audio clips. Click 'Use Playhead' on a speaker to grab the current moment as their reference." FontSize="10" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Text="Preview" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="Scrub through the video to find good audio clips. Click 'Use Playhead' on a speaker to grab the current moment as their reference." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
 
                     <!-- Video Surface (Windows) -->
@@ -273,8 +270,8 @@
                             Margin="8,0"
                             IsVisible="{Binding MiniPreview.ShowNonWindowsHint}">
                         <StackPanel Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="Preview not available on this platform" FontSize="12" FontWeight="Medium" HorizontalAlignment="Center"/>
-                            <TextBlock Text="On Linux/macOS, use the main window to scrub through video. When you find a good moment, come back here and click 'Use Playhead' for that speaker." FontSize="10" Opacity="0.6" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Preview not available on this platform" Classes="text-emphasis" HorizontalAlignment="Center"/>
+                            <TextBlock Text="On Linux/macOS, use the main window to scrub through video. When you find a good moment, come back here and click 'Use Playhead' for that speaker." Classes="text-micro" Opacity="0.6" TextWrapping="Wrap" HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
@@ -282,7 +279,7 @@
                     <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8" Margin="12,8" IsVisible="{Binding MiniPreview.ShowVideoSurface}" VerticalAlignment="Center">
                         <TextBlock Grid.Column="0"
                                    Text="{Binding MiniPreview.PositionFormatted}"
-                                   FontSize="11"
+                                   Classes="text-caption"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource VideoOverlaySubtextBrush}"
                                    MinWidth="50"/>
@@ -295,7 +292,7 @@
                                 ToolTip.Tip="Drag to seek through the video"/>
                         <TextBlock Grid.Column="2"
                                    Text="{Binding MiniPreview.DurationFormatted}"
-                                   FontSize="11"
+                                   Classes="text-caption"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource VideoOverlaySubtextBrush}"
                                    MinWidth="50"
@@ -304,7 +301,6 @@
                                 Command="{Binding MiniPreview.ToggleMiniPlaybackCommand}"
                                 Content="{Binding MiniPreview.MiniPlayPauseLabel}"
                                 Padding="12,6"
-                                FontSize="11"
                                 FontWeight="Medium"
                                 ToolTip.Tip="Play or pause the preview"/>
                     </Grid>
@@ -312,7 +308,7 @@
                     <!-- Status Hint -->
                     <TextBlock Grid.Row="4"
                                Text="{Binding MiniPreview.StatusHint}"
-                               FontSize="10"
+                               Classes="text-micro"
                                Foreground="{DynamicResource DestructiveFgBrush}"
                                TextWrapping="Wrap"
                                Margin="12,4,12,12"
@@ -321,7 +317,7 @@
                     <!-- Playhead Clip Settings -->
                     <Border Grid.Row="3" Classes="card" Margin="8,8,8,12" IsVisible="{Binding MiniPreview.ShowVideoSurface}">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="Playhead Clip Duration" FontSize="11" FontWeight="Medium" ToolTip.Tip="How much audio to grab before and after the playhead position"/>
+                            <TextBlock Text="Playhead Clip Duration" Classes="text-label" ToolTip.Tip="How much audio to grab before and after the playhead position"/>
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                 <Slider Grid.Column="0"
                                         Width="100"
@@ -332,8 +328,8 @@
                                         Value="{Binding PlayheadClipWindowSeconds, Mode=TwoWay}"
                                         VerticalAlignment="Center"
                                         ToolTip.Tip="Length of audio clip in seconds (3-15 seconds)"/>
-                                <TextBlock Grid.Column="1" Text="{Binding PlayheadClipWindowSeconds, StringFormat='{}{0:F0} seconds'}" VerticalAlignment="Center" FontSize="11" Opacity="0.7"/>
-                                <Button Grid.Column="2" Command="{Binding StopReferencePreviewCommand}" Content="Stop" Padding="8,4" FontSize="10"/>
+                                <TextBlock Grid.Column="1" Text="{Binding PlayheadClipWindowSeconds, StringFormat='{}{0:F0} seconds'}" VerticalAlignment="Center" Classes="text-caption" Opacity="0.7"/>
+                                <Button Grid.Column="2" Command="{Binding StopReferencePreviewCommand}" Content="Stop" Padding="8,4" Classes="control-pill"/>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -348,8 +344,8 @@
                 <Grid RowDefinitions="Auto,*">
                     <!-- Header -->
                     <StackPanel Grid.Row="0" Margin="14,14,14,8">
-                        <TextBlock Text="Speakers" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                        <TextBlock Text="Select a voice for each speaker. For Qwen, also set a reference audio clip from the video." FontSize="10" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Text="Speakers" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="Select a voice for each speaker. For Qwen, also set a reference audio clip from the video." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
 
                     <!-- Speaker List -->
@@ -361,23 +357,23 @@
                                         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto">
                                             <!-- Speaker Header -->
                                             <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
-                                                <TextBlock Text="{Binding SpeakerId}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding SpeakerId}" Classes="text-display" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
                                                 <Border Background="{DynamicResource InfoBrush}" CornerRadius="4" Padding="8,3" VerticalAlignment="Center"
                                                         ToolTip.Tip="Quality of the reference clip for this speaker">
-                                                    <TextBlock Text="{Binding ConfidenceTier}" FontSize="10" FontWeight="Medium" Foreground="{DynamicResource InfoFgBrush}"/>
+                                                    <TextBlock Text="{Binding ConfidenceTier}" Classes="text-micro" FontWeight="Medium" Foreground="{DynamicResource InfoFgBrush}"/>
                                                 </Border>
-                                                <TextBlock Text="{Binding LastActionLabel}" FontSize="11" Opacity="0.5" VerticalAlignment="Center"
+                                                <TextBlock Text="{Binding LastActionLabel}" Classes="text-caption" Opacity="0.5" VerticalAlignment="Center"
                                                            ToolTip.Tip="Last action taken on this speaker"/>
                                             </StackPanel>
 
                                             <!-- Voice Assignment -->
                                             <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Spacing="8" Margin="0,0,0,10">
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <TextBlock Text="Voice" FontSize="11" FontWeight="Medium" Opacity="0.7"/>
-                                                    <TextBlock Text="(for TTS generation)" FontSize="10" Opacity="0.4" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Voice" Classes="text-label" Opacity="0.7"/>
+                                                    <TextBlock Text="(for TTS generation)" Classes="text-micro" Opacity="0.4" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                                 <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
-                                                    <TextBlock Grid.Column="0" Text="{Binding EffectiveAssignedVoice, TargetNullValue='None'}" FontSize="12" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="0" Text="{Binding EffectiveAssignedVoice, TargetNullValue='None'}" Classes="text-secondary" VerticalAlignment="Center"/>
                                                     <Button Grid.Column="1" Classes="action-btn" Tag="{Binding}" Click="OnKeepAutoClick" Content="Auto"
                                                             ToolTip.Tip="Use automatically detected voice for this speaker"/>
                                                     <Button Grid.Column="2" Classes="action-btn" Tag="{Binding}" Click="OnUseActiveTtsVoiceClick" Content="Use Active"
@@ -390,7 +386,6 @@
                                                           ItemsSource="{Binding $parent[Window].DataContext.PiperVoices}"
                                                           SelectedItem="{Binding DraftAssignedVoice, Mode=TwoWay}"
                                                           MinWidth="200"
-                                                          FontSize="11"
                                                           PlaceholderText="Or select a downloaded Piper voice..."
                                                           ToolTip.Tip="Choose from downloaded Piper voices, or type a custom voice ID"/>
                                             </StackPanel>
@@ -398,11 +393,11 @@
                                             <!-- Reference Clip (Qwen) -->
                                             <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding ReferenceActionsEnabled}">
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <TextBlock Text="Reference Clip" FontSize="11" FontWeight="Medium" Opacity="0.7"/>
-                                                    <TextBlock Text="(for voice cloning - Qwen only)" FontSize="10" Opacity="0.4" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Reference Clip" Classes="text-label" Opacity="0.7"/>
+                                                    <TextBlock Text="(for voice cloning - Qwen only)" Classes="text-micro" Opacity="0.4" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding EffectiveReferencePath, TargetNullValue='No clip selected - Qwen voice cloning will use default'}" 
-                                                           TextWrapping="Wrap" FontSize="10" Opacity="0.6" FontFamily="Consolas,monospace"
+                                                           TextWrapping="Wrap" Classes="text-micro" Opacity="0.6" FontFamily="{DynamicResource UiMonoFontFamily}"
                                                            ToolTip.Tip="Audio clip used as reference for Qwen voice cloning"/>
 
                                                 <!-- Reference Actions -->
@@ -421,7 +416,7 @@
 
                                             <!-- Segments -->
                                             <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Spacing="4" Margin="0,0,0,4">
-                                                <TextBlock Text="Jump to speaker's segments" FontSize="10" Opacity="0.6"
+                                                <TextBlock Text="Jump to speaker's segments" Classes="text-micro" Opacity="0.6"
                                                           ToolTip.Tip="Click a timestamp to jump to that point in the video, then use 'Use Playhead'"/>
                                                 <WrapPanel Orientation="Horizontal">
                                                     <ItemsControl ItemsSource="{Binding SourceSegments}">
@@ -432,7 +427,7 @@
                                                         </ItemsControl.ItemsPanel>
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate x:DataType="model:WorkflowSegmentState">
-                                                                <Button Padding="6,3" FontSize="10" Margin="0,0,4,4" Click="OnJumpToSegmentClick" Tag="{Binding}" 
+                                                                <Button Padding="6,3" Classes="control-pill" Margin="0,0,4,4" Click="OnJumpToSegmentClick" Tag="{Binding}" 
                                                                         ToolTip.Tip="{Binding SourceText, StringFormat='Click to jump to {0}'}">
                                                                     <TextBlock Text="{Binding StartSeconds, StringFormat='→ {0:F1}s'}"/>
                                                                 </Button>
@@ -446,7 +441,7 @@
                                             <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
                                                        Text="{Binding ConfidenceReasonSummary}"
                                                        TextWrapping="Wrap"
-                                                       FontSize="10"
+                                                       Classes="text-micro"
                                                        Opacity="0.5"
                                                        IsVisible="{Binding ReferenceActionsEnabled}"
                                                        Margin="0,0,0,4"
@@ -456,7 +451,7 @@
                                             <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
                                                        Text="{Binding InlineError}"
                                                        Foreground="{DynamicResource DestructiveFgBrush}"
-                                                       FontSize="10"
+                                                       Classes="text-micro"
                                                        TextWrapping="Wrap"
                                                        IsVisible="{Binding HasInlineError}"/>
                                         </Grid>
@@ -474,14 +469,14 @@
             <Expander Grid.Column="0" Header="Advanced">
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,0">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="Merge speakers" FontSize="10" Opacity="0.6"/>
+                        <TextBlock Text="Merge speakers" Classes="text-micro" Opacity="0.6"/>
                         <StackPanel Orientation="Horizontal" Spacing="4">
-                            <ComboBox ItemsSource="{Binding SpeakerIdOptions}" SelectedItem="{Binding MergeSourceSpeakerId, Mode=TwoWay}" Width="100" FontSize="11"
+                            <ComboBox ItemsSource="{Binding SpeakerIdOptions}" SelectedItem="{Binding MergeSourceSpeakerId, Mode=TwoWay}" Width="100"
                                       ToolTip.Tip="Select source speaker to merge"/>
-                            <TextBlock Text="→" VerticalAlignment="Center" FontSize="12" Opacity="0.5"/>
-                            <ComboBox ItemsSource="{Binding SpeakerIdOptions}" SelectedItem="{Binding MergeTargetSpeakerId, Mode=TwoWay}" Width="100" FontSize="11"
+                            <TextBlock Text="→" VerticalAlignment="Center" Classes="text-secondary" Opacity="0.5"/>
+                            <ComboBox ItemsSource="{Binding SpeakerIdOptions}" SelectedItem="{Binding MergeTargetSpeakerId, Mode=TwoWay}" Width="100"
                                       ToolTip.Tip="Select target speaker (will receive the merged segments)"/>
-                            <Button Command="{Binding MergeSpeakersCommand}" Content="Merge" Padding="10,6" FontSize="11"
+                            <Button Command="{Binding MergeSpeakersCommand}" Content="Merge" Padding="10,6"
                                     ToolTip.Tip="Merge source into target - this updates the transcript permanently"/>
                         </StackPanel>
                     </StackPanel>
@@ -491,7 +486,7 @@
             <TextBlock Grid.Column="1"
                        Text="Finish saves voice and reference changes. Cancel discards all edits."
                        VerticalAlignment="Center"
-                       FontSize="11"
+                       Classes="text-caption"
                        Opacity="0.5"
                        TextWrapping="Wrap"
                        Margin="12,0"/>
@@ -500,15 +495,13 @@
                     Click="OnCancelClick"
                     Content="Cancel"
                     Padding="16,8"
-                    FontSize="12"
                     ToolTip.Tip="Discard all changes and close"/>
             
             <Button Grid.Column="3"
                     Click="OnFinishClick"
                     Content="Finish"
                     Padding="16,8"
-                    FontSize="12"
-                    FontWeight="SemiBold"
+                    FontWeight="Medium"
                     ToolTip.Tip="Apply voice and reference changes to the session"/>
         </Grid>
     </Grid>

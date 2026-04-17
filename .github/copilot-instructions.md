@@ -61,6 +61,7 @@ Test categories used in this repo:
 - Use `InferenceRuntimeCatalog` for provider/profile/runtime normalization instead of duplicating compute-selection logic in UI or service code.
 - Missing capability/readiness should surface as a truthful blocked state with remediation, not a fake-ready UI path. If you add a fallback, it must be explicit in status/logging.
 - Keep storage and identity names consistent by context: product branding is `Babel Player`, the repo is `Babel-Player`, and persisted app paths/identifiers use `BabelPlayer`.
+- **Avoid UI Verbosity:** Adhere to the verbosity audit (April 2026): avoid over-explaining how the "sausage is made" in user-facing status messages. Prefer concise, professional labels (e.g., "Ready", "Reset to [Stage]") over internal technical descriptions. Do not include instructional filler for standard UI elements.
 - This repo is milestone-driven. Avoid broad refactors, speculative extension points, or “future-proof” abstractions unless they directly support the current milestone in `docs/PLAN.md`.
 - For benchmark or hardware-routing work, capture the machine/runtime environment first and keep comparisons hardware-specific. Existing repo instructions expect an `Environment Snapshot` section and hardware-profile tokens such as `int8_8c16t_32g` in benchmark matrices.
 

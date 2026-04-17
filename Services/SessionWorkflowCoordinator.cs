@@ -314,16 +314,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             }
 
             string statusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
-                    ? "Resumed session with TTS. Dubbing complete."
+                    ? "Ready."
                 : validated.Stage >= SessionWorkflowStage.Translated
-                    ? "Resumed session with translation. Ready for TTS/dubbing."
+                    ? "Ready."
                 : validated.Stage >= SessionWorkflowStage.Diarized
-                    ? "Resumed session with speaker mapping. Ready to resume translation/TTS."
+                    ? "Ready."
                     : validated.Stage >= SessionWorkflowStage.Transcribed
-                        ? "Resumed session with transcript. Ready for translation."
+                        ? "Ready."
                         : validated.Stage >= SessionWorkflowStage.MediaLoaded
-                            ? "Resumed session with media. Ready for transcription."
-                            : "Resumed saved foundation session. Workflow not yet started.";
+                            ? "Ready."
+                            : "Ready.";
 
 
             CurrentSession = validated with
@@ -513,7 +513,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 TtsGeneratedAtUtc = null,
                 TtsSegmentsPath = null,
                 TtsSegmentAudioPaths = null,
-                StatusMessage = "Media loaded. Ready for transcription.",
+                StatusMessage = "Media loaded.",
             };
         }
 
@@ -593,7 +593,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             DefaultTtsVoiceFallback = null,
             DiarizationProvider = null,
             SpeakersDetectedAtUtc = null,
-            StatusMessage = "Pipeline reset. Ready to run."
+            StatusMessage = "Ready.",
         };
     }
 
@@ -623,7 +623,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             DefaultTtsVoiceFallback = null,
             DiarizationProvider = null,
             SpeakersDetectedAtUtc = null,
-            StatusMessage = "Pipeline reset to transcribed state."
+            StatusMessage = "Reset to transcription."
         };
     }
 
@@ -649,7 +649,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             TranslationModel = null,
             TtsRuntime = null,
             TtsProvider = null,
-            StatusMessage = "Pipeline reset to speaker-mapped state."
+            StatusMessage = "Reset to speaker analysis."
         };
     }
 
@@ -668,7 +668,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             TtsGeneratedAtUtc = null,
             TtsRuntime = null,
             TtsProvider = null,
-            StatusMessage = "Pipeline reset to translated state."
+            StatusMessage = "Reset to translation."
         };
     }
 
@@ -682,7 +682,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         else
             ResetPipelineToTranscribed();
 
-        CurrentSession = CurrentSession with { StatusMessage = "Ready to re-run translation." };
+        CurrentSession = CurrentSession with { StatusMessage = "Ready." };
         SaveCurrentSession();
     }
 

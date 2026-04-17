@@ -38,7 +38,7 @@ public static class AvaloniaComposition
                 return;
             }
 
-            var gpu = await compositor.TryGetCompositionGpuInterop().ConfigureAwait(true);
+            var gpu = await compositor.TryGetCompositionGpuInterop().ConfigureAwait(false);
             Debug.WriteLine(gpu is not null
                 ? "[Babel] Compositor: default OK; GPU interop available (future texture/shared-surface work)."
                 : "[Babel] Compositor: default OK; GPU interop not available on this backend.");
