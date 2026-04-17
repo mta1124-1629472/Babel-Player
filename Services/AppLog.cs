@@ -115,15 +115,19 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
 
         if (batch.Length > 0)
         {
+        if (batch.Length > 0)
+        {
             try
             {
                 await File.AppendAllTextAsync(LogFilePath, batch.ToString()).ConfigureAwait(false);
-                batch.Clear();
             }
             catch (Exception ex)
             {
                 writeFailure = ex;
                 System.Diagnostics.Debug.WriteLine($"Failed to write log batch to '{LogFilePath}': {ex}");
+            }
+            finally
+            {
                 batch.Clear();
             }
         }
