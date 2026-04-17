@@ -296,6 +296,10 @@ public partial class MainWindow : Window
             TryApplyPendingMediaReloadRequest();
     }
 
+    /// <summary>
+    /// Handles key press events, maps them to application shortcut actions, and executes matching commands.
+    /// </summary>
+    /// <param name="e">The key event arguments; set to handled if a shortcut action is performed.</param>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -322,6 +326,12 @@ public partial class MainWindow : Window
             e.Handled = true;
     }
 
+    /// <summary>
+    /// Attempts to execute the provided command when the shortcut is enabled and the command can execute.
+    /// </summary>
+    /// <param name="isEnabled">Whether the shortcut action is currently enabled.</param>
+    /// <param name="command">The command to execute, or null.</param>
+    /// <returns>`true` if the command was executed, `false` otherwise.</returns>
     private static bool TryExecuteShortcut(bool isEnabled, ICommand? command)
     {
         if (!isEnabled || command is null || !command.CanExecute(null))
@@ -331,6 +341,11 @@ public partial class MainWindow : Window
         return true;
     }
 
+    /// <summary>
+    /// Exits fullscreen mode for the specified playback preview if it is currently fullscreen.
+    /// </summary>
+    /// <param name="preview">The playback preview whose fullscreen state will be changed.</param>
+    /// <returns>`true` if the preview was fullscreen and was switched out of fullscreen; `false` if it was already not fullscreen.</returns>
     private static bool TryExitFullscreen(EmbeddedPlaybackPreviewViewModel preview)
     {
         if (!preview.IsFullscreen)
