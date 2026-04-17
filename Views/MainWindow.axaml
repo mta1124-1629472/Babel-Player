@@ -1301,7 +1301,8 @@
                                         Command="{Binding Playback.Preview.ToggleSegmentPaneCommand}"
                                         Padding="8,6" FontSize="11"
                                         ToolTip.Tip="Toggle side panels"
-                                        AutomationProperties.Name="Toggle side panes">
+                                        ToolTip.Tip="Toggle side panels (S)"
+                                        AutomationProperties.Name="Toggle side panels">
                                     <TextBlock Text="☰" FontSize="14"/>
                                 </Button>
 
