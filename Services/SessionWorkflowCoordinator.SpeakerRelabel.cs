@@ -111,11 +111,14 @@ public sealed partial class SessionWorkflowCoordinator
             refs.Remove(from);
         }
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            SpeakerVoiceAssignments = voices.Count == 0 ? null : voices,
-            SpeakerReferenceAudioPaths = refs.Count == 0 ? null : refs,
-        };
+            CurrentSession = CurrentSession with
+            {
+                SpeakerVoiceAssignments = voices.Count == 0 ? null : voices,
+                SpeakerReferenceAudioPaths = refs.Count == 0 ? null : refs,
+            };
+        }
 
         SaveCurrentSession();
         return transcriptChanged;

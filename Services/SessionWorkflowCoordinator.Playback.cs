@@ -284,13 +284,16 @@ public sealed partial class SessionWorkflowCoordinator
                     : SessionWorkflowStage.Diarized);
             var nextStatusMessage = statusMessage ?? "Speaker analysis complete.";
 
-            CurrentSession = currentSession with
+            lock (_sessionLock)
             {
-                Stage = nextStage,
-                DiarizationProvider = CurrentSettings.DiarizationProvider,
-                SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
-                StatusMessage = nextStatusMessage,
-            };
+                CurrentSession = CurrentSession with
+                {
+                    Stage = nextStage,
+                    DiarizationProvider = CurrentSettings.DiarizationProvider,
+                    SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+                    StatusMessage = nextStatusMessage,
+                };
+            }
             SaveCurrentSession();
 
             _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
@@ -537,28 +540,32 @@ public sealed partial class SessionWorkflowCoordinator
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(segmentId);
         var normalizedSegmentId = segmentId.Trim();
-        var current = CurrentSession.SegmentTimingModeOverrides is null
-            ? new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
-            : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
 
-        var changed = false;
-        if (mode.HasValue)
+        lock (_sessionLock)
         {
-            changed = !current.TryGetValue(normalizedSegmentId, out var existing) || existing != mode.Value;
-            current[normalizedSegmentId] = mode.Value;
+            var current = CurrentSession.SegmentTimingModeOverrides is null
+                ? new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
+                : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
+
+            bool changed;
+            if (mode.HasValue)
+            {
+                changed = !current.TryGetValue(normalizedSegmentId, out var existing) || existing != mode.Value;
+                current[normalizedSegmentId] = mode.Value;
+            }
+            else
+            {
+                changed = current.Remove(normalizedSegmentId);
+            }
+
+            if (!changed)
+                return;
+
+            CurrentSession = CurrentSession with
+            {
+                SegmentTimingModeOverrides = current.Count == 0 ? null : current,
+            };
         }
-        else
-        {
-            changed = current.Remove(normalizedSegmentId);
-        }
-
-        if (!changed)
-            return;
-
-        CurrentSession = CurrentSession with
-        {
-            SegmentTimingModeOverrides = current.Count == 0 ? null : current,
-        };
         SaveCurrentSession();
     }
 
@@ -567,27 +574,34 @@ public sealed partial class SessionWorkflowCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
         ArgumentException.ThrowIfNullOrWhiteSpace(voiceOrModel);
 
-        var current = CurrentSession.SpeakerVoiceAssignments ?? new Dictionary<string, string>(StringComparer.Ordinal);
-        var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
+        lock (_sessionLock)
         {
-            [speakerId] = voiceOrModel,
-        };
+            var current = CurrentSession.SpeakerVoiceAssignments ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
+            {
+                [speakerId] = voiceOrModel,
+            };
 
-        CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated };
+            CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated };
+        }
         SaveCurrentSession();
     }
 
     public void RemoveSpeakerVoiceAssignment(string speakerId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
-        if (CurrentSession.SpeakerVoiceAssignments is null)
-            return;
 
-        var updated = new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
-        if (!updated.Remove(speakerId))
-            return;
+        lock (_sessionLock)
+        {
+            if (CurrentSession.SpeakerVoiceAssignments is null)
+                return;
 
-        CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
+            var updated = new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
+            if (!updated.Remove(speakerId))
+                return;
+
+            CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
+        }
         SaveCurrentSession();
     }
 
@@ -597,40 +611,43 @@ public sealed partial class SessionWorkflowCoordinator
         if (updates.Count == 0)
             return;
 
-        var current = CurrentSession.SpeakerVoiceAssignments is null
-            ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
-
-        var changed = false;
-        foreach (var (speakerId, candidateVoice) in updates)
+        lock (_sessionLock)
         {
-            if (string.IsNullOrWhiteSpace(speakerId))
-                continue;
+            var current = CurrentSession.SpeakerVoiceAssignments is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
 
-            var normalizedSpeakerId = speakerId.Trim();
-            var normalizedVoice = string.IsNullOrWhiteSpace(candidateVoice) ? null : candidateVoice.Trim();
-
-            if (string.IsNullOrWhiteSpace(normalizedVoice))
+            var changed = false;
+            foreach (var (speakerId, candidateVoice) in updates)
             {
-                changed |= current.Remove(normalizedSpeakerId);
-                continue;
+                if (string.IsNullOrWhiteSpace(speakerId))
+                    continue;
+
+                var normalizedSpeakerId = speakerId.Trim();
+                var normalizedVoice = string.IsNullOrWhiteSpace(candidateVoice) ? null : candidateVoice.Trim();
+
+                if (string.IsNullOrWhiteSpace(normalizedVoice))
+                {
+                    changed |= current.Remove(normalizedSpeakerId);
+                    continue;
+                }
+
+                if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
+                    !string.Equals(existing, normalizedVoice, StringComparison.Ordinal))
+                {
+                    current[normalizedSpeakerId] = normalizedVoice;
+                    changed = true;
+                }
             }
 
-            if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
-                !string.Equals(existing, normalizedVoice, StringComparison.Ordinal))
+            if (!changed)
+                return;
+
+            CurrentSession = CurrentSession with
             {
-                current[normalizedSpeakerId] = normalizedVoice;
-                changed = true;
-            }
+                SpeakerVoiceAssignments = current.Count == 0 ? null : current,
+            };
         }
-
-        if (!changed)
-            return;
-
-        CurrentSession = CurrentSession with
-        {
-            SpeakerVoiceAssignments = current.Count == 0 ? null : current,
-        };
         SaveCurrentSession();
     }
 
@@ -639,27 +656,34 @@ public sealed partial class SessionWorkflowCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
         ArgumentException.ThrowIfNullOrWhiteSpace(clipPath);
 
-        var current = CurrentSession.SpeakerReferenceAudioPaths ?? new Dictionary<string, string>(StringComparer.Ordinal);
-        var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
+        lock (_sessionLock)
         {
-            [speakerId] = clipPath,
-        };
+            var current = CurrentSession.SpeakerReferenceAudioPaths ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
+            {
+                [speakerId] = clipPath,
+            };
 
-        CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
+            CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
+        }
         SaveCurrentSession();
     }
 
     public void RemoveSpeakerReferenceAudioPath(string speakerId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
-        if (CurrentSession.SpeakerReferenceAudioPaths is null)
-            return;
 
-        var updated = new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
-        if (!updated.Remove(speakerId))
-            return;
+        lock (_sessionLock)
+        {
+            if (CurrentSession.SpeakerReferenceAudioPaths is null)
+                return;
 
-        CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated.Count == 0 ? null : updated };
+            var updated = new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
+            if (!updated.Remove(speakerId))
+                return;
+
+            CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated.Count == 0 ? null : updated };
+        }
         SaveCurrentSession();
     }
 
@@ -669,40 +693,43 @@ public sealed partial class SessionWorkflowCoordinator
         if (updates.Count == 0)
             return;
 
-        var current = CurrentSession.SpeakerReferenceAudioPaths is null
-            ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
-
-        var changed = false;
-        foreach (var (speakerId, candidatePath) in updates)
+        lock (_sessionLock)
         {
-            if (string.IsNullOrWhiteSpace(speakerId))
-                continue;
+            var current = CurrentSession.SpeakerReferenceAudioPaths is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
 
-            var normalizedSpeakerId = speakerId.Trim();
-            var normalizedPath = string.IsNullOrWhiteSpace(candidatePath) ? null : candidatePath.Trim();
-
-            if (string.IsNullOrWhiteSpace(normalizedPath))
+            var changed = false;
+            foreach (var (speakerId, candidatePath) in updates)
             {
-                changed |= current.Remove(normalizedSpeakerId);
-                continue;
+                if (string.IsNullOrWhiteSpace(speakerId))
+                    continue;
+
+                var normalizedSpeakerId = speakerId.Trim();
+                var normalizedPath = string.IsNullOrWhiteSpace(candidatePath) ? null : candidatePath.Trim();
+
+                if (string.IsNullOrWhiteSpace(normalizedPath))
+                {
+                    changed |= current.Remove(normalizedSpeakerId);
+                    continue;
+                }
+
+                if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
+                    !string.Equals(existing, normalizedPath, StringComparison.Ordinal))
+                {
+                    current[normalizedSpeakerId] = normalizedPath;
+                    changed = true;
+                }
             }
 
-            if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
-                !string.Equals(existing, normalizedPath, StringComparison.Ordinal))
+            if (!changed)
+                return;
+
+            CurrentSession = CurrentSession with
             {
-                current[normalizedSpeakerId] = normalizedPath;
-                changed = true;
-            }
+                SpeakerReferenceAudioPaths = current.Count == 0 ? null : current,
+            };
         }
-
-        if (!changed)
-            return;
-
-        CurrentSession = CurrentSession with
-        {
-            SpeakerReferenceAudioPaths = current.Count == 0 ? null : current,
-        };
         SaveCurrentSession();
     }
 
@@ -1309,11 +1336,12 @@ public sealed partial class SessionWorkflowCoordinator
         // still be talking to the managed GPU process). If that wait times out, we still dispose
         // the inference hosts so child Python/Docker processes do not keep the OS process alive
         // after the main window closes.
-        if (_pendingTtsTasks.Count > 0)
+        var pendingTtsSnapshot = SnapshotPendingTtsTasks();
+        if (pendingTtsSnapshot.Length > 0)
         {
             try
             {
-                bool completed = Task.WhenAll(_pendingTtsTasks).Wait(TimeSpan.FromSeconds(2));
+                bool completed = Task.WhenAll(pendingTtsSnapshot).Wait(TimeSpan.FromSeconds(2));
                 if (!completed)
                 {
                     _log.Warning("TTS shutdown timed out — scheduling background disposal of TTS service.");

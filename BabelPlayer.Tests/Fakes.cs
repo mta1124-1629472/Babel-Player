@@ -186,10 +186,22 @@ public sealed class FakeTtsProvider : ITtsProvider
 
 public sealed class FakeAudioProcessingService : IAudioProcessingService
 {
+    public bool CombineAudioSegmentsAsyncCalled { get; private set; }
+    public bool ComposeTimelineDubAsyncCalled { get; private set; }
+    public bool MixDubOverAmbianceAsyncCalled { get; private set; }
+    /// <summary>Last <c>ambianceGainDb</c> value the fake received, so tests can assert
+    /// the coordinator forwarded <c>AppSettings.AmbianceMixDb</c> correctly.</summary>
+    public double? LastAmbianceGainDb { get; private set; }
+    public bool SkipTimelineOutputCreation { get; set; }
+    public bool SkipMixedOutputCreation { get; set; }
+    public bool ThrowOnMixDubOverAmbiance { get; set; }
+
     public async Task CombineAudioSegmentsAsync(IReadOnlyList<string> segmentAudioPaths, string outputAudioPath, CancellationToken cancellationToken)
     {
+        CombineAudioSegmentsAsyncCalled = true;
         var dir = Path.GetDirectoryName(outputAudioPath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
         await File.WriteAllBytesAsync(outputAudioPath, [0xAA, 0xBB], cancellationToken);
     }
 
@@ -198,8 +210,12 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         string outputAudioPath,
         CancellationToken cancellationToken)
     {
+        ComposeTimelineDubAsyncCalled = true;
         var dir = Path.GetDirectoryName(outputAudioPath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+        if (SkipTimelineOutputCreation)
+            return;
         await File.WriteAllBytesAsync(outputAudioPath, [0xAB, 0xCD], cancellationToken);
     }
 
@@ -210,8 +226,16 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         double ambianceGainDb,
         CancellationToken cancellationToken)
     {
+        MixDubOverAmbianceAsyncCalled = true;
+        LastAmbianceGainDb = ambianceGainDb;
+        if (ThrowOnMixDubOverAmbiance)
+            throw new InvalidOperationException("PLACEHOLDER(test-fake): simulated mix failure");
+
         var dir = Path.GetDirectoryName(outputAudioPath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+        if (SkipMixedOutputCreation)
+            return;
         await File.WriteAllBytesAsync(outputAudioPath, [0xDE, 0xAD], cancellationToken);
     }
 
@@ -235,23 +259,14 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         await File.WriteAllBytesAsync(outputPath, [0xEE, 0xFF], cancellationToken);
     }
 
-    /// <summary>
-        /// Attempts to produce a time-stretched version of an audio file at the requested duration.
-        /// </summary>
-        /// <param name="inputPath">Path to the source audio file to be time-stretched.</param>
-        /// <param name="outputPath">Path where the time-stretched audio should be written.</param>
-        /// <param name="targetDurationSeconds">Desired duration in seconds for the output audio.</param>
-        /// <param name="minRatio">Minimum allowed stretch ratio (output duration / input duration).</param>
-        /// <param name="maxRatio">Maximum allowed stretch ratio (output duration / input duration).</param>
-        /// <param name="cancellationToken">Token to observe while waiting for the operation to complete.</param>
-        /// <returns>`true` if the time-stretched audio was produced and written to <paramref name="outputPath"/>, `false` otherwise.</returns>
-    public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
-        double minRatio = DubTimingDefaults.StretchMinTempoRatio, double maxRatio = DubTimingDefaults.StretchMaxTempoRatio, CancellationToken cancellationToken = default)
-        => Task.FromResult(false); /// <summary>
-        /// Probe the duration of an audio file in seconds.
-        /// </summary>
-        /// <param name="filePath">Path to the audio file to probe.</param>
-        /// <returns>`double?` containing the duration in seconds, or `null` if the duration is unavailable. This fake implementation always returns `null`.</returns>
+    public Task<bool> TimeStretchAsync(
+        string inputPath,
+        string outputPath,
+        double targetDurationSeconds,
+        double minRatio = DubTimingDefaults.StretchMinTempoRatio,
+        double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
 
     public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
         => Task.FromResult<double?>(null);

@@ -60,7 +60,6 @@
     ],
     "search.useGlobalIgnoreFiles": true,
     "dotrush.roslyn.projectOrSolutionFiles": [
-        "d:\\Dev\\Babel-Player\\Babel-Player.sln",
-        "d:\\Dev\\Babel-Player\\BabelPlayer.csproj"
+        "${workspaceFolder}/Babel-Player.sln"
     ]
 }

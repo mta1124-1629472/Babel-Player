@@ -300,15 +300,17 @@ Sessions save automatically. Your session will appear in the recent sessions lis
    dotnet run --project BabelPlayer.csproj
    ```
 
-Run the full verification suite:
+Run the maintained verification suite:
 
 ```powershell
-dotnet test
+dotnet build Babel-Player.sln -c Release
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Category=Smoke"
 python scripts/check-architecture.py
 python -m py_compile inference/main.py
 ```
 
-The architecture linter (`scripts/check-architecture.py`) enforces structural rules: provider string constants, ViewModel pipeline call discipline, coordinator line limits, and `PLACEHOLDER` requirements on unimplemented stubs.
+The architecture linter (`scripts/check-architecture.py`) enforces structural rules and maintained-test hygiene: provider string constants, ViewModel pipeline call discipline, coordinator line limits, `PLACEHOLDER` requirements on unimplemented stubs, and the no-slow-tests policy described in [docs/testing-requirements.md](docs/testing-requirements.md).
 
 ---
 
@@ -420,6 +422,7 @@ Read these first:
 - [AGENTS.md](AGENTS.md) — operating rules and non-negotiables
 - [docs/PLAN.md](docs/PLAN.md) — milestone order and gates
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow and scope discipline
+- [docs/testing-requirements.md](docs/testing-requirements.md) — maintained suite rules, quarantine policy, and smoke-test requirements
 - [docs/architecture.md](docs/architecture.md) — structural map and ownership rules
 - [docs/typography.md](docs/typography.md) — typography tokens and semantic text classes (`Styles/Typography.axaml`)
 - [docs/privacy-policy.md](docs/privacy-policy.md) — privacy policy (published copy also on GitHub Pages)
@@ -429,7 +432,7 @@ Minimum verification before opening a PR:
 
 ```powershell
 dotnet build Babel-Player.sln
-dotnet test Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release
 python scripts/check-architecture.py
 ```
 

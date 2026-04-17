@@ -16,8 +16,8 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    # All integration/RequiresPython/RequiresFfmpeg tests use fake providers in CI —
-    # no real subprocess calls, no model downloads. Build + test should finish in ~5 min.
+    # Smoke tests are the only PR-gated integration layer. They must stay fast,
+    # deterministic, and independent of Python/ffmpeg/container availability.
     timeout-minutes: 15
 
     steps:
@@ -42,13 +42,14 @@ jobs:
 
       - name: Run integration tests
         run: >
-          timeout 90 dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
+          dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
           --no-build
           --configuration Release
-          --filter "Category=Integration|Category=RequiresPython|Category=RequiresFfmpeg"
+          --filter "Category=Smoke"
+          --blame-hang
+          --blame-hang-timeout 2m
           --logger "trx;LogFileName=integration-results.trx"
           --results-directory TestResults
-          || true
 
       - name: Upload test results
         if: always()

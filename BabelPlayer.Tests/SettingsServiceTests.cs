@@ -106,7 +106,8 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public void SaveAndLoad_DubTimingMode_RoundTrips()
+    [Trait("Category", "Smoke")]
+    public void SaveAndLoad_DubTimingMode_PauseIsCoercedToOff()
     {
         var service = new SettingsService(_settingsPath, _log);
         service.Save(new AppSettings
@@ -116,7 +117,22 @@ public sealed class SettingsServiceTests : IDisposable
 
         var loaded = service.LoadOrDefault();
 
-        Assert.Equal(SegmentTimingMode.Pause, loaded.DubTimingMode);
+        Assert.Equal(SegmentTimingMode.Off, loaded.DubTimingMode);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
+    public void SaveAndLoad_AmbianceMixDb_RoundTrips()
+    {
+        var service = new SettingsService(_settingsPath, _log);
+        service.Save(new AppSettings
+        {
+            AmbianceMixDb = -9.5
+        });
+
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(-9.5, loaded.AmbianceMixDb, precision: 3);
     }
 
     [Fact]
