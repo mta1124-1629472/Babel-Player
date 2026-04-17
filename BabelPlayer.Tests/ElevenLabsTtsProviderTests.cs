@@ -179,7 +179,7 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
     [Fact]
     public async Task GenerateTtsAsync_GeneratesCombinedAudio()
     {
-        var mockAudioService = new MockAudioProcessingService();
+        var mockAudioService = new FakeAudioProcessingService();
         using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient, audioProcessingService: mockAudioService);
         var translationPath = WriteTranslationJson(twoSegments: true);
         var outputPath = Path.Combine(_testDir, "out.mp3");
@@ -342,6 +342,7 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
         }
     }
 
+<<<<<<< Updated upstream
     /// <summary>
     /// Manual mock implementation of IAudioProcessingService for testing.
     /// Writes dummy audio data to the output path when CombineAudioSegmentsAsync is called.
@@ -425,4 +426,6 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
         public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
             => Task.FromResult<double?>(null);
     }
+=======
+>>>>>>> Stashed changes
 }

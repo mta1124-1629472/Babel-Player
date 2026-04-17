@@ -27,8 +27,17 @@ public sealed class VideoExportPlanner
             issues.Add("Output path is required.");
 
         var preferredDubPath = ResolvePreferredDubPath(session, options);
-        if (options.IncludeTtsAudio && (string.IsNullOrWhiteSpace(preferredDubPath) || !File.Exists(preferredDubPath)))
-            issues.Add("No dubbed audio is available for export.");
+        if (options.IncludeTtsAudio)
+        {
+            if (IsMixedDubRequiredButMissing(session, options))
+            {
+                issues.Add("Mixed dubbed audio is missing. Render dub audio again before export.");
+            }
+            else if (string.IsNullOrWhiteSpace(preferredDubPath) || !File.Exists(preferredDubPath))
+            {
+                issues.Add("No dubbed audio is available for export.");
+            }
+        }
 
         if ((options.IncludeSoftCaptions || options.BurnInCaptions) && segments.Count == 0)
             issues.Add("No segment data is available for captions.");
@@ -164,6 +173,17 @@ public sealed class VideoExportPlanner
         if (!string.IsNullOrWhiteSpace(session.AmbianceAudioPath) && File.Exists(session.AmbianceAudioPath))
             return null;
         return session.TtsPath;
+    }
+
+    private static bool IsMixedDubRequiredButMissing(WorkflowSessionSnapshot session, ExportVideoOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.DubAudioPathOverride) && File.Exists(options.DubAudioPathOverride))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(session.AmbianceAudioPath) || !File.Exists(session.AmbianceAudioPath))
+            return false;
+
+        return string.IsNullOrWhiteSpace(session.MixedDubAudioPath) || !File.Exists(session.MixedDubAudioPath);
     }
 
     public string BuildSubtitleText(IReadOnlyList<WorkflowSegmentState> segments) =>

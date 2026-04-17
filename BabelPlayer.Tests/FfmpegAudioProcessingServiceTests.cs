@@ -242,6 +242,40 @@ public sealed class FfmpegAudioProcessingServiceTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task TimeStretchAsync_WhenSpeedUpWithinNewCap_ProducesOutput()
+    {
+        var fakeToolsDir = Path.Combine(_dir, "fake-stretch-tools");
+        Directory.CreateDirectory(fakeToolsDir);
+        CreateFakeStretchTools(fakeToolsDir, sourceDurationSeconds: 1.5);
+
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+        var testPath = string.IsNullOrWhiteSpace(originalPath)
+            ? fakeToolsDir
+            : $"{fakeToolsDir}{Path.PathSeparator}{originalPath}";
+        Environment.SetEnvironmentVariable("PATH", testPath);
+
+        try
+        {
+            var inputPath = Path.Combine(_dir, "stretch-input.mp3");
+            var outputPath = Path.Combine(_dir, "stretch-output.mp3");
+            await File.WriteAllTextAsync(inputPath, "placeholder");
+
+            var result = await _service.TimeStretchAsync(
+                inputPath,
+                outputPath,
+                targetDurationSeconds: 1.0,
+                cancellationToken: CancellationToken.None);
+
+            Assert.True(result);
+            Assert.True(File.Exists(outputPath));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+        }
+    }
+
     private static void CreateFakeFfprobe(string directory)
     {
         if (OperatingSystem.IsWindows())
@@ -275,6 +309,87 @@ public sealed class FfmpegAudioProcessingServiceTests : IDisposable
             "done\n" +
             "echo \"12.34\"\n");
 
+        File.SetUnixFileMode(
+            unixScriptPath,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+    }
+
+    private static void CreateFakeStretchTools(string directory, double sourceDurationSeconds)
+    {
+        CreateFakeFfprobeWithDuration(directory, sourceDurationSeconds);
+        CreateFakeFfmpeg(directory);
+    }
+
+    private static void CreateFakeFfprobeWithDuration(string directory, double durationSeconds)
+    {
+        var durationText = durationSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        if (OperatingSystem.IsWindows())
+        {
+            File.WriteAllText(
+                Path.Combine(directory, "ffprobe.cmd"),
+                "@echo off\r\n" +
+                "if \"%~1\"==\"-version\" (\r\n" +
+                "  echo ffprobe version fake\r\n" +
+                "  exit /b 0\r\n" +
+                ")\r\n" +
+                $"echo {durationText}\r\n" +
+                "exit /b 0\r\n");
+            return;
+        }
+
+        var unixScriptPath = Path.Combine(directory, "ffprobe");
+        File.WriteAllText(
+            unixScriptPath,
+            "#!/usr/bin/env sh\n" +
+            "if [ \"$1\" = \"-version\" ]; then\n" +
+            "  echo \"ffprobe version fake\"\n" +
+            "  exit 0\n" +
+            "fi\n" +
+            $"echo \"{durationText}\"\n");
+        File.SetUnixFileMode(
+            unixScriptPath,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+    }
+
+    private static void CreateFakeFfmpeg(string directory)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            File.WriteAllText(
+                Path.Combine(directory, "ffmpeg.cmd"),
+                "@echo off\r\n" +
+                "if \"%~1\"==\"-version\" (\r\n" +
+                "  echo ffmpeg version fake\r\n" +
+                "  exit /b 0\r\n" +
+                ")\r\n" +
+                "set output=%~1\r\n" +
+                ":loop\r\n" +
+                "if \"%~2\"==\"\" goto write\r\n" +
+                "set output=%~2\r\n" +
+                "shift\r\n" +
+                "goto loop\r\n" +
+                ":write\r\n" +
+                "echo fake-audio>\"%output%\"\r\n" +
+                "exit /b 0\r\n");
+            return;
+        }
+
+        var unixScriptPath = Path.Combine(directory, "ffmpeg");
+        File.WriteAllText(
+            unixScriptPath,
+            "#!/usr/bin/env sh\n" +
+            "if [ \"$1\" = \"-version\" ]; then\n" +
+            "  echo \"ffmpeg version fake\"\n" +
+            "  exit 0\n" +
+            "fi\n" +
+            "out=\"\"\n" +
+            "for arg in \"$@\"; do out=\"$arg\"; done\n" +
+            "printf 'fake-audio' > \"$out\"\n");
         File.SetUnixFileMode(
             unixScriptPath,
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |

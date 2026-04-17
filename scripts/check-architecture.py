@@ -65,6 +65,14 @@ if test_frameworks:
 else:
     fail("Test project must have a test framework package reference")
 
+# ── Check 3b: Quarantined tests are excluded from compile ────────────────────
+
+test_csproj_content = test_csproj.read_text(encoding="utf-8", errors="replace")
+if 'Compile Remove="Quarantined\\**\\*.cs"' in test_csproj_content:
+    ok("Quarantined test files are excluded from compile")
+else:
+    fail('BabelPlayer.Tests.csproj must exclude Quarantined\\**\\*.cs from compile')
+
 # ── Check 4: Main project is Avalonia app ───────────────────────────────────
 
 main_csproj = Path("BabelPlayer.csproj")
@@ -213,6 +221,79 @@ if coordinator.exists():
         )
     else:
         ok(f"SessionWorkflowCoordinator.cs is {line_count} lines (within {COORDINATOR_WARN_LINES}-line threshold)")
+
+# ── Check 11: Maintained tests obey hygiene rules ────────────────────────────
+
+maintained_tests = [
+    f for f in Path("BabelPlayer.Tests").rglob("*.cs")
+    if not any(part in ("bin", "obj", "Quarantined") for part in f.parts)
+]
+
+thread_sleep_hits: list[str] = []
+task_delay_hits: list[str] = []
+banned_trait_hits: list[str] = []
+
+delay_ms_pattern = re.compile(r"Task\.Delay\(\s*(\d+)\s*(?:,|\))")
+delay_timespan_ms_pattern = re.compile(r"Task\.Delay\(\s*TimeSpan\.FromMilliseconds\(\s*(\d+)\s*\)")
+delay_timespan_sec_pattern = re.compile(r"Task\.Delay\(\s*TimeSpan\.FromSeconds\(\s*([0-9]*\.?[0-9]+)\s*\)")
+banned_traits = (
+    'Trait("Category", "RequiresPython")',
+    'Trait("Category", "RequiresFfmpeg")',
+    'Trait("Category", "RequiresExternalTranslation")',
+    'Trait("Category", "ManualBenchmark")',
+    'Trait("Category", "Performance")',
+    'Trait("Category", "Manual")',
+)
+
+for cs in maintained_tests:
+    lines = cs.read_text(encoding="utf-8", errors="replace").splitlines()
+    for lineno, line in enumerate(lines, start=1):
+        stripped = line.lstrip()
+        if stripped.startswith("//"):
+            continue
+
+        if "Thread.Sleep(" in line:
+            thread_sleep_hits.append(f"{cs}:{lineno}: {line.strip()}")
+
+        ms_match = delay_ms_pattern.search(line)
+        if ms_match and int(ms_match.group(1)) > 100:
+            task_delay_hits.append(f"{cs}:{lineno}: {line.strip()}")
+
+        timespan_ms_match = delay_timespan_ms_pattern.search(line)
+        if timespan_ms_match and int(timespan_ms_match.group(1)) > 100:
+            task_delay_hits.append(f"{cs}:{lineno}: {line.strip()}")
+
+        timespan_sec_match = delay_timespan_sec_pattern.search(line)
+        if timespan_sec_match and float(timespan_sec_match.group(1)) > 0.1:
+            task_delay_hits.append(f"{cs}:{lineno}: {line.strip()}")
+
+        for banned_trait in banned_traits:
+            if banned_trait in line:
+                banned_trait_hits.append(f"{cs}:{lineno}: {line.strip()}")
+
+if thread_sleep_hits:
+    fail(
+        "Maintained tests must not use Thread.Sleep:\n"
+        + "\n".join(f"    {hit}" for hit in thread_sleep_hits)
+    )
+else:
+    ok("Maintained tests do not use Thread.Sleep")
+
+if task_delay_hits:
+    fail(
+        "Maintained tests must not use Task.Delay above 100 ms:\n"
+        + "\n".join(f"    {hit}" for hit in task_delay_hits)
+    )
+else:
+    ok("Maintained tests do not use long Task.Delay calls")
+
+if banned_trait_hits:
+    fail(
+        "Maintained tests include banned runtime/manual traits:\n"
+        + "\n".join(f"    {hit}" for hit in banned_trait_hits)
+    )
+else:
+    ok("Maintained tests do not use banned runtime/manual traits")
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 

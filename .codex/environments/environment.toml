@@ -20,3 +20,8 @@ dotnet run --project BabelPlayer.csproj --no-build
 name = "Full Test"
 icon = "test"
 command = "dotnet test Babel-Player.sln"
+
+[[actions]]
+name = "Dev"
+icon = "debug"
+command = "dotnet run -c Dev --project BabelPlayer.csproj"

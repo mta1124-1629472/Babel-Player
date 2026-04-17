@@ -6,7 +6,8 @@
 dotnet clean Babel-Player.sln
 dotnet build Babel-Player.sln             # Full build (includes restore)
 dotnet build Babel-Player.sln --no-restore # Fast build (skip restore)
-dotnet test Babel-Player.sln             # Run all tests
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release # Maintained test suite
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Category=Smoke" # PR smoke suite
 dotnet run --project BabelPlayer.csproj   # Launch the app
 python3 scripts/check-architecture.py    # Architecture linter
 ```
@@ -41,6 +42,7 @@ Before making non-trivial changes, read:
 - `AGENTS.md` — operating rules, scope discipline, non-negotiables
 - `docs/PLAN.md` — milestone order and gates (the plan wins if anything conflicts)
 - `docs/architecture.md` — structural boundaries and state ownership
+- `docs/testing-requirements.md` before writing or modifying tests
 
 ## Current Milestone
 
@@ -55,7 +57,7 @@ Babel Player is a cross-platform desktop dubbing/localization app built with:
 - **libmpv** (native C library, P/Invoke) for media playback
 - **CommunityToolkit.MVVM 8.2.1** for observable properties
 - **Python subprocesses** for AI inference (Faster-Whisper, CTranslate2/NLLB, edge-tts)
-- **xUnit 2.9.3** + coverlet for testing
+- **xUnit 2.9.3** + coverlet for the maintained fast suite and smoke tests
 
 Core workflow chain: `source media → ingest → transcribe → translate → TTS → preview → persist`
 
@@ -67,7 +69,8 @@ Babel-Player/
 ├── Services/                        # Coordination, infrastructure, AI/media boundaries
 ├── ViewModels/                      # MVVM coordinators
 ├── Views/                           # Avalonia XAML UI
-├── BabelPlayer.Tests/               # xUnit integration tests
+├── BabelPlayer.Tests/               # xUnit maintained fast suite + smoke tests
+│   ├── Quarantined/                 # non-compiled legacy tests
 ├── docs/
 │   ├── architecture.md              # Structural principles
 │   ├── PLAN.md                      # Links to current milestone plans
@@ -144,14 +147,13 @@ Babel-Player/
 ## Testing
 
 ```bash
-dotnet test Babel-Player.sln             # All tests
-dotnet test Babel-Player.sln --filter "ClassName=SessionWorkflowTests"
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Category=Smoke"
 ```
 
-- 22 integration tests in `BabelPlayer.Tests/SessionWorkflowTests.cs`
-- Shared fixture via `SessionWorkflowTemplateFixture` (temp dirs, reusable templates)
-- xUnit collection `"Media transport"` runs non-parallel (hardware resource)
-- Test assets: `test-assets/video/sample.mp4`
+- The compiled suite is intentionally limited to fast, deterministic tests.
+- Legacy slow/runtime-heavy tests live under `BabelPlayer.Tests/Quarantined/` and are excluded from compile.
+- Read `docs/testing-requirements.md` before adding or modifying tests.
 
 ## Architecture Linter
 

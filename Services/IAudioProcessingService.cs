@@ -88,7 +88,7 @@ public interface IAudioProcessingService
     /// <param name="outputPath">Output audio file path (overwritten if it exists).</param>
     /// <param name="targetDurationSeconds">Desired output duration in seconds.</param>
     /// <param name="minRatio">Minimum acceptable tempo ratio (default 0.75 — 25% slower).</param>
-    /// <param name="maxRatio">Maximum acceptable tempo ratio (default 1.35 — 35% faster).</param>
+    /// <param name="maxRatio">Maximum acceptable tempo ratio (default 1.75 — 75% faster).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <summary>
         /// Adjusts the input audio's playback speed to match the specified target duration without changing pitch and writes the result to the output path when the required tempo ratio falls within the allowed range.

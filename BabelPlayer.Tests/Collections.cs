@@ -7,11 +7,6 @@ public sealed class MediaTransportCollection
 {
 }
 
-[CollectionDefinition("Session workflow shared")]
-public sealed class SessionWorkflowSharedCollection : ICollectionFixture<SessionWorkflowTemplateFixture>
-{
-}
-
 [CollectionDefinition("Environment", DisableParallelization = true)]
 public sealed class EnvironmentCollection
 {

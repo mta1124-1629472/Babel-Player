@@ -16,6 +16,7 @@ Read:
 - `docs/PLAN.md` for milestone order and gates
 - `docs/architecture.md` for the current structural map and major boundaries
 - `AGENTS.md` for repo behavior rules
+- `docs/testing-requirements.md` before writing or modifying tests
 - any milestone-specific docs relevant to the area you are touching
 
 If your intended work does not clearly support the current milestone, it is probably out of scope.
@@ -64,7 +65,8 @@ Before opening or merging a PR, contributors should verify changes at the approp
 Minimum expectation:
 
 - `dotnet build`
-- `dotnet test`
+- `dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release`
+- `dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Category=Smoke"` when the change affects PR-gated smoke behavior
 
 If the change affects behavior that can be manually exercised, also run the relevant smoke path for the current milestone and note what was verified.
 
@@ -76,7 +78,7 @@ It is done when the milestone gate it touches is actually demonstrated.
 When a contributor or agent reports build/test instability, run `/troubleshoot` as a standard diagnostic script:
 
 1. `dotnet build`
-2. `dotnet test`
+2. `dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release`
 3. `python scripts/check-architecture.py`
 4. `python -m py_compile inference/main.py`
 
@@ -215,6 +217,7 @@ A good PR is:
 - honest about what it does and does not complete
 - accompanied by build/test results
 - accompanied by smoke results when relevant
+- confirms that any new or modified tests follow `docs/testing-requirements.md`
 
 A bad PR:
 

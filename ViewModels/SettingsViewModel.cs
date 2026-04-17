@@ -701,7 +701,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         TranscriptionCpuThreads = settings.TranscriptionCpuThreads;
         TranscriptionNumWorkers = settings.TranscriptionNumWorkers;
 
-        settings.DubTimingMode       = DubTimingMode;
+        settings.DubTimingMode       = DubTimingMode == SegmentTimingMode.Pause
+            ? SegmentTimingMode.Off
+            : DubTimingMode;
 
         settings.VideoHwdec          = VideoHwdec;
         settings.VideoGpuApi         = VideoGpuApi;

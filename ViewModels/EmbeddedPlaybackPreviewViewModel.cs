@@ -654,7 +654,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             }
         }
 
-        if (IsDubModeOn && !IsSourcePaused)
+        if ((previewTimingOverride.HasValue || IsDubModeOn) && !IsSourcePaused)
             ApplyDubForSegment(segment, previewTimingOverride: previewTimingOverride);
     }
 

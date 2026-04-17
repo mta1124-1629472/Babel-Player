@@ -186,10 +186,19 @@ public sealed class FakeTtsProvider : ITtsProvider
 
 public sealed class FakeAudioProcessingService : IAudioProcessingService
 {
+    public bool CombineAudioSegmentsAsyncCalled { get; private set; }
+    public bool ComposeTimelineDubAsyncCalled { get; private set; }
+    public bool MixDubOverAmbianceAsyncCalled { get; private set; }
+    public bool SkipTimelineOutputCreation { get; set; }
+    public bool SkipMixedOutputCreation { get; set; }
+    public bool ThrowOnMixDubOverAmbiance { get; set; }
+
     public async Task CombineAudioSegmentsAsync(IReadOnlyList<string> segmentAudioPaths, string outputAudioPath, CancellationToken cancellationToken)
     {
+        CombineAudioSegmentsAsyncCalled = true;
         var dir = Path.GetDirectoryName(outputAudioPath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
         await File.WriteAllBytesAsync(outputAudioPath, [0xAA, 0xBB], cancellationToken);
     }
 
@@ -198,8 +207,12 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         string outputAudioPath,
         CancellationToken cancellationToken)
     {
+        ComposeTimelineDubAsyncCalled = true;
         var dir = Path.GetDirectoryName(outputAudioPath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+        if (SkipTimelineOutputCreation)
+            return;
         await File.WriteAllBytesAsync(outputAudioPath, [0xAB, 0xCD], cancellationToken);
     }
 
@@ -210,8 +223,15 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         double ambianceGainDb,
         CancellationToken cancellationToken)
     {
+        MixDubOverAmbianceAsyncCalled = true;
+        if (ThrowOnMixDubOverAmbiance)
+            throw new InvalidOperationException("PLACEHOLDER(test-fake): simulated mix failure");
+
         var dir = Path.GetDirectoryName(outputAudioPath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+        if (SkipMixedOutputCreation)
+            return;
         await File.WriteAllBytesAsync(outputAudioPath, [0xDE, 0xAD], cancellationToken);
     }
 
@@ -235,6 +255,7 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         await File.WriteAllBytesAsync(outputPath, [0xEE, 0xFF], cancellationToken);
     }
 
+<<<<<<< Updated upstream
     /// <summary>
         /// Attempts to produce a time-stretched version of an audio file at the requested duration.
         /// </summary>
@@ -252,6 +273,16 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         /// </summary>
         /// <param name="filePath">Path to the audio file to probe.</param>
         /// <returns>`double?` containing the duration in seconds, or `null` if the duration is unavailable. This fake implementation always returns `null`.</returns>
+=======
+    public Task<bool> TimeStretchAsync(
+        string inputPath,
+        string outputPath,
+        double targetDurationSeconds,
+        double minRatio = DubTimingDefaults.StretchMinTempoRatio,
+        double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+>>>>>>> Stashed changes
 
     public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
         => Task.FromResult<double?>(null);

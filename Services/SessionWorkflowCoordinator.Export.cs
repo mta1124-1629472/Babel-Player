@@ -134,6 +134,7 @@ public sealed partial class SessionWorkflowCoordinator
     {
         var outputDir = Path.GetDirectoryName(dubPath) ?? AppContext.BaseDirectory;
         var fileName = Path.GetFileNameWithoutExtension(dubPath);
-        return Path.Combine(outputDir, $"{fileName}_mixed.mp3");
+        var extension = Path.GetExtension(dubPath);
+        return Path.Combine(outputDir, $"{fileName}_mixed{extension}");
     }
 }

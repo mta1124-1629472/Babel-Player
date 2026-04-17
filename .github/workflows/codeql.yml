@@ -44,11 +44,17 @@ jobs:
         clean: true
       env:
         GIT_LFS_SKIP_SMUDGE: '1'
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: "10.0.x"
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
+    - name: Restore
+      run: dotnet restore Babel-Player.sln
+    - name: Build
+      run: dotnet build Babel-Player.sln --no-restore --configuration Release
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4

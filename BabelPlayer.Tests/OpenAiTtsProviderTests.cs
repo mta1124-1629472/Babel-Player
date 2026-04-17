@@ -134,7 +134,7 @@ public sealed class OpenAiTtsProviderTests : IDisposable
     [Fact]
     public async Task GenerateTtsAsync_GeneratesCombinedAudioFromSegments()
     {
-        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient, new StubAudioProcessingService());
+        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient, new FakeAudioProcessingService());
         var translationPath = WriteTranslationJson("Hello world");
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
@@ -279,6 +279,7 @@ public sealed class OpenAiTtsProviderTests : IDisposable
             base.Dispose(disposing);
         }
     }
+<<<<<<< Updated upstream
 
     private sealed class StubAudioProcessingService : IAudioProcessingService
     {
@@ -318,4 +319,6 @@ public sealed class OpenAiTtsProviderTests : IDisposable
         public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
             => Task.FromResult<double?>(null);
     }
+=======
+>>>>>>> Stashed changes
 }

@@ -58,5 +58,8 @@
     "csharp-dev-tools.roslyn.projectOrSolutionFiles": [
         "${workspaceFolder}/Babel-Player.sln"
     ],
-    "search.useGlobalIgnoreFiles": true
+    "search.useGlobalIgnoreFiles": true,
+    "dotrush.roslyn.projectOrSolutionFiles": [
+        "d:\\Dev\\Babel-Player\\Babel-Player.sln"
+    ]
 }

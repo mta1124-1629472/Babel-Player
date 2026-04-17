@@ -287,22 +287,6 @@
                             <TextBlock Text="{Binding Playback.VocalSeparationAvailabilityHint}"
                                        IsVisible="{Binding Playback.HasVocalSeparationAvailabilityHint}"
                                        FontSize="10" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="Segment timing mode" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                <ComboBox ItemsSource="{Binding Playback.DubTimingModeOptions}"
-                                          SelectedItem="{Binding Playback.DubTimingMode, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch"
-                                          Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                          BorderBrush="{DynamicResource BorderBrush}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding Converter={StaticResource SegmentTimingModeDisplayConverter}}"/>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <TextBlock Text="Off: play TTS as-is. Stretch: time-scale TTS to fit. Pause: stop video while TTS plays."
-                                           FontSize="10" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" Opacity="0.85" />
-                            </StackPanel>
                         </StackPanel>
 
                         <!-- TRANSCRIPTION -->
@@ -1062,55 +1046,83 @@
                     </StackPanel>
                     </Panel>
 
-                    <!-- Segment inspection panel (row 2) — shown when a segment with TTS audio is selected -->
+                    <!-- Segment inspection / timing panel (row 2) -->
                     <Border Grid.Row="2"
-                            IsVisible="{Binding Inspection.IsVisible}"
+                            IsVisible="{Binding Playback.Preview.HasSegments}"
                             BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
                             Padding="14,10">
                         <StackPanel Spacing="6">
 
-                            <TextBlock Text="Segment timing" Classes="text-label"
+                            <TextBlock Text="Render timing" Classes="text-label"
                                        Foreground="{DynamicResource StatusTextBrush}"/>
 
-                            <TextBlock Text="{Binding Inspection.TimingLabel}"
+                            <ComboBox ItemsSource="{Binding Playback.DubTimingModeOptions}"
+                                      SelectedItem="{Binding Playback.DubTimingMode, Mode=TwoWay}"
+                                      HorizontalAlignment="Stretch"
+                                      Background="{DynamicResource ControlBackgroundBrush}"
+                                      Foreground="{DynamicResource PrimaryTextBrush}"
+                                      BorderBrush="{DynamicResource BorderBrush}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Converter={StaticResource SegmentTimingModeDisplayConverter}}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+
+                            <TextBlock Text="Applies to generated dub audio and export. Pause is preview-only."
                                        Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}"/>
 
-                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
-                                <StackPanel.Styles>
-                                    <Style Selector="Button.segmentTimingButton">
-                                        <Setter Property="Padding" Value="8,3"/>
-                                        <Setter Property="FontSize" Value="11"/>
-                                        <Setter Property="CornerRadius" Value="4"/>
-                                        <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource StatusTextBrush}"/>
-                                    </Style>
-                                </StackPanel.Styles>
-                                <!-- Inherit = clear override -->
-                                <Button Classes="segmentTimingButton"
-                                        Content="Inherit"
-                                        Command="{Binding Inspection.SetTimingOverrideCommand}"
-                                        CommandParameter="{x:Null}"
-                                        ToolTip.Tip="Use session default timing mode"/>
-                                <Button Classes="segmentTimingButton"
-                                        Content="Off"
-                                        Command="{Binding Inspection.SetTimingOverrideCommand}"
-                                        CommandParameter="{x:Static models:SegmentTimingMode.Off}"
-                                        ToolTip.Tip="Play TTS as-is for this segment (no stretch/pause alignment)"/>
-                                <Button Classes="segmentTimingButton"
-                                        Content="Stretch"
-                                        Command="{Binding Inspection.SetTimingOverrideCommand}"
-                                        CommandParameter="{x:Static models:SegmentTimingMode.Stretch}"
-                                        ToolTip.Tip="Time-stretch TTS to fit the segment window"/>
-                                <Button Classes="segmentTimingButton"
-                                        Content="Pause"
-                                        Command="{Binding Inspection.SetTimingOverrideCommand}"
-                                        CommandParameter="{x:Static models:SegmentTimingMode.Pause}"
-                                        ToolTip.Tip="Pause source video while TTS plays, then resume"/>
-                            </StackPanel>
+                            <StackPanel IsVisible="{Binding Inspection.IsVisible}"
+                                        Spacing="6">
+                                <TextBlock Text="Selected segment" Classes="text-label"
+                                           Foreground="{DynamicResource StatusTextBrush}"/>
 
-                            <TextBlock Text="{Binding Inspection.TimingOverrideLabel}"
-                                       FontSize="10" Foreground="{DynamicResource StatusTextBrush}"
-                                       Opacity="0.7"/>
+                                <TextBlock Text="{Binding Inspection.TimingLabel}"
+                                           Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}"/>
+
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                                    <StackPanel.Styles>
+                                        <Style Selector="Button.segmentTimingButton">
+                                            <Setter Property="Padding" Value="8,3"/>
+                                            <Setter Property="FontSize" Value="11"/>
+                                            <Setter Property="CornerRadius" Value="4"/>
+                                            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource StatusTextBrush}"/>
+                                        </Style>
+                                    </StackPanel.Styles>
+                                    <Button Classes="segmentTimingButton"
+                                            Content="Inherit"
+                                            Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                            CommandParameter="{x:Null}"
+                                            ToolTip.Tip="Use the session render timing for this segment"/>
+                                    <Button Classes="segmentTimingButton"
+                                            Content="Off"
+                                            Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                            CommandParameter="{x:Static models:SegmentTimingMode.Off}"
+                                            ToolTip.Tip="Play TTS as-is for this segment in rendered dub/export"/>
+                                    <Button Classes="segmentTimingButton"
+                                            Content="Stretch"
+                                            Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                            CommandParameter="{x:Static models:SegmentTimingMode.Stretch}"
+                                            ToolTip.Tip="Time-stretch TTS to fit this segment window in rendered dub/export"/>
+                                </StackPanel>
+
+                                <TextBlock Text="{Binding Inspection.TimingOverrideLabel}"
+                                           FontSize="10" Foreground="{DynamicResource StatusTextBrush}"
+                                           Opacity="0.7"/>
+
+                                <TextBlock Text="Preview pause" Classes="text-label"
+                                           Foreground="{DynamicResource StatusTextBrush}"/>
+
+                                <TextBlock Text="Pauses source playback while previewing the selected segment, then resumes at the segment end."
+                                           Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}"/>
+
+                                <Button Classes="segmentTimingButton"
+                                        Content="Preview With Pause"
+                                        Command="{Binding Inspection.PreviewPauseCommand}"
+                                        IsEnabled="{Binding Inspection.HasTtsAudio}"
+                                        ToolTip.Tip="Preview this segment using pause behavior without changing rendered dub timing"/>
+                            </StackPanel>
 
                         </StackPanel>
                     </Border>
