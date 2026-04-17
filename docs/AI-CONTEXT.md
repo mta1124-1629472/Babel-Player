@@ -149,7 +149,7 @@ dotnet build Babel-Player.sln
 dotnet run --project BabelPlayer.csproj
 
 # Test
-dotnet test Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release
 
 # Architecture linter (run before every PR)
 python scripts/check-architecture.py
