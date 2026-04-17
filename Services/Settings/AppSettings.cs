@@ -253,6 +253,12 @@ public sealed class AppSettings
     /// </summary>
     public SegmentTimingMode DubTimingMode { get; set; } = SegmentTimingMode.Off;
 
+    /// <summary>
+    /// Ambiance attenuation in dB applied when a separated ambiance stem is mixed back under the dub.
+    /// 0 dB keeps the ambiance at full level; more negative values make it quieter.
+    /// </summary>
+    public double AmbianceMixDb { get; set; } = -15.0;
+
     /// <summary>UI theme: "Light", "Dark", or "System".</summary>
     public string Theme { get; set; } = "System";
 
