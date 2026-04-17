@@ -42,12 +42,13 @@ public sealed class PerSessionSnapshotStore
     {
         // Per-session save gate — overlapping Save()/SaveAsync() for the same session can
         // clobber each other or surface transient "file in use" errors. Different sessions
-        // still save in parallel.
+        // still save in parallel. Serialize inside the gate so gate-acquisition order
+        // matches file-write order (prevents a stale snapshot from overwriting a newer one).
         var gate = GetSaveGate(snapshot.SessionId);
-        var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
         gate.Wait();
         try
         {
+            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
             var dir = SessionDir(snapshot.SessionId);
             Directory.CreateDirectory(dir);
             var path = SnapshotPath(snapshot.SessionId);
@@ -70,10 +71,10 @@ public sealed class PerSessionSnapshotStore
     public async Task SaveAsync(WorkflowSessionSnapshot snapshot)
     {
         var gate = GetSaveGate(snapshot.SessionId);
-        var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
         await gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
             var dir = SessionDir(snapshot.SessionId);
             Directory.CreateDirectory(dir);
             var path = SnapshotPath(snapshot.SessionId);

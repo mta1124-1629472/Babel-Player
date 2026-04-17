@@ -62,13 +62,14 @@ public sealed class SessionSnapshotStore
 
     public void Save(WorkflowSessionSnapshot snapshot)
     {
-        // Serialize outside the gate — JSON serialization is CPU-bound and does not
-        // need to block other pending saves. The gate guards the file write itself so
-        // Save() and SaveAsync() cannot clobber each other at StateFilePath.
-        var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
+        // Serialize inside the gate so the order in which callers acquire the gate
+        // matches the order their snapshot is written. Serializing outside the gate
+        // would allow Thread A to produce snapshot-V1, Thread B to produce V2, and
+        // then B to acquire first and write V2 before A overwrites with stale V1.
         _saveGate.Wait();
         try
         {
+            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
             File.WriteAllText(StateFilePath, json);
         }
         catch (Exception ex)
@@ -88,10 +89,10 @@ public sealed class SessionSnapshotStore
     /// </summary>
     public async Task SaveAsync(WorkflowSessionSnapshot snapshot)
     {
-        var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
         await _saveGate.WaitAsync().ConfigureAwait(false);
         try
         {
+            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
             await File.WriteAllTextAsync(StateFilePath, json).ConfigureAwait(false);
         }
         catch (Exception ex)
