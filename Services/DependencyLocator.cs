@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -20,6 +21,28 @@ namespace Babel.Player.Services;
 public static class DependencyLocator
 {
     private const int ProbeTimeoutMs = 500;
+
+    /// <summary>
+    /// Cache of <b>successful</b> probe results keyed by <c>"fileName arguments"</c>.
+    /// Subprocess spawns are expensive (particularly for Python on Windows) and the set
+    /// of working candidates is effectively constant for a session, so caching positives
+    /// avoids re-spawning the same process on every <see cref="FindPython"/>,
+    /// <see cref="FindFfmpeg"/>, or <see cref="FindFfprobe"/> call.
+    /// <para>
+    /// Failures are intentionally <i>not</i> cached: callers may probe the same candidate
+    /// before and after a runtime adds directories to <c>PATH</c> (e.g. the managed GPU
+    /// host prepends <c>tools/&lt;rid&gt;/</c>), and caching a negative would hide the
+    /// now-available executable. Re-probing a missing file is cheap — <c>Process.Start</c>
+    /// throws immediately without waiting for the timeout.
+    /// </para>
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, bool> ProbeResultCache = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Clears the probe result cache. Intended for tests or rare runtime scenarios where
+    /// the on-disk set of executables may have changed (e.g. after an installer run).
+    /// </summary>
+    public static void ClearProbeCache() => ProbeResultCache.Clear();
 
     /// <summary>Returns a working Python executable path, or null if not found.</summary>
     public static string? FindPython()
@@ -170,6 +193,19 @@ public static class DependencyLocator
     }
 
     private static bool ProbeExecutable(string fileName, string arguments)
+    {
+        var cacheKey = $"{fileName}\0{arguments}";
+        if (ProbeResultCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
+        var result = ProbeExecutableUncached(fileName, arguments);
+        // Only cache positive results; see ProbeResultCache XML docs for rationale.
+        if (result)
+            ProbeResultCache[cacheKey] = true;
+        return result;
+    }
+
+    private static bool ProbeExecutableUncached(string fileName, string arguments)
     {
         try
         {

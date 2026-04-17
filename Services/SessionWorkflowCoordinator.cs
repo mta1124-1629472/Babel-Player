@@ -38,7 +38,35 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITtsProvider? _ttsService;
     private IVocalSeparationProvider? _vocalSeparationProvider;
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
-    private readonly ConcurrentBag<Task> _pendingTtsTasks = [];
+    private readonly List<Task> _pendingTtsTasks = [];
+    private readonly object _pendingTtsTasksLock = new();
+
+    /// <summary>
+    /// Adds a TTS task to the pending list while pruning any tasks that have already completed.
+    /// Keeping the list bounded to in-flight work avoids the unbounded growth of the previous
+    /// <see cref="ConcurrentBag{T}"/>, which retained completed tasks for the coordinator's lifetime.
+    /// </summary>
+    private void TrackPendingTtsTask(Task task)
+    {
+        lock (_pendingTtsTasksLock)
+        {
+            _pendingTtsTasks.RemoveAll(static t => t.IsCompleted);
+            _pendingTtsTasks.Add(task);
+        }
+    }
+
+    /// <summary>
+    /// Returns a snapshot of currently in-flight TTS tasks after pruning completed ones.
+    /// Used at shutdown to wait briefly for pending TTS work.
+    /// </summary>
+    private Task[] SnapshotPendingTtsTasks()
+    {
+        lock (_pendingTtsTasksLock)
+        {
+            _pendingTtsTasks.RemoveAll(static t => t.IsCompleted);
+            return [.. _pendingTtsTasks];
+        }
+    }
     private readonly IAudioProcessingService? _audioProcessingService;
 
 
@@ -313,17 +341,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     $"cleared={string.Join(",", validation.ClearedArtifacts)}; provenance={SessionSnapshotSemantics.DescribeSessionProvenance(validated)}");
             }
 
-            string statusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
-                    ? "Ready."
-                : validated.Stage >= SessionWorkflowStage.Translated
-                    ? "Ready."
-                : validated.Stage >= SessionWorkflowStage.Diarized
-                    ? "Ready."
-                    : validated.Stage >= SessionWorkflowStage.Transcribed
-                        ? "Ready."
-                        : validated.Stage >= SessionWorkflowStage.MediaLoaded
-                            ? "Ready."
-                            : "Ready.";
+            string statusMessage = "Ready.";
 
 
             CurrentSession = validated with
@@ -461,7 +479,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 IngestedMediaPath = ingestedPath,
                 VocalsAudioPath = validated.VocalsAudioPath,
                 AmbianceAudioPath = validated.AmbianceAudioPath,
-                InstrumentalAudioPath = validated.AmbianceAudioPath,
                 MediaLoadedAtUtc = nowUtc,
                 LastUpdatedAtUtc = nowUtc,
                 StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
@@ -499,7 +516,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 IngestedMediaPath = ingestedPath,
                 VocalsAudioPath = null,
                 AmbianceAudioPath = null,
-                InstrumentalAudioPath = null,
                 MediaLoadedAtUtc = nowUtc,
                 TranscriptPath = null,
                 SourceLanguage = null,
@@ -566,7 +582,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             Stage = SessionWorkflowStage.MediaLoaded,
             VocalsAudioPath = null,
             AmbianceAudioPath = null,
-            InstrumentalAudioPath = null,
             TranscriptPath = null,
             TranslationPath = null,
             TtsPath = null,
@@ -839,7 +854,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// <exception cref="InvalidOperationException">Thrown when no translation is available, the segment is not found, or TTS generation fails.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session does not exist.</exception>
     /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider is not ready for execution and no model download is required.</exception>
-    public async Task RegenerateSegmentTtsAsync(string segmentId)
+    public async Task RegenerateSegmentTtsAsync(string segmentId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
         {
@@ -851,24 +866,24 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var segmentText = await _artifactReader.GetTranslatedTextAsync(CurrentSession.TranslationPath, segmentId);
+        var segmentText = await _artifactReader.GetTranslatedTextAsync(CurrentSession.TranslationPath, segmentId, cancellationToken);
 
         if (string.IsNullOrEmpty(segmentText))
         {
             throw new InvalidOperationException($"Segment not found: {segmentId}");
         }
 
-        var translation = await _artifactReader.LoadTranslationAsync(CurrentSession.TranslationPath);
+        var translation = await _artifactReader.LoadTranslationAsync(CurrentSession.TranslationPath, cancellationToken);
         var targetSegment = translation.Segments?.FirstOrDefault(s => s.Id == segmentId);
         var regenVoice = targetSegment is not null
             ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
             : CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
-        await EnsureSingleSpeakerQwenReferenceClipAsync();
+        await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
         var referenceAudioPath = targetSegment is not null
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime, "TTS");
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime, "TTS", cancellationToken);
 
         var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
             ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(CurrentSettings, _containerizedProbe)
@@ -901,8 +916,9 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 regenVoice,
                 targetSegment?.SpeakerId,
                 referenceAudioPath,
-                Language: targetLanguage));
-        _pendingTtsTasks.Add(ttsTask);
+                Language: targetLanguage),
+            cancellationToken);
+        TrackPendingTtsTask(ttsTask);
         var result = await ttsTask;
 
         if (!result.Success)
@@ -943,7 +959,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// </remarks>
     /// <exception cref="FileNotFoundException">Thrown when the current session's translation file cannot be found on disk.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the session lacks a translation path, when the source or target language is not set, when the segment source text is not found, or when the translation attempt fails.</exception>
-    public async Task RegenerateSegmentTranslationAsync(string segmentId)
+    public async Task RegenerateSegmentTranslationAsync(string segmentId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
         {
@@ -955,14 +971,14 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var sourceText = await _artifactReader.GetSourceTextAsync(CurrentSession.TranslationPath, segmentId);
+        var sourceText = await _artifactReader.GetSourceTextAsync(CurrentSession.TranslationPath, segmentId, cancellationToken);
 
         if (string.IsNullOrEmpty(sourceText))
         {
             throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
         }
 
-        await EnsureTranslationExecutionReadyAsync();
+        await EnsureTranslationExecutionReadyAsync(cancellationToken: cancellationToken);
 
         _translationService ??= CreateTranslationService();
 
@@ -986,7 +1002,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 CurrentSession.TranslationPath,
                 sourceLanguage,
                 targetLanguage,
-                CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel));
+                CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel),
+            cancellationToken);
 
         if (!result.Success)
         {
@@ -1148,6 +1165,18 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     }
 
     /// <summary>
+    /// Asynchronous counterpart to <see cref="SaveCurrentSession"/>. Pipeline code that is already
+    /// inside an <c>async</c> context should prefer this so the disk write does not block the
+    /// calling thread.
+    /// </summary>
+    public async Task SaveCurrentSessionAsync()
+    {
+        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
+        CurrentSession = snapshot;
+        await PersistSnapshotAsync(snapshot, updateStatus: true).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Immediately persists the current session snapshot to persistent stores after updating LastUpdatedAtUtc.
     /// </summary>
     /// <remarks>
@@ -1241,6 +1270,18 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         if (updateStatus)
             PersistenceStatus = message;
         _log.Info($"{message} Mirrored per-session snapshot. elapsedMs={stopwatch.ElapsedMilliseconds}");
+    }
+
+    private async Task PersistSnapshotAsync(WorkflowSessionSnapshot snapshot, bool updateStatus)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        await _store.SaveAsync(snapshot).ConfigureAwait(false);
+        await _perSessionStore.SaveAsync(snapshot).ConfigureAwait(false);
+        stopwatch.Stop();
+        var message = $"Saved current session snapshot to {StateFilePath}.";
+        if (updateStatus)
+            PersistenceStatus = message;
+        _log.Info($"{message} Mirrored per-session snapshot (async). elapsedMs={stopwatch.ElapsedMilliseconds}");
     }
 
     public sealed record BootstrapWarmupData(

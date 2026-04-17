@@ -13,8 +13,6 @@ public sealed record WorkflowSessionSnapshot(
     string? IngestedMediaPath = null,
     string? VocalsAudioPath = null,
     string? AmbianceAudioPath = null,
-    [property: Obsolete("Use AmbianceAudioPath.")]
-    string? InstrumentalAudioPath = null,
     DateTimeOffset? MediaLoadedAtUtc = null,
     string? TranscriptPath = null,
     DateTimeOffset? TranscribedAtUtc = null,
