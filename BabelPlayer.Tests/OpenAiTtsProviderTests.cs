@@ -279,46 +279,4 @@ public sealed class OpenAiTtsProviderTests : IDisposable
             base.Dispose(disposing);
         }
     }
-<<<<<<< Updated upstream
-
-    private sealed class StubAudioProcessingService : IAudioProcessingService
-    {
-        public async Task CombineAudioSegmentsAsync(IReadOnlyList<string> segmentAudioPaths, string outputAudioPath, CancellationToken cancellationToken)
-        {
-            var bytes = segmentAudioPaths.SelectMany(File.ReadAllBytes).ToArray();
-            await File.WriteAllBytesAsync(outputAudioPath, bytes, cancellationToken);
-        }
-
-        public async Task ComposeTimelineDubAsync(
-            IReadOnlyList<TimelineDubSegment> segments,
-            string outputAudioPath,
-            CancellationToken cancellationToken)
-        {
-            var bytes = segments.SelectMany(segment => File.ReadAllBytes(segment.AudioPath)).ToArray();
-            await File.WriteAllBytesAsync(outputAudioPath, bytes, cancellationToken);
-        }
-
-        public Task MixDubOverAmbianceAsync(
-            string dubbedAudioPath,
-            string ambianceAudioPath,
-            string outputAudioPath,
-            double ambianceGainDb,
-            CancellationToken cancellationToken) =>
-            File.WriteAllBytesAsync(outputAudioPath, File.ReadAllBytes(dubbedAudioPath), cancellationToken);
-
-        public Task ExtractAudioClipAsync(string inputPath, string outputPath, double startTimeSeconds, double durationSeconds, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
-
-        public Task ExtractFullAudioAsync(string inputPath, string outputPath, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
-
-        public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
-            double minRatio = DubTimingDefaults.StretchMinTempoRatio, double maxRatio = DubTimingDefaults.StretchMaxTempoRatio, CancellationToken cancellationToken = default)
-            => Task.FromResult(false);
-
-        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
-            => Task.FromResult<double?>(null);
-    }
-=======
->>>>>>> Stashed changes
 }

@@ -255,25 +255,6 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         await File.WriteAllBytesAsync(outputPath, [0xEE, 0xFF], cancellationToken);
     }
 
-<<<<<<< Updated upstream
-    /// <summary>
-        /// Attempts to produce a time-stretched version of an audio file at the requested duration.
-        /// </summary>
-        /// <param name="inputPath">Path to the source audio file to be time-stretched.</param>
-        /// <param name="outputPath">Path where the time-stretched audio should be written.</param>
-        /// <param name="targetDurationSeconds">Desired duration in seconds for the output audio.</param>
-        /// <param name="minRatio">Minimum allowed stretch ratio (output duration / input duration).</param>
-        /// <param name="maxRatio">Maximum allowed stretch ratio (output duration / input duration).</param>
-        /// <param name="cancellationToken">Token to observe while waiting for the operation to complete.</param>
-        /// <returns>`true` if the time-stretched audio was produced and written to <paramref name="outputPath"/>, `false` otherwise.</returns>
-    public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
-        double minRatio = DubTimingDefaults.StretchMinTempoRatio, double maxRatio = DubTimingDefaults.StretchMaxTempoRatio, CancellationToken cancellationToken = default)
-        => Task.FromResult(false); /// <summary>
-        /// Probe the duration of an audio file in seconds.
-        /// </summary>
-        /// <param name="filePath">Path to the audio file to probe.</param>
-        /// <returns>`double?` containing the duration in seconds, or `null` if the duration is unavailable. This fake implementation always returns `null`.</returns>
-=======
     public Task<bool> TimeStretchAsync(
         string inputPath,
         string outputPath,
@@ -282,7 +263,6 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(false);
->>>>>>> Stashed changes
 
     public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
         => Task.FromResult<double?>(null);
