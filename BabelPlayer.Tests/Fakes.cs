@@ -207,6 +207,7 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         string dubbedAudioPath,
         string ambianceAudioPath,
         string outputAudioPath,
+        double ambianceGainDb,
         CancellationToken cancellationToken)
     {
         var dir = Path.GetDirectoryName(outputAudioPath);

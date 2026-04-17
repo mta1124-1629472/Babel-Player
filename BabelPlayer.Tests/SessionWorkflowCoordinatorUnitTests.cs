@@ -108,6 +108,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             string dubbedAudioPath,
             string ambianceAudioPath,
             string outputAudioPath,
+            double ambianceGainDb,
             CancellationToken cancellationToken) =>
             Task.FromException(new InvalidOperationException("MixDubOverAmbianceAsync is not used in this test."));
 

@@ -384,6 +384,7 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
             string dubbedAudioPath,
             string ambianceAudioPath,
             string outputAudioPath,
+            double ambianceGainDb,
             CancellationToken cancellationToken)
         {
             var outputDir = Path.GetDirectoryName(outputAudioPath);

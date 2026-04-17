@@ -936,7 +936,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
             return Task.CompletedTask;
         }
 
-        public Task MixDubOverAmbianceAsync(string dubbedAudioPath, string ambianceAudioPath, string outputAudioPath, CancellationToken cancellationToken)
+        public Task MixDubOverAmbianceAsync(string dubbedAudioPath, string ambianceAudioPath, string outputAudioPath, double ambianceGainDb, CancellationToken cancellationToken)
         {
             var outputDir = Path.GetDirectoryName(outputAudioPath);
             if (!string.IsNullOrEmpty(outputDir))

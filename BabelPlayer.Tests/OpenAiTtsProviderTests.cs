@@ -301,6 +301,7 @@ public sealed class OpenAiTtsProviderTests : IDisposable
             string dubbedAudioPath,
             string ambianceAudioPath,
             string outputAudioPath,
+            double ambianceGainDb,
             CancellationToken cancellationToken) =>
             File.WriteAllBytesAsync(outputAudioPath, File.ReadAllBytes(dubbedAudioPath), cancellationToken);
 
