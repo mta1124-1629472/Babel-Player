@@ -17,9 +17,10 @@ public sealed partial class SessionWorkflowCoordinator
     /// </summary>
     public void SaveCurrentSession()
     {
-        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
+        WorkflowSessionSnapshot snapshot;
         lock (_sessionLock)
         {
+            snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
             CurrentSession = snapshot;
         }
         PersistSnapshot(snapshot, updateStatus: true);
@@ -32,9 +33,10 @@ public sealed partial class SessionWorkflowCoordinator
     /// </summary>
     public async Task SaveCurrentSessionAsync()
     {
-        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
+        WorkflowSessionSnapshot snapshot;
         lock (_sessionLock)
         {
+            snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
             CurrentSession = snapshot;
         }
         await PersistSnapshotAsync(snapshot, updateStatus: true).ConfigureAwait(false);
@@ -44,7 +46,16 @@ public sealed partial class SessionWorkflowCoordinator
     /// Immediately persists the current session snapshot and updates its last-updated timestamp.
     /// Used by callers that need a synchronous flush during shutdown or media-switch handoffs.
     /// </summary>
-    public void FlushPendingSave() => SaveCurrentSession();
+    public void FlushPendingSave()
+    {
+        WorkflowSessionSnapshot snapshot;
+        lock (_sessionLock)
+        {
+            snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
+            CurrentSession = snapshot;
+        }
+        PersistSnapshot(snapshot, updateStatus: true);
+    }
 
     private void PersistSnapshot(WorkflowSessionSnapshot snapshot, bool updateStatus)
     {
