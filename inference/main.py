@@ -2423,6 +2423,30 @@ async def diarize_wespeaker(
 # Vocal separation
 # ============================================================================
 
+_ALLOWED_SEPARATION_EXTENSIONS = {
+    ".wav",
+    ".mp3",
+    ".flac",
+    ".m4a",
+    ".mp4",
+    ".mkv",
+    ".webm",
+    ".ogg",
+    ".avi",
+    ".mov",
+    ".wmv",
+    ".mpg",
+    ".mpeg",
+}
+
+
+def _safe_separation_upload_suffix(filename: str) -> str:
+    """Use only a short extension for temp paths — avoids spaces/special chars in Windows APIs."""
+    ext = Path(filename or "").suffix.lower()
+    # Unknown extensions use .bin so the worker does not treat bytes as native WAV.
+    return ext if ext in _ALLOWED_SEPARATION_EXTENSIONS else ".bin"
+
+
 @app.post("/separate/vocals", response_model=VocalSeparationResponse)
 async def separate_vocals(
     background_tasks: BackgroundTasks,
@@ -2439,7 +2463,7 @@ async def separate_vocals(
     temp_src: Optional[Path] = None
     try:
         safe_name = Path(file.filename or "upload").name or "upload"
-        temp_src = TEMP_DIR / f"sep_src_{uuid4().hex}_{safe_name}"
+        temp_src = TEMP_DIR / f"sep_src_{uuid4().hex}{_safe_separation_upload_suffix(safe_name)}"
         temp_src.write_bytes(await file.read())
 
         from workers.vocal_separator_worker import run_vocal_separation

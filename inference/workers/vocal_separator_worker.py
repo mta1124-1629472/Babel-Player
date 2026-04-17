@@ -3,7 +3,10 @@
 
 import logging
 import os
+import shutil
+import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +26,111 @@ _MDX_HOP_LENGTH = 1024
 _MDX_SEGMENT_SIZE = 256
 _MDX_OVERLAP = 0.25
 _MDX_BATCH_SIZE = 1
+
+# Paths with spaces or > ~220 chars often trigger OSError errno 22 on Windows in native
+# loaders (soundfile/torchaudio). Decode containers to PCM WAV; copy other inputs to a
+# short work path when needed.
+_MAX_INPUT_PATH_LEN = 220
+
+
+def _is_unsafe_path(path: Path) -> bool:
+    """
+    Return True if path contains spaces or exceeds the safe length for native audio loaders.
+    """
+    str_path = str(path)
+    return " " in str_path or len(str_path) > _MAX_INPUT_PATH_LEN
+
+
+def _is_video_like(suffix: str) -> bool:
+    """
+    Return True if suffix indicates a video container format.
+    """
+    return suffix in {
+        ".mp4",
+        ".mkv",
+        ".webm",
+        ".avi",
+        ".mov",
+        ".mpg",
+        ".mpeg",
+        ".wmv",
+    }
+
+
+def _is_audio_like(suffix: str) -> bool:
+    """
+    Return True if suffix indicates a native audio format (WAV, FLAC, MP3, OGG).
+    """
+    return suffix in {".wav", ".flac", ".mp3", ".ogg"}
+
+
+def _ffmpeg_decode_to_wav(src: Path, out: Path, timeout: int = 300) -> None:
+    """
+    Decode src to PCM WAV at out using ffmpeg. Raises RuntimeError on failure.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError(
+            "ffmpeg not found on PATH; required to decode this media for vocal separation."
+        )
+    proc = subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-i",
+            str(src),
+            "-vn",
+            "-acodec",
+            "pcm_s16le",
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            str(out),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    if proc.returncode != 0:
+        tail = (proc.stderr or "")[-800:]
+        raise RuntimeError(f"ffmpeg decode for vocal separation failed: {tail}")
+
+
+def _copy_to_workdir(src: Path, dst: Path) -> None:
+    """
+    Copy src to dst with metadata preservation.
+    """
+    shutil.copy2(src, dst)
+
+
+def _normalize_input_for_separator(src: Path, work_dir: Path) -> tuple[Path, Optional[Path]]:
+    """
+    Return (path_for_separator, temp_file_to_delete_or_none).
+    """
+    work_dir = work_dir.resolve()
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    resolved = src.resolve()
+    suffix = resolved.suffix.lower()
+    unsafe_path = _is_unsafe_path(resolved)
+
+    uid = uuid.uuid4().hex
+
+    if _is_video_like(suffix) or suffix == ".m4a":
+        out = work_dir / f"sep_in_{uid}.wav"
+        _ffmpeg_decode_to_wav(resolved, out)
+        return out, out
+    if _is_audio_like(suffix):
+        if not unsafe_path:
+            return resolved, None
+        out = work_dir / f"sep_in_{uid}{suffix}"
+        _copy_to_workdir(resolved, out)
+        return out, out
+
+    out = work_dir / f"sep_in_{uid}.wav"
+    _ffmpeg_decode_to_wav(resolved, out)
+    return out, out
 
 
 def _resolve_stem_path(raw: str | Path, output_dir: Path) -> Path:
@@ -92,48 +200,61 @@ def run_vocal_separation(
 
     effective_instrumental_model = instrumental_model or vocals_model
 
-    if vocals_model == effective_instrumental_model:
-        # Single pass — both stems come from the same model run
-        stems = [
-            _resolve_stem_path(p, output_dir)
-            for p in make_separator(vocals_model).separate(str(audio_path))
-        ]
-        if len(stems) < 2:
-            raise RuntimeError(
-                f"Expected 2 stems from {vocals_model}, got {len(stems)}: {stems}"
-            )
-        vocals_path = pick_vocals(stems)
-        instrumental_path = pick_instrumental(stems)
-    else:
-        # Two-pass — optimise each stem independently
-        vocals_stems = [
-            _resolve_stem_path(p, output_dir)
-            for p in make_separator(vocals_model).separate(str(audio_path))
-        ]
-        instrumental_stems = [
-            _resolve_stem_path(p, output_dir)
-            for p in make_separator(effective_instrumental_model).separate(str(audio_path))
-        ]
-        if len(vocals_stems) < 2 or len(instrumental_stems) < 2:
-            raise RuntimeError(
-                f"Expected 2 stems per pass. "
-                f"Got vocals={len(vocals_stems)}, instrumental={len(instrumental_stems)}"
-            )
-        vocals_path = pick_vocals(vocals_stems)
-        instrumental_path = pick_instrumental(instrumental_stems)
-        # Discard the stems we don't use — each pass produces 2, we keep 1 from each
-        for rejected in vocals_stems:
-            if rejected != vocals_path:
-                rejected.unlink(missing_ok=True)
-        for rejected in instrumental_stems:
-            if rejected != instrumental_path:
-                rejected.unlink(missing_ok=True)
+    temp_input: Optional[Path] = None
+    try:
+        work_audio, temp_input = _normalize_input_for_separator(audio_path, output_dir)
+        if vocals_model == effective_instrumental_model:
+            # Single pass — both stems come from the same model run
+            stems = [
+                _resolve_stem_path(p, output_dir)
+                for p in make_separator(vocals_model).separate(str(work_audio))
+            ]
+            if len(stems) < 2:
+                raise RuntimeError(
+                    f"Expected 2 stems from {vocals_model}, got {len(stems)}: {stems}"
+                )
+            vocals_path = pick_vocals(stems)
+            instrumental_path = pick_instrumental(stems)
+        else:
+            # Two-pass — optimise each stem independently
+            vocals_stems = [
+                _resolve_stem_path(p, output_dir)
+                for p in make_separator(vocals_model).separate(str(work_audio))
+            ]
+            instrumental_stems = [
+                _resolve_stem_path(p, output_dir)
+                for p in make_separator(effective_instrumental_model).separate(str(work_audio))
+            ]
+            if len(vocals_stems) < 2 or len(instrumental_stems) < 2:
+                raise RuntimeError(
+                    f"Expected 2 stems per pass. "
+                    f"Got vocals={len(vocals_stems)}, instrumental={len(instrumental_stems)}"
+                )
+            vocals_path = pick_vocals(vocals_stems)
+            instrumental_path = pick_instrumental(instrumental_stems)
+            # Discard the stems we don't use — each pass produces 2, we keep 1 from each
+            for rejected in vocals_stems:
+                if rejected != vocals_path:
+                    rejected.unlink(missing_ok=True)
+            for rejected in instrumental_stems:
+                if rejected != instrumental_path:
+                    rejected.unlink(missing_ok=True)
 
-    logger.info(
-        "Vocal separation complete — vocals=%s (%d bytes), instrumental=%s (%d bytes)",
-        vocals_path.name,
-        vocals_path.stat().st_size,
-        instrumental_path.name,
-        instrumental_path.stat().st_size,
-    )
-    return vocals_path, instrumental_path
+        logger.info(
+            "Vocal separation complete — vocals=%s (%d bytes), instrumental=%s (%d bytes)",
+            vocals_path.name,
+            vocals_path.stat().st_size,
+            instrumental_path.name,
+            instrumental_path.stat().st_size,
+        )
+        return vocals_path, instrumental_path
+    finally:
+        if temp_input is not None:
+            try:
+                temp_input.unlink(missing_ok=True)
+            except (PermissionError, OSError) as exc:
+                logger.warning(
+                    "Failed to clean up temporary normalized input %s: %s",
+                    temp_input,
+                    exc,
+                )
