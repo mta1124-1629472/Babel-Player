@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 
@@ -14,6 +15,7 @@ public sealed class SessionSnapshotStore
     };
 
     private readonly AppLog _log;
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
 
     public SessionSnapshotStore(string stateFilePath, AppLog log)
     {
@@ -60,15 +62,23 @@ public sealed class SessionSnapshotStore
 
     public void Save(WorkflowSessionSnapshot snapshot)
     {
+        // Serialize outside the gate — JSON serialization is CPU-bound and does not
+        // need to block other pending saves. The gate guards the file write itself so
+        // Save() and SaveAsync() cannot clobber each other at StateFilePath.
+        var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
+        _saveGate.Wait();
         try
         {
-            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
             File.WriteAllText(StateFilePath, json);
         }
         catch (Exception ex)
         {
             // Save failure is non-fatal — log and continue. The in-memory session is still valid.
             _log.Error($"Failed to save session snapshot to {StateFilePath}.", ex);
+        }
+        finally
+        {
+            _saveGate.Release();
         }
     }
 
@@ -78,14 +88,19 @@ public sealed class SessionSnapshotStore
     /// </summary>
     public async Task SaveAsync(WorkflowSessionSnapshot snapshot)
     {
+        var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
+        await _saveGate.WaitAsync().ConfigureAwait(false);
         try
         {
-            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
             await File.WriteAllTextAsync(StateFilePath, json).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _log.Error($"Failed to save session snapshot to {StateFilePath}.", ex);
+        }
+        finally
+        {
+            _saveGate.Release();
         }
     }
 
