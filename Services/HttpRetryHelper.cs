@@ -56,7 +56,7 @@ public static class HttpRetryHelper
 
     private static bool IsTransient(Exception ex, CancellationToken cancellationToken) =>
         ex is HttpRequestException or IOException or TimeoutException
-        || (ex is TaskCanceledException tce && tce.CancellationToken != cancellationToken);
+        || (ex is OperationCanceledException oce && oce.CancellationToken != cancellationToken);
 
     private static TimeSpan GetDelay(HttpResponseMessage response, int attempt) =>
         response.Headers.RetryAfter?.Delta ?? GetDelay(attempt);
