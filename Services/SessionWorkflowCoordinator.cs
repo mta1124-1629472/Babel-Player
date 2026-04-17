@@ -1216,6 +1216,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         PersistSnapshot(snapshot, updateStatus: true);
     }
 
+    internal void TrackPendingTtsTask(Task task) => _pendingTtsTasks.Add(task);
+
+    internal Task[] SnapshotPendingTtsTasks() => _pendingTtsTasks.ToArray();
+
     private void OnProbeResultUpdated(ContainerizedProbeResult probeResult)
     {
         var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(probeResult.ServiceUrl);

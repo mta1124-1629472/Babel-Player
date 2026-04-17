@@ -13,6 +13,7 @@ public sealed record WorkflowSessionSnapshot(
     string? IngestedMediaPath = null,
     string? VocalsAudioPath = null,
     string? AmbianceAudioPath = null,
+    string? InstrumentalAudioPath = null,
     DateTimeOffset? MediaLoadedAtUtc = null,
     string? TranscriptPath = null,
     DateTimeOffset? TranscribedAtUtc = null,
