@@ -818,3 +818,79 @@ private async Task<T> ExecuteJsonAsync<T>(
     return await readAsync(response).ConfigureAwait(false);
 }
 ```
+
+- [ ] **Step 6: Apply the helper to DeepL, ElevenLabs, Google, and Gemini without changing provider behavior**
+
+```csharp
+// Services/DeepLApiClient.cs / Services/ElevenLabsApiClient.cs / Services/GoogleApiClient.cs / Services/GeminiApiClient.cs
+using var response = await HttpRetryHelper.SendAsync(
+    async () =>
+    {
+        using var request = BuildRequest(...);
+        return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    },
+    cancellationToken: cancellationToken).ConfigureAwait(false);
+```
+
+Rules:
+- Build a fresh `HttpRequestMessage` and fresh `HttpContent` inside the retry delegate for every attempt.
+- Keep existing JSON parsing, provider-specific error mapping, and response validation intact.
+- Retry only the shared cloud HTTP transport calls in the OpenAI, DeepL, ElevenLabs, Google, and Gemini clients.
+- Do not widen the retry helper to local inference, container management, or non-HTTP provider paths.
+
+- [ ] **Step 7: Re-run focused retry tests**
+
+```bash
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj --filter "FullyQualifiedName~HttpRetryHelperTests|FullyQualifiedName~CloudApiClientRetryTests" -v minimal
+```
+
+Expected: `PASS`
+
+- [ ] **Step 8: Commit the retry changes**
+
+```bash
+git add Services/HttpRetryHelper.cs Services/OpenAiApiClient.cs Services/DeepLApiClient.cs Services/ElevenLabsApiClient.cs Services/GoogleApiClient.cs Services/GeminiApiClient.cs BabelPlayer.Tests/HttpRetryHelperTests.cs BabelPlayer.Tests/CloudApiClientRetryTests.cs
+git commit -m "feat: add shared cloud http retries"
+```
+
+### Task 4: Run Full Verification
+
+**Files**:
+- None, verification only
+
+- [ ] **Step 1: Build the solution**
+
+```bash
+dotnet build Babel-Player.sln
+```
+
+Expected: `Build succeeded.`
+
+- [ ] **Step 2: Run the full test suite**
+
+```bash
+dotnet test Babel-Player.sln --no-build
+```
+
+Expected summary includes `Passed!`
+
+- [ ] **Step 3: If a failure appears, tighten the repro before editing anything else**
+
+```bash
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj --no-build --filter "<paste failing test filter here>" -v minimal
+```
+
+Expected: a focused repro without unrelated edits.
+
+## Out Of Scope
+
+- `.github/workflows/ci.yml` already exists and stays unchanged.
+- `IMediaTransportManager` already extends `IDisposable`, so no interface edit is needed.
+- `Services/SessionWorkflowCoordinator*.Orchestrators.cs`, `Services/AppLog.cs`, `Services/DependencyLocator.cs`, `Services/PerSessionSnapshotStore.cs`, and `Models/WorkflowSessionSnapshot.cs` remain untouched.
+
+## Execution Notes
+
+- Keep the dialog extraction narrow: `MainWindowViewModel` still owns the settings gate and persistence flag, while `IDialogService` owns only the Avalonia UI construction and result.
+- Keep the session locking change mechanical: add `_sessionLock` once in `Services/SessionWorkflowCoordinator.cs` and wrap each `CurrentSession = CurrentSession with { ... }` mutation in `lock (_sessionLock) { ... }` without altering surrounding logic.
+- Favor a shared request helper shape for cloud clients so retries do not duplicate parsing or error handling code in each provider.
+- Do not claim completion until `dotnet build` and `dotnet test` have both run successfully.
