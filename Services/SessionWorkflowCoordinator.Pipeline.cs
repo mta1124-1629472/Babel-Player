@@ -786,9 +786,6 @@ public sealed partial class SessionWorkflowCoordinator
         return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
     }
 
-    private static SegmentTimingMode NormalizeRenderTimingMode(SegmentTimingMode mode) =>
-        mode == SegmentTimingMode.Pause ? SegmentTimingMode.Off : mode;
-
     /// <summary>
     /// Generates TTS audio for multiple translated segments in a single batch using the Qwen container TTS provider and records produced file paths and durations.
     /// </summary>

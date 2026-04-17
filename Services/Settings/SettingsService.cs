@@ -3,6 +3,8 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Babel.Player.Models;
+using Babel.Player.Services;
+
 namespace Babel.Player.Services.Settings;
 
 /// <summary>
@@ -221,7 +223,9 @@ public sealed class SettingsService
             settings.VideoHdrComputePeak = VideoHdrComputePeak ?? settings.VideoHdrComputePeak;
             settings.VideoExportEncoder = VideoExportEncoder ?? settings.VideoExportEncoder;
             if (DubTimingMode.HasValue)
-                settings.DubTimingMode = DubTimingMode.Value;
+            {
+                settings.DubTimingMode = DubTimingDefaults.NormalizeRenderTimingMode(DubTimingMode.Value);
+            }
             if (AmbianceMixDb.HasValue)
                 settings.AmbianceMixDb = AmbianceMixDb.Value;
             settings.Theme = Theme ?? settings.Theme;
@@ -271,7 +275,7 @@ public sealed class SettingsService
             VideoTargetPeak = settings.VideoTargetPeak,
             VideoHdrComputePeak = settings.VideoHdrComputePeak,
             VideoExportEncoder = settings.VideoExportEncoder,
-            DubTimingMode = settings.DubTimingMode,
+            DubTimingMode = DubTimingDefaults.NormalizeRenderTimingMode(settings.DubTimingMode),
             AmbianceMixDb = settings.AmbianceMixDb,
             Theme = settings.Theme,
             MaxRecentSessions = settings.MaxRecentSessions,

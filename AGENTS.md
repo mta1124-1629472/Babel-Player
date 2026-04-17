@@ -25,3 +25,9 @@
 - Windows native deps install **ffmpeg.exe** and **ffprobe.exe** under `tools/<rid>/`; the managed GPU host prepends those directories to **PATH** so subprocess audio tooling (for example pydub) can resolve **ffprobe**.
 - Multi-speaker detection in the main UI is **WeSpeaker**-only with diarization off by default; periodic NeMo background health on the GPU host is off unless **`BABEL_ENABLE_NEMO_BACKGROUND_HEALTH`** is enabled.
 - Transcript JSON under `transcripts/` is named from the **ingested source media** stem even when vocal separation uses a generated stem (for example `vocals.wav`); **`VocalSeparationEnabled`** is coerced off when the container reports the audio separator is not ready.
+
+## Testing Requirements
+- Before writing or modifying tests, read `docs/testing-requirements.md`.
+- The maintained suite command is `dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release`; do not treat `dotnet test Babel-Player.sln` as the routine verification path.
+- `BabelPlayer.Tests` must stay fast and deterministic. Do not add real Python, ffmpeg, container, libmpv, manual, or performance-dependent tests to the compiled suite.
+- If a test is flaky, slow, or runtime-heavy, prefer deleting or quarantining it over preserving short-term nominal coverage.
