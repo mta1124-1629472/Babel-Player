@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -277,13 +276,13 @@ public sealed class ExtractedOrchestratorTests
                 return Task.CompletedTask;
             },
         };
-        var updates = new ConcurrentQueue<PipelineStageUpdate>();
+        var updates = new List<PipelineStageUpdate>();
         var stageContext = new PipelineStageContext(
             2,
             3,
             SessionWorkflowStage.Translated,
             "Translation",
-            new CaptureProgress<PipelineStageUpdate>(updates.Enqueue));
+            new CaptureProgress<PipelineStageUpdate>(updates.Add));
         var orchestrator = new TranslationOrchestrator(
             session,
             new FakeStageExecutionPlanner(),
@@ -308,19 +307,13 @@ public sealed class ExtractedOrchestratorTests
             stageContext,
             CancellationToken.None);
 
-        SpinWait.SpinUntil(
-            () => updates.Count >= 2,
-            TimeSpan.FromMilliseconds(100));
-
-        var updateSnapshot = updates.ToArray();
-
         Assert.Contains(
-            updateSnapshot,
+            updates,
             update => !update.IsIndeterminate
                    && Math.Abs(update.Progress01 - 0.25) < 0.001
                    && update.Detail.Contains("Preparing translation model", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(
-            updateSnapshot,
+            updates,
             update => !update.IsIndeterminate
                    && Math.Abs(update.Progress01 - 1.0) < 0.001
                    && update.Detail.Contains("Preparing translation model", StringComparison.OrdinalIgnoreCase));
