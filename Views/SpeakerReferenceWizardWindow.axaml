@@ -22,6 +22,10 @@
         Background="{DynamicResource PanelBackgroundBrush}">
 
     <Window.Styles>
+        <Style Selector="Border.top-chrome">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
         <Style Selector="Border.card">
             <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
             <Setter Property="CornerRadius" Value="8"/>
@@ -70,39 +74,113 @@
                chrome:WindowDecorationProperties.ElementRole="ResizeSE" />
 
         <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*">
-            <!-- Custom title bar (drag + close); content below -->
+            <!-- Title bar: match MainWindow chrome (drag, minimize, maximize, close) -->
             <Border Grid.Row="0"
+                    Classes="top-chrome"
                     Background="{DynamicResource SurfaceSubtleBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,0,0,1"
-                    Padding="12,0,0,0"
+                    Padding="10,0,0,0"
+                    PointerPressed="OnTitleBarPointerPressed"
                     chrome:WindowDecorationProperties.ElementRole="TitleBar">
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                     <TextBlock Grid.Column="0"
                                Text="Speaker Reference Wizard"
                                FontSize="13"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource PrimaryTextBrush}"
                                VerticalAlignment="Center" />
-                    <Button Grid.Column="1"
-                            Classes="chrome-button chrome-close"
-                            Width="32"
-                            Height="32"
-                            Background="{DynamicResource DestructiveBrush}"
-                            Foreground="{DynamicResource PrimaryTextBrush}"
-                            Click="OnCancelClick"
-                            ToolTip.Tip="Close wizard (discard changes)"
-                            AutomationProperties.Name="Close wizard">
-                        <Viewbox Width="14" Height="14">
-                            <Canvas Width="24" Height="24">
-                                <Path Stroke="{DynamicResource PrimaryTextBrush}"
-                                      StrokeThickness="1.75"
-                                      StrokeLineCap="Round"
-                                      Stretch="None"
-                                      Data="M 6.5,6.5 L 17.5,17.5 M 17.5,6.5 L 6.5,17.5" />
-                            </Canvas>
-                        </Viewbox>
-                    </Button>
+                    <StackPanel Grid.Column="2"
+                                Orientation="Horizontal"
+                                Spacing="0"
+                                VerticalAlignment="Stretch"
+                                HorizontalAlignment="Right"
+                                UseLayoutRounding="True">
+                        <Button Classes="chrome-button"
+                                Width="32"
+                                Height="32"
+                                Background="{DynamicResource ButtonBackgroundBrush}"
+                                Foreground="{DynamicResource PrimaryTextBrush}"
+                                Click="OnMinimizeWindowClick"
+                                AutomationProperties.Name="Minimize window">
+                            <Viewbox Width="14" Height="14">
+                                <Canvas Width="24" Height="24">
+                                    <Border Canvas.Left="4"
+                                            Canvas.Top="11"
+                                            Width="16"
+                                            Height="2.5"
+                                            Background="{DynamicResource PrimaryTextBrush}"
+                                            CornerRadius="1" />
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+                        <Button Classes="chrome-button"
+                                Width="32"
+                                Height="32"
+                                Background="{DynamicResource ButtonBackgroundBrush}"
+                                Foreground="{DynamicResource PrimaryTextBrush}"
+                                Click="OnToggleMaximizeWindowClick"
+                                AutomationProperties.Name="Maximize or restore window">
+                            <Grid Width="24" Height="24">
+                                <Viewbox x:Name="ChromeMaximizeIcon"
+                                         Width="14"
+                                         Height="14"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center">
+                                    <Canvas Width="24" Height="24">
+                                        <Rectangle Canvas.Left="5.5"
+                                                   Canvas.Top="5.5"
+                                                   Width="13"
+                                                   Height="13"
+                                                   Stroke="{DynamicResource PrimaryTextBrush}"
+                                                   StrokeThickness="1.75"
+                                                   Fill="Transparent" />
+                                    </Canvas>
+                                </Viewbox>
+                                <Viewbox x:Name="ChromeRestoreIcon"
+                                         Width="14"
+                                         Height="14"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         IsVisible="False">
+                                    <Canvas Width="24" Height="24">
+                                        <Rectangle Canvas.Left="9"
+                                                   Canvas.Top="5"
+                                                   Width="9"
+                                                   Height="9"
+                                                   Stroke="{DynamicResource PrimaryTextBrush}"
+                                                   StrokeThickness="1.75"
+                                                   Fill="Transparent" />
+                                        <Rectangle Canvas.Left="5"
+                                                   Canvas.Top="9"
+                                                   Width="9"
+                                                   Height="9"
+                                                   Stroke="{DynamicResource PrimaryTextBrush}"
+                                                   StrokeThickness="1.75"
+                                                   Fill="Transparent" />
+                                    </Canvas>
+                                </Viewbox>
+                            </Grid>
+                        </Button>
+                        <Button Classes="chrome-button chrome-close"
+                                Width="32"
+                                Height="32"
+                                Background="{DynamicResource DestructiveBrush}"
+                                Foreground="{DynamicResource PrimaryTextBrush}"
+                                Click="OnCancelClick"
+                                ToolTip.Tip="Close wizard (discard changes)"
+                                AutomationProperties.Name="Close wizard">
+                            <Viewbox Width="14" Height="14">
+                                <Canvas Width="24" Height="24">
+                                    <Path Stroke="{DynamicResource PrimaryTextBrush}"
+                                          StrokeThickness="1.75"
+                                          StrokeLineCap="Round"
+                                          Stretch="None"
+                                          Data="M 6.5,6.5 L 17.5,17.5 M 17.5,6.5 L 6.5,17.5" />
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
