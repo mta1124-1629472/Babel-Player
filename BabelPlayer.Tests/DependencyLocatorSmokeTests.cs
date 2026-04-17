@@ -34,13 +34,13 @@ public sealed class DependencyLocatorSmokeTests : IDisposable
     }
 
     // Note: these tests assert that `FindFfmpeg/Ffprobe` resolve *into* the
-    // bundled `tools/{rid}/` directory, not that they hit the explicit
-    // `ffmpeg.exe` entries in the candidate list. On Windows we write a `.cmd`
-    // shim (a bare `.exe` placeholder can't execute and would fail Probe's
-    // `-version` check), so resolution actually succeeds via the bare
-    // `"ffmpeg"` candidate + PATH lookup (PATHEXT picks up `.cmd`). Because we
-    // prepend `tools/{rid}/` to PATH, the resolved path still starts with that
-    // directory — which is the invariant the app relies on at runtime.
+    // bundled `tools/{rid}/` directory. On Windows we write a `.cmd` shim (a
+    // bare `.exe` placeholder can't execute and would fail Probe's `-version`
+    // check); the candidate list in `DependencyLocator` includes `.cmd` and
+    // `.bat` entries alongside `.exe`, so the explicit `tools/{rid}/` entry
+    // matches. We also prepend `tools/{rid}/` to PATH as a belt-and-braces
+    // fallback so the invariant (resolved path lives inside `tools/{rid}/`)
+    // holds whichever branch wins.
 
     [Fact]
     [Trait("Category", "Smoke")]
