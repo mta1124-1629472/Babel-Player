@@ -170,10 +170,12 @@ public partial class EmbeddedPlaybackViewModel
         get => _coordinator.CurrentSettings.DubTimingMode;
         set
         {
-            if (_coordinator.CurrentSettings.DubTimingMode == value)
+            var effective = value == SegmentTimingMode.Pause ? SegmentTimingMode.Off : value;
+
+            if (_coordinator.CurrentSettings.DubTimingMode == effective)
                 return;
 
-            _coordinator.CurrentSettings.DubTimingMode = value;
+            _coordinator.CurrentSettings.DubTimingMode = effective;
             _coordinator.NotifySettingsModified();
             OnPropertyChanged();
         }

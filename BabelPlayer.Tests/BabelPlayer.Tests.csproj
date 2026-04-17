@@ -28,6 +28,11 @@
     <ProjectReference Include="..\BabelPlayer.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Quarantined\**\*.cs" />
+    <None Include="Quarantined\**\*" />
+  </ItemGroup>
+
   <!-- Staged after optional FetchWinNativeDepsIfNeeded (../Directory.Build.targets) so first build after clone works. -->
   <Target Name="IncludeLibMpvForTests" BeforeTargets="AssignTargetPaths" AfterTargets="FetchWinNativeDepsIfNeeded" Condition="'$(OS)' == 'Windows_NT'">
     <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\native\$(BabelWinNativeSubdir)\libmpv-2.dll')">

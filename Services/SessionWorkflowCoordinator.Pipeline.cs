@@ -86,14 +86,16 @@ public sealed partial class SessionWorkflowCoordinator
         if (!File.Exists(result.AmbianceAudioPath))
             throw new InvalidOperationException($"Vocal separation completed but ambiance artifact was not found: {result.AmbianceAudioPath}");
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            VocalsAudioPath = result.VocalsAudioPath,
-            AmbianceAudioPath = result.AmbianceAudioPath,
-            InstrumentalAudioPath = result.AmbianceAudioPath,
-            StatusMessage = "Audio prepared for transcription.",
-        };
-        SaveCurrentSession();
+            CurrentSession = CurrentSession with
+            {
+                VocalsAudioPath = result.VocalsAudioPath,
+                AmbianceAudioPath = result.AmbianceAudioPath,
+                StatusMessage = "Audio prepared for transcription.",
+            };
+        }
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
 
         ReportStage(
             stageContext,
@@ -317,24 +319,26 @@ public sealed partial class SessionWorkflowCoordinator
         // fresh stem paths into CurrentSession before this method is called, so we preserve them.
         var vocalsPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.VocalsAudioPath : null;
         var ambiancePath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.AmbianceAudioPath : null;
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.Transcribed,
-            TranscriptPath = transcriptPath,
-            SourceLanguage = result.Language,
-            VocalsAudioPath = vocalsPath,
-            AmbianceAudioPath = ambiancePath,
-            InstrumentalAudioPath = ambiancePath,
-            TranscribedAtUtc = nowUtc,
-            TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
-            TranscriptionProvider = CurrentSettings.TranscriptionProvider,
-            TranscriptionModel = CurrentSettings.TranscriptionModel,
-            TranscriptionLanguageHint = SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
-                CurrentSettings.TranscriptionLanguageHint),
-            StatusMessage = ShouldRunDiarization()
-                ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
-                : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.Transcribed,
+                TranscriptPath = transcriptPath,
+                SourceLanguage = result.Language,
+                VocalsAudioPath = vocalsPath,
+                AmbianceAudioPath = ambiancePath,
+                TranscribedAtUtc = nowUtc,
+                TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
+                TranscriptionProvider = CurrentSettings.TranscriptionProvider,
+                TranscriptionModel = CurrentSettings.TranscriptionModel,
+                TranscriptionLanguageHint = SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
+                    CurrentSettings.TranscriptionLanguageHint),
+                StatusMessage = ShouldRunDiarization()
+                    ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
+                    : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
+            };
+        }
 
         _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
         SaveCurrentSession();
@@ -347,18 +351,21 @@ public sealed partial class SessionWorkflowCoordinator
         string targetLanguage)
     {
         var nowUtc = DateTimeOffset.UtcNow;
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.Translated,
-            TranslationPath = translationPath,
-            SourceLanguage = sourceLanguage,
-            TargetLanguage = targetLanguage,
-            TranslatedAtUtc = nowUtc,
-            TranslationRuntime = CurrentSettings.TranslationRuntime,
-            TranslationProvider = CurrentSettings.TranslationProvider,
-            TranslationModel = CurrentSettings.TranslationModel,
-            StatusMessage = "Translation complete. Ready for dubbing.",
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.Translated,
+                TranslationPath = translationPath,
+                SourceLanguage = sourceLanguage,
+                TargetLanguage = targetLanguage,
+                TranslatedAtUtc = nowUtc,
+                TranslationRuntime = CurrentSettings.TranslationRuntime,
+                TranslationProvider = CurrentSettings.TranslationProvider,
+                TranslationModel = CurrentSettings.TranslationModel,
+                StatusMessage = "Translation complete. Ready for dubbing.",
+            };
+        }
 
         _log.Info($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
         SaveCurrentSession();
@@ -491,10 +498,25 @@ public sealed partial class SessionWorkflowCoordinator
             else
             {
                 int completed = 0;
-                foreach (var seg in candidateSegments)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await GenerateSingleSegmentAsync(
+                // Honor the provider's advertised MaxConcurrency so cloud and
+                // worker-pool-backed providers (ElevenLabs, OpenAI, Edge TTS,
+                // Piper, etc.) synthesize segments in parallel. Shared state
+                // (ConcurrentDictionary paths/durations, Interlocked counter)
+                // is already thread-safe; Qwen takes the batch branch above.
+                var maxConcurrency = Math.Max(1, _ttsService?.MaxConcurrency ?? 1);
+                var parallelism = Math.Max(1, Math.Min(maxConcurrency, candidateSegments.Count));
+                _log.Info(
+                    $"TTS segment generation: provider={_ttsService?.GetType().Name ?? "<none>"} " +
+                    $"max_concurrency={maxConcurrency} parallelism={parallelism} " +
+                    $"segments={candidateSegments.Count}");
+                await Parallel.ForEachAsync(
+                    candidateSegments,
+                    new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = parallelism,
+                        CancellationToken = cancellationToken,
+                    },
+                    async (seg, ct) => await GenerateSingleSegmentAsync(
                         seg,
                         voice,
                         ttsLanguage,
@@ -503,9 +525,9 @@ public sealed partial class SessionWorkflowCoordinator
                         segmentDurations,
                         totalSegments,
                         stageContext,
-                        cancellationToken,
-                        onSucceeded: () => Interlocked.Increment(ref completed));
-                }
+                        ct,
+                        onSucceeded: () => Interlocked.Increment(ref completed))
+                        .ConfigureAwait(false));
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -596,7 +618,7 @@ public sealed partial class SessionWorkflowCoordinator
                     Language: ttsLanguage,
                     SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
                 cancellationToken);
-            _pendingTtsTasks.Add(segTask);
+            TrackPendingTtsTask(segTask);
             var segResult = await segTask;
 
             if (segResult.Success && File.Exists(segmentAudioPath))
@@ -703,22 +725,25 @@ public sealed partial class SessionWorkflowCoordinator
             ? $"TTS generated ({voice}). Dubbing complete."
             : $"TTS generated ({voice}). {succeeded}/{totalSegments} segments ready — {totalSegments - succeeded} failed.";
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.TtsGenerated,
-            TtsPath = ttsPath,
-            MixedDubAudioPath = renderResult.AmbianceMixed ? renderResult.MixedWithAmbiancePath : null,
-            TtsVoice = voice,
-            TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
-            TtsSegmentsPath = segmentsDir,
-            TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
-            TtsSegmentDurations = segmentDurations is { Count: > 0 }
-                ? new Dictionary<string, double>(segmentDurations)
-                : null,
-            TtsRuntime = CurrentSettings.TtsRuntime,
-            TtsProvider = CurrentSettings.TtsProvider,
-            StatusMessage = statusMessage,
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.TtsGenerated,
+                TtsPath = ttsPath,
+                MixedDubAudioPath = renderResult.AmbianceMixed ? renderResult.MixedWithAmbiancePath : null,
+                TtsVoice = voice,
+                TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
+                TtsSegmentsPath = segmentsDir,
+                TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
+                TtsSegmentDurations = segmentDurations is { Count: > 0 }
+                    ? new Dictionary<string, double>(segmentDurations)
+                    : null,
+                TtsRuntime = CurrentSettings.TtsRuntime,
+                TtsProvider = CurrentSettings.TtsProvider,
+                StatusMessage = statusMessage,
+            };
+        }
 
         SaveCurrentSession();
 
@@ -795,9 +820,6 @@ public sealed partial class SessionWorkflowCoordinator
 
         return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
     }
-
-    private static SegmentTimingMode NormalizeRenderTimingMode(SegmentTimingMode mode) =>
-        mode == SegmentTimingMode.Pause ? SegmentTimingMode.Off : mode;
 
     /// <summary>
     /// Generates TTS audio for multiple translated segments in a single batch using the Qwen container TTS provider and records produced file paths and durations.
@@ -1230,7 +1252,7 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken)
     {
         ResetPipelineToMediaLoaded();
-        SaveCurrentSession();
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
 
         if (remainingDownstream)
         {
@@ -1261,7 +1283,7 @@ public sealed partial class SessionWorkflowCoordinator
             if (speakerAssignmentsChanged && hadTranslatableOutput)
             {
                 ResetPipelineToTranslated();
-                SaveCurrentSession();
+                await SaveCurrentSessionAsync().ConfigureAwait(false);
             }
 
             return;
@@ -1270,13 +1292,13 @@ public sealed partial class SessionWorkflowCoordinator
         if (HasDiarizationMarker(CurrentSession))
         {
             ResetPipelineToDiarized();
-            SaveCurrentSession();
+            await SaveCurrentSessionAsync().ConfigureAwait(false);
             await ContinuePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
         }
         else
         {
             ResetPipelineToTranscribed();
-            SaveCurrentSession();
+            await SaveCurrentSessionAsync().ConfigureAwait(false);
             await AdvancePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
         }
     }

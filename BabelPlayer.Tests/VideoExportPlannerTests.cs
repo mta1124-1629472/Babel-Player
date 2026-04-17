@@ -114,4 +114,63 @@ public sealed class VideoExportPlannerTests
             Directory.Delete(workDir, recursive: true);
         }
     }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
+    public void BuildPlan_WhenMixedDubExists_UsesMixedDubAudio()
+    {
+        var workDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workDir);
+        try
+        {
+            var planner = new VideoExportPlanner();
+            var session = CreateSession(workDir) with
+            {
+                MixedDubAudioPath = Path.Combine(workDir, "dub-mixed.mp3"),
+            };
+            File.WriteAllText(session.MixedDubAudioPath!, "mixed");
+
+            var plan = planner.BuildPlan(
+                session,
+                CreateSegments(),
+                new ExportVideoOptions(Path.Combine(workDir, "out.mp4"), IncludeTtsAudio: true));
+
+            Assert.Contains(session.MixedDubAudioPath, plan.InputFiles);
+            Assert.DoesNotContain(session.TtsPath, plan.InputFiles);
+        }
+        finally
+        {
+            Directory.Delete(workDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
+    public void Validate_WhenAmbianceExistsButMixedDubMissing_RejectsExport()
+    {
+        var workDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workDir);
+        try
+        {
+            var planner = new VideoExportPlanner();
+            var session = CreateSession(workDir) with
+            {
+                AmbianceAudioPath = Path.Combine(workDir, "ambiance.wav"),
+                MixedDubAudioPath = Path.Combine(workDir, "missing-mixed.mp3"),
+            };
+            File.WriteAllText(session.AmbianceAudioPath!, "ambiance");
+
+            var result = planner.Validate(
+                session,
+                CreateSegments(),
+                new ExportVideoOptions(Path.Combine(workDir, "out.mp4"), IncludeTtsAudio: true));
+
+            Assert.False(result.CanExport);
+            Assert.Contains(result.Issues, issue => issue.Contains("dubbed audio", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.Delete(workDir, recursive: true);
+        }
+    }
 }

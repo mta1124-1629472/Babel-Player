@@ -93,7 +93,7 @@ public partial class MainWindow : Window
         base.OnOpened(e);
 
         if (DataContext is MainWindowViewModel vm)
-            _ = vm.TryShowManagedBackendWarmupNoticeAsync(this);
+            _ = vm.TryShowManagedBackendWarmupNoticeAsync();
 
         _windowPositionChangedHandler ??= OnWindowPositionChanged;
         _windowScalingChangedHandler ??= OnWindowMetricsChanged;

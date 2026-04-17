@@ -58,8 +58,11 @@ public sealed partial class SessionWorkflowCoordinator
             : new Dictionary<string, string>(references, StringComparer.Ordinal);
         updatedRefs[QwenReferenceKeys.SingleSpeakerDefault] = outputPath;
 
-        CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updatedRefs };
-        SaveCurrentSession();
+        lock (_sessionLock)
+        {
+            CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updatedRefs };
+        }
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
         _log.Info($"Prepared Qwen single-speaker reference clip: {outputPath}");
     }
 
@@ -146,8 +149,11 @@ public sealed partial class SessionWorkflowCoordinator
         if (!anyNew)
             return;
 
-        CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
-        SaveCurrentSession();
+        lock (_sessionLock)
+        {
+            CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
+        }
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
         _log.Info($"Multi-speaker reference extraction complete: {bestBySpeaker.Count} speakers processed.");
     }
 
