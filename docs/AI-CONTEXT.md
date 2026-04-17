@@ -86,7 +86,7 @@ Babel-Player/
 | `ViewModels/EmbeddedPlaybackViewModel.cs` | Largest VM; manages video playback UI, segment selection, dub mode, subtitle toggle |
 | `ViewModels/MainWindowViewModel.cs` | Top-level VM; composes pipeline, preview, and settings VMs |
 | `Models/WorkflowSessionSnapshot.cs` | Complete session state record persisted to disk |
-| `Models/SessionWorkflowStage.cs` | Enum: `Foundation → MediaLoaded → Transcribed → Translated → TtsGenerated` |
+| `Models/SessionWorkflowStage.cs` | Enum: `Foundation → MediaLoaded → Transcribed → Diarized → Translated → TtsGenerated` |
 | `Models/ProviderNames.cs` | All provider identifier constants (string keys) |
 | `Models/ComputeProfile.cs` | CPU / GPU / Cloud enum with hardware-aware selection |
 | `Services/InferenceRuntimeCatalog.cs` | Compute profile → provider routing and normalization |
