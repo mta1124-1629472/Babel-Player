@@ -14,6 +14,7 @@ namespace BabelPlayer.Tests;
 /// Tests that can run without an ffmpeg binary cover edge cases (empty list, single-file copy).
 /// Tests that require ffmpeg are skipped when the binary is absent.
 /// </summary>
+[Collection("Environment")]
 public sealed class FfmpegAudioProcessingServiceTests : IDisposable
 {
     private readonly string _dir;

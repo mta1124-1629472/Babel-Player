@@ -39,7 +39,9 @@ public sealed class DeepLApiClient : IDisposable
 
     public async Task<DeepLUsageInfo> GetUsageAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync("usage", cancellationToken);
+        using var response = await HttpRetryHelper.SendAsync(
+            () => _httpClient.GetAsync("usage", cancellationToken),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         var payload = await ReadJsonAsync<UsageResponseDto>(response, cancellationToken);
 
         return new DeepLUsageInfo(payload.CharacterCount, payload.CharacterLimit);
@@ -74,12 +76,15 @@ public sealed class DeepLApiClient : IDisposable
             request.SourceLanguage = normalizedSource;
         }
 
-        var content = new StringContent(
-            JsonSerializer.Serialize(request, JsonOptions),
-            Encoding.UTF8,
-            "application/json");
+        var requestJson = JsonSerializer.Serialize(request, JsonOptions);
 
-        using var response = await _httpClient.PostAsync("translate", content, cancellationToken);
+        using var response = await HttpRetryHelper.SendAsync(
+            () =>
+            {
+                var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+                return _httpClient.PostAsync("translate", content, cancellationToken);
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         var payload = await ReadJsonAsync<TranslateResponseDto>(response, cancellationToken);
 
         return [..

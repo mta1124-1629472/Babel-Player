@@ -166,7 +166,7 @@ If the abstraction mainly serves imagined future needs, do not add it yet.
 
 ### Python and inference environment hygiene
 
-For Python/C# serialization contracts and inference conventions, see [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#pythonc-serialization-contract).
+For Python/C# serialization contracts and inference conventions, see [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#pythonc-serialization-contracts).
 
 ### Historical preservation
 
