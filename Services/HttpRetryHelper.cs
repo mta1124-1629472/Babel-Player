@@ -19,6 +19,11 @@ public static class HttpRetryHelper
 {
     private const int DefaultMaxAttempts = 3;
 
+    // Upper bound for any single backoff delay. Protects callers from a hostile or
+    // misconfigured server returning an unbounded `Retry-After` value (e.g. 1 hour),
+    // which would otherwise cause the UI / pipeline thread to hang for that duration.
+    private static readonly TimeSpan MaxDelay = TimeSpan.FromSeconds(30);
+
     public static async Task<HttpResponseMessage> SendAsync(
         Func<Task<HttpResponseMessage>> sendAsync,
         int maxAttempts = DefaultMaxAttempts,
@@ -58,9 +63,17 @@ public static class HttpRetryHelper
         ex is HttpRequestException or IOException or TimeoutException
         || (ex is OperationCanceledException oce && oce.CancellationToken != cancellationToken);
 
-    private static TimeSpan GetDelay(HttpResponseMessage response, int attempt) =>
-        response.Headers.RetryAfter?.Delta ?? GetDelay(attempt);
+    private static TimeSpan GetDelay(HttpResponseMessage response, int attempt)
+    {
+        var retryAfter = response.Headers.RetryAfter?.Delta;
+        if (retryAfter is { } delta)
+            return delta < TimeSpan.Zero ? TimeSpan.Zero : (delta > MaxDelay ? MaxDelay : delta);
+        return GetDelay(attempt);
+    }
 
-    private static TimeSpan GetDelay(int attempt) =>
-        TimeSpan.FromMilliseconds(Math.Pow(2, attempt - 1) * 200);
+    private static TimeSpan GetDelay(int attempt)
+    {
+        var exponential = TimeSpan.FromMilliseconds(Math.Pow(2, attempt - 1) * 200);
+        return exponential > MaxDelay ? MaxDelay : exponential;
+    }
 }

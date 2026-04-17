@@ -37,11 +37,14 @@ public sealed class CloudApiClientRetryTests
     [Fact]
     public async Task DeepLApiClient_GetUsageAsync_RetriesServiceUnavailable()
     {
+        var unavailable = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+        {
+            Content = new StringContent("busy")
+        };
+        unavailable.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(System.TimeSpan.Zero);
+
         var handler = new SequencedHandler(
-            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
-            {
-                Content = new StringContent("busy")
-            },
+            unavailable,
             new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("{\"character_count\":1,\"character_limit\":1000}", Encoding.UTF8, "application/json")
@@ -80,11 +83,14 @@ public sealed class CloudApiClientRetryTests
     [Fact]
     public async Task GoogleApiClient_ListVoicesAsync_RetriesServiceUnavailable()
     {
+        var unavailable = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+        {
+            Content = new StringContent("{\"error\":{\"message\":\"busy\"}}", Encoding.UTF8, "application/json")
+        };
+        unavailable.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(System.TimeSpan.Zero);
+
         var handler = new SequencedHandler(
-            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
-            {
-                Content = new StringContent("{\"error\":{\"message\":\"busy\"}}", Encoding.UTF8, "application/json")
-            },
+            unavailable,
             new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("{\"voices\":[{\"name\":\"en-US-Standard-A\"}]}", Encoding.UTF8, "application/json")
