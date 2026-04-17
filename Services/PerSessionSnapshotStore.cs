@@ -12,7 +12,7 @@ namespace Babel.Player.Services;
 /// Persists each session's <see cref="WorkflowSessionSnapshot"/> to a per-session directory
 /// under <c>sessions/[SessionId]/snapshot.json</c>.
 /// </summary>
-public sealed class PerSessionSnapshotStore
+public sealed class PerSessionSnapshotStore : IDisposable
 {
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
 
@@ -141,4 +141,9 @@ public sealed class PerSessionSnapshotStore
 
     private string SnapshotPath(Guid sessionId) =>
         Path.Combine(SessionDir(sessionId), "snapshot.json");
+
+    public void Dispose()
+    {
+        _saveGate.Dispose();
+    }
 }
