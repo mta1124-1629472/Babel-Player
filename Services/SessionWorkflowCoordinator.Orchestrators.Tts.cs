@@ -75,14 +75,14 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                 var (segmentAudioPaths, segmentDurations, totalSegments, orderedSegments) = await _c.GenerateSegmentClipsAsync(
                     v!, ttsLanguage, segmentsDir, stageContext, cancellationToken);
 
-                var mixedDubPath = await _c.StitchSegmentClipsAsync(
+                var renderResult = await _c.StitchSegmentClipsAsync(
                     segmentAudioPaths,
                     orderedSegments,
                     ttsPath,
                     stageContext,
                     cancellationToken);
 
-                _c.CommitTtsSessionState(v!, ttsPath, mixedDubPath, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
+                _c.CommitTtsSessionState(v!, ttsPath, renderResult, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
                 stageSucceeded = true;
             }
             finally

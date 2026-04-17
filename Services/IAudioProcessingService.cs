@@ -44,6 +44,7 @@ public interface IAudioProcessingService
         string dubbedAudioPath,
         string ambianceAudioPath,
         string outputAudioPath,
+        double ambianceGainDb,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -103,8 +104,8 @@ public interface IAudioProcessingService
         string inputPath,
         string outputPath,
         double targetDurationSeconds,
-        double minRatio = 0.75,
-        double maxRatio = 1.35,
+        double minRatio = DubTimingDefaults.StretchMinTempoRatio,
+        double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
         CancellationToken cancellationToken = default);
 
     /// <summary>

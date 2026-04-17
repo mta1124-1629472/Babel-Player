@@ -621,7 +621,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// <paramref name="orderedSegments"/> comes from <see cref="GenerateSegmentClipsAsync"/> to avoid
     /// a redundant disk read of the translation artifact.
     /// </summary>
-    private async Task<string?> StitchSegmentClipsAsync(
+    private async Task<DubRenderResult> StitchSegmentClipsAsync(
         ConcurrentDictionary<string, string> segmentAudioPaths,
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         string ttsPath,
@@ -644,37 +644,19 @@ public sealed partial class SessionWorkflowCoordinator
             progress01: 1,
             isIndeterminate: true);
 
-        string? mixedDubPath = null;
         if (_audioProcessingService is null)
         {
             throw new InvalidOperationException("Audio processing service unavailable. Unable to compose dub audio.");
         }
 
-        var timelineSegments = await BuildTimelineDubSegmentsAsync(
-            orderedSegments,
-            segmentAudioPaths,
-            cancellationToken).ConfigureAwait(false);
-        await _audioProcessingService.ComposeTimelineDubAsync(timelineSegments, ttsPath, cancellationToken).ConfigureAwait(false);
-
-        if (!string.IsNullOrWhiteSpace(CurrentSession.AmbianceAudioPath)
-            && File.Exists(CurrentSession.AmbianceAudioPath))
-        {
-            var outputDir = Path.GetDirectoryName(ttsPath) ?? GetSessionDirectory();
-            var fileName = Path.GetFileNameWithoutExtension(ttsPath);
-            mixedDubPath = Path.Combine(outputDir, $"{fileName}_mixed.mp3");
-            await _audioProcessingService.MixDubOverAmbianceAsync(
+        return await RenderDubAudioAsync(
+                orderedSegments,
+                segmentAudioPaths,
                 ttsPath,
                 CurrentSession.AmbianceAudioPath,
-                mixedDubPath,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (!File.Exists(ttsPath))
-            throw new InvalidOperationException(
-                $"Stitching completed but combined dub file was not created at '{ttsPath}'. Check ffmpeg output and disk permissions.");
-
-        _log.Info($"TTS combined complete: {ttsPath}");
-        return mixedDubPath;
+                CurrentSettings.AmbianceMixDb,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -693,7 +675,7 @@ public sealed partial class SessionWorkflowCoordinator
     private void CommitTtsSessionState(
         string voice,
         string ttsPath,
-        string? mixedDubPath,
+        DubRenderResult renderResult,
         string segmentsDir,
         ConcurrentDictionary<string, string> segmentAudioPaths,
         ConcurrentDictionary<string, double>? segmentDurations,
@@ -717,7 +699,7 @@ public sealed partial class SessionWorkflowCoordinator
         {
             Stage = SessionWorkflowStage.TtsGenerated,
             TtsPath = ttsPath,
-            MixedDubAudioPath = mixedDubPath,
+            MixedDubAudioPath = renderResult.AmbianceMixed ? renderResult.MixedWithAmbiancePath : null,
             TtsVoice = voice,
             TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
             TtsSegmentsPath = segmentsDir,
@@ -756,7 +738,7 @@ public sealed partial class SessionWorkflowCoordinator
                 continue;
 
             var segmentDuration = Math.Max(0.05, segment.End - segment.Start);
-            var timingMode = ResolveSegmentTimingMode(segment.Id);
+            var timingMode = ResolveRenderTimingMode(segment.Id);
             var effectivePath = sourcePath;
 
             if (timingMode == SegmentTimingMode.Stretch && _audioProcessingService is not null)
@@ -776,7 +758,7 @@ public sealed partial class SessionWorkflowCoordinator
                 effectivePath,
                 Math.Max(0, segment.Start),
                 segmentDuration,
-                TrimToSegmentWindow: timingMode != SegmentTimingMode.Pause));
+                TrimToSegmentWindow: true));
         }
 
         if (timelineSegments.Count == 0)
@@ -788,12 +770,22 @@ public sealed partial class SessionWorkflowCoordinator
         return timelineSegments;
     }
 
-    private SegmentTimingMode ResolveSegmentTimingMode(string segmentId)
+    private SegmentTimingMode ResolveRenderTimingMode(string segmentId)
     {
         if (CurrentSession.SegmentTimingModeOverrides is not null
             && CurrentSession.SegmentTimingModeOverrides.TryGetValue(segmentId, out var overrideMode))
-            return overrideMode;
-        return CurrentSettings.DubTimingMode;
+        {
+            if (overrideMode == SegmentTimingMode.Pause)
+            {
+                _log.Info(
+                    $"Ignoring preview-only Pause timing override for render on segment '{segmentId}'; using session default timing mode.");
+                return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
+            }
+
+            return DubTimingDefaults.NormalizeRenderTimingMode(overrideMode);
+        }
+
+        return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
     }
 
     /// <summary>
