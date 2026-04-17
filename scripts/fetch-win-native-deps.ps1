@@ -25,6 +25,55 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Invoke-FileDownload {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Uri,
+        [Parameter(Mandatory = $true)]
+        [string] $OutFile,
+        [int] $MaxAttempts = 3
+    )
+
+    $lastError = $null
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            Invoke-WebRequest -Uri $Uri -OutFile $OutFile
+            return
+        }
+        catch {
+            $lastError = $_
+            Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue
+
+            $curl = Get-Command "curl.exe" -ErrorAction SilentlyContinue
+            if ($null -ne $curl) {
+                try {
+                    & $curl.Source -fL --output $OutFile $Uri | Out-Null
+                    if ($LASTEXITCODE -eq 0 -and (Test-Path $OutFile)) {
+                        return
+                    }
+
+                    throw "curl.exe exited with code $LASTEXITCODE while downloading $Uri"
+                }
+                catch {
+                    $lastError = $_
+                    Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue
+                }
+            }
+
+            if ($attempt -eq $MaxAttempts) {
+                throw $lastError
+            }
+
+            $delaySeconds = [int][Math]::Pow(2, $attempt - 1)
+            Write-Warning "Download attempt $attempt for $Uri failed: $($lastError.Exception.Message). Retrying in $delaySeconds second(s)."
+            Start-Sleep -Seconds $delaySeconds
+        }
+    }
+
+    throw $lastError
+}
+
 function Get-TargetArchitecture {
     if ($Architecture -ne "Auto") {
         return $Architecture
@@ -73,11 +122,11 @@ New-Item -ItemType Directory -Force -Path $scratch | Out-Null
 try {
     $sevenZip = Join-Path $scratch "7zr.exe"
     Write-Host "Downloading 7zr from $SevenZipRemote"
-    Invoke-WebRequest -Uri $SevenZipRemote -OutFile $sevenZip
+    Invoke-FileDownload -Uri $SevenZipRemote -OutFile $sevenZip
 
     $libmpvArc = Join-Path $scratch "mpv-dev.7z"
     Write-Host "Downloading libmpv dev archive from $LibmpvDevArchiveUrl"
-    Invoke-WebRequest -Uri $LibmpvDevArchiveUrl -OutFile $libmpvArc
+    Invoke-FileDownload -Uri $LibmpvDevArchiveUrl -OutFile $libmpvArc
 
     Push-Location $scratch
     try {
@@ -96,7 +145,7 @@ try {
 
     Write-Host "Downloading uv from $UvZipUrl"
     $uvZip = Join-Path $scratch "uv.zip"
-    Invoke-WebRequest -Uri $UvZipUrl -OutFile $uvZip
+    Invoke-FileDownload -Uri $UvZipUrl -OutFile $uvZip
     $uvTemp = Join-Path $scratch "uv_temp"
     Expand-Archive -Path $uvZip -DestinationPath $uvTemp -Force
     $uvExe = Get-ChildItem -Path $uvTemp -Filter "uv.exe" -Recurse | Select-Object -First 1
@@ -119,7 +168,7 @@ try {
             Write-Host "Downloading FFmpeg $FfmpegVersion from $ffmpegUrl"
         }
         $ffmpegZip = Join-Path $scratch "ffmpeg.zip"
-        Invoke-WebRequest -Uri $ffmpegUrl -OutFile $ffmpegZip
+        Invoke-FileDownload -Uri $ffmpegUrl -OutFile $ffmpegZip
         $ffmpegTemp = Join-Path $scratch "ffmpeg_temp"
         Expand-Archive -Path $ffmpegZip -DestinationPath $ffmpegTemp -Force
         $ffmpegExe = Get-ChildItem -Path $ffmpegTemp -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
