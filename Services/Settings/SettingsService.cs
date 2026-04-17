@@ -102,6 +102,7 @@ public sealed class SettingsService
         public int? DiarizationMinSpeakers { get; set; }
         public int? DiarizationMaxSpeakers { get; set; }
         public bool? VocalSeparationEnabled { get; set; }
+        public bool? ShownManagedBackendWarmupNotice { get; set; }
         public string? TranslationProvider { get; set; }
         public ComputeProfile? TranslationProfile { get; set; }
         public InferenceRuntime? TranslationRuntime { get; set; }
@@ -171,6 +172,8 @@ public sealed class SettingsService
             settings.DiarizationMinSpeakers = null;
             settings.DiarizationMaxSpeakers = null;
             settings.VocalSeparationEnabled = VocalSeparationEnabled ?? settings.VocalSeparationEnabled;
+            settings.ShownManagedBackendWarmupNotice =
+                ShownManagedBackendWarmupNotice ?? settings.ShownManagedBackendWarmupNotice;
 
             settings.TranslationProvider = TranslationProvider ?? settings.TranslationProvider;
             settings.TranslationProfile = ResolveProfile(
@@ -254,6 +257,7 @@ public sealed class SettingsService
             DiarizationMinSpeakers = null,
             DiarizationMaxSpeakers = null,
             VocalSeparationEnabled = settings.VocalSeparationEnabled,
+            ShownManagedBackendWarmupNotice = settings.ShownManagedBackendWarmupNotice,
             TranslationProvider = settings.TranslationProvider,
             TranslationProfile = settings.TranslationProfile,
             TranslationModel = settings.TranslationModel,

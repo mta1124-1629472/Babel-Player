@@ -40,6 +40,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private readonly ConcurrentBag<Task> _pendingTtsTasks = [];
     private readonly IAudioProcessingService? _audioProcessingService;
+    private readonly object _sessionLock = new();
 
 
     private readonly IInferenceExecutionEngine _inferenceEngine;
@@ -294,7 +295,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         if (loadResult.Snapshot is null)
         {
-            CurrentSession = WorkflowSessionSnapshot.CreateNew(nowUtc);
+            lock (_sessionLock)
+            {
+                CurrentSession = WorkflowSessionSnapshot.CreateNew(nowUtc);
+            }
             SessionSource = "Created a new foundation session.";
         }
         else
@@ -325,12 +329,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                             ? "Ready."
                             : "Ready.";
 
-
-            CurrentSession = validated with
+            lock (_sessionLock)
             {
-                LastUpdatedAtUtc = nowUtc,
-                StatusMessage = statusMessage,
-            };
+                CurrentSession = validated with
+                {
+                    LastUpdatedAtUtc = nowUtc,
+                    StatusMessage = statusMessage,
+                };
+            }
 
             // Primary current-session.json is authoritative — overwrite per-session cache entry.
             if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
@@ -456,24 +462,27 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
             _log.Info($"Copied media to session artifact: {ingestedPath}");
 
-            CurrentSession = validated with
+            lock (_sessionLock)
             {
-                IngestedMediaPath = ingestedPath,
-                VocalsAudioPath = validated.VocalsAudioPath,
-                AmbianceAudioPath = validated.AmbianceAudioPath,
-                InstrumentalAudioPath = validated.AmbianceAudioPath,
-                MediaLoadedAtUtc = nowUtc,
-                LastUpdatedAtUtc = nowUtc,
-                StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
-                    ? "Restored prior TTS. Ready for playback."
-                    : validated.Stage >= SessionWorkflowStage.Translated
-                        ? "Restored translation. Ready for TTS/dubbing."
-                    : validated.Stage >= SessionWorkflowStage.Diarized
-                        ? "Restored speaker mapping state. Ready to resume translation/TTS."
-                    : validated.Stage >= SessionWorkflowStage.Transcribed
-                        ? "Restored transcript. Ready for translation."
-                    : "Media loaded. Ready for transcription.",
-            };
+                CurrentSession = validated with
+                {
+                    IngestedMediaPath = ingestedPath,
+                    VocalsAudioPath = validated.VocalsAudioPath,
+                    AmbianceAudioPath = validated.AmbianceAudioPath,
+                    InstrumentalAudioPath = validated.AmbianceAudioPath,
+                    MediaLoadedAtUtc = nowUtc,
+                    LastUpdatedAtUtc = nowUtc,
+                    StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
+                        ? "Restored prior TTS. Ready for playback."
+                        : validated.Stage >= SessionWorkflowStage.Translated
+                            ? "Restored translation. Ready for TTS/dubbing."
+                        : validated.Stage >= SessionWorkflowStage.Diarized
+                            ? "Restored speaker mapping state. Ready to resume translation/TTS."
+                        : validated.Stage >= SessionWorkflowStage.Transcribed
+                            ? "Restored transcript. Ready for translation."
+                        : "Media loaded. Ready for transcription.",
+                };
+            }
             _log.Info($"Restored cached session for: {sourceMediaPath} (stage: {CurrentSession.Stage})");
         }
         else
@@ -491,30 +500,33 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
             _log.Info($"Copied media to session artifact: {ingestedPath}");
 
-            CurrentSession = CurrentSession with
+            lock (_sessionLock)
             {
-                SessionId = newSessionId,
-                Stage = SessionWorkflowStage.MediaLoaded,
-                SourceMediaPath = sourceMediaPath,
-                IngestedMediaPath = ingestedPath,
-                VocalsAudioPath = null,
-                AmbianceAudioPath = null,
-                InstrumentalAudioPath = null,
-                MediaLoadedAtUtc = nowUtc,
-                TranscriptPath = null,
-                SourceLanguage = null,
-                TranscribedAtUtc = null,
-                TranscriptionLanguageHint = null,
-                TranslationPath = null,
-                TargetLanguage = null,
-                TranslatedAtUtc = null,
-                TtsPath = null,
-                TtsVoice = null,
-                TtsGeneratedAtUtc = null,
-                TtsSegmentsPath = null,
-                TtsSegmentAudioPaths = null,
-                StatusMessage = "Media loaded.",
-            };
+                CurrentSession = CurrentSession with
+                {
+                    SessionId = newSessionId,
+                    Stage = SessionWorkflowStage.MediaLoaded,
+                    SourceMediaPath = sourceMediaPath,
+                    IngestedMediaPath = ingestedPath,
+                    VocalsAudioPath = null,
+                    AmbianceAudioPath = null,
+                    InstrumentalAudioPath = null,
+                    MediaLoadedAtUtc = nowUtc,
+                    TranscriptPath = null,
+                    SourceLanguage = null,
+                    TranscribedAtUtc = null,
+                    TranscriptionLanguageHint = null,
+                    TranslationPath = null,
+                    TargetLanguage = null,
+                    TranslatedAtUtc = null,
+                    TtsPath = null,
+                    TtsVoice = null,
+                    TtsGeneratedAtUtc = null,
+                    TtsSegmentsPath = null,
+                    TtsSegmentAudioPaths = null,
+                    StatusMessage = "Media loaded.",
+                };
+            }
         }
 
         QueueMediaReloadRequest(autoPlay: false, "media-switch");
@@ -545,15 +557,18 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
     public void InjectTestTranscript(string transcriptPath, string? translationPath = null)
     {
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = translationPath != null ? SessionWorkflowStage.Translated : SessionWorkflowStage.Transcribed,
-            TranscriptPath = transcriptPath,
-            TranslationPath = translationPath,
-            StatusMessage = translationPath != null
-                ? "Test transcript and translation injected."
-                : "Test transcript injected.",
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = translationPath != null ? SessionWorkflowStage.Translated : SessionWorkflowStage.Transcribed,
+                TranscriptPath = transcriptPath,
+                TranslationPath = translationPath,
+                StatusMessage = translationPath != null
+                    ? "Test transcript and translation injected."
+                    : "Test transcript injected.",
+            };
+        }
         SaveCurrentSession();
     }
 
@@ -561,70 +576,76 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     {
         if (CurrentSession.Stage < SessionWorkflowStage.MediaLoaded) return;
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.MediaLoaded,
-            VocalsAudioPath = null,
-            AmbianceAudioPath = null,
-            InstrumentalAudioPath = null,
-            TranscriptPath = null,
-            TranslationPath = null,
-            TtsPath = null,
-            MixedDubAudioPath = null,
-            TtsVoice = null,
-            TtsSegmentsPath = null,
-            TtsSegmentAudioPaths = null,
-            SourceLanguage = null,
-            TargetLanguage = null,
-            TranscribedAtUtc = null,
-            TranslatedAtUtc = null,
-            TtsGeneratedAtUtc = null,
-            TranscriptionRuntime = null,
-            TranscriptionProvider = null,
-            TranscriptionModel = null,
-            TranscriptionLanguageHint = null,
-            TranslationRuntime = null,
-            TranslationProvider = null,
-            TranslationModel = null,
-            TtsRuntime = null,
-            TtsProvider = null,
-            SpeakerVoiceAssignments = null,
-            SpeakerReferenceAudioPaths = null,
-            DefaultTtsVoiceFallback = null,
-            DiarizationProvider = null,
-            SpeakersDetectedAtUtc = null,
-            StatusMessage = "Ready.",
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.MediaLoaded,
+                VocalsAudioPath = null,
+                AmbianceAudioPath = null,
+                InstrumentalAudioPath = null,
+                TranscriptPath = null,
+                TranslationPath = null,
+                TtsPath = null,
+                MixedDubAudioPath = null,
+                TtsVoice = null,
+                TtsSegmentsPath = null,
+                TtsSegmentAudioPaths = null,
+                SourceLanguage = null,
+                TargetLanguage = null,
+                TranscribedAtUtc = null,
+                TranslatedAtUtc = null,
+                TtsGeneratedAtUtc = null,
+                TranscriptionRuntime = null,
+                TranscriptionProvider = null,
+                TranscriptionModel = null,
+                TranscriptionLanguageHint = null,
+                TranslationRuntime = null,
+                TranslationProvider = null,
+                TranslationModel = null,
+                TtsRuntime = null,
+                TtsProvider = null,
+                SpeakerVoiceAssignments = null,
+                SpeakerReferenceAudioPaths = null,
+                DefaultTtsVoiceFallback = null,
+                DiarizationProvider = null,
+                SpeakersDetectedAtUtc = null,
+                StatusMessage = "Ready.",
+            };
+        }
     }
 
     public void ResetPipelineToTranscribed()
     {
         if (CurrentSession.Stage < SessionWorkflowStage.Transcribed) return;
         
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.Transcribed,
-            TranslationPath = null,
-            TtsPath = null,
-            MixedDubAudioPath = null,
-            TtsVoice = null,
-            TtsSegmentsPath = null,
-            TtsSegmentAudioPaths = null,
-            TargetLanguage = null,
-            TranslatedAtUtc = null,
-            TtsGeneratedAtUtc = null,
-            TranslationRuntime = null,
-            TranslationProvider = null,
-            TranslationModel = null,
-            TtsRuntime = null,
-            TtsProvider = null,
-            SpeakerVoiceAssignments = null,
-            SpeakerReferenceAudioPaths = null,
-            DefaultTtsVoiceFallback = null,
-            DiarizationProvider = null,
-            SpeakersDetectedAtUtc = null,
-            StatusMessage = "Reset to transcription."
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.Transcribed,
+                TranslationPath = null,
+                TtsPath = null,
+                MixedDubAudioPath = null,
+                TtsVoice = null,
+                TtsSegmentsPath = null,
+                TtsSegmentAudioPaths = null,
+                TargetLanguage = null,
+                TranslatedAtUtc = null,
+                TtsGeneratedAtUtc = null,
+                TranslationRuntime = null,
+                TranslationProvider = null,
+                TranslationModel = null,
+                TtsRuntime = null,
+                TtsProvider = null,
+                SpeakerVoiceAssignments = null,
+                SpeakerReferenceAudioPaths = null,
+                DefaultTtsVoiceFallback = null,
+                DiarizationProvider = null,
+                SpeakersDetectedAtUtc = null,
+                StatusMessage = "Reset to transcription."
+            };
+        }
     }
 
     public void ResetPipelineToDiarized()
@@ -632,44 +653,50 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         if (CurrentSession.Stage < SessionWorkflowStage.Diarized || !HasDiarizationMarker(CurrentSession))
             return;
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.Diarized,
-            TranslationPath = null,
-            TtsPath = null,
-            MixedDubAudioPath = null,
-            TtsVoice = null,
-            TtsSegmentsPath = null,
-            TtsSegmentAudioPaths = null,
-            TargetLanguage = null,
-            TranslatedAtUtc = null,
-            TtsGeneratedAtUtc = null,
-            TranslationRuntime = null,
-            TranslationProvider = null,
-            TranslationModel = null,
-            TtsRuntime = null,
-            TtsProvider = null,
-            StatusMessage = "Reset to speaker analysis."
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.Diarized,
+                TranslationPath = null,
+                TtsPath = null,
+                MixedDubAudioPath = null,
+                TtsVoice = null,
+                TtsSegmentsPath = null,
+                TtsSegmentAudioPaths = null,
+                TargetLanguage = null,
+                TranslatedAtUtc = null,
+                TtsGeneratedAtUtc = null,
+                TranslationRuntime = null,
+                TranslationProvider = null,
+                TranslationModel = null,
+                TtsRuntime = null,
+                TtsProvider = null,
+                StatusMessage = "Reset to speaker analysis."
+            };
+        }
     }
 
     public void ResetPipelineToTranslated()
     {
         if (CurrentSession.Stage < SessionWorkflowStage.Translated) return;
         
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.Translated,
-            TtsPath = null,
-            MixedDubAudioPath = null,
-            TtsVoice = null,
-            TtsSegmentsPath = null,
-            TtsSegmentAudioPaths = null,
-            TtsGeneratedAtUtc = null,
-            TtsRuntime = null,
-            TtsProvider = null,
-            StatusMessage = "Reset to translation."
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.Translated,
+                TtsPath = null,
+                MixedDubAudioPath = null,
+                TtsVoice = null,
+                TtsSegmentsPath = null,
+                TtsSegmentAudioPaths = null,
+                TtsGeneratedAtUtc = null,
+                TtsRuntime = null,
+                TtsProvider = null,
+                StatusMessage = "Reset to translation."
+            };
+        }
     }
 
     /// <summary>
@@ -682,7 +709,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         else
             ResetPipelineToTranscribed();
 
-        CurrentSession = CurrentSession with { StatusMessage = "Ready." };
+        lock (_sessionLock)
+        {
+            CurrentSession = CurrentSession with { StatusMessage = "Ready." };
+        }
         SaveCurrentSession();
     }
 
@@ -790,7 +820,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         {
             case PipelineInvalidation.Transcription:
                 ResetPipelineToMediaLoaded();
-                CurrentSession = CurrentSession with { StatusMessage = statusMessage };
+                lock (_sessionLock)
+                {
+                    CurrentSession = CurrentSession with { StatusMessage = statusMessage };
+                }
                 SaveCurrentSession();
                 break;
             case PipelineInvalidation.Translation:
@@ -798,12 +831,18 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                     ResetPipelineToDiarized();
                 else
                     ResetPipelineToTranscribed();
-                CurrentSession = CurrentSession with { StatusMessage = statusMessage };
+                lock (_sessionLock)
+                {
+                    CurrentSession = CurrentSession with { StatusMessage = statusMessage };
+                }
                 SaveCurrentSession();
                 break;
             case PipelineInvalidation.Tts:
                 ResetPipelineToTranslated();
-                CurrentSession = CurrentSession with { StatusMessage = statusMessage };
+                lock (_sessionLock)
+                {
+                    CurrentSession = CurrentSession with { StatusMessage = statusMessage };
+                }
                 SaveCurrentSession();
                 break;
         }
@@ -915,11 +954,14 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         var currentSegments = CurrentSession.TtsSegmentAudioPaths ?? [];
         currentSegments[segmentId] = segmentAudioPath;
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            TtsSegmentAudioPaths = currentSegments,
-            StatusMessage = $"Regenerated TTS for segment {segmentId}.",
-        };
+            CurrentSession = CurrentSession with
+            {
+                TtsSegmentAudioPaths = currentSegments,
+                StatusMessage = $"Regenerated TTS for segment {segmentId}.",
+            };
+        }
 
         _log.Info($"Segment TTS regenerated: {segmentId} -> {segmentAudioPath}");
         SaveCurrentSession();
@@ -996,10 +1038,13 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         }
 
         _log.Info($"Segment translation regenerated: {segmentId}");
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            StatusMessage = $"Regenerated translation for segment {segmentId}.",
-        };
+            CurrentSession = CurrentSession with
+            {
+                StatusMessage = $"Regenerated translation for segment {segmentId}.",
+            };
+        }
         SaveCurrentSession();
     }
 
@@ -1091,21 +1136,24 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 $"cleared={string.Join(",", validation.ClearedArtifacts)}; provenance={SessionSnapshotSemantics.DescribeSessionProvenance(validated)}");
         }
         var nowUtc = DateTimeOffset.UtcNow;
-        CurrentSession = validated with
+        lock (_sessionLock)
         {
-            LastUpdatedAtUtc = nowUtc,
-            StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
-                ? "Restored session with TTS. Ready for playback."
-                : validated.Stage >= SessionWorkflowStage.Translated
-                    ? "Restored session with translation. Ready for TTS/dubbing."
-                : validated.Stage >= SessionWorkflowStage.Diarized
-                    ? "Restored session with speaker mapping. Ready to resume translation/TTS."
-                    : validated.Stage >= SessionWorkflowStage.Transcribed
-                        ? "Restored session with transcript. Ready for translation."
-                    : validated.Stage >= SessionWorkflowStage.MediaLoaded
-                            ? "Restored session with media. Ready for transcription."
-                            : "Restored foundation session.",
-        };
+            CurrentSession = validated with
+            {
+                LastUpdatedAtUtc = nowUtc,
+                StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
+                    ? "Restored session with TTS. Ready for playback."
+                    : validated.Stage >= SessionWorkflowStage.Translated
+                        ? "Restored session with translation. Ready for TTS/dubbing."
+                    : validated.Stage >= SessionWorkflowStage.Diarized
+                        ? "Restored session with speaker mapping. Ready to resume translation/TTS."
+                        : validated.Stage >= SessionWorkflowStage.Transcribed
+                            ? "Restored session with transcript. Ready for translation."
+                        : validated.Stage >= SessionWorkflowStage.MediaLoaded
+                                ? "Restored session with media. Ready for transcription."
+                                : "Restored foundation session.",
+            };
+        }
 
         _log.Info($"Restored session {sessionId} (stage: {CurrentSession.Stage}).");
         QueueMediaReloadRequest(autoPlay: false, "session-restore");
@@ -1143,7 +1191,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     public void SaveCurrentSession()
     {
         var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-        CurrentSession = snapshot;
+        lock (_sessionLock)
+        {
+            CurrentSession = snapshot;
+        }
         PersistSnapshot(snapshot, updateStatus: true);
     }
 
@@ -1161,7 +1212,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     public void FlushPendingSave()
     {
         var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-        CurrentSession = snapshot;
+        lock (_sessionLock)
+        {
+            CurrentSession = snapshot;
+        }
         PersistSnapshot(snapshot, updateStatus: true);
     }
 
