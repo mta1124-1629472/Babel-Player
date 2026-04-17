@@ -29,7 +29,7 @@ Load Media → Timed Transcript → Voice Assignment → Translated Dialogue →
 | Python env management | uv (bundled `uv.exe`) |
 | AI inference (local) | Python subprocesses or managed venv (FastAPI server) |
 | AI inference (cloud) | HTTP clients for OpenAI, ElevenLabs, DeepL, Google, Gemini |
-| MVVM toolkit | CommunityToolkit.MVVM 8.2.1 |
+| MVVM toolkit | CommunityToolkit.Mvvm 8.4.2 |
 | Testing | xUnit 2.9.3 + coverlet |
 
 ---
@@ -111,7 +111,7 @@ Babel-Player/
 
 ---
 
-## Serialization Contracts (Python ↔ C#)
+## Python/C# Serialization Contracts
 
 **Critical:** Field names crossing the Python/C# boundary are explicit serialization contracts.
 
