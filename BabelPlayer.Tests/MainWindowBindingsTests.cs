@@ -18,18 +18,6 @@ public sealed class MainWindowBindingsTests
         Assert.Equal(2, CountOccurrences(axaml, "Playback.Preview.DubMixControlValueLabel"));
     }
 
-    [Fact]
-    public void MainWindow_AdvertisedPlaybackShortcuts_AppearInBothChromeLayouts()
-    {
-        var axamlPath = FindRepoFile("Views", "MainWindow.axaml");
-        var axaml = File.ReadAllText(axamlPath);
-
-        Assert.Equal(2, CountOccurrences(axaml, "Play / Pause (Space)"));
-        Assert.Equal(2, CountOccurrences(axaml, "Toggle side panels (S)"));
-        Assert.Equal(2, CountOccurrences(axaml, "Toggle Dub Mode (D)"));
-        Assert.Equal(2, CountOccurrences(axaml, "Toggle fullscreen (F11)"));
-    }
-
     private static string FindRepoFile(params string[] relativePathParts)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

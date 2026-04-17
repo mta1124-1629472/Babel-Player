@@ -6,7 +6,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -296,63 +295,14 @@ public partial class MainWindow : Window
             TryApplyPendingMediaReloadRequest();
     }
 
-    /// <summary>
-    /// Handles key press events, maps them to application shortcut actions, and executes matching commands.
-    /// </summary>
-    /// <param name="e">The key event arguments; set to handled if a shortcut action is performed.</param>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-
-        if (e.Handled || DataContext is not MainWindowViewModel vm)
-            return;
-
-        var preview = vm.Playback.Preview;
-        var focusedElement = FocusManager?.GetFocusedElement();
-        if (!MainWindowShortcutRouter.TryMap(e.Key, e.KeyModifiers, focusedElement, preview.IsFullscreen, out var action))
-            return;
-
-        var handled = action switch
+        if (e.Key == Key.Escape && DataContext is MainWindowViewModel vm && vm.Playback.Preview.IsFullscreen)
         {
-            MainWindowShortcutAction.PlayPause => TryExecuteShortcut(preview.IsSourceMediaLoaded, preview.PlayPauseSourceCommand),
-            MainWindowShortcutAction.ToggleSegmentPane => TryExecuteShortcut(true, preview.ToggleSegmentPaneCommand),
-            MainWindowShortcutAction.ToggleDubMode => TryExecuteShortcut(preview.HasSegments, preview.ToggleDubModeCommand),
-            MainWindowShortcutAction.ToggleFullscreen => TryExecuteShortcut(preview.IsSourceMediaLoaded, preview.ToggleFullscreenCommand),
-            MainWindowShortcutAction.ExitFullscreen => TryExitFullscreen(preview),
-            _ => false,
-        };
-
-        if (handled)
+            vm.Playback.Preview.IsFullscreen = false;
             e.Handled = true;
-    }
-
-    /// <summary>
-    /// Attempts to execute the provided command when the shortcut is enabled and the command can execute.
-    /// </summary>
-    /// <param name="isEnabled">Whether the shortcut action is currently enabled.</param>
-    /// <param name="command">The command to execute, or null.</param>
-    /// <returns>`true` if the command was executed, `false` otherwise.</returns>
-    private static bool TryExecuteShortcut(bool isEnabled, ICommand? command)
-    {
-        if (!isEnabled || command is null || !command.CanExecute(null))
-            return false;
-
-        command.Execute(null);
-        return true;
-    }
-
-    /// <summary>
-    /// Exits fullscreen mode for the specified playback preview if it is currently fullscreen.
-    /// </summary>
-    /// <param name="preview">The playback preview whose fullscreen state will be changed.</param>
-    /// <returns>`true` if the preview was fullscreen and was switched out of fullscreen; `false` if it was already not fullscreen.</returns>
-    private static bool TryExitFullscreen(EmbeddedPlaybackPreviewViewModel preview)
-    {
-        if (!preview.IsFullscreen)
-            return false;
-
-        preview.IsFullscreen = false;
-        return true;
+        }
     }
 
     // ── Drag & Drop file support ──────────────────────────────────────────────────

@@ -1188,7 +1188,7 @@
                                         IsEnabled="{Binding Playback.Preview.HasSegments}"
                                         Padding="8,6" FontSize="11"
                                         Background="Transparent"
-                                        ToolTip.Tip="Toggle subtitles"
+                                        ToolTip.Tip="Toggle subtitles (C)"
                                         AutomationProperties.Name="Toggle subtitles" />
                                 <Button Content="{Binding Playback.Preview.DubModeLabel}"
                                         Classes="control-pill"
@@ -1368,7 +1368,7 @@
                                         IsEnabled="{Binding Playback.Preview.HasSegments}"
                                         Padding="8,6" FontSize="11"
                                         Background="Transparent"
-                                        ToolTip.Tip="Toggle subtitles"
+                                        ToolTip.Tip="Toggle subtitles (C)"
                                         AutomationProperties.Name="Toggle subtitles" />
                                 <Button Content="{Binding Playback.Preview.DubModeLabel}"
                                         Classes="control-pill"
