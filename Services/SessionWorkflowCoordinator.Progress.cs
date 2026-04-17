@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Babel.Player.Models;
+using SharedOrchestration = Babel.Player.Services.Orchestration;
 
 namespace Babel.Player.Services;
 
@@ -14,14 +15,70 @@ public sealed partial class SessionWorkflowCoordinator
         string Detail,
         double Progress01,
         bool IsIndeterminate,
-        string? StreamingStatus = null);
+        string? StreamingStatus = null)
+    {
+        internal SharedOrchestration.PipelineStageUpdate ToShared() =>
+            new(
+                StageIndex,
+                StageCount,
+                TargetStage,
+                Title,
+                Detail,
+                Progress01,
+                IsIndeterminate,
+                StreamingStatus);
+
+        internal static PipelineStageUpdate FromShared(SharedOrchestration.PipelineStageUpdate update) =>
+            new(
+                update.StageIndex,
+                update.StageCount,
+                update.TargetStage,
+                update.Title,
+                update.Detail,
+                update.Progress01,
+                update.IsIndeterminate,
+                update.StreamingStatus);
+    }
 
     internal readonly record struct PipelineStageContext(
         int StageIndex,
         int StageCount,
         SessionWorkflowStage TargetStage,
         string Title,
-        IProgress<PipelineStageUpdate>? Reporter);
+        IProgress<PipelineStageUpdate>? Reporter)
+    {
+        internal SharedOrchestration.PipelineStageContext ToShared()
+        {
+            var reporterTarget = Reporter;
+            IProgress<SharedOrchestration.PipelineStageUpdate>? reporter = reporterTarget is null
+                ? null
+                : new Progress<SharedOrchestration.PipelineStageUpdate>(
+                    update => reporterTarget.Report(PipelineStageUpdate.FromShared(update)));
+            return new SharedOrchestration.PipelineStageContext(
+                StageIndex,
+                StageCount,
+                TargetStage,
+                Title,
+                reporter);
+        }
+
+        internal static PipelineStageContext? FromShared(SharedOrchestration.PipelineStageContext? context)
+        {
+            if (context is not { } shared)
+                return null;
+
+            IProgress<PipelineStageUpdate>? reporter = shared.Reporter is null
+                ? null
+                : new Progress<PipelineStageUpdate>(
+                    update => shared.Reporter.Report(update.ToShared()));
+            return new PipelineStageContext(
+                shared.StageIndex,
+                shared.StageCount,
+                shared.TargetStage,
+                shared.Title,
+                reporter);
+        }
+    }
 
     private static IReadOnlyList<SessionWorkflowStage> GetAdvancePipelineStages(
         SessionWorkflowStage currentStage,
@@ -80,62 +137,27 @@ public sealed partial class SessionWorkflowCoordinator
     }
 
     private static string GetPipelineStageTitle(SessionWorkflowStage stage) =>
-        stage switch
-        {
-            SessionWorkflowStage.Transcribed => "Transcription",
-            SessionWorkflowStage.Diarized => "Speaker Mapping",
-            SessionWorkflowStage.Translated => "Translation",
-            SessionWorkflowStage.TtsGenerated => "Dub",
-            _ => stage.ToString(),
-        };
+        SharedOrchestration.PipelineStageReporter.GetPipelineStageTitle(stage);
 
     private static void ReportStage(
         PipelineStageContext? context,
         string detail,
         double progress01,
         bool isIndeterminate,
-        string? streamingStatus = null)
-    {
-        if (context is not { } stageContext || stageContext.Reporter is null)
-            return;
-
-        var clampedProgress = double.IsFinite(progress01)
-            ? Math.Clamp(progress01, 0d, 1d)
-            : 0d;
-        stageContext.Reporter.Report(
-            new PipelineStageUpdate(
-                stageContext.StageIndex,
-                stageContext.StageCount,
-                stageContext.TargetStage,
-                stageContext.Title,
-                detail,
-                clampedProgress,
-                isIndeterminate,
-                streamingStatus));
-    }
+        string? streamingStatus = null) =>
+        SharedOrchestration.PipelineStageReporter.ReportStage(
+            context is { } stageContext ? stageContext.ToShared() : null,
+            detail,
+            progress01,
+            isIndeterminate,
+            streamingStatus);
 
     private static IProgress<double>? CreateStageDownloadProgress(
         PipelineStageContext? context,
         IProgress<double>? rawProgress,
-        string detailPrefix)
-    {
-        if (context is null && rawProgress is null)
-            return null;
-
-        return new Progress<double>(value =>
-        {
-            var clampedProgress = double.IsFinite(value)
-                ? Math.Clamp(value, 0d, 1d)
-                : 0d;
-            rawProgress?.Report(clampedProgress);
-            if (context is { } stageContext)
-            {
-                ReportStage(
-                    stageContext,
-                    $"{detailPrefix} ({clampedProgress:P0}).",
-                    clampedProgress,
-                    isIndeterminate: false);
-            }
-        });
-    }
+        string detailPrefix) =>
+        SharedOrchestration.PipelineStageReporter.CreateStageDownloadProgress(
+            context is { } stageContext ? stageContext.ToShared() : null,
+            rawProgress,
+            detailPrefix);
 }
