@@ -308,54 +308,12 @@ public partial class App : Application
 
     private static void LogResolvedAudioToolPaths(AppLog log, string context)
     {
-        var ffmpeg = ResolveAudioToolPathForLogging("ffmpeg") ?? "<missing>";
-        var ffprobe = ResolveAudioToolPathForLogging("ffprobe") ?? "<missing>";
+        // Delegate to DependencyLocator so the logged path matches the actual
+        // runtime resolution (including the `-version` probe that filters out
+        // binaries that exist but aren't runnable).
+        var ffmpeg = DependencyLocator.FindFfmpeg() ?? "<missing>";
+        var ffprobe = DependencyLocator.FindFfprobe() ?? "<missing>";
         log.Info($"Audio tool resolution ({context}): ffmpeg={ffmpeg}; ffprobe={ffprobe}");
-    }
-
-    private static string? ResolveAudioToolPathForLogging(string toolName)
-    {
-        var appDir = AppContext.BaseDirectory;
-        var rid = WindowsPackagingPaths.NativeRidFolder;
-        var toolFileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
-        var candidates = new[]
-        {
-            Path.Combine(appDir, toolFileName),
-            Path.Combine(appDir, "tools", toolFileName),
-            Path.Combine(appDir, "tools", rid, toolFileName),
-            Path.Combine(appDir, "tools", "win-x64", toolFileName),
-            Path.Combine(appDir, "tools", "win-arm64", toolFileName),
-        };
-
-        foreach (var candidate in candidates)
-        {
-            if (File.Exists(candidate))
-                return candidate;
-        }
-
-        var pathEnv = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrWhiteSpace(pathEnv))
-            return null;
-
-        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var trimmedDir = dir.Trim().Trim('"');
-            if (string.IsNullOrWhiteSpace(trimmedDir))
-                continue;
-
-            var pathCandidate = Path.Combine(trimmedDir, toolFileName);
-            if (File.Exists(pathCandidate))
-                return pathCandidate;
-
-            if (!OperatingSystem.IsWindows())
-            {
-                var unixCandidate = Path.Combine(trimmedDir, toolName);
-                if (File.Exists(unixCandidate))
-                    return unixCandidate;
-            }
-        }
-
-        return null;
     }
 
     private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)

@@ -189,6 +189,9 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
     public bool CombineAudioSegmentsAsyncCalled { get; private set; }
     public bool ComposeTimelineDubAsyncCalled { get; private set; }
     public bool MixDubOverAmbianceAsyncCalled { get; private set; }
+    /// <summary>Last <c>ambianceGainDb</c> value the fake received, so tests can assert
+    /// the coordinator forwarded <c>AppSettings.AmbianceMixDb</c> correctly.</summary>
+    public double? LastAmbianceGainDb { get; private set; }
     public bool SkipTimelineOutputCreation { get; set; }
     public bool SkipMixedOutputCreation { get; set; }
     public bool ThrowOnMixDubOverAmbiance { get; set; }
@@ -224,6 +227,7 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         CancellationToken cancellationToken)
     {
         MixDubOverAmbianceAsyncCalled = true;
+        LastAmbianceGainDb = ambianceGainDb;
         if (ThrowOnMixDubOverAmbiance)
             throw new InvalidOperationException("PLACEHOLDER(test-fake): simulated mix failure");
 

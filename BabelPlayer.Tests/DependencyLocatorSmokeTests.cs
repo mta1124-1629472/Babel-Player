@@ -14,6 +14,10 @@ public sealed class DependencyLocatorSmokeTests : IDisposable
     public void Dispose()
     {
         Environment.SetEnvironmentVariable("PATH", _originalPath);
+        // DependencyLocator caches positive probe results for the session; drop
+        // any entries this test installed so later tests in the same process
+        // don't resolve our shim paths.
+        DependencyLocator.ClearProbeCache();
 
         foreach (var path in _createdPaths)
         {
@@ -29,9 +33,18 @@ public sealed class DependencyLocatorSmokeTests : IDisposable
         }
     }
 
+    // Note: these tests assert that `FindFfmpeg/Ffprobe` resolve *into* the
+    // bundled `tools/{rid}/` directory, not that they hit the explicit
+    // `ffmpeg.exe` entries in the candidate list. On Windows we write a `.cmd`
+    // shim (a bare `.exe` placeholder can't execute and would fail Probe's
+    // `-version` check), so resolution actually succeeds via the bare
+    // `"ffmpeg"` candidate + PATH lookup (PATHEXT picks up `.cmd`). Because we
+    // prepend `tools/{rid}/` to PATH, the resolved path still starts with that
+    // directory — which is the invariant the app relies on at runtime.
+
     [Fact]
     [Trait("Category", "Smoke")]
-    public void FindFfmpeg_ResolvesBundledToolsRidPath()
+    public void FindFfmpeg_ResolvesIntoBundledToolsRidDirectory()
     {
         var toolDir = EnsureBundledToolDirectory();
         EnsureBundledToolCommand(toolDir, "ffmpeg");
@@ -47,7 +60,7 @@ public sealed class DependencyLocatorSmokeTests : IDisposable
 
     [Fact]
     [Trait("Category", "Smoke")]
-    public void FindFfprobe_ResolvesBundledToolsRidPath()
+    public void FindFfprobe_ResolvesIntoBundledToolsRidDirectory()
     {
         var toolDir = EnsureBundledToolDirectory();
         EnsureBundledToolCommand(toolDir, "ffprobe");
