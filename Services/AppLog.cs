@@ -62,6 +62,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         var reader = _channel.Reader;
         var batch = new StringBuilder();
         var flushSignals = new List<TaskCompletionSource<bool>>();
+        Exception? persistentWriteFailure = null;
 
         try
         {
@@ -82,7 +83,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
                     }
                 }
 
-                await WriteBatchAsync(batch, flushSignals).ConfigureAwait(false);
+                persistentWriteFailure = await WriteBatchAsync(batch, flushSignals, persistentWriteFailure).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { }
@@ -102,23 +103,15 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
 
             if (batch.Length >= MaxBatchSize * 256 || flushSignals.Count >= MaxBatchSize)
             {
-                ShutdownFlushBatch(batch, flushSignals);
+                persistentWriteFailure = ShutdownFlushBatch(batch, flushSignals, persistentWriteFailure);
             }
         }
 
-        ShutdownFlushBatch(batch, flushSignals);
+        persistentWriteFailure = ShutdownFlushBatch(batch, flushSignals, persistentWriteFailure);
     }
 
-    private async Task WriteBatchAsync(StringBuilder batch, List<TaskCompletionSource<bool>> flushSignals)
+    private async Task<Exception?> WriteBatchAsync(StringBuilder batch, List<TaskCompletionSource<bool>> flushSignals, Exception? persistentWriteFailure)
     {
-        Exception? writeFailure = null;
-
-        if (batch.Length > 0)
-        {
-        if (batch.Length > 0)
-        {
-            try
-            {
         if (batch.Length > 0)
         {
             try
@@ -127,7 +120,10 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                writeFailure = ex;
+                if (persistentWriteFailure is null)
+                {
+                    persistentWriteFailure = ex;
+                }
                 System.Diagnostics.Debug.WriteLine($"Failed to write log batch to '{LogFilePath}': {ex}");
             }
             finally
@@ -140,29 +136,23 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         {
             foreach (var tcs in flushSignals)
             {
-                if (writeFailure is null)
+                if (persistentWriteFailure is null)
                 {
                     tcs.TrySetResult(true);
                 }
                 else
                 {
-                    tcs.TrySetException(writeFailure);
+                    tcs.TrySetException(persistentWriteFailure);
                 }
             }
             flushSignals.Clear();
         }
+
+        return persistentWriteFailure;
     }
 
-    private void ShutdownFlushBatch(StringBuilder batch, List<TaskCompletionSource<bool>> flushSignals)
+    private Exception? ShutdownFlushBatch(StringBuilder batch, List<TaskCompletionSource<bool>> flushSignals, Exception? persistentWriteFailure)
     {
-        Exception? writeFailure = null;
-
-        if (batch.Length > 0)
-        {
-        if (batch.Length > 0)
-        {
-            try
-            {
         if (batch.Length > 0)
         {
             try
@@ -171,7 +161,10 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                writeFailure = ex;
+                if (persistentWriteFailure is null)
+                {
+                    persistentWriteFailure = ex;
+                }
                 System.Diagnostics.Debug.WriteLine($"Failed to drain log batch to '{LogFilePath}': {ex}");
             }
             finally
@@ -184,17 +177,19 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         {
             foreach (var tcs in flushSignals)
             {
-                if (writeFailure is null)
+                if (persistentWriteFailure is null)
                 {
                     tcs.TrySetResult(true);
                 }
                 else
                 {
-                    tcs.TrySetException(writeFailure);
+                    tcs.TrySetException(persistentWriteFailure);
                 }
             }
             flushSignals.Clear();
         }
+
+        return persistentWriteFailure;
     }
 
     public void Dispose()
