@@ -47,7 +47,6 @@ internal static class SessionSnapshotJsonCompat
                 // AmbianceAudioPath missing or explicitly null: adopt the legacy value.
                 obj[AmbianceField] = legacyNode?.DeepClone();
             }
-            obj.Remove(LegacyInstrumentalField);
         }
     }
 }
