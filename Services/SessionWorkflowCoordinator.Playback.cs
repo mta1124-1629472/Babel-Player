@@ -573,14 +573,14 @@ public sealed partial class SessionWorkflowCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
         ArgumentException.ThrowIfNullOrWhiteSpace(voiceOrModel);
 
-        var current = CurrentSession.SpeakerVoiceAssignments ?? new Dictionary<string, string>(StringComparer.Ordinal);
-        var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
-        {
-            [speakerId] = voiceOrModel,
-        };
-
         lock (_sessionLock)
         {
+            var current = CurrentSession.SpeakerVoiceAssignments ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
+            {
+                [speakerId] = voiceOrModel,
+            };
+
             CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated };
         }
         SaveCurrentSession();
@@ -654,14 +654,14 @@ public sealed partial class SessionWorkflowCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
         ArgumentException.ThrowIfNullOrWhiteSpace(clipPath);
 
-        var current = CurrentSession.SpeakerReferenceAudioPaths ?? new Dictionary<string, string>(StringComparer.Ordinal);
-        var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
-        {
-            [speakerId] = clipPath,
-        };
-
         lock (_sessionLock)
         {
+            var current = CurrentSession.SpeakerReferenceAudioPaths ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            var updated = new Dictionary<string, string>(current, StringComparer.Ordinal)
+            {
+                [speakerId] = clipPath,
+            };
+
             CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
         }
         SaveCurrentSession();
@@ -690,38 +690,38 @@ public sealed partial class SessionWorkflowCoordinator
         if (updates.Count == 0)
             return;
 
-        var current = CurrentSession.SpeakerReferenceAudioPaths is null
-            ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
-
-        var changed = false;
-        foreach (var (speakerId, candidatePath) in updates)
-        {
-            if (string.IsNullOrWhiteSpace(speakerId))
-                continue;
-
-            var normalizedSpeakerId = speakerId.Trim();
-            var normalizedPath = string.IsNullOrWhiteSpace(candidatePath) ? null : candidatePath.Trim();
-
-            if (string.IsNullOrWhiteSpace(normalizedPath))
-            {
-                changed |= current.Remove(normalizedSpeakerId);
-                continue;
-            }
-
-            if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
-                !string.Equals(existing, normalizedPath, StringComparison.Ordinal))
-            {
-                current[normalizedSpeakerId] = normalizedPath;
-                changed = true;
-            }
-        }
-
-        if (!changed)
-            return;
-
         lock (_sessionLock)
         {
+            var current = CurrentSession.SpeakerReferenceAudioPaths is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
+
+            var changed = false;
+            foreach (var (speakerId, candidatePath) in updates)
+            {
+                if (string.IsNullOrWhiteSpace(speakerId))
+                    continue;
+
+                var normalizedSpeakerId = speakerId.Trim();
+                var normalizedPath = string.IsNullOrWhiteSpace(candidatePath) ? null : candidatePath.Trim();
+
+                if (string.IsNullOrWhiteSpace(normalizedPath))
+                {
+                    changed |= current.Remove(normalizedSpeakerId);
+                    continue;
+                }
+
+                if (!current.TryGetValue(normalizedSpeakerId, out var existing) ||
+                    !string.Equals(existing, normalizedPath, StringComparison.Ordinal))
+                {
+                    current[normalizedSpeakerId] = normalizedPath;
+                    changed = true;
+                }
+            }
+
+            if (!changed)
+                return;
+
             CurrentSession = CurrentSession with
             {
                 SpeakerReferenceAudioPaths = current.Count == 0 ? null : current,
