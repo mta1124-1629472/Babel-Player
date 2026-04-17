@@ -114,7 +114,6 @@ tasks.json
 .windsurf/
 .Benchmarks/
 *.lscache
-.gitignore
 apm.lock.yaml
 TestResults/
 obj/
@@ -139,12 +138,6 @@ gha-creds-*.json
 # Personal IDE notes
 .jules/
 
-# OpenClaw skill copies (optional; restore from marketplace or a private fork)
-/skills/
-
-# Codex local task queue
-.codex/tasks/
-
 # Merge / editor backup files
 *.orig
 
@@ -162,7 +155,6 @@ gha-creds-*.json
 /fix_merge_conflict.sh
 /add-bootstrap-mocks.ps1
 /setup-qwen-coder.ps1
-opencode.jsonc
 
 # APM dependencies
 apm_modules/
@@ -170,4 +162,3 @@ test-timeout.sh
 test-output2.txt
 test-output.txt
 test_results.txt
-.gemini/
