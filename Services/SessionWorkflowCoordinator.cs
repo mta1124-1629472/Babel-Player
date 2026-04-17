@@ -939,11 +939,12 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new InvalidOperationException($"Segment TTS regeneration failed: {errorMsg}");
         }
 
-        var currentSegments = CurrentSession.TtsSegmentAudioPaths ?? [];
-        currentSegments[segmentId] = segmentAudioPath;
-
         lock (_sessionLock)
         {
+            var currentSegments = CurrentSession.TtsSegmentAudioPaths is not null
+                ? new Dictionary<string, string>(CurrentSession.TtsSegmentAudioPaths)
+                : [];
+            currentSegments[segmentId] = segmentAudioPath;
             CurrentSession = CurrentSession with
             {
                 TtsSegmentAudioPaths = currentSegments,
@@ -1178,9 +1179,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// </remarks>
     public void SaveCurrentSession()
     {
-        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
+        WorkflowSessionSnapshot snapshot;
         lock (_sessionLock)
         {
+            snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
             CurrentSession = snapshot;
         }
         PersistSnapshot(snapshot, updateStatus: true);
@@ -1199,9 +1201,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// </remarks>
     public void FlushPendingSave()
     {
-        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
+        WorkflowSessionSnapshot snapshot;
         lock (_sessionLock)
         {
+            snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
             CurrentSession = snapshot;
         }
         PersistSnapshot(snapshot, updateStatus: true);

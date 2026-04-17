@@ -315,16 +315,6 @@ public partial class App : Application
         log.Info($"Audio tool resolution ({context}): ffmpeg={ffmpeg}; ffprobe={ffprobe}");
     }
 
-    private static string? ResolveAudioToolPathForLogging(string toolName)
-    {
-        return toolName switch
-        {
-            "ffmpeg" => DependencyLocator.FindFfmpeg(),
-            "ffprobe" => DependencyLocator.FindFfprobe(),
-            _ => null,
-        };
-    }
-
     private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
     {
         if (_sessionWorkflowCoordinator is null) return;
