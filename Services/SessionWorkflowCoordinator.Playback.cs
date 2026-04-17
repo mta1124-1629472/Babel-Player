@@ -1361,6 +1361,7 @@ public sealed partial class SessionWorkflowCoordinator
                         }
                     }
 
+                    _perSessionStore?.Dispose();
                     _shutdownCts.Dispose();
                     return;
                 }
@@ -1385,6 +1386,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         (_ttsService as IDisposable)?.Dispose();
         _transportManager.Dispose();
+        _perSessionStore?.Dispose();
         _shutdownCts.Dispose();
     }
 

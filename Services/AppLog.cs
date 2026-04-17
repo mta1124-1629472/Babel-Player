@@ -62,6 +62,7 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         var reader = _channel.Reader;
         var batch = new StringBuilder();
         var flushSignals = new List<TaskCompletionSource<bool>>();
+        Exception? persistentWriteFailure = null;
 
         try
         {
@@ -82,12 +83,13 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
                     }
                 }
 
-                await WriteBatchAsync(batch, flushSignals).ConfigureAwait(false);
+                persistentWriteFailure = await WriteBatchAsync(batch, flushSignals, persistentWriteFailure).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { }
 
-        // Drain remaining entries after cancellation (best effort, synchronous is fine during shutdown).
+        // Drain remaining entries after cancellation. Flush periodically during the drain so
+        // a very large backlog does not accumulate into a single unbounded buffer.
         while (reader.TryRead(out var remaining))
         {
             if (remaining is string line)
@@ -98,39 +100,96 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
             {
                 flushSignals.Add(tcs);
             }
+
+            if (batch.Length >= MaxBatchSize * 256 || flushSignals.Count >= MaxBatchSize)
+            {
+                persistentWriteFailure = ShutdownFlushBatch(batch, flushSignals, persistentWriteFailure);
+            }
         }
 
-        if (batch.Length > 0)
-        {
-            try { File.AppendAllText(LogFilePath, batch.ToString()); }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to drain log batch to '{LogFilePath}': {ex}"); }
-            batch.Clear();
-        }
-
-        foreach (var tcs in flushSignals)
-        {
-            tcs.TrySetResult(true);
-        }
-        flushSignals.Clear();
+        persistentWriteFailure = ShutdownFlushBatch(batch, flushSignals, persistentWriteFailure);
     }
 
-    private async Task WriteBatchAsync(StringBuilder batch, List<TaskCompletionSource<bool>> flushSignals)
+    private async Task<Exception?> WriteBatchAsync(StringBuilder batch, List<TaskCompletionSource<bool>> flushSignals, Exception? persistentWriteFailure)
     {
         if (batch.Length > 0)
         {
-            try { await File.AppendAllTextAsync(LogFilePath, batch.ToString()).ConfigureAwait(false); }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Failed to write log batch to '{LogFilePath}': {ex}"); }
-            batch.Clear();
+            try
+            {
+                await File.AppendAllTextAsync(LogFilePath, batch.ToString()).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                if (persistentWriteFailure is null)
+                {
+                    persistentWriteFailure = ex;
+                }
+                System.Diagnostics.Debug.WriteLine($"Failed to write log batch to '{LogFilePath}': {ex}");
+            }
+            finally
+            {
+                batch.Clear();
+            }
         }
 
         if (flushSignals.Count > 0)
         {
             foreach (var tcs in flushSignals)
             {
-                tcs.TrySetResult(true);
+                if (persistentWriteFailure is null)
+                {
+                    tcs.TrySetResult(true);
+                }
+                else
+                {
+                    tcs.TrySetException(persistentWriteFailure);
+                }
             }
             flushSignals.Clear();
         }
+
+        return persistentWriteFailure;
+    }
+
+    private Exception? ShutdownFlushBatch(StringBuilder batch, List<TaskCompletionSource<bool>> flushSignals, Exception? persistentWriteFailure)
+    {
+        if (batch.Length > 0)
+        {
+            try
+            {
+                File.AppendAllText(LogFilePath, batch.ToString());
+            }
+            catch (Exception ex)
+            {
+                if (persistentWriteFailure is null)
+                {
+                    persistentWriteFailure = ex;
+                }
+                System.Diagnostics.Debug.WriteLine($"Failed to drain log batch to '{LogFilePath}': {ex}");
+            }
+            finally
+            {
+                batch.Clear();
+            }
+        }
+
+        if (flushSignals.Count > 0)
+        {
+            foreach (var tcs in flushSignals)
+            {
+                if (persistentWriteFailure is null)
+                {
+                    tcs.TrySetResult(true);
+                }
+                else
+                {
+                    tcs.TrySetException(persistentWriteFailure);
+                }
+            }
+            flushSignals.Clear();
+        }
+
+        return persistentWriteFailure;
     }
 
     public void Dispose()
