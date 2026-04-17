@@ -286,7 +286,7 @@ public sealed partial class SessionWorkflowCoordinator
 
             lock (_sessionLock)
             {
-                CurrentSession = currentSession with
+                CurrentSession = CurrentSession with
                 {
                     Stage = nextStage,
                     DiarizationProvider = CurrentSettings.DiarizationProvider,
@@ -546,7 +546,7 @@ public sealed partial class SessionWorkflowCoordinator
                 ? new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
                 : new Dictionary<string, SegmentTimingMode>(CurrentSession.SegmentTimingModeOverrides, StringComparer.Ordinal);
 
-            var changed = false;
+            bool changed;
             if (mode.HasValue)
             {
                 changed = !current.TryGetValue(normalizedSegmentId, out var existing) || existing != mode.Value;
@@ -597,7 +597,6 @@ public sealed partial class SessionWorkflowCoordinator
             var updated = new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
             if (!updated.Remove(speakerId))
                 return;
-
             CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
         }
         SaveCurrentSession();
@@ -678,7 +677,6 @@ public sealed partial class SessionWorkflowCoordinator
             var updated = new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
             if (!updated.Remove(speakerId))
                 return;
-
             CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated.Count == 0 ? null : updated };
         }
         SaveCurrentSession();
@@ -1358,6 +1356,7 @@ public sealed partial class SessionWorkflowCoordinator
                         }
                     }
 
+                    _perSessionStore?.Dispose();
                     _shutdownCts.Dispose();
                     return;
                 }
@@ -1382,6 +1381,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         (_ttsService as IDisposable)?.Dispose();
         _transportManager.Dispose();
+        _perSessionStore?.Dispose();
         _shutdownCts.Dispose();
     }
 

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Reactive.Subjects;
 using Babel.Player.Models;
+using Babel.Player.Services.Orchestration;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Planning;
 using Babel.Player.Services.Registries;
@@ -185,9 +186,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _inferenceEngine = options.InferenceExecutionEngine ?? DefaultInferenceExecutionEngine.Instance;
         _executionPlanner = options.ExecutionPlanner ?? DefaultExecutionPlanner.Instance;
         _requestLeaseTracker = options.RequestLeaseTracker;
-        _transcriptionOrchestrator = new TranscriptionOrchestrator(this);
-        _translationOrchestrator = new TranslationOrchestrator(this);
-        _diarizationStageOrchestrator = new DiarizationStageOrchestrator(this);
+        _transcriptionOrchestrator = new TranscriptionOrchestrator(this, this, this, this, _inferenceEngine, _log);
+        _translationOrchestrator = new TranslationOrchestrator(this, this, this, this, _inferenceEngine, _log);
+        _diarizationStageOrchestrator = new DiarizationStageOrchestrator(this, this, this, _log);
         _ttsPipelineOrchestrator = new TtsPipelineOrchestrator(this);
         _streamingPipelineOrchestrator = new StreamingPipelineOrchestrator(this);
 
@@ -943,13 +944,17 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
         lock (_sessionLock)
         {
-            var currentSegments = CurrentSession.TtsSegmentAudioPaths is not null
-                ? new Dictionary<string, string>(CurrentSession.TtsSegmentAudioPaths)
-                : [];
-            currentSegments[segmentId] = segmentAudioPath;
             CurrentSession = CurrentSession with
             {
-                TtsSegmentAudioPaths = currentSegments,
+                TtsSegmentAudioPaths = CurrentSession.TtsSegmentAudioPaths is null
+                    ? new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [segmentId] = segmentAudioPath,
+                    }
+                    : new Dictionary<string, string>(CurrentSession.TtsSegmentAudioPaths, StringComparer.Ordinal)
+                    {
+                        [segmentId] = segmentAudioPath,
+                    },
                 StatusMessage = $"Regenerated TTS for segment {segmentId}.",
             };
         }
@@ -1173,44 +1178,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         return invalidation;
     }
 
-    /// <summary>
-    /// Updates the snapshot's LastUpdatedAtUtc, sets it as the current session, and persists that snapshot.
-    /// </summary>
-    /// <remarks>
-    /// Sets <c>CurrentSession</c> to a copy with an updated <c>LastUpdatedAtUtc</c> and saves that snapshot to the configured persistence stores.
-    /// </remarks>
-    public void SaveCurrentSession()
-    {
-        WorkflowSessionSnapshot snapshot;
-        lock (_sessionLock)
-        {
-            snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-            CurrentSession = snapshot;
-        }
-        PersistSnapshot(snapshot, updateStatus: true);
-    }
-
-    /// <summary>
-    /// Immediately persists the current session snapshot to persistent stores after updating LastUpdatedAtUtc.
-    /// </summary>
-    /// <remarks>
-    /// Updates the in-memory <c>CurrentSession</c> with the current UTC <c>LastUpdatedAtUtc</c> timestamp and then synchronously saves that snapshot to the underlying stores.
-    /// <summary>
-    /// Immediately persists the current session snapshot and updates its last-updated timestamp.
-    /// </summary>
-    /// <remarks>
-    /// Updates CurrentSession.LastUpdatedAtUtc to the current UTC time, assigns the updated snapshot to CurrentSession, and synchronously saves the snapshot to all configured stores so the persistence status is updated immediately.
-    /// </remarks>
-    public void FlushPendingSave()
-    {
-        WorkflowSessionSnapshot snapshot;
-        lock (_sessionLock)
-        {
-            snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-            CurrentSession = snapshot;
-        }
-        PersistSnapshot(snapshot, updateStatus: true);
-    }
+    // SaveCurrentSession / SaveCurrentSessionAsync / FlushPendingSave and the
+    // underlying PersistSnapshot helpers live in SessionWorkflowCoordinator.Persistence.cs.
 
     internal void TrackPendingTtsTask(Task task)
     {
@@ -1295,18 +1264,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             summary: value.DiagnosticSummary,
             source: nameof(BootstrapDiagnostics),
             forceRefresh: true);
-
-    private void PersistSnapshot(WorkflowSessionSnapshot snapshot, bool updateStatus)
-    {
-        var stopwatch = Stopwatch.StartNew();
-        _store.Save(snapshot);
-        _perSessionStore.Save(snapshot);
-        stopwatch.Stop();
-        var message = $"Saved current session snapshot to {StateFilePath}.";
-        if (updateStatus)
-            PersistenceStatus = message;
-        _log.Info($"{message} Mirrored per-session snapshot. elapsedMs={stopwatch.ElapsedMilliseconds}");
-    }
 
     public sealed record BootstrapWarmupData(
         BootstrapDiagnostics Diagnostics,

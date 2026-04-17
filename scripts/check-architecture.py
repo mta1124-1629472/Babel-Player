@@ -234,8 +234,12 @@ task_delay_hits: list[str] = []
 banned_trait_hits: list[str] = []
 
 delay_ms_pattern = re.compile(r"Task\.Delay\(\s*(\d+)\s*(?:,|\))")
-delay_timespan_ms_pattern = re.compile(r"Task\.Delay\(\s*TimeSpan\.FromMilliseconds\(\s*(\d+)\s*\)")
-delay_timespan_sec_pattern = re.compile(r"Task\.Delay\(\s*TimeSpan\.FromSeconds\(\s*([0-9]*\.?[0-9]+)\s*\)")
+delay_timespan_ms_pattern = re.compile(
+    r"Task\.Delay\(\s*TimeSpan\.FromMilliseconds\(\s*(\d+)\s*\)\s*(?:,|\))"
+)
+delay_timespan_sec_pattern = re.compile(
+    r"Task\.Delay\(\s*TimeSpan\.FromSeconds\(\s*([0-9]*\.?[0-9]+)\s*\)\s*(?:,|\))"
+)
 banned_traits = (
     'Trait("Category", "RequiresPython")',
     'Trait("Category", "RequiresFfmpeg")',

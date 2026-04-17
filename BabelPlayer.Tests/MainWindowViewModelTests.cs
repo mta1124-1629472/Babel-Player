@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
@@ -100,7 +101,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     {
         public int CallCount { get; private set; }
 
-        public Task<bool> ShowWarmupNoticeAsync()
+        public Task<bool> ShowWarmupNoticeAsync(CancellationToken cancellationToken = default)
         {
             CallCount++;
             return Task.FromResult(result);

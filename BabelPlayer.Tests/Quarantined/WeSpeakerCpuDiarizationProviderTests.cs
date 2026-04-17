@@ -1,8 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
@@ -81,7 +79,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         }
 
         var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
-        var markerHash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        var markerHash = MarkerHashHelper.ComputeMarkerHash(requirementsPath, constraintsPath);
         File.WriteAllText(markerPath, markerHash);
         File.WriteAllText(
             Path.Combine(runtimeRoot, ".cpu-runtime-validation.json"),
@@ -119,7 +117,7 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         Directory.CreateDirectory(Path.Combine(runtimeRoot, ".venv", scriptsDir));
         File.WriteAllBytes(Path.Combine(runtimeRoot, ".venv", scriptsDir, pythonExe), Array.Empty<byte>());
 
-        var markerHash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        var markerHash = MarkerHashHelper.ComputeMarkerHash(requirementsPath, constraintsPath);
         File.WriteAllText(Path.Combine(runtimeRoot, ".cpu-bootstrap-version"), markerHash);
         File.WriteAllText(
             Path.Combine(runtimeRoot, ".cpu-runtime-validation.json"),
@@ -171,12 +169,5 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         }
 
         throw new InvalidOperationException($"Could not locate inference directory from {AppContext.BaseDirectory}.");
-    }
-
-    private static string ComputeMarkerHash(string requirementsPath, string constraintsPath)
-    {
-        var content = $"python:3.11.6\n[requirements]\n{File.ReadAllText(requirementsPath)}\n[constraints]\n{File.ReadAllText(constraintsPath)}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
-        return Convert.ToHexString(bytes);
     }
 }

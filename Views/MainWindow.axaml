@@ -1074,6 +1074,17 @@
 
                             <StackPanel IsVisible="{Binding Inspection.IsVisible}"
                                         Spacing="6">
+                                <StackPanel.Styles>
+                                    <!-- Shared at this scope so the timing chips AND the
+                                         "Preview With Pause" button below render identically. -->
+                                    <Style Selector="Button.segmentTimingButton">
+                                        <Setter Property="Padding" Value="8,3"/>
+                                        <Setter Property="FontSize" Value="11"/>
+                                        <Setter Property="CornerRadius" Value="4"/>
+                                        <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource StatusTextBrush}"/>
+                                    </Style>
+                                </StackPanel.Styles>
                                 <TextBlock Text="Selected segment" Classes="text-label"
                                            Foreground="{DynamicResource StatusTextBrush}"/>
 
@@ -1081,15 +1092,6 @@
                                            Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}"/>
 
                                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
-                                    <StackPanel.Styles>
-                                        <Style Selector="Button.segmentTimingButton">
-                                            <Setter Property="Padding" Value="8,3"/>
-                                            <Setter Property="FontSize" Value="11"/>
-                                            <Setter Property="CornerRadius" Value="4"/>
-                                            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
-                                            <Setter Property="Foreground" Value="{DynamicResource StatusTextBrush}"/>
-                                        </Style>
-                                    </StackPanel.Styles>
                                     <Button Classes="segmentTimingButton"
                                             Content="Inherit"
                                             Command="{Binding Inspection.SetTimingOverrideCommand}"
@@ -1186,7 +1188,7 @@
                                         IsEnabled="{Binding Playback.Preview.HasSegments}"
                                         Padding="8,6" FontSize="11"
                                         Background="Transparent"
-                                        ToolTip.Tip="Toggle subtitles"
+                                        ToolTip.Tip="Toggle subtitles (C)"
                                         AutomationProperties.Name="Toggle subtitles" />
                                 <Button Content="{Binding Playback.Preview.DubModeLabel}"
                                         Classes="control-pill"
@@ -1195,7 +1197,7 @@
                                         IsEnabled="{Binding Playback.Preview.HasSegments}"
                                         Padding="8,6" FontSize="11"
                                         Background="Transparent"
-                                        ToolTip.Tip="Toggle Dub Mode"
+                                        ToolTip.Tip="Toggle Dub Mode (D)"
                                         AutomationProperties.Name="Toggle Dub Mode" />
 
                                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="6,0,0,0"
@@ -1298,7 +1300,7 @@
                                 <Button Classes="control-pill"
                                         Command="{Binding Playback.Preview.ToggleSegmentPaneCommand}"
                                         Padding="8,6" FontSize="11"
-                                        ToolTip.Tip="Toggle side panels"
+                                        ToolTip.Tip="Toggle side panels (S)"
                                         AutomationProperties.Name="Toggle side panes">
                                     <TextBlock Text="☰" FontSize="14"/>
                                 </Button>
@@ -1307,7 +1309,7 @@
                                         Command="{Binding Playback.Preview.ToggleFullscreenCommand}"
                                         IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                         Padding="8,6" FontSize="11"
-                                        ToolTip.Tip="Toggle fullscreen"
+                                        ToolTip.Tip="Toggle fullscreen (F11)"
                                         AutomationProperties.Name="Toggle fullscreen">
                                     <TextBlock Text="⛶" FontSize="12"/>
                                 </Button>
@@ -1366,7 +1368,7 @@
                                         IsEnabled="{Binding Playback.Preview.HasSegments}"
                                         Padding="8,6" FontSize="11"
                                         Background="Transparent"
-                                        ToolTip.Tip="Toggle subtitles"
+                                        ToolTip.Tip="Toggle subtitles (C)"
                                         AutomationProperties.Name="Toggle subtitles" />
                                 <Button Content="{Binding Playback.Preview.DubModeLabel}"
                                         Classes="control-pill"
@@ -1375,7 +1377,7 @@
                                         IsEnabled="{Binding Playback.Preview.HasSegments}"
                                         Padding="8,6" FontSize="11"
                                         Background="Transparent"
-                                        ToolTip.Tip="Toggle Dub Mode"
+                                        ToolTip.Tip="Toggle Dub Mode (D)"
                                         AutomationProperties.Name="Toggle Dub Mode" />
 
                                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="6,0,0,0"
@@ -1419,7 +1421,7 @@
                                 <Button Classes="control-pill"
                                         Command="{Binding Playback.Preview.ToggleSegmentPaneCommand}"
                                         Padding="8,6" FontSize="11"
-                                        ToolTip.Tip="Toggle side panels"
+                                        ToolTip.Tip="Toggle side panels (S)"
                                         AutomationProperties.Name="Toggle side panes">
                                     <TextBlock Text="☰" FontSize="14"/>
                                 </Button>
@@ -1428,7 +1430,7 @@
                                         Command="{Binding Playback.Preview.ToggleFullscreenCommand}"
                                         IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                         Padding="8,6" FontSize="11"
-                                        ToolTip.Tip="Toggle fullscreen"
+                                        ToolTip.Tip="Toggle fullscreen (F11)"
                                         AutomationProperties.Name="Toggle fullscreen">
                                     <TextBlock Text="⛶" FontSize="12"/>
                                 </Button>
