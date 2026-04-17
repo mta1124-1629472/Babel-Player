@@ -77,7 +77,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         _log.Info($"TTS combined complete: {dubPath}");
 
-        var ambianceExpected = !string.IsNullOrWhiteSpace(ambiancePath) && File.Exists(ambiancePath);
+        var ambianceExpected = !string.IsNullOrWhiteSpace(ambiancePath);
+        if (ambianceExpected && !File.Exists(ambiancePath))
+        {
+            throw new InvalidOperationException(
+                $"Ambiance stem was expected for this session but was not found at '{ambiancePath}'.");
+        }
         string? mixedPath = null;
 
         if (ambianceExpected)

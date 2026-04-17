@@ -130,7 +130,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             string inputPath,
             string outputPath,
             double targetDurationSeconds,
-            double minRatio = 0.75,
+            double minRatio = DubTimingDefaults.StretchMinTempoRatio,
             double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
             CancellationToken cancellationToken = default)
         {
@@ -1099,6 +1099,39 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         Assert.Equal(initialAmbiancePath, audioProcessing.AmbiancePathUsed);
         Assert.NotNull(audioProcessing.AmbianceGainDbUsed);
         Assert.Equal(-12.0, audioProcessing.AmbianceGainDbUsed.Value, 3);
+    }
+
+    [Fact]
+    public async Task TryRenderDubAudioForExportAsync_MissingConfiguredAmbiance_ThrowsInvalidOperationException()
+    {
+        var coord = CreateCoordinator(
+            audioProcessingService: new FakeAudioProcessingService());
+        coord.Initialize();
+
+        var missingAmbiancePath = Path.Combine(_ctx.Dir, "missing-ambiance.wav");
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            TranslationPath = CreateTranslationArtifactFile(
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_0.0",
+                    Start = 0.0,
+                    End = 1.0,
+                    Text = "hola",
+                    TranslatedText = "hello",
+                }),
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                ["segment_0.0"] = CreateMediaFile(".mp3"),
+            },
+            AmbianceAudioPath = missingAmbiancePath,
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coord.TryRenderDubAudioForExportAsync());
+
+        Assert.Contains("Ambiance stem was expected", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(missingAmbiancePath, ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
