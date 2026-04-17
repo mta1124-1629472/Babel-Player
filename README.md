@@ -300,15 +300,17 @@ Sessions save automatically. Your session will appear in the recent sessions lis
    dotnet run --project BabelPlayer.csproj
    ```
 
-Run the full verification suite:
+Run the maintained verification suite:
 
 ```powershell
-dotnet test
+dotnet build Babel-Player.sln -c Release
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Category=Smoke"
 python scripts/check-architecture.py
 python -m py_compile inference/main.py
 ```
 
-The architecture linter (`scripts/check-architecture.py`) enforces structural rules: provider string constants, ViewModel pipeline call discipline, coordinator line limits, and `PLACEHOLDER` requirements on unimplemented stubs.
+The architecture linter (`scripts/check-architecture.py`) enforces structural rules and maintained-test hygiene: provider string constants, ViewModel pipeline call discipline, coordinator line limits, `PLACEHOLDER` requirements on unimplemented stubs, and the no-slow-tests policy described in [docs/testing-requirements.md](docs/testing-requirements.md).
 
 ---
 
@@ -396,32 +398,7 @@ Babel Player bundles **libmpv** (GPL-2.0-or-later) and **ffmpeg** (LGPL-2.1-or-l
 
 ## Project Layout
 
-```
-Babel-Player/
-├── Models/                  # Domain records and enums (session state, segments, providers, compute profiles)
-├── Services/                # Workflow coordinator, providers, persistence, transport, host management
-│   └── Registries/          # Per-stage provider registries with compute-aware filtering
-├── ViewModels/              # MVVM layer with observables and commands
-├── Views/                   # Avalonia XAML UI with refined styling
-├── BabelPlayer.Tests/       # xUnit test project (large suite)
-├── inference/               # Python inference server (FastAPI + Faster-Whisper + TTS + diarization)
-├── scripts/                 # Architecture linter and development tooling
-├── docs/
-│   ├── architecture.md      # Structural map and ownership rules
-│   ├── PLAN.md              # Milestone plans (index)
-│   ├── context/             # Extra agent context (Gemini, Qwen, …)
-│   └── history/
-│       ├── smoke/           # Milestone smoke / gate evidence
-│       └── benchmarks/    # Transcription benchmark runs + leaderboard
-├── native/win-x64/          # libmpv-2.dll (fetched; see README setup)
-├── installer/               # Inno Setup script
-├── AGENTS.md                # Operating rules (read before non-trivial changes)
-├── CLAUDE.md                # Claude / Cursor-oriented project context
-├── CONTRIBUTING.md
-├── README.md
-├── LICENSE
-└── BabelPlayer.csproj
-```
+See [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md) for the full directory structure, key files table, and services reference.
 
 Key files:
 
@@ -441,13 +418,13 @@ Key files:
 
 Read these first:
 
+- [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md) — full project context for AI assistants and contributors
 - [AGENTS.md](AGENTS.md) — operating rules and non-negotiables
-- [CLAUDE.md](CLAUDE.md) — context and instructions for Claude
-- [docs/context/GEMINI.md](docs/context/GEMINI.md) — context for Gemini-oriented assistants
-- [docs/context/QWEN.md](docs/context/QWEN.md) — context for Qwen Coder–style setups
 - [docs/PLAN.md](docs/PLAN.md) — milestone order and gates
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow and scope discipline
+- [docs/testing-requirements.md](docs/testing-requirements.md) — maintained suite rules, quarantine policy, and smoke-test requirements
 - [docs/architecture.md](docs/architecture.md) — structural map and ownership rules
+- [docs/typography.md](docs/typography.md) — typography tokens and semantic text classes (`Styles/Typography.axaml`)
 - [docs/privacy-policy.md](docs/privacy-policy.md) — privacy policy (published copy also on GitHub Pages)
 - [Marketing site (GitHub Pages)](https://babelworks.github.io/Babel-Player/) — Jekyll source on branch [`site`](https://github.com/Babelworks/Babel-Player/tree/site); push to that branch to deploy (workflow lives in `.github/workflows/` on `main`).
 
@@ -455,7 +432,7 @@ Minimum verification before opening a PR:
 
 ```powershell
 dotnet build Babel-Player.sln
-dotnet test Babel-Player.sln
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release
 python scripts/check-architecture.py
 ```
 

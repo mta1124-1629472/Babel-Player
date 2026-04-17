@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -20,6 +21,28 @@ namespace Babel.Player.Services;
 public static class DependencyLocator
 {
     private const int ProbeTimeoutMs = 500;
+
+    /// <summary>
+    /// Cache of <b>successful</b> probe results keyed by <c>"fileName arguments"</c>.
+    /// Subprocess spawns are expensive (particularly for Python on Windows) and the set
+    /// of working candidates is effectively constant for a session, so caching positives
+    /// avoids re-spawning the same process on every <see cref="FindPython"/>,
+    /// <see cref="FindFfmpeg"/>, or <see cref="FindFfprobe"/> call.
+    /// <para>
+    /// Failures are intentionally <i>not</i> cached: callers may probe the same candidate
+    /// before and after a runtime adds directories to <c>PATH</c> (e.g. the managed GPU
+    /// host prepends <c>tools/&lt;rid&gt;/</c>), and caching a negative would hide the
+    /// now-available executable. Re-probing a missing file is cheap — <c>Process.Start</c>
+    /// throws immediately without waiting for the timeout.
+    /// </para>
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, bool> ProbeResultCache = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Clears the probe result cache. Intended for tests or rare runtime scenarios where
+    /// the on-disk set of executables may have changed (e.g. after an installer run).
+    /// </summary>
+    public static void ClearProbeCache() => ProbeResultCache.Clear();
 
     /// <summary>Returns a working Python executable path, or null if not found.</summary>
     public static string? FindPython()
@@ -76,10 +99,20 @@ public static class DependencyLocator
         var candidates = new[]
         {
             Path.Combine(appDir, "ffmpeg.exe"),
+            Path.Combine(appDir, "ffmpeg.cmd"),
+            Path.Combine(appDir, "ffmpeg.bat"),
             Path.Combine(appDir, "tools", "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", "ffmpeg.cmd"),
+            Path.Combine(appDir, "tools", "ffmpeg.bat"),
             Path.Combine(appDir, "tools", rid, "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", rid, "ffmpeg.cmd"),
+            Path.Combine(appDir, "tools", rid, "ffmpeg.bat"),
             Path.Combine(appDir, "tools", "win-x64", "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", "win-x64", "ffmpeg.cmd"),
+            Path.Combine(appDir, "tools", "win-x64", "ffmpeg.bat"),
             Path.Combine(appDir, "tools", "win-arm64", "ffmpeg.exe"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffmpeg.cmd"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffmpeg.bat"),
             "ffmpeg",
         };
         return Probe(candidates, "-version");
@@ -96,10 +129,20 @@ public static class DependencyLocator
         var candidates = new[]
         {
             Path.Combine(appDir, "ffprobe.exe"),
+            Path.Combine(appDir, "ffprobe.cmd"),
+            Path.Combine(appDir, "ffprobe.bat"),
             Path.Combine(appDir, "tools", "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "ffprobe.cmd"),
+            Path.Combine(appDir, "tools", "ffprobe.bat"),
             Path.Combine(appDir, "tools", rid, "ffprobe.exe"),
+            Path.Combine(appDir, "tools", rid, "ffprobe.cmd"),
+            Path.Combine(appDir, "tools", rid, "ffprobe.bat"),
             Path.Combine(appDir, "tools", "win-x64", "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "win-x64", "ffprobe.cmd"),
+            Path.Combine(appDir, "tools", "win-x64", "ffprobe.bat"),
             Path.Combine(appDir, "tools", "win-arm64", "ffprobe.exe"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffprobe.cmd"),
+            Path.Combine(appDir, "tools", "win-arm64", "ffprobe.bat"),
             "ffprobe",
         };
         return Probe(candidates, "-version");
@@ -170,6 +213,19 @@ public static class DependencyLocator
     }
 
     private static bool ProbeExecutable(string fileName, string arguments)
+    {
+        var cacheKey = $"{fileName}\0{arguments}";
+        if (ProbeResultCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
+        var result = ProbeExecutableUncached(fileName, arguments);
+        // Only cache positive results; see ProbeResultCache XML docs for rationale.
+        if (result)
+            ProbeResultCache[cacheKey] = true;
+        return result;
+    }
+
+    private static bool ProbeExecutableUncached(string fileName, string arguments)
     {
         try
         {

@@ -1333,11 +1333,12 @@ public sealed partial class SessionWorkflowCoordinator
         // still be talking to the managed GPU process). If that wait times out, we still dispose
         // the inference hosts so child Python/Docker processes do not keep the OS process alive
         // after the main window closes.
-        if (_pendingTtsTasks.Count > 0)
+        var pendingTtsSnapshot = SnapshotPendingTtsTasks();
+        if (pendingTtsSnapshot.Length > 0)
         {
             try
             {
-                bool completed = Task.WhenAll(_pendingTtsTasks).Wait(TimeSpan.FromSeconds(2));
+                bool completed = Task.WhenAll(pendingTtsSnapshot).Wait(TimeSpan.FromSeconds(2));
                 if (!completed)
                 {
                     _log.Warning("TTS shutdown timed out — scheduling background disposal of TTS service.");

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Babel.Player.Models;
 
 namespace Babel.Player.Services;
@@ -47,6 +48,26 @@ public sealed class PerSessionSnapshotStore
     }
 
     /// <summary>
+    /// Asynchronous counterpart to <see cref="Save"/>. Use from async pipeline code to avoid
+    /// blocking the caller on disk I/O. Non-fatal on failure (errors are logged and swallowed).
+    /// </summary>
+    public async Task SaveAsync(WorkflowSessionSnapshot snapshot)
+    {
+        try
+        {
+            var dir = SessionDir(snapshot.SessionId);
+            Directory.CreateDirectory(dir);
+            var path = SnapshotPath(snapshot.SessionId);
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(snapshot, SerializerOptions))
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"PerSessionSnapshotStore: failed to save session {snapshot.SessionId}.", ex);
+        }
+    }
+
+    /// <summary>
     /// Loads a single session by ID. Returns null if the file is absent or unreadable.
     /// </summary>
     public WorkflowSessionSnapshot? Load(Guid sessionId)
@@ -57,7 +78,7 @@ public sealed class PerSessionSnapshotStore
         try
         {
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<WorkflowSessionSnapshot>(json, SerializerOptions);
+            return SessionSnapshotJsonCompat.Deserialize(json, SerializerOptions);
         }
         catch (Exception ex)
         {
@@ -84,7 +105,7 @@ public sealed class PerSessionSnapshotStore
             try
             {
                 var json = File.ReadAllText(path);
-                var snapshot = JsonSerializer.Deserialize<WorkflowSessionSnapshot>(json, SerializerOptions);
+                var snapshot = SessionSnapshotJsonCompat.Deserialize(json, SerializerOptions);
                 if (snapshot is not null)
                     results.Add(snapshot);
             }

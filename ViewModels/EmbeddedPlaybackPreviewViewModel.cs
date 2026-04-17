@@ -175,6 +175,12 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         OnPropertyChanged(nameof(DubMixControlTooltip));
         OnPropertyChanged(nameof(DubMixControlDb));
         OnPropertyChanged(nameof(DubMixControlValueLabel));
+
+        // When vocal separation is enabled the slider writes AmbianceMixDb; the live
+        // preview would otherwise keep using the old AudioDuckingDb, making the
+        // control a no-op for what the user hears. Reapply volumes so preview
+        // tracks the ambience level too.
+        RecalculateOutputVolumes();
     }
 
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
@@ -654,7 +660,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             }
         }
 
-        if (IsDubModeOn && !IsSourcePaused)
+        if ((previewTimingOverride.HasValue || IsDubModeOn) && !IsSourcePaused)
             ApplyDubForSegment(segment, previewTimingOverride: previewTimingOverride);
     }
 
@@ -680,8 +686,15 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private void RecalculateOutputVolumes()
     {
         var masterGain = IsMuted ? 0.0 : SourceVolume;
+        // When vocal separation is on, the dub-mix slider writes AmbianceMixDb and
+        // that's the level the user is shaping; for live preview we don't have a
+        // separated ambience track, but applying the same dB to the source gives
+        // the slider an audible effect that tracks the render.
+        var duckingDb = UsesAmbianceMixControl
+            ? _coordinator.CurrentSettings.AmbianceMixDb
+            : AudioDuckingDb;
         var sourceGain = _isDucked
-            ? masterGain * Math.Pow(10.0, AudioDuckingDb / 20.0)
+            ? masterGain * Math.Pow(10.0, duckingDb / 20.0)
             : masterGain;
 
         _coordinator.SourceMediaPlayer?.Volume = sourceGain;

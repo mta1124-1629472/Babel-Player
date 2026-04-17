@@ -248,8 +248,8 @@ public sealed class AppSettings
     public string VideoExportEncoder { get; set; } = "auto";
 
     /// <summary>
-    /// Session-level dub timing strategy applied during dub-mode preview playback.
-    /// Individual segments can override this via <see cref="Babel.Player.Models.WorkflowSegmentState.TimingModeOverride"/>.
+    /// Session-level dub timing strategy applied during rendered dub composition and as the
+    /// default timing mode for dub preview when a segment does not carry its own override.
     /// </summary>
     public SegmentTimingMode DubTimingMode { get; set; } = SegmentTimingMode.Off;
 
