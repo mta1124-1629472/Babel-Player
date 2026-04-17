@@ -396,32 +396,7 @@ Babel Player bundles **libmpv** (GPL-2.0-or-later) and **ffmpeg** (LGPL-2.1-or-l
 
 ## Project Layout
 
-```
-Babel-Player/
-├── Models/                  # Domain records and enums (session state, segments, providers, compute profiles)
-├── Services/                # Workflow coordinator, providers, persistence, transport, host management
-│   └── Registries/          # Per-stage provider registries with compute-aware filtering
-├── ViewModels/              # MVVM layer with observables and commands
-├── Views/                   # Avalonia XAML UI with refined styling
-├── BabelPlayer.Tests/       # xUnit test project (large suite)
-├── inference/               # Python inference server (FastAPI + Faster-Whisper + TTS + diarization)
-├── scripts/                 # Architecture linter and development tooling
-├── docs/
-│   ├── architecture.md      # Structural map and ownership rules
-│   ├── PLAN.md              # Milestone plans (index)
-│   ├── context/             # Extra agent context (Gemini, Qwen, …)
-│   └── history/
-│       ├── smoke/           # Milestone smoke / gate evidence
-│       └── benchmarks/    # Transcription benchmark runs + leaderboard
-├── native/win-x64/          # libmpv-2.dll (fetched; see README setup)
-├── installer/               # Inno Setup script
-├── AGENTS.md                # Operating rules (read before non-trivial changes)
-├── CLAUDE.md                # Claude / Cursor-oriented project context
-├── CONTRIBUTING.md
-├── README.md
-├── LICENSE
-└── BabelPlayer.csproj
-```
+See [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md) for the full directory structure, key files table, and services reference.
 
 Key files:
 
@@ -441,10 +416,8 @@ Key files:
 
 Read these first:
 
+- [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md) — full project context for AI assistants and contributors
 - [AGENTS.md](AGENTS.md) — operating rules and non-negotiables
-- [CLAUDE.md](CLAUDE.md) — context and instructions for Claude
-- [docs/context/GEMINI.md](docs/context/GEMINI.md) — context for Gemini-oriented assistants
-- [docs/context/QWEN.md](docs/context/QWEN.md) — context for Qwen Coder–style setups
 - [docs/PLAN.md](docs/PLAN.md) — milestone order and gates
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow and scope discipline
 - [docs/architecture.md](docs/architecture.md) — structural map and ownership rules
