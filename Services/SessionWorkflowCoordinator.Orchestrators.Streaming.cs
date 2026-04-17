@@ -205,13 +205,13 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 await ttsStageTask.ConfigureAwait(false);
                 var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
-                var mixedDubPath = await _c.StitchSegmentClipsAsync(
+                var renderResult = await _c.StitchSegmentClipsAsync(
                     segmentAudioPaths,
                     translationWriter.OrderedSegments,
                     ttsPath,
                     ttsStageContext,
                     pipelineToken).ConfigureAwait(false);
-                _c.CommitTtsSessionState(voice, ttsPath, mixedDubPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+                _c.CommitTtsSessionState(voice, ttsPath, renderResult, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
             }
             catch (Exception ex)
             {
@@ -377,13 +377,13 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 await ttsStageTask.ConfigureAwait(false);
                 var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
-                var mixedDubPath = await _c.StitchSegmentClipsAsync(
+                var renderResult = await _c.StitchSegmentClipsAsync(
                     segmentAudioPaths,
                     translationWriter.OrderedSegments,
                     ttsPath,
                     ttsStageContext,
                     pipelineToken).ConfigureAwait(false);
-                _c.CommitTtsSessionState(voice, ttsPath, mixedDubPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+                _c.CommitTtsSessionState(voice, ttsPath, renderResult, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
             }
             catch (Exception ex)
             {

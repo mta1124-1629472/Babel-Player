@@ -14,7 +14,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// Renders dub audio using the same timeline rules as the pipeline (timing overrides, stretch, ambiance mix),
     /// so export matches current session configuration rather than stale on-disk TTS/mixed artifacts.
     /// </summary>
-    public async Task<DubExportRenderResult?> TryRenderDubAudioForExportAsync(
+    public async Task<DubRenderResult?> TryRenderDubAudioForExportAsync(
         CancellationToken cancellationToken = default)
     {
         if (_audioProcessingService is null)
@@ -41,25 +41,81 @@ public sealed partial class SessionWorkflowCoordinator
         var exportDir = Path.Combine(GetSessionDirectory(), "exports", "render");
         Directory.CreateDirectory(exportDir);
         var dubPath = Path.Combine(exportDir, $"dub-timeline-{Guid.NewGuid():N}.mp3");
-
-        var timeline = await BuildTimelineDubSegmentsAsync(ordered, session.TtsSegmentAudioPaths, cancellationToken)
+        return await RenderDubAudioAsync(ordered, session.TtsSegmentAudioPaths, dubPath, cancellationToken)
             .ConfigureAwait(false);
+    }
 
+    private async Task<DubRenderResult> RenderDubAudioAsync(
+        IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
+        IReadOnlyDictionary<string, string> segmentAudioPaths,
+        string dubPath,
+        CancellationToken cancellationToken)
+    {
+        if (_audioProcessingService is null)
+            throw new InvalidOperationException("Audio processing service unavailable. Unable to compose dub audio.");
+
+        var timeline = await BuildTimelineDubSegmentsAsync(orderedSegments, segmentAudioPaths, cancellationToken)
+            .ConfigureAwait(false);
         await _audioProcessingService.ComposeTimelineDubAsync(timeline, dubPath, cancellationToken)
             .ConfigureAwait(false);
 
-        string? mixedPath = null;
-        if (!string.IsNullOrWhiteSpace(session.AmbianceAudioPath) && File.Exists(session.AmbianceAudioPath))
+        if (!File.Exists(dubPath))
         {
-            mixedPath = Path.Combine(exportDir, $"dub-mixed-{Guid.NewGuid():N}.mp3");
-            await _audioProcessingService.MixDubOverAmbianceAsync(
-                    dubPath,
-                    session.AmbianceAudioPath,
-                    mixedPath,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            throw new InvalidOperationException(
+                $"Dub composition completed but the expected output file was not created at '{dubPath}'.");
         }
 
-        return new DubExportRenderResult(dubPath, mixedPath);
+        _log.Info($"TTS combined complete: {dubPath}");
+
+        var ambiancePath = CurrentSession.AmbianceAudioPath;
+        var ambianceExpected = !string.IsNullOrWhiteSpace(ambiancePath) && File.Exists(ambiancePath);
+        string? mixedPath = null;
+
+        if (ambianceExpected)
+        {
+            mixedPath = BuildMixedDubPath(dubPath);
+            _log.Info(
+                $"Starting ambiance mix: dub='{dubPath}', ambiance='{ambiancePath}', output='{mixedPath}', " +
+                $"gainDb={CurrentSettings.AmbianceMixDb:F1}");
+
+            try
+            {
+                await _audioProcessingService.MixDubOverAmbianceAsync(
+                        dubPath,
+                        ambiancePath!,
+                        mixedPath,
+                        CurrentSettings.AmbianceMixDb,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Ambiance mix failed for '{dubPath}'.", ex);
+                throw new InvalidOperationException("Dub generation failed while mixing ambiance back under the dub.", ex);
+            }
+
+            if (!File.Exists(mixedPath))
+            {
+                var error = new InvalidOperationException(
+                    $"Ambiance mix was expected but the mixed dub file was not created at '{mixedPath}'.");
+                _log.Error("Ambiance expected but mixed dub file is missing.", error);
+                throw error;
+            }
+
+            _log.Info($"Ambiance mix complete: {mixedPath}");
+        }
+
+        return new DubRenderResult(
+            dubPath,
+            mixedPath,
+            ambianceExpected,
+            !string.IsNullOrWhiteSpace(mixedPath) && File.Exists(mixedPath));
+    }
+
+    private static string BuildMixedDubPath(string dubPath)
+    {
+        var outputDir = Path.GetDirectoryName(dubPath) ?? AppContext.BaseDirectory;
+        var fileName = Path.GetFileNameWithoutExtension(dubPath);
+        return Path.Combine(outputDir, $"{fileName}_mixed.mp3");
     }
 }

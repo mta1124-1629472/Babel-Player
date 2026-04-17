@@ -58,6 +58,8 @@ public sealed class SettingsService
             var file = JsonSerializer.Deserialize<AppSettingsFile>(json, SerializerOptions)
                 ?? new AppSettingsFile();
             var settings = file.ToSettings();
+            if (file.DubTimingMode == SegmentTimingMode.Pause)
+                _log.Info("Migrated legacy Pause session timing default to Off because Pause is preview-only.");
             settings.NormalizeLegacyInferenceSettings();
             return settings;
         }
@@ -136,6 +138,7 @@ public sealed class SettingsService
         public bool? VideoHdrComputePeak { get; set; }
         public string? VideoExportEncoder { get; set; }
         public SegmentTimingMode? DubTimingMode { get; set; }
+        public double? AmbianceMixDb { get; set; }
         public string? Theme { get; set; }
         public int? MaxRecentSessions { get; set; }
         public bool? AutoSaveEnabled { get; set; }
@@ -219,7 +222,11 @@ public sealed class SettingsService
             settings.VideoHdrComputePeak = VideoHdrComputePeak ?? settings.VideoHdrComputePeak;
             settings.VideoExportEncoder = VideoExportEncoder ?? settings.VideoExportEncoder;
             if (DubTimingMode.HasValue)
-                settings.DubTimingMode = DubTimingMode.Value;
+            {
+                settings.DubTimingMode = NormalizeRenderTimingMode(DubTimingMode.Value);
+            }
+            if (AmbianceMixDb.HasValue)
+                settings.AmbianceMixDb = AmbianceMixDb.Value;
             settings.Theme = Theme ?? settings.Theme;
             settings.MaxRecentSessions = MaxRecentSessions ?? settings.MaxRecentSessions;
             settings.AutoSaveEnabled = AutoSaveEnabled ?? settings.AutoSaveEnabled;
@@ -267,11 +274,15 @@ public sealed class SettingsService
             VideoTargetPeak = settings.VideoTargetPeak,
             VideoHdrComputePeak = settings.VideoHdrComputePeak,
             VideoExportEncoder = settings.VideoExportEncoder,
-            DubTimingMode = settings.DubTimingMode,
+            DubTimingMode = NormalizeRenderTimingMode(settings.DubTimingMode),
+            AmbianceMixDb = settings.AmbianceMixDb,
             Theme = settings.Theme,
             MaxRecentSessions = settings.MaxRecentSessions,
             AutoSaveEnabled = settings.AutoSaveEnabled,
         };
+
+        private static SegmentTimingMode NormalizeRenderTimingMode(SegmentTimingMode mode) =>
+            mode == SegmentTimingMode.Pause ? SegmentTimingMode.Off : mode;
 
         private ComputeProfile ResolveProfile(
             ComputeProfile? profile,

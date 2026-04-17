@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Babel.Player.Models;
@@ -48,7 +49,7 @@ public partial class SegmentInspectionViewModel : ViewModelBase, IDisposable
     {
         SegmentTimingMode.Off => "Off (override)",
         SegmentTimingMode.Stretch => "Stretch (override)",
-        SegmentTimingMode.Pause => "Pause (override)",
+        SegmentTimingMode.Pause => "Preview pause (legacy override)",
         null => "Inherit",
         _ => "Unknown",
     };
@@ -120,6 +121,9 @@ public partial class SegmentInspectionViewModel : ViewModelBase, IDisposable
         TimingModeOverride = mode;
         _preview.ApplySegmentTimingOverride(currentId, mode);
     }
+
+    [RelayCommand]
+    private Task PreviewPauseAsync() => _preview.PreviewSelectedSegmentWithPauseAsync();
 
     /// <summary>
     /// Detaches the view model's preview PropertyChanged handler and performs cleanup.
