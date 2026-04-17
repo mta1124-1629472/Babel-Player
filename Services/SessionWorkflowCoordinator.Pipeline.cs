@@ -130,7 +130,10 @@ public sealed partial class SessionWorkflowCoordinator
         IProgress<double>? progress,
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken) =>
-        _transcriptionOrchestrator.ExecuteAsync(progress, stageContext, cancellationToken);
+        _transcriptionOrchestrator.ExecuteAsync(
+            progress,
+            stageContext is { } context ? context.ToShared() : null,
+            cancellationToken);
 
     /// <summary>
         /// Advances the current session by translating the existing transcript into the specified target language.
@@ -161,13 +164,18 @@ public sealed partial class SessionWorkflowCoordinator
         /// <param name="stageContext">Optional stage context controlling persistence/visibility of intermediate stage updates.</param>
         /// <param name="cancellationToken">Token to observe for cancellation; operation honors cancellation and will throw <see cref="OperationCanceledException"/> when requested.</param>
         /// <returns>A task that completes when translation finishes. On success the session's stage is set to Translated and translation metadata are persisted.</returns>
-        internal Task TranslateTranscriptAsync(
+    internal Task TranslateTranscriptAsync(
         IProgress<double>? progress,
         string? targetLanguage,
         string? sourceLanguage,
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken) =>
-        _translationOrchestrator.ExecuteAsync(progress, targetLanguage, sourceLanguage, stageContext, cancellationToken);
+        _translationOrchestrator.ExecuteAsync(
+            progress,
+            targetLanguage,
+            sourceLanguage,
+            stageContext is { } context ? context.ToShared() : null,
+            cancellationToken);
 
     /// <summary>
         /// Runs the TTS generation pipeline for the current session using the provided voice and progress reporter.
@@ -1030,7 +1038,9 @@ public sealed partial class SessionWorkflowCoordinator
                     break;
                 case PipelineAdvanceAction.Diarize:
                     await _diarizationStageOrchestrator.ExecuteAsync(
-                        GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress),
+                        GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress) is { } stageContext
+                            ? stageContext.ToShared()
+                            : null,
                         cancellationToken);
                     if (CurrentSession.Stage <= stageBeforeAction)
                         throw new InvalidOperationException($"Pipeline stalled: stage did not advance after {action} (still at {CurrentSession.Stage}).");
@@ -1206,13 +1216,10 @@ public sealed partial class SessionWorkflowCoordinator
         private bool ShouldRunDiarization() =>
         !string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider);
 
-    private static string NormalizePipelineLanguage(string? raw, string nonNormalizedFallback)
-    {
-        var n = LanguageCode.NormalizeForPersistence(raw);
-        if (n is not null) return n;
-        if (string.IsNullOrWhiteSpace(raw)) return nonNormalizedFallback;
-        return raw.Trim();
-    }
+    private static string NormalizePipelineLanguage(string? raw, string nonNormalizedFallback) =>
+        Babel.Player.Services.Orchestration.PipelineStageReporter.NormalizePipelineLanguage(
+            raw,
+            nonNormalizedFallback);
 
     /// <summary>
     /// Re-run transcription, optionally continuing through diarization (if enabled), translation, and TTS.
