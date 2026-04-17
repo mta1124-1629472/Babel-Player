@@ -614,7 +614,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             CurrentSession = CurrentSession with
             {
                 Stage = SessionWorkflowStage.Transcribed,
-                InstrumentalAudioPath = null,
                 TranslationPath = null,
                 TtsPath = null,
                 MixedDubAudioPath = null,
