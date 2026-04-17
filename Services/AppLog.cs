@@ -119,6 +119,10 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
         {
             try
             {
+        if (batch.Length > 0)
+        {
+            try
+            {
                 await File.AppendAllTextAsync(LogFilePath, batch.ToString()).ConfigureAwait(false);
             }
             catch (Exception ex)
