@@ -941,12 +941,13 @@
                     </Style>
                 </Border.Styles>
 
-                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                <ScrollViewer x:Name="ControlsBarScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled"
                               HorizontalAlignment="Stretch">
                     <!-- Keep star spacer columns finite inside ScrollViewer so left/center/right groups stay distributed. -->
                     <Grid ColumnDefinitions="Auto,*,Auto,*,Auto"
-                          MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource AncestorType=Border}}">
+                          MinWidth="{Binding Viewport.Width, ElementName=ControlsBarScrollViewer}">
 
                     <!-- Left: open media + CC + dub mode toggle -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"

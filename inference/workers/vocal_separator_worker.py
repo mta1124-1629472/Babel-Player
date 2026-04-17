@@ -170,8 +170,6 @@ def run_vocal_separation(
     """
     from audio_separator.separator import Separator
 
-    work_audio, temp_input = _normalize_input_for_separator(audio_path, output_dir)
-
     mdx_params = {
         "hop_length": _MDX_HOP_LENGTH,
         "segment_size": _MDX_SEGMENT_SIZE,
@@ -202,7 +200,9 @@ def run_vocal_separation(
 
     effective_instrumental_model = instrumental_model or vocals_model
 
+    temp_input: Optional[Path] = None
     try:
+        work_audio, temp_input = _normalize_input_for_separator(audio_path, output_dir)
         if vocals_model == effective_instrumental_model:
             # Single pass — both stems come from the same model run
             stems = [
