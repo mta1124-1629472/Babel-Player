@@ -158,7 +158,7 @@ See `docs/design-system-audit.md` and `docs/design-system-handoff.md` for the co
 - **Do not hard-code sizes or families.** `FontSize="12"`, `FontFamily="Segoe UI"`, and similar literals bypass the scale and will drift. Use a class or a `DynamicResource` key.
 - **Do not invent new sizes.** The scale is intentionally 6 steps (10 / 11 / 12 / 13 / 14 / 15). New magic numbers should be a discussion, not an inline edit.
 - **Do not redefine `text-*` classes locally.** If a view needs a genuinely new text role, add it to `Styles/Typography.axaml` so every view picks it up. Keep the `text-<role>` naming.
-- **Do not override weights on every line.** If you find yourself writing `FontWeight="SemiBold"` on many `TextBlock`s, you probably want `text-title` or `text-display` instead.
+- **Do not use StaticResource for font keys.** Use DynamicResource so theme and style changes propagate consistently.
 - **Do not mix `StaticResource` for font keys.** Use `DynamicResource` so theme and style changes propagate consistently.
 - **Do not use `text-overline` for non-rail text.** It is specifically the all-caps `FontSizeMicro` (10) Medium rail style used for section headers; regular captions should use `text-caption` or `text-micro`.
 
