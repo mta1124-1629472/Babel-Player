@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 
@@ -14,6 +15,7 @@ public sealed class SessionSnapshotStore
     };
 
     private readonly AppLog _log;
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
 
     public SessionSnapshotStore(string stateFilePath, AppLog log)
     {
@@ -60,6 +62,11 @@ public sealed class SessionSnapshotStore
 
     public void Save(WorkflowSessionSnapshot snapshot)
     {
+        // Serialize inside the gate so the order in which callers acquire the gate
+        // matches the order their snapshot is written. Serializing outside the gate
+        // would allow Thread A to produce snapshot-V1, Thread B to produce V2, and
+        // then B to acquire first and write V2 before A overwrites with stale V1.
+        _saveGate.Wait();
         try
         {
             var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
@@ -70,6 +77,10 @@ public sealed class SessionSnapshotStore
             // Save failure is non-fatal — log and continue. The in-memory session is still valid.
             _log.Error($"Failed to save session snapshot to {StateFilePath}.", ex);
         }
+        finally
+        {
+            _saveGate.Release();
+        }
     }
 
     /// <summary>
@@ -78,6 +89,7 @@ public sealed class SessionSnapshotStore
     /// </summary>
     public async Task SaveAsync(WorkflowSessionSnapshot snapshot)
     {
+        await _saveGate.WaitAsync().ConfigureAwait(false);
         try
         {
             var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
@@ -86,6 +98,10 @@ public sealed class SessionSnapshotStore
         catch (Exception ex)
         {
             _log.Error($"Failed to save session snapshot to {StateFilePath}.", ex);
+        }
+        finally
+        {
+            _saveGate.Release();
         }
     }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 
@@ -11,12 +12,17 @@ namespace Babel.Player.Services;
 /// Persists each session's <see cref="WorkflowSessionSnapshot"/> to a per-session directory
 /// under <c>sessions/[SessionId]/snapshot.json</c>.
 /// </summary>
-public sealed class PerSessionSnapshotStore
+public sealed class PerSessionSnapshotStore : IDisposable
 {
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
 
     private readonly string _sessionsRoot;
     private readonly AppLog _log;
+    // Single store-wide save gate. A per-session gate would allow cross-session
+    // parallelism, but saves are short (small JSON write) and rare, and a per-session
+    // dictionary grows unbounded as new sessions are created. One gate keeps memory
+    // flat and still serializes same-session Save()/SaveAsync() correctly.
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
 
     public PerSessionSnapshotStore(string sessionsRoot, AppLog log)
     {
@@ -34,16 +40,23 @@ public sealed class PerSessionSnapshotStore
     /// <summary>Writes <c>sessions/[SessionId]/snapshot.json</c>. Non-fatal on failure.</summary>
     public void Save(WorkflowSessionSnapshot snapshot)
     {
+        // Serialize inside the gate so gate-acquisition order matches file-write order.
+        _saveGate.Wait();
         try
         {
+            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
             var dir = SessionDir(snapshot.SessionId);
             Directory.CreateDirectory(dir);
             var path = SnapshotPath(snapshot.SessionId);
-            File.WriteAllText(path, JsonSerializer.Serialize(snapshot, SerializerOptions));
+            File.WriteAllText(path, json);
         }
         catch (Exception ex)
         {
             _log.Error($"PerSessionSnapshotStore: failed to save session {snapshot.SessionId}.", ex);
+        }
+        finally
+        {
+            _saveGate.Release();
         }
     }
 
@@ -53,17 +66,22 @@ public sealed class PerSessionSnapshotStore
     /// </summary>
     public async Task SaveAsync(WorkflowSessionSnapshot snapshot)
     {
+        await _saveGate.WaitAsync().ConfigureAwait(false);
         try
         {
+            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
             var dir = SessionDir(snapshot.SessionId);
             Directory.CreateDirectory(dir);
             var path = SnapshotPath(snapshot.SessionId);
-            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(snapshot, SerializerOptions))
-                .ConfigureAwait(false);
+            await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _log.Error($"PerSessionSnapshotStore: failed to save session {snapshot.SessionId}.", ex);
+        }
+        finally
+        {
+            _saveGate.Release();
         }
     }
 
@@ -123,4 +141,9 @@ public sealed class PerSessionSnapshotStore
 
     private string SnapshotPath(Guid sessionId) =>
         Path.Combine(SessionDir(sessionId), "snapshot.json");
+
+    public void Dispose()
+    {
+        _saveGate.Dispose();
+    }
 }
