@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -276,13 +277,13 @@ public sealed class ExtractedOrchestratorTests
                 return Task.CompletedTask;
             },
         };
-        var updates = new List<PipelineStageUpdate>();
+        var updates = new ConcurrentQueue<PipelineStageUpdate>();
         var stageContext = new PipelineStageContext(
             2,
             3,
             SessionWorkflowStage.Translated,
             "Translation",
-            new CaptureProgress<PipelineStageUpdate>(updates));
+            new CaptureProgress<PipelineStageUpdate>(updates.Enqueue));
         var orchestrator = new TranslationOrchestrator(
             session,
             new FakeStageExecutionPlanner(),
@@ -307,13 +308,19 @@ public sealed class ExtractedOrchestratorTests
             stageContext,
             CancellationToken.None);
 
+        SpinWait.SpinUntil(
+            () => updates.Count >= 2,
+            TimeSpan.FromMilliseconds(100));
+
+        var updateSnapshot = updates.ToArray();
+
         Assert.Contains(
-            updates,
+            updateSnapshot,
             update => !update.IsIndeterminate
                    && Math.Abs(update.Progress01 - 0.25) < 0.001
                    && update.Detail.Contains("Preparing translation model", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(
-            updates,
+            updateSnapshot,
             update => !update.IsIndeterminate
                    && Math.Abs(update.Progress01 - 1.0) < 0.001
                    && update.Detail.Contains("Preparing translation model", StringComparison.OrdinalIgnoreCase));
@@ -364,7 +371,7 @@ public sealed class ExtractedOrchestratorTests
             4,
             SessionWorkflowStage.Diarized,
             "Speaker Mapping",
-            new CaptureProgress<PipelineStageUpdate>(updates));
+            new CaptureProgress<PipelineStageUpdate>(updates.Add));
         var executor = new FakeDiarizationExecutor
         {
             ExecuteAsyncImpl = (_, _, _, _, _) => Task.FromResult((true, 3, 12)),
@@ -661,8 +668,8 @@ public sealed class ExtractedOrchestratorTests
             throw new NotSupportedException();
     }
 
-    private sealed class CaptureProgress<T>(List<T> values) : IProgress<T>
+    private sealed class CaptureProgress<T>(Action<T> capture) : IProgress<T>
     {
-        public void Report(T value) => values.Add(value);
+        public void Report(T value) => capture(value);
     }
 }
