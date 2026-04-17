@@ -49,7 +49,9 @@ public sealed class GoogleApiClient : IDisposable
     /// </summary>
     public async Task<GoogleVoicesInfo> ListVoicesAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"voices?key={Uri.EscapeDataString(_apiKey)}", cancellationToken);
+        using var response = await HttpRetryHelper.SendAsync(
+            () => _httpClient.GetAsync($"voices?key={Uri.EscapeDataString(_apiKey)}", cancellationToken),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         return await ReadJsonAsync<GoogleVoicesInfo>(response, cancellationToken);
     }
 
@@ -67,8 +69,13 @@ public sealed class GoogleApiClient : IDisposable
             AudioConfig: new GoogleSynthesizeAudioConfig("MP3"));
 
         var json = JsonSerializer.Serialize(request, JsonOptions);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync($"text:synthesize?key={Uri.EscapeDataString(_apiKey)}", content, cancellationToken);
+        using var response = await HttpRetryHelper.SendAsync(
+            () =>
+            {
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                return _httpClient.PostAsync($"text:synthesize?key={Uri.EscapeDataString(_apiKey)}", content, cancellationToken);
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         var result = await ReadJsonAsync<GoogleSynthesizeResponse>(response, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(result.AudioContent))
@@ -103,9 +110,14 @@ public sealed class GoogleApiClient : IDisposable
             new GoogleRecognizeAudio(Convert.ToBase64String(audioBytes)));
 
         var json = JsonSerializer.Serialize(payload, JsonOptions);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
         var url = $"{SpeechBaseUrl}speech:recognize?key={Uri.EscapeDataString(_apiKey)}";
-        using var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        using var response = await HttpRetryHelper.SendAsync(
+            () =>
+            {
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                return _httpClient.PostAsync(url, content, cancellationToken);
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         return await ReadJsonAsync<GoogleSpeechRecognizeInfo>(response, cancellationToken);
     }
 
