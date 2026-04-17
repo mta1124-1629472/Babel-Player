@@ -53,7 +53,7 @@
 
         <!-- Header -->
         <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" 
-                   FontSize="22" FontWeight="SemiBold" Text="Settings" 
+                   Classes="text-display" Text="Settings" 
                    Margin="0,0,0,16"/>
 
         <!-- Sidebar -->
@@ -84,11 +84,11 @@
                         <!-- Session Settings Card -->
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Session" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Session" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                     <StackPanel Grid.Column="0" Grid.Row="0" Spacing="4">
-                                        <TextBlock Text="Recent session history limit" FontSize="12" Foreground="{DynamicResource StatusTextBrush}"/>
-                                        <TextBlock Text="Maximum number of recent sessions kept in the file menu (1–20)." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                        <TextBlock Text="Recent session history limit" Classes="text-secondary" Foreground="{DynamicResource StatusTextBrush}"/>
+                                        <TextBlock Text="Maximum number of recent sessions kept in the file menu (1–20)." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <TextBox Grid.Column="1" Grid.Row="0" Text="{Binding MaxRecentSessions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center"/>
                                 </Grid>
@@ -99,9 +99,9 @@
                         <!-- GPU Backend Card -->
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="GPU Backend" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="GPU Backend" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <StackPanel Spacing="4">
-                                    <TextBlock Text="Preferred Local GPU Backend" FontSize="12" Foreground="{DynamicResource StatusTextBrush}"/>
+                                    <TextBlock Text="Preferred Local GPU Backend" Classes="text-secondary" Foreground="{DynamicResource StatusTextBrush}"/>
                                     <ComboBox ItemsSource="{Binding GpuBackendOptions}"
                                               SelectedItem="{Binding PreferredLocalGpuBackend, Mode=TwoWay}"
                                               Width="220"
@@ -112,7 +112,7 @@
                                             </DataTemplate>
                                         </ComboBox.ItemTemplate>
                                     </ComboBox>
-                                    <TextBlock Text="Managed local GPU is the default low-friction path. Docker GPU host is available as an advanced backend." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Managed local GPU is the default low-friction path. Docker GPU host is available as an advanced backend." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -120,24 +120,24 @@
                         <!-- Backend Status Card -->
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Backend Status" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Backend Status" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Top">
                                     <Ellipse Width="10" Height="10" Fill="{Binding BackendStatusBrush}" VerticalAlignment="Top" Margin="0,3,0,0"/>
-                                    <TextBlock Text="{Binding BackendStatusText}" FontSize="12" FontWeight="Medium" TextWrapping="Wrap" MaxWidth="480"/>
-                                    <Button Content="Restart" Command="{Binding RestartBackendCommand}" IsEnabled="{Binding CanRestartBackend}" Padding="12,6" FontSize="11" VerticalAlignment="Top"/>
+                                    <TextBlock Text="{Binding BackendStatusText}" Classes="text-emphasis" TextWrapping="Wrap" MaxWidth="480"/>
+                                    <Button Content="Restart" Command="{Binding RestartBackendCommand}" IsEnabled="{Binding CanRestartBackend}" Padding="12,6" VerticalAlignment="Top"/>
                                 </StackPanel>
-                                <TextBlock Text="{Binding BackendErrorDetail}" IsVisible="{Binding BackendErrorDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" FontSize="11" Foreground="{DynamicResource SystemErrorForeground}" Opacity="0.8" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding BackendErrorDetail}" IsVisible="{Binding BackendErrorDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Classes="text-caption" Foreground="{DynamicResource SystemErrorForeground}" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
 
                         <!-- Docker GPU Card -->
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Docker GPU Service" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Docker GPU Service" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <StackPanel Spacing="4">
-                                    <TextBlock Text="Advanced GPU Service URL" FontSize="12" Foreground="{DynamicResource StatusTextBrush}"/>
+                                    <TextBlock Text="Advanced GPU Service URL" Classes="text-secondary" Foreground="{DynamicResource StatusTextBrush}"/>
                                     <TextBox Text="{Binding AdvancedGpuServiceUrl, Mode=TwoWay}" IsEnabled="{Binding IsDockerBackend}" Width="280" HorizontalAlignment="Left"/>
-                                    <TextBlock Text="Only editable when the Docker GPU backend is selected." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Only editable when the Docker GPU backend is selected." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <CheckBox IsChecked="{Binding AlwaysStartLocalGpuRuntimeAtAppStart}" Content="Always start local GPU runtime at app start"/>
                             </StackPanel>
@@ -145,23 +145,23 @@
 
                         <Border Classes="settings-card">
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Pipeline audio &amp; dubbing" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <TextBlock Text="Vocal separation and segment timing (dub) are configured in the main window → Pipeline panel, so they stay next to the run controls." FontSize="11" Opacity="0.65" TextWrapping="Wrap"/>
+                                <TextBlock Text="Pipeline audio &amp; dubbing" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Vocal separation and segment timing (dub) are configured in the main window → Pipeline panel, so they stay next to the run controls." Classes="text-caption" Opacity="0.65" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
 
                         <!-- Advanced CPU Expander -->
                         <Expander Header="Advanced: CPU Transcription" IsExpanded="False">
                             <StackPanel Spacing="12" Margin="0,12,0,0">
-                                <TextBlock Text="These options tune CPU-only transcription. 0 threads means auto selection. Worker count can follow hardware (cores + RAM) or a manual value (clamped)." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
-                                <TextBlock Text="{Binding CpuAdvancedSettingsNotice}" FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"/>
+                                <TextBlock Text="These options tune CPU-only transcription. 0 threads means auto selection. Worker count can follow hardware (cores + RAM) or a manual value (clamped)." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding CpuAdvancedSettingsNotice}" Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"/>
                                 <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto">
-                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="CPU Compute Type:" VerticalAlignment="Center" FontSize="12"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="CPU Compute Type:" VerticalAlignment="Center" Classes="text-secondary"/>
                                     <ComboBox Grid.Column="1" Grid.Row="0" ItemsSource="{Binding TranscriptionCpuComputeTypeOptions}" SelectedItem="{Binding TranscriptionCpuComputeType, Mode=TwoWay}" Width="150"/>
-                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="CPU Threads (0=auto):" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="CPU Threads (0=auto):" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
                                     <TextBox Grid.Column="1" Grid.Row="1" Text="{Binding TranscriptionCpuThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="0,8,0,0"/>
                                     <CheckBox Grid.Column="1" Grid.Row="2" Content="Automatic worker count (from CPU cores and RAM)" IsChecked="{Binding TranscriptionNumWorkersUseAuto, Mode=TwoWay}" Margin="0,8,0,0"/>
-                                    <TextBlock Grid.Column="0" Grid.Row="3" Text="Workers (manual):" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="3" Text="Workers (manual):" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
                                     <TextBox Grid.Column="1" Grid.Row="3" Text="{Binding TranscriptionNumWorkers, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="0,8,0,0" IsEnabled="{Binding TranscriptionNumWorkersManualEnabled}"/>
                                 </Grid>
                             </StackPanel>
@@ -174,16 +174,16 @@
                     <StackPanel Spacing="16">
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Keyboard Shortcuts" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <TextBlock Text="Hotkey customisation is not yet available. Shown values are the current defaults." FontSize="11" Opacity="0.5" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock Text="Keyboard Shortcuts" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Hotkey customisation is not yet available. Shown values are the current defaults." Classes="text-caption" Opacity="0.5" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
-                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="Play/Pause:" VerticalAlignment="Center" FontSize="12"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Text="Play/Pause:" VerticalAlignment="Center" Classes="text-secondary"/>
                                     <TextBox Grid.Column="1" Grid.Row="0" Text="{Binding PlayPauseHotkey}" IsReadOnly="True" Width="120"/>
-                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="Toggle Segment Panel:" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="Toggle Segment Panel:" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
                                     <TextBox Grid.Column="1" Grid.Row="1" Text="{Binding ToggleSegmentPanelHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
-                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="Toggle Dub Mode:" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="Toggle Dub Mode:" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
                                     <TextBox Grid.Column="1" Grid.Row="2" Text="{Binding ToggleDubModeHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
-                                    <TextBlock Grid.Column="0" Grid.Row="3" Text="Toggle Fullscreen:" VerticalAlignment="Center" FontSize="12" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="3" Text="Toggle Fullscreen:" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
                                     <TextBox Grid.Column="1" Grid.Row="3" Text="{Binding ToggleFullscreenHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
                                 </Grid>
                             </StackPanel>
@@ -194,10 +194,20 @@
                 <!-- Video Panel -->
                 <ScrollViewer IsVisible="{Binding IsVideoSelected}" VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="16">
+                        <!-- Playback / captions -->
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Embedded playback" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <CheckBox IsChecked="{Binding BilingualSubtitlesEnabled, Mode=TwoWay}"
+                                          Content="Bilingual subtitles (source + translation in exports and embedded preview)"/>
+                                <TextBlock Text="When enabled, subtitle export and the in-player CC track include both languages when segments are available." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Hardware Decode Card -->
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Hardware Decode" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Hardware Decode" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto">
                                     <TextBlock Grid.Column="0" Grid.Row="0" Text="Hardware Decoder:" VerticalAlignment="Center"/>
                                     <ComboBox Grid.Column="1" Grid.Row="0" ItemsSource="{Binding HwdecOptions}" SelectedItem="{Binding VideoHwdec, Mode=TwoWay}" Width="200"/>
@@ -212,32 +222,32 @@
                         <!-- GPU-Next Card -->
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="GPU-Next Backend" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="GPU-Next Backend" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <CheckBox IsChecked="{Binding VideoUseGpuNext, Mode=TwoWay}" Content="Use gpu-next video output (required for RTX enhancements)"/>
-                                <TextBlock Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or HDR modes." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="gpu-next is the newer mpv renderer. Enable this before turning on RTX Video Super Resolution or HDR modes." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
 
                         <!-- RTX Video Card -->
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="RTX Video Enhancement" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="RTX Video Enhancement" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <CheckBox IsChecked="{Binding VideoVsrEnabled, Mode=TwoWay}" IsEnabled="{Binding VsrSettingsAvailable}" Content="RTX Video Super Resolution (VSR)"/>
-                                <TextBlock Text="AI upscaling via NVIDIA d3d11vpp. Requires a detected GeForce RTX GPU, driver ≥ 551.23, gpu-next, and 'RTX Video Enhancement' in NVIDIA Control Panel." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
-                                <TextBlock Text="{Binding RtxVideoHardwareGateHint}" IsVisible="{Binding HasRtxVideoHardwareGateHint}" FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="AI upscaling via NVIDIA d3d11vpp. Requires a detected GeForce RTX GPU, driver ≥ 551.23, gpu-next, and 'RTX Video Enhancement' in NVIDIA Control Panel." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding RtxVideoHardwareGateHint}" IsVisible="{Binding HasRtxVideoHardwareGateHint}" Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
                                 
                                 <Border Background="{DynamicResource SurfaceRaisedBrush}" CornerRadius="6" Padding="12" Margin="0,8,0,0">
                                     <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
-                                        <TextBlock Grid.Column="0" Grid.Row="0" Text="Support:" FontWeight="Medium" FontSize="11"/>
-                                        <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding VsrSupportHintText}" FontSize="11" TextWrapping="Wrap"/>
-                                        <TextBlock Grid.Column="0" Grid.Row="1" Text="Requested:" FontWeight="Medium" FontSize="11"/>
-                                        <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding VsrRequestedStateText}" FontSize="11" TextWrapping="Wrap"/>
-                                        <TextBlock Grid.Column="0" Grid.Row="2" Text="Resolved:" FontWeight="Medium" FontSize="11"/>
-                                        <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding VsrResolvedStateText}" FontSize="11" TextWrapping="Wrap"/>
-                                        <TextBlock Grid.Column="0" Grid.Row="3" Text="Last reason:" FontWeight="Medium" FontSize="11"/>
-                                        <TextBlock Grid.Column="1" Grid.Row="3" Text="{Binding VsrReasonText}" FontSize="11" TextWrapping="Wrap"/>
-                                        <TextBlock Grid.Column="0" Grid.Row="4" Text="Last filter:" FontWeight="Medium" FontSize="11"/>
-                                        <TextBlock Grid.Column="1" Grid.Row="4" Text="{Binding VsrFilterText}" FontSize="11" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="0" Text="Support:" Classes="text-label"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding VsrSupportHintText}" Classes="text-caption" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="1" Text="Requested:" Classes="text-label"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding VsrRequestedStateText}" Classes="text-caption" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="2" Text="Resolved:" Classes="text-label"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding VsrResolvedStateText}" Classes="text-caption" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="3" Text="Last reason:" Classes="text-label"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="3" Text="{Binding VsrReasonText}" Classes="text-caption" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Grid.Row="4" Text="Last filter:" Classes="text-label"/>
+                                        <TextBlock Grid.Column="1" Grid.Row="4" Text="{Binding VsrFilterText}" Classes="text-caption" TextWrapping="Wrap"/>
                                     </Grid>
                                 </Border>
                             </StackPanel>
@@ -246,8 +256,8 @@
                         <!-- HDR Card -->
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="HDR Playback" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <TextBlock Text="Choose one mode. RTX HDR follows NVIDIA Control Panel. HDR passthrough configures mpv. Requires gpu-next and Windows HDR." FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="HDR Playback" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Choose one mode. RTX HDR follows NVIDIA Control Panel. HDR passthrough configures mpv. Requires gpu-next and Windows HDR." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
                                 
                                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                                     <RadioButton GroupName="VideoHdrPlaybackMode" Content="Off" IsChecked="{Binding IsHdrModeOff, Mode=TwoWay}" IsEnabled="{Binding VideoUseGpuNext}" Padding="12,8"/>
@@ -256,7 +266,7 @@
                                 </StackPanel>
                                 
                                 <StackPanel IsVisible="{Binding IsMpvHdrPassthroughDetailsVisible}" Spacing="8" Margin="0,8,0,0">
-                                    <TextBlock Text="mpv passthrough options" FontWeight="SemiBold" FontSize="12"/>
+                                    <TextBlock Text="mpv passthrough options" Classes="text-label"/>
                                     <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto">
                                         <TextBlock Grid.Column="0" Grid.Row="0" Text="Tone mapping:" VerticalAlignment="Center"/>
                                         <ComboBox Grid.Column="1" Grid.Row="0" ItemsSource="{Binding HdrToneMappingOptions}" SelectedItem="{Binding VideoToneMapping, Mode=TwoWay}" Width="200" HorizontalAlignment="Left"/>
@@ -267,9 +277,9 @@
                                     </Grid>
                                 </StackPanel>
                                 
-                                <TextBlock Text="{Binding HdrAvailabilityHintText}" IsVisible="{Binding HasHdrAvailabilityHint}" FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
-                                <TextBlock Text="{x:Static vm:SettingsViewModel.HdrDriverFeatureHintText}" FontSize="10" Opacity="0.4" TextWrapping="Wrap"/>
-                                <TextBlock Text="All video settings take effect after restarting the app." FontSize="10" Opacity="0.4" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                <TextBlock Text="{Binding HdrAvailabilityHintText}" IsVisible="{Binding HasHdrAvailabilityHint}" Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="{x:Static vm:SettingsViewModel.HdrDriverFeatureHintText}" Classes="text-micro" Opacity="0.4" TextWrapping="Wrap"/>
+                                <TextBlock Text="All video settings take effect after restarting the app." Classes="text-micro" Opacity="0.4" TextWrapping="Wrap" Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -278,8 +288,8 @@
                 <!-- Models Panel -->
                 <Grid IsVisible="{Binding IsModelsSelected}" RowDefinitions="Auto,*">
                     <StackPanel Grid.Row="0" Margin="0,0,0,12">
-                        <TextBlock Text="Models" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                        <TextBlock Text="Manage locally-hosted models. Cloud providers do not require downloads." FontSize="11" Opacity="0.5" TextWrapping="Wrap"/>
+                        <TextBlock Text="Models" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="Manage locally-hosted models. Cloud providers do not require downloads." Classes="text-caption" Opacity="0.5" TextWrapping="Wrap"/>
                     </StackPanel>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding ModelsTab.Models}">
@@ -288,16 +298,16 @@
                                     <Border Margin="0,0,0,8" Padding="12" Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="8">
                                         <Grid ColumnDefinitions="160,*,Auto">
                                             <StackPanel Grid.Column="0" Spacing="2">
-                                                <TextBlock Text="{Binding ProviderLabel}" FontSize="10" Opacity="0.5" FontWeight="SemiBold"/>
-                                                <TextBlock Text="{Binding ModelId}" FontSize="13" FontWeight="Medium"/>
+                                                <TextBlock Text="{Binding ProviderLabel}" Classes="text-micro" Opacity="0.5"/>
+                                                <TextBlock Text="{Binding ModelId}" Classes="text-emphasis"/>
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4" Margin="12,0">
-                                                <TextBlock Text="{Binding StatusLabel}" FontSize="11"/>
+                                                <TextBlock Text="{Binding StatusLabel}" Classes="text-caption"/>
                                                 <ProgressBar Value="{Binding DownloadProgress}" Minimum="0" Maximum="1" Height="4" IsVisible="{Binding IsProgressVisible}"/>
                                             </StackPanel>
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                <Button Content="Download" IsVisible="{Binding CanDownload}" Command="{Binding DownloadCommand}" FontSize="11" Padding="10,6"/>
-                                                <Button Content="Cancel" IsVisible="{Binding CanCancel}" Command="{Binding CancelCommand}" FontSize="11" Padding="10,6"/>
+                                                <Button Content="Download" IsVisible="{Binding CanDownload}" Command="{Binding DownloadCommand}" Padding="10,6"/>
+                                                <Button Content="Cancel" IsVisible="{Binding CanCancel}" Command="{Binding CancelCommand}" Padding="10,6"/>
                                             </StackPanel>
                                         </Grid>
                                     </Border>
@@ -311,25 +321,25 @@
                 <ScrollViewer IsVisible="{Binding IsAboutSelected}" VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="16" HorizontalAlignment="Center">
                         <StackPanel HorizontalAlignment="Center" Spacing="8">
-                            <TextBlock Text="Babel Player" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                            <TextBlock Text="{Binding AppVersion}" FontSize="13" HorizontalAlignment="Center" Opacity="0.7"/>
-                            <TextBlock Text="{Binding AppBuildDate}" FontSize="12" HorizontalAlignment="Center" Opacity="0.5"/>
-                            <TextBlock Text="AGPL-3.0 License" FontSize="11" HorizontalAlignment="Center" Opacity="0.5"/>
+                            <TextBlock Text="Babel Player" Classes="text-display" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding AppVersion}" HorizontalAlignment="Center" Opacity="0.7"/>
+                            <TextBlock Text="{Binding AppBuildDate}" Classes="text-caption" HorizontalAlignment="Center" Opacity="0.5"/>
+                            <TextBlock Text="AGPL-3.0 License" Classes="text-micro" HorizontalAlignment="Center" Opacity="0.5"/>
                         </StackPanel>
                         
                         <StackPanel Spacing="12" Margin="0,20,0,0">
-                            <TextBlock Text="Support the project:" FontSize="13" HorizontalAlignment="Center" Opacity="0.7"/>
+                            <TextBlock Text="Support the project:" Classes="text-secondary" HorizontalAlignment="Center" Opacity="0.7"/>
                             <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
                                 <Button Command="{Binding OpenKofiCommand}" Padding="16,10" Background="{DynamicResource ButtonBackgroundBrush}">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="☕" FontSize="16"/>
-                                        <TextBlock Text="Ko-fi" FontSize="13" FontWeight="Medium"/>
+                                        <TextBlock Text="Ko-fi" Classes="text-emphasis"/>
                                     </StackPanel>
                                 </Button>
                                 <Button Command="{Binding OpenGitHubSponsorsCommand}" Padding="16,10" Background="{DynamicResource ButtonBackgroundBrush}">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="❤" FontSize="16" Foreground="#BF3989"/>
-                                        <TextBlock Text="GitHub Sponsors" FontSize="13" FontWeight="Medium"/>
+                                        <TextBlock Text="GitHub Sponsors" Classes="text-emphasis"/>
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
@@ -342,7 +352,7 @@
                     <StackPanel Spacing="16">
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Hardware Snapshot" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Hardware Snapshot" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto">
                                     <TextBlock Grid.Column="0" Grid.Row="0" Text="CPU:" Opacity="0.65"/>
                                     <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding CpuInfo}" TextWrapping="Wrap"/>
@@ -356,7 +366,7 @@
                         
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Runtime Routing" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Runtime Routing" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto">
                                     <TextBlock Grid.Column="0" Grid.Row="0" Text="Inference Host:" Opacity="0.65"/>
                                     <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding InferenceModeInfo}" TextWrapping="Wrap"/>
@@ -372,12 +382,12 @@
                         
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Environment" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="Environment" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto">
                                     <TextBlock Grid.Column="0" Grid.Row="0" Text="Python Path:" Opacity="0.65"/>
-                                    <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding PythonInfo}" TextWrapping="Wrap" FontSize="11"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding PythonInfo}" TextWrapping="Wrap" Classes="text-caption"/>
                                     <TextBlock Grid.Column="0" Grid.Row="1" Text="ffmpeg Path:" Opacity="0.65" Margin="0,4,0,0"/>
-                                    <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding FfmpegInfo}" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding FfmpegInfo}" TextWrapping="Wrap" Classes="text-caption" Margin="0,4,0,0"/>
                                 </Grid>
                             </StackPanel>
                         </Border>

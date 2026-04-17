@@ -75,8 +75,8 @@ public sealed record HardwareSnapshot(
             if (IsDetecting) return "Detecting\u2026";
             if (HasAvx512F) return "AVX-512F";
             if (HasAvx2)    return "AVX2";
-            if (HasAvx)     return "AVX (no AVX2 \u2014 reduced inference performance)";
-            return "none detected (inference will be significantly slower)";
+            if (HasAvx)     return "AVX (Legacy)";
+            return "No AVX detected";
         }
     }
 

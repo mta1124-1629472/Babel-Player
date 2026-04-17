@@ -11,7 +11,7 @@
   <Window.Styles>
     <Style Selector="TextBlock">
       <Setter Property="Foreground" Value="#cdccca"/>
-      <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+      <Setter Property="FontFamily" Value="{DynamicResource UiFontFamily}"/>
     </Style>
     <Style Selector="Button">
       <Setter Property="Background" Value="#313b3b"/>
@@ -32,14 +32,14 @@
     <!-- Header -->
     <StackPanel Grid.Row="0" Spacing="6" Margin="0,0,0,12">
       <TextBlock Text="An unhandled error occurred"
-                 FontSize="18" FontWeight="SemiBold"
+                 FontSize="{DynamicResource FontSizeTitle}" FontWeight="Medium"
                  Foreground="#dd6974"/>
       <TextBlock x:Name="SubtitleText"
                  Text="The full error details are shown below. The error has also been written to the log file."
-                 FontSize="13" Foreground="#797876"
+                 FontSize="{DynamicResource FontSizeBody}" Foreground="#797876"
                  TextWrapping="Wrap"/>
       <TextBlock x:Name="LogPathText"
-                 FontSize="12" Foreground="#5a5957"
+                 Classes="text-secondary" Foreground="#5a5957"
                  TextWrapping="Wrap"
                  IsVisible="False"/>
     </StackPanel>
@@ -55,8 +55,8 @@
                  IsReadOnly="True"
                  AcceptsReturn="True"
                  TextWrapping="NoWrap"
-                 FontFamily="Cascadia Code, Consolas, monospace"
-                 FontSize="12"
+                 FontFamily="{DynamicResource UiMonoFontFamily}"
+                 FontSize="{DynamicResource FontSizeSecondary}"
                  Foreground="#cdccca"
                  Background="Transparent"
                  BorderThickness="0"

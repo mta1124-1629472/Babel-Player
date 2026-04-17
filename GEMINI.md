@@ -63,6 +63,7 @@ python -m py_compile inference/main.py    # Verify Python syntax
 ## Operating Rules for AI Agents
 
 - **Read `AGENTS.md`**: Contains non-negotiable operating rules and learned preferences.
+- **Avoid UI Verbosity:** Adhere to the verbosity audit (April 2026): avoid over-explaining how the "sausage is made." Prefer concise, professional status messages (e.g., "Ready", "Reset to [Stage]") over internal technical descriptions. Do not include instructional filler for standard UI elements.
 - **Scope Discipline**: Do not perform unrelated refactors or "cleanup". Stick to the current milestone (see `docs/PLAN.md`).
 - **Truthful Readiness**: Never implement silent fallbacks or pretend-complete UI. If a path is unimplemented, use explicit placeholders or disabled states.
 - **Verification**: All changes must pass the architecture linter (`scripts/check-architecture.py`) and existing tests.

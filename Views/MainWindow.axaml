@@ -97,11 +97,11 @@
                Background="Transparent"
                chrome:WindowDecorationProperties.ElementRole="ResizeSE" />
 
-    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*" ColumnDefinitions="Auto,*,Auto">
+    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
         <Border Grid.Row="0"
                 Classes="top-chrome"
                 Classes.fullscreen-hidden="{Binding Playback.Preview.IsFullscreen}"
-                Grid.ColumnSpan="3"
+                Grid.ColumnSpan="2"
                 Background="{DynamicResource SurfaceSubtleBrush}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="0,0,0,1"
@@ -109,10 +109,9 @@
                 PointerPressed="OnTitleBarPointerPressed">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <TextBlock Grid.Column="0"
+                           Classes="text-title"
                            Text="Babel Player"
                            Foreground="{DynamicResource PrimaryTextBrush}"
-                           FontSize="13"
-                           FontWeight="SemiBold"
                            VerticalAlignment="Center" />
                 <!-- Win11-style: zero gap, square targets, flush to the right window edge (no right padding on chrome Border). -->
                 <StackPanel Grid.Column="2"
@@ -241,13 +240,13 @@
 <Border Grid.Row="0" Padding="16,14,16,12"
         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-        <TextBlock Grid.Column="0" Text="Pipeline" FontSize="15" FontWeight="SemiBold"
+        <TextBlock Grid.Column="0" Text="Pipeline" Classes="text-display"
                     Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
         <Button Grid.Column="2"
                 Classes="console-button"
                 Command="{Binding Playback.Pipeline.ClearPipelineCommand}"
                 ToolTip.Tip="Clear pipeline and start fresh">
-            <TextBlock Text="Clear" FontWeight="Medium"/>
+            <TextBlock Text="Clear"/>
         </Button>
     </Grid>
 </Border>
@@ -260,13 +259,13 @@
 
                         <!-- TARGET LANGUAGE -->
                         <StackPanel Spacing="10">
-                            <TextBlock Text="TARGET LANGUAGE" FontSize="10"
-                                       Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                            <TextBlock Text="TARGET LANGUAGE" Classes="text-overline"
+                                       Foreground="{DynamicResource PrimaryTextBrush}" />
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Output (dub / subs)" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Text="Output (dub / subs)" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <ComboBox ItemsSource="{Binding Playback.TargetLanguageOptions}"
                                           SelectedItem="{Binding Playback.SelectedTargetLanguageOption, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          HorizontalAlignment="Stretch"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                           BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
@@ -280,8 +279,8 @@
 
                         <!-- AUDIO + DUB (session pipeline) -->
                         <StackPanel Spacing="10">
-                            <TextBlock Text="AUDIO &amp; DUB" FontSize="10"
-                                       Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                            <TextBlock Text="AUDIO &amp; DUB" Classes="text-overline"
+                                       Foreground="{DynamicResource PrimaryTextBrush}" />
                             <CheckBox IsChecked="{Binding Playback.VocalSeparationEnabled, Mode=TwoWay}"
                                       IsEnabled="{Binding Playback.VocalSeparationAvailable}"
                                       Content="Separate vocals before transcription" />
@@ -289,10 +288,10 @@
                                        IsVisible="{Binding Playback.HasVocalSeparationAvailabilityHint}"
                                        FontSize="10" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Segment timing mode" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Text="Segment timing mode" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <ComboBox ItemsSource="{Binding Playback.DubTimingModeOptions}"
                                           SelectedItem="{Binding Playback.DubTimingMode, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          HorizontalAlignment="Stretch"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                           BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
@@ -309,8 +308,8 @@
                         <!-- TRANSCRIPTION -->
                         <StackPanel Spacing="10">
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                <TextBlock Grid.Column="0" Text="TRANSCRIPTION" FontSize="10"
-                                           Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="TRANSCRIPTION" Classes="text-overline"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
                                            VerticalAlignment="Center" />
                                 <Button Grid.Column="1"
                                         Command="{Binding Playback.Pipeline.RefreshTranscriptionCommand}"
@@ -329,10 +328,10 @@
                             </Grid>
 
                              <StackPanel Spacing="5">
-                                 <TextBlock Text="Compute" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                 <TextBlock Text="Compute" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
 <ComboBox ItemsSource="{Binding Playback.InferenceRuntimeOptions}"
                                            SelectedItem="{Binding Playback.TranscriptionRuntime, Mode=TwoWay}"
-                                            HorizontalAlignment="Stretch" FontSize="12"
+                                            HorizontalAlignment="Stretch"
                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                            BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
@@ -344,19 +343,19 @@
                             </StackPanel>
 
                              <StackPanel Spacing="5">
-                                 <TextBlock Text="Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                 <TextBlock Text="Provider" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                  <ComboBox ItemsSource="{Binding Playback.TranscriptionProviders}"
                                            SelectedItem="{Binding Playback.TranscriptionProvider, Mode=TwoWay}"
-                                           HorizontalAlignment="Stretch" FontSize="12"
+                                           HorizontalAlignment="Stretch"
                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                            BorderBrush="{DynamicResource BorderBrush}" />
                             </StackPanel>
 
 <StackPanel Spacing="5">
-                                 <TextBlock Text="Model" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                 <TextBlock Text="Model" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
 <ComboBox ItemsSource="{Binding Playback.AvailableTranscriptionModels}"
                                             SelectedItem="{Binding Playback.SelectedTranscriptionModel, Mode=TwoWay}"
-                                           HorizontalAlignment="Stretch" FontSize="12"
+                                           HorizontalAlignment="Stretch"
                                            Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                            BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
@@ -372,10 +371,10 @@
                             </StackPanel>
 
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Spoken language (ASR hint)" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Text="Spoken language (ASR hint)" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <ComboBox ItemsSource="{Binding Playback.SpokenLanguageOptions}"
                                           SelectedItem="{Binding Playback.SelectedSpokenLanguageOption, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          HorizontalAlignment="Stretch"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                           BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
@@ -387,7 +386,7 @@
                             </StackPanel>
 
                             <TextBlock Text="{Binding Playback.TranscriptionKeyStatus}"
-                                        FontSize="11" Foreground="{DynamicResource StatusTextBrush}"
+                                        Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}"
                                         IsVisible="{Binding Playback.TranscriptionKeyStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                         TextWrapping="Wrap" />
                         </StackPanel>
@@ -396,8 +395,8 @@
                         <StackPanel Spacing="10">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                    <TextBlock Grid.Column="0" Text="DIARIZATION / SPEAKERS" FontSize="10"
-                                               Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                    <TextBlock Grid.Column="0" Text="DIARIZATION / SPEAKERS" Classes="text-overline"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                VerticalAlignment="Center" />
                                     <Button Grid.Column="1"
                                             Command="{Binding Playback.Pipeline.RefreshDiarizationCommand}"
@@ -417,7 +416,7 @@
                             </Border>
 
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Multi-speaker audio" FontSize="12"
+                                <TextBlock Text="Multi-speaker audio" Classes="text-secondary"
                                            Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <TextBlock FontSize="11"
                                            Foreground="{DynamicResource StatusTextBrush}"
@@ -441,7 +440,7 @@
 
                                 <!-- Hint shown when no speaker IDs have been detected yet -->
                                 <TextBlock Text="Enable multi-speaker detection above, then transcribe, to assign speaker IDs."
-                                           FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
+                                           Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
                                            IsVisible="{Binding Playback.SpeakerRouting.IsMultiSpeakerNoSpeakersYet}" />
 
                                 <TextBlock Text="Speaker assignments are managed in the speaker setup wizard."
@@ -464,8 +463,8 @@
                         <StackPanel Spacing="10">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                    <TextBlock Grid.Column="0" Text="TRANSLATION" FontSize="10"
-                                               Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                    <TextBlock Grid.Column="0" Text="TRANSLATION" Classes="text-overline"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                VerticalAlignment="Center" />
                                     <Button Grid.Column="1"
                                             Command="{Binding Playback.Pipeline.RefreshTranslationCommand}"
@@ -485,10 +484,10 @@
                             </Border>
 
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Compute" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Text="Compute" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <ComboBox ItemsSource="{Binding Playback.InferenceRuntimeOptions}"
                                           SelectedItem="{Binding Playback.TranslationRuntime, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          HorizontalAlignment="Stretch"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                           BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
@@ -500,19 +499,19 @@
                             </StackPanel>
 
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Text="Provider" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <ComboBox ItemsSource="{Binding Playback.TranslationProviders}"
                                           SelectedItem="{Binding Playback.TranslationProvider, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          HorizontalAlignment="Stretch"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                           BorderBrush="{DynamicResource BorderBrush}" />
                             </StackPanel>
 
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Model" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Text="Model" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <ComboBox ItemsSource="{Binding Playback.AvailableTranslationModels}"
                                           SelectedItem="{Binding Playback.SelectedTranslationModel, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          HorizontalAlignment="Stretch"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                           BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
@@ -532,8 +531,8 @@
                         <StackPanel Spacing="10">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                    <TextBlock Grid.Column="0" Text="DUB" FontSize="10"
-                                               Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold"
+                                    <TextBlock Grid.Column="0" Text="DUB" Classes="text-overline"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                VerticalAlignment="Center" />
                                     <Button Grid.Column="1"
                                             Command="{Binding Playback.Pipeline.RefreshDubCommand}"
@@ -553,10 +552,10 @@
                             </Border>
 
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Compute" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Text="Compute" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <ComboBox ItemsSource="{Binding Playback.InferenceRuntimeOptions}"
                                           SelectedItem="{Binding Playback.TtsRuntime, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          HorizontalAlignment="Stretch"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                           BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
@@ -568,16 +567,16 @@
                             </StackPanel>
 
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Text="Provider" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <ComboBox ItemsSource="{Binding Playback.TtsProviders}"
                                           SelectedItem="{Binding Playback.TtsProvider, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          HorizontalAlignment="Stretch"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                           BorderBrush="{DynamicResource BorderBrush}" />
                             </StackPanel>
 
                             <StackPanel Spacing="6" IsVisible="{Binding Playback.ShowTtsAssignmentModeSwitch}">
-                                <TextBlock Text="Voice assignment" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                <TextBlock Text="Voice assignment" Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <CheckBox Content="Assign per speaker in Speaker Reference Wizard (fallback voice below)"
                                           IsChecked="{Binding Playback.TtsVoiceUsePerSpeakerWizard, Mode=TwoWay}"
                                           FontSize="12" />
@@ -591,7 +590,7 @@
                                            Text="{Binding Playback.TtsVoiceComboHeaderText}" />
                                 <ComboBox ItemsSource="{Binding Playback.AvailableTtsOptions}"
                                           SelectedItem="{Binding Playback.SelectedTtsOption, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          HorizontalAlignment="Stretch"
                                           Background="{DynamicResource ControlBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                           BorderBrush="{DynamicResource BorderBrush}">
                                     <ComboBox.ItemTemplate>
@@ -607,7 +606,7 @@
                             </StackPanel>
 
                             <TextBlock Text="{Binding Playback.TtsKeyStatus}"
-                                       FontSize="11" Foreground="{DynamicResource StatusTextBrush}"
+                                       Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}"
                                        IsVisible="{Binding Playback.TtsKeyStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
@@ -615,8 +614,8 @@
                          <!-- API KEYS -->
                          <StackPanel Spacing="8">
                              <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                 <TextBlock Text="API KEYS" FontSize="10"
-                                            Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                                 <TextBlock Text="API KEYS" Classes="text-overline"
+                                            Foreground="{DynamicResource PrimaryTextBrush}" />
                              </Border>
 
                              <TextBlock Text="Configure credentials for the providers selected above."
@@ -641,27 +640,27 @@
                          <!-- LANGUAGE ROUTING -->
                          <StackPanel Spacing="10">
                              <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                 <TextBlock Text="LANGUAGE ROUTING" FontSize="10"
-                                            Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                                 <TextBlock Text="LANGUAGE ROUTING" Classes="text-overline"
+                                            Foreground="{DynamicResource PrimaryTextBrush}" />
                              </Border>
 
                              <Grid ColumnDefinitions="*,Auto">
-                                 <TextBlock Grid.Column="0" Text="Source Audio" FontSize="12"
+                                 <TextBlock Grid.Column="0" Text="Source Audio" Classes="text-secondary"
                                             Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
                                  <Border Grid.Column="1" Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="4"
                                          Padding="8,4">
                                      <TextBlock Text="{Binding Coordinator.CurrentSession.SourceLanguage, TargetNullValue='—'}"
-                                                FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                                Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                  </Border>
                              </Grid>
 
                              <Grid ColumnDefinitions="*,Auto">
-                                 <TextBlock Grid.Column="0" Text="Target Sub/Dub" FontSize="12"
+                                 <TextBlock Grid.Column="0" Text="Target Sub/Dub" Classes="text-secondary"
                                             Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
                                  <Border Grid.Column="1" Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="4"
                                          Padding="8,4">
                                      <TextBlock Text="{Binding Coordinator.CurrentSession.TargetLanguage, TargetNullValue='—'}"
-                                                FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                                Classes="text-secondary" Foreground="{DynamicResource PrimaryTextBrush}" />
                                  </Border>
                              </Grid>
                         </StackPanel>
@@ -669,54 +668,54 @@
                         <!-- ACTIVE CONFIGURATION -->
                         <StackPanel Spacing="8">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                <TextBlock Text="ACTIVE CONFIG" FontSize="10"
-                                            Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                                <TextBlock Text="ACTIVE CONFIG" Classes="text-overline"
+                                            Foreground="{DynamicResource PrimaryTextBrush}" />
                             </Border>
 
                             <Grid ColumnDefinitions="56,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="ASR"
-                                           FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                           Classes="text-caption" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <TextBlock Grid.Row="0" Grid.Column="1"
                                            Text="{Binding Playback.ActiveTranscriptionConfigLine}"
-                                           FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                                           Classes="text-caption" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="CPU"
-                                           FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                           Classes="text-caption" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <TextBlock Grid.Row="1" Grid.Column="1"
                                            Text="{Binding Playback.ActiveCpuTuningLine}"
-                                           FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                                           Classes="text-caption" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="GPU"
-                                           FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Top" />
+                                           Classes="text-caption" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Top" />
                                 <TextBlock Grid.Row="2" Grid.Column="1"
                                            Text="{Binding Playback.HwGpuLine}"
-                                           FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
+                                           Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="NMT"
-                                           FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                           Classes="text-caption" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <TextBlock Grid.Row="3" Grid.Column="1"
                                            Text="{Binding Playback.ActiveTranslationConfigLine}"
-                                           FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                                           Classes="text-caption" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="4" Grid.Column="0" Text="TTS"
-                                           FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                           Classes="text-caption" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <TextBlock Grid.Row="4" Grid.Column="1"
                                            Text="{Binding Playback.HwNpuLine}"
-                                           FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
+                                           Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
 
                                 <TextBlock Grid.Row="5" Grid.Column="0" Text="RAM"
-                                           FontSize="11" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                           Classes="text-caption" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 <TextBlock Grid.Row="5" Grid.Column="1"
                                            Text="{Binding Playback.HwRamLine}"
-                                           FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
+                                           Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap" />
                             </Grid>
                         </StackPanel>
 
                         <!-- PROVIDER DIAGNOSTICS -->
                         <StackPanel Spacing="8">
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                <TextBlock Text="PROVIDER DIAGNOSTICS" FontSize="10"
-                                            Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" />
+                                <TextBlock Text="PROVIDER DIAGNOSTICS" Classes="text-overline"
+                                            Foreground="{DynamicResource PrimaryTextBrush}" />
                             </Border>
 
                             <ItemsControl ItemsSource="{Binding Playback.ProviderHealthSnapshots}">
@@ -732,39 +731,38 @@
                                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                                     <TextBlock Grid.Column="0"
                                                                Text="{Binding Section}"
-                                                               FontSize="12"
-                                                               FontWeight="SemiBold"
+                                                               Classes="text-secondary"
                                                                Foreground="{DynamicResource PrimaryTextBrush}" />
                                                     <TextBlock Grid.Column="1"
                                                                Text="{Binding StatusLine}"
-                                                               FontSize="11"
+                                                               Classes="text-caption"
                                                                Foreground="{DynamicResource StatusTextBrush}"
                                                                HorizontalAlignment="Right" />
                                                 </Grid>
 
                                                 <TextBlock Text="{Binding SelectionLabel}"
-                                                           FontSize="11"
+                                                           Classes="text-caption"
                                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                                            TextWrapping="Wrap" />
                                                 <TextBlock Text="{Binding Detail}"
-                                                           FontSize="11"
+                                                           Classes="text-caption"
                                                            Foreground="{DynamicResource StatusTextBrush}"
                                                            TextWrapping="Wrap" />
                                                 <TextBlock Text="{Binding HostState}"
-                                                           FontSize="11"
+                                                           Classes="text-caption"
                                                            Foreground="{DynamicResource StatusTextBrush}"
                                                            TextWrapping="Wrap" />
                                                 <TextBlock Text="{Binding MetricsText}"
-                                                           FontSize="10"
+                                                           Classes="text-micro"
                                                            Foreground="{DynamicResource StatusTextBrush}"
                                                            TextWrapping="Wrap"
                                                            IsVisible="{Binding MetricsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                                     <TextBlock Text="{Binding CheckedAtText}"
-                                                               FontSize="10"
+                                                               Classes="text-micro"
                                                                Foreground="{DynamicResource StatusTextBrush}" />
                                                     <TextBlock Text="stale"
-                                                               FontSize="10"
+                                                               Classes="text-micro"
                                                                Foreground="{DynamicResource StatusTextBrush}"
                                                                IsVisible="{Binding IsStale}" />
                                                 </StackPanel>
@@ -790,11 +788,11 @@
                             <StackPanel Spacing="6"
                                        IsVisible="{Binding Playback.Pipeline.ShowPipelineStatusChrome}">
                                 <TextBlock Text="{Binding Playback.Pipeline.PipelineStageDetail}"
-                                           FontSize="11"
+                                           Classes="text-caption"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding Playback.Pipeline.PipelineProgressStatusLine}"
-                                           FontSize="10"
+                                           Classes="text-micro"
                                            Foreground="{DynamicResource StatusTextBrush}"
                                            TextWrapping="Wrap" />
                                 <ProgressBar Value="{Binding Playback.Pipeline.PipelineProgressPercent}"
@@ -860,21 +858,24 @@
         </Border>
 
         <!-- ═══════════════════════════════════════════════════
-             CENTER PANEL: Video player
+             VIDEO + SEGMENTS + chrome (merged former center/right columns)
              ═══════════════════════════════════════════════════ -->
-        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto"
+        <Grid Grid.Row="1" Grid.Column="1"
+              x:Name="VideoSegmentsChromeHost"
+              ColumnDefinitions="*,Auto"
+              RowDefinitions="Auto,*,Auto,Auto"
               Background="{DynamicResource WindowBackgroundBrush}">
 
             <!-- Diagnostics warning bar (hidden when all deps available) -->
-            <Border Grid.Row="0" Background="{DynamicResource WarningBackgroundBrush}" Padding="10,5"
+            <Border Grid.Row="0" Grid.Column="0" Background="{DynamicResource WarningBackgroundBrush}" Padding="10,5"
                     BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="0,0,0,1"
                     IsVisible="{Binding Playback.ShowDiagnosticsWarningBanner}">
                 <TextBlock Text="{Binding Playback.DiagnosticsWarningText}"
-                                FontSize="11" Foreground="{DynamicResource StatusTextBrush}" />
+                                Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}" />
             </Border>
 
             <!-- Video surface -->
-            <Grid Grid.Row="1">
+            <Grid Grid.Row="1" Grid.Column="0">
                 <Border Background="Black" Margin="0">
                     <v:MpvVideoView x:Name="VideoView" />
                 </Border>
@@ -897,7 +898,7 @@
             </Grid>
 
             <!-- Scrub bar -->
-            <Border Grid.Row="2" Padding="12,5"
+            <Border Grid.Row="2" Grid.Column="0" Padding="12,5"
                     IsVisible="{Binding Playback.Preview.IsControlsVisible}">
                 <Grid ColumnDefinitions="40,*,40">
                      <TextBlock Grid.Column="0"
@@ -917,9 +918,212 @@
                 </Grid>
             </Border>
 
-            <!-- Controls bar: horizontal scroll when narrow so transport + toolbars never overlap. -->
+            <Border Grid.Row="0" Grid.Column="1" Grid.RowSpan="4"
+                    Classes="right-pane glass-rack"
+                    Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
+                    Margin="0,0,8,8"
+                    ZIndex="0"
+                    >
+                <Grid RowDefinitions="Auto,*,Auto">
+
+                    <!-- Header -->
+                    <Border Grid.Row="0" Padding="14,12"
+                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Segments" Classes="text-title" Foreground="#F0F0F8"
+                                           VerticalAlignment="Center" />
+                                <Border Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="4" Padding="8,2"
+                                        VerticalAlignment="Center">
+                                    <TextBlock FontSize="11" Foreground="#8888A0" VerticalAlignment="Center"
+                                               Text="{Binding Playback.Preview.Segments.Count, StringFormat='{}{0} items'}" />
+                                </Border>
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Click="OnExportMenuButtonClick"
+                                    Classes="console-button"
+                                    ToolTip.Tip="Export captions (.srt), dubbed audio only (.mp3), or video with dub + soft subs (.mp4) — audio matches current timings and mix.">
+                                <TextBlock Text="Export" />
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="to .srt"
+                                                  Click="OnExportToSrtClick" />
+                                        <MenuItem Header="to .mp3"
+                                                  Click="OnExportToMp3Click" />
+                                        <MenuItem Header="to .mp4"
+                                                  Click="OnExportToMp4Click" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
+
+                            <Button Grid.Column="2"
+                                    Command="{Binding Playback.Preview.RefreshSegmentsCommand}"
+                                    Classes="console-button"
+                                    ToolTip.Tip="Refresh segments">
+                                <TextBlock Text="↻" FontSize="14" />
+                            </Button>
+
+                        </Grid>
+                    </Border>
+
+                    <Panel Grid.Row="1">
+                    <!-- Segment list -->
+                    <ListBox Grid.Row="1" x:Name="SegmentList"
+                             Margin="0,0,0,54"
+                             ItemsSource="{Binding Playback.Preview.Segments}"
+                             SelectedItem="{Binding Playback.Preview.SelectedSegment}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Background" Value="Transparent" />
+                            </Style>
+                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                                <Setter Property="Background" Value="{DynamicResource SegmentSelectedBrush}" />
+                            </Style>
+                            <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                                <Setter Property="Background" Value="{DynamicResource SegmentPointerOverBrush}" />
+                            </Style>
+                        </ListBox.Styles>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:WorkflowSegmentState">
+                                <Border Padding="14,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+                                    <Grid ColumnDefinitions="*,12">
+
+                                        <StackPanel Grid.Column="0" Spacing="3">
+                                            <!-- Time range -->
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Border Background="{Binding SpeakerId, Converter={StaticResource SpeakerIdToColorConverter}}"
+                                                        CornerRadius="999"
+                                                        Padding="7,2"
+                                                        VerticalAlignment="Center"
+                                                        IsVisible="{Binding SpeakerId, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                    <TextBlock Text="{Binding SpeakerId, Converter={StaticResource SpeakerIdToShortLabelConverter}}"
+                                                               Classes="text-micro"
+                                                               FontWeight="Medium"
+                                                               Foreground="White"
+                                                               VerticalAlignment="Center" />
+                                                </Border>
+                                                <TextBlock Classes="text-caption"
+                                                           Foreground="{DynamicResource StatusTextBrush}"
+                                                           VerticalAlignment="Center">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0:F1}s  —  {1:F1}s">
+                                                            <Binding Path="StartSeconds" />
+                                                            <Binding Path="EndSeconds" />
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <!-- Original text -->
+                                            <TextBlock Text="{Binding SourceText}"
+                                                       Classes="text-secondary" Foreground="{DynamicResource StatusTextBrush}"
+                                                       TextWrapping="Wrap" />
+                                            <!-- Translated text -->
+                                            <TextBlock Text="{Binding TranslatedText}"
+                                                       Classes="text-emphasis" Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+
+                                        <!-- Status indicator column -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Top"
+                                                    Margin="0,4,0,0" Spacing="4">
+                                            <!-- Green dot: TTS audio ready -->
+                                            <Ellipse Width="8" Height="8"
+                                                     Fill="#22C55E"
+                                                     IsVisible="{Binding HasTtsAudio}"
+                                                     HorizontalAlignment="Center" />
+                                            <!-- Orange bar: translation present, no TTS yet -->
+                                            <Rectangle Width="4" Height="16"
+                                                       Fill="#F59E0B"
+                                                       RadiusX="2" RadiusY="2"
+                                                       IsVisible="{Binding HasTranslation}"
+                                                       HorizontalAlignment="Center" />
+                                        </StackPanel>
+
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <StackPanel IsVisible="{Binding !Playback.Preview.HasSegments}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Spacing="4">
+                        <TextBlock Text="No segments yet" Classes="text-title" HorizontalAlignment="Center" />
+                        <TextBlock Text="Open media and run the pipeline to generate segments."
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+                    </Panel>
+
+                    <!-- Segment inspection panel (row 2) — shown when a segment with TTS audio is selected -->
+                    <Border Grid.Row="2"
+                            IsVisible="{Binding Inspection.IsVisible}"
+                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                            Padding="14,10">
+                        <StackPanel Spacing="6">
+
+                            <TextBlock Text="Segment timing" Classes="text-label"
+                                       Foreground="{DynamicResource StatusTextBrush}"/>
+
+                            <TextBlock Text="{Binding Inspection.TimingLabel}"
+                                       Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}"/>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                                <StackPanel.Styles>
+                                    <Style Selector="Button.segmentTimingButton">
+                                        <Setter Property="Padding" Value="8,3"/>
+                                        <Setter Property="FontSize" Value="11"/>
+                                        <Setter Property="CornerRadius" Value="4"/>
+                                        <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource StatusTextBrush}"/>
+                                    </Style>
+                                </StackPanel.Styles>
+                                <!-- Inherit = clear override -->
+                                <Button Classes="segmentTimingButton"
+                                        Content="Inherit"
+                                        Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                        CommandParameter="{x:Null}"
+                                        ToolTip.Tip="Use session default timing mode"/>
+                                <Button Classes="segmentTimingButton"
+                                        Content="Off"
+                                        Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                        CommandParameter="{x:Static models:SegmentTimingMode.Off}"
+                                        ToolTip.Tip="Play TTS as-is for this segment (no stretch/pause alignment)"/>
+                                <Button Classes="segmentTimingButton"
+                                        Content="Stretch"
+                                        Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                        CommandParameter="{x:Static models:SegmentTimingMode.Stretch}"
+                                        ToolTip.Tip="Time-stretch TTS to fit the segment window"/>
+                                <Button Classes="segmentTimingButton"
+                                        Content="Pause"
+                                        Command="{Binding Inspection.SetTimingOverrideCommand}"
+                                        CommandParameter="{x:Static models:SegmentTimingMode.Pause}"
+                                        ToolTip.Tip="Pause source video while TTS plays, then resume"/>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding Inspection.TimingOverrideLabel}"
+                                       FontSize="10" Foreground="{DynamicResource StatusTextBrush}"
+                                       Opacity="0.7"/>
+
+                        </StackPanel>
+                    </Border>
+
+                </Grid>
+            </Border>
+
+            <!-- Controls bar: bottom overlay spanning video + segments -->
             <Border x:Name="ControlsBarContainer"
-                    Grid.Row="3" Padding="12,7"
+                    Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                    Padding="12,7"
+                    ZIndex="2"
+                    Margin="0,0,8,0"
                     IsVisible="{Binding Playback.Preview.IsControlsVisible}">
                 <Border.Styles>
                     <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
@@ -941,415 +1145,371 @@
                     </Style>
                 </Border.Styles>
 
-                <ScrollViewer x:Name="ControlsBarScrollViewer"
-                              HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Disabled"
-                              HorizontalAlignment="Stretch">
-                    <!-- Keep star spacer columns finite inside ScrollViewer so left/center/right groups stay distributed. -->
-                    <Grid ColumnDefinitions="Auto,*,Auto,*,Auto"
-                          MinWidth="{Binding Viewport.Width, ElementName=ControlsBarScrollViewer}">
+                <Grid>
+                    <!-- Wide: left | transport | right; Bi-lang moved to Settings -->
+                    <ScrollViewer x:Name="ControlsBarScrollViewer"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  HorizontalAlignment="Stretch"
+                                  IsVisible="{Binding Playback.Preview.IsWideVideoChrome}">
+                        <!-- Keep star spacer columns finite inside ScrollViewer so left/center/right groups stay distributed. -->
+                        <Grid ColumnDefinitions="Auto,*,Auto,*,Auto"
+                              MinWidth="{Binding Viewport.Width, ElementName=ControlsBarScrollViewer}">
 
-                    <!-- Left: open media + CC + dub mode toggle -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
-                                VerticalAlignment="Center">
-                        <Button Classes="control-pill"
-                                Padding="10,8"
-                                FontSize="14"
-                                Background="Transparent"
-                                Click="OnOpenMediaClick"
-                                ToolTip.Tip="Open media file"
-                                AutomationProperties.Name="Open media">
-                            <TextBlock Text="📁" FontSize="14"/>
-                        </Button>
-                        <Button Content="{Binding Playback.Preview.SubtitleToggleLabel}"
-                                Classes="control-pill"
-                                Command="{Binding Playback.Preview.ToggleSubtitlesCommand}"
-                                IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                Padding="8,6" FontSize="11"
-                                Background="Transparent"
-                                ToolTip.Tip="Toggle subtitles"
-                                AutomationProperties.Name="Toggle subtitles" />
-                        <Button Content="{Binding Playback.Preview.BilingualToggleLabel}"
-                                Classes="control-pill"
-                                Command="{Binding Playback.Preview.ToggleBilingualSubtitlesCommand}"
-                                IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                Padding="8,6" FontSize="11"
-                                Background="Transparent"
-                                ToolTip.Tip="Toggle Bilingual Subtitles"
-                                AutomationProperties.Name="Toggle Bilingual Subtitles" />
-                        <Button Content="{Binding Playback.Preview.DubModeLabel}"
-                                Classes="control-pill"
-                                Classes.active="{Binding Playback.Preview.IsDubModeOn}"
-                                Command="{Binding Playback.Preview.ToggleDubModeCommand}"
-                                IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                Padding="8,6" FontSize="11"
-                                Background="Transparent"
-                                ToolTip.Tip="Toggle Dub Mode"
-                                AutomationProperties.Name="Toggle Dub Mode" />
+                            <!-- Left: open media + CC + dub mode toggle -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
+                                        VerticalAlignment="Center">
+                                <Button Classes="control-pill"
+                                        Padding="10,8"
+                                        FontSize="14"
+                                        Background="Transparent"
+                                        Click="OnOpenMediaClick"
+                                        ToolTip.Tip="Open media file"
+                                        AutomationProperties.Name="Open media">
+                                    <TextBlock Text="📁" FontSize="14"/>
+                                </Button>
+                                <Button Content="{Binding Playback.Preview.SubtitleToggleLabel}"
+                                        Classes="control-pill"
+                                        Command="{Binding Playback.Preview.ToggleSubtitlesCommand}"
+                                        IsEnabled="{Binding Playback.Preview.HasSegments}"
+                                        Padding="8,6" FontSize="11"
+                                        Background="Transparent"
+                                        ToolTip.Tip="Toggle subtitles"
+                                        AutomationProperties.Name="Toggle subtitles" />
+                                <Button Content="{Binding Playback.Preview.DubModeLabel}"
+                                        Classes="control-pill"
+                                        Classes.active="{Binding Playback.Preview.IsDubModeOn}"
+                                        Command="{Binding Playback.Preview.ToggleDubModeCommand}"
+                                        IsEnabled="{Binding Playback.Preview.HasSegments}"
+                                        Padding="8,6" FontSize="11"
+                                        Background="Transparent"
+                                        ToolTip.Tip="Toggle Dub Mode"
+                                        AutomationProperties.Name="Toggle Dub Mode" />
 
-                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="6,0,0,0"
-                                    IsVisible="{Binding Playback.Preview.IsDubModeOn}">
-                            <TextBlock Text="Duck" FontSize="10" Foreground="#8A88A8" VerticalAlignment="Center" />
-                            <Slider x:Name="DuckingSlider"
-                                    Width="60"
-                                    Orientation="Horizontal"
-                                    Minimum="-30"
-                                    Maximum="0"
-                                    Value="{Binding Playback.Preview.AudioDuckingDb, Mode=TwoWay}"
-                                    IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                    VerticalAlignment="Center"
-                                    ToolTip.Tip="Audio Ducking (dB)" />
-                            <TextBlock Text="{Binding Playback.Preview.AudioDuckingLabel}"
-                                       FontSize="10"
-                                       Foreground="#8A88A8"
-                                       VerticalAlignment="Center"
-                                       Width="30" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <!-- Center: playback buttons in a unified transport capsule -->
-                    <Border Grid.Column="2" Classes="glass-rack" Padding="6,4"
-                            VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <Button Classes="control-pill"
-                                    Command="{Binding Playback.Preview.SkipBackwardCommand}"
-                                    IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                    Padding="10,6" FontSize="12"
-                                    ToolTip.Tip="Skip to previous segment"
-                                    AutomationProperties.Name="Skip to previous segment">
-                                <TextBlock Text="|◀" FontSize="12"/>
-                            </Button>
-                            <Button Classes="control-pill"
-                                    Command="{Binding Playback.Preview.RewindCommand}"
-                                    IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                    Padding="10,6" FontSize="12"
-                                    ToolTip.Tip="Rewind 10 seconds"
-                                    AutomationProperties.Name="Rewind 10 seconds">
-                                <TextBlock Text="◀◀" FontSize="12"/>
-                            </Button>
-                            <Button Command="{Binding Playback.Preview.PlayPauseSourceCommand}"
-                                    IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                    Width="46" Height="46" Padding="0" Margin="4,0"
-                                    CornerRadius="23" Background="{DynamicResource AccentBrush}"
-                                    ToolTip.Tip="Play / Pause (Space)"
-                                    AutomationProperties.Name="Play or pause">
-                                <Button.Styles>
-                                    <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                        <Setter Property="Background" Value="{DynamicResource AccentSecondaryBrush}" />
-                                    </Style>
-                                </Button.Styles>
-                                <TextBlock Text="{Binding Playback.Preview.PlayPauseSourceLabel}"
-                                           FontSize="14"
-                                           FontWeight="SemiBold"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
-                            </Button>
-                            <Button Classes="control-pill"
-                                    Command="{Binding Playback.Preview.FastForwardCommand}"
-                                    IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                    Padding="10,6" FontSize="12"
-                                    ToolTip.Tip="Fast forward 10 seconds"
-                                    AutomationProperties.Name="Fast forward 10 seconds">
-                                <TextBlock Text="▶▶" FontSize="12"/>
-                            </Button>
-                            <Button Classes="control-pill"
-                                    Command="{Binding Playback.Preview.SkipForwardCommand}"
-                                    IsEnabled="{Binding Playback.Preview.HasSegments}"
-                                    Padding="10,6" FontSize="12"
-                                    ToolTip.Tip="Skip to next segment"
-                                    AutomationProperties.Name="Skip to next segment">
-                                <TextBlock Text="▶|" FontSize="12"/>
-                            </Button>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Right: volume + fullscreen + settings [+ dev toolbar] -->
-                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4"
-                                VerticalAlignment="Center" HorizontalAlignment="Right">
-                        <Button Classes="control-pill"
-                                Command="{Binding Playback.Preview.ToggleMuteCommand}"
-                                IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                Padding="8,6" FontSize="11"
-                                ToolTip.Tip="Toggle mute"
-                                AutomationProperties.Name="Toggle Mute">
-                            <TextBlock Text="🔊" FontSize="12"/>
-                        </Button>
-                        <Slider x:Name="VolumeSlider"
-                                Width="70"
-                                Orientation="Horizontal"
-                                Minimum="0"
-                                Maximum="1"
-                                Value="{Binding Playback.Preview.SourceVolume, Mode=TwoWay}"
-                                IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                VerticalAlignment="Center"
-                                Margin="2,0,6,0"
-                                ToolTip.Tip="Volume" />
-
-                        <Button Classes="control-pill"
-                                Command="{Binding Playback.Preview.ToggleSegmentPaneCommand}"
-                                Padding="8,6" FontSize="11"
-                                ToolTip.Tip="Toggle side panels"
-                                AutomationProperties.Name="Toggle side panes">
-                            <TextBlock Text="☰" FontSize="14"/>
-                        </Button>
-
-                        <Button Classes="control-pill"
-                                Command="{Binding Playback.Preview.ToggleFullscreenCommand}"
-                                IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
-                                Padding="8,6" FontSize="11"
-                                ToolTip.Tip="Toggle fullscreen"
-                                AutomationProperties.Name="Toggle fullscreen">
-                            <TextBlock Text="⛶" FontSize="12"/>
-                        </Button>
-
-                        <Button Classes="control-pill"
-                                Click="OnSettingsClick"
-                                Padding="8,6" FontSize="11"
-                                ToolTip.Tip="Open settings"
-                                AutomationProperties.Name="Settings">
-                            <TextBlock Text="⚙" FontSize="14"/>
-                        </Button>
-
-                        <!--
-                            ╔══════════════════════════════╗
-                            ║  DEV BUILD TOOLBAR           ║
-                            ║  Visible only in Dev builds. ║
-                            ╚══════════════════════════════╝
-                            AXAML has no #if support, so we gate visibility at runtime via
-                            the BuildInfo.IsDevBuild static.  The Click handlers in
-                            MainWindow.axaml.cs are wrapped in #if BABEL_DEV so they
-                            are compiled away in Release — the buttons just won't exist.
-                        -->
-                        <Border Margin="6,0,0,0"
-                                BorderBrush="#3A3010"
-                                BorderThickness="1,0,0,0"
-                                Padding="6,0,0,0"
-                                IsVisible="{x:Static bp:BuildInfo.IsDevBuild}">
-                            <StackPanel Orientation="Horizontal" Spacing="2">
-                                <Button Classes="dev-pill"
-                                        x:Name="DevLogButton"
-                                        Content="📋 Dev Log"
-                                        Padding="6,5" FontSize="12"
-                                        ToolTip.Tip="Open in-app dev log viewer" />
-                                <Button Classes="dev-pill"
-                                        x:Name="FreshStartButton"
-                                        Content="🔄 Fresh Start"
-                                        Padding="6,5" FontSize="12"
-                                        ToolTip.Tip="Cancel pipeline, wipe session temp files, reset UI" />
+                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="6,0,0,0"
+                                            IsVisible="{Binding Playback.Preview.IsDubModeOn}">
+                                    <TextBlock Text="Duck" FontSize="10" Foreground="#8A88A8" VerticalAlignment="Center" />
+                                    <Slider Width="60"
+                                            Orientation="Horizontal"
+                                            Minimum="-30"
+                                            Maximum="0"
+                                            Value="{Binding Playback.Preview.AudioDuckingDb, Mode=TwoWay}"
+                                            IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Audio Ducking (dB)" />
+                                    <TextBlock Text="{Binding Playback.Preview.AudioDuckingLabel}"
+                                               FontSize="10"
+                                               Foreground="#8A88A8"
+                                               VerticalAlignment="Center"
+                                               Width="30" />
+                                </StackPanel>
                             </StackPanel>
-                        </Border>
 
-                    </StackPanel>
+                            <!-- Center: playback buttons in a unified transport capsule -->
+                            <Border Grid.Column="2" Classes="glass-rack" Padding="6,4"
+                                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <Button Classes="control-pill"
+                                            Command="{Binding Playback.Preview.SkipBackwardCommand}"
+                                            IsEnabled="{Binding Playback.Preview.HasSegments}"
+                                            Padding="10,6" FontSize="12"
+                                            ToolTip.Tip="Skip to previous segment"
+                                            AutomationProperties.Name="Skip to previous segment">
+                                        <TextBlock Text="|◀" FontSize="12"/>
+                                    </Button>
+                                    <Button Classes="control-pill"
+                                            Command="{Binding Playback.Preview.RewindCommand}"
+                                            IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                            Padding="10,6" FontSize="12"
+                                            ToolTip.Tip="Rewind 10 seconds"
+                                            AutomationProperties.Name="Rewind 10 seconds">
+                                        <TextBlock Text="◀◀" FontSize="12"/>
+                                    </Button>
+                                    <Button Command="{Binding Playback.Preview.PlayPauseSourceCommand}"
+                                            IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                            Width="46" Height="46" Padding="0" Margin="4,0"
+                                            CornerRadius="23" Background="{DynamicResource AccentBrush}"
+                                            ToolTip.Tip="Play / Pause (Space)"
+                                            AutomationProperties.Name="Play or pause">
+                                        <Button.Styles>
+                                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="{DynamicResource AccentSecondaryBrush}" />
+                                            </Style>
+                                        </Button.Styles>
+                                        <TextBlock Text="{Binding Playback.Preview.PlayPauseSourceLabel}"
+                                                   FontSize="{DynamicResource FontSizeTitle}"
+                                                   FontWeight="Medium"
+                                                   Foreground="White"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Button>
+                                    <Button Classes="control-pill"
+                                            Command="{Binding Playback.Preview.FastForwardCommand}"
+                                            IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                            Padding="10,6" FontSize="12"
+                                            ToolTip.Tip="Fast forward 10 seconds"
+                                            AutomationProperties.Name="Fast forward 10 seconds">
+                                        <TextBlock Text="▶▶" FontSize="12"/>
+                                    </Button>
+                                    <Button Classes="control-pill"
+                                            Command="{Binding Playback.Preview.SkipForwardCommand}"
+                                            IsEnabled="{Binding Playback.Preview.HasSegments}"
+                                            Padding="10,6" FontSize="12"
+                                            ToolTip.Tip="Skip to next segment"
+                                            AutomationProperties.Name="Skip to next segment">
+                                        <TextBlock Text="▶|" FontSize="12"/>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
 
+                            <!-- Right: volume + fullscreen + settings [+ dev toolbar] -->
+                            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4"
+                                        VerticalAlignment="Center" HorizontalAlignment="Right">
+                                <Button Classes="control-pill"
+                                        Command="{Binding Playback.Preview.ToggleMuteCommand}"
+                                        IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                        Padding="8,6" FontSize="11"
+                                        ToolTip.Tip="Toggle mute"
+                                        AutomationProperties.Name="Toggle Mute">
+                                    <TextBlock Text="🔊" FontSize="12"/>
+                                </Button>
+                                <Slider Width="70"
+                                        Orientation="Horizontal"
+                                        Minimum="0"
+                                        Maximum="1"
+                                        Value="{Binding Playback.Preview.SourceVolume, Mode=TwoWay}"
+                                        IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                        VerticalAlignment="Center"
+                                        Margin="2,0,6,0"
+                                        ToolTip.Tip="Volume" />
+
+                                <Button Classes="control-pill"
+                                        Command="{Binding Playback.Preview.ToggleSegmentPaneCommand}"
+                                        Padding="8,6" FontSize="11"
+                                        ToolTip.Tip="Toggle side panels"
+                                        AutomationProperties.Name="Toggle side panes">
+                                    <TextBlock Text="☰" FontSize="14"/>
+                                </Button>
+
+                                <Button Classes="control-pill"
+                                        Command="{Binding Playback.Preview.ToggleFullscreenCommand}"
+                                        IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                        Padding="8,6" FontSize="11"
+                                        ToolTip.Tip="Toggle fullscreen"
+                                        AutomationProperties.Name="Toggle fullscreen">
+                                    <TextBlock Text="⛶" FontSize="12"/>
+                                </Button>
+
+                                <Button Classes="control-pill"
+                                        Click="OnSettingsClick"
+                                        Padding="8,6" FontSize="11"
+                                        ToolTip.Tip="Open settings"
+                                        AutomationProperties.Name="Settings">
+                                    <TextBlock Text="⚙" FontSize="14"/>
+                                </Button>
+
+                                <Border Margin="6,0,0,0"
+                                        BorderBrush="#3A3010"
+                                        BorderThickness="1,0,0,0"
+                                        Padding="6,0,0,0"
+                                        IsVisible="{x:Static bp:BuildInfo.IsDevBuild}">
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <Button Classes="dev-pill"
+                                                x:Name="DevLogButton"
+                                                Content="📋 Dev Log"
+                                                Padding="6,5" FontSize="12"
+                                                ToolTip.Tip="Open in-app dev log viewer" />
+                                        <Button Classes="dev-pill"
+                                                x:Name="FreshStartButton"
+                                                Content="🔄 Fresh Start"
+                                                Padding="6,5" FontSize="12"
+                                                ToolTip.Tip="Cancel pipeline, wipe session temp files, reset UI" />
+                                    </StackPanel>
+                                </Border>
+
+                            </StackPanel>
+
+                        </Grid>
+                    </ScrollViewer>
+
+                    <!-- Compact: merged media + system controls on the left; transport centered -->
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  HorizontalAlignment="Stretch"
+                                  IsVisible="{Binding Playback.Preview.IsCompactVideoChrome}">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                <Button Classes="control-pill"
+                                        Padding="10,8"
+                                        FontSize="14"
+                                        Background="Transparent"
+                                        Click="OnOpenMediaClick"
+                                        ToolTip.Tip="Open media file"
+                                        AutomationProperties.Name="Open media">
+                                    <TextBlock Text="📁" FontSize="14"/>
+                                </Button>
+                                <Button Content="{Binding Playback.Preview.SubtitleToggleLabel}"
+                                        Classes="control-pill"
+                                        Command="{Binding Playback.Preview.ToggleSubtitlesCommand}"
+                                        IsEnabled="{Binding Playback.Preview.HasSegments}"
+                                        Padding="8,6" FontSize="11"
+                                        Background="Transparent"
+                                        ToolTip.Tip="Toggle subtitles"
+                                        AutomationProperties.Name="Toggle subtitles" />
+                                <Button Content="{Binding Playback.Preview.DubModeLabel}"
+                                        Classes="control-pill"
+                                        Classes.active="{Binding Playback.Preview.IsDubModeOn}"
+                                        Command="{Binding Playback.Preview.ToggleDubModeCommand}"
+                                        IsEnabled="{Binding Playback.Preview.HasSegments}"
+                                        Padding="8,6" FontSize="11"
+                                        Background="Transparent"
+                                        ToolTip.Tip="Toggle Dub Mode"
+                                        AutomationProperties.Name="Toggle Dub Mode" />
+
+                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="6,0,0,0"
+                                            IsVisible="{Binding Playback.Preview.IsDubModeOn}">
+                                    <TextBlock Text="Duck" FontSize="10" Foreground="#8A88A8" VerticalAlignment="Center" />
+                                    <Slider Width="60"
+                                            Orientation="Horizontal"
+                                            Minimum="-30"
+                                            Maximum="0"
+                                            Value="{Binding Playback.Preview.AudioDuckingDb, Mode=TwoWay}"
+                                            IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Audio Ducking (dB)" />
+                                    <TextBlock Text="{Binding Playback.Preview.AudioDuckingLabel}"
+                                               FontSize="10"
+                                               Foreground="#8A88A8"
+                                               VerticalAlignment="Center"
+                                               Width="30" />
+                                </StackPanel>
+
+                                <Border Width="1" Height="22" Margin="4,0,4,0" Background="{DynamicResource BorderBrush}" Opacity="0.5" VerticalAlignment="Center" />
+
+                                <Button Classes="control-pill"
+                                        Command="{Binding Playback.Preview.ToggleMuteCommand}"
+                                        IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                        Padding="8,6" FontSize="11"
+                                        ToolTip.Tip="Toggle mute"
+                                        AutomationProperties.Name="Toggle Mute">
+                                    <TextBlock Text="🔊" FontSize="12"/>
+                                </Button>
+                                <Slider Width="70"
+                                        Orientation="Horizontal"
+                                        Minimum="0"
+                                        Maximum="1"
+                                        Value="{Binding Playback.Preview.SourceVolume, Mode=TwoWay}"
+                                        IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                        VerticalAlignment="Center"
+                                        Margin="2,0,6,0"
+                                        ToolTip.Tip="Volume" />
+
+                                <Button Classes="control-pill"
+                                        Command="{Binding Playback.Preview.ToggleSegmentPaneCommand}"
+                                        Padding="8,6" FontSize="11"
+                                        ToolTip.Tip="Toggle side panels"
+                                        AutomationProperties.Name="Toggle side panes">
+                                    <TextBlock Text="☰" FontSize="14"/>
+                                </Button>
+
+                                <Button Classes="control-pill"
+                                        Command="{Binding Playback.Preview.ToggleFullscreenCommand}"
+                                        IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                        Padding="8,6" FontSize="11"
+                                        ToolTip.Tip="Toggle fullscreen"
+                                        AutomationProperties.Name="Toggle fullscreen">
+                                    <TextBlock Text="⛶" FontSize="12"/>
+                                </Button>
+
+                                <Button Classes="control-pill"
+                                        Click="OnSettingsClick"
+                                        Padding="8,6" FontSize="11"
+                                        ToolTip.Tip="Open settings"
+                                        AutomationProperties.Name="Settings">
+                                    <TextBlock Text="⚙" FontSize="14"/>
+                                </Button>
+
+                                <Border Margin="6,0,0,0"
+                                        BorderBrush="#3A3010"
+                                        BorderThickness="1,0,0,0"
+                                        Padding="6,0,0,0"
+                                        IsVisible="{x:Static bp:BuildInfo.IsDevBuild}">
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <Button Classes="dev-pill"
+                                                x:Name="DevLogButtonCompact"
+                                                Content="📋 Dev Log"
+                                                Padding="6,5" FontSize="12"
+                                                ToolTip.Tip="Open in-app dev log viewer" />
+                                        <Button Classes="dev-pill"
+                                                x:Name="FreshStartButtonCompact"
+                                                Content="🔄 Fresh Start"
+                                                Padding="6,5" FontSize="12"
+                                                ToolTip.Tip="Cancel pipeline, wipe session temp files, reset UI" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <Border Grid.Column="1" Classes="glass-rack" Padding="6,4"
+                                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <Button Classes="control-pill"
+                                            Command="{Binding Playback.Preview.SkipBackwardCommand}"
+                                            IsEnabled="{Binding Playback.Preview.HasSegments}"
+                                            Padding="10,6" FontSize="12"
+                                            ToolTip.Tip="Skip to previous segment"
+                                            AutomationProperties.Name="Skip to previous segment">
+                                        <TextBlock Text="|◀" FontSize="12"/>
+                                    </Button>
+                                    <Button Classes="control-pill"
+                                            Command="{Binding Playback.Preview.RewindCommand}"
+                                            IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                            Padding="10,6" FontSize="12"
+                                            ToolTip.Tip="Rewind 10 seconds"
+                                            AutomationProperties.Name="Rewind 10 seconds">
+                                        <TextBlock Text="◀◀" FontSize="12"/>
+                                    </Button>
+                                    <Button Command="{Binding Playback.Preview.PlayPauseSourceCommand}"
+                                            IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                            Width="46" Height="46" Padding="0" Margin="4,0"
+                                            CornerRadius="23" Background="{DynamicResource AccentBrush}"
+                                            ToolTip.Tip="Play / Pause (Space)"
+                                            AutomationProperties.Name="Play or pause">
+                                        <Button.Styles>
+                                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="{DynamicResource AccentSecondaryBrush}" />
+                                            </Style>
+                                        </Button.Styles>
+                                        <TextBlock Text="{Binding Playback.Preview.PlayPauseSourceLabel}"
+                                                   FontSize="{DynamicResource FontSizeTitle}"
+                                                   FontWeight="Medium"
+                                                   Foreground="White"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Button>
+                                    <Button Classes="control-pill"
+                                            Command="{Binding Playback.Preview.FastForwardCommand}"
+                                            IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
+                                            Padding="10,6" FontSize="12"
+                                            ToolTip.Tip="Fast forward 10 seconds"
+                                            AutomationProperties.Name="Fast forward 10 seconds">
+                                        <TextBlock Text="▶▶" FontSize="12"/>
+                                    </Button>
+                                    <Button Classes="control-pill"
+                                            Command="{Binding Playback.Preview.SkipForwardCommand}"
+                                            IsEnabled="{Binding Playback.Preview.HasSegments}"
+                                            Padding="10,6" FontSize="12"
+                                            ToolTip.Tip="Skip to next segment"
+                                            AutomationProperties.Name="Skip to next segment">
+                                        <TextBlock Text="▶|" FontSize="12"/>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </ScrollViewer>
                 </Grid>
-                </ScrollViewer>
             </Border>
 
         </Grid>
-
-        <!-- ═══════════════════════════════════════════════════
-             RIGHT PANEL: Segments
-             ═══════════════════════════════════════════════════ -->
-        <Border Grid.Row="1" Grid.Column="2"
-                Classes="right-pane glass-rack"
-                Classes.collapsed="{Binding !Playback.Preview.IsSegmentPaneVisible}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0"
-                Margin="0,0,8,8"
-                >
-            <Grid RowDefinitions="Auto,*,Auto">
-
-                <!-- Header -->
-                <Border Grid.Row="0" Padding="14,12"
-                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
-                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Segments" FontSize="14"
-                                       FontWeight="SemiBold" Foreground="#F0F0F8"
-                                       VerticalAlignment="Center" />
-                            <Border Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="4" Padding="8,2"
-                                    VerticalAlignment="Center">
-                                <TextBlock FontSize="11" Foreground="#8888A0" VerticalAlignment="Center"
-                                           Text="{Binding Playback.Preview.Segments.Count, StringFormat='{}{0} items'}" />
-                            </Border>
-                        </StackPanel>
-
-                        <Button Grid.Column="1"
-                                Click="OnExportMenuButtonClick"
-                                Classes="console-button"
-                                ToolTip.Tip="Export captions (.srt), dubbed audio only (.mp3), or video with dub + soft subs (.mp4) — audio matches current timings and mix.">
-                            <TextBlock Text="Export" />
-                            <Button.ContextMenu>
-                                <ContextMenu>
-                                    <MenuItem Header="to .srt"
-                                              Click="OnExportToSrtClick" />
-                                    <MenuItem Header="to .mp3"
-                                              Click="OnExportToMp3Click" />
-                                    <MenuItem Header="to .mp4"
-                                              Click="OnExportToMp4Click" />
-                                </ContextMenu>
-                            </Button.ContextMenu>
-                        </Button>
-
-                        <Button Grid.Column="2"
-                                Command="{Binding Playback.Preview.RefreshSegmentsCommand}"
-                                Classes="console-button"
-                                ToolTip.Tip="Refresh segments">
-                            <TextBlock Text="↻" FontSize="14" />
-                        </Button>
-
-                    </Grid>
-                </Border>
-
-                <Panel Grid.Row="1">
-                <!-- Segment list -->
-                <ListBox Grid.Row="1" x:Name="SegmentList"
-                         ItemsSource="{Binding Playback.Preview.Segments}"
-                         SelectedItem="{Binding Playback.Preview.SelectedSegment}"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.Styles>
-                        <Style Selector="ListBoxItem">
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="Background" Value="Transparent" />
-                        </Style>
-                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                            <Setter Property="Background" Value="{DynamicResource SegmentSelectedBrush}" />
-                        </Style>
-                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                            <Setter Property="Background" Value="{DynamicResource SegmentPointerOverBrush}" />
-                        </Style>
-                    </ListBox.Styles>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:WorkflowSegmentState">
-                            <Border Padding="14,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
-                                <Grid ColumnDefinitions="*,12">
-
-                                    <StackPanel Grid.Column="0" Spacing="3">
-                                        <!-- Time range -->
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <Border Background="{Binding SpeakerId, Converter={StaticResource SpeakerIdToColorConverter}}"
-                                                    CornerRadius="999"
-                                                    Padding="7,2"
-                                                    VerticalAlignment="Center"
-                                                    IsVisible="{Binding SpeakerId, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                                <TextBlock Text="{Binding SpeakerId, Converter={StaticResource SpeakerIdToShortLabelConverter}}"
-                                                           FontSize="10"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="White"
-                                                           VerticalAlignment="Center" />
-                                            </Border>
-                                            <TextBlock FontSize="11"
-                                                       Foreground="{DynamicResource StatusTextBrush}"
-                                                       VerticalAlignment="Center">
-                                                <TextBlock.Text>
-                                                    <MultiBinding StringFormat="{}{0:F1}s  —  {1:F1}s">
-                                                        <Binding Path="StartSeconds" />
-                                                        <Binding Path="EndSeconds" />
-                                                    </MultiBinding>
-                                                </TextBlock.Text>
-                                            </TextBlock>
-                                        </StackPanel>
-                                        <!-- Original text -->
-                                        <TextBlock Text="{Binding SourceText}"
-                                                   FontSize="12" Foreground="{DynamicResource StatusTextBrush}"
-                                                   TextWrapping="Wrap" />
-                                        <!-- Translated text -->
-                                        <TextBlock Text="{Binding TranslatedText}"
-                                                   FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}"
-                                                   FontWeight="Medium"
-                                                   TextWrapping="Wrap" />
-                                    </StackPanel>
-
-                                    <!-- Status indicator column -->
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Top"
-                                                Margin="0,4,0,0" Spacing="4">
-                                        <!-- Green dot: TTS audio ready -->
-                                        <Ellipse Width="8" Height="8"
-                                                 Fill="#22C55E"
-                                                 IsVisible="{Binding HasTtsAudio}"
-                                                 HorizontalAlignment="Center" />
-                                        <!-- Orange bar: translation present, no TTS yet -->
-                                        <Rectangle Width="4" Height="16"
-                                                   Fill="#F59E0B"
-                                                   RadiusX="2" RadiusY="2"
-                                                   IsVisible="{Binding HasTranslation}"
-                                                   HorizontalAlignment="Center" />
-                                    </StackPanel>
-
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-
-                <StackPanel IsVisible="{Binding !Playback.Preview.HasSegments}"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Spacing="4">
-                    <TextBlock Text="No segments yet" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                    <TextBlock Text="Open media and run the pipeline to generate segments."
-                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                               HorizontalAlignment="Center" />
-                </StackPanel>
-                </Panel>
-
-                <!-- Segment inspection panel (row 2) — shown when a segment with TTS audio is selected -->
-                <Border Grid.Row="2"
-                        IsVisible="{Binding Inspection.IsVisible}"
-                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
-                        Padding="14,10">
-                    <StackPanel Spacing="6">
-
-                        <TextBlock Text="Segment timing" FontSize="11" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource StatusTextBrush}"/>
-
-                        <TextBlock Text="{Binding Inspection.TimingLabel}"
-                                   FontSize="11" Foreground="{DynamicResource StatusTextBrush}"/>
-
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
-                            <StackPanel.Styles>
-                                <Style Selector="Button.segmentTimingButton">
-                                    <Setter Property="Padding" Value="8,3"/>
-                                    <Setter Property="FontSize" Value="11"/>
-                                    <Setter Property="CornerRadius" Value="4"/>
-                                    <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
-                                    <Setter Property="Foreground" Value="{DynamicResource StatusTextBrush}"/>
-                                </Style>
-                            </StackPanel.Styles>
-                            <!-- Inherit = clear override -->
-                            <Button Classes="segmentTimingButton"
-                                    Content="Inherit"
-                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
-                                    CommandParameter="{x:Null}"
-                                    ToolTip.Tip="Use session default timing mode"/>
-                            <Button Classes="segmentTimingButton"
-                                    Content="Off"
-                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
-                                    CommandParameter="{x:Static models:SegmentTimingMode.Off}"
-                                    ToolTip.Tip="Play TTS as-is for this segment (no stretch/pause alignment)"/>
-                            <Button Classes="segmentTimingButton"
-                                    Content="Stretch"
-                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
-                                    CommandParameter="{x:Static models:SegmentTimingMode.Stretch}"
-                                    ToolTip.Tip="Time-stretch TTS to fit the segment window"/>
-                            <Button Classes="segmentTimingButton"
-                                    Content="Pause"
-                                    Command="{Binding Inspection.SetTimingOverrideCommand}"
-                                    CommandParameter="{x:Static models:SegmentTimingMode.Pause}"
-                                    ToolTip.Tip="Pause source video while TTS plays, then resume"/>
-                        </StackPanel>
-
-                        <TextBlock Text="{Binding Inspection.TimingOverrideLabel}"
-                                   FontSize="10" Foreground="{DynamicResource StatusTextBrush}"
-                                   Opacity="0.7"/>
-
-                    </StackPanel>
-                </Border>
-
-            </Grid>
-        </Border>
 
     </Grid>
     </Grid>

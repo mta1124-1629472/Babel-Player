@@ -117,9 +117,9 @@ public sealed record BootstrapDiagnostics(
         {
             if (System.Runtime.Intrinsics.X86.Avx512F.IsSupported) return "AVX-512F";
             if (System.Runtime.Intrinsics.X86.Avx2.IsSupported)   return "AVX2";
-            if (System.Runtime.Intrinsics.X86.Avx.IsSupported)    return "AVX (no AVX2 \u2014 reduced inference performance)";
+            if (System.Runtime.Intrinsics.X86.Avx.IsSupported)    return "AVX (Legacy)";
         }
         catch { /* fall through */ }
-        return "none detected (inference will be significantly slower)";
+        return "No AVX detected";
     }
 }

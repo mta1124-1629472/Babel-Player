@@ -36,9 +36,8 @@
                 chrome:WindowDecorationProperties.ElementRole="TitleBar">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <TextBlock Grid.Column="0"
+                           Classes="text-title"
                            Text="API Keys"
-                           FontSize="13"
-                           FontWeight="SemiBold"
                            Foreground="{DynamicResource PrimaryTextBrush}"
                            VerticalAlignment="Center" />
                 <StackPanel Grid.Column="2"
@@ -153,7 +152,7 @@
                                     <Grid ColumnDefinitions="*,Auto">
                                         <TextBlock Grid.Column="0"
                                                    Text="{Binding ProviderDisplayName}"
-                                                   FontSize="13" FontWeight="SemiBold"
+                                                   Classes="text-secondary"
                                                    Foreground="{DynamicResource PrimaryTextBrush}"
                                                    VerticalAlignment="Center" />
                                         <StackPanel Grid.Column="1" Orientation="Horizontal"
@@ -163,7 +162,7 @@
                                                      VerticalAlignment="Center" />
                                             <TextBlock Text="{Binding StatusText}"
                                                        Foreground="{Binding StatusTextColor}"
-                                                       FontSize="11" VerticalAlignment="Center" />
+                                                       Classes="text-caption" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </Grid>
 
@@ -173,8 +172,7 @@
                                                  Text="{Binding KeyValue, Mode=TwoWay}"
                                                  PasswordChar="{Binding MaskChar}"
                                                  PlaceholderText="{Binding PlaceholderText}"
-                                                 FontFamily="Consolas,monospace"
-                                                 FontSize="12"
+                                                 FontFamily="{DynamicResource UiMonoFontFamily}"
                                                  Background="{DynamicResource WindowBackgroundBrush}"
                                                  BorderBrush="{DynamicResource BorderBrush}"
                                                  Foreground="{DynamicResource PrimaryTextBrush}"
@@ -186,7 +184,7 @@
                                                 Content="{Binding RevealIcon}"
                                                 Padding="8,6" Margin="6,0,0,0"
                                                 Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                                                CornerRadius="4" FontSize="13"
+                                                CornerRadius="4"
                                                 ToolTip.Tip="Show / hide key" />
 
                                         <Button Grid.Column="2"
@@ -194,7 +192,7 @@
                                                 Content="Save"
                                                 Padding="10,6" Margin="4,0,0,0"
                                                 Background="{DynamicResource PositiveBrush}" Foreground="{DynamicResource PositiveFgBrush}"
-                                                CornerRadius="4" FontSize="12" />
+                                                CornerRadius="4" />
 
                                         <Button Grid.Column="3"
                                                 Command="{Binding ValidateKeyCommand}"
@@ -202,19 +200,19 @@
                                                 IsEnabled="{Binding CanValidateLive}"
                                                 Padding="10,6" Margin="4,0,0,0"
                                                 Background="{DynamicResource InfoBrush}" Foreground="{DynamicResource InfoFgBrush}"
-                                                CornerRadius="4" FontSize="12" />
+                                                CornerRadius="4" />
 
                                         <Button Grid.Column="4"
                                                 Command="{Binding ClearKeyCommand}"
                                                 Content="Clear"
                                                 Padding="10,6" Margin="4,0,0,0"
                                                 Background="{DynamicResource DestructiveBrush}" Foreground="{DynamicResource DestructiveFgBrush}"
-                                                CornerRadius="4" FontSize="12" />
+                                                CornerRadius="4" />
                                     </Grid>
 
                                     <TextBlock Text="{Binding ValidationText}"
                                                Foreground="{Binding ValidationTextColor}"
-                                               FontSize="11"
+                                               Classes="text-caption"
                                                IsVisible="{Binding HasValidationText}"
                                                TextWrapping="Wrap" />
 
@@ -228,7 +226,7 @@
                 <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="8"
                         Padding="14,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                     <TextBlock Text="More providers can be added in future updates."
-                               FontSize="11" Foreground="#4A4A62"
+                               Classes="text-caption" Foreground="#4A4A62"
                                HorizontalAlignment="Center" />
                 </Border>
 
@@ -242,10 +240,9 @@
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBlock Text="Storage Security:"
-                               FontSize="10" Foreground="#545470"
-                               FontWeight="SemiBold" />
+                               Classes="text-label" Foreground="#545470" />
                     <TextBlock Text="{Binding SecurityStatusDetail}"
-                               FontSize="11" Foreground="#686885"
+                               Classes="text-caption" Foreground="#686885"
                                TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1"
@@ -253,7 +250,7 @@
                         Content="Close"
                         Padding="16,7" Margin="12,0,0,0"
                         Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                        CornerRadius="4" FontSize="12" />
+                        CornerRadius="4" />
             </Grid>
         </Border>
 

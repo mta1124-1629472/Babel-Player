@@ -10,6 +10,8 @@
 - For commit/push requests that provide an explicit staged/unstaged file list, treat that list as authoritative and do not include files outside it.
 - When asked to implement from an attached plan with pre-created todos, execute the plan without editing the plan file and progress existing todos instead of creating duplicates.
 - Prefer concise, plain UI wording; avoid em dashes in user-visible copy when a short phrase, comma, or “to” for ranges reads clearly (for example “30 to 60 seconds” instead of “30–60”).
+- For advanced CPU transcription and similar parallelism controls, prefer hardware-informed defaults over fixed ultra-conservative baselines; when clamping values or falling back to a safer compute path after errors or incompatible choices, notify the user explicitly rather than only logging.
+- **Avoid UI Verbosity:** Prefer concise, action-oriented status messages (e.g., 'Ready') over internal technical explanations or instructional filler. Hide the "sausage-making" from the primary workflow; keep diagnostic detail secondary or hidden. Do not over-explain basic UI actions (e.g., how "OK" buttons work).
 
 ## Learned Workspace Facts
 - The desktop UI targets **Avalonia 12.x** as pinned in `BabelPlayer.csproj` (do not assume Avalonia 11 or other versions when discussing APIs or docs unless verified from the project file).

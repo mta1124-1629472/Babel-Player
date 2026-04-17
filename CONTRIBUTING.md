@@ -166,6 +166,8 @@ UI additions should generally serve one of these purposes:
 
 Avoid prestige UI work before the product loop is real.
 
+- **Avoid UI Verbosity:** Adhere to the verbosity audit (April 2026): avoid over-explaining how the "sausage is made" in user-facing status messages. Prefer concise, professional labels (e.g., "Ready", "Reset to [Stage]") over internal technical descriptions. Do not include instructional filler for standard UI elements (e.g., explaining how "OK" buttons work).
+
 ### New abstractions
 
 Before adding a new service, coordinator, factory, interface, or subsystem, ask:

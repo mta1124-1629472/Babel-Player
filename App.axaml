@@ -74,6 +74,7 @@
 
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="/Styles/Typography.axaml" />
         <!-- Fluent applies a second "reveal" Background on ContentPresenter; it reads as a box on gradients / stacked fills. -->
         <Style Selector="Button:not(.control-pill):not(.chrome-button) /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent" />

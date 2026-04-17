@@ -82,9 +82,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         panel.Children.Add(new TextBlock
         {
             Text =
-                "The first time after install, an update, or app startup, the local host may need about 30 to 60 seconds before it is ready. " +
-                "Wait until the status shows Ready, then run the pipeline.\n\n" +
-                "OK closes this message for now. Use Don't show again if you do not want this tip when the app starts.",
+                "The local inference host may take 30-60 seconds to start. " +
+                "Please wait for the status to show 'Ready' before running the pipeline.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
             MaxWidth = 440,
         });

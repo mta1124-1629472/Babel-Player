@@ -89,6 +89,7 @@ Babel-Player/
 | Repository | `Babel-Player` |
 | .NET namespaces / assembly IDs | `BabelPlayer` or `Babel.Player` |
 | Filenames / folders | match local convention already in use |
+| **UI Verbosity** | **Avoid over-explaining**; prefer concise status (e.g., "Ready") over internal technical details. |
 
 ## Key Files
 

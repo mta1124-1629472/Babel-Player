@@ -237,28 +237,7 @@ public sealed partial class SessionWorkflowCoordinator
                 message = $"{hostLabel} is ready.";
         }
 
-        return AppendWarmupExpectationHint(probeResult, message);
-    }
-
-    private string AppendWarmupExpectationHint(ContainerizedProbeResult probeResult, string message)
-    {
-        if (probeResult.State == ContainerizedProbeState.Available
-            && !probeResult.IsStale
-            && string.IsNullOrWhiteSpace(FindActiveWarmupDetail(probeResult))
-            && !probeResult.Busy)
-        {
-            return message;
-        }
-
-        if (probeResult.State == ContainerizedProbeState.Unavailable)
-        {
-            var coldBudget = TimeSpan.FromSeconds(90);
-            if (DateTimeOffset.UtcNow - ProcessStartedAtUtc >= coldBudget)
-                return message;
-        }
-
-        const string hint = " Typical first warm-up after launch or install: 30 to 60 seconds.";
-        return message.EndsWith(hint, StringComparison.Ordinal) ? message : message + hint;
+        return message;
     }
 
     private string? FindActiveWarmupDetail(ContainerizedProbeResult probeResult)

@@ -91,7 +91,7 @@ public sealed partial class SessionWorkflowCoordinator
             VocalsAudioPath = result.VocalsAudioPath,
             AmbianceAudioPath = result.AmbianceAudioPath,
             InstrumentalAudioPath = result.AmbianceAudioPath,
-            StatusMessage = "Vocal and ambiance stems prepared for transcription.",
+            StatusMessage = "Audio prepared for transcription.",
         };
         SaveCurrentSession();
 
@@ -349,7 +349,7 @@ public sealed partial class SessionWorkflowCoordinator
             TranslationRuntime = CurrentSettings.TranslationRuntime,
             TranslationProvider = CurrentSettings.TranslationProvider,
             TranslationModel = CurrentSettings.TranslationModel,
-            StatusMessage = $"Translated {result.Segments.Count} segments to {targetLanguage}. Ready for TTS/dubbing.",
+            StatusMessage = "Translation complete. Ready for dubbing.",
         };
 
         _log.Info($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
