@@ -1199,54 +1199,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         return invalidation;
     }
 
-    /// <summary>
-    /// Updates the snapshot's LastUpdatedAtUtc, sets it as the current session, and persists that snapshot.
-    /// </summary>
-    /// <remarks>
-    /// Sets <c>CurrentSession</c> to a copy with an updated <c>LastUpdatedAtUtc</c> and saves that snapshot to the configured persistence stores.
-    /// </remarks>
-    public void SaveCurrentSession()
-    {
-        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-        lock (_sessionLock)
-        {
-            CurrentSession = snapshot;
-        }
-        PersistSnapshot(snapshot, updateStatus: true);
-    }
-
-    /// <summary>
-    /// Asynchronous counterpart to <see cref="SaveCurrentSession"/>. Pipeline code that is already
-    /// inside an <c>async</c> context should prefer this so the disk write does not block the
-    /// calling thread.
-    /// </summary>
-    public async Task SaveCurrentSessionAsync()
-    {
-        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-        CurrentSession = snapshot;
-        await PersistSnapshotAsync(snapshot, updateStatus: true).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Immediately persists the current session snapshot to persistent stores after updating LastUpdatedAtUtc.
-    /// </summary>
-    /// <remarks>
-    /// Updates the in-memory <c>CurrentSession</c> with the current UTC <c>LastUpdatedAtUtc</c> timestamp and then synchronously saves that snapshot to the underlying stores.
-    /// <summary>
-    /// Immediately persists the current session snapshot and updates its last-updated timestamp.
-    /// </summary>
-    /// <remarks>
-    /// Updates CurrentSession.LastUpdatedAtUtc to the current UTC time, assigns the updated snapshot to CurrentSession, and synchronously saves the snapshot to all configured stores so the persistence status is updated immediately.
-    /// </remarks>
-    public void FlushPendingSave()
-    {
-        var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
-        lock (_sessionLock)
-        {
-            CurrentSession = snapshot;
-        }
-        PersistSnapshot(snapshot, updateStatus: true);
-    }
+    // SaveCurrentSession / SaveCurrentSessionAsync / FlushPendingSave and the
+    // underlying PersistSnapshot helpers live in SessionWorkflowCoordinator.Persistence.cs.
 
     private void OnProbeResultUpdated(ContainerizedProbeResult probeResult)
     {
@@ -1313,30 +1267,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             summary: value.DiagnosticSummary,
             source: nameof(BootstrapDiagnostics),
             forceRefresh: true);
-
-    private void PersistSnapshot(WorkflowSessionSnapshot snapshot, bool updateStatus)
-    {
-        var stopwatch = Stopwatch.StartNew();
-        _store.Save(snapshot);
-        _perSessionStore.Save(snapshot);
-        stopwatch.Stop();
-        var message = $"Saved current session snapshot to {StateFilePath}.";
-        if (updateStatus)
-            PersistenceStatus = message;
-        _log.Info($"{message} Mirrored per-session snapshot. elapsedMs={stopwatch.ElapsedMilliseconds}");
-    }
-
-    private async Task PersistSnapshotAsync(WorkflowSessionSnapshot snapshot, bool updateStatus)
-    {
-        var stopwatch = Stopwatch.StartNew();
-        await _store.SaveAsync(snapshot).ConfigureAwait(false);
-        await _perSessionStore.SaveAsync(snapshot).ConfigureAwait(false);
-        stopwatch.Stop();
-        var message = $"Saved current session snapshot to {StateFilePath}.";
-        if (updateStatus)
-            PersistenceStatus = message;
-        _log.Info($"{message} Mirrored per-session snapshot (async). elapsedMs={stopwatch.ElapsedMilliseconds}");
-    }
 
     public sealed record BootstrapWarmupData(
         BootstrapDiagnostics Diagnostics,
