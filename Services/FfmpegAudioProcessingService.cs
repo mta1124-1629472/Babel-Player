@@ -227,6 +227,7 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         string dubbedAudioPath,
         string ambianceAudioPath,
         string outputAudioPath,
+        double ambianceGainDb,
         CancellationToken cancellationToken)
     {
         if (!File.Exists(dubbedAudioPath))
@@ -256,7 +257,9 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         psi.ArgumentList.Add("-i");
         psi.ArgumentList.Add(ambianceAudioPath);
         psi.ArgumentList.Add("-filter_complex");
-        psi.ArgumentList.Add("[1:a]volume=1.0[bg];[0:a][bg]amix=inputs=2:normalize=0:dropout_transition=0[outa]");
+        psi.ArgumentList.Add(
+            $"[1:a]volume={ambianceGainDb.ToString("0.###", CultureInfo.InvariantCulture)}dB[bg];" +
+            "[0:a][bg]amix=inputs=2:normalize=0:dropout_transition=0[outa]");
         psi.ArgumentList.Add("-map");
         psi.ArgumentList.Add("[outa]");
         psi.ArgumentList.Add("-vn");
@@ -499,14 +502,16 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
         string inputPath,
         string outputPath,
         double targetDurationSeconds,
-        double minRatio = 0.75,
-        double maxRatio = 1.35,
+        double minRatio = DubTimingDefaults.StretchMinTempoRatio,
+        double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
         CancellationToken cancellationToken = default)
     {
         var sourceDuration = await ProbeDurationAsync(inputPath, cancellationToken).ConfigureAwait(false);
         if (sourceDuration is null or <= 0 || targetDurationSeconds <= 0)
         {
-            _log.Warning($"TimeStretch skipped: cannot determine valid duration for '{inputPath}'.");
+            _log.Warning(
+                $"TimeStretch skipped: ffprobe could not determine a valid source duration for '{inputPath}' " +
+                $"or the target duration '{targetDurationSeconds:F3}' was invalid.");
             return false;
         }
 
@@ -515,7 +520,9 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
 
         if (tempo < minRatio || tempo > maxRatio)
         {
-            _log.Info($"TimeStretch skipped: tempo ratio {tempo:F3} outside [{minRatio:F2}, {maxRatio:F2}] for '{Path.GetFileName(inputPath)}'.");
+            _log.Info(
+                $"TimeStretch skipped: tempo ratio {tempo:F3} outside [{minRatio:F2}, {maxRatio:F2}] " +
+                $"for '{Path.GetFileName(inputPath)}'.");
             return false;
         }
 
@@ -573,6 +580,8 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
 
         if (process.ExitCode != 0 || !File.Exists(outputPath))
         {
+            _log.Warning(
+                $"TimeStretch failed for '{Path.GetFileName(inputPath)}': exit={process.ExitCode} stderr={stderr}");
             throw new InvalidOperationException(
                 $"ffmpeg time-stretch failed (exit {process.ExitCode}): {stderr} {stdout}".Trim());
         }

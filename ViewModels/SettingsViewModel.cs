@@ -334,7 +334,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private SegmentTimingMode _dubTimingMode;
 
     public SegmentTimingMode[] DubTimingModeOptions { get; } =
-        [SegmentTimingMode.Off, SegmentTimingMode.Stretch, SegmentTimingMode.Pause];
+        [SegmentTimingMode.Off, SegmentTimingMode.Stretch];
 
     /// <summary>CPU compute types available for the current hardware (AVX-512-only entries hidden when unsupported).</summary>
     public string[] TranscriptionCpuComputeTypeOptions =>
