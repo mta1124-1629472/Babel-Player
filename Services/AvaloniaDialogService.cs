@@ -12,7 +12,10 @@ public sealed class AvaloniaDialogService : IDialogService
 {
     public async Task<bool> ShowWarmupNoticeAsync()
     {
-        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
+        if (Application.Current is null)
+            return false;
+
+        if (Dispatcher.UIThread.CheckAccess())
             return await ShowWarmupNoticeUiAsync().ConfigureAwait(true);
 
         return await Dispatcher.UIThread.InvokeAsync(ShowWarmupNoticeUiAsync).ConfigureAwait(true);
