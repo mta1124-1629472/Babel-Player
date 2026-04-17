@@ -448,6 +448,7 @@ Read these first:
 - [docs/PLAN.md](docs/PLAN.md) — milestone order and gates
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow and scope discipline
 - [docs/architecture.md](docs/architecture.md) — structural map and ownership rules
+- [docs/typography.md](docs/typography.md) — typography tokens and semantic text classes (`Styles/Typography.axaml`)
 - [docs/privacy-policy.md](docs/privacy-policy.md) — privacy policy (published copy also on GitHub Pages)
 - [Marketing site (GitHub Pages)](https://babelworks.github.io/Babel-Player/) — Jekyll source on branch [`site`](https://github.com/Babelworks/Babel-Player/tree/site); push to that branch to deploy (workflow lives in `.github/workflows/` on `main`).
 
