@@ -132,7 +132,7 @@ Babel-Player/
 | Python runtimes | `%LOCALAPPDATA%/BabelPlayer/runtime/` |
 | Native tools | `tools/<rid>/` (ffmpeg.exe, ffprobe.exe) |
 
-On restore, the coordinator validates artifacts exist and **downgrades stage** if files are missing.
+On restore, the coordinator validates artifacts exist and **downgrades stage** if files are missing. If `current-session.json` contains invalid/corrupt JSON, the coordinator relocates it with a `.corrupt` suffix, then downgrades the stage and continues recovery.
 
 ---
 
