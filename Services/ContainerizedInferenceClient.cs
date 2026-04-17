@@ -576,6 +576,10 @@ public sealed class ContainerizedInferenceClient : IDisposable
                 result = await DeserializeResponseAsync<SeparateVocalsApiResponseDto>(response, cancellationToken).ConfigureAwait(false);
             }
 
+            if (!result.Success)
+                throw new InvalidOperationException(
+                    $"Vocal separation error: {result.ErrorMessage ?? "unknown"}");
+
             if (string.IsNullOrWhiteSpace(result.VocalsFilename) || string.IsNullOrWhiteSpace(result.InstrumentalFilename))
                 throw new InvalidOperationException("Vocal separation response did not include stem filenames.");
 
@@ -1202,6 +1206,9 @@ public sealed class ContainerizedInferenceClient : IDisposable
 
     private sealed class SeparateVocalsApiResponseDto
     {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
         [JsonPropertyName("vocals_filename")]
         public string? VocalsFilename { get; set; }
 
@@ -1219,6 +1226,9 @@ public sealed class ContainerizedInferenceClient : IDisposable
 
         [JsonPropertyName("instrumental_model")]
         public string? InstrumentalModel { get; set; }
+
+        [JsonPropertyName("error_message")]
+        public string? ErrorMessage { get; set; }
     }
 
     private sealed class QwenReferenceResponseDto
