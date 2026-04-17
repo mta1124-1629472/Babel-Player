@@ -47,6 +47,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
 
     public void Dispose()
     {
+        _ctx.Log.Dispose();
         try { Directory.Delete(_ctx.Dir, recursive: true); }
         catch { /* best-effort cleanup */ }
     }

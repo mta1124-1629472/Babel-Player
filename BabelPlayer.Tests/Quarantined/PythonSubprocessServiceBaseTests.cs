@@ -450,7 +450,7 @@ for i, arg in enumerate(sys.argv):
             requirementsPathResolver: () => requirementsPath,
             constraintsPathResolver: () => constraintsPath);
 
-        var hash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        var hash = MarkerHashHelper.ComputeMarkerHash(requirementsPath, constraintsPath);
         await File.WriteAllTextAsync(manager.GetBootstrapMarkerPath(), hash);
         await File.WriteAllTextAsync(
             manager.GetValidationRecordPath(),
@@ -472,7 +472,7 @@ for i, arg in enumerate(sys.argv):
         Assert.True(await constraintsChangedManager.CheckNeedsBootstrapAsync());
 
         await File.WriteAllTextAsync(constraintsPath, "edge-tts==7.2.8\n");
-        var resetHash = ComputeMarkerHash(requirementsPath, constraintsPath);
+        var resetHash = MarkerHashHelper.ComputeMarkerHash(requirementsPath, constraintsPath);
         await File.WriteAllTextAsync(constraintsChangedManager.GetBootstrapMarkerPath(), resetHash);
         await File.WriteAllTextAsync(
             constraintsChangedManager.GetValidationRecordPath(),
@@ -500,7 +500,7 @@ for i, arg in enumerate(sys.argv):
     {
         var uvPath = DependencyLocator.FindUv();
         if (uvPath is null)
-            return;
+            throw new Xunit.SkipException("uv not available in test environment");
 
         using var log = new AppLog(_tempLogPath);
 
@@ -545,12 +545,5 @@ for i, arg in enumerate(sys.argv):
 
         Assert.NotNull(field);
         return Assert.IsType<string>(field!.GetValue(provider));
-    }
-
-    private static string ComputeMarkerHash(string requirementsPath, string constraintsPath)
-    {
-        var content = $"python:3.11.6\n[requirements]\n{File.ReadAllText(requirementsPath)}\n[constraints]\n{File.ReadAllText(constraintsPath)}";
-        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content));
-        return Convert.ToHexString(bytes);
     }
 }

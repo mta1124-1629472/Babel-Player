@@ -57,13 +57,14 @@ public sealed class SessionWorkflowCoordinatorLockingTests
                             return true;
                         if (back > 0 && lines[back - 1].Contains("lock (_sessionLock)", StringComparison.Ordinal))
                             return true;
-                        return false;
+                        continue;
                     }
                     depth--;
                 }
             }
         }
         return false;
+    }
     }
 
     private static string FindRepoDirectory(string name)
