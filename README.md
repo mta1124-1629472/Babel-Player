@@ -305,7 +305,6 @@ Run the maintained verification suite:
 ```powershell
 dotnet build Babel-Player.sln -c Release
 dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release
-dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Category=Smoke"
 python scripts/check-architecture.py
 python -m py_compile inference/main.py
 ```

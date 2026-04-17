@@ -40,6 +40,7 @@ public sealed class BenchmarkOrchestratorTests : IDisposable
 
     public void Dispose()
     {
+        _log.Dispose();
         try
         {
             if (Directory.Exists(_tempDir))
