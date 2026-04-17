@@ -1188,16 +1188,16 @@
 
                                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="6,0,0,0"
                                             IsVisible="{Binding Playback.Preview.IsDubModeOn}">
-                                    <TextBlock Text="Duck" FontSize="10" Foreground="#8A88A8" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Playback.Preview.DubMixControlLabel}" FontSize="10" Foreground="#8A88A8" VerticalAlignment="Center" />
                                     <Slider Width="60"
                                             Orientation="Horizontal"
                                             Minimum="-30"
                                             Maximum="0"
-                                            Value="{Binding Playback.Preview.AudioDuckingDb, Mode=TwoWay}"
+                                            Value="{Binding Playback.Preview.DubMixControlDb, Mode=TwoWay}"
                                             IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                             VerticalAlignment="Center"
-                                            ToolTip.Tip="Audio Ducking (dB)" />
-                                    <TextBlock Text="{Binding Playback.Preview.AudioDuckingLabel}"
+                                            ToolTip.Tip="{Binding Playback.Preview.DubMixControlTooltip}" />
+                                    <TextBlock Text="{Binding Playback.Preview.DubMixControlValueLabel}"
                                                FontSize="10"
                                                Foreground="#8A88A8"
                                                VerticalAlignment="Center"
@@ -1368,16 +1368,16 @@
 
                                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="6,0,0,0"
                                             IsVisible="{Binding Playback.Preview.IsDubModeOn}">
-                                    <TextBlock Text="Duck" FontSize="10" Foreground="#8A88A8" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Playback.Preview.DubMixControlLabel}" FontSize="10" Foreground="#8A88A8" VerticalAlignment="Center" />
                                     <Slider Width="60"
                                             Orientation="Horizontal"
                                             Minimum="-30"
                                             Maximum="0"
-                                            Value="{Binding Playback.Preview.AudioDuckingDb, Mode=TwoWay}"
+                                            Value="{Binding Playback.Preview.DubMixControlDb, Mode=TwoWay}"
                                             IsEnabled="{Binding Playback.Preview.IsSourceMediaLoaded}"
                                             VerticalAlignment="Center"
-                                            ToolTip.Tip="Audio Ducking (dB)" />
-                                    <TextBlock Text="{Binding Playback.Preview.AudioDuckingLabel}"
+                                            ToolTip.Tip="{Binding Playback.Preview.DubMixControlTooltip}" />
+                                    <TextBlock Text="{Binding Playback.Preview.DubMixControlValueLabel}"
                                                FontSize="10"
                                                Foreground="#8A88A8"
                                                VerticalAlignment="Center"
