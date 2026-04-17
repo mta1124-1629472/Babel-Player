@@ -126,6 +126,7 @@ public partial class App : Application
 
             var errorDialogService = new AvaloniaErrorDialogService(appLog);
             var pipelineRefreshDialogService = new AvaloniaPipelineRefreshDialogService();
+            var dialogService = new AvaloniaDialogService();
 
             var mainVm = new MainWindowViewModel(
                 _sessionWorkflowCoordinator,
@@ -134,6 +135,7 @@ public partial class App : Application
                 _apiKeyStore,
                 errorDialogService,
                 pipelineRefreshDialogService,
+                dialogService,
                 logFilePath: _logFilePath);
 
             desktop.MainWindow = new MainWindow { DataContext = mainVm };

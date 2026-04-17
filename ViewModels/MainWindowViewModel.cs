@@ -15,6 +15,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly SettingsService _settingsService;
     private readonly ModelDownloader _modelDownloader;
     private readonly ApiKeyStore? _apiKeyStore;
+    private readonly IDialogService _dialogService;
 
     public MainWindowViewModel(
         SessionWorkflowCoordinator coordinator,
@@ -23,12 +24,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ApiKeyStore? apiKeyStore = null,
         IErrorDialogService? errorDialogService = null,
         IPipelineRefreshDialogService? pipelineRefreshDialogService = null,
+        IDialogService? dialogService = null,
         string? logFilePath = null)
     {
         Coordinator = coordinator;
         _settingsService = settingsService;
         _modelDownloader = modelDownloader;
         _apiKeyStore = apiKeyStore;
+        _dialogService = dialogService ?? new AvaloniaDialogService();
 
         Playback = new EmbeddedPlaybackViewModel(
             coordinator,
@@ -65,7 +68,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             apiKeyStore: _apiKeyStore);
 
     /// <summary>One-time tip after install: managed GPU host warm-up duration.</summary>
-    public async Task TryShowManagedBackendWarmupNoticeAsync(Window owner)
+    public async Task TryShowManagedBackendWarmupNoticeAsync()
     {
         var settings = Coordinator.CurrentSettings;
         if (settings.ShownManagedBackendWarmupNotice)
@@ -74,59 +77,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (!settings.AlwaysStartLocalGpuRuntimeAtAppStart)
             return;
 
-        var panel = new StackPanel
-        {
-            Margin = new Avalonia.Thickness(20),
-            Spacing = 14,
-        };
-        panel.Children.Add(new TextBlock
-        {
-            Text =
-                "The local inference host may take 30-60 seconds to start. " +
-                "Please wait for the status to show 'Ready' before running the pipeline.",
-            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-            MaxWidth = 440,
-        });
-        var persistDontShowAgain = false;
-
-        var buttonRow = new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-            Spacing = 10,
-        };
-        var dontShowAgain = new Button
-        {
-            Content = "Don't show again",
-            MinWidth = 140,
-        };
-        var ok = new Button
-        {
-            Content = "OK",
-            MinWidth = 96,
-            IsDefault = true,
-        };
-        buttonRow.Children.Add(dontShowAgain);
-        buttonRow.Children.Add(ok);
-        panel.Children.Add(buttonRow);
-
-        var dialog = new Window
-        {
-            Title = "Local inference host",
-            Content = panel,
-            SizeToContent = SizeToContent.WidthAndHeight,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
-
-        dontShowAgain.Click += (_, _) =>
-        {
-            persistDontShowAgain = true;
-            dialog.Close();
-        };
-        ok.Click += (_, _) => dialog.Close();
-
-        await dialog.ShowDialog(owner).ConfigureAwait(true);
+        var persistDontShowAgain = await _dialogService.ShowWarmupNoticeAsync().ConfigureAwait(true);
 
         if (persistDontShowAgain)
         {

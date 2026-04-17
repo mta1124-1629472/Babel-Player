@@ -284,13 +284,16 @@ public sealed partial class SessionWorkflowCoordinator
                     : SessionWorkflowStage.Diarized);
             var nextStatusMessage = statusMessage ?? "Speaker analysis complete.";
 
-            CurrentSession = currentSession with
+            lock (_sessionLock)
             {
-                Stage = nextStage,
-                DiarizationProvider = CurrentSettings.DiarizationProvider,
-                SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
-                StatusMessage = nextStatusMessage,
-            };
+                CurrentSession = currentSession with
+                {
+                    Stage = nextStage,
+                    DiarizationProvider = CurrentSettings.DiarizationProvider,
+                    SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+                    StatusMessage = nextStatusMessage,
+                };
+            }
             SaveCurrentSession();
 
             _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
@@ -555,10 +558,13 @@ public sealed partial class SessionWorkflowCoordinator
         if (!changed)
             return;
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            SegmentTimingModeOverrides = current.Count == 0 ? null : current,
-        };
+            CurrentSession = CurrentSession with
+            {
+                SegmentTimingModeOverrides = current.Count == 0 ? null : current,
+            };
+        }
         SaveCurrentSession();
     }
 
@@ -573,7 +579,10 @@ public sealed partial class SessionWorkflowCoordinator
             [speakerId] = voiceOrModel,
         };
 
-        CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated };
+        lock (_sessionLock)
+        {
+            CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated };
+        }
         SaveCurrentSession();
     }
 
@@ -587,7 +596,10 @@ public sealed partial class SessionWorkflowCoordinator
         if (!updated.Remove(speakerId))
             return;
 
-        CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
+        lock (_sessionLock)
+        {
+            CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
+        }
         SaveCurrentSession();
     }
 
@@ -627,10 +639,13 @@ public sealed partial class SessionWorkflowCoordinator
         if (!changed)
             return;
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            SpeakerVoiceAssignments = current.Count == 0 ? null : current,
-        };
+            CurrentSession = CurrentSession with
+            {
+                SpeakerVoiceAssignments = current.Count == 0 ? null : current,
+            };
+        }
         SaveCurrentSession();
     }
 
@@ -645,7 +660,10 @@ public sealed partial class SessionWorkflowCoordinator
             [speakerId] = clipPath,
         };
 
-        CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
+        lock (_sessionLock)
+        {
+            CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
+        }
         SaveCurrentSession();
     }
 
@@ -659,7 +677,10 @@ public sealed partial class SessionWorkflowCoordinator
         if (!updated.Remove(speakerId))
             return;
 
-        CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated.Count == 0 ? null : updated };
+        lock (_sessionLock)
+        {
+            CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated.Count == 0 ? null : updated };
+        }
         SaveCurrentSession();
     }
 
@@ -699,10 +720,13 @@ public sealed partial class SessionWorkflowCoordinator
         if (!changed)
             return;
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            SpeakerReferenceAudioPaths = current.Count == 0 ? null : current,
-        };
+            CurrentSession = CurrentSession with
+            {
+                SpeakerReferenceAudioPaths = current.Count == 0 ? null : current,
+            };
+        }
         SaveCurrentSession();
     }
 

@@ -86,13 +86,16 @@ public sealed partial class SessionWorkflowCoordinator
         if (!File.Exists(result.AmbianceAudioPath))
             throw new InvalidOperationException($"Vocal separation completed but ambiance artifact was not found: {result.AmbianceAudioPath}");
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            VocalsAudioPath = result.VocalsAudioPath,
-            AmbianceAudioPath = result.AmbianceAudioPath,
-            StatusMessage = "Audio prepared for transcription.",
-        };
-        await SaveCurrentSessionAsync().ConfigureAwait(false);
+                CurrentSession = CurrentSession with
+                {
+                    VocalsAudioPath = result.VocalsAudioPath,
+                    AmbianceAudioPath = result.AmbianceAudioPath,
+                    StatusMessage = "Audio prepared for transcription.",
+                };
+            }
+        SaveCurrentSession();
 
         ReportStage(
             stageContext,
@@ -308,23 +311,26 @@ public sealed partial class SessionWorkflowCoordinator
         // fresh stem paths into CurrentSession before this method is called, so we preserve them.
         var vocalsPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.VocalsAudioPath : null;
         var ambiancePath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.AmbianceAudioPath : null;
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.Transcribed,
-            TranscriptPath = transcriptPath,
-            SourceLanguage = result.Language,
-            VocalsAudioPath = vocalsPath,
-            AmbianceAudioPath = ambiancePath,
-            TranscribedAtUtc = nowUtc,
-            TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
-            TranscriptionProvider = CurrentSettings.TranscriptionProvider,
-            TranscriptionModel = CurrentSettings.TranscriptionModel,
-            TranscriptionLanguageHint = SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
-                CurrentSettings.TranscriptionLanguageHint),
-            StatusMessage = ShouldRunDiarization()
-                ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
-                : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.Transcribed,
+                TranscriptPath = transcriptPath,
+                SourceLanguage = result.Language,
+                VocalsAudioPath = vocalsPath,
+                AmbianceAudioPath = ambiancePath,
+                TranscribedAtUtc = nowUtc,
+                TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
+                TranscriptionProvider = CurrentSettings.TranscriptionProvider,
+                TranscriptionModel = CurrentSettings.TranscriptionModel,
+                TranscriptionLanguageHint = SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
+                    CurrentSettings.TranscriptionLanguageHint),
+                StatusMessage = ShouldRunDiarization()
+                    ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
+                    : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
+            };
+        }
 
         _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
         SaveCurrentSession();
@@ -337,18 +343,21 @@ public sealed partial class SessionWorkflowCoordinator
         string targetLanguage)
     {
         var nowUtc = DateTimeOffset.UtcNow;
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.Translated,
-            TranslationPath = translationPath,
-            SourceLanguage = sourceLanguage,
-            TargetLanguage = targetLanguage,
-            TranslatedAtUtc = nowUtc,
-            TranslationRuntime = CurrentSettings.TranslationRuntime,
-            TranslationProvider = CurrentSettings.TranslationProvider,
-            TranslationModel = CurrentSettings.TranslationModel,
-            StatusMessage = "Translation complete. Ready for dubbing.",
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.Translated,
+                TranslationPath = translationPath,
+                SourceLanguage = sourceLanguage,
+                TargetLanguage = targetLanguage,
+                TranslatedAtUtc = nowUtc,
+                TranslationRuntime = CurrentSettings.TranslationRuntime,
+                TranslationProvider = CurrentSettings.TranslationProvider,
+                TranslationModel = CurrentSettings.TranslationModel,
+                StatusMessage = "Translation complete. Ready for dubbing.",
+            };
+        }
 
         _log.Info($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
         SaveCurrentSession();
@@ -586,7 +595,7 @@ public sealed partial class SessionWorkflowCoordinator
                     Language: ttsLanguage,
                     SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
                 cancellationToken);
-            TrackPendingTtsTask(segTask);
+            _pendingTtsTasks.Add(segTask);
             var segResult = await segTask;
 
             if (segResult.Success && File.Exists(segmentAudioPath))
@@ -693,22 +702,25 @@ public sealed partial class SessionWorkflowCoordinator
             ? $"TTS generated ({voice}). Dubbing complete."
             : $"TTS generated ({voice}). {succeeded}/{totalSegments} segments ready — {totalSegments - succeeded} failed.";
 
-        CurrentSession = CurrentSession with
+        lock (_sessionLock)
         {
-            Stage = SessionWorkflowStage.TtsGenerated,
-            TtsPath = ttsPath,
-            MixedDubAudioPath = renderResult.AmbianceMixed ? renderResult.MixedWithAmbiancePath : null,
-            TtsVoice = voice,
-            TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
-            TtsSegmentsPath = segmentsDir,
-            TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
-            TtsSegmentDurations = segmentDurations is { Count: > 0 }
-                ? new Dictionary<string, double>(segmentDurations)
-                : null,
-            TtsRuntime = CurrentSettings.TtsRuntime,
-            TtsProvider = CurrentSettings.TtsProvider,
-            StatusMessage = statusMessage,
-        };
+            CurrentSession = CurrentSession with
+            {
+                Stage = SessionWorkflowStage.TtsGenerated,
+                TtsPath = ttsPath,
+                MixedDubAudioPath = renderResult.AmbianceMixed ? renderResult.MixedWithAmbiancePath : null,
+                TtsVoice = voice,
+                TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
+                TtsSegmentsPath = segmentsDir,
+                TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
+                TtsSegmentDurations = segmentDurations is { Count: > 0 }
+                    ? new Dictionary<string, double>(segmentDurations)
+                    : null,
+                TtsRuntime = CurrentSettings.TtsRuntime,
+                TtsProvider = CurrentSettings.TtsProvider,
+                StatusMessage = statusMessage,
+            };
+        }
 
         SaveCurrentSession();
 
@@ -1218,7 +1230,7 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken)
     {
         ResetPipelineToMediaLoaded();
-        await SaveCurrentSessionAsync().ConfigureAwait(false);
+        SaveCurrentSession();
 
         if (remainingDownstream)
         {
@@ -1249,7 +1261,7 @@ public sealed partial class SessionWorkflowCoordinator
             if (speakerAssignmentsChanged && hadTranslatableOutput)
             {
                 ResetPipelineToTranslated();
-                await SaveCurrentSessionAsync().ConfigureAwait(false);
+                SaveCurrentSession();
             }
 
             return;
@@ -1258,13 +1270,13 @@ public sealed partial class SessionWorkflowCoordinator
         if (HasDiarizationMarker(CurrentSession))
         {
             ResetPipelineToDiarized();
-            await SaveCurrentSessionAsync().ConfigureAwait(false);
+            SaveCurrentSession();
             await ContinuePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
         }
         else
         {
             ResetPipelineToTranscribed();
-            await SaveCurrentSessionAsync().ConfigureAwait(false);
+            SaveCurrentSession();
             await AdvancePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
         }
     }

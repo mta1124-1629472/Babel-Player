@@ -54,7 +54,10 @@ public partial class SessionWorkflowCoordinator
         }
 
         // 4. Reset VM state visible in the UI to foundation.
-        CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
+        lock (_sessionLock)
+        {
+            CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
+        }
 
         _log?.Info("[DevTools] FreshStartAsync completed.");
     }
