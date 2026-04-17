@@ -83,36 +83,36 @@ public sealed partial class SessionWorkflowCoordinator
             }
         }
 
-        var voices = CurrentSession.SpeakerVoiceAssignments is null
-            ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
-        if (voices.TryGetValue(from, out var voicePath) && !string.IsNullOrWhiteSpace(voicePath))
-        {
-            if (!voices.ContainsKey(to))
-                voices[to] = voicePath;
-            voices.Remove(from);
-        }
-        else
-        {
-            voices.Remove(from);
-        }
-
-        var refs = CurrentSession.SpeakerReferenceAudioPaths is null
-            ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
-        if (refs.TryGetValue(from, out var refPath) && !string.IsNullOrWhiteSpace(refPath))
-        {
-            if (!refs.ContainsKey(to))
-                refs[to] = refPath;
-            refs.Remove(from);
-        }
-        else
-        {
-            refs.Remove(from);
-        }
-
         lock (_sessionLock)
         {
+            var voices = CurrentSession.SpeakerVoiceAssignments is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
+            if (voices.TryGetValue(from, out var voicePath) && !string.IsNullOrWhiteSpace(voicePath))
+            {
+                if (!voices.ContainsKey(to))
+                    voices[to] = voicePath;
+                voices.Remove(from);
+            }
+            else
+            {
+                voices.Remove(from);
+            }
+
+            var refs = CurrentSession.SpeakerReferenceAudioPaths is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
+            if (refs.TryGetValue(from, out var refPath) && !string.IsNullOrWhiteSpace(refPath))
+            {
+                if (!refs.ContainsKey(to))
+                    refs[to] = refPath;
+                refs.Remove(from);
+            }
+            else
+            {
+                refs.Remove(from);
+            }
+
             CurrentSession = CurrentSession with
             {
                 SpeakerVoiceAssignments = voices.Count == 0 ? null : voices,
