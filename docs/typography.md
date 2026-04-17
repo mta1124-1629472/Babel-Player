@@ -160,7 +160,7 @@ See `docs/design-system-audit.md` and `docs/design-system-handoff.md` for the co
 - **Do not redefine `text-*` classes locally.** If a view needs a genuinely new text role, add it to `Styles/Typography.axaml` so every view picks it up. Keep the `text-<role>` naming.
 - **Do not override weights on every line.** If you find yourself writing `FontWeight="SemiBold"` on many `TextBlock`s, you probably want `text-title` or `text-display` instead.
 - **Do not mix `StaticResource` for font keys.** Use `DynamicResource` so theme and style changes propagate consistently.
-- **Do not use `text-overline` for non-rail text.** It is specifically the all-caps 10 px Medium rail style used for section headers; regular captions should use `text-caption` or `text-micro`.
+- **Do not use `text-overline` for non-rail text.** It is specifically the all-caps `FontSizeMicro` (10) Medium rail style used for section headers; regular captions should use `text-caption` or `text-micro`.
 
 ---
 
