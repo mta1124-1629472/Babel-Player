@@ -38,15 +38,20 @@ Load Media → Timed Transcript → Voice Assignment → Translated Dialogue →
 
 Each stage is **gated** — downstream stages only enable when upstream artifacts exist on disk.
 
+The six workflow stages (defined in `Models/SessionWorkflowStage.cs`) are:
+
 | Stage | What It Does | Compute Options | Key Providers |
 |-------|-------------|----------------|---------------|
-| **Transcribe** | Timed transcript with word-level timestamps | CPU / GPU / Cloud | Faster-Whisper, Gemini, OpenAI Whisper, Google STT |
-| **Diarize** | Identify speakers, assign voices | CPU / GPU | WeSpeaker (CPU), NeMo (GPU/container) |
-| **Translate** | Adapt transcript to target language | CPU / GPU / Cloud | NLLB-200, CTranslate2, DeepL, Gemini, OpenAI |
-| **Dub (TTS)** | Generate spoken audio per segment | CPU / GPU / Cloud | Piper, Qwen3-TTS, XTTS v2, Edge TTS, ElevenLabs, OpenAI TTS, Google TTS |
-| **Preview** | In-context playback, toggle source/dub audio | — | libmpv embedded transport |
+| **Foundation** | Initial state before media is loaded | — | — |
+| **MediaLoaded** | Media file ingested and available | — | ffmpeg, libmpv |
+| **Transcribed** | Timed transcript with word-level timestamps | CPU / GPU / Cloud | Faster-Whisper, Gemini, OpenAI Whisper, Google STT |
+| **Diarized** | Identify speakers, assign voices | CPU / GPU | WeSpeaker (CPU), NeMo (GPU/container) |
+| **Translated** | Adapt transcript to target language | CPU / GPU / Cloud | NLLB-200, CTranslate2, DeepL, Gemini, OpenAI |
+| **TtsGenerated** | Generate spoken audio per segment | CPU / GPU / Cloud | Piper, Qwen3-TTS, XTTS v2, Edge TTS, ElevenLabs, OpenAI TTS, Google TTS |
 
 Compute selection is explicit (CPU / GPU / Cloud selector per stage). No silent fallbacks — if a path is unavailable, the stage blocks with a remediation message.
+
+**Preview/playback** is not a workflow stage but a UI feature implemented in `ViewModels/EmbeddedPlaybackViewModel.cs` using libmpv embedded transport for in-context playback and source/dub audio toggling.
 
 ---
 
