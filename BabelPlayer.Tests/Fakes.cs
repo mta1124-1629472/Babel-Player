@@ -245,8 +245,8 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         /// <param name="maxRatio">Maximum allowed stretch ratio (output duration / input duration).</param>
         /// <param name="cancellationToken">Token to observe while waiting for the operation to complete.</param>
         /// <returns>`true` if the time-stretched audio was produced and written to <paramref name="outputPath"/>, `false` otherwise.</returns>
-        public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
-        double minRatio = 0.75, double maxRatio = 1.35, CancellationToken cancellationToken = default)
+    public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
+        double minRatio = 0.75, double maxRatio = DubTimingDefaults.StretchMaxTempoRatio, CancellationToken cancellationToken = default)
         => Task.FromResult(false); /// <summary>
         /// Probe the duration of an audio file in seconds.
         /// </summary>

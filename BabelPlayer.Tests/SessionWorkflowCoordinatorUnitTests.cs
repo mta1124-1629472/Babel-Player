@@ -131,7 +131,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             string outputPath,
             double targetDurationSeconds,
             double minRatio = 0.75,
-            double maxRatio = 1.35,
+            double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
             CancellationToken cancellationToken = default)
         {
             StretchStarted.TrySetResult(true);
