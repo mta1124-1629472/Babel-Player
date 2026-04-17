@@ -286,7 +286,7 @@ public sealed partial class SessionWorkflowCoordinator
 
             lock (_sessionLock)
             {
-                CurrentSession = currentSession with
+                CurrentSession = CurrentSession with
                 {
                     Stage = nextStage,
                     DiarizationProvider = CurrentSettings.DiarizationProvider,

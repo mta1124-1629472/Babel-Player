@@ -967,14 +967,19 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new InvalidOperationException($"Segment TTS regeneration failed: {errorMsg}");
         }
 
-        var currentSegments = CurrentSession.TtsSegmentAudioPaths ?? [];
-        currentSegments[segmentId] = segmentAudioPath;
-
         lock (_sessionLock)
         {
             CurrentSession = CurrentSession with
             {
-                TtsSegmentAudioPaths = currentSegments,
+                TtsSegmentAudioPaths = CurrentSession.TtsSegmentAudioPaths is null
+                    ? new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [segmentId] = segmentAudioPath,
+                    }
+                    : new Dictionary<string, string>(CurrentSession.TtsSegmentAudioPaths, StringComparer.Ordinal)
+                    {
+                        [segmentId] = segmentAudioPath,
+                    },
                 StatusMessage = $"Regenerated TTS for segment {segmentId}.",
             };
         }
