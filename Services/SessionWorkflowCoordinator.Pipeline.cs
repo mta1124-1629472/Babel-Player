@@ -490,10 +490,25 @@ public sealed partial class SessionWorkflowCoordinator
             else
             {
                 int completed = 0;
-                foreach (var seg in candidateSegments)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await GenerateSingleSegmentAsync(
+                // Honor the provider's advertised MaxConcurrency so cloud and
+                // worker-pool-backed providers (ElevenLabs, OpenAI, Edge TTS,
+                // Piper, etc.) synthesize segments in parallel. Shared state
+                // (ConcurrentDictionary paths/durations, Interlocked counter)
+                // is already thread-safe; Qwen takes the batch branch above.
+                var maxConcurrency = Math.Max(1, _ttsService?.MaxConcurrency ?? 1);
+                var parallelism = Math.Max(1, Math.Min(maxConcurrency, candidateSegments.Count));
+                _log.Info(
+                    $"TTS segment generation: provider={_ttsService?.GetType().Name ?? "<none>"} " +
+                    $"max_concurrency={maxConcurrency} parallelism={parallelism} " +
+                    $"segments={candidateSegments.Count}");
+                await Parallel.ForEachAsync(
+                    candidateSegments,
+                    new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = parallelism,
+                        CancellationToken = cancellationToken,
+                    },
+                    async (seg, ct) => await GenerateSingleSegmentAsync(
                         seg,
                         voice,
                         ttsLanguage,
@@ -502,9 +517,9 @@ public sealed partial class SessionWorkflowCoordinator
                         segmentDurations,
                         totalSegments,
                         stageContext,
-                        cancellationToken,
-                        onSucceeded: () => Interlocked.Increment(ref completed));
-                }
+                        ct,
+                        onSucceeded: () => Interlocked.Increment(ref completed))
+                        .ConfigureAwait(false));
             }
         }
         catch (OperationCanceledException) { throw; }
