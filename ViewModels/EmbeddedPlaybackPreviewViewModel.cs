@@ -167,8 +167,46 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         if (IsSubtitleModeOn)
             ApplySubtitleState();
     }
+
+    public void SyncDubMixControlFromSettings()
+    {
+        OnPropertyChanged(nameof(UsesAmbianceMixControl));
+        OnPropertyChanged(nameof(DubMixControlLabel));
+        OnPropertyChanged(nameof(DubMixControlTooltip));
+        OnPropertyChanged(nameof(DubMixControlDb));
+        OnPropertyChanged(nameof(DubMixControlValueLabel));
+    }
+
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
     public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
+    public bool UsesAmbianceMixControl => _coordinator.CurrentSettings.VocalSeparationEnabled;
+    public string DubMixControlLabel => UsesAmbianceMixControl ? "Ambience" : "Duck";
+    public string DubMixControlTooltip => UsesAmbianceMixControl
+        ? "Set separated ambiance level under the dub"
+        : "Lower source audio during dub preview";
+    public string DubMixControlValueLabel => $"{DubMixControlDb:F1} dB";
+    public double DubMixControlDb
+    {
+        get => UsesAmbianceMixControl ? _coordinator.CurrentSettings.AmbianceMixDb : AudioDuckingDb;
+        set
+        {
+            if (UsesAmbianceMixControl)
+            {
+                if (Math.Abs(_coordinator.CurrentSettings.AmbianceMixDb - value) < 0.001)
+                    return;
+
+                _coordinator.CurrentSettings.AmbianceMixDb = value;
+                _coordinator.NotifySettingsModified();
+                SyncDubMixControlFromSettings();
+                return;
+            }
+
+            if (Math.Abs(AudioDuckingDb - value) < 0.001)
+                return;
+
+            AudioDuckingDb = value;
+        }
+    }
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
     public string SourceDurationFormatted => FormatMs(SourceDurationMs);
 
@@ -461,7 +499,12 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         RecalculateOutputVolumes();
     }
 
-    partial void OnAudioDuckingDbChanged(double value) => RecalculateOutputVolumes();
+    partial void OnAudioDuckingDbChanged(double value)
+    {
+        RecalculateOutputVolumes();
+        OnPropertyChanged(nameof(DubMixControlDb));
+        OnPropertyChanged(nameof(DubMixControlValueLabel));
+    }
 
     partial void OnIsMutedChanged(bool value) => RecalculateOutputVolumes();
 
@@ -573,7 +616,18 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _isUpdatingActiveSegment = false;
     }
 
-    private async Task SeekAndPlayAsync(WorkflowSegmentState segment)
+    public Task PreviewSelectedSegmentWithPauseAsync()
+    {
+        if (SelectedSegment is null || !SelectedSegment.HasTtsAudio || !IsSourceMediaLoaded)
+            return Task.CompletedTask;
+
+        return SeekAndPlayAsync(SelectedSegment, SegmentTimingMode.Pause);
+    }
+
+    private Task SeekAndPlayAsync(WorkflowSegmentState segment) =>
+        SeekAndPlayAsync(segment, null);
+
+    private async Task SeekAndPlayAsync(WorkflowSegmentState segment, SegmentTimingMode? previewTimingOverride)
     {
         var player = _coordinator.SourceMediaPlayer;
         if (player is null)
@@ -601,7 +655,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         }
 
         if (IsDubModeOn && !IsSourcePaused)
-            ApplyDubForSegment(segment);
+            ApplyDubForSegment(segment, previewTimingOverride: previewTimingOverride);
     }
 
     private async Task PlaySourceAtSegmentAsync(WorkflowSegmentState? segment)
@@ -731,7 +785,10 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         return candidate >= 0 ? _sortedSegments[candidate] : null;
     }
 
-    private void ApplyDubForSegment(WorkflowSegmentState? segment, bool seekVideoToSegmentStart = false)
+    private void ApplyDubForSegment(
+        WorkflowSegmentState? segment,
+        bool seekVideoToSegmentStart = false,
+        SegmentTimingMode? previewTimingOverride = null)
     {
         RestoreDucking();
         _coordinator.StopTtsPlayback();
@@ -745,7 +802,9 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         if (segment.HasTtsAudio)
         {
             // Resolve effective timing mode: per-segment override takes priority, then session setting.
-            var effectiveMode = segment.TimingModeOverride ?? _coordinator.CurrentSettings.DubTimingMode;
+            var effectiveMode = previewTimingOverride
+                ?? segment.TimingModeOverride
+                ?? _coordinator.CurrentSettings.DubTimingMode;
             ApplyDucking();
             _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId, segment, effectiveMode);
         }
