@@ -41,7 +41,9 @@ public sealed class ElevenLabsApiClient : IDisposable
     /// </summary>
     public async Task<ElevenLabsSubscriptionInfo> GetSubscriptionAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync("user/subscription", cancellationToken);
+        using var response = await HttpRetryHelper.SendAsync(
+            () => _httpClient.GetAsync("user/subscription", cancellationToken),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         return await ReadJsonAsync<ElevenLabsSubscriptionInfo>(response, cancellationToken);
     }
 
@@ -58,20 +60,21 @@ public sealed class ElevenLabsApiClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         var body = new TtsRequestDto { Text = text, ModelId = modelId };
-        var content = new StringContent(
-            JsonSerializer.Serialize(body, JsonOptions),
-            Encoding.UTF8,
-            "application/json");
+        var bodyJson = JsonSerializer.Serialize(body, JsonOptions);
 
-        // Explicitly request MP3 to receive binary audio data.
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"text-to-speech/{voiceId}")
-        {
-            Content = content
-        };
-        requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("audio/mpeg"));
-
-        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
+        using var response = await HttpRetryHelper.SendAsync(
+            () =>
+            {
+                var content = new StringContent(bodyJson, Encoding.UTF8, "application/json");
+                // Explicitly request MP3 to receive binary audio data.
+                var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"text-to-speech/{voiceId}")
+                {
+                    Content = content
+                };
+                requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("audio/mpeg"));
+                return _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken)
             .ConfigureAwait(false);
