@@ -810,13 +810,15 @@ public sealed class PipelineStageProgressTests() : IDisposable
                     ModelDownloadDescription: $"Download {settings.TranslationModel}")
                 : ProviderReadiness.Ready;
 
-        public Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
+        public async Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default)
         {
+            await Task.Yield();
+
             foreach (var step in _downloadSteps)
                 progress?.Report(step);
 
             _requiresDownload = false;
-            return Task.FromResult(true);
+            return true;
         }
 
         public async Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)
