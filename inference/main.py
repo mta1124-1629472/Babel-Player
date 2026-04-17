@@ -3216,7 +3216,7 @@ if __name__ == "__main__":
                         help="Exit non-zero if CUDA is not available")
     args = parser.parse_args()
     # Make the exposure boundary loud when operators opt in to a non-loopback bind.
-    if args.host not in ("127.0.0.1", "localhost", "::1"):
+    if args.host.lower() not in ("127.0.0.1", "localhost", "::1", "[::1]"):
         logger.warning(
             "Inference service binding to non-loopback host '%s' — endpoints are "
             "unauthenticated; ensure the port is firewalled or reachable only by "
