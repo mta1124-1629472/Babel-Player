@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Babel.Player.Models;
 
 namespace Babel.Player.Services;
@@ -33,7 +34,7 @@ public sealed class SessionSnapshotStore
         try
         {
             var json = File.ReadAllText(StateFilePath);
-            var snapshot = JsonSerializer.Deserialize<WorkflowSessionSnapshot>(json, SerializerOptions);
+            var snapshot = SessionSnapshotJsonCompat.Deserialize(json, SerializerOptions);
 
             if (snapshot is null)
             {
@@ -67,6 +68,23 @@ public sealed class SessionSnapshotStore
         catch (Exception ex)
         {
             // Save failure is non-fatal — log and continue. The in-memory session is still valid.
+            _log.Error($"Failed to save session snapshot to {StateFilePath}.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Asynchronous counterpart to <see cref="Save"/>. Use from async pipeline code to avoid
+    /// blocking the caller on disk I/O. Non-fatal on failure (errors are logged and swallowed).
+    /// </summary>
+    public async Task SaveAsync(WorkflowSessionSnapshot snapshot)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
+            await File.WriteAllTextAsync(StateFilePath, json).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
             _log.Error($"Failed to save session snapshot to {StateFilePath}.", ex);
         }
     }
