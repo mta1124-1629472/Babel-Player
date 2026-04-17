@@ -282,7 +282,7 @@ public sealed class ExtractedOrchestratorTests
             3,
             SessionWorkflowStage.Translated,
             "Translation",
-            new CaptureProgress<PipelineStageUpdate>(updates));
+            new CaptureProgress<PipelineStageUpdate>(updates.Add));
         var orchestrator = new TranslationOrchestrator(
             session,
             new FakeStageExecutionPlanner(),
@@ -364,7 +364,7 @@ public sealed class ExtractedOrchestratorTests
             4,
             SessionWorkflowStage.Diarized,
             "Speaker Mapping",
-            new CaptureProgress<PipelineStageUpdate>(updates));
+            new CaptureProgress<PipelineStageUpdate>(updates.Add));
         var executor = new FakeDiarizationExecutor
         {
             ExecuteAsyncImpl = (_, _, _, _, _) => Task.FromResult((true, 3, 12)),
@@ -661,8 +661,8 @@ public sealed class ExtractedOrchestratorTests
             throw new NotSupportedException();
     }
 
-    private sealed class CaptureProgress<T>(List<T> values) : IProgress<T>
+    private sealed class CaptureProgress<T>(Action<T> capture) : IProgress<T>
     {
-        public void Report(T value) => values.Add(value);
+        public void Report(T value) => capture(value);
     }
 }

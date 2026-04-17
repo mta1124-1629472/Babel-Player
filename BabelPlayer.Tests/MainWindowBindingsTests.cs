@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace BabelPlayer.Tests;
@@ -16,6 +17,39 @@ public sealed class MainWindowBindingsTests
         Assert.Equal(2, CountOccurrences(axaml, "Playback.Preview.DubMixControlLabel"));
         Assert.Equal(2, CountOccurrences(axaml, "Playback.Preview.DubMixControlTooltip"));
         Assert.Equal(2, CountOccurrences(axaml, "Playback.Preview.DubMixControlValueLabel"));
+    }
+
+    [Fact]
+    public void MainWindow_AdvertisedPlaybackShortcuts_AppearInBothChromeLayouts()
+    {
+        var axamlPath = FindRepoFile("Views", "MainWindow.axaml");
+        var axaml = File.ReadAllText(axamlPath);
+
+        AssertCommandButtonAttributes(
+            axaml,
+            "Playback.Preview.PlayPauseSourceCommand",
+            expectedTooltip: "Play / Pause (Space)",
+            expectedAutomationName: "Play or pause");
+        AssertCommandButtonAttributes(
+            axaml,
+            "Playback.Preview.ToggleSubtitlesCommand",
+            expectedTooltip: "Toggle subtitles (C)",
+            expectedAutomationName: "Toggle subtitles");
+        AssertCommandButtonAttributes(
+            axaml,
+            "Playback.Preview.ToggleSegmentPaneCommand",
+            expectedTooltip: "Toggle side panels (S)",
+            expectedAutomationName: "Toggle side panes");
+        AssertCommandButtonAttributes(
+            axaml,
+            "Playback.Preview.ToggleDubModeCommand",
+            expectedTooltip: "Toggle Dub Mode (D)",
+            expectedAutomationName: "Toggle Dub Mode");
+        AssertCommandButtonAttributes(
+            axaml,
+            "Playback.Preview.ToggleFullscreenCommand",
+            expectedTooltip: "Toggle fullscreen (F11)",
+            expectedAutomationName: "Toggle fullscreen");
     }
 
     private static string FindRepoFile(params string[] relativePathParts)
@@ -45,5 +79,49 @@ public sealed class MainWindowBindingsTests
         }
 
         return count;
+    }
+
+    private static void AssertCommandButtonAttributes(
+        string axaml,
+        string commandBinding,
+        string expectedTooltip,
+        string expectedAutomationName)
+    {
+        var tags = FindButtonTagsByCommand(axaml, commandBinding);
+
+        Assert.Equal(
+            2,
+            tags.Length);
+        Assert.Equal(
+            2,
+            CountOccurrences(axaml, expectedTooltip));
+
+        foreach (var tag in tags)
+        {
+            Assert.Equal(expectedTooltip, GetAttributeValue(tag, "ToolTip.Tip"));
+            Assert.Equal(expectedAutomationName, GetAttributeValue(tag, "AutomationProperties.Name"));
+        }
+    }
+
+    private static string[] FindButtonTagsByCommand(string axaml, string commandBinding)
+    {
+        var pattern = $@"<Button\b(?:(?!>).)*Command=""\{{Binding {Regex.Escape(commandBinding)}\}}""(?:(?!>).)*>";
+        var matches = Regex.Matches(axaml, pattern, RegexOptions.Singleline);
+        var results = new string[matches.Count];
+        for (var i = 0; i < matches.Count; i++)
+            results[i] = matches[i].Value;
+
+        return results;
+    }
+
+    private static string GetAttributeValue(string tag, string attributeName)
+    {
+        var match = Regex.Match(
+            tag,
+            $@"\b{Regex.Escape(attributeName)}=""([^""]+)""",
+            RegexOptions.Singleline);
+
+        Assert.True(match.Success, $"Expected attribute '{attributeName}' in tag: {tag}");
+        return match.Groups[1].Value;
     }
 }

@@ -48,7 +48,7 @@ internal static class PipelineStageReporter
         if (context is null && rawProgress is null)
             return null;
 
-        return new Progress<double>(value =>
+        return new InlineProgress<double>(value =>
         {
             var clampedProgress = double.IsFinite(value)
                 ? Math.Clamp(value, 0d, 1d)
@@ -73,5 +73,10 @@ internal static class PipelineStageReporter
         if (string.IsNullOrWhiteSpace(raw))
             return nonNormalizedFallback;
         return raw.Trim();
+    }
+
+    private sealed class InlineProgress<T>(Action<T> callback) : IProgress<T>
+    {
+        public void Report(T value) => callback(value);
     }
 }
