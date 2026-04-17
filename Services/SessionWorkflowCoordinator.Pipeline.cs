@@ -653,6 +653,8 @@ public sealed partial class SessionWorkflowCoordinator
                 orderedSegments,
                 segmentAudioPaths,
                 ttsPath,
+                CurrentSession.AmbianceAudioPath,
+                CurrentSettings.AmbianceMixDb,
                 cancellationToken)
             .ConfigureAwait(false);
     }

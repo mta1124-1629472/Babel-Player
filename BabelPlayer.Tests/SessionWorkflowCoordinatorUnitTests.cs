@@ -1016,6 +1016,92 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
     }
 
     [Fact]
+    public async Task TryRenderDubAudioForExportAsync_MixCanceled_PropagatesOperationCanceledException()
+    {
+        using var mixCts = new CancellationTokenSource();
+        var settings = CreateMatchingSettings();
+        settings.AmbianceMixDb = -12.0;
+
+        var coord = CreateCoordinator(
+            settings,
+            audioProcessingService: new CancelDuringMixAudioProcessingService(mixCts));
+        coord.Initialize();
+
+        var translatedSegmentAudioPath = CreateMediaFile(".mp3");
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            TranslationPath = CreateTranslationArtifactFile(
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_0.0",
+                    Start = 0.0,
+                    End = 1.0,
+                    Text = "hola",
+                    TranslatedText = "hello",
+                }),
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                ["segment_0.0"] = translatedSegmentAudioPath,
+            },
+            AmbianceAudioPath = CreateMediaFile(".wav"),
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => coord.TryRenderDubAudioForExportAsync(mixCts.Token));
+    }
+
+    [Fact]
+    public async Task TryRenderDubAudioForExportAsync_UsesCapturedSessionAmbianceState()
+    {
+        var settings = CreateMatchingSettings();
+        settings.AmbianceMixDb = -12.0;
+
+        var audioProcessing = new CaptureMixAudioProcessingService();
+        var coord = CreateCoordinator(
+            settings,
+            audioProcessingService: audioProcessing);
+        coord.Initialize();
+
+        var initialAmbiancePath = CreateMediaFile(".wav");
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            TranslationPath = CreateTranslationArtifactFile(
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_0.0",
+                    Start = 0.0,
+                    End = 1.0,
+                    Text = "hola",
+                    TranslatedText = "hello",
+                }),
+            TtsSegmentAudioPaths = new Dictionary<string, string>
+            {
+                ["segment_0.0"] = CreateMediaFile(".mp3"),
+            },
+            AmbianceAudioPath = initialAmbiancePath,
+        };
+
+        var renderTask = coord.TryRenderDubAudioForExportAsync();
+        await audioProcessing.ComposeStarted.Task;
+
+        var replacedAmbiancePath = CreateMediaFile(".wav");
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            AmbianceAudioPath = replacedAmbiancePath,
+        };
+        coord.CurrentSettings.AmbianceMixDb = -3.0;
+
+        audioProcessing.AllowComposeCompletion.TrySetResult(true);
+
+        var result = await renderTask;
+
+        Assert.NotNull(result);
+        Assert.Equal(initialAmbiancePath, audioProcessing.AmbiancePathUsed);
+        Assert.NotNull(audioProcessing.AmbianceGainDbUsed);
+        Assert.Equal(-12.0, audioProcessing.AmbianceGainDbUsed.Value, 3);
+    }
+
+    [Fact]
     public async Task RunDiarizationAsync_TranslatedSession_UpdatesTranscriptAndTranslationSpeakerIds()
     {
         var fakeProvider = new FakeDiarizationProvider(_ =>
@@ -2012,6 +2098,146 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
             File.WriteAllBytes(request.OutputAudioPath, [0x01]);
             return Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, 1, null));
         }
+    }
+
+    private sealed class CancelDuringMixAudioProcessingService(CancellationTokenSource cancellationSource) : IAudioProcessingService
+    {
+        public async Task CombineAudioSegmentsAsync(
+            IReadOnlyList<string> segmentAudioPaths,
+            string outputAudioPath,
+            CancellationToken cancellationToken)
+        {
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrWhiteSpace(outputDir))
+                Directory.CreateDirectory(outputDir);
+
+            await File.WriteAllBytesAsync(outputAudioPath, [0x01, 0x02], cancellationToken);
+        }
+
+        public async Task ComposeTimelineDubAsync(
+            IReadOnlyList<TimelineDubSegment> segments,
+            string outputAudioPath,
+            CancellationToken cancellationToken)
+        {
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrWhiteSpace(outputDir))
+                Directory.CreateDirectory(outputDir);
+
+            await File.WriteAllBytesAsync(outputAudioPath, [0x03, 0x04], cancellationToken);
+        }
+
+        public Task MixDubOverAmbianceAsync(
+            string dubbedAudioPath,
+            string ambianceAudioPath,
+            string outputAudioPath,
+            double ambianceGainDb,
+            CancellationToken cancellationToken)
+        {
+            cancellationSource.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task ExtractAudioClipAsync(
+            string inputPath,
+            string outputPath,
+            double startTimeSeconds,
+            double durationSeconds,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task ExtractFullAudioAsync(
+            string inputPath,
+            string outputPath,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<bool> TimeStretchAsync(
+            string inputPath,
+            string outputPath,
+            double targetDurationSeconds,
+            double minRatio = DubTimingDefaults.StretchMinTempoRatio,
+            double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult<double?>(null);
+    }
+
+    private sealed class CaptureMixAudioProcessingService : IAudioProcessingService
+    {
+        public TaskCompletionSource<bool> ComposeStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> AllowComposeCompletion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public string? AmbiancePathUsed { get; private set; }
+        public double? AmbianceGainDbUsed { get; private set; }
+
+        public Task CombineAudioSegmentsAsync(
+            IReadOnlyList<string> segmentAudioPaths,
+            string outputAudioPath,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public async Task ComposeTimelineDubAsync(
+            IReadOnlyList<TimelineDubSegment> segments,
+            string outputAudioPath,
+            CancellationToken cancellationToken)
+        {
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrWhiteSpace(outputDir))
+                Directory.CreateDirectory(outputDir);
+
+            await File.WriteAllBytesAsync(outputAudioPath, [0x05, 0x06], cancellationToken);
+            ComposeStarted.TrySetResult(true);
+            await AllowComposeCompletion.Task.ConfigureAwait(false);
+        }
+
+        public async Task MixDubOverAmbianceAsync(
+            string dubbedAudioPath,
+            string ambianceAudioPath,
+            string outputAudioPath,
+            double ambianceGainDb,
+            CancellationToken cancellationToken)
+        {
+            AmbiancePathUsed = ambianceAudioPath;
+            AmbianceGainDbUsed = ambianceGainDb;
+
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrWhiteSpace(outputDir))
+                Directory.CreateDirectory(outputDir);
+
+            await File.WriteAllBytesAsync(outputAudioPath, [0x07, 0x08], cancellationToken);
+        }
+
+        public Task ExtractAudioClipAsync(
+            string inputPath,
+            string outputPath,
+            double startTimeSeconds,
+            double durationSeconds,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task ExtractFullAudioAsync(
+            string inputPath,
+            string outputPath,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<bool> TimeStretchAsync(
+            string inputPath,
+            string outputPath,
+            double targetDurationSeconds,
+            double minRatio = DubTimingDefaults.StretchMinTempoRatio,
+            double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult<double?>(null);
     }
 
     private sealed class StubHttpMessageHandler(
