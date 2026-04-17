@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -19,7 +18,11 @@ public sealed class PerSessionSnapshotStore
 
     private readonly string _sessionsRoot;
     private readonly AppLog _log;
-    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _saveGates = new();
+    // Single store-wide save gate. A per-session gate would allow cross-session
+    // parallelism, but saves are short (small JSON write) and rare, and a per-session
+    // dictionary grows unbounded as new sessions are created. One gate keeps memory
+    // flat and still serializes same-session Save()/SaveAsync() correctly.
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
 
     public PerSessionSnapshotStore(string sessionsRoot, AppLog log)
     {
@@ -27,9 +30,6 @@ public sealed class PerSessionSnapshotStore
         _log = log;
         Directory.CreateDirectory(sessionsRoot);
     }
-
-    private SemaphoreSlim GetSaveGate(Guid sessionId) =>
-        _saveGates.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
 
     /// <summary>Root directory containing all per-session folders.</summary>
     public string SessionsRoot => _sessionsRoot;
@@ -40,12 +40,8 @@ public sealed class PerSessionSnapshotStore
     /// <summary>Writes <c>sessions/[SessionId]/snapshot.json</c>. Non-fatal on failure.</summary>
     public void Save(WorkflowSessionSnapshot snapshot)
     {
-        // Per-session save gate — overlapping Save()/SaveAsync() for the same session can
-        // clobber each other or surface transient "file in use" errors. Different sessions
-        // still save in parallel. Serialize inside the gate so gate-acquisition order
-        // matches file-write order (prevents a stale snapshot from overwriting a newer one).
-        var gate = GetSaveGate(snapshot.SessionId);
-        gate.Wait();
+        // Serialize inside the gate so gate-acquisition order matches file-write order.
+        _saveGate.Wait();
         try
         {
             var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
@@ -60,7 +56,7 @@ public sealed class PerSessionSnapshotStore
         }
         finally
         {
-            gate.Release();
+            _saveGate.Release();
         }
     }
 
@@ -70,8 +66,7 @@ public sealed class PerSessionSnapshotStore
     /// </summary>
     public async Task SaveAsync(WorkflowSessionSnapshot snapshot)
     {
-        var gate = GetSaveGate(snapshot.SessionId);
-        await gate.WaitAsync().ConfigureAwait(false);
+        await _saveGate.WaitAsync().ConfigureAwait(false);
         try
         {
             var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
@@ -86,7 +81,7 @@ public sealed class PerSessionSnapshotStore
         }
         finally
         {
-            gate.Release();
+            _saveGate.Release();
         }
     }
 
