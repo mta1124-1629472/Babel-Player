@@ -88,6 +88,10 @@ public sealed partial class SessionWorkflowCoordinator
                         cancellationToken)
                     .ConfigureAwait(false);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _log.Error($"Ambiance mix failed for '{dubPath}'.", ex);
