@@ -936,7 +936,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
             return Task.CompletedTask;
         }
 
-        public Task MixDubOverAmbianceAsync(string dubbedAudioPath, string ambianceAudioPath, string outputAudioPath, CancellationToken cancellationToken)
+        public Task MixDubOverAmbianceAsync(string dubbedAudioPath, string ambianceAudioPath, string outputAudioPath, double ambianceGainDb, CancellationToken cancellationToken)
         {
             var outputDir = Path.GetDirectoryName(outputAudioPath);
             if (!string.IsNullOrEmpty(outputDir))
@@ -965,7 +965,7 @@ public sealed class PipelineStageProgressTests() : IDisposable
         }
 
         public Task<bool> TimeStretchAsync(string inputPath, string outputPath, double targetDurationSeconds,
-            double minRatio = 0.75, double maxRatio = 1.35, CancellationToken cancellationToken = default)
+            double minRatio = DubTimingDefaults.StretchMinTempoRatio, double maxRatio = DubTimingDefaults.StretchMaxTempoRatio, CancellationToken cancellationToken = default)
             => Task.FromResult(false);
 
         public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)

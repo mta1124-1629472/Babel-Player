@@ -21,6 +21,8 @@ public sealed partial class SessionWorkflowCoordinator
             return null;
 
         var session = CurrentSession;
+        var ambiancePath = session.AmbianceAudioPath;
+        var ambianceMixDb = CurrentSettings.AmbianceMixDb;
         if (string.IsNullOrWhiteSpace(session.TranslationPath) || !File.Exists(session.TranslationPath))
             return null;
 
@@ -38,10 +40,16 @@ public sealed partial class SessionWorkflowCoordinator
         if (ordered is null || ordered.Count == 0)
             return null;
 
-        var exportDir = Path.Combine(GetSessionDirectory(), "exports", "render");
+        var exportDir = Path.Combine(SessionDirectoryFor(session.SessionId), "exports", "render");
         Directory.CreateDirectory(exportDir);
         var dubPath = Path.Combine(exportDir, $"dub-timeline-{Guid.NewGuid():N}.mp3");
-        return await RenderDubAudioAsync(ordered, session.TtsSegmentAudioPaths, dubPath, cancellationToken)
+        return await RenderDubAudioAsync(
+                ordered,
+                session.TtsSegmentAudioPaths,
+                dubPath,
+                ambiancePath,
+                ambianceMixDb,
+                cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -49,6 +57,8 @@ public sealed partial class SessionWorkflowCoordinator
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         IReadOnlyDictionary<string, string> segmentAudioPaths,
         string dubPath,
+        string? ambiancePath,
+        double ambianceMixDb,
         CancellationToken cancellationToken)
     {
         if (_audioProcessingService is null)
@@ -67,8 +77,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         _log.Info($"TTS combined complete: {dubPath}");
 
-        var ambiancePath = CurrentSession.AmbianceAudioPath;
-        var ambianceExpected = !string.IsNullOrWhiteSpace(ambiancePath) && File.Exists(ambiancePath);
+        var ambianceExpected = !string.IsNullOrWhiteSpace(ambiancePath);
+        if (ambianceExpected && !File.Exists(ambiancePath))
+        {
+            throw new InvalidOperationException(
+                $"Ambiance stem was expected for this session but was not found at '{ambiancePath}'.");
+        }
         string? mixedPath = null;
 
         if (ambianceExpected)
@@ -76,7 +90,7 @@ public sealed partial class SessionWorkflowCoordinator
             mixedPath = BuildMixedDubPath(dubPath);
             _log.Info(
                 $"Starting ambiance mix: dub='{dubPath}', ambiance='{ambiancePath}', output='{mixedPath}', " +
-                $"gainDb={CurrentSettings.AmbianceMixDb:F1}");
+                $"gainDb={ambianceMixDb:F1}");
 
             try
             {
@@ -84,9 +98,13 @@ public sealed partial class SessionWorkflowCoordinator
                         dubPath,
                         ambiancePath!,
                         mixedPath,
-                        CurrentSettings.AmbianceMixDb,
+                        ambianceMixDb,
                         cancellationToken)
                     .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

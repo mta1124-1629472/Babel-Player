@@ -9,9 +9,9 @@ script = ""
 name = "Run"
 icon = "run"
 command = '''
-dotnet restore babel-player.sln
+dotnet restore Babel-Player.sln
 
-dotnet build babel-Player.sln --no-restore -v quiet
+dotnet build Babel-Player.sln --no-restore -v quiet
 
 dotnet run --project BabelPlayer.csproj --no-build
 '''
@@ -19,4 +19,4 @@ dotnet run --project BabelPlayer.csproj --no-build
 [[actions]]
 name = "Full Test"
 icon = "test"
-command = "dotnet test babel-player.sln"
+command = "dotnet test Babel-Player.sln"
