@@ -195,8 +195,7 @@ public sealed class TaskExtensionsTests : IDisposable
             var task = FailAfterDelay();
             _ = task.FireAndForgetAsync(log, "delayed operation");
 
-            // Wait for the task to fault and continuation to run
-            await Task.Delay(100);
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await task);
             await log.FlushAsync();
         }
 

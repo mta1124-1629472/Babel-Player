@@ -64,884 +64,883 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="Common_Cancel" xml:space="preserve">
-    <value>Abbrechen</value>
+    <value>إلغاء</value>
   </data>
   <data name="Common_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>إغلاق</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
-    <value>Speichern Sie</value>
+    <value>الحفظ</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
-    <value>Leeren</value>
+    <value>واضح</value>
   </data>
   <data name="Common_Ok" xml:space="preserve">
-    <value>OK</value>
+    <value>حسناً</value>
   </data>
   <data name="Common_Apply" xml:space="preserve">
-    <value>Anwenden</value>
+    <value>قدم طلبك</value>
   </data>
   <data name="Common_Browse" xml:space="preserve">
-    <value>Durchsuchen Sie</value>
+    <value>تصفح</value>
   </data>
   <data name="Common_Download" xml:space="preserve">
-    <value>Herunterladen</value>
+    <value>تنزيل</value>
   </data>
   <data name="Common_Restart" xml:space="preserve">
-    <value>Neustart</value>
+    <value>إعادة التشغيل</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>Babel Player</value>
+    <value>مشغل بابل</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
-    <value>Babel Player - Einstellungen</value>
+    <value>مشغل بابل - الإعدادات</value>
   </data>
   <data name="Window_Title_ApiKeys" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>مفاتيح واجهة برمجة التطبيقات</value>
   </data>
   <data name="Window_Title_Crash" xml:space="preserve">
-    <value>Babel Player - Unbehandelter Fehler</value>
+    <value>مشغل بابل - خطأ غير معالج</value>
   </data>
   <data name="Window_Title_Wizard" xml:space="preserve">
-    <value>Lautsprecher-Referenz-Assistent</value>
+    <value>معالج مراجع السماعات</value>
   </data>
   <data name="Chrome_Minimize" xml:space="preserve">
-    <value>Fenster minimieren</value>
+    <value>تصغير النافذة</value>
   </data>
   <data name="Chrome_MaximizeRestore" xml:space="preserve">
-    <value>Fenster maximieren oder wiederherstellen</value>
+    <value>تكبير النافذة أو استعادتها</value>
   </data>
   <data name="Chrome_Close" xml:space="preserve">
-    <value>Fenster schließen</value>
+    <value>إغلاق النافذة</value>
   </data>
   <data name="Menu_File_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>إغلاق</value>
   </data>
   <data name="Menu_File_ForceClose" xml:space="preserve">
-    <value>Schließen erzwingen</value>
+    <value>إغلاق إجباري</value>
   </data>
   <data name="Section_Pipeline" xml:space="preserve">
-    <value>Pipeline</value>
+    <value>خط الأنابيب</value>
   </data>
   <data name="Tooltip_ClearPipeline" xml:space="preserve">
-    <value>Pipeline löschen und neu beginnen</value>
+    <value>مسح خط الأنابيب والبدء من جديد</value>
   </data>
   <data name="Section_TargetLanguage" xml:space="preserve">
-    <value>ZIELSPRACHE</value>
+    <value>اللغة المستهدفة</value>
   </data>
   <data name="Label_Output" xml:space="preserve">
-    <value>Ausgabe (Synchronisation / Untertitel)</value>
+    <value>الإخراج (دبلجة/غواصات)</value>
   </data>
   <data name="Section_AudioAndDub" xml:space="preserve">
-    <value>AUDIO &amp; DUB</value>
+    <value>الصوت والدبلجة</value>
   </data>
   <data name="Label_SeparateVocals" xml:space="preserve">
-    <value>Getrennter Gesang vor der Transkription</value>
+    <value>فصل الغناء المنفصل قبل النسخ</value>
   </data>
   <data name="Section_Transcription" xml:space="preserve">
-    <value>TRANSKRIPTION</value>
+    <value>الترجمة</value>
   </data>
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
-    <value>Transkription wiederholen (nur diesen Schritt wählen oder nachgelagerte Schritte einbeziehen)</value>
+    <value>إعادة تشغيل النسخ (اختر هذه المرحلة فقط أو قم بتضمين المرحلة النهائية)</value>
   </data>
   <data name="Label_Compute" xml:space="preserve">
-    <value>Berechnen Sie</value>
+    <value>الحوسبة</value>
   </data>
   <data name="Label_Provider" xml:space="preserve">
-    <value>Anbieter</value>
+    <value>المزود</value>
   </data>
   <data name="Label_Model" xml:space="preserve">
-    <value>Modell</value>
+    <value>الطراز</value>
   </data>
   <data name="Status_NeedsDownload" xml:space="preserve">
-    <value>⬇ Braucht Download</value>
+    <value>⬇ يحتاج إلى تنزيل</value>
   </data>
   <data name="Status_Ready" xml:space="preserve">
-    <value>✓ Bereit</value>
+    <value>✓ جاهز</value>
   </data>
   <data name="Label_SpokenLanguage" xml:space="preserve">
-    <value>Gesprochene Sprache (ASR-Hinweis)</value>
+    <value>اللغة المنطوقة (تلميح ASR)</value>
   </data>
   <data name="Section_Diarization" xml:space="preserve">
-    <value>DIARISIERUNG / SPRECHER</value>
+    <value>اليوميات / مكبرات الصوت</value>
   </data>
   <data name="Tooltip_RerunDiarization" xml:space="preserve">
-    <value>Wiederholen Sie die Zuordnung von Lautsprechern (wählen Sie nur diese Phase oder auch die nachgelagerte)</value>
+    <value>إعادة تشغيل تخطيط مكبر الصوت (اختر هذه المرحلة فقط أو قم بتضمين المصب)</value>
   </data>
   <data name="Label_MultiSpeakerAudio" xml:space="preserve">
-    <value>Audio mit mehreren Lautsprechern</value>
+    <value>صوت متعدد مكبرات الصوت</value>
   </data>
   <data name="Hint_MultiSpeakerAudio" xml:space="preserve">
-    <value>Schalten Sie diese Option ein, wenn die Aufnahme mehr als einen Sprecher hat, damit die Zeilen separat beschriftet und nachvertont werden können. Bei einem einzelnen Sprecher oder einer Sprecherin lassen Sie diese Option ausgeschaltet, um zusätzliche Bearbeitung zu vermeiden.</value>
+    <value>قم بتشغيل هذه الخاصية عندما يحتوي التسجيل على أكثر من مكبر صوت مميز بحيث يمكن تسمية الخطوط ودبلجتها بشكل منفصل. بالنسبة لراوٍ واحد أو مكبر صوت واحد، اتركه مغلقاً لتجنب المعالجة الإضافية.</value>
   </data>
   <data name="Check_DetectSpeakers" xml:space="preserve">
-    <value>Separate Lautsprecher erkennen und kennzeichnen</value>
+    <value>الكشف عن مكبرات الصوت المنفصلة وتسميتها</value>
   </data>
   <data name="Hint_EnableMultiSpeakerForIds" xml:space="preserve">
-    <value>Aktivieren Sie die Erkennung mehrerer Sprecher (siehe oben) und transkribieren Sie dann, um Sprecher-IDs zuzuweisen.</value>
+    <value>قم بتمكين اكتشاف تعدد مكبرات الصوت أعلاه، ثم قم بالنسخ، لتعيين معرفات مكبرات الصوت.</value>
   </data>
   <data name="Hint_SpeakerAssignmentsInWizard" xml:space="preserve">
-    <value>Die Zuweisung von Lautsprechern wird mit dem Assistenten für die Lautsprechereinrichtung verwaltet.</value>
+    <value>تتم إدارة تعيينات مكبر الصوت في معالج إعداد مكبر الصوت.</value>
   </data>
   <data name="Tooltip_OpenSpeakerWizard" xml:space="preserve">
-    <value>Öffnet den Assistenten für die Lautsprechereinrichtung: Stimme pro Lautsprecher und (für Qwen) Referenzclips. Beenden im Assistenten speichert die Änderungen.</value>
+    <value>يفتح معالج إعداد مكبر الصوت: صوت لكل مكبر صوت و(بالنسبة لـ Qwen) المقاطع المرجعية. إنهاء في المعالج يحفظ التغييرات.</value>
   </data>
   <data name="Button_SpeakerSetupWizard" xml:space="preserve">
-    <value>Lautsprecher-Einrichtungsassistent...</value>
+    <value>معالج إعداد مكبر الصوت...</value>
   </data>
   <data name="Section_Translation" xml:space="preserve">
-    <value>ÜBERSETZUNG</value>
+    <value>الترجمة</value>
   </data>
   <data name="Tooltip_RerunTranslation" xml:space="preserve">
-    <value>Wiederholung der Übersetzung (nur diese Phase oder auch Synchronisation)</value>
+    <value>إعادة تشغيل الترجمة (اختر هذه المرحلة فقط أو قم بتضمين الدبلجة)</value>
   </data>
   <data name="Section_Dub" xml:space="preserve">
-    <value>DUB</value>
+    <value>دوب</value>
   </data>
   <data name="Tooltip_RerunDub" xml:space="preserve">
-    <value>Synchronisation aus der aktuellen Übersetzung neu generieren</value>
+    <value>إعادة إنشاء صوت الدبلجة من الترجمة الحالية</value>
   </data>
   <data name="Label_VoiceAssignment" xml:space="preserve">
-    <value>Zuordnung der Stimme</value>
+    <value>التعيين الصوتي</value>
   </data>
   <data name="Check_AssignPerSpeakerInWizard" xml:space="preserve">
-    <value>Zuweisung pro Lautsprecher im Assistenten für Lautsprecherreferenzen (Fallback-Stimme unten)</value>
+    <value>تعيين لكل مكبر صوت في معالج مرجع مكبر الصوت (الصوت الاحتياطي أدناه)</value>
   </data>
   <data name="Hint_VoiceAssignment" xml:space="preserve">
-    <value>Verwenden Sie eine Stimme für jeden Sprecher, oder aktivieren Sie die obige Option und legen Sie im Assistenten eine Ersatzstimme sowie Stimmen pro Sprecher fest.</value>
+    <value>استخدم صوتًا واحدًا لكل مكبر صوت، أو قم بتشغيل الخيار أعلاه وقم بتعيين صوت احتياطي بالإضافة إلى أصوات لكل مكبر صوت في المعالج.</value>
   </data>
   <data name="Section_ApiKeys" xml:space="preserve">
-    <value>API-SCHLÜSSEL</value>
+    <value>مفاتيح API</value>
   </data>
   <data name="Hint_ConfigureCredentials" xml:space="preserve">
-    <value>Konfigurieren Sie die Anmeldedaten für die oben ausgewählten Anbieter.</value>
+    <value>تكوين بيانات الاعتماد للموفرين المحددين أعلاه.</value>
   </data>
   <data name="Button_ApiKeys" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>مفاتيح واجهة برمجة التطبيقات</value>
   </data>
   <data name="Section_LanguageRouting" xml:space="preserve">
-    <value>SPRACHROUTING</value>
+    <value>توجيه اللغة</value>
   </data>
   <data name="Label_SourceAudio" xml:space="preserve">
-    <value>Quelle Audio</value>
+    <value>مصدر الصوت</value>
   </data>
   <data name="Label_TargetSubDub" xml:space="preserve">
-    <value>Ziel Sub/Dub</value>
+    <value>الهدف الفرعي المستهدف/الدوب</value>
   </data>
   <data name="Section_ActiveConfig" xml:space="preserve">
-    <value>AKTIVE KONFIG</value>
+    <value>التكوين النشط</value>
   </data>
   <data name="Label_ActiveAsr" xml:space="preserve">
     <value>ASR</value>
   </data>
   <data name="Label_ActiveCpu" xml:space="preserve">
-    <value>CPU</value>
+    <value>وحدة المعالجة المركزية</value>
   </data>
   <data name="Label_ActiveGpu" xml:space="preserve">
-    <value>GPU</value>
+    <value>وحدة معالجة الرسوميات</value>
   </data>
   <data name="Label_ActiveNmt" xml:space="preserve">
-    <value>NMT</value>
+    <value>ن.م.م.م</value>
   </data>
   <data name="Label_ActiveTts" xml:space="preserve">
     <value>TTS</value>
   </data>
   <data name="Label_ActiveRam" xml:space="preserve">
-    <value>RAM</value>
+    <value>ذاكرة الوصول العشوائي</value>
   </data>
   <data name="Section_ProviderDiagnostics" xml:space="preserve">
-    <value>ANBIETERDIAGNOSTIK</value>
+    <value>تشخيص مزود الخدمة</value>
   </data>
   <data name="Status_Stale" xml:space="preserve">
-    <value>veraltet</value>
+    <value>قديم</value>
   </data>
   <data name="Automation_PipelineProgress" xml:space="preserve">
-    <value>Fortschritte in der Pipeline</value>
+    <value>تقدم خط الأنابيب</value>
   </data>
   <data name="Button_RunPipeline" xml:space="preserve">
-    <value>Pipeline ausführen</value>
+    <value>تشغيل خط الأنابيب</value>
   </data>
   <data name="Button_CancelPipeline" xml:space="preserve">
-    <value>Pipeline abbrechen</value>
+    <value>إلغاء خط الأنابيب</value>
   </data>
   <data name="Tooltip_ExpandErrorDetails" xml:space="preserve">
-    <value>Fehlerdetails erweitern</value>
+    <value>توسيع تفاصيل الخطأ</value>
   </data>
   <data name="Section_Segments" xml:space="preserve">
-    <value>Segmente</value>
+    <value>الشرائح</value>
   </data>
   <data name="Tooltip_ExportSegments" xml:space="preserve">
-    <value>Exportieren Sie Untertitel (.srt), nur den synchronisierten Ton (.mp3) oder das Video mit Synchronisation und weichen Untertiteln (.mp4) - der Ton entspricht dem aktuellen Timing und Mix.</value>
+    <value>تصدير التعليقات (.srt)، أو الصوت المدبلج فقط (.mp3)، أو الفيديو مع الدبلجة + الغواصات الناعمة (.mp4) - الصوت يطابق التوقيت والمزج الحالي.</value>
   </data>
   <data name="Button_Export" xml:space="preserve">
-    <value>Exportieren</value>
+    <value>التصدير</value>
   </data>
   <data name="Menu_Export_Srt" xml:space="preserve">
-    <value>zu .srt</value>
+    <value>إلى .srt</value>
   </data>
   <data name="Menu_Export_Mp3" xml:space="preserve">
-    <value>zu .mp3</value>
+    <value>إلى .mp3</value>
   </data>
   <data name="Menu_Export_Mp4" xml:space="preserve">
-    <value>zu .mp4</value>
+    <value>إلى .mp4</value>
   </data>
   <data name="Tooltip_RefreshSegments" xml:space="preserve">
-    <value>Segmente aktualisieren</value>
+    <value>شرائح التحديث</value>
   </data>
   <data name="Message_NoSegmentsTitle" xml:space="preserve">
-    <value>Noch keine Segmente</value>
+    <value>لا توجد شرائح بعد</value>
   </data>
   <data name="Message_NoSegmentsHint" xml:space="preserve">
-    <value>Öffnen Sie Medien und führen Sie die Pipeline aus, um Segmente zu erzeugen.</value>
+    <value>افتح الوسائط وشغّل خط الأنابيب لإنشاء مقاطع.</value>
   </data>
   <data name="Label_RenderTiming" xml:space="preserve">
-    <value>Rendering-Zeitplan</value>
+    <value>توقيت التقديم</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Gilt für generierte Synchronisationen und den Export. Pause ist nur für die Vorschau.</value>
+    <value>ينطبق على صوت الدبلجة الذي تم إنشاؤه وتصديره. الإيقاف المؤقت للمعاينة فقط.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
-    <value>Ausgewähltes Segment</value>
+    <value>شريحة مختارة</value>
   </data>
   <data name="Option_Inherit" xml:space="preserve">
-    <value>Erben Sie</value>
+    <value>التوريث</value>
   </data>
   <data name="Tooltip_Inherit" xml:space="preserve">
-    <value>Verwenden Sie das Session-Rendering-Timing für dieses Segment</value>
+    <value>استخدم توقيت عرض الجلسة لهذا الجزء</value>
   </data>
   <data name="Option_Off" xml:space="preserve">
-    <value>Aus</value>
+    <value>إيقاف التشغيل</value>
   </data>
   <data name="Tooltip_TimingOff" xml:space="preserve">
-    <value>TTS für dieses Segment in der gerenderten Nachvertonung/im Export unverändert abspielen</value>
+    <value>تشغيل TTS كما هو لهذا المقطع في الدبلجة/التصدير المُقدَّم</value>
   </data>
   <data name="Option_Stretch" xml:space="preserve">
-    <value>Dehnen</value>
+    <value>التمدد</value>
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
-    <value>TTS zeitlich strecken, damit dieses Segmentfenster in die gerenderte Synchronisation/den Export passt</value>
+    <value>تمديد وقت TTS لملاءمة نافذة هذا المقطع في الدبلجة/التصدير المُقدَّم</value>
   </data>
   <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Vorschau-Pause</value>
+    <value>معاينة التوقف المؤقت</value>
   </data>
   <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Hält die Wiedergabe der Quelle während der Vorschau des ausgewählten Segments an und setzt sie am Ende des Segments fort.</value>
+    <value>يوقف تشغيل المصدر مؤقتاً أثناء معاينة المقطع المحدد، ثم يستأنف عند نهاية المقطع.</value>
   </data>
   <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Vorschau mit Pause</value>
+    <value>معاينة مع إيقاف مؤقت</value>
   </data>
   <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Vorschau dieses Segments mit Pausenverhalten ohne Änderung des gerenderten Synchronisationszeitpunkts</value>
+    <value>معاينة هذا المقطع باستخدام سلوك الإيقاف المؤقت دون تغيير توقيت الدبل المقدمة</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
-    <value>Mediendatei öffnen</value>
+    <value>فتح ملف الوسائط</value>
   </data>
   <data name="Automation_OpenMedia" xml:space="preserve">
-    <value>Offene Medien</value>
+    <value>الوسائط المفتوحة</value>
   </data>
   <data name="Tooltip_ToggleSubtitles" xml:space="preserve">
-    <value>Untertitel umschalten (C)</value>
+    <value>تبديل الترجمة (ج)</value>
   </data>
   <data name="Automation_ToggleSubtitles" xml:space="preserve">
-    <value>Untertitel umschalten</value>
+    <value>تبديل الترجمة</value>
   </data>
   <data name="Tooltip_ToggleDubMode" xml:space="preserve">
-    <value>Umschalten des Dub-Modus (D)</value>
+    <value>تبديل وضع الدوب (D)</value>
   </data>
   <data name="Automation_ToggleDubMode" xml:space="preserve">
-    <value>Umschalten des Dub-Modus</value>
+    <value>تبديل وضع الدوب</value>
   </data>
   <data name="Tooltip_SkipPrevious" xml:space="preserve">
-    <value>Zum vorherigen Segment springen</value>
+    <value>الانتقال إلى المقطع السابق</value>
   </data>
   <data name="Automation_SkipPrevious" xml:space="preserve">
-    <value>Zum vorherigen Segment springen</value>
+    <value>الانتقال إلى المقطع السابق</value>
   </data>
   <data name="Tooltip_Rewind10" xml:space="preserve">
-    <value>10 Sekunden zurückspulen</value>
+    <value>الترجيع 10 ثوانٍ</value>
   </data>
   <data name="Automation_Rewind10" xml:space="preserve">
-    <value>10 Sekunden zurückspulen</value>
+    <value>الترجيع 10 ثوانٍ</value>
   </data>
   <data name="Tooltip_PlayPause" xml:space="preserve">
-    <value>Wiedergabe/Pause (Leertaste)</value>
+    <value>تشغيل/إيقاف مؤقت (مسافة)</value>
   </data>
   <data name="Automation_PlayPause" xml:space="preserve">
-    <value>Abspielen oder Anhalten</value>
+    <value>تشغيل أو إيقاف مؤقت</value>
   </data>
   <data name="Tooltip_Forward10" xml:space="preserve">
-    <value>10 Sekunden vorspulen</value>
+    <value>تقديم سريع 10 ثوانٍ إلى الأمام</value>
   </data>
   <data name="Automation_Forward10" xml:space="preserve">
-    <value>10 Sekunden vorspulen</value>
+    <value>تقديم سريع 10 ثوانٍ إلى الأمام</value>
   </data>
   <data name="Tooltip_SkipNext" xml:space="preserve">
-    <value>Zum nächsten Segment springen</value>
+    <value>الانتقال إلى المقطع التالي</value>
   </data>
   <data name="Automation_SkipNext" xml:space="preserve">
-    <value>Zum nächsten Segment springen</value>
+    <value>الانتقال إلى المقطع التالي</value>
   </data>
   <data name="Tooltip_ToggleMute" xml:space="preserve">
-    <value>Stummschaltung umschalten</value>
+    <value>تبديل كتم الصوت</value>
   </data>
   <data name="Automation_ToggleMute" xml:space="preserve">
-    <value>Stummschaltung umschalten</value>
+    <value>تبديل كتم الصوت</value>
   </data>
   <data name="Tooltip_Volume" xml:space="preserve">
-    <value>Lautstärke</value>
+    <value>الحجم</value>
   </data>
   <data name="Tooltip_ToggleSidePanes" xml:space="preserve">
-    <value>Seitenwände umklappen (S)</value>
+    <value>تبديل الألواح الجانبية (S)</value>
   </data>
   <data name="Automation_ToggleSidePanes" xml:space="preserve">
-    <value>Seitenscheiben umschalten</value>
+    <value>تبديل الأجزاء الجانبية</value>
   </data>
   <data name="Tooltip_ToggleFullscreen" xml:space="preserve">
-    <value>Vollbildmodus umschalten (F11)</value>
+    <value>تبديل ملء الشاشة (F11)</value>
   </data>
   <data name="Automation_ToggleFullscreen" xml:space="preserve">
-    <value>Vollbild umschalten</value>
+    <value>تبديل ملء الشاشة الكاملة</value>
   </data>
   <data name="Tooltip_OpenSettings" xml:space="preserve">
-    <value>Einstellungen öffnen</value>
+    <value>فتح الإعدادات</value>
   </data>
   <data name="Automation_Settings" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>الإعدادات</value>
   </data>
   <data name="Dev_Button_DevLog" xml:space="preserve">
-    <value>📋 Entwicklungsprotokoll</value>
+    <value>📋 سجل التطوير</value>
   </data>
   <data name="Dev_Tooltip_DevLog" xml:space="preserve">
-    <value>In-App-Entwicklungsprotokoll-Viewer öffnen</value>
+    <value>فتح عارض سجل المطور داخل التطبيق</value>
   </data>
   <data name="Dev_Button_FreshStart" xml:space="preserve">
-    <value>🔄 Neuanfang</value>
+    <value>🔄 بداية جديدة</value>
   </data>
   <data name="Dev_Tooltip_FreshStart" xml:space="preserve">
-    <value>Pipeline abbrechen, temporäre Sitzungsdateien löschen, Benutzeroberfläche zurücksetzen</value>
+    <value>إلغاء خط الأنابيب، ومسح الملفات المؤقتة للجلسة، وإعادة ضبط واجهة المستخدم</value>
   </data>
   <data name="Settings_Title" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>الإعدادات</value>
   </data>
   <data name="Settings_Nav_General" xml:space="preserve">
-    <value>Allgemein</value>
+    <value>عام</value>
   </data>
   <data name="Settings_Nav_Hotkeys" xml:space="preserve">
-    <value>Tastenkombinationen</value>
+    <value>مفاتيح التشغيل السريع</value>
   </data>
   <data name="Settings_Nav_Video" xml:space="preserve">
-    <value>Video</value>
+    <value>فيديو</value>
   </data>
   <data name="Settings_Nav_Models" xml:space="preserve">
-    <value>Modelle</value>
+    <value>النماذج</value>
   </data>
   <data name="Settings_Nav_About" xml:space="preserve">
-    <value>Über</value>
+    <value>نبذة عن</value>
   </data>
   <data name="Settings_Nav_Diagnostics" xml:space="preserve">
-    <value>Diagnostik</value>
+    <value>التشخيص</value>
   </data>
   <data name="Settings_Group_Session" xml:space="preserve">
-    <value>Sitzung</value>
+    <value>الجلسة</value>
   </data>
   <data name="Settings_Label_RecentLimit" xml:space="preserve">
-    <value>Grenzwert für den Verlauf der letzten Sitzung</value>
+    <value>حد تاريخ الجلسة الأخيرة</value>
   </data>
   <data name="Settings_Hint_RecentLimit" xml:space="preserve">
-    <value>Maximale Anzahl der letzten Sitzungen, die im Dateimenü gespeichert sind (1-20).</value>
+    <value>الحد الأقصى لعدد الجلسات الأخيرة المحفوظة في قائمة الملفات (1-20).</value>
   </data>
   <data name="Settings_Check_AutoSave" xml:space="preserve">
-    <value>Sitzung beim Beenden automatisch speichern</value>
+    <value>الحفظ التلقائي للجلسة عند الخروج</value>
   </data>
   <data name="Settings_Group_AppLanguage" xml:space="preserve">
-    <value>App-Sprache</value>
+    <value>لغة التطبيق</value>
   </data>
   <data name="Settings_Hint_AppLanguage" xml:space="preserve">
-    <value>Ändert die Sprache der Benutzeroberfläche des Babel Players. Auto (System) folgt bei jedem Start dem Gebietsschema Ihres Betriebssystems.</value>
+    <value>يغير لغة واجهة مشغل Babel Player. يتبع (النظام) التلقائي (النظام) لغة نظام التشغيل عند كل تشغيل.</value>
   </data>
   <data name="Settings_Option_AutoSystem" xml:space="preserve">
-    <value>Auto (System)</value>
+    <value>تلقائي (نظام)</value>
   </data>
   <data name="Settings_Group_Gpu" xml:space="preserve">
-    <value>GPU-Backend</value>
+    <value>الواجهة الخلفية لوحدة معالجة الرسومات</value>
   </data>
   <data name="Settings_Label_PreferredGpu" xml:space="preserve">
-    <value>Bevorzugtes lokales GPU-Backend</value>
+    <value>الواجهة الخلفية المفضلة لوحدة معالجة الرسومات المحلية</value>
   </data>
   <data name="Settings_Hint_Gpu" xml:space="preserve">
-    <value>Die verwaltete lokale GPU ist der Standardpfad mit geringer Reibung. Der Docker-GPU-Host ist als erweitertes Backend verfügbar.</value>
+    <value>وحدة معالجة الرسومات المحلية المُدارة هي المسار الافتراضي منخفض الاحتكاك. يتوفر مضيف Docker GPU كواجهة خلفية متقدمة.</value>
   </data>
   <data name="Settings_Group_BackendStatus" xml:space="preserve">
-    <value>Backend-Status</value>
+    <value>حالة الواجهة الخلفية</value>
   </data>
   <data name="Settings_Group_DockerGpu" xml:space="preserve">
-    <value>Docker GPU-Dienst</value>
+    <value>خدمة Docker لوحدة معالجة الرسومات</value>
   </data>
   <data name="Settings_Label_AdvancedGpuUrl" xml:space="preserve">
-    <value>Erweiterte GPU-Dienst-URL</value>
+    <value>عنوان URL لخدمة وحدة معالجة الرسومات المتقدمة</value>
   </data>
   <data name="Settings_Hint_AdvancedGpuUrl" xml:space="preserve">
-    <value>Nur bearbeitbar, wenn das Docker-GPU-Backend ausgewählt ist.</value>
+    <value>قابل للتحرير فقط عند تحديد الواجهة الخلفية لوحدة معالجة الرسومات Docker GPU.</value>
   </data>
   <data name="Settings_Check_AlwaysStartGpu" xml:space="preserve">
-    <value>Lokale GPU-Laufzeit immer beim Start der Anwendung starten</value>
+    <value>بدء تشغيل وقت تشغيل وحدة معالجة الرسومات المحلية دائمًا عند بدء تشغيل التطبيق</value>
   </data>
   <data name="Settings_Group_PipelineAudio" xml:space="preserve">
-    <value>Pipeline-Audio und Vertonung</value>
+    <value>الدبلجة والصوت عبر الأنابيب</value>
   </data>
   <data name="Settings_Hint_PipelineAudio" xml:space="preserve">
-    <value>Vocal-Separation und Segment-Timing (Dub) werden im Hauptfenster → Pipeline-Panel konfiguriert, so dass sie neben den Laufkontrollen bleiben.</value>
+    <value>يتم تكوين الفصل الصوتي وتوقيت المقطع (الدبلجة) في النافذة الرئيسية → لوحة خط الأنابيب، بحيث تبقى بجوار عناصر التحكم في التشغيل.</value>
   </data>
   <data name="Settings_Expander_AdvancedCpu" xml:space="preserve">
-    <value>Fortgeschrittene: CPU-Transkription</value>
+    <value>متقدم: نسخ وحدة المعالجة المركزية</value>
   </data>
   <data name="Settings_Hint_AdvancedCpu" xml:space="preserve">
-    <value>Diese Optionen stellen die reine CPU-Transkription ein. 0 Threads bedeutet automatische Auswahl. Die Anzahl der Worker kann der Hardware (Kerne + RAM) oder einem manuellen Wert (geklemmt) folgen.</value>
+    <value>تقوم هذه الخيارات بضبط النسخ بوحدة المعالجة المركزية فقط. 0 خيوط تعني التحديد التلقائي. يمكن أن يتبع عدد العمال الأجهزة (النوى + ذاكرة الوصول العشوائي) أو قيمة يدوية (مثبتة).</value>
   </data>
   <data name="Settings_Label_CpuComputeType" xml:space="preserve">
-    <value>CPU-Rechenleistungstyp:</value>
+    <value>نوع حوسبة وحدة المعالجة المركزية:</value>
   </data>
   <data name="Settings_Label_CpuThreads" xml:space="preserve">
-    <value>CPU-Threads (0=auto):</value>
+    <value>خيوط وحدة المعالجة المركزية (0=تلقائي):</value>
   </data>
   <data name="Settings_Check_AutoWorkers" xml:space="preserve">
-    <value>Automatische Zählung der Arbeiter (von CPU-Kernen und RAM)</value>
+    <value>العد التلقائي للعامل (من أنوية وحدة المعالجة المركزية وذاكرة الوصول العشوائي)</value>
   </data>
   <data name="Settings_Label_WorkersManual" xml:space="preserve">
-    <value>Arbeiter (manuell):</value>
+    <value>العمال (يدوي):</value>
   </data>
   <data name="Settings_Group_Hotkeys" xml:space="preserve">
-    <value>Tastaturkurzbefehle</value>
+    <value>اختصارات لوحة المفاتيح</value>
   </data>
   <data name="Settings_Hint_Hotkeys" xml:space="preserve">
-    <value>Die Anpassung der Hotkeys ist noch nicht möglich. Die angezeigten Werte sind die aktuellen Standardwerte.</value>
+    <value>تخصيص مفتاح التشغيل السريع غير متاح بعد. القيم المعروضة هي القيم الافتراضية الحالية.</value>
   </data>
   <data name="Settings_Label_PlayPauseHotkey" xml:space="preserve">
-    <value>Wiedergabe/Pause:</value>
+    <value>تشغيل/إيقاف مؤقت:</value>
   </data>
   <data name="Settings_Label_ToggleSegmentsHotkey" xml:space="preserve">
-    <value>Toggle Segment Panel:</value>
+    <value>تبديل لوحة المقطع:</value>
   </data>
   <data name="Settings_Label_ToggleDubHotkey" xml:space="preserve">
-    <value>Umschalten des Dub-Modus:</value>
+    <value>تبديل وضع الدوب:</value>
   </data>
   <data name="Settings_Label_ToggleFullscreenHotkey" xml:space="preserve">
-    <value>Vollbildmodus umschalten:</value>
+    <value>تبديل ملء الشاشة الكاملة:</value>
   </data>
   <data name="Settings_Group_EmbeddedPlayback" xml:space="preserve">
-    <value>Eingebettete Wiedergabe</value>
+    <value>التشغيل المضمن</value>
   </data>
   <data name="Settings_Check_BilingualSubs" xml:space="preserve">
-    <value>Zweisprachige Untertitel (Quelle + Übersetzung in Exporten und eingebetteter Vorschau)</value>
+    <value>ترجمات ثنائية اللغة (المصدر + الترجمة في التصدير والمعاينة المضمنة)</value>
   </data>
   <data name="Settings_Hint_BilingualSubs" xml:space="preserve">
-    <value>Wenn diese Option aktiviert ist, enthalten der Untertitelexport und die CC-Spur im Player beide Sprachen, wenn Segmente verfügbar sind.</value>
+    <value>عند التمكين، يتضمن تصدير الترجمة ومسار CC داخل المشغل كلا اللغتين عند توفر المقاطع.</value>
   </data>
   <data name="Settings_Group_HardwareDecode" xml:space="preserve">
-    <value>Hardware-Dekodierung</value>
+    <value>فك تشفير الأجهزة</value>
   </data>
   <data name="Settings_Label_HardwareDecoder" xml:space="preserve">
-    <value>Hardware-Decoder:</value>
+    <value>وحدة فك ترميز الأجهزة:</value>
   </data>
   <data name="Settings_Label_GpuRenderApi" xml:space="preserve">
-    <value>GPU-Rendering-API:</value>
+    <value>واجهة برمجة تطبيقات العرض بوحدة معالجة الرسومات:</value>
   </data>
   <data name="Settings_Label_ExportEncoder" xml:space="preserve">
-    <value>Encoder exportieren:</value>
+    <value>أداة تشفير التصدير:</value>
   </data>
   <data name="Settings_Group_GpuNext" xml:space="preserve">
-    <value>GPU-Next Backend</value>
+    <value>الواجهة الخلفية GPU-Next</value>
   </data>
   <data name="Settings_Check_UseGpuNext" xml:space="preserve">
-    <value>Verwenden Sie den gpu-next-Videoausgang (erforderlich für RTX-Verbesserungen)</value>
+    <value>استخدام إخراج فيديو gpu-next (مطلوب لتحسينات RTX)</value>
   </data>
   <data name="Settings_Hint_GpuNext" xml:space="preserve">
-    <value>gpu-next ist der neuere mpv-Renderer. Aktivieren Sie diesen, bevor Sie die Modi RTX Video Super Resolution oder HDR aktivieren.</value>
+    <value>gpu-next هو عارض mpv الأحدث. قم بتمكين هذا قبل تشغيل أوضاع الدقة الفائقة للفيديو RTX أو HDR.</value>
   </data>
   <data name="Settings_Group_RtxVideo" xml:space="preserve">
-    <value>RTX-Videoverbesserung</value>
+    <value>تحسين الفيديو RTX</value>
   </data>
   <data name="Settings_Check_Vsr" xml:space="preserve">
-    <value>RTX Video Super Resolution (VSR)</value>
+    <value>الدقة الفائقة للفيديو RTX (VSR)</value>
   </data>
   <data name="Settings_Hint_Vsr" xml:space="preserve">
-    <value>AI-Upscaling über NVIDIA d3d11vpp. Erfordert eine erkannte GeForce RTX GPU, Treiber ≥ 551.23, gpu-next und "RTX Video Enhancement" in der NVIDIA Systemsteuerung.</value>
+    <value>ترقية الذكاء الاصطناعي عبر NVIDIA d3d11vpp. يتطلب وحدة معالجة رسومات GeForce RTX مكتشفة، وبرنامج تشغيل ≥ 551.23، ووحدة معالجة الرسومات GeForce RTX، و"تحسين الفيديو RTX" في لوحة تحكم NVIDIA.</value>
   </data>
   <data name="Settings_Label_VsrSupport" xml:space="preserve">
-    <value>Unterstützung:</value>
+    <value>الدعم:</value>
   </data>
   <data name="Settings_Label_VsrRequested" xml:space="preserve">
-    <value>Ersucht:</value>
+    <value>مطلوب:</value>
   </data>
   <data name="Settings_Label_VsrResolved" xml:space="preserve">
-    <value>Gelöst:</value>
+    <value>تم الحل:</value>
   </data>
   <data name="Settings_Label_VsrReason" xml:space="preserve">
-    <value>Letzter Grund:</value>
+    <value>السبب الأخير</value>
   </data>
   <data name="Settings_Label_VsrFilter" xml:space="preserve">
-    <value>Letzter Filter:</value>
+    <value>الفلتر الأخير:</value>
   </data>
   <data name="Settings_Group_Hdr" xml:space="preserve">
-    <value>HDR-Wiedergabe</value>
+    <value>تشغيل بتقنية HDR</value>
   </data>
   <data name="Settings_Hint_Hdr" xml:space="preserve">
-    <value>Wählen Sie einen Modus. RTX HDR folgt dem NVIDIA Control Panel. HDR Passthrough konfiguriert mpv. Erfordert gpu-next und Windows HDR.</value>
+    <value>اختر وضعًا واحدًا. RTX HDR يتبع لوحة تحكم NVIDIA. يقوم HDR passthrough بتكوين MPV. يتطلب gpu-next وWindows HDR.</value>
   </data>
   <data name="Settings_Radio_HdrOff" xml:space="preserve">
-    <value>Aus</value>
+    <value>إيقاف التشغيل</value>
   </data>
   <data name="Settings_Radio_HdrRtx" xml:space="preserve">
     <value>RTX HDR</value>
   </data>
   <data name="Settings_Radio_HdrPassthrough" xml:space="preserve">
-    <value>HDR-Passthrough</value>
+    <value>تمرير النطاق الديناميكي العالي HDR</value>
   </data>
   <data name="Settings_Label_MpvPassthrough" xml:space="preserve">
-    <value>mpv-Passthrough-Optionen</value>
+    <value>خيارات المرور عبر MPV</value>
   </data>
   <data name="Settings_Label_ToneMapping" xml:space="preserve">
-    <value>Tone Mapping:</value>
+    <value>تخطيط النغمة:</value>
   </data>
   <data name="Settings_Label_TargetPeak" xml:space="preserve">
-    <value>Zielgipfel:</value>
+    <value>الذروة المستهدفة:</value>
   </data>
   <data name="Settings_Placeholder_TargetPeak" xml:space="preserve">
-    <value>Auto oder Nits</value>
+    <value>السيارات أو القمل</value>
   </data>
   <data name="Settings_Label_HdrComputePeak" xml:space="preserve">
-    <value>HDR-Berechnungsspitze:</value>
+    <value>ذروة حوسبة HDR:</value>
   </data>
   <data name="Settings_Check_HdrComputePeak" xml:space="preserve">
-    <value>Dynamischer Spitzenwert pro Bild (mpv)</value>
+    <value>الذروة الديناميكية لكل إطار (mpv)</value>
   </data>
   <data name="Settings_Hint_VideoRestart" xml:space="preserve">
-    <value>Alle Videoeinstellungen werden nach dem Neustart der App wirksam.</value>
+    <value>تسري جميع إعدادات الفيديو بعد إعادة تشغيل التطبيق.</value>
   </data>
   <data name="Settings_Group_Models" xml:space="preserve">
-    <value>Modelle</value>
+    <value>النماذج</value>
   </data>
   <data name="Settings_Hint_Models" xml:space="preserve">
-    <value>Verwalten Sie lokal gehostete Modelle. Bei Cloud-Anbietern sind keine Downloads erforderlich.</value>
+    <value>إدارة النماذج المستضافة محلياً. لا يتطلب موفرو السحابة تنزيلات.</value>
   </data>
   <data name="Settings_About_AppName" xml:space="preserve">
-    <value>Babel-Spieler</value>
+    <value>مشغل بابل</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>AGPL-3.0-Lizenz</value>
+    <value>رخصة AGPL-3.0 ترخيص</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
-    <value>Unterstützen Sie das Projekt:</value>
+    <value>دعم المشروع:</value>
   </data>
   <data name="Settings_About_Kofi" xml:space="preserve">
-    <value>Ko-fi</value>
+    <value>كو-في</value>
   </data>
   <data name="Settings_About_GitHubSponsors" xml:space="preserve">
-    <value>GitHub-Sponsoren</value>
+    <value>رعاة GitHub</value>
   </data>
   <data name="Api_Title" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>مفاتيح واجهة برمجة التطبيقات</value>
   </data>
   <data name="Api_Button_Save" xml:space="preserve">
-    <value>Speichern Sie</value>
+    <value>الحفظ</value>
   </data>
   <data name="Api_Button_Clear" xml:space="preserve">
-    <value>Klar</value>
+    <value>واضح</value>
   </data>
   <data name="Api_Tooltip_ToggleReveal" xml:space="preserve">
-    <value>Taste ein-/ausblenden</value>
+    <value>إظهار/إخفاء المفتاح</value>
   </data>
   <data name="Api_Footer_StorageSecurity" xml:space="preserve">
-    <value>Sicherheit der Speicherung:</value>
+    <value>أمان التخزين:</value>
   </data>
   <data name="Api_Footer_MoreProviders" xml:space="preserve">
-    <value>Weitere Anbieter können in zukünftigen Updates hinzugefügt werden.</value>
+    <value>يمكن إضافة المزيد من المزودين في التحديثات المستقبلية.</value>
   </data>
   <data name="Crash_Header" xml:space="preserve">
-    <value>Ein unbehandelter Fehler ist aufgetreten</value>
+    <value>حدث خطأ لم تتم معالجته</value>
   </data>
   <data name="Crash_Subtitle" xml:space="preserve">
-    <value>Die vollständigen Fehlerdetails sind unten aufgeführt. Der Fehler wurde auch in die Protokolldatei geschrieben.</value>
+    <value>تفاصيل الخطأ الكاملة موضحة أدناه. تمت كتابة الخطأ أيضاً في ملف السجل.</value>
   </data>
   <data name="Crash_Button_Copy" xml:space="preserve">
-    <value>In die Zwischenablage kopieren</value>
+    <value>نسخ إلى الحافظة</value>
   </data>
   <data name="Crash_Button_OpenLogFolder" xml:space="preserve">
-    <value>Log-Ordner öffnen</value>
+    <value>فتح مجلد السجل المفتوح</value>
   </data>
   <data name="Crash_Button_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>إغلاق</value>
   </data>
   <data name="Wizard_Title" xml:space="preserve">
-    <value>Lautsprecher-Referenz-Assistent</value>
+    <value>معالج مراجع السماعات</value>
   </data>
   <data name="Wizard_Assign_Header" xml:space="preserve">
-    <value>Redner</value>
+    <value>مكبرات الصوت</value>
   </data>
   <data name="Wizard_Assign_Hint" xml:space="preserve">
-    <value>Wählen Sie für jeden Sprecher eine Stimme aus. Für Qwen legen Sie außerdem einen Referenz-Audioclip aus dem Video fest.</value>
+    <value>حدد صوتًا لكل مكبر صوت. بالنسبة لـ Qwen، قم أيضاً بتعيين مقطع صوتي مرجعي من الفيديو.</value>
   </data>
   <data name="Wizard_Preview_Header" xml:space="preserve">
-    <value>Vorschau</value>
+    <value>معاينة</value>
   </data>
   <data name="Wizard_Preview_Hint" xml:space="preserve">
-    <value>Durchsuchen Sie das Video, um gute Audioclips für jeden Sprecher zu finden, und ordnen Sie diese dann unten zu.</value>
+    <value>قم بفحص الفيديو للعثور على مقاطع صوتية جيدة لكل متحدث، ثم قم بتعيينها أدناه.</value>
   </data>
   <data name="Wizard_Preview_Unavailable" xml:space="preserve">
-    <value>Vorschau nicht verfügbar auf dieser Plattform</value>
+    <value>المعاينة غير متوفرة على هذه المنصة</value>
   </data>
   <data name="Wizard_Playhead_Clip_Tooltip" xml:space="preserve">
-    <value>Länge des Audioclips in Sekunden (3-15 Sekunden)</value>
+    <value>طول المقطع الصوتي بالثواني (3-15 ثانية)</value>
   </data>
   <data name="Wizard_Button_Stop" xml:space="preserve">
-    <value>Stopp</value>
+    <value>توقف</value>
   </data>
   <data name="Wizard_Label_Voice" xml:space="preserve">
-    <value>Stimme</value>
+    <value>الصوت</value>
   </data>
   <data name="Wizard_Label_VoiceHelp" xml:space="preserve">
-    <value>(für die TTS-Erzeugung)</value>
+    <value>(لتوليد اختبارات الترجمة الفورية)</value>
   </data>
   <data name="Wizard_Button_Auto" xml:space="preserve">
-    <value>Auto</value>
+    <value>السيارات</value>
   </data>
   <data name="Wizard_Tooltip_Auto" xml:space="preserve">
-    <value>Automatisch erkannte Stimme für diesen Lautsprecher verwenden</value>
+    <value>استخدام الصوت المكتشف تلقائياً لهذه السماعة</value>
   </data>
   <data name="Wizard_Button_UseActive" xml:space="preserve">
-    <value>Aktiv verwenden</value>
+    <value>استخدام نشط</value>
   </data>
   <data name="Wizard_Tooltip_UseActive" xml:space="preserve">
-    <value>Verwenden Sie die derzeit aktive TTS-Spracheinstellung</value>
+    <value>استخدام إعداد صوت TTS النشط حالياً</value>
   </data>
   <data name="Wizard_Button_ClearVoice" xml:space="preserve">
-    <value>Klar</value>
+    <value>واضح</value>
   </data>
   <data name="Wizard_Tooltip_ClearVoice" xml:space="preserve">
-    <value>Löschen Sie die Sprachzuweisung, verwenden Sie die automatische Erkennung</value>
+    <value>مسح التعيين الصوتي، سيستخدم الاكتشاف التلقائي</value>
   </data>
   <data name="Wizard_Placeholder_PiperVoice" xml:space="preserve">
-    <value>Oder wählen Sie eine heruntergeladene Piper-Stimme...</value>
+    <value>أو حدد صوت بايبر الذي تم تنزيله...</value>
   </data>
   <data name="Wizard_Tooltip_PiperVoice" xml:space="preserve">
-    <value>Wählen Sie eine der heruntergeladenen Piper-Stimmen oder geben Sie eine eigene Sprach-ID ein.</value>
+    <value>اختر من بين أصوات بايبر التي تم تنزيلها، أو اكتب معرف صوت مخصص</value>
   </data>
   <data name="Wizard_Label_ReferenceClip" xml:space="preserve">
-    <value>Referenz-Clip</value>
+    <value>مقطع مرجعي</value>
   </data>
   <data name="Wizard_Label_ReferenceClipHelp" xml:space="preserve">
-    <value>(für das Klonen von Stimmen - nur Qwen)</value>
+    <value>(للاستنساخ الصوتي - كوين فقط)</value>
   </data>
   <data name="Wizard_NoClipSelected" xml:space="preserve">
-    <value>Kein Clip ausgewählt - Qwen Voice Cloning verwendet die Standardeinstellung</value>
+    <value>لم يتم تحديد أي مقطع - سيستخدم استنساخ الصوت Qwen الافتراضي</value>
   </data>
   <data name="Wizard_Tooltip_RefPath" xml:space="preserve">
-    <value>Audioclip, der als Referenz für das Klonen der Qwen-Stimme verwendet wurde</value>
+    <value>المقطع الصوتي المستخدم كمرجع لاستنساخ صوت كوين</value>
   </data>
   <data name="Wizard_Button_Play" xml:space="preserve">
-    <value>Spielen</value>
+    <value>تشغيل</value>
   </data>
   <data name="Wizard_Button_Show" xml:space="preserve">
-    <value>anzeigen</value>
+    <value>عرض</value>
   </data>
   <data name="Wizard_Button_Browse" xml:space="preserve">
-    <value>Durchsuchen Sie</value>
+    <value>تصفح</value>
   </data>
   <data name="Wizard_Button_UseSegment" xml:space="preserve">
-    <value>Segment verwenden</value>
+    <value>استخدام الجزء</value>
   </data>
   <data name="Wizard_Tooltip_UseSegment" xml:space="preserve">
-    <value>Verwenden Sie das ausgewählte Segment als Referenz (klicken Sie zuerst auf einen Zeitstempel darunter)</value>
+    <value>استخدم المقطع المحدد كمرجع (انقر فوق الطابع الزمني أدناه أولاً)</value>
   </data>
   <data name="Wizard_Button_UsePlayhead" xml:space="preserve">
-    <value>Abspielkopf verwenden</value>
+    <value>استخدام رأس اللعب</value>
   </data>
   <data name="Wizard_Tooltip_UsePlayhead" xml:space="preserve">
-    <value>Übernehmen Sie die aktuelle Position des Abspielkopfes aus der Vorschau - der einfachste Weg, eine Referenz zu setzen!</value>
+    <value>احصل على موضع رأس التشغيل الحالي من المعاينة - أسهل طريقة لتعيين المرجع!</value>
   </data>
   <data name="Wizard_Button_AutoPick" xml:space="preserve">
-    <value>Auto-Pick</value>
+    <value>الانتقاء التلقائي</value>
   </data>
   <data name="Wizard_Tooltip_AutoPick" xml:space="preserve">
-    <value>Automatisch einen guten Clip aus den Segmenten dieses Sprechers finden</value>
+    <value>العثور تلقائياً على مقطع جيد من مقاطع هذا المتحدث</value>
   </data>
   <data name="Wizard_Hint_JumpToSegments" xml:space="preserve">
-    <value>Zu den Segmenten des Sprechers springen</value>
+    <value>الانتقال إلى مقاطع المتحدثين</value>
   </data>
   <data name="Wizard_Tooltip_JumpToSegments" xml:space="preserve">
-    <value>Klicken Sie auf einen Zeitstempel, um zu diesem Punkt im Video zu springen, und verwenden Sie dann "Abspielkopf verwenden".</value>
+    <value>انقر فوق الطابع الزمني للانتقال إلى تلك النقطة في الفيديو، ثم استخدم &quot;استخدام رأس التشغيل&quot;.</value>
   </data>
   <data name="Wizard_Tooltip_ConfidenceReason" xml:space="preserve">
-    <value>Warum dieser Clip als gut/schlecht bewertet wurde</value>
+    <value>سبب تصنيف هذا المقطع على أنه جيد/ضعيف</value>
   </data>
   <data name="Wizard_Tooltip_ConfidenceTier" xml:space="preserve">
-    <value>Qualität des Referenzclips für diesen Lautsprecher</value>
+    <value>جودة المقطع المرجعي لهذه السماعة</value>
   </data>
   <data name="Wizard_Tooltip_LastAction" xml:space="preserve">
-    <value>Letzte Aktion für diesen Redner</value>
+    <value>آخر إجراء تم اتخاذه بشأن هذا المتحدث</value>
   </data>
   <data name="Wizard_Expander_Advanced" xml:space="preserve">
-    <value>Fortgeschrittene</value>
+    <value>متقدم</value>
   </data>
   <data name="Wizard_Label_MergeSpeakers" xml:space="preserve">
-    <value>Lautsprecher zusammenführen</value>
+    <value>دمج مكبرات الصوت</value>
   </data>
   <data name="Wizard_Tooltip_MergeSource" xml:space="preserve">
-    <value>Quelllautsprecher für die Zusammenführung auswählen</value>
+    <value>حدد مكبر الصوت المصدر للدمج</value>
   </data>
   <data name="Wizard_Tooltip_MergeTarget" xml:space="preserve">
-    <value>Zielsprecher auswählen (der die zusammengeführten Segmente erhält)</value>
+    <value>حدد السماعة المستهدفة (ستتلقى المقاطع المدمجة)</value>
   </data>
   <data name="Wizard_Button_Merge" xml:space="preserve">
-    <value>Zusammenführen</value>
+    <value>الدمج</value>
   </data>
   <data name="Wizard_Tooltip_Merge" xml:space="preserve">
-    <value>Quelle in Ziel zusammenführen - dadurch wird die Abschrift permanent aktualisiert</value>
+    <value>دمج المصدر في الهدف - يؤدي هذا إلى تحديث النسخة بشكل دائم</value>
   </data>
   <data name="Wizard_Footer_Hint" xml:space="preserve">
-    <value>Beenden speichert die Änderungen an Stimme und Referenz. Abbrechen verwirft alle Bearbeitungen.</value>
+    <value>إنهاء يحفظ التغييرات الصوتية والمرجعية. إلغاء يتجاهل جميع التعديلات.</value>
   </data>
   <data name="Wizard_Button_Cancel" xml:space="preserve">
-    <value>Abbrechen</value>
+    <value>إلغاء</value>
   </data>
   <data name="Wizard_Tooltip_Cancel" xml:space="preserve">
-    <value>Alle Änderungen verwerfen und schließen</value>
+    <value>تجاهل جميع التغييرات وأغلق</value>
   </data>
   <data name="Wizard_Button_Finish" xml:space="preserve">
-    <value>Fertigstellen</value>
+    <value>الإنهاء</value>
   </data>
   <data name="Wizard_Tooltip_Finish" xml:space="preserve">
-    <value>Sprach- und Referenzänderungen auf die Sitzung anwenden</value>
+    <value>تطبيق التغييرات الصوتية والمرجعية على الجلسة</value>
   </data>
   <data name="Wizard_Tooltip_Close" xml:space="preserve">
-    <value>Assistenten schließen</value>
+    <value>إغلاق المعالج</value>
   </data>
   <data name="Wizard_Tooltip_CloseDiscard" xml:space="preserve">
-    <value>Assistenten schließen (Änderungen verwerfen)</value>
+    <value>إغلاق المعالج (تجاهل التغييرات)</value>
   </data>
   <data name="Wizard_Hint_TopBanner" xml:space="preserve">
-    <value>Weisen Sie den Lautsprechern Stimmen zu und legen Sie Referenz-Audioclips fest. Verwenden Sie die Vorschau, um gute Clips zu finden, und klicken Sie dann auf "Abspielkopf verwenden", um den aktuellen Moment zu erfassen.</value>
+    <value>تعيين الأصوات إلى مكبرات الصوت وتعيين مقاطع صوتية مرجعية. استخدم المعاينة للعثور على مقاطع جيدة، ثم انقر فوق "استخدام رأس التشغيل" لالتقاط اللحظة الحالية.</value>
   </data>
   <data name="Wizard_Toggle_NeedsAttention" xml:space="preserve">
-    <value>Show braucht Aufmerksamkeit</value>
+    <value>العرض يحتاج إلى اهتمام</value>
   </data>
   <data name="Wizard_Tooltip_NeedsAttention" xml:space="preserve">
-    <value>Zeigen Sie nur Lautsprecher, die überarbeitet werden müssen oder schlechte Referenzen haben</value>
+    <value>عرض المتحدثين الذين يحتاجون إلى مراجعة أو لديهم مرجع ضعيف فقط</value>
   </data>
   <data name="Wizard_Button_ResetAll" xml:space="preserve">
-    <value>Alle zurücksetzen</value>
+    <value>إعادة تعيين الكل</value>
   </data>
   <data name="Wizard_Tooltip_ResetAll" xml:space="preserve">
-    <value>Alle Entwurfsänderungen löschen und neu beginnen</value>
+    <value>امسح جميع التغييرات في المسودة وابدأ من جديد</value>
   </data>
   <data name="Wizard_Hint_ScrubPreview" xml:space="preserve">
-    <value>Durchsuchen Sie das Video, um gute Audioclips zu finden. Klicken Sie auf "Abspielkopf verwenden" bei einem Sprecher, um den aktuellen Moment als Referenz zu verwenden.</value>
+    <value>افحص الفيديو للعثور على مقاطع صوتية جيدة. انقر فوق "استخدام رأس التشغيل" على أحد مكبرات الصوت لالتقاط اللحظة الحالية كمرجع لها.</value>
   </data>
   <data name="Wizard_Hint_LinuxMacFallback" xml:space="preserve">
-    <value>Unter Linux/MacOS verwenden Sie das Hauptfenster, um durch das Video zu blättern. Wenn Sie einen guten Moment gefunden haben, kommen Sie hierher zurück und klicken Sie auf "Abspielkopf verwenden" für diesen Lautsprecher.</value>
+    <value>على لينكس/ماك أو إس، استخدم النافذة الرئيسية لتنظيف الفيديو. عندما تجد لحظة جيدة، ارجع إلى هنا وانقر على "استخدام رأس التشغيل" لتلك السماعة.</value>
   </data>
   <data name="Wizard_Tooltip_SeekSlider" xml:space="preserve">
-    <value>Ziehen, um das Video zu durchsuchen</value>
+    <value>اسحب للبحث من خلال الفيديو</value>
   </data>
   <data name="Wizard_Tooltip_PlayPause" xml:space="preserve">
-    <value>Abspielen oder Anhalten der Vorschau</value>
+    <value>تشغيل المعاينة أو إيقافها مؤقتاً</value>
   </data>
   <data name="Wizard_Label_ClipDuration" xml:space="preserve">
-    <value>Abspielkopf Clip Dauer</value>
+    <value>مدة مقطع رأس التشغيل</value>
   </data>
   <data name="Wizard_Tooltip_ClipDuration" xml:space="preserve">
-    <value>Wie viel Audio vor und nach der Abspielposition aufgenommen werden soll</value>
+    <value>مقدار الصوت المطلوب التقاطه قبل وبعد موضع رأس التشغيل</value>
   </data>
   <data name="Diag_HardwareSnapshot" xml:space="preserve">
-    <value>Hardware-Schnappschuss</value>
+    <value>لقطة الأجهزة</value>
   </data>
   <data name="Diag_Cpu" xml:space="preserve">
-    <value>CPU:</value>
+    <value>وحدة المعالجة المركزية:</value>
   </data>
   <data name="Diag_Gpu" xml:space="preserve">
-    <value>GPU:</value>
+    <value>وحدة معالجة الرسومات:</value>
   </data>
   <data name="Diag_Ram" xml:space="preserve">
-    <value>System-RAM:</value>
+    <value>ذاكرة الوصول العشوائي للنظام:</value>
   </data>
   <data name="Diag_RuntimeRouting" xml:space="preserve">
-    <value>Laufzeit-Routing</value>
+    <value>توجيه وقت التشغيل</value>
   </data>
   <data name="Diag_InferenceHost" xml:space="preserve">
-    <value>Inference Host:</value>
+    <value>مضيف الاستدلال:</value>
   </data>
   <data name="Diag_WarmupStatus" xml:space="preserve">
-    <value>Aufwärmstatus:</value>
+    <value>حالة الإحماء:</value>
   </data>
   <data name="Diag_NmtFallback" xml:space="preserve">
-    <value>NMT Fallback:</value>
+    <value>احتياطي NMT:</value>
   </data>
   <data name="Diag_GpuProbeStreak" xml:space="preserve">
-    <value>GPU-Probe-Streifen:</value>
+    <value>سلسلة مسبار وحدة معالجة الرسومات:</value>
   </data>
   <data name="Diag_Environment" xml:space="preserve">
-    <value>Umwelt</value>
+    <value>البيئة</value>
   </data>
   <data name="Diag_PythonPath" xml:space="preserve">
-    <value>Python-Pfad:</value>
+    <value>مسار بايثون:</value>
   </data>
   <data name="Diag_FfmpegPath" xml:space="preserve">
-    <value>ffmpeg Pfad:</value>
+    <value>مسار ffmpeg:</value>
   </data>
   <data name="Diag_Button_Refresh" xml:space="preserve">
-    <value>Diagnostik aktualisieren</value>
+    <value>تحديث التشخيص</value>
   </data>
   <data name="Settings_Button_SaveClose" xml:space="preserve">
-    <value>Speichern &amp; Schließen</value>
+    <value>الحفظ والإغلاق</value>
   </data>
   <data name="Language_ar" xml:space="preserve">
-    <value>Arabisch</value>
+    <value>اللغة العربية</value>
   </data>
   <data name="Language_de" xml:space="preserve">
-    <value>Deutsch</value>
+    <value>الألمانية</value>
   </data>
   <data name="Language_en" xml:space="preserve">
-    <value>Englisch</value>
+    <value>اللغة الإنجليزية</value>
   </data>
   <data name="Language_es" xml:space="preserve">
-    <value>Spanisch</value>
+    <value>الإسبانية</value>
   </data>
   <data name="Language_fr" xml:space="preserve">
-    <value>Französisch</value>
+    <value>الفرنسية</value>
   </data>
   <data name="Language_hi" xml:space="preserve">
-    <value>Hindi</value>
+    <value>هندي</value>
   </data>
   <data name="Language_it" xml:space="preserve">
-    <value>Italienisch</value>
+    <value>إيطالي</value>
   </data>
   <data name="Language_ja" xml:space="preserve">
-    <value>Japanisch</value>
+    <value>ياباني</value>
   </data>
   <data name="Language_ko" xml:space="preserve">
-    <value>Koreanisch</value>
+    <value>الكورية</value>
   </data>
   <data name="Language_nl" xml:space="preserve">
-    <value>Niederländisch</value>
+    <value>الهولندية</value>
   </data>
   <data name="Language_pl" xml:space="preserve">
-    <value>Polnisch</value>
+    <value>البولندية</value>
   </data>
   <data name="Language_pt" xml:space="preserve">
-    <value>Portugiesisch</value>
+    <value>البرتغالية</value>
   </data>
   <data name="Language_ru" xml:space="preserve">
-    <value>Russisch</value>
+    <value>الروسية</value>
   </data>
   <data name="Language_sv" xml:space="preserve">
-    <value>Schwedisch</value>
+    <value>اللغة السويدية</value>
   </data>
   <data name="Language_tr" xml:space="preserve">
-    <value>Türkisch</value>
+    <value>اللغة التركية</value>
   </data>
   <data name="Language_zh" xml:space="preserve">
-    <value>Chinesisch (vereinfacht)</value>
+    <value>الصينية (المبسطة)</value>
   </data>
 </root>
-
 
