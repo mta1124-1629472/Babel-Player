@@ -372,6 +372,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// Builds the app-language dropdown from <see cref="SupportedUiLanguageCatalog"/>
+    /// (languages with a shipping <c>Strings.*.resx</c>), not from the pipeline
+    /// translation catalog.  Listing pipeline-only codes would silently fall back
+    /// to English UI strings with no user feedback.
+    /// </summary>
     private static AppLanguageOption[] BuildAppLanguageOptions()
     {
         var options = new System.Collections.Generic.List<AppLanguageOption>
@@ -380,7 +386,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
                 .GetString("Settings_Option_AutoSystem", LocalizationService.Instance.CurrentCulture)
                 ?? "Auto (system)"),
         };
-        foreach (var code in NllbLanguageCatalog.IsoToFloresToken.Keys.OrderBy(c => c, StringComparer.Ordinal))
+        foreach (var code in SupportedUiLanguageCatalog.IsoCodes)
         {
             options.Add(new AppLanguageOption(code, LanguageDisplayNames.ForIso639(code)));
         }
