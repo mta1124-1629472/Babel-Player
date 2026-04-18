@@ -1,6 +1,5 @@
 version: 2.1
 
-# Use the Windows Orb to simplify environment setup
 orbs:
   win: circleci/windows@5.0
 
@@ -9,32 +8,31 @@ jobs:
     executor:
       name: win/default
       shell: powershell.exe
-      size: "medium"
-
     steps:
       - checkout
 
       - run:
           name: Install .NET 10
           command: |
-            # Official script to install the latest .NET SDK
             Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile dotnet-install.ps1
             ./dotnet-install.ps1 -Channel 10.0 -InstallDir 'C:\Program Files\dotnet'
 
       - run:
           name: Restore Dependencies
-          command: dotnet restore
+          # Explicitly pointing to the .sln to fix the ambiguity error
+          command: dotnet restore Babel-Player.sln
 
       - run:
           name: Build Babel Player
-          command: dotnet build --configuration Release --no-restore
+          command: dotnet build Babel-Player.sln --configuration Release --no-restore
 
       - run:
           name: Run Unit Tests
-          command: dotnet test --no-build --verbosity normal
+          # This will run tests found in BabelPlayer.Tests.csproj via the solution
+          command: dotnet test Babel-Player.sln --no-build --verbosity normal
 
 workflows:
   version: 2
-  primary:
+  build_and_test_workflow:
     jobs:
       - build-and-test
