@@ -60,7 +60,7 @@ public sealed class FasterWhisperTranscriptionProvider : PythonSubprocessService
         if (proc.ExitCode != 0 || !File.Exists(audioPath))
             throw new InvalidOperationException($"Audio extraction failed: {stderr}");
 
-        Log.Info($"Extracted audio to: {audioPath}");
+        Log.Debug($"Extracted audio to: {audioPath}");
         return audioPath;
     }
 
@@ -178,7 +178,7 @@ with open(sys.argv[2], 'w', encoding='utf-8') as f:
 print('Transcription complete')
 ";
 
-            Log.Info($"Starting transcription of: {inputPath} [cpu compute={cpuComputeType}, threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, workers={numWorkers}]");
+            Log.Debug($"Starting transcription of: {inputPath} [cpu compute={cpuComputeType}, threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, workers={numWorkers}]");
 
             var result = await RunPythonScriptAsync(
                 script,
@@ -187,7 +187,7 @@ print('Transcription complete')
                 cancellationToken: cancellationToken);
             ThrowIfFailed(result, "Transcription");
 
-            Log.Info($"Transcription completed: {request.OutputJsonPath}");
+            Log.Debug($"Transcription completed: {request.OutputJsonPath}");
 
             var transcriptionData = await ArtifactJson.LoadTranscriptAsync(request.OutputJsonPath, cancellationToken);
 
@@ -213,7 +213,7 @@ print('Transcription complete')
             if (!string.IsNullOrWhiteSpace(extractedAudioPath) && File.Exists(extractedAudioPath))
             {
                 File.Delete(extractedAudioPath);
-                Log.Info($"Deleted temporary extracted audio: {extractedAudioPath}");
+                Log.Debug($"Deleted temporary extracted audio: {extractedAudioPath}");
             }
         }
     }
@@ -340,7 +340,7 @@ _emit({{
             var peakVramMb = -1d;
             var segments = new List<TranscriptSegment>();
 
-            Log.Info(
+            Log.Debug(
                 $"Starting streaming transcription of: {inputPath} " +
                 $"[cpu compute={cpuComputeType}, threads={(cpuThreads > 0 ? cpuThreads.ToString() : "auto")}, workers={numWorkers}]");
 
@@ -418,7 +418,7 @@ _emit({{
             if (!string.IsNullOrWhiteSpace(extractedAudioPath) && File.Exists(extractedAudioPath))
             {
                 File.Delete(extractedAudioPath);
-                Log.Info($"Deleted temporary extracted audio: {extractedAudioPath}");
+                Log.Debug($"Deleted temporary extracted audio: {extractedAudioPath}");
             }
         }
     }
@@ -439,7 +439,7 @@ _emit({{
         var model = settings.TranscriptionModel;
         if (!ModelDownloader.IsFasterWhisperDownloaded(model))
         {
-            Log.Info($"Model {model} requires download. Starting download...");
+            Log.Debug($"Model {model} requires download. Starting download...");
             return await new ModelDownloader(Log).DownloadFasterWhisperAsync(model, progress, ct);
         }
         return true;

@@ -604,7 +604,7 @@ public sealed class ManagedCpuRuntimeManager
             };
         }
 
-        _log.Info($"Managed CPU runtime validated with packages: {FormatPackageVersions(payload.Packages)}");
+        _log.Debug($"Managed CPU runtime validated with packages: {FormatPackageVersions(payload.Packages)}");
         return new ManagedCpuRuntimeValidationRecord
         {
             MarkerHash = markerHash,
@@ -646,7 +646,7 @@ public sealed class ManagedCpuRuntimeManager
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
-        _log.Info(
+        _log.Debug(
             $"Running CPU runtime process: {fileName} {ProcessArgFormatter.FormatArgs(arguments)}");
 
         using var process = Process.Start(psi)
@@ -655,7 +655,7 @@ public sealed class ManagedCpuRuntimeManager
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         while (await process.StandardOutput.ReadLineAsync(cancellationToken) is { } line)
         {
-            _log.Info(line);
+            _log.Debug(line);
             if (!string.IsNullOrWhiteSpace(line))
                 onStatusLine?.Invoke(line);
         }
@@ -663,7 +663,7 @@ public sealed class ManagedCpuRuntimeManager
         await process.WaitForExitAsync(cancellationToken);
         var stderr = await stderrTask;
 
-        _log.Info($"CPU runtime process exited: file={fileName}, exit_code={process.ExitCode}");
+        _log.Debug($"CPU runtime process exited: file={fileName}, exit_code={process.ExitCode}");
 
         if (process.ExitCode != 0)
         {
@@ -672,7 +672,7 @@ public sealed class ManagedCpuRuntimeManager
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))
-            _log.Info(stderr.Trim());
+            _log.Debug(stderr.Trim());
     }
 
     /// <summary>
@@ -705,7 +705,7 @@ public sealed class ManagedCpuRuntimeManager
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
-        _log.Info($"Running CPU runtime capture process: {fileName} {ProcessArgFormatter.FormatArgs(arguments)}");
+        _log.Debug($"Running CPU runtime capture process: {fileName} {ProcessArgFormatter.FormatArgs(arguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");

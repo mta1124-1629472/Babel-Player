@@ -136,7 +136,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
                  && _options.AllowHdrPassthrough
                  && _options.HdrPlaybackMode == VideoHdrPlaybackMode.NvidiaDriverRtxHdr)
         {
-            _log?.Info(
+            _log?.Debug(
                 "HDR mode: NVIDIA driver RTX/Auto HDR — mpv HDR passthrough options are not forced.");
         }
 
@@ -159,7 +159,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             && _options.AllowHdrPassthrough
             && _options.HdrPlaybackMode == VideoHdrPlaybackMode.MpvHdrPassthrough)
         {
-            _log?.Info(
+            _log?.Debug(
                 $"Configured mpv HDR passthrough: gpu-next={_options.UseGpuNext}, " +
                 $"tone_mapping={_options.ToneMapping}, target_peak='{_options.TargetPeak}', " +
                 "note=driver-level Auto HDR remains separate and is not controlled by this app.");
@@ -188,7 +188,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
         if (_options.UseGpuNext && _options.VsrEnabled)
         {
-            _log?.Info($"Updated embedded video surface size: width={width}, height={height}");
+            _log?.Debug($"Updated embedded video surface size: width={width}, height={height}");
 
             if (_isLoaded && _handle != IntPtr.Zero)
                 ApplyVsrFilter("display-size-updated");
@@ -213,7 +213,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
 
         if (_options.UseGpuNext && _options.VsrEnabled)
         {
-            _log?.Info($"Updated monitor resolution for embedded video surface: width={width}, height={height}");
+            _log?.Debug($"Updated monitor resolution for embedded video surface: width={width}, height={height}");
 
             if (_isLoaded && _handle != IntPtr.Zero)
                 ApplyVsrFilter("monitor-resolution-updated");
@@ -769,7 +769,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         if (snapshot.State == VsrDiagnosticState.Rejected)
             _log?.Warning(message);
         else
-            _log?.Info(message);
+            _log?.Debug(message);
     }
 
     internal static string DescribeBackendResultLabel(int? backendResultCode) =>

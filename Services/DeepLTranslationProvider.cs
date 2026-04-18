@@ -75,7 +75,7 @@ public sealed class DeepLTranslationProvider : ITranslationProvider
         };
 
         await WriteTranslationArtifactAsync(translationArtifact, request.OutputJsonPath, cancellationToken);
-        _log.Info($"[DeepLTranslation] Complete: {translationArtifact.Segments?.Count ?? 0} segments.");
+        _log.Debug($"[DeepLTranslation] Complete: {translationArtifact.Segments?.Count ?? 0} segments.");
 
         return BuildResult(translationArtifact);
     }
@@ -119,7 +119,7 @@ public sealed class DeepLTranslationProvider : ITranslationProvider
             throw new InvalidOperationException($"Segment '{request.SegmentId}' not found in translation JSON.");
 
         await WriteTranslationArtifactAsync(existing, request.OutputJsonPath, cancellationToken);
-        _log.Info($"[DeepLTranslation] Single-segment regen complete: {request.SegmentId}");
+        _log.Debug($"[DeepLTranslation] Single-segment regen complete: {request.SegmentId}");
 
         return BuildResult(existing);
     }

@@ -69,7 +69,7 @@ public sealed class BenchmarkRunHarness
         for (int i = 0; i < _warmupRuns; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _log.Info($"Benchmark warmup run {i + 1}/{_warmupRuns} (index {runIndex})");
+            _log.Debug($"Benchmark warmup run {i + 1}/{_warmupRuns} (index {runIndex})");
 
             var metrics = await runFn(runIndex, "warmup", cancellationToken);
 
@@ -83,7 +83,7 @@ public sealed class BenchmarkRunHarness
                 Wer:                  metrics.Wer,
                 Cer:                  metrics.Cer));
 
-            _log.Info($"  warmup  run {i + 1}: {metrics.LatencyMs} ms");
+            _log.Debug($"  warmup  run {i + 1}: {metrics.LatencyMs} ms");
         }
 
         // ── Measured phase ──────────────────────────────────────────────────
@@ -91,7 +91,7 @@ public sealed class BenchmarkRunHarness
         for (int i = 0; i < _measuredRuns; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _log.Info($"Benchmark measured run {i + 1}/{_measuredRuns} (index {runIndex})");
+            _log.Debug($"Benchmark measured run {i + 1}/{_measuredRuns} (index {runIndex})");
 
             var metrics = await runFn(runIndex, "measured", cancellationToken);
             measuredLatencies.Add(metrics.LatencyMs);
@@ -106,7 +106,7 @@ public sealed class BenchmarkRunHarness
                 Wer:                  metrics.Wer,
                 Cer:                  metrics.Cer));
 
-            _log.Info($"  measured run {i + 1}: {metrics.LatencyMs} ms");
+            _log.Debug($"  measured run {i + 1}: {metrics.LatencyMs} ms");
         }
 
         if (measuredLatencies.Count > 0)

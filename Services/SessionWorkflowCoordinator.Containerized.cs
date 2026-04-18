@@ -128,7 +128,7 @@ public sealed partial class SessionWorkflowCoordinator
 
             var capabilityReady = probeResult.Capabilities?.IsReady(ContainerCapabilityStage.Translation) ?? false;
             var capabilityDetail = probeResult.Capabilities?.Detail(ContainerCapabilityStage.Translation) ?? "<none>";
-            _log.Info(
+            _log.Debug(
                 $"Translation GPU route: provider={CurrentSettings.TranslationProvider}, model={CurrentSettings.TranslationModel}, " +
                 $"service_url={CurrentSettings.EffectiveGpuServiceUrl}, capability_ready={capabilityReady}, detail='{capabilityDetail}'");
 
@@ -140,7 +140,7 @@ public sealed partial class SessionWorkflowCoordinator
         }
         else
         {
-            _log.Info(
+            _log.Debug(
                 $"Translation route: runtime={CurrentSettings.TranslationRuntime}, provider={CurrentSettings.TranslationProvider}, model={CurrentSettings.TranslationModel}");
             readiness = TranslationRegistry.CheckReadiness(
                 CurrentSettings.TranslationProvider,

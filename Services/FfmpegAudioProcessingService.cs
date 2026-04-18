@@ -520,7 +520,7 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
 
         if (tempo < minRatio || tempo > maxRatio)
         {
-            _log.Info(
+            _log.Debug(
                 $"TimeStretch skipped: tempo ratio {tempo:F3} outside [{minRatio:F2}, {maxRatio:F2}] " +
                 $"for '{Path.GetFileName(inputPath)}'.");
             return false;
@@ -586,7 +586,7 @@ public sealed class FfmpegAudioProcessingService(AppLog log) : IAudioProcessingS
                 $"ffmpeg time-stretch failed (exit {process.ExitCode}): {stderr} {stdout}".Trim());
         }
 
-        _log.Info($"TimeStretch: '{Path.GetFileName(inputPath)}' {sourceDuration.Value:F2}s -> {targetDurationSeconds:F2}s (tempo {tempo:F3})");
+        _log.Debug($"TimeStretch: '{Path.GetFileName(inputPath)}' {sourceDuration.Value:F2}s -> {targetDurationSeconds:F2}s (tempo {tempo:F3})");
         return true;
     }
 

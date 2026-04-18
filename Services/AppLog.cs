@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -30,6 +31,8 @@ public sealed class AppLog : IDisposable, IAsyncDisposable
     public string LogFilePath { get; }
 
     public void Info(string message)    => Write("INFO",  message);
+    [Conditional("BABEL_DEV")]
+    public void Debug(string message)   => Write("DEBUG", message);
     public void Warning(string message) => Write("WARN",  message);
 
     public void Error(string message, Exception exception)

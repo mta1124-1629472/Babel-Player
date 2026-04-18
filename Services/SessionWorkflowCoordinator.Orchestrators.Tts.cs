@@ -58,9 +58,12 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                 await _c.EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
                 await _c.EnsureMultiSpeakerReferenceClipsAsync(cancellationToken);
 
+                var startMessage = BuildInfo.IsDevBuild
+                    ? $"Starting TTS synthesis with {_c.CurrentSettings.TtsProvider} / {v}. Generating combined dub audio — progress will appear below."
+                    : $"Starting dub generation with voice {v}.";
                 ReportStage(
                     stageContext,
-                    $"Starting TTS synthesis with {_c.CurrentSettings.TtsProvider} / {v}. Generating combined dub audio — progress will appear below.",
+                    startMessage,
                     progress01: 0,
                     isIndeterminate: false);
 
@@ -70,7 +73,7 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                     _c.CurrentSession.TargetLanguage ?? _c.CurrentSettings.TargetLanguage,
                     _c.CurrentSettings.TargetLanguage);
 
-                _c.Log.Info($"Starting TTS generation: {_c.CurrentSession.TranslationPath} -> {ttsPath}");
+                _c.Log.Debug($"Starting TTS generation: {_c.CurrentSession.TranslationPath} -> {ttsPath}");
 
                 var (segmentAudioPaths, segmentDurations, totalSegments, orderedSegments) = await _c.GenerateSegmentClipsAsync(
                     v!, ttsLanguage, segmentsDir, stageContext, cancellationToken);
@@ -95,7 +98,7 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
             }
             finally
             {
-                _c.Log.Info(
+                _c.Log.Debug(
                     $"Stage telemetry stage=tts success={(stageSucceeded ? "true" : "false")} " +
                     $"provider={stagePlan.ProviderId} runtime={stagePlan.Runtime} role={stagePlan.Role} " +
                     $"elapsed_ms={stageTimer.ElapsedMilliseconds}");
