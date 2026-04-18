@@ -55,6 +55,7 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
         {
             var json = $$"""
             {
+              "schema_version": "2.0",
               "sourceLanguage": "es",
               "targetLanguage": "en",
               "segments": [
@@ -81,6 +82,7 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
         {
             var json = $$"""
             {
+              "schema_version": "2.0",
               "sourceLanguage": "es",
               "targetLanguage": "en",
               "segments": [
@@ -105,6 +107,7 @@ public sealed class ElevenLabsTtsProviderTests() : IDisposable
         var path = Path.Combine(_testDir, $"empty-translation-{Guid.NewGuid():N}.json");
         var json = """
         {
+          "schema_version": "2.0",
           "sourceLanguage": "es",
           "targetLanguage": "en",
           "segments": []

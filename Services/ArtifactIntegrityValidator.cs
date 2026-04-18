@@ -109,6 +109,12 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
+        if (!File.Exists(snapshot.TranscriptPath))
+        {
+            error = "Transcript file was missing.";
+            return false;
+        }
+
         var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath), snapshot.TranscriptPath);
         var expectedTiming = ArtifactIntegrity.BuildTranscriptTimingSummary(transcript.Segments);
         var expectedSegmentIds = ArtifactIntegrity.BuildTranscriptSegmentIds(transcript.Segments);
@@ -155,6 +161,12 @@ internal static class ArtifactIntegrityValidator
         if (string.IsNullOrWhiteSpace(snapshot.TranslationPath))
         {
             error = "Translation path was missing.";
+            return false;
+        }
+
+        if (!File.Exists(snapshot.TranslationPath))
+        {
+            error = "Translation file was missing.";
             return false;
         }
 
