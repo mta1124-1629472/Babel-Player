@@ -14,9 +14,10 @@ namespace Babel.Player.Services;
 
 /// <summary>
 /// Runtime-switchable UI language service.  Exposes an indexer so AXAML can
-/// bind via <c>{Binding [KeyName], Source={x:Static local:LocalizationService.Instance}}</c>;
-/// simpler one-shot lookups use the <see cref="Converters.LocalizeExtension"/>
-/// markup extension.
+/// bind via <c>{Binding [KeyName], Source={x:Static local:LocalizationService.Instance}}</c>.
+/// The <see cref="Converters.LocalizeExtension"/> markup extension wraps this
+/// indexer so <c>{local:Localize KeyName}</c> produces a live binding that
+/// refreshes when <see cref="SetCulture"/> is called.
 /// </summary>
 public sealed class LocalizationService : INotifyPropertyChanged
 {
