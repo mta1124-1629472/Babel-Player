@@ -67,6 +67,7 @@ public sealed class GoogleSttTranscriptionProvider : ITranscriptionProvider
 
             var artifact = new TranscriptArtifact
             {
+                SchemaVersion = ArtifactJson.CurrentSchemaVersion,
                 Language = languageCode,
                 LanguageProbability = 1.0,
                 Segments =
@@ -84,7 +85,11 @@ public sealed class GoogleSttTranscriptionProvider : ITranscriptionProvider
             if (!string.IsNullOrEmpty(outputDir))
                 Directory.CreateDirectory(outputDir);
 
-            await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(artifact), cancellationToken);
+            await ArtifactPersistence.AtomicWriteTextAsync(
+                    request.OutputJsonPath,
+                    ArtifactJson.SerializeTranscript(artifact),
+                    cancellationToken)
+                .ConfigureAwait(false);
 
             _log.Debug($"[GoogleSTT] Complete: {segments.Count} segments.");
 

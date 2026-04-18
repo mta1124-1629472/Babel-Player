@@ -67,6 +67,7 @@ public sealed class OpenAiWhisperTranscriptionProvider : ITranscriptionProvider
 
         var transcriptArtifact = new TranscriptArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             Language = string.IsNullOrWhiteSpace(payload.Language)
                 ? (request.LanguageHint ?? "unknown")
                 : payload.Language,
@@ -86,7 +87,11 @@ public sealed class OpenAiWhisperTranscriptionProvider : ITranscriptionProvider
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(transcriptArtifact), cancellationToken);
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                request.OutputJsonPath,
+                ArtifactJson.SerializeTranscript(transcriptArtifact),
+                cancellationToken)
+            .ConfigureAwait(false);
 
         _log.Debug($"[OpenAIWhisper] Complete: {segments.Count} segments.");
 

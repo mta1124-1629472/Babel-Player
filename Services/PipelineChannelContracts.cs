@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -26,23 +29,7 @@ internal sealed record TtsChannelItem(
 
 public interface IStreamingTranscriptionProvider
 {
-    /// <summary>
-        /// Starts a streaming transcription for the specified request and emits transcript updates to the provided channel writer.
-        /// </summary>
-        /// <param name="request">The transcription request describing the audio source, model options, and desired output parameters.</param>
-        /// <param name="writer">A channel writer to which incremental <see cref="TranscriptChannelItem"/> updates will be written.</param>
-        /// <param name="cancellationToken">A token to cancel the streaming operation; implementations must observe this token and stop producing new items when cancellation is requested.</param>
-        /// <returns>The final <see cref="TranscriptionResult"/> containing the aggregated transcript, language information, and any session metrics.</returns>
-        /// <remarks>
-        /// Entry/exit state:
-        /// - Entry: caller must ensure the hosting pipeline is initialized and ready to accept streaming transcription requests.
-        /// - Exit on success: the transcription session is completed and the returned <see cref="TranscriptionResult"/> represents the final transcript state; implementations will have emitted final segment updates to <paramref name="writer"/>.
-        /// Persistence:
-        /// - Implementations may persist partial artifacts as items are written to <paramref name="writer"/> and should promote any partial artifacts to final storage before returning the final result.
-        /// Cancellation:
-        /// - When <paramref name="cancellationToken"/> is signaled, implementations should stop producing further transcript updates and perform any required cleanup or finalization as quickly as possible.
-        /// </remarks>
-        Task<TranscriptionResult> TranscribeStreamingAsync(
+    Task<TranscriptionResult> TranscribeStreamingAsync(
         TranscriptionRequest request,
         ChannelWriter<TranscriptChannelItem> writer,
         CancellationToken cancellationToken = default);
@@ -56,57 +43,142 @@ internal sealed class TranscriptChannelForwardingWriter(
 
     public override bool TryWrite(TranscriptChannelItem item)
     {
-        artifactWriter.AppendAsync(item, CancellationToken.None).GetAwaiter().GetResult();
-        return innerWriter.TryWrite(item);
+        if (!innerWriter.TryWrite(item))
+            return false;
+
+        artifactWriter.TryAppend(item);
+        return true;
     }
 
     public override ValueTask<bool> WaitToWriteAsync(CancellationToken cancellationToken = default) =>
         innerWriter.WaitToWriteAsync(cancellationToken);
 
-    public override async ValueTask WriteAsync(TranscriptChannelItem item, CancellationToken cancellationToken = default)
+    public override ValueTask WriteAsync(TranscriptChannelItem item, CancellationToken cancellationToken = default)
     {
-        await artifactWriter.AppendAsync(item, cancellationToken).ConfigureAwait(false);
-        await innerWriter.WriteAsync(item, cancellationToken).ConfigureAwait(false);
+        artifactWriter.TryAppend(item);
+        return innerWriter.WriteAsync(item, cancellationToken);
+    }
+}
+
+internal sealed record StreamingArtifactJournalPaths(
+    string PartialPath,
+    string PartialTempPath,
+    string EventsPath,
+    string CommitPath)
+{
+    public static StreamingArtifactJournalPaths FromFinalPath(string finalPath)
+    {
+        var dir = Path.GetDirectoryName(finalPath) ?? AppContext.BaseDirectory;
+        var stem = Path.GetFileNameWithoutExtension(finalPath);
+        var extension = Path.GetExtension(finalPath);
+        var partialPath = Path.Combine(dir, $"{stem}.partial{extension}");
+        return new StreamingArtifactJournalPaths(
+            partialPath,
+            $"{partialPath}.tmp",
+            Path.Combine(dir, $"{stem}.events.jsonl"),
+            Path.Combine(dir, $"{stem}.commit.json"));
+    }
+
+    public static StreamingArtifactJournalPaths FromPartialPath(string partialPath)
+    {
+        var fileName = Path.GetFileName(partialPath);
+        const string partialJsonSuffix = ".partial.json";
+        if (!fileName.EndsWith(partialJsonSuffix, StringComparison.OrdinalIgnoreCase))
+            return FromFinalPath(partialPath);
+
+        var dir = Path.GetDirectoryName(partialPath) ?? AppContext.BaseDirectory;
+        var stem = fileName[..^partialJsonSuffix.Length];
+        return new StreamingArtifactJournalPaths(
+            partialPath,
+            $"{partialPath}.tmp",
+            Path.Combine(dir, $"{stem}.events.jsonl"),
+            Path.Combine(dir, $"{stem}.commit.json"));
     }
 }
 
 internal sealed class TranscriptArtifactStreamingWriter
 {
-    private readonly string _partialPath;
+    private const int CompactEveryEventCount = 16;
+
+    private static readonly JsonSerializerOptions JournalJsonOptions = new()
+    {
+        WriteIndented = false,
+    };
+
+    private readonly StreamingArtifactJournalPaths _paths;
+    private readonly object _sync = new();
+    private readonly Channel<Func<CancellationToken, Task>> _operations = Channel.CreateUnbounded<Func<CancellationToken, Task>>(
+        new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false,
+        });
+
     private TranscriptArtifact _artifact;
+    private Task? _processorTask;
+    private long _nextSequence;
+    private int _eventsSinceCompaction;
 
     public TranscriptArtifactStreamingWriter(
         string partialPath,
         string sourceLanguage,
         double languageProbability)
     {
-        _partialPath = partialPath;
-        _artifact = new TranscriptArtifact
-        {
-            Language = sourceLanguage,
-            LanguageProbability = languageProbability,
-            Segments = [],
-        };
+        _paths = StreamingArtifactJournalPaths.FromPartialPath(partialPath);
+        _artifact = CreateEmptyArtifact(sourceLanguage, languageProbability);
     }
 
-    public string PartialPath => _partialPath;
+    public string PartialPath => _paths.PartialPath;
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        var dir = System.IO.Path.GetDirectoryName(_partialPath);
+        var dir = Path.GetDirectoryName(_paths.PartialPath);
         if (!string.IsNullOrWhiteSpace(dir))
-            System.IO.Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(dir);
 
-        await PersistAsync(cancellationToken).ConfigureAwait(false);
+        RecoverOrResetState();
+        await CompactAsync(cancellationToken).ConfigureAwait(false);
+        _processorTask = Task.Run(ProcessOperationsAsync, CancellationToken.None);
     }
 
-    public async Task AppendAsync(TranscriptChannelItem item, CancellationToken cancellationToken)
+    public bool TryAppend(TranscriptChannelItem item)
     {
-        _artifact.Language = item.SourceLanguage;
-        _artifact.LanguageProbability = item.LanguageProbability;
-        _artifact.Segments ??= [];
-        _artifact.Segments.Add(CloneTranscriptSegment(item.Segment));
-        await PersistAsync(cancellationToken).ConfigureAwait(false);
+        TranscriptArtifact snapshot;
+        string eventLine;
+        bool shouldCompact;
+
+        lock (_sync)
+        {
+            _artifact.Language = item.SourceLanguage;
+            _artifact.LanguageProbability = item.LanguageProbability;
+            _artifact.Segments ??= [];
+            _artifact.Segments.Add(CloneTranscriptSegment(item.Segment));
+            _nextSequence++;
+            _eventsSinceCompaction++;
+            eventLine = JsonSerializer.Serialize(new TranscriptJournalEvent
+            {
+                Sequence = _nextSequence,
+                Type = "append_segment",
+                SourceLanguage = item.SourceLanguage,
+                LanguageProbability = item.LanguageProbability,
+                Segment = CloneTranscriptSegment(item.Segment),
+            }, JournalJsonOptions);
+            snapshot = CloneArtifact(_artifact);
+            shouldCompact = _eventsSinceCompaction >= CompactEveryEventCount;
+        }
+
+        EnqueueAppend(eventLine);
+        if (shouldCompact)
+            EnqueueCompact(snapshot, _nextSequence);
+
+        return true;
+    }
+
+    public Task AppendAsync(TranscriptChannelItem item, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        TryAppend(item);
+        return Task.CompletedTask;
     }
 
     public async Task CompleteAsync(
@@ -114,16 +186,175 @@ internal sealed class TranscriptArtifactStreamingWriter
         string finalPath,
         CancellationToken cancellationToken)
     {
-        _artifact.Language = result.Language;
-        _artifact.LanguageProbability = result.LanguageProbability;
-        _artifact.PeakRamMb = result.PeakRamMb;
-        _artifact.PeakVramMb = result.PeakVramMb;
-        await PersistAsync(cancellationToken).ConfigureAwait(false);
-        PromotePartialFile(_partialPath, finalPath);
+        TranscriptArtifact snapshot;
+        lock (_sync)
+        {
+            _artifact.Language = result.Language;
+            _artifact.LanguageProbability = result.LanguageProbability;
+            _artifact.PeakRamMb = result.PeakRamMb;
+            _artifact.PeakVramMb = result.PeakVramMb;
+            snapshot = CloneArtifact(_artifact);
+        }
+
+        EnqueueCompact(snapshot, _nextSequence);
+        _operations.Writer.TryComplete();
+        if (_processorTask is not null)
+            await _processorTask.ConfigureAwait(false);
+
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                finalPath,
+                ArtifactJson.SerializeTranscript(snapshot),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
-    private Task PersistAsync(CancellationToken cancellationToken) =>
-        System.IO.File.WriteAllTextAsync(_partialPath, ArtifactJson.SerializeTranscript(_artifact), cancellationToken);
+    public async Task ReloadFromDiskAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RecoverOrResetState();
+        await CompactAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public static string GetPartialPath(string finalPath) =>
+        StreamingArtifactJournalPaths.FromFinalPath(finalPath).PartialPath;
+
+    private void RecoverOrResetState()
+    {
+        try
+        {
+            var lastCommittedSequence = ReadCommittedSequence(_paths.CommitPath);
+            var recovered = lastCommittedSequence > 0 && File.Exists(_paths.PartialPath)
+                ? ArtifactJson.DeserializeTranscript(File.ReadAllText(_paths.PartialPath), _paths.PartialPath)
+                : CreateEmptyArtifact(_artifact.Language ?? "unknown", _artifact.LanguageProbability);
+            var lastAppliedSequence = lastCommittedSequence;
+
+            if (File.Exists(_paths.EventsPath))
+            {
+                if (lastCommittedSequence == 0)
+                {
+                    recovered = CreateEmptyArtifact(_artifact.Language ?? "unknown", _artifact.LanguageProbability);
+                }
+
+                foreach (var line in File.ReadLines(_paths.EventsPath))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                        continue;
+
+                    var evt = JsonSerializer.Deserialize<TranscriptJournalEvent>(line, JournalJsonOptions)
+                        ?? throw new InvalidOperationException("Transcript journal line deserialized to null.");
+                    if (evt.Sequence <= lastAppliedSequence)
+                        continue;
+                    if (!string.Equals(evt.Type, "append_segment", StringComparison.Ordinal))
+                        throw new InvalidOperationException($"Unsupported transcript journal event '{evt.Type ?? "<null>"}'.");
+                    if (evt.Segment is null)
+                        throw new InvalidOperationException("Transcript journal event was missing a segment payload.");
+
+                    recovered.Language = evt.SourceLanguage ?? recovered.Language;
+                    recovered.LanguageProbability = evt.LanguageProbability ?? recovered.LanguageProbability;
+                    recovered.Segments ??= [];
+                    recovered.Segments.Add(CloneTranscriptSegment(evt.Segment));
+                    lastAppliedSequence = evt.Sequence;
+                }
+            }
+
+            lock (_sync)
+            {
+                _artifact = recovered;
+                _nextSequence = lastAppliedSequence;
+                _eventsSinceCompaction = 0;
+            }
+        }
+        catch
+        {
+            QuarantineExistingJournalFiles();
+            lock (_sync)
+            {
+                _artifact = CreateEmptyArtifact(_artifact.Language ?? "unknown", _artifact.LanguageProbability);
+                _nextSequence = 0;
+                _eventsSinceCompaction = 0;
+            }
+        }
+    }
+
+    private async Task ProcessOperationsAsync()
+    {
+        await foreach (var operation in _operations.Reader.ReadAllAsync().ConfigureAwait(false))
+            await operation(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private void EnqueueAppend(string eventLine)
+    {
+        if (!_operations.Writer.TryWrite(static (ct) => Task.CompletedTask))
+        {
+            throw new InvalidOperationException("Transcript journal writer was not accepting new work.");
+        }
+
+        _operations.Reader.TryRead(out _);
+        if (!_operations.Writer.TryWrite(ct => File.AppendAllTextAsync(_paths.EventsPath, eventLine + Environment.NewLine, ct)))
+        {
+            throw new InvalidOperationException("Transcript journal writer was not accepting append work.");
+        }
+    }
+
+    private void EnqueueCompact(TranscriptArtifact snapshot, long committedSequence)
+    {
+        var json = ArtifactJson.SerializeTranscript(snapshot);
+        if (!_operations.Writer.TryWrite(async ct =>
+            {
+                await File.WriteAllTextAsync(_paths.PartialTempPath, json, ct).ConfigureAwait(false);
+                ArtifactPersistence.AtomicReplace(_paths.PartialTempPath, _paths.PartialPath);
+                await ArtifactPersistence.AtomicWriteTextAsync(
+                        _paths.CommitPath,
+                        JsonSerializer.Serialize(new StreamingArtifactCommitState { CommittedSequence = committedSequence }, JournalJsonOptions),
+                        ct)
+                    .ConfigureAwait(false);
+            }))
+        {
+            throw new InvalidOperationException("Transcript journal writer was not accepting compaction work.");
+        }
+    }
+
+    private async Task CompactAsync(CancellationToken cancellationToken)
+    {
+        TranscriptArtifact snapshot;
+        long committedSequence;
+        lock (_sync)
+        {
+            snapshot = CloneArtifact(_artifact);
+            committedSequence = _nextSequence;
+            _eventsSinceCompaction = 0;
+        }
+
+        await File.WriteAllTextAsync(_paths.PartialTempPath, ArtifactJson.SerializeTranscript(snapshot), cancellationToken).ConfigureAwait(false);
+        ArtifactPersistence.AtomicReplace(_paths.PartialTempPath, _paths.PartialPath);
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                _paths.CommitPath,
+                JsonSerializer.Serialize(new StreamingArtifactCommitState { CommittedSequence = committedSequence }, JournalJsonOptions),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static TranscriptArtifact CreateEmptyArtifact(string sourceLanguage, double languageProbability) =>
+        new()
+        {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
+            Language = sourceLanguage,
+            LanguageProbability = languageProbability,
+            Segments = [],
+        };
+
+    private static TranscriptArtifact CloneArtifact(TranscriptArtifact artifact) =>
+        new()
+        {
+            SchemaVersion = artifact.SchemaVersion,
+            Language = artifact.Language,
+            LanguageProbability = artifact.LanguageProbability,
+            PeakRamMb = artifact.PeakRamMb,
+            PeakVramMb = artifact.PeakVramMb,
+            Segments = artifact.Segments is null
+                ? null
+                : [.. artifact.Segments.Select(CloneTranscriptSegment)],
+        };
 
     private static TranscriptSegmentArtifact CloneTranscriptSegment(TranscriptSegmentArtifact segment) =>
         new()
@@ -136,71 +367,142 @@ internal sealed class TranscriptArtifactStreamingWriter
             Words = segment.Words is null ? null : [.. segment.Words],
         };
 
-    public static string GetPartialPath(string finalPath) => $"{finalPath}.partial";
-
-    public static void PromotePartialFile(string partialPath, string finalPath)
+    private static long ReadCommittedSequence(string commitPath)
     {
-        var dir = System.IO.Path.GetDirectoryName(finalPath);
-        if (!string.IsNullOrWhiteSpace(dir))
-            System.IO.Directory.CreateDirectory(dir);
+        if (!File.Exists(commitPath))
+            return 0;
 
-        if (System.IO.File.Exists(finalPath))
-            System.IO.File.Delete(finalPath);
+        var state = JsonSerializer.Deserialize<StreamingArtifactCommitState>(File.ReadAllText(commitPath), JournalJsonOptions);
+        return state?.CommittedSequence ?? 0;
+    }
 
-        System.IO.File.Move(partialPath, finalPath);
+    private void QuarantineExistingJournalFiles()
+    {
+        var suffix = $".abandoned.{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}";
+        MoveIfExists(_paths.PartialPath, suffix);
+        MoveIfExists(_paths.PartialTempPath, suffix);
+        MoveIfExists(_paths.EventsPath, suffix);
+        MoveIfExists(_paths.CommitPath, suffix);
+    }
+
+    private static void MoveIfExists(string path, string suffix)
+    {
+        if (!File.Exists(path))
+            return;
+
+        var destination = path + suffix;
+        ArtifactPersistence.TryDelete(destination);
+        File.Move(path, destination);
+    }
+
+    private sealed class TranscriptJournalEvent
+    {
+        public long Sequence { get; set; }
+        public string? Type { get; set; }
+        public string? SourceLanguage { get; set; }
+        public double? LanguageProbability { get; set; }
+        public TranscriptSegmentArtifact? Segment { get; set; }
     }
 }
 
 internal sealed class TranslationArtifactStreamingWriter
 {
-    private readonly string _partialPath;
+    private const int CompactEveryEventCount = 16;
+
+    private static readonly JsonSerializerOptions JournalJsonOptions = new()
+    {
+        WriteIndented = false,
+    };
+
+    private readonly StreamingArtifactJournalPaths _paths;
+    private readonly object _sync = new();
+    private readonly Channel<Func<CancellationToken, Task>> _operations = Channel.CreateUnbounded<Func<CancellationToken, Task>>(
+        new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false,
+        });
+
     private TranslationArtifact _artifact;
+    private Task? _processorTask;
+    private long _nextSequence;
+    private int _eventsSinceCompaction;
 
     public TranslationArtifactStreamingWriter(
         string partialPath,
         string sourceLanguage,
         string targetLanguage)
     {
-        _partialPath = partialPath;
-        _artifact = new TranslationArtifact
-        {
-            SourceLanguage = sourceLanguage,
-            TargetLanguage = targetLanguage,
-            Segments = [],
-        };
+        _paths = StreamingArtifactJournalPaths.FromPartialPath(partialPath);
+        _artifact = CreateEmptyArtifact(sourceLanguage, targetLanguage);
     }
 
-    public string PartialPath => _partialPath;
+    public string PartialPath => _paths.PartialPath;
 
-    public IReadOnlyList<TranslationSegmentArtifact> OrderedSegments =>
-        _artifact.Segments ?? [];
+    public IReadOnlyList<TranslationSegmentArtifact> OrderedSegments
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _artifact.Segments is null
+                    ? []
+                    : [.. _artifact.Segments.Select(StreamingArtifactCloneHelpers.CloneTranslationSegment)];
+            }
+        }
+    }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        var dir = System.IO.Path.GetDirectoryName(_partialPath);
+        var dir = Path.GetDirectoryName(_paths.PartialPath);
         if (!string.IsNullOrWhiteSpace(dir))
-            System.IO.Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(dir);
 
-        await PersistAsync(cancellationToken).ConfigureAwait(false);
+        RecoverOrResetState();
+        await CompactAsync(cancellationToken).ConfigureAwait(false);
+        _processorTask = Task.Run(ProcessOperationsAsync, CancellationToken.None);
     }
 
-    public async Task AppendPendingSegmentAsync(
+    public Task AppendPendingSegmentAsync(
         TranscriptChannelItem item,
         CancellationToken cancellationToken)
     {
-        _artifact.SourceLanguage = item.SourceLanguage;
-        _artifact.Segments ??= [];
-        _artifact.Segments.Add(new TranslationSegmentArtifact
-        {
-            Id = item.SegmentId,
-            Start = item.Segment.Start,
-            End = item.Segment.End,
-            Text = item.Segment.Text ?? string.Empty,
-            TranslatedText = string.Empty,
-            SpeakerId = item.Segment.SpeakerId,
-        });
+        cancellationToken.ThrowIfCancellationRequested();
+        TranslationArtifact snapshot;
+        string eventLine;
+        bool shouldCompact;
 
-        await PersistAsync(cancellationToken).ConfigureAwait(false);
+        lock (_sync)
+        {
+            _artifact.SourceLanguage = item.SourceLanguage;
+            _artifact.Segments ??= [];
+            _artifact.Segments.Add(new TranslationSegmentArtifact
+            {
+                Id = item.SegmentId,
+                Start = item.Segment.Start,
+                End = item.Segment.End,
+                Text = item.Segment.Text ?? string.Empty,
+                TranslatedText = string.Empty,
+                SpeakerId = item.Segment.SpeakerId,
+            });
+            _nextSequence++;
+            _eventsSinceCompaction++;
+            eventLine = JsonSerializer.Serialize(new TranslationJournalEvent
+            {
+                Sequence = _nextSequence,
+                Type = "append_pending_segment",
+                SourceLanguage = item.SourceLanguage,
+                Segment = StreamingArtifactCloneHelpers.CloneTranslationSegment(_artifact.Segments[^1]),
+            }, JournalJsonOptions);
+            snapshot = CloneArtifact(_artifact);
+            shouldCompact = _eventsSinceCompaction >= CompactEveryEventCount;
+        }
+
+        EnqueueAppend(eventLine);
+        if (shouldCompact)
+            EnqueueCompact(snapshot, _nextSequence);
+
+        return Task.CompletedTask;
     }
 
     public int IndexOfSegment(string segmentId)
@@ -208,71 +510,288 @@ internal sealed class TranslationArtifactStreamingWriter
         if (string.IsNullOrWhiteSpace(segmentId))
             return -1;
 
-        var segments = _artifact.Segments;
-        if (segments is null)
-            return -1;
-
-        for (var i = 0; i < segments.Count; i++)
+        lock (_sync)
         {
-            if (string.Equals(segments[i].Id, segmentId, StringComparison.Ordinal))
-                return i;
-        }
+            var segments = _artifact.Segments;
+            if (segments is null)
+                return -1;
 
-        return -1;
+            for (var i = 0; i < segments.Count; i++)
+            {
+                if (string.Equals(segments[i].Id, segmentId, StringComparison.Ordinal))
+                    return i;
+            }
+
+            return -1;
+        }
     }
 
-    public async Task<TranslationSegmentArtifact> ApplyTranslatedTextAsync(
+    public Task<TranslationSegmentArtifact> ApplyTranslatedTextAsync(
         string segmentId,
         string translatedText,
         string? sourceLanguage,
         string? targetLanguage,
         CancellationToken cancellationToken)
     {
-        var index = IndexOfSegment(segmentId);
-        if (index < 0)
-            throw new InvalidOperationException($"Translated segment '{segmentId}' was not found in the streaming translation artifact.");
+        cancellationToken.ThrowIfCancellationRequested();
+        TranslationArtifact snapshot;
+        string eventLine;
+        TranslationSegmentArtifact result;
+        bool shouldCompact;
 
-        return await ApplyTranslatedTextAsync(index, translatedText, sourceLanguage, targetLanguage, cancellationToken).ConfigureAwait(false);
-    }
+        lock (_sync)
+        {
+            var segments = _artifact.Segments ?? throw new InvalidOperationException("No translation segments were queued for streaming translation.");
+            var index = segments.FindIndex(segment => string.Equals(segment.Id, segmentId, StringComparison.Ordinal));
+            if (index < 0)
+                throw new InvalidOperationException($"Translated segment '{segmentId}' was not found in the streaming translation artifact.");
 
-    public async Task<TranslationSegmentArtifact> ApplyTranslatedTextAsync(
-        int segmentIndex,
-        string translatedText,
-        string? sourceLanguage,
-        string? targetLanguage,
-        CancellationToken cancellationToken)
-    {
-        var segments = _artifact.Segments;
-        if (segments == null || segmentIndex < 0 || segmentIndex >= segments.Count)
-            throw new ArgumentOutOfRangeException(nameof(segmentIndex), $"Segment index {segmentIndex} is out of range.");
+            _artifact.SourceLanguage = string.IsNullOrWhiteSpace(sourceLanguage) ? _artifact.SourceLanguage : sourceLanguage;
+            _artifact.TargetLanguage = string.IsNullOrWhiteSpace(targetLanguage) ? _artifact.TargetLanguage : targetLanguage;
+            segments[index].TranslatedText = translatedText;
+            result = StreamingArtifactCloneHelpers.CloneTranslationSegment(segments[index]);
+            _nextSequence++;
+            _eventsSinceCompaction++;
+            eventLine = JsonSerializer.Serialize(new TranslationJournalEvent
+            {
+                Sequence = _nextSequence,
+                Type = "segment_translated",
+                SourceLanguage = _artifact.SourceLanguage,
+                TargetLanguage = _artifact.TargetLanguage,
+                SegmentId = segmentId,
+                TranslatedText = translatedText,
+            }, JournalJsonOptions);
+            snapshot = CloneArtifact(_artifact);
+            shouldCompact = _eventsSinceCompaction >= CompactEveryEventCount;
+        }
 
-        _artifact.SourceLanguage = string.IsNullOrWhiteSpace(sourceLanguage)
-            ? _artifact.SourceLanguage
-            : sourceLanguage;
-        _artifact.TargetLanguage = string.IsNullOrWhiteSpace(targetLanguage)
-            ? _artifact.TargetLanguage
-            : targetLanguage;
+        EnqueueAppend(eventLine);
+        if (shouldCompact)
+            EnqueueCompact(snapshot, _nextSequence);
 
-        var matched = segments[segmentIndex];
-        matched.TranslatedText = translatedText;
-
-        await PersistAsync(cancellationToken).ConfigureAwait(false);
-        return StreamingArtifactCloneHelpers.CloneTranslationSegment(matched);
+        return Task.FromResult(result);
     }
 
     public async Task ReloadFromDiskAsync(CancellationToken cancellationToken)
     {
-        _artifact = await ArtifactJson.LoadTranslationAsync(_partialPath, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        RecoverOrResetState();
+        await CompactAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task CompleteAsync(string finalPath, CancellationToken cancellationToken)
     {
-        await PersistAsync(cancellationToken).ConfigureAwait(false);
-        TranscriptArtifactStreamingWriter.PromotePartialFile(_partialPath, finalPath);
+        TranslationArtifact snapshot;
+        lock (_sync)
+        {
+            snapshot = CloneArtifact(_artifact);
+        }
+
+        EnqueueCompact(snapshot, _nextSequence);
+        _operations.Writer.TryComplete();
+        if (_processorTask is not null)
+            await _processorTask.ConfigureAwait(false);
+
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                finalPath,
+                ArtifactJson.SerializeTranslation(snapshot),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
-    private Task PersistAsync(CancellationToken cancellationToken) =>
-        System.IO.File.WriteAllTextAsync(_partialPath, ArtifactJson.SerializeTranslation(_artifact), cancellationToken);
+    private void RecoverOrResetState()
+    {
+        try
+        {
+            var lastCommittedSequence = ReadCommittedSequence(_paths.CommitPath);
+            var recovered = lastCommittedSequence > 0 && File.Exists(_paths.PartialPath)
+                ? ArtifactJson.DeserializeTranslation(File.ReadAllText(_paths.PartialPath), _paths.PartialPath)
+                : CreateEmptyArtifact(_artifact.SourceLanguage ?? "unknown", _artifact.TargetLanguage ?? string.Empty);
+            var lastAppliedSequence = lastCommittedSequence;
+
+            if (File.Exists(_paths.EventsPath))
+            {
+                if (lastCommittedSequence == 0)
+                {
+                    recovered = CreateEmptyArtifact(_artifact.SourceLanguage ?? "unknown", _artifact.TargetLanguage ?? string.Empty);
+                }
+
+                foreach (var line in File.ReadLines(_paths.EventsPath))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                        continue;
+
+                    var evt = JsonSerializer.Deserialize<TranslationJournalEvent>(line, JournalJsonOptions)
+                        ?? throw new InvalidOperationException("Translation journal line deserialized to null.");
+                    if (evt.Sequence <= lastAppliedSequence)
+                        continue;
+
+                    switch (evt.Type)
+                    {
+                        case "append_pending_segment":
+                            if (evt.Segment is null)
+                                throw new InvalidOperationException("Translation journal event was missing a segment payload.");
+                            recovered.SourceLanguage = evt.SourceLanguage ?? recovered.SourceLanguage;
+                            recovered.Segments ??= [];
+                            recovered.Segments.Add(StreamingArtifactCloneHelpers.CloneTranslationSegment(evt.Segment));
+                            break;
+                        case "segment_translated":
+                            if (recovered.Segments is null)
+                                throw new InvalidOperationException("Translation journal applied a translated event before any segments existed.");
+                            var matched = recovered.Segments.FirstOrDefault(segment => string.Equals(segment.Id, evt.SegmentId, StringComparison.Ordinal))
+                                ?? throw new InvalidOperationException($"Translation journal segment '{evt.SegmentId ?? "<null>"}' was not found.");
+                            recovered.SourceLanguage = evt.SourceLanguage ?? recovered.SourceLanguage;
+                            recovered.TargetLanguage = evt.TargetLanguage ?? recovered.TargetLanguage;
+                            matched.TranslatedText = evt.TranslatedText ?? string.Empty;
+                            break;
+                        default:
+                            throw new InvalidOperationException($"Unsupported translation journal event '{evt.Type ?? "<null>"}'.");
+                    }
+
+                    lastAppliedSequence = evt.Sequence;
+                }
+            }
+
+            lock (_sync)
+            {
+                _artifact = recovered;
+                _nextSequence = lastAppliedSequence;
+                _eventsSinceCompaction = 0;
+            }
+        }
+        catch
+        {
+            QuarantineExistingJournalFiles();
+            lock (_sync)
+            {
+                _artifact = CreateEmptyArtifact(_artifact.SourceLanguage ?? "unknown", _artifact.TargetLanguage ?? string.Empty);
+                _nextSequence = 0;
+                _eventsSinceCompaction = 0;
+            }
+        }
+    }
+
+    private async Task ProcessOperationsAsync()
+    {
+        await foreach (var operation in _operations.Reader.ReadAllAsync().ConfigureAwait(false))
+            await operation(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private void EnqueueAppend(string eventLine)
+    {
+        if (!_operations.Writer.TryWrite(static (ct) => Task.CompletedTask))
+        {
+            throw new InvalidOperationException("Translation journal writer was not accepting new work.");
+        }
+
+        _operations.Reader.TryRead(out _);
+        if (!_operations.Writer.TryWrite(ct => File.AppendAllTextAsync(_paths.EventsPath, eventLine + Environment.NewLine, ct)))
+        {
+            throw new InvalidOperationException("Translation journal writer was not accepting append work.");
+        }
+    }
+
+    private void EnqueueCompact(TranslationArtifact snapshot, long committedSequence)
+    {
+        var json = ArtifactJson.SerializeTranslation(snapshot);
+        if (!_operations.Writer.TryWrite(async ct =>
+            {
+                await File.WriteAllTextAsync(_paths.PartialTempPath, json, ct).ConfigureAwait(false);
+                ArtifactPersistence.AtomicReplace(_paths.PartialTempPath, _paths.PartialPath);
+                await ArtifactPersistence.AtomicWriteTextAsync(
+                        _paths.CommitPath,
+                        JsonSerializer.Serialize(new StreamingArtifactCommitState { CommittedSequence = committedSequence }, JournalJsonOptions),
+                        ct)
+                    .ConfigureAwait(false);
+            }))
+        {
+            throw new InvalidOperationException("Translation journal writer was not accepting compaction work.");
+        }
+    }
+
+    private async Task CompactAsync(CancellationToken cancellationToken)
+    {
+        TranslationArtifact snapshot;
+        long committedSequence;
+        lock (_sync)
+        {
+            snapshot = CloneArtifact(_artifact);
+            committedSequence = _nextSequence;
+            _eventsSinceCompaction = 0;
+        }
+
+        await File.WriteAllTextAsync(_paths.PartialTempPath, ArtifactJson.SerializeTranslation(snapshot), cancellationToken).ConfigureAwait(false);
+        ArtifactPersistence.AtomicReplace(_paths.PartialTempPath, _paths.PartialPath);
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                _paths.CommitPath,
+                JsonSerializer.Serialize(new StreamingArtifactCommitState { CommittedSequence = committedSequence }, JournalJsonOptions),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static TranslationArtifact CreateEmptyArtifact(string sourceLanguage, string targetLanguage) =>
+        new()
+        {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
+            SourceLanguage = sourceLanguage,
+            TargetLanguage = targetLanguage,
+            Segments = [],
+        };
+
+    private static TranslationArtifact CloneArtifact(TranslationArtifact artifact) =>
+        new()
+        {
+            SchemaVersion = artifact.SchemaVersion,
+            SourceLanguage = artifact.SourceLanguage,
+            TargetLanguage = artifact.TargetLanguage,
+            Segments = artifact.Segments is null
+                ? null
+                : [.. artifact.Segments.Select(StreamingArtifactCloneHelpers.CloneTranslationSegment)],
+        };
+
+    private static long ReadCommittedSequence(string commitPath)
+    {
+        if (!File.Exists(commitPath))
+            return 0;
+
+        var state = JsonSerializer.Deserialize<StreamingArtifactCommitState>(File.ReadAllText(commitPath), JournalJsonOptions);
+        return state?.CommittedSequence ?? 0;
+    }
+
+    private void QuarantineExistingJournalFiles()
+    {
+        var suffix = $".abandoned.{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}";
+        MoveIfExists(_paths.PartialPath, suffix);
+        MoveIfExists(_paths.PartialTempPath, suffix);
+        MoveIfExists(_paths.EventsPath, suffix);
+        MoveIfExists(_paths.CommitPath, suffix);
+    }
+
+    private static void MoveIfExists(string path, string suffix)
+    {
+        if (!File.Exists(path))
+            return;
+
+        var destination = path + suffix;
+        ArtifactPersistence.TryDelete(destination);
+        File.Move(path, destination);
+    }
+
+    private sealed class TranslationJournalEvent
+    {
+        public long Sequence { get; set; }
+        public string? Type { get; set; }
+        public string? SourceLanguage { get; set; }
+        public string? TargetLanguage { get; set; }
+        public string? SegmentId { get; set; }
+        public string? TranslatedText { get; set; }
+        public TranslationSegmentArtifact? Segment { get; set; }
+    }
+}
+
+internal sealed class StreamingArtifactCommitState
+{
+    public long CommittedSequence { get; set; }
 }
 
 internal static class StreamingArtifactCloneHelpers

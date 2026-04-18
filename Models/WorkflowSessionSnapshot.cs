@@ -47,7 +47,9 @@ public sealed record WorkflowSessionSnapshot(
     string? TranslationModel = null,
     InferenceRuntime? TtsRuntime = null,
     string? TtsProvider = null,
-    Dictionary<string, SegmentTimingMode>? SegmentTimingModeOverrides = null)
+    Dictionary<string, SegmentTimingMode>? SegmentTimingModeOverrides = null,
+    SegmentTimingMode? DubTimingMode = null,
+    double? AmbianceMixDb = null)
 {
     public static WorkflowSessionSnapshot CreateNew(DateTimeOffset nowUtc)
     {
