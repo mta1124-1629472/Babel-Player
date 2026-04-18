@@ -596,6 +596,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             _lastReportedAmbiancePath = null;
             PauseAmbiancePreview();
             ApplyDubForSegment(null);
+            RecalculateOutputVolumes();
         }
         else if (!IsSourcePaused)
         {
@@ -920,6 +921,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         if (segment.HasTtsAudio)
         {
+            // Non-null segment while global dub is off is intentional for TTS preview flows (e.g. coordinator pause-preview).
             // Resolve effective timing mode: per-segment override takes priority, then session setting.
             var effectiveMode = segment.TimingModeOverride
                 ?? _coordinator.CurrentSettings.DubTimingMode;
@@ -1021,40 +1023,34 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         IMediaTransport? ambiancePlayerForPlay = null;
         var requestVersion = 0;
+        var ambientSyncFailed = false;
 
         lock (_ambianceTransportGate)
         {
             var ambiancePlayer = _coordinator.GetOrCreateAmbiancePlayer();
-            if (!string.Equals(_loadedAmbiancePath, ambiancePath, StringComparison.OrdinalIgnoreCase))
+            try
             {
-                ambiancePlayer.Load(ambiancePath);
-                _loadedAmbiancePath = ambiancePath;
-                forceSeek = true;
+                if (!string.Equals(_loadedAmbiancePath, ambiancePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    ambiancePlayer.Load(ambiancePath);
+                    _loadedAmbiancePath = ambiancePath;
+                    forceSeek = true;
+                }
+
+                ambiancePlayer.PlaybackRate = sourcePlayer.PlaybackRate;
+                ambiancePlayer.Volume = (IsMuted ? 0.0 : SourceVolume) *
+                    Math.Pow(10.0, _coordinator.CurrentSettings.AmbianceMixDb / 20.0);
+
+                var sourcePositionMs = sourcePlayer.CurrentTime;
+                if (forceSeek || Math.Abs(ambiancePlayer.CurrentTime - sourcePositionMs) > AmbianceSyncThresholdMs)
+                    ambiancePlayer.Seek(sourcePositionMs);
             }
-
-            ambiancePlayer.PlaybackRate = sourcePlayer.PlaybackRate;
-            ambiancePlayer.Volume = (IsMuted ? 0.0 : SourceVolume) *
-                Math.Pow(10.0, _coordinator.CurrentSettings.AmbianceMixDb / 20.0);
-
-            var sourcePositionMs = sourcePlayer.CurrentTime;
-            if (forceSeek || Math.Abs(ambiancePlayer.CurrentTime - sourcePositionMs) > AmbianceSyncThresholdMs)
-                ambiancePlayer.Seek(sourcePositionMs);
-
-            AnnounceDubPreviewMode(DubPreviewAudioMode.SeparatedAmbiance, ambiancePath);
-
-            if (shouldPlay)
+            catch (Exception ex)
             {
-                if (_isStartingAmbiancePlayback || ambiancePlayer.IsPlaying)
-                    return;
-
-                _isStartingAmbiancePlayback = true;
-                requestVersion = Interlocked.Increment(ref _ambiancePlayRequestVersion);
-                ambiancePlayerForPlay = ambiancePlayer;
-            }
-            else
-            {
+                _coordinator.Log.Warning($"Ambience preview sync failed (load/seek): {ex.Message}");
                 Interlocked.Increment(ref _ambiancePlayRequestVersion);
                 _isStartingAmbiancePlayback = false;
+                _loadedAmbiancePath = null;
                 try
                 {
                     ambiancePlayer.Pause();
@@ -1064,8 +1060,55 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
                     // Shutdown/race path: ambiance transport was disposed during pause.
                 }
 
-                return;
+                InvalidateAmbiancePreviewPathCache();
+                ambientSyncFailed = true;
             }
+
+            if (ambientSyncFailed)
+            {
+                // Skip announce/play; post-lock path restores volumes and UI hint.
+            }
+            else
+            {
+                AnnounceDubPreviewMode(DubPreviewAudioMode.SeparatedAmbiance, ambiancePath);
+
+                if (shouldPlay)
+                {
+                    if (_isStartingAmbiancePlayback || ambiancePlayer.IsPlaying)
+                        return;
+
+                    _isStartingAmbiancePlayback = true;
+                    requestVersion = Interlocked.Increment(ref _ambiancePlayRequestVersion);
+                    ambiancePlayerForPlay = ambiancePlayer;
+                }
+                else
+                {
+                    Interlocked.Increment(ref _ambiancePlayRequestVersion);
+                    _isStartingAmbiancePlayback = false;
+                    try
+                    {
+                        ambiancePlayer.Pause();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Shutdown/race path: ambiance transport was disposed during pause.
+                    }
+
+                    return;
+                }
+            }
+        }
+
+        if (ambientSyncFailed)
+        {
+            RecalculateOutputVolumes();
+            if (IsDubModeOn)
+            {
+                _coordinator.Log.Debug("Dub preview mode: ducked-source-fallback after ambience load/seek failure.");
+                _parent.StatusText = "Dub preview uses source audio fallback.";
+            }
+
+            return;
         }
 
         var capturedPlayer = ambiancePlayerForPlay;
