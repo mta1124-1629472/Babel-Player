@@ -1,0 +1,16 @@
+{
+  "name": "Babel Player Linux Agent",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "postCreateCommand": "bash scripts/verify-linux-agent.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-python.python"
+      ]
+    }
+  }
+}
