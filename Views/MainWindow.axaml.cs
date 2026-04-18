@@ -289,8 +289,10 @@ public partial class MainWindow : Window
 
     private void OnPaneLayoutHostSizeChanged(object? sender, SizeChangedEventArgs e)
     {
-        // Drag clamping uses the live host width. No-op here beyond keeping the
-        // reference available for future updates without relying on a magic width.
+        if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) <= double.Epsilon)
+            return;
+
+        UpdateCompactVideoChromeLayout();
     }
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
