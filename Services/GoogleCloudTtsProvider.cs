@@ -91,7 +91,7 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
 
         await File.WriteAllBytesAsync(request.OutputAudioPath, audioBytes, cancellationToken);
 
-        _log.Info($"[GoogleCloudTTS] Generated combined audio: {request.OutputAudioPath} ({audioBytes.Length} bytes)");
+        _log.Debug($"[GoogleCloudTTS] Generated combined audio: {request.OutputAudioPath} ({audioBytes.Length} bytes)");
 
         return new TtsResult(true, request.OutputAudioPath, request.VoiceName, audioBytes.Length, null);
     }
@@ -120,7 +120,7 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
 
         await File.WriteAllBytesAsync(request.OutputAudioPath, audioBytes, cancellationToken);
 
-        _log.Info($"[GoogleCloudTTS] Generated segment audio: {request.OutputAudioPath} ({audioBytes.Length} bytes)");
+        _log.Debug($"[GoogleCloudTTS] Generated segment audio: {request.OutputAudioPath} ({audioBytes.Length} bytes)");
 
         return new TtsResult(true, request.OutputAudioPath, request.VoiceName, audioBytes.Length, null);
     }

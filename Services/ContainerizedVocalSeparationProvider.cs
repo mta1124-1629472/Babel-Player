@@ -38,7 +38,7 @@ public sealed class ContainerizedVocalSeparationProvider : IVocalSeparationProvi
             throw new InvalidOperationException(
                 $"Containerized vocal separation failed: {result.ErrorMessage}");
 
-        _log.Info($"[ContainerizedVocalSeparation] Complete: vocals='{result.VocalsAudioPath}', ambiance='{result.AmbianceAudioPath}'");
+        _log.Debug($"[ContainerizedVocalSeparation] Complete: vocals='{result.VocalsAudioPath}', ambiance='{result.AmbianceAudioPath}'");
         return result;
     }
 

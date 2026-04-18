@@ -166,7 +166,7 @@ public sealed class SessionSwitchService
                 var oldestKey = _cacheInsertionOrder.Dequeue();
                 if (cache.TryRemove(oldestKey, out _))
                 {
-                    _log.Info($"Evicted cached session for media key '{oldestKey}' to keep cache bounded.");
+                    _log.Debug($"Evicted cached session for media key '{oldestKey}' to keep cache bounded.");
                 }
             }
         }

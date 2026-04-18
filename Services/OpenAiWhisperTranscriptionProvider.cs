@@ -42,7 +42,7 @@ public sealed class OpenAiWhisperTranscriptionProvider : ITranscriptionProvider
         if (!File.Exists(request.SourceAudioPath))
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        _log.Info($"[OpenAIWhisper] Transcribing: {request.SourceAudioPath} (model={request.ModelName})");
+        _log.Debug($"[OpenAIWhisper] Transcribing: {request.SourceAudioPath} (model={request.ModelName})");
 
         using var client = _clientFactory();
         var payload = await client.TranscribeAudioAsync(
@@ -88,7 +88,7 @@ public sealed class OpenAiWhisperTranscriptionProvider : ITranscriptionProvider
 
         await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(transcriptArtifact), cancellationToken);
 
-        _log.Info($"[OpenAIWhisper] Complete: {segments.Count} segments.");
+        _log.Debug($"[OpenAIWhisper] Complete: {segments.Count} segments.");
 
         return new TranscriptionResult(
             true,

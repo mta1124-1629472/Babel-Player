@@ -333,7 +333,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
             if (!File.Exists(audioFilePath))
                 throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
 
-            _log.Info($"Transcribing with Parakeet: {audioFilePath}");
+            _log.Debug($"Transcribing with Parakeet: {audioFilePath}");
 
             using var content = new MultipartFormDataContent();
             await using var fileStream = new FileStream(
@@ -359,7 +359,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
                     segments.Add(new TranscriptSegment(seg.Start, seg.End, seg.Text));
             }
 
-            _log.Info($"Parakeet transcription complete: {segments.Count} segments");
+            _log.Debug($"Parakeet transcription complete: {segments.Count} segments");
 
             return new TranscriptionResult(
                 true,
@@ -516,7 +516,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
             }
 
             const string endpoint = "/diarize";
-            _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
+            _log.Debug($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
 
             using var content = new MultipartFormDataContent();
             await using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
@@ -559,7 +559,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
             if (!File.Exists(audioPath))
                 throw new FileNotFoundException($"Audio file not found: {audioPath}");
 
-            _log.Info($"Separating vocals with containerized service: {audioPath}");
+            _log.Debug($"Separating vocals with containerized service: {audioPath}");
 
             SeparateVocalsApiResponseDto result;
             using (var lease = AcquireLease(ContainerizedRequestKind.Other))

@@ -30,7 +30,7 @@ public sealed class ContainerizedTtsProvider : ITtsProvider
         SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default)
     {
-        _log.Info($"[ContainerizedTts] Generating segment TTS (voice: {request.VoiceName})");
+        _log.Debug($"[ContainerizedTts] Generating segment TTS (voice: {request.VoiceName})");
 
         var result = await _client.TextToSpeechAsync(
             request.Text,
@@ -42,7 +42,7 @@ public sealed class ContainerizedTtsProvider : ITtsProvider
 
         await DownloadToOutputPathAsync(result.AudioPath, request.OutputAudioPath, cancellationToken);
 
-        _log.Info($"[ContainerizedTts] Segment TTS saved to: {request.OutputAudioPath}");
+        _log.Debug($"[ContainerizedTts] Segment TTS saved to: {request.OutputAudioPath}");
 
         return result with { AudioPath = request.OutputAudioPath };
     }
@@ -54,7 +54,7 @@ public sealed class ContainerizedTtsProvider : ITtsProvider
         if (!File.Exists(request.TranslationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
-        _log.Info($"[ContainerizedTts] Generating combined TTS (voice: {request.VoiceName})");
+        _log.Debug($"[ContainerizedTts] Generating combined TTS (voice: {request.VoiceName})");
 
         // Read all translated segments and concatenate their text for combined output.
         var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
@@ -79,7 +79,7 @@ public sealed class ContainerizedTtsProvider : ITtsProvider
 
         await DownloadToOutputPathAsync(result.AudioPath, request.OutputAudioPath, cancellationToken);
 
-        _log.Info($"[ContainerizedTts] Combined TTS saved to: {request.OutputAudioPath}");
+        _log.Debug($"[ContainerizedTts] Combined TTS saved to: {request.OutputAudioPath}");
 
         return result with { AudioPath = request.OutputAudioPath };
     }

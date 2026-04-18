@@ -128,7 +128,7 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
         if (!File.Exists(request.SourceAudioPath))
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        _log.Info($"[NemoContainerizedDiarization] Diarizing: {request.SourceAudioPath}");
+        _log.Debug($"[NemoContainerizedDiarization] Diarizing: {request.SourceAudioPath}");
         var result = await _client.DiarizeAsync(
                 request.SourceAudioPath,
                 ProviderNames.NemoDiarizationAlias,

@@ -167,7 +167,7 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
         if (!File.Exists(request.SourceAudioPath))
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        Log.Info($"[WeSpeakerCpuDiarization] Diarizing: {request.SourceAudioPath}");
+        Log.Debug($"[WeSpeakerCpuDiarization] Diarizing: {request.SourceAudioPath}");
 
         try
         {

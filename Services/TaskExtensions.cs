@@ -26,14 +26,24 @@ internal static class TaskExtensions
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(log);
 
-        _ = task.ContinueWith(t =>
-        {
-            if (t.IsFaulted && t.Exception != null)
-            {
-                log.Error($"Unhandled exception during {context}", t.Exception);
-            }
-        }, TaskContinuationOptions.OnlyOnFaulted);
+        _ = ObserveFaultAsync(task, log, context);
 
         return task;
+    }
+
+    private static async Task ObserveFaultAsync(Task task, AppLog log, string context)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Canceled work is intentionally silent.
+        }
+        catch (Exception ex)
+        {
+            log.Error($"Unhandled exception during {context}", ex);
+        }
     }
 }

@@ -60,7 +60,7 @@ public sealed class QwenContainerTtsProvider(
         if (string.IsNullOrWhiteSpace(request.Text))
             throw new ArgumentException("Segment text cannot be empty", nameof(request));
 
-        _log.Info($"[QwenContainerTts] Segment synth start");
+        _log.Debug($"[QwenContainerTts] Segment synth start");
 
         var referenceAudioPath = request.ReferenceAudioPath;
         if (string.IsNullOrWhiteSpace(referenceAudioPath) && !string.IsNullOrWhiteSpace(request.SourceVideoPath))
@@ -85,7 +85,7 @@ public sealed class QwenContainerTtsProvider(
 
         await DownloadToOutputPathAsync(result.AudioPath, request.OutputAudioPath, cancellationToken);
 
-        _log.Info($"[QwenContainerTts] Segment synth saved: {request.OutputAudioPath}");
+        _log.Debug($"[QwenContainerTts] Segment synth saved: {request.OutputAudioPath}");
         return result with { AudioPath = request.OutputAudioPath };
     }
 
@@ -117,7 +117,7 @@ public sealed class QwenContainerTtsProvider(
                 }
 
                 var speakerId = request.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault;
-                _log.Info($"[QwenContainerTts] Segment synth start ({completed + 1}/{requests.Count}): {request.SegmentId}");
+                _log.Debug($"[QwenContainerTts] Segment synth start ({completed + 1}/{requests.Count}): {request.SegmentId}");
                 var result = await QwenSegmentWithRetryAsync(
                     request.Text,
                     group.Key,
@@ -132,7 +132,7 @@ public sealed class QwenContainerTtsProvider(
 
                 await DownloadToOutputPathAsync(result.AudioPath, request.OutputAudioPath, cancellationToken);
                 outputPaths[request.SegmentId] = request.OutputAudioPath;
-                _log.Info($"[QwenContainerTts] Segment synth saved: {request.OutputAudioPath}");
+                _log.Debug($"[QwenContainerTts] Segment synth saved: {request.OutputAudioPath}");
                 progress?.Report((++completed, requests.Count));
             }
         }
@@ -152,7 +152,7 @@ public sealed class QwenContainerTtsProvider(
     /// </remarks>
     public async Task ResetSessionAsync()
     {
-        _log.Info("[QwenContainerTts] Resetting session state");
+        _log.Debug("[QwenContainerTts] Resetting session state");
         _referenceIdCache.Clear();
         if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
         {
@@ -185,7 +185,7 @@ public sealed class QwenContainerTtsProvider(
 
         var refId = await _client.RegisterQwenReferenceAsync(speakerId, referenceAudioPath, ct);
         _referenceIdCache[cacheKey] = refId;
-        _log.Info($"[QwenContainerTts] Registered reference for speaker '{speakerId}': {refId}");
+        _log.Debug($"[QwenContainerTts] Registered reference for speaker '{speakerId}': {refId}");
         return refId;
     }
 
@@ -363,7 +363,7 @@ public sealed class QwenContainerTtsProvider(
         if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
             return _autoExtractedReferencePath;
 
-        _log.Info($"[QwenContainerTts] Auto-extracting reference audio from: {sourceVideoPath}");
+        _log.Debug($"[QwenContainerTts] Auto-extracting reference audio from: {sourceVideoPath}");
         _autoExtractedReferencePath = await _extractor.ExtractReferenceAsync(sourceVideoPath, ct);
         return _autoExtractedReferencePath;
     }
