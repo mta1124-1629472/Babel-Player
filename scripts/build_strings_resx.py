@@ -38,7 +38,7 @@ STRINGS: Dict[str, str] = {
     "Window_Title_Main": "Babel Player",
     "Window_Title_Settings": "Babel Player - Settings",
     "Window_Title_ApiKeys": "API Keys",
-    "Window_Title_Crash": "Babel Player \u2014 Unhandled Error",
+    "Window_Title_Crash": "Babel Player - Unhandled Error",
     "Window_Title_Wizard": "Speaker Reference Wizard",
     "Chrome_Minimize": "Minimize window",
     "Chrome_MaximizeRestore": "Maximize or restore window",
@@ -299,20 +299,20 @@ STRINGS: Dict[str, str] = {
     "Wizard_Tooltip_MergeTarget": "Select target speaker (will receive the merged segments)",
     "Wizard_Button_Merge": "Merge",
     "Wizard_Tooltip_Merge": "Merge source into target - this updates the transcript permanently",
-    "Wizard_Footer_Hint": "Finish saves voice and reference changes. Cancel discards all edits.",
+    "Wizard_Footer_Hint": "Finish: save changes. Cancel: discard edits.",
     "Wizard_Button_Cancel": "Cancel",
-    "Wizard_Tooltip_Cancel": "Discard all changes and close",
+    "Wizard_Tooltip_Cancel": "Discard edits",
     "Wizard_Button_Finish": "Finish",
-    "Wizard_Tooltip_Finish": "Apply voice and reference changes to the session",
+    "Wizard_Tooltip_Finish": "Save changes",
     "Wizard_Tooltip_Close": "Close wizard",
-    "Wizard_Tooltip_CloseDiscard": "Close wizard (discard changes)",
-    "Wizard_Hint_TopBanner": "Assign voices to speakers and set reference audio clips. Use the preview to find good clips, then click 'Use Playhead' to grab the current moment.",
+    "Wizard_Tooltip_CloseDiscard": "Discard changes",
+    "Wizard_Hint_TopBanner": "Assign voices and set reference clips.",
     "Wizard_Toggle_NeedsAttention": "Show needs attention",
-    "Wizard_Tooltip_NeedsAttention": "Only show speakers that need review or have poor reference",
+    "Wizard_Tooltip_NeedsAttention": "Show speakers needing review",
     "Wizard_Button_ResetAll": "Reset All",
-    "Wizard_Tooltip_ResetAll": "Clear all draft changes and start fresh",
-    "Wizard_Hint_ScrubPreview": "Scrub through the video to find good audio clips. Click 'Use Playhead' on a speaker to grab the current moment as their reference.",
-    "Wizard_Hint_LinuxMacFallback": "On Linux/macOS, use the main window to scrub through video. When you find a good moment, come back here and click 'Use Playhead' for that speaker.",
+    "Wizard_Tooltip_ResetAll": "Clear all changes",
+    "Wizard_Hint_ScrubPreview": "Scrub to find clips; click Use Playhead.",
+    "Wizard_Hint_LinuxMacFallback": "Scrub in main window, return here, click Use Playhead.",
     "Wizard_Tooltip_SeekSlider": "Drag to seek through the video",
     "Wizard_Tooltip_PlayPause": "Play or pause the preview",
     "Wizard_Label_ClipDuration": "Playhead Clip Duration",
@@ -442,7 +442,28 @@ def write_resx(path: str, entries: Dict[str, str]) -> None:
         fh.write("\n".join(lines))
 
 
+def validate_no_duplicate_values(entries: Dict[str, str]) -> None:
+    """Validates that STRINGS contains no duplicate English literal values.
+
+    Duplicate values break apply_localize.py's value->key inversion logic.
+    When duplicates are found, raises ValueError listing all keys that map to each duplicate.
+    """
+    value_to_keys: Dict[str, list[str]] = {}
+    for key, value in entries.items():
+        value_to_keys.setdefault(value, []).append(key)
+
+    duplicates = {val: keys for val, keys in value_to_keys.items() if len(keys) > 1}
+    if duplicates:
+        lines = ["STRINGS dictionary contains duplicate English literal values:"]
+        for value, keys in sorted(duplicates.items()):
+            lines.append(f"  Value: {value!r}")
+            for key in keys:
+                lines.append(f"    - {key}")
+        raise ValueError("\n".join(lines))
+
+
 def main() -> None:
+    validate_no_duplicate_values(STRINGS)
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out_path = os.path.join(repo_root, "Resources", "Strings.resx")
     write_resx(out_path, STRINGS)

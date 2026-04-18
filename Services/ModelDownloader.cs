@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
@@ -159,7 +160,7 @@ except Exception as e:
                     if (progress != null)
                     {
                         var match = ProgressRegex().Match(line);
-                        if (match.Success && double.TryParse(match.Groups[1].Value, out double pct))
+                        if (match.Success && double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double pct))
                         {
                             progress.Report(pct / 100.0);
                         }
@@ -526,14 +527,14 @@ except Exception as e:
             return;
 
         var explicitMatch = ExplicitProgressRegex().Match(line);
-        if (explicitMatch.Success && double.TryParse(explicitMatch.Groups[1].Value, out var explicitPct))
+        if (explicitMatch.Success && double.TryParse(explicitMatch.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var explicitPct))
         {
             progress.Report(explicitPct / 100.0);
             return;
         }
 
         var genericMatch = ProgressRegex().Match(line);
-        if (genericMatch.Success && double.TryParse(genericMatch.Groups[1].Value, out var pct))
+        if (genericMatch.Success && double.TryParse(genericMatch.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var pct))
             progress.Report(pct / 100.0);
     }
 

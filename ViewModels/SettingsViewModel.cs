@@ -124,6 +124,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _videoHdrComputePeak = current.VideoHdrComputePeak;
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
+        LocalizationService.Instance.CultureChanged += OnCultureChanged;
 
         // Hotkeys (default values)
         PlayPauseHotkey             = "Space";
@@ -374,15 +375,16 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     private static AppLanguageOption[] BuildAppLanguageOptions()
     {
+        var currentCulture = LocalizationService.Instance.CurrentCulture;
         var options = new System.Collections.Generic.List<AppLanguageOption>
         {
             new("auto", Babel.Player.Resources.Strings.ResourceManager
-                .GetString("Settings_Option_AutoSystem", LocalizationService.Instance.CurrentCulture)
+                .GetString("Settings_Option_AutoSystem", currentCulture)
                 ?? "Auto (system)"),
         };
         foreach (var code in LocalizationService.SupportedUiLanguages.OrderBy(c => c, StringComparer.Ordinal))
         {
-            options.Add(new AppLanguageOption(code, LanguageDisplayNames.ForIso639(code)));
+            options.Add(new AppLanguageOption(code, LanguageDisplayNames.ForIso639(code, currentCulture)));
         }
         return options.ToArray();
     }
@@ -873,6 +875,17 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _readinessSignalSubscription?.Dispose();
         _readinessSignalSubscription = null;
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
+        LocalizationService.Instance.CultureChanged -= OnCultureChanged;
+    }
+
+    private void OnCultureChanged(object? sender, CultureInfo newCulture)
+    {
+        var previousCode = SelectedAppLanguage?.Code;
+        AppLanguageOptions = BuildAppLanguageOptions();
+        SelectedAppLanguage = AppLanguageOptions.FirstOrDefault(o =>
+            string.Equals(o.Code, previousCode, StringComparison.OrdinalIgnoreCase))
+            ?? AppLanguageOptions[0];
+        OnPropertyChanged(nameof(AppLanguageOptions));
     }
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
@@ -125,7 +126,7 @@ public sealed record HardwareSnapshot(
         {
             if (GpuComputeCapability == null) return false;
             var parts = GpuComputeCapability.Split('.');
-            if (parts.Length < 1 || !int.TryParse(parts[0], out var major))
+            if (parts.Length < 1 || !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var major))
                 return false;
             return major >= 10;
         }
@@ -208,7 +209,7 @@ public sealed record HardwareSnapshot(
             timeoutMs: 8000);
         if (string.IsNullOrWhiteSpace(output)) return null;
         var line = output.Trim().Split('\n')[0].Trim();
-        return int.TryParse(line, out var n) && n > 0 ? n : null;
+        return int.TryParse(line, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n > 0 ? n : null;
     }
 
     private static int? DetectCpuPhysicalCoreCountLinux()
@@ -240,13 +241,13 @@ public sealed record HardwareSnapshot(
                 if (line.StartsWith("physical id", StringComparison.OrdinalIgnoreCase))
                 {
                     var idx = line.IndexOf(':');
-                    if (idx >= 0 && int.TryParse(line[(idx + 1)..].Trim(), out var pid))
+                    if (idx >= 0 && int.TryParse(line[(idx + 1)..].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var pid))
                         physId = pid;
                 }
                 else if (line.StartsWith("core id", StringComparison.OrdinalIgnoreCase))
                 {
                     var idx = line.IndexOf(':');
-                    if (idx >= 0 && int.TryParse(line[(idx + 1)..].Trim(), out var cid))
+                    if (idx >= 0 && int.TryParse(line[(idx + 1)..].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var cid))
                         coreId = cid;
                 }
             }
@@ -262,7 +263,7 @@ public sealed record HardwareSnapshot(
                 var line = raw.Trim();
                 if (!line.StartsWith("cpu cores", StringComparison.OrdinalIgnoreCase)) continue;
                 var idx = line.IndexOf(':');
-                if (idx >= 0 && int.TryParse(line[(idx + 1)..].Trim(), out var perSocket) && perSocket > 0)
+                if (idx >= 0 && int.TryParse(line[(idx + 1)..].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var perSocket) && perSocket > 0)
                     return perSocket;
             }
         }
@@ -354,7 +355,7 @@ public sealed record HardwareSnapshot(
         var parts = line.Split(',');
         var name  = parts.Length > 0 ? parts[0].Trim() : null;
         long? vram = null;
-        if (parts.Length > 1 && long.TryParse(parts[1].Trim(), out var mb))
+        if (parts.Length > 1 && long.TryParse(parts[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var mb))
             vram = mb;
 
         return (name, vram);
@@ -385,7 +386,7 @@ public sealed record HardwareSnapshot(
         var trimmed = output.Trim();
         // Validate format: should be "major.minor"
         var parts = trimmed.Split('.');
-        if (parts.Length == 2 && int.TryParse(parts[0], out _) && int.TryParse(parts[1], out _))
+        if (parts.Length == 2 && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
             return trimmed;
 
         return null;
@@ -405,8 +406,8 @@ public sealed record HardwareSnapshot(
         bool sufficient = false;
         var parts = ver.Split('.');
         if (parts.Length >= 2
-            && int.TryParse(parts[0], out int major)
-            && int.TryParse(parts[1], out int minor))
+            && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int major)
+            && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int minor))
         {
             sufficient = major > 551 || (major == 551 && minor >= 23);
         }

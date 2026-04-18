@@ -100,7 +100,7 @@
     <value>API-Schlüssel</value>
   </data>
   <data name="Window_Title_Crash" xml:space="preserve">
-    <value>Babel Player — Unbehandelter Fehler</value>
+    <value>Babel Player - Unbehandelter Fehler</value>
   </data>
   <data name="Window_Title_Wizard" xml:space="preserve">
     <value>Sprecher-Referenz-Assistent</value>
@@ -139,7 +139,7 @@
     <value>App-Sprache</value>
   </data>
   <data name="Settings_Hint_AppLanguage" xml:space="preserve">
-    <value>Ändert die Sprache der Babel Player-Oberfläche. Auto (System) folgt bei jedem Start der Sprache Ihres Betriebssystems.</value>
+    <value>Ändert die Sprache der Babel Player-Oberfläche. Automatisch (System) folgt bei jedem Start der Sprache Ihres Betriebssystems.</value>
   </data>
   <data name="Settings_Option_AutoSystem" xml:space="preserve">
     <value>Automatisch (System)</value>
