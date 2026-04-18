@@ -36,12 +36,21 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private readonly DispatcherTimer _healthTimer;
 
     /// <summary>
-    /// UI culture captured when the settings window opened.  Used by <see cref="Cancel"/>
+    /// UI culture captured when the settings window opened.  Used by <see cref="Dispose"/>
     /// to revert live language changes (<see cref="OnSelectedAppLanguageChanged"/> calls
     /// <c>SetCulture</c> the moment the user picks a language so the effect is visible,
-    /// but cancelling must undo that global state change since nothing was persisted).
+    /// but closing the dialog without Apply/OK must undo that global state change since
+    /// nothing was persisted).
     /// </summary>
     private readonly CultureInfo _originalCulture;
+
+    /// <summary>
+    /// Set by <see cref="Apply"/> once the current language selection has been persisted
+    /// to settings.  <see cref="Dispose"/> uses this to decide whether the live culture
+    /// preview should be reverted to <see cref="_originalCulture"/> when the window
+    /// closes via Cancel, the OS X button, or Alt+F4.
+    /// </summary>
+    private bool _languageChangeCommitted;
     private IDisposable? _readinessSignalSubscription;
 
     /// <summary>
@@ -738,6 +747,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.AppLanguage        = string.IsNullOrWhiteSpace(SelectedAppLanguage?.Code)
             ? settings.AppLanguage
             : SelectedAppLanguage.Code;
+        // Applied language is now persisted; suppress the Dispose-time revert to
+        // _originalCulture even if the user later closes the window via the X button.
+        _languageChangeCommitted = true;
         settings.MaxRecentSessions  = MaxRecentSessions;
         settings.AutoSaveEnabled    = AutoSaveEnabled;
         settings.BilingualSubtitlesEnabled = BilingualSubtitlesEnabled;
@@ -803,11 +815,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void Cancel()
     {
-        // Revert any live language preview (OnSelectedAppLanguageChanged applies
-        // SetCulture immediately so the user can see RTL / translated strings,
-        // but cancelling must not leave the process in a culture that was never
-        // persisted to settings).
-        LocalizationService.Instance.SetCulture(_originalCulture);
+        // The language-preview revert lives in Dispose() so it also catches the
+        // OS X button / Alt+F4 close paths, which bypass this command but still
+        // fire the Window.Closed event that disposes the view model.
         _ownerWindow.Close();
     }
 
@@ -849,6 +859,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        // Revert any live language preview that wasn't persisted via Apply / OK.
+        // Covers Cancel, the OS X button, and Alt+F4.  Safe even if culture is
+        // already the original (SetCulture short-circuits on equality).
+        if (!_languageChangeCommitted)
+            LocalizationService.Instance.SetCulture(_originalCulture);
+
         _healthTimer.Stop();
         _restartCts?.Cancel();
         _restartCts?.Dispose();
