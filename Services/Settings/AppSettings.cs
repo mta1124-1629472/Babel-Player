@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text.Json.Serialization;
 using Babel.Player.Models;
 
@@ -301,10 +302,32 @@ public sealed class AppSettings
     /// <summary>When false, the app may show a one-time notice about managed GPU host warm-up time.</summary>
     public bool ShownManagedBackendWarmupNotice { get; set; }
 
+    private string _appLanguage = "auto";
+
     /// <summary>
     /// UI language.  <c>"auto"</c> means "follow the OS locale on each launch" (mirrors the
     /// <see cref="Theme"/> <c>"System"</c> sentinel); otherwise a lowercase ISO 639-1 code
     /// supported by the app's localization catalog (e.g. <c>"de"</c>, <c>"ja"</c>).
+    /// Values are normalized to lowercase on set; unknown values are replaced with "auto".
     /// </summary>
-    public string AppLanguage { get; set; } = "auto";
+    public string AppLanguage
+    {
+        get => _appLanguage;
+        set
+        {
+            var normalized = value?.Trim().ToLowerInvariant() ?? "auto";
+            if (string.Equals(normalized, "auto", StringComparison.OrdinalIgnoreCase))
+            {
+                _appLanguage = "auto";
+            }
+            else if (LocalizationService.SupportedUiLanguages.Contains(normalized))
+            {
+                _appLanguage = normalized;
+            }
+            else
+            {
+                _appLanguage = "auto";
+            }
+        }
+    }
 }

@@ -139,13 +139,13 @@
     <value>فصل الغناء المنفصل قبل النسخ</value>
   </data>
   <data name="Section_Transcription" xml:space="preserve">
-    <value>الترجمة</value>
+    <value>التفريغ النصي</value>
   </data>
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
     <value>إعادة تشغيل النسخ (اختر هذه المرحلة فقط أو قم بتضمين المرحلة النهائية)</value>
   </data>
   <data name="Label_Compute" xml:space="preserve">
-    <value>الحوسبة</value>
+    <value>تنفيذ</value>
   </data>
   <data name="Label_Provider" xml:space="preserve">
     <value>المزود</value>
@@ -667,7 +667,7 @@
     <value>نسخ إلى الحافظة</value>
   </data>
   <data name="Crash_Button_OpenLogFolder" xml:space="preserve">
-    <value>فتح مجلد السجل المفتوح</value>
+    <value>فتح مجلد السجل</value>
   </data>
   <data name="Crash_Button_Close" xml:space="preserve">
     <value>إغلاق</value>

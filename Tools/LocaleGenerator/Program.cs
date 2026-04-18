@@ -33,6 +33,9 @@ namespace Babel.Player.Tools.LocaleGenerator;
 
 internal static class Program
 {
+    /// <summary>DeepL translate API accepts at most 50 <c>text</c> entries per request.</summary>
+    private const int DeepLMaxTextsPerRequest = 50;
+
     // Protected overrides for product branding and UI terminology that DeepL
     // routinely mistranslates in short command labels.
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ProtectedOverrides =
@@ -46,6 +49,9 @@ internal static class Program
                 ["Wizard_Tooltip_JumpToSegments"] = "انقر فوق الطابع الزمني للانتقال إلى تلك النقطة في الفيديو، ثم استخدم \"استخدام رأس التشغيل\".",
                 ["Settings_Nav_General"] = "عام",
                 ["Settings_Group_DockerGpu"] = "خدمة Docker لوحدة معالجة الرسومات",
+                ["Section_Transcription"] = "التفريغ النصي",
+                ["Label_Compute"] = "تنفيذ",
+                ["Crash_Button_OpenLogFolder"] = "فتح مجلد السجل",
             },
             ["de"] = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -65,6 +71,11 @@ internal static class Program
                 ["Common_Ok"] = "Aceptar",
                 ["Common_Apply"] = "Aplicar",
                 ["Common_Browse"] = "Examinar",
+                ["Common_Restart"] = "Reiniciar",
+                ["Label_Compute"] = "Calcular",
+                ["Option_Off"] = "Desactivado",
+                ["Window_Title_Main"] = "Babel Player",
+                ["Settings_About_AppName"] = "Babel Player",
             },
             ["fr"] = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -99,6 +110,7 @@ internal static class Program
                 ["Label_ActiveAsr"] = "使用中のASR:",
                 ["Button_Export"] = "エクスポート",
                 ["Language_sv"] = "スウェーデン語",
+                ["Wizard_Playhead_Clip_Tooltip"] = "オーディオクリップの長さ（3～15秒）",
             },
             ["ko"] = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -231,12 +243,14 @@ internal static class Program
         var succeeded = new List<string>();
         var skipped = new List<string>();
         var failed = new List<string>();
+        var cancelled = false;
 
         foreach (var lang in options.Targets)
         {
             if (cts.IsCancellationRequested)
             {
                 Console.Error.WriteLine("Cancelled by user.");
+                cancelled = true;
                 break;
             }
 
@@ -259,6 +273,7 @@ internal static class Program
             catch (OperationCanceledException)
             {
                 Console.Error.WriteLine($"[{lang}] CANCELLED");
+                cancelled = true;
                 break;
             }
             catch (Exception ex)
@@ -276,7 +291,7 @@ internal static class Program
         if (failed.Count > 0)
             Console.WriteLine($"Failed     : {failed.Count}  ({string.Join(", ", failed)})");
 
-        return failed.Count > 0 ? 1 : 0;
+        return failed.Count > 0 || cancelled ? 1 : 0;
     }
 
     private static async Task TranslateOneLanguageAsync(
@@ -290,22 +305,37 @@ internal static class Program
         Console.Write($"[{lang}] Translating {entries.Count} strings via DeepL ({deepLTargetCode})... ");
 
         var texts = entries.Select(e => e.Value).ToList();
-        var translations = await client.TranslateTextsAsync(
-                texts,
-                deepLTargetCode,
-                sourceLanguage: "EN",
-                cancellationToken)
-            .ConfigureAwait(false);
+        var translatedTexts = new List<string>(texts.Count);
+        for (var offset = 0; offset < texts.Count; offset += DeepLMaxTextsPerRequest)
+        {
+            var batchSize = Math.Min(DeepLMaxTextsPerRequest, texts.Count - offset);
+            var batch = texts.GetRange(offset, batchSize);
+            var batchTranslations = await client.TranslateTextsAsync(
+                    batch,
+                    deepLTargetCode,
+                    sourceLanguage: "EN",
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-        if (translations.Count != entries.Count)
+            if (batchTranslations.Count != batchSize)
+            {
+                throw new InvalidOperationException(
+                    $"Expected {batchSize} translations for batch at offset {offset}, got {batchTranslations.Count}.");
+            }
+
+            foreach (var item in batchTranslations)
+                translatedTexts.Add(item.Text);
+        }
+
+        if (translatedTexts.Count != entries.Count)
         {
             throw new InvalidOperationException(
-                $"Expected {entries.Count} translations, got {translations.Count}.");
+                $"Expected {entries.Count} translations, got {translatedTexts.Count}.");
         }
 
         var localizedEntries = entries.Select((kv, i) => new KeyValuePair<string, string>(
             kv.Key,
-            string.IsNullOrEmpty(translations[i].Text) ? kv.Value : translations[i].Text)).ToList();
+            string.IsNullOrEmpty(translatedTexts[i]) ? kv.Value : translatedTexts[i])).ToList();
 
         ApplyProtectedOverrides(lang, localizedEntries);
         ValidateLocalizedEntries(lang, localizedEntries);

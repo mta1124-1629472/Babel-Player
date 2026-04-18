@@ -19,7 +19,9 @@ public sealed class PipelineTargetLanguageOption : INotifyPropertyChanged, IEqua
     public string Code { get; }
 
     /// <summary>Localized display name, re-resolved on each access so runtime culture switches take effect.</summary>
-    public string DisplayName => LanguageDisplayNames.ForIso639(Code);
+    public string DisplayName => LanguageDisplayNames.ForIso639(
+        Code,
+        LocalizationService.Instance.CurrentCulture);
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

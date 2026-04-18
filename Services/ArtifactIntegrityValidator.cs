@@ -25,24 +25,6 @@ internal static class ArtifactIntegrityValidator
 
         if (!ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath, out _, out _))
         {
-            // Missing manifest - warn if this is a recently ingested artifact
-            if (snapshot.MediaLoadedAtUtc.HasValue)
-            {
-                var age = DateTimeOffset.UtcNow - snapshot.MediaLoadedAtUtc.Value;
-                if (age.TotalDays < 30) // Consider artifacts from the last 30 days as "recent"
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[WARN] Missing integrity manifest for recently ingested artifact: " +
-                        $"path={snapshot.IngestedMediaPath}, ingestedAt={snapshot.MediaLoadedAtUtc.Value:O}, age={age.TotalDays:F1} days");
-                }
-            }
-            else
-            {
-                // No timestamp available - log at lower level
-                System.Diagnostics.Debug.WriteLine(
-                    $"[DEBUG] Missing integrity manifest for artifact (no timestamp available): path={snapshot.IngestedMediaPath}");
-            }
-
             error = null;
             return true;
         }
@@ -166,7 +148,6 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath), snapshot.TranscriptPath);
         var transcriptManifestPath = ArtifactPersistence.GetManifestPath(snapshot.TranscriptPath);
         if (!File.Exists(transcriptManifestPath))
         {
@@ -174,6 +155,7 @@ internal static class ArtifactIntegrityValidator
             return true;
         }
 
+        var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath), snapshot.TranscriptPath);
         var expectedTiming = ArtifactIntegrity.BuildTranscriptTimingSummary(transcript.Segments);
         var expectedSegmentIds = ArtifactIntegrity.BuildTranscriptSegmentIds(transcript.Segments);
         var upstream = ArtifactIntegrity.BuildUpstreamHashes(
@@ -233,6 +215,13 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
+        var translationManifestPath = ArtifactPersistence.GetManifestPath(snapshot.TranslationPath);
+        if (!File.Exists(translationManifestPath))
+        {
+            error = null;
+            return true;
+        }
+
         var translation = ArtifactJson.DeserializeTranslation(File.ReadAllText(snapshot.TranslationPath), snapshot.TranslationPath);
         var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath!), snapshot.TranscriptPath!);
         var expectedTiming = ArtifactIntegrity.BuildTranslationTimingSummary(translation.Segments);
@@ -248,13 +237,6 @@ internal static class ArtifactIntegrityValidator
         {
             error = "Translation segment count did not match transcript segment count.";
             return false;
-        }
-
-        var translationManifestPath = ArtifactPersistence.GetManifestPath(snapshot.TranslationPath);
-        if (!File.Exists(translationManifestPath))
-        {
-            error = null;
-            return true;
         }
 
         ArtifactIntegrity.TryLoadManifest(snapshot.TranscriptPath!, out var transcriptManifest, out _);
