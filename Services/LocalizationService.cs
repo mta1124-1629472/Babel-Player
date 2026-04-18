@@ -86,10 +86,14 @@ public sealed class LocalizationService : INotifyPropertyChanged
             CultureChanged?.Invoke(this, culture);
         }
 
-        if (Dispatcher.UIThread.CheckAccess())
+        if (Dispatcher.UIThread.CheckAccess() || Application.Current is null)
+        {
             Apply();
+        }
         else
+        {
             Dispatcher.UIThread.Post(Apply);
+        }
     }
 
     /// <summary>Resolves the effective app language from a saved setting.</summary>
