@@ -172,6 +172,12 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     public string RightPaneRole => IsPipelinePaneOnLeft ? GetLocalized("Section_Segments") : GetLocalized("Section_Pipeline");
     public string LeftPaneTooltip => BuildPaneTooltip(isLeftSide: true, LeftPaneRole, hotkey: "A");
     public string RightPaneTooltip => BuildPaneTooltip(isLeftSide: false, RightPaneRole, hotkey: "S");
+    public string SegmentCountLabel => Segments.Count == 1
+        ? GetLocalized("Label_SegmentCountSingle")
+        : string.Format(
+            LocalizationService.Instance.CurrentCulture,
+            GetLocalized("Label_SegmentCountFormat"),
+            Segments.Count);
     [ObservableProperty]
     private bool _isCompactVideoChrome;
 
@@ -642,6 +648,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         Array.Sort(sorted, (a, b) => a.StartSeconds.CompareTo(b.StartSeconds));
         _sortedSegments = sorted;
         _parent.SpeakerRouting.RebuildSpeakerIds(value, SelectedSegment?.SpeakerId);
+        OnPropertyChanged(nameof(SegmentCountLabel));
     }
 
     public void ResizeLeftPane(double desiredWidth, double hostWidth) =>
@@ -817,8 +824,11 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private static string GetLocalized(string key) => LocalizationService.Instance[key];
 
-    private void OnLocalizationCultureChanged(object? sender, System.Globalization.CultureInfo culture) =>
+    private void OnLocalizationCultureChanged(object? sender, System.Globalization.CultureInfo culture)
+    {
         NotifyPaneLayoutProjectionChanged();
+        OnPropertyChanged(nameof(SegmentCountLabel));
+    }
 
     private void OnPositionTimerTick(object? sender, EventArgs e)
     {

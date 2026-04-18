@@ -283,6 +283,28 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
+    public void ValidateArtifacts_MissingTranscript_WithStemArtifacts_ReportsVocalSeparationCleared()
+    {
+        var mediaPath = WriteFile("video.mp4");
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = Path.Combine(_dir, "missing-transcript.json"),
+            VocalsAudioPath = WriteFile("vocals.wav"),
+            AmbianceAudioPath = WriteFile("ambiance.wav"),
+            SourceLanguage = "es",
+        };
+
+        var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
+
+        Assert.Contains("transcription", result.ClearedArtifacts);
+        Assert.Contains("vocal_separation", result.ClearedArtifacts);
+        Assert.Null(result.Snapshot.VocalsAudioPath);
+        Assert.Null(result.Snapshot.AmbianceAudioPath);
+    }
+
+    [Fact]
     public void ValidateArtifacts_MissingVocalsStem_ClearsVocalSeparationArtifacts()
     {
         var mediaPath = WriteFile("video.mp4");

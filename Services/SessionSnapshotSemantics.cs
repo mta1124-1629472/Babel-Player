@@ -62,9 +62,13 @@ public static class SessionSnapshotSemantics
         if (stage >= SessionWorkflowStage.Transcribed
             && (string.IsNullOrEmpty(snapshot.TranscriptPath) || !File.Exists(snapshot.TranscriptPath)))
         {
+            var hadStemArtifacts = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath)
+                || !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath);
             stage = SessionWorkflowStage.MediaLoaded;
             snapshot = ClearTranscriptionOutputs(snapshot);
             cleared.Add("transcription");
+            if (hadStemArtifacts)
+                cleared.Add("vocal_separation");
         }
 
         // Strict vocal validation: both stems must be present and valid on disk; any mismatch clears the pair.

@@ -276,6 +276,12 @@
   <data name="Button_Export" xml:space="preserve">
     <value>Export</value>
   </data>
+  <data name="Label_SegmentCountSingle" xml:space="preserve">
+    <value>1 segment</value>
+  </data>
+  <data name="Label_SegmentCountFormat" xml:space="preserve">
+    <value>{0} segments</value>
+  </data>
   <data name="Menu_Export_Srt" xml:space="preserve">
     <value>to .srt</value>
   </data>
