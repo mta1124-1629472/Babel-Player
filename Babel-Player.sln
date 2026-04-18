@@ -6,6 +6,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer", "BabelPlayer.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer.Tests", "BabelPlayer.Tests\BabelPlayer.Tests.csproj", "{F021B902-7B44-4E76-AD15-C9C332F8A7B7}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LocaleGenerator", "Tools\LocaleGenerator\LocaleGenerator.csproj", "{AD0EAD53-F128-486C-A40E-622B0E49F3CE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,9 +59,30 @@ Global
 		{F021B902-7B44-4E76-AD15-C9C332F8A7B7}.Release|x64.Build.0 = Release|Any CPU
 		{F021B902-7B44-4E76-AD15-C9C332F8A7B7}.Release|x86.ActiveCfg = Release|Any CPU
 		{F021B902-7B44-4E76-AD15-C9C332F8A7B7}.Release|x86.Build.0 = Release|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Debug|x64.Build.0 = Debug|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Debug|x86.Build.0 = Debug|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Dev|Any CPU.ActiveCfg = Dev|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Dev|Any CPU.Build.0 = Dev|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Dev|x64.ActiveCfg = Dev|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Dev|x64.Build.0 = Dev|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Dev|x86.ActiveCfg = Dev|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Dev|x86.Build.0 = Dev|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Release|x64.ActiveCfg = Release|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Release|x64.Build.0 = Release|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Release|x86.ActiveCfg = Release|Any CPU
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{AD0EAD53-F128-486C-A40E-622B0E49F3CE} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {67389139-3541-498D-8647-8FA63A98BADC}

@@ -56,7 +56,7 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal(InferenceStage.Transcription, planner.RequestedStages[0]);
         Assert.NotNull(committer.TranscriptionCommit);
         Assert.EndsWith(
-            Path.Combine("transcripts", "sample.json"),
+            Path.Combine("transcripts", "sample.json.work"),
             committer.TranscriptionCommit!.Value.TranscriptPath,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal("sample.mp4", Path.GetFileName(session.CurrentSession.IngestedMediaPath));
@@ -108,7 +108,7 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal(vocalsPath, engine.LastTranscriptionRequest!.SourceAudioPath);
         Assert.NotNull(committer.TranscriptionCommit);
         Assert.EndsWith(
-            Path.Combine("transcripts", "original.json"),
+            Path.Combine("transcripts", "original.json.work"),
             committer.TranscriptionCommit!.Value.TranscriptPath,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -248,7 +248,7 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal("es", committer.TranslationCommit!.Value.SourceLanguage);
         Assert.Equal("en", committer.TranslationCommit.Value.TargetLanguage);
         Assert.EndsWith(
-            Path.Combine("translations", "input_en.json"),
+            Path.Combine("translations", "input_en.json.work"),
             committer.TranslationCommit.Value.TranslationPath,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -621,9 +621,9 @@ public sealed class ExtractedOrchestratorTests
                 ?? Task.FromException<TranslationResult>(new InvalidOperationException("TranslateAsync was not configured."));
         }
 
-        public Task<TranslationResult> TranslateSingleSegmentAsync(
+        public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
             ITranslationProvider provider,
-            SingleSegmentTranslationRequest request,
+            SingleSegmentTranslationTextRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
@@ -661,8 +661,8 @@ public sealed class ExtractedOrchestratorTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<TranslationResult> TranslateSingleSegmentAsync(
-            SingleSegmentTranslationRequest request,
+        public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+            SingleSegmentTranslationTextRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

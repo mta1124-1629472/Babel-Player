@@ -69,11 +69,11 @@ public sealed class DefaultInferenceExecutionEngine : IInferenceExecutionEngine
         /// Exit state: returns the provider's translation result; no engine state is mutated and no session is persisted by this method.
         /// Cancellation: the operation observes <paramref name="cancellationToken"/> and may terminate early if cancellation is requested.
         /// </remarks>
-        public Task<TranslationResult> TranslateSingleSegmentAsync(
+        public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
         ITranslationProvider provider,
-        SingleSegmentTranslationRequest request,
+        SingleSegmentTranslationTextRequest request,
         CancellationToken cancellationToken = default) =>
-        provider.TranslateSingleSegmentAsync(request, cancellationToken);
+        provider.TranslateSingleSegmentTextAsync(request, cancellationToken);
 
     /// <summary>
         /// Generates speech audio for a single text segment using the supplied TTS provider.

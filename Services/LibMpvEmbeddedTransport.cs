@@ -311,7 +311,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             positionMs = dur;
 
         double positionSec = positionMs / 1000.0;
-        string command = $"seek {positionSec:F3} absolute";
+        var command = FormattableString.Invariant($"seek {positionSec:F3} absolute");
         _mpv_command_string!(_handle, command);
         // Don't throw on seek failure — libmpv may reject seeks near end-of-file
     }
@@ -359,7 +359,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         set
         {
             if (_disposed || _handle == IntPtr.Zero) return;
-            _mpv_command_string!(_handle, $"set volume {Math.Clamp(value, 0.0, 1.0) * 100:F0}");
+            _mpv_command_string!(_handle,
+                FormattableString.Invariant($"set volume {Math.Clamp(value, 0.0, 1.0) * 100:F0}"));
         }
     }
 
@@ -373,7 +374,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
                 return spd;
             return 1.0;
         }
-        set => _mpv_command_string!(_handle, $"set speed {Math.Clamp(value, 0.1, 4.0):F2}");
+        set => _mpv_command_string!(_handle,
+            FormattableString.Invariant($"set speed {Math.Clamp(value, 0.1, 4.0):F2}"));
     }
 
     public bool HasEnded
@@ -757,14 +759,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _lastVsrDiagnostic = snapshot;
         VsrDiagnosticChanged?.Invoke(snapshot);
 
-        var message =
-            $"RTX VSR diagnostic: state={snapshot.State}, trigger={snapshot.Trigger}, " +
-            $"requested_gpu_next={snapshot.UseGpuNextRequested}, requested_vsr={snapshot.VsrRequested}, " +
-            $"resolved_plan={snapshot.ResolvedPlan}, reason={snapshot.ReasonCode}, reason_text='{snapshot.ReasonText}', " +
-            $"backend='{snapshot.BackendSummary}', filter='{snapshot.FilterChain ?? "<none>"}', " +
-            $"video={snapshot.VideoWidth}x{snapshot.VideoHeight}, display={snapshot.DisplayWidth}x{snapshot.DisplayHeight}, monitor={snapshot.MonitorWidth}x{snapshot.MonitorHeight}, " +
-            $"scale={snapshot.Scale:F1}, hwfmt='{snapshot.HwPixelFormat}', vo='{snapshot.VideoOutput ?? "<unknown>"}', " +
-            $"gpu_context='{snapshot.GpuContext ?? "<unknown>"}', hwdec='{snapshot.HwdecCurrent ?? "<unknown>"}'";
+        var message = FormattableString.Invariant(
+            $"RTX VSR diagnostic: state={snapshot.State}, trigger={snapshot.Trigger}, requested_gpu_next={snapshot.UseGpuNextRequested}, requested_vsr={snapshot.VsrRequested}, resolved_plan={snapshot.ResolvedPlan}, reason={snapshot.ReasonCode}, reason_text='{snapshot.ReasonText}', backend='{snapshot.BackendSummary}', filter='{snapshot.FilterChain ?? "<none>"}', video={snapshot.VideoWidth}x{snapshot.VideoHeight}, display={snapshot.DisplayWidth}x{snapshot.DisplayHeight}, monitor={snapshot.MonitorWidth}x{snapshot.MonitorHeight}, scale={snapshot.Scale:F1}, hwfmt='{snapshot.HwPixelFormat}', vo='{snapshot.VideoOutput ?? "<unknown>"}', gpu_context='{snapshot.GpuContext ?? "<unknown>"}', hwdec='{snapshot.HwdecCurrent ?? "<unknown>"}'");
 
         if (snapshot.State == VsrDiagnosticState.Rejected)
             _log?.Warning(message);

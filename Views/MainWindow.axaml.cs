@@ -966,7 +966,7 @@ public partial class MainWindow : Window
         try
         {
             var plan = planner.BuildPlan(session, segments, options);
-            await FfmpegVideoExportRunner.RunPlanAsync(plan).ConfigureAwait(true);
+            await FfmpegVideoExportRunner.RunPlanAsync(plan, vm.Coordinator.Log).ConfigureAwait(true);
             vm.Playback.StatusText = $"Exported video to {Path.GetFileName(destPath)}.";
         }
         catch (Exception ex)

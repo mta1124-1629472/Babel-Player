@@ -8,6 +8,8 @@ namespace Babel.Player.Models;
 
 public static class ArtifactJson
 {
+    public const string CurrentSchemaVersion = "2.0";
+
     private static readonly JsonSerializerOptions ReadOptions = new()
     {
         PropertyNameCaseInsensitive = false,
@@ -23,6 +25,9 @@ public static class ArtifactJson
         var artifact = JsonSerializer.Deserialize<TranscriptArtifact>(json, ReadOptions)
             ?? throw CreateInvalidArtifactException("transcript", contextLabel, "JSON deserialized to null.");
 
+        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
+            artifact.SchemaVersion = CurrentSchemaVersion;
+
         ValidateTranscript(artifact, contextLabel);
         return artifact;
     }
@@ -31,6 +36,9 @@ public static class ArtifactJson
     {
         var artifact = JsonSerializer.Deserialize<TranslationArtifact>(json, ReadOptions)
             ?? throw CreateInvalidArtifactException("translation", contextLabel, "JSON deserialized to null.");
+
+        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
+            artifact.SchemaVersion = CurrentSchemaVersion;
 
         ValidateTranslation(artifact, contextLabel);
         return artifact;
@@ -54,18 +62,27 @@ public static class ArtifactJson
 
     public static string SerializeTranscript(TranscriptArtifact artifact)
     {
+        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
+            artifact.SchemaVersion = CurrentSchemaVersion;
         ValidateTranscript(artifact, "serialize");
         return JsonSerializer.Serialize(artifact, WriteOptions);
     }
 
     public static string SerializeTranslation(TranslationArtifact artifact)
     {
+        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
+            artifact.SchemaVersion = CurrentSchemaVersion;
         ValidateTranslation(artifact, "serialize");
         return JsonSerializer.Serialize(artifact, WriteOptions);
     }
 
     private static void ValidateTranscript(TranscriptArtifact artifact, string contextLabel)
     {
+        if (!string.Equals(artifact.SchemaVersion, CurrentSchemaVersion, StringComparison.Ordinal))
+            throw CreateInvalidArtifactException(
+                "transcript",
+                contextLabel,
+                $"Unsupported or missing 'schema_version'. Expected '{CurrentSchemaVersion}'.");
         if (string.IsNullOrWhiteSpace(artifact.Language))
             throw CreateInvalidArtifactException("transcript", contextLabel, "Missing required 'language'.");
         if (artifact.Segments is null)
@@ -85,6 +102,11 @@ public static class ArtifactJson
 
     private static void ValidateTranslation(TranslationArtifact artifact, string contextLabel)
     {
+        if (!string.Equals(artifact.SchemaVersion, CurrentSchemaVersion, StringComparison.Ordinal))
+            throw CreateInvalidArtifactException(
+                "translation",
+                contextLabel,
+                $"Unsupported or missing 'schema_version'. Expected '{CurrentSchemaVersion}'.");
         if (string.IsNullOrWhiteSpace(artifact.SourceLanguage))
             throw CreateInvalidArtifactException("translation", contextLabel, "Missing required 'sourceLanguage'.");
         if (string.IsNullOrWhiteSpace(artifact.TargetLanguage))

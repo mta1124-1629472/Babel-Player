@@ -26,8 +26,22 @@ public static class SupportedUiLanguageCatalog
     /// <summary>Shipping UI languages in catalog order (English first).</summary>
     public static readonly IReadOnlyList<string> IsoCodes = new[]
     {
-        "en",
+        "ar",
         "de",
+        "en",
+        "es",
+        "fr",
+        "hi",
+        "it",
+        "ja",
+        "ko",
+        "nl",
+        "pl",
+        "pt",
+        "ru",
+        "sv",
+        "tr",
+        "zh",
     };
 
     /// <summary>True when <paramref name="code"/> has a shipping UI translation.</summary>

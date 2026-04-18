@@ -35,7 +35,7 @@ public static class SessionSnapshotSemantics
         var cleared = new List<string>();
 
         if (stage >= SessionWorkflowStage.TtsGenerated
-            && (string.IsNullOrEmpty(snapshot.TtsPath) || !File.Exists(snapshot.TtsPath)))
+            && !ArtifactIntegrityValidator.ValidateTts(snapshot, out _))
         {
             stage = SessionWorkflowStage.Translated;
             snapshot = ClearTtsOutputs(snapshot);
@@ -43,7 +43,7 @@ public static class SessionSnapshotSemantics
         }
 
         if (stage >= SessionWorkflowStage.Translated
-            && (string.IsNullOrEmpty(snapshot.TranslationPath) || !File.Exists(snapshot.TranslationPath)))
+            && !ArtifactIntegrityValidator.ValidateTranslation(snapshot, out _))
         {
             stage = HasDiarizationMarker(snapshot)
                 ? SessionWorkflowStage.Diarized
@@ -59,24 +59,24 @@ public static class SessionSnapshotSemantics
             cleared.Add("diarization");
         }
 
-        if (stage >= SessionWorkflowStage.Transcribed
-            && (string.IsNullOrEmpty(snapshot.TranscriptPath) || !File.Exists(snapshot.TranscriptPath)))
+        if (stage >= SessionWorkflowStage.Transcribed)
         {
-            var hadStemArtifacts = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath)
-                || !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath);
-            stage = SessionWorkflowStage.MediaLoaded;
-            snapshot = ClearTranscriptionOutputs(snapshot);
-            cleared.Add("transcription");
-            if (hadStemArtifacts)
+            if (!ArtifactIntegrityValidator.ValidateStemPair(snapshot, out _))
+            {
+                stage = SessionWorkflowStage.MediaLoaded;
+                snapshot = ClearTranscriptionOutputs(snapshot);
                 cleared.Add("vocal_separation");
+                cleared.Add("transcription");
+            }
+            else if (!ArtifactIntegrityValidator.ValidateTranscript(snapshot, out _))
+            {
+                stage = SessionWorkflowStage.MediaLoaded;
+                snapshot = ClearTranscriptionOutputs(snapshot);
+                cleared.Add("transcription");
+            }
         }
 
-        // Strict vocal validation: both stems must be present and valid on disk; any mismatch clears the pair.
-        var hasVocalsStem = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
-        var hasAmbianceStem = !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath);
-        if (hasVocalsStem != hasAmbianceStem
-            || (hasVocalsStem && !File.Exists(snapshot.VocalsAudioPath!))
-            || (hasAmbianceStem && !File.Exists(snapshot.AmbianceAudioPath!)))
+        if (!ArtifactIntegrityValidator.ValidateStemPair(snapshot, out _))
         {
             snapshot = ClearTranscriptionOutputs(snapshot);
             cleared.Add("vocal_separation");
@@ -84,7 +84,7 @@ public static class SessionSnapshotSemantics
         }
 
         if (stage >= SessionWorkflowStage.MediaLoaded
-            && (string.IsNullOrEmpty(snapshot.IngestedMediaPath) || !File.Exists(snapshot.IngestedMediaPath)))
+            && !ArtifactIntegrityValidator.ValidateMedia(snapshot, out _))
         {
             // Ingested media is missing - downgrade to Foundation stage
             stage = SessionWorkflowStage.Foundation;
@@ -117,7 +117,9 @@ public static class SessionSnapshotSemantics
             || !LanguageCode.TargetLanguagesMatch(snapshot.TargetLanguage, settings.TargetLanguage);
         bool ttsChanged = snapshot.TtsRuntime != settings.TtsRuntime
             || snapshot.TtsProvider != settings.TtsProvider
-            || snapshot.TtsVoice != settings.TtsVoice;
+            || snapshot.TtsVoice != settings.TtsVoice
+            || snapshot.DubTimingMode != settings.DubTimingMode
+            || snapshot.AmbianceMixDb != settings.AmbianceMixDb;
 
         var effectiveStage = ResolveArtifactStage(snapshot);
         return effectiveStage switch
@@ -145,29 +147,24 @@ public static class SessionSnapshotSemantics
     public static SessionWorkflowStage ResolveArtifactStage(WorkflowSessionSnapshot snapshot)
     {
         if (snapshot.Stage >= SessionWorkflowStage.TtsGenerated
-            && !string.IsNullOrWhiteSpace(snapshot.TtsPath)
-            && File.Exists(snapshot.TtsPath))
+            && ArtifactIntegrityValidator.ValidateTts(snapshot, out _))
             return SessionWorkflowStage.TtsGenerated;
 
         if (snapshot.Stage >= SessionWorkflowStage.Translated
-            && !string.IsNullOrWhiteSpace(snapshot.TranslationPath)
-            && File.Exists(snapshot.TranslationPath))
+            && ArtifactIntegrityValidator.ValidateTranslation(snapshot, out _))
             return SessionWorkflowStage.Translated;
 
         if (snapshot.Stage >= SessionWorkflowStage.Diarized
-            && !string.IsNullOrWhiteSpace(snapshot.TranscriptPath)
-            && File.Exists(snapshot.TranscriptPath)
+            && ArtifactIntegrityValidator.ValidateTranscript(snapshot, out _)
             && HasDiarizationMarker(snapshot))
             return SessionWorkflowStage.Diarized;
 
         if (snapshot.Stage >= SessionWorkflowStage.Transcribed
-            && !string.IsNullOrWhiteSpace(snapshot.TranscriptPath)
-            && File.Exists(snapshot.TranscriptPath))
+            && ArtifactIntegrityValidator.ValidateTranscript(snapshot, out _))
             return SessionWorkflowStage.Transcribed;
 
         if (snapshot.Stage >= SessionWorkflowStage.MediaLoaded
-            && !string.IsNullOrWhiteSpace(snapshot.IngestedMediaPath)
-            && File.Exists(snapshot.IngestedMediaPath))
+            && ArtifactIntegrityValidator.ValidateMedia(snapshot, out _))
             return SessionWorkflowStage.MediaLoaded;
 
         return SessionWorkflowStage.Foundation;
@@ -219,6 +216,8 @@ public static class SessionSnapshotSemantics
             TtsSegmentDurations = null,
             TtsRuntime = null,
             TtsProvider = null,
+            DubTimingMode = null,
+            AmbianceMixDb = null,
         };
 
     public static WorkflowSessionSnapshot ClearTranslationOutputs(WorkflowSessionSnapshot snapshot) =>

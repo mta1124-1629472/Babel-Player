@@ -100,7 +100,7 @@
     <value>API Keys</value>
   </data>
   <data name="Window_Title_Crash" xml:space="preserve">
-    <value>Babel Player — Unhandled Error</value>
+    <value>Babel Player - Unhandled Error</value>
   </data>
   <data name="Window_Title_Wizard" xml:space="preserve">
     <value>Speaker Reference Wizard</value>
@@ -144,6 +144,9 @@
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
     <value>Re-run transcription (choose this stage only or include downstream)</value>
   </data>
+  <data name="Automation_RerunTranscription" xml:space="preserve">
+    <value>Re-run transcription</value>
+  </data>
   <data name="Label_Compute" xml:space="preserve">
     <value>Compute</value>
   </data>
@@ -167,6 +170,9 @@
   </data>
   <data name="Tooltip_RerunDiarization" xml:space="preserve">
     <value>Re-run speaker mapping (choose this stage only or include downstream)</value>
+  </data>
+  <data name="Automation_RerunDiarization" xml:space="preserve">
+    <value>Re-run speaker mapping</value>
   </data>
   <data name="Label_MultiSpeakerAudio" xml:space="preserve">
     <value>Multi-speaker audio</value>
@@ -195,11 +201,17 @@
   <data name="Tooltip_RerunTranslation" xml:space="preserve">
     <value>Re-run translation (choose this stage only or include dub)</value>
   </data>
+  <data name="Automation_RerunTranslation" xml:space="preserve">
+    <value>Re-run translation</value>
+  </data>
   <data name="Section_Dub" xml:space="preserve">
     <value>DUB</value>
   </data>
   <data name="Tooltip_RerunDub" xml:space="preserve">
     <value>Re-generate dub audio from the current translation</value>
+  </data>
+  <data name="Automation_RerunDub" xml:space="preserve">
+    <value>Re-generate dub audio</value>
   </data>
   <data name="Label_VoiceAssignment" xml:space="preserve">
     <value>Voice assignment</value>
@@ -267,8 +279,17 @@
   <data name="Tooltip_ExpandErrorDetails" xml:space="preserve">
     <value>Expand error details</value>
   </data>
+  <data name="Automation_ExpandErrorDetails" xml:space="preserve">
+    <value>Expand error details</value>
+  </data>
   <data name="Section_Segments" xml:space="preserve">
     <value>Segments</value>
+  </data>
+  <data name="Label_SegmentCount_One" xml:space="preserve">
+    <value>{0} segment</value>
+  </data>
+  <data name="Label_SegmentCount_Many" xml:space="preserve">
+    <value>{0} segments</value>
   </data>
   <data name="Tooltip_ExportSegments" xml:space="preserve">
     <value>Export captions (.srt), dubbed audio only (.mp3), or video with dub + soft subs (.mp4) — audio matches current timings and mix.</value>
@@ -292,6 +313,9 @@
     <value>to .mp4</value>
   </data>
   <data name="Tooltip_RefreshSegments" xml:space="preserve">
+    <value>Refresh segments</value>
+  </data>
+  <data name="Automation_RefreshSegments" xml:space="preserve">
     <value>Refresh segments</value>
   </data>
   <data name="Message_NoSegmentsTitle" xml:space="preserve">
@@ -829,46 +853,46 @@
     <value>Merge source into target - this updates the transcript permanently</value>
   </data>
   <data name="Wizard_Footer_Hint" xml:space="preserve">
-    <value>Finish saves voice and reference changes. Cancel discards all edits.</value>
+    <value>Finish: save changes. Cancel: discard edits.</value>
   </data>
   <data name="Wizard_Button_Cancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
   <data name="Wizard_Tooltip_Cancel" xml:space="preserve">
-    <value>Discard all changes and close</value>
+    <value>Discard edits</value>
   </data>
   <data name="Wizard_Button_Finish" xml:space="preserve">
     <value>Finish</value>
   </data>
   <data name="Wizard_Tooltip_Finish" xml:space="preserve">
-    <value>Apply voice and reference changes to the session</value>
+    <value>Save changes</value>
   </data>
   <data name="Wizard_Tooltip_Close" xml:space="preserve">
     <value>Close wizard</value>
   </data>
   <data name="Wizard_Tooltip_CloseDiscard" xml:space="preserve">
-    <value>Close wizard (discard changes)</value>
+    <value>Discard changes</value>
   </data>
   <data name="Wizard_Hint_TopBanner" xml:space="preserve">
-    <value>Assign voices to speakers and set reference audio clips. Use the preview to find good clips, then click 'Use Playhead' to grab the current moment.</value>
+    <value>Assign voices and set reference clips.</value>
   </data>
   <data name="Wizard_Toggle_NeedsAttention" xml:space="preserve">
     <value>Show needs attention</value>
   </data>
   <data name="Wizard_Tooltip_NeedsAttention" xml:space="preserve">
-    <value>Only show speakers that need review or have poor reference</value>
+    <value>Show speakers needing review</value>
   </data>
   <data name="Wizard_Button_ResetAll" xml:space="preserve">
     <value>Reset All</value>
   </data>
   <data name="Wizard_Tooltip_ResetAll" xml:space="preserve">
-    <value>Clear all draft changes and start fresh</value>
+    <value>Clear all changes</value>
   </data>
   <data name="Wizard_Hint_ScrubPreview" xml:space="preserve">
-    <value>Scrub through the video to find good audio clips. Click 'Use Playhead' on a speaker to grab the current moment as their reference.</value>
+    <value>Scrub to find clips; click Use Playhead.</value>
   </data>
   <data name="Wizard_Hint_LinuxMacFallback" xml:space="preserve">
-    <value>On Linux/macOS, use the main window to scrub through video. When you find a good moment, come back here and click 'Use Playhead' for that speaker.</value>
+    <value>Scrub in main window, return here, click Use Playhead.</value>
   </data>
   <data name="Wizard_Tooltip_SeekSlider" xml:space="preserve">
     <value>Drag to seek through the video</value>
