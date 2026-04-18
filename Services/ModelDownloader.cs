@@ -145,7 +145,7 @@ except Exception as e:
                 {
                     string? line = await proc.StandardOutput.ReadLineAsync(token);
                     if (line == null) break;
-                    _log.Info($"[hf-download] {line}");
+                    _log.Debug($"[hf-download] {line}");
                 }
             }, token);
 
@@ -471,7 +471,7 @@ except Exception as e:
                     if (line == null) break;
 
                     TryReportProgress(line, progress);
-                    _log.Info($"[model-prep] {line}");
+                    _log.Debug($"[model-prep] {line}");
                 }
             }, token);
 

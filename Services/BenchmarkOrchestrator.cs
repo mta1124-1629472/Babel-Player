@@ -140,7 +140,7 @@ public sealed class BenchmarkOrchestrator
                 continue;
             }
 
-            _log.Info($"BenchmarkOrchestrator: benchmarking clip '{clip.Id}' ({clip.DurationSeconds:F1} s)");
+            _log.Debug($"BenchmarkOrchestrator: benchmarking clip '{clip.Id}' ({clip.DurationSeconds:F1} s)");
 
             var outputJsonPath = Path.Combine(
                 Path.GetTempPath(),

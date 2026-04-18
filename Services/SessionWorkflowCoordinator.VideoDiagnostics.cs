@@ -19,7 +19,7 @@ public sealed partial class SessionWorkflowCoordinator
             return;
 
         VideoEnhancementDiagnostics = diagnostics;
-        _log.Info(
+        _log.Debug(
             $"Video enhancement diagnostics updated: support_hint='{diagnostics.SupportHintText}', " +
             $"requested='{diagnostics.RequestedStateText}', resolved='{diagnostics.ResolvedStateText}', " +
             $"backend='{diagnostics.BackendSummaryText}'");
