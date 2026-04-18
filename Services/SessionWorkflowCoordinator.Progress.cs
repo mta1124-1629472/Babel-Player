@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Babel.Player.Models;
 using SharedOrchestration = Babel.Player.Services.Orchestration;
 
@@ -7,6 +9,8 @@ namespace Babel.Player.Services;
 
 public sealed partial class SessionWorkflowCoordinator
 {
+    private static readonly TimeSpan TtsHeartbeatInterval = TimeSpan.FromSeconds(10);
+
     internal sealed record PipelineStageUpdate(
         int StageIndex,
         int StageCount,
@@ -160,4 +164,41 @@ public sealed partial class SessionWorkflowCoordinator
             context is { } stageContext ? stageContext.ToShared() : null,
             rawProgress,
             detailPrefix);
+
+    private async Task<T> AwaitWithTtsHeartbeatAsync<T>(
+        Task<T> work,
+        PipelineStageContext? context,
+        Func<TimeSpan, string> detailFactory,
+        Func<double>? progressFactory,
+        bool isIndeterminate,
+        CancellationToken cancellationToken,
+        Func<TimeSpan, string?>? streamingStatusFactory = null)
+    {
+        if (context is null)
+            return await work.ConfigureAwait(false);
+
+        var startedAt = DateTimeOffset.UtcNow;
+        while (true)
+        {
+            var delayTask = Task.Delay(TtsHeartbeatInterval, cancellationToken);
+            var completedTask = await Task.WhenAny(work, delayTask).ConfigureAwait(false);
+            if (completedTask == work)
+                return await work.ConfigureAwait(false);
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var elapsed = DateTimeOffset.UtcNow - startedAt;
+            ReportStage(
+                context,
+                detailFactory(elapsed),
+                progressFactory?.Invoke() ?? 0,
+                isIndeterminate,
+                streamingStatusFactory?.Invoke(elapsed));
+        }
+    }
+
+    private static string FormatTtsHeartbeatElapsed(TimeSpan elapsed)
+    {
+        var seconds = Math.Max(1, (int)Math.Floor(elapsed.TotalSeconds));
+        return $"{seconds}s";
+    }
 }
