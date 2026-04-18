@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using ScriptResult = Babel.Player.Services.PythonSubprocessServiceBase.ScriptResult;
 
 namespace BabelPlayer.Tests;
 
@@ -66,11 +67,13 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
     {
         var provider = new TestCTranslate2TranslationProvider(_log, "nllb-200-distilled-600M")
         {
-            OnRun = (arguments, _, standardInput) =>
+            OnRun = (_, _, standardInput) =>
             {
                 Assert.Equal("hola", standardInput);
-                File.WriteAllText(arguments[1], "{\"translatedText\":\"greetings\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\"}");
-                return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
+                return Task.FromResult(new ScriptResult(
+                    0,
+                    "{\"translatedText\":\"greetings\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\"}",
+                    string.Empty));
             }
         };
 

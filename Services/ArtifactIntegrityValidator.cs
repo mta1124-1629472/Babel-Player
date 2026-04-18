@@ -109,6 +109,12 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
+        if (!File.Exists(snapshot.TranscriptPath))
+        {
+            error = $"Transcript file was missing: {snapshot.TranscriptPath}";
+            return false;
+        }
+
         var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath), snapshot.TranscriptPath);
         var expectedTiming = ArtifactIntegrity.BuildTranscriptTimingSummary(transcript.Segments);
         var expectedSegmentIds = ArtifactIntegrity.BuildTranscriptSegmentIds(transcript.Segments);
