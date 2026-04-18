@@ -52,6 +52,33 @@ public sealed class MainWindowBindingsTests
             expectedAutomationName: "Toggle fullscreen");
     }
 
+    [Fact]
+    public void MainWindow_ControlsBar_IsAnchoredToPlayerColumnOnly()
+    {
+        var axamlPath = FindRepoFile("Views", "MainWindow.axaml");
+        var axaml = File.ReadAllText(axamlPath);
+
+        var playerChromeWidthHostTag = FindTagByName(axaml, "PlayerChromeWidthHost");
+        Assert.Equal("0", GetAttributeValue(playerChromeWidthHostTag, "Grid.Column"));
+        Assert.Equal("4", GetAttributeValue(playerChromeWidthHostTag, "Grid.RowSpan"));
+
+        var controlsBarTag = FindTagByName(axaml, "ControlsBarContainer");
+        Assert.Equal("0", GetAttributeValue(controlsBarTag, "Grid.Column"));
+        Assert.Null(GetOptionalAttributeValue(controlsBarTag, "Grid.ColumnSpan"));
+        Assert.Null(GetOptionalAttributeValue(controlsBarTag, "Margin"));
+    }
+
+    [Fact]
+    public void MainWindow_CompactChrome_UsesDedicatedPlayerWidthHost()
+    {
+        var codeBehindPath = FindRepoFile("Views", "MainWindow.axaml.cs");
+        var codeBehind = File.ReadAllText(codeBehindPath);
+
+        Assert.Equal(2, CountOccurrences(codeBehind, "FindControl<Control>(\"PlayerChromeWidthHost\")"));
+        Assert.Contains("OnPlayerChromeWidthHostSizeChanged", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("FindControl<Control>(\"VideoSegmentsChromeHost\")", codeBehind, StringComparison.Ordinal);
+    }
+
     private static string FindRepoFile(params string[] relativePathParts)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -103,6 +130,17 @@ public sealed class MainWindowBindingsTests
         }
     }
 
+    private static string FindTagByName(string axaml, string controlName)
+    {
+        var match = Regex.Match(
+            axaml,
+            $@"<\w+\b(?:(?!>).)*\bx:Name=""{Regex.Escape(controlName)}""(?:(?!>).)*>",
+            RegexOptions.Singleline);
+
+        Assert.True(match.Success, $"Expected tag with x:Name='{controlName}'.");
+        return match.Value;
+    }
+
     private static string[] FindButtonTagsByCommand(string axaml, string commandBinding)
     {
         var pattern = $@"<Button\b(?:(?!>).)*Command=""\{{Binding {Regex.Escape(commandBinding)}\}}""(?:(?!>).)*>";
@@ -123,5 +161,15 @@ public sealed class MainWindowBindingsTests
 
         Assert.True(match.Success, $"Expected attribute '{attributeName}' in tag: {tag}");
         return match.Groups[1].Value;
+    }
+
+    private static string? GetOptionalAttributeValue(string tag, string attributeName)
+    {
+        var match = Regex.Match(
+            tag,
+            $@"\b{Regex.Escape(attributeName)}=""([^""]+)""",
+            RegexOptions.Singleline);
+
+        return match.Success ? match.Groups[1].Value : null;
     }
 }
