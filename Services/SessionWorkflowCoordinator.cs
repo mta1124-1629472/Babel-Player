@@ -41,33 +41,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private readonly List<Task> _pendingTtsTasks = [];
     private readonly object _pendingTtsTasksLock = new();
-
-    /// <summary>
-    /// Adds a TTS task to the pending list while pruning any tasks that have already completed.
-    /// Keeping the list bounded to in-flight work avoids the unbounded growth of the previous
-    /// <see cref="ConcurrentBag{T}"/>, which retained completed tasks for the coordinator's lifetime.
-    /// </summary>
-    private void TrackPendingTtsTask(Task task)
-    {
-        lock (_pendingTtsTasksLock)
-        {
-            _pendingTtsTasks.RemoveAll(static t => t.IsCompleted);
-            _pendingTtsTasks.Add(task);
-        }
-    }
-
-    /// <summary>
-    /// Returns a snapshot of currently in-flight TTS tasks after pruning completed ones.
-    /// Used at shutdown to wait briefly for pending TTS work.
-    /// </summary>
-    private Task[] SnapshotPendingTtsTasks()
-    {
-        lock (_pendingTtsTasksLock)
-        {
-            _pendingTtsTasks.RemoveAll(static t => t.IsCompleted);
-            return [.. _pendingTtsTasks];
-        }
-    }
     private readonly IAudioProcessingService? _audioProcessingService;
     private readonly object _sessionLock = new();
 
@@ -168,16 +141,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     public ApiKeyStore? KeyStore { get; private set; }
 
     /// <summary>
-    /// Creates a <see cref="SessionWorkflowCoordinator"/> with an explicit transport manager.
-    /// Use this overload in production via <see cref="DependencyLocator"/>.
-    /// <summary>
-    /// Initializes a new <see cref="SessionWorkflowCoordinator"/> using the provided core services, media transport manager, registries, and optional components.
-    /// </summary>
-    /// <param name="coreServices">Core application services and shared dependencies (settings, store, logging) required by the coordinator.</param>
-    /// <param name="transportManager">Media transport manager responsible for playback and segment transports for this coordinator.</param>
-    /// <param name="registries">Registry bundle providing per-session stores and provider registries (transcription, translation, TTS, recent sessions).</param>
-    /// <summary>
-    /// Initializes a new SessionWorkflowCoordinator with the provided core services, transport manager, and registries, and prepares internal orchestration, runtime, and probe wiring required to manage the session workflow.
+    /// Initializes a new <see cref="SessionWorkflowCoordinator"/> with the provided core services, transport manager, and registries, and prepares internal orchestration, runtime, and probe wiring required to manage the session workflow.
     /// </summary>
     /// <param name="coreServices">Core application services and stores required by the coordinator (settings, persistence store, logging).</param>
     /// <param name="transportManager">Media transport manager used for playback and segment transport.</param>
@@ -309,10 +273,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     /// <summary>
-    /// Loads persisted coordinator state (if any), initializes the current session and bootstrap diagnostics, and prepares any required media reload and persistence state.
+    /// Bootstraps coordinator state by loading a persisted session snapshot or creating a new foundation session when none exists.
     /// </summary>
     /// <remarks>
-    /// If a saved snapshot is present, artifacts are validated and the session may be downgraded; the validated snapshot becomes the active CurrentSession (with LastUpdatedAtUtc updated and an appropriate StatusMessage). If no snapshot is found, a new foundation session is created. The method also sets SessionSource and PersistenceStatus, loads RecentSessions, caches the session's media snapshot when applicable, queues a media reload request when the session has media, and persists the current session.
+    /// On entry: may be called at application startup; no specific pipeline stage is required.
+    /// On success: restores CurrentSession to the persisted snapshot (possibly with its stage downgraded if artifacts are missing) or sets a newly created foundation session; updates persistence-related properties and recent-session list.
+    /// Side effects: caches the session snapshot for the media key when applicable, enqueues a media reload request if the restored session is at or past MediaLoaded, and persists the current session to disk.
+    /// Cancellation: this method is synchronous and does not support cancellation.
     /// </remarks>
     public void Initialize()
     {
@@ -346,7 +313,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     $"cleared={string.Join(",", validation.ClearedArtifacts)}; provenance={SessionSnapshotSemantics.DescribeSessionProvenance(validated)}");
             }
 
-            string statusMessage = "Ready.";
+            const string statusMessage = "Ready.";
 
             lock (_sessionLock)
             {
@@ -430,13 +397,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     /// <summary>
-    /// Loads the specified media file into the workflow, restoring a previously cached session for that media when available or creating a new session otherwise.
+    /// Loads the specified media file into the coordinator, restoring a cached session if available or creating a new session for the media.
     /// </summary>
-    /// <param name="sourceMediaPath">Absolute or relative path to the source media file to load.</param>
-    /// <exception cref="FileNotFoundException">Thrown when <paramref name="sourceMediaPath"/> does not exist.</exception>
+    /// <param name="sourceMediaPath">Absolute or relative path to the source media file to ingest.</param>
     /// <remarks>
-    /// As a result of this call the coordinator copies the media into the session's artifact directory, updates <c>CurrentSession</c> (session id, stage, artifact paths, timestamps, and status message), queues a media reload request, and persists the session snapshot.
+    /// Entry state: may be called at any time; if a current session has a SourceMediaPath, the coordinator treats this as a media switch.
+    /// Exit state: on success the coordinator's CurrentSession will be at least <see cref="SessionWorkflowStage.MediaLoaded"/> and its media/artifact paths and status message will reflect either the restored snapshot or a newly created session; a media reload request is queued.
+    /// Persistence: when switching media the existing session is stashed into the MRU/per-session store and the new/restored session is persisted (FlushPendingSave is invoked) so state survives restarts.
+    /// Behavior: if a previously cached snapshot exists for the supplied media the method validates and restores that snapshot (copying the media into the snapshot's session directory) and retains restored artifact paths; otherwise it creates a new per-session directory, copies the media there, resets downstream artifacts, and sets a fresh SessionId when switching media.
+    /// Cancellation: this method is synchronous and does not support cancellation.
     /// </remarks>
+    /// <exception cref="FileNotFoundException">Thrown when the file at <paramref name="sourceMediaPath"/> does not exist.</exception>
     public void LoadMedia(string sourceMediaPath)
     {
         if (!File.Exists(sourceMediaPath))
@@ -520,29 +491,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
             lock (_sessionLock)
             {
-                CurrentSession = CurrentSession with
-                {
-                    SessionId = newSessionId,
-                    Stage = SessionWorkflowStage.MediaLoaded,
-                    SourceMediaPath = sourceMediaPath,
-                    IngestedMediaPath = ingestedPath,
-                    VocalsAudioPath = null,
-                    AmbianceAudioPath = null,
-                    MediaLoadedAtUtc = nowUtc,
-                    TranscriptPath = null,
-                    SourceLanguage = null,
-                    TranscribedAtUtc = null,
-                    TranscriptionLanguageHint = null,
-                    TranslationPath = null,
-                    TargetLanguage = null,
-                    TranslatedAtUtc = null,
-                    TtsPath = null,
-                    TtsVoice = null,
-                    TtsGeneratedAtUtc = null,
-                    TtsSegmentsPath = null,
-                    TtsSegmentAudioPaths = null,
-                    StatusMessage = "Media loaded.",
-                };
+                CurrentSession = CreateMediaLoadedSession(
+                    newSessionId,
+                    sourceMediaPath,
+                    ingestedPath,
+                    nowUtc);
             }
         }
 
@@ -589,45 +542,22 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         SaveCurrentSession();
     }
 
+    /// <summary>
+    /// Resets the session pipeline to the MediaLoaded stage and clears all downstream artifacts, provider/model selections, language settings, speaker metadata, and generated timestamps.
+    /// </summary>
+    /// <remarks>
+    /// Entry condition: safe to call at any time; the method is a no-op if the current session's stage is already earlier than MediaLoaded.
+    /// Exit state on success: <c>CurrentSession.Stage</c> is set to <see cref="SessionWorkflowStage.MediaLoaded"/> and all transcription/translation/diarization/TTS-related fields are cleared or nulled, with <c>StatusMessage</c> set to "Ready.".
+    /// Persistence: this method updates the in-memory <c>CurrentSession</c> only and does not persist the session to storage.
+    /// Cancellation: not applicable.
+    /// </remarks>
     public void ResetPipelineToMediaLoaded()
     {
         if (CurrentSession.Stage < SessionWorkflowStage.MediaLoaded) return;
 
         lock (_sessionLock)
         {
-            CurrentSession = CurrentSession with
-            {
-                Stage = SessionWorkflowStage.MediaLoaded,
-                VocalsAudioPath = null,
-                AmbianceAudioPath = null,
-                TranscriptPath = null,
-                TranslationPath = null,
-                TtsPath = null,
-                MixedDubAudioPath = null,
-                TtsVoice = null,
-                TtsSegmentsPath = null,
-                TtsSegmentAudioPaths = null,
-                SourceLanguage = null,
-                TargetLanguage = null,
-                TranscribedAtUtc = null,
-                TranslatedAtUtc = null,
-                TtsGeneratedAtUtc = null,
-                TranscriptionRuntime = null,
-                TranscriptionProvider = null,
-                TranscriptionModel = null,
-                TranscriptionLanguageHint = null,
-                TranslationRuntime = null,
-                TranslationProvider = null,
-                TranslationModel = null,
-                TtsRuntime = null,
-                TtsProvider = null,
-                SpeakerVoiceAssignments = null,
-                SpeakerReferenceAudioPaths = null,
-                DefaultTtsVoiceFallback = null,
-                DiarizationProvider = null,
-                SpeakersDetectedAtUtc = null,
-                StatusMessage = "Ready.",
-            };
+            CurrentSession = ResetToMediaLoadedSession(CurrentSession);
         }
     }
 
@@ -646,6 +576,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 TtsVoice = null,
                 TtsSegmentsPath = null,
                 TtsSegmentAudioPaths = null,
+                TtsSegmentDurations = null,
                 TargetLanguage = null,
                 TranslatedAtUtc = null,
                 TtsGeneratedAtUtc = null,
@@ -680,6 +611,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 TtsVoice = null,
                 TtsSegmentsPath = null,
                 TtsSegmentAudioPaths = null,
+                TtsSegmentDurations = null,
                 TargetLanguage = null,
                 TranslatedAtUtc = null,
                 TtsGeneratedAtUtc = null,
@@ -707,6 +639,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 TtsVoice = null,
                 TtsSegmentsPath = null,
                 TtsSegmentAudioPaths = null,
+                TtsSegmentDurations = null,
                 TtsGeneratedAtUtc = null,
                 TtsRuntime = null,
                 TtsProvider = null,
@@ -877,22 +810,14 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     }
 
     /// <summary>
-    /// Regenerates the TTS audio for a single translated segment and updates the current session with the generated audio path.
+    /// Regenerates TTS audio for a single translated segment and updates the session's TTS segment paths.
     /// </summary>
-    /// <param name="segmentId">The identifier of the segment to regenerate (for example, "segment_0.0").</param>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when no translation is available, the specified segment cannot be found in the translation, or TTS generation fails.
-    /// </exception>
-    /// <exception cref="FileNotFoundException">Thrown when the session's translation file is missing on disk.</exception>
-    /// <summary>
-    /// Regenerates the TTS audio file for a single translated segment and updates the session's TTS segment audio mapping.
-    /// </summary>
-    /// <param name="segmentId">Identifier of the translated segment to regenerate TTS for.</param>
+    /// <param name="segmentId">The identifier of the translated segment to regenerate TTS for.</param>
     /// <remarks>
-    /// Preconditions: <see cref="CurrentSession.TranslationPath"/> must be set and the translation file must exist; otherwise this method throws (<see cref="InvalidOperationException"/> or <see cref="FileNotFoundException"/>). The method ensures any required containerized runtime is started and checks provider readiness before generation; if the configured TTS provider is not ready for execution and a model download is not required, a <see cref="PipelineProviderException"/> is thrown. On success the session's <c>TtsSegmentAudioPaths</c> and <c>StatusMessage</c> are updated and the session is persisted via <see cref="SaveCurrentSession"/>. This method does not accept a cancellation token and does not support cooperative cancellation.
+    /// Preconditions: <see cref="CurrentSession.TranslationPath"/> must be set and the translation file must exist; otherwise this method throws (<see cref="InvalidOperationException"/> or <see cref="FileNotFoundException"/>). The method ensures any required containerized runtime is started and checks provider readiness before generation; if the configured TTS provider is not ready for execution and a model download is not required, a <see cref="PipelineProviderException"/> is thrown. On success the session's <c>TtsSegmentAudioPaths</c> and <c>StatusMessage</c> are updated and the session is persisted via <see cref="SaveCurrentSession"/>. The operation supports cooperative cancellation through <paramref name="cancellationToken"/>.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when no translation is available, the segment is not found, or TTS generation fails.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no translation is available or the specified segment text is missing.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session cannot be found.</exception>
     /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider is not ready for execution and no model download is required.</exception>
     public async Task RegenerateSegmentTtsAsync(string segmentId, CancellationToken cancellationToken = default)
     {
@@ -906,14 +831,19 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var segmentText = await _artifactReader.GetTranslatedTextAsync(CurrentSession.TranslationPath, segmentId, cancellationToken);
+        var segmentText = await _artifactReader.GetTranslatedTextAsync(
+            CurrentSession.TranslationPath,
+            segmentId,
+            cancellationToken);
 
         if (string.IsNullOrEmpty(segmentText))
         {
             throw new InvalidOperationException($"Segment not found: {segmentId}");
         }
 
-        var translation = await _artifactReader.LoadTranslationAsync(CurrentSession.TranslationPath, cancellationToken);
+        var translation = await _artifactReader.LoadTranslationAsync(
+            CurrentSession.TranslationPath,
+            cancellationToken);
         var targetSegment = translation.Segments?.FirstOrDefault(s => s.Id == segmentId);
         var regenVoice = targetSegment is not null
             ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
@@ -923,10 +853,16 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime, "TTS", cancellationToken);
+        await EnsureContainerizedExecutionRuntimeStartedAsync(
+            CurrentSettings.TtsRuntime,
+            "TTS",
+            cancellationToken);
 
         var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
-            ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(CurrentSettings, _containerizedProbe)
+            ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(
+                CurrentSettings,
+                _containerizedProbe,
+                cancellationToken: cancellationToken)
             : TtsRegistry.CheckReadiness(
                 CurrentSettings.TtsProvider,
                 regenVoice,
@@ -990,20 +926,11 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     }
 
     /// <summary>
-    /// Regenerates the translation for a single segment identified by its segment ID and updates the current session snapshot.
+    /// Regenerates the translated text for a single segment in the current session's translation artifact.
     /// </summary>
-    /// <param name="segmentId">The identifier of the segment to retranslate (e.g., "segment_0.0").</param>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when there is no translation available for the current session, when the source text for the specified segment is missing,
-    /// when the session's source or target language is not set, or when the translation operation fails.
-    /// </exception>
-    /// <summary>
-    /// Regenerates the translated text for a single segment and updates session status.
-    /// </summary>
-    /// <param name="segmentId">The identifier of the segment to regenerate (stable segment id produced by SegmentId).</param>
+    /// <param name="segmentId">Identifier of the segment to regenerate (stable segment id produced by SegmentId).</param>
     /// <remarks>
-    /// Entry state: requires a current session with <see cref="WorkflowSessionSnapshot.TranslationPath"/> set and a translation file present on disk. On success: updates the session <see cref="WorkflowSessionSnapshot.StatusMessage"/> to indicate the regenerated segment and persists the session snapshot. This method observes the coordinator's translation execution readiness and will attempt to prepare the translation runtime before invoking translation. The operation honors cooperative cancellation if the coordinator's runtime readiness checks or the underlying translation pipeline support it; callers should use external cancellation by stopping coordinator-triggered workflows where applicable.
-    /// Guard conditions: throws if the translation path is missing or the translation file is not found, if source or target language is not set, or if the segment source text cannot be located. If readiness checks indicate the translation cannot run (for example due to missing provider readiness), the method will throw an InvalidOperationException describing the failure.
+    /// Preconditions: the session must have a translation artifact path (CurrentSession.TranslationPath) and that file must exist; source and target languages must be set on the session. The method ensures the translation execution runtime is ready before invoking translation. On success the session's status message is updated and the session is persisted via SaveCurrentSession; the session pipeline stage is not advanced by this operation. The operation supports cooperative cancellation through <paramref name="cancellationToken"/>.
     /// </remarks>
     /// <exception cref="FileNotFoundException">Thrown when the current session's translation file cannot be found on disk.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the session lacks a translation path, when the source or target language is not set, when the segment source text is not found, or when the translation attempt fails.</exception>
@@ -1019,7 +946,10 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var sourceText = await _artifactReader.GetSourceTextAsync(CurrentSession.TranslationPath, segmentId, cancellationToken);
+        var sourceText = await _artifactReader.GetSourceTextAsync(
+            CurrentSession.TranslationPath,
+            segmentId,
+            cancellationToken);
 
         if (string.IsNullOrEmpty(sourceText))
         {
@@ -1185,10 +1115,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     }
 
     /// <summary>
-    /// Compares the current session's recorded provider/model settings against the
-    /// active <see cref="CurrentSettings"/> to determine what has been invalidated.
-    /// Callers use the result to decide which pipeline reset to apply before running.
-    /// <summary>
     /// Computes which pipeline stages must be invalidated based on the current session's artifacts and the active pipeline settings.
     /// </summary>
     /// <returns>A <see cref="PipelineInvalidation"/> value that indicates which pipeline stages (if any) require reset.</returns>
@@ -1205,9 +1131,48 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         return invalidation;
     }
 
-    // SaveCurrentSession / SaveCurrentSessionAsync / FlushPendingSave and the
-    // underlying PersistSnapshot helpers live in SessionWorkflowCoordinator.Persistence.cs.
+    /// <summary>
+    /// Records a pending TTS generation task for later observation and removes any completed tasks from the internal tracking list.
+    /// </summary>
+    /// <param name="task">The TTS-related <see cref="Task"/> to track; callers may await or monitor the snapshot returned by <see cref="SnapshotPendingTtsTasks"/>.</param>
 
+    internal void TrackPendingTtsTask(Task task)
+    {
+        lock (_pendingTtsTasksLock)
+        {
+            _pendingTtsTasks.RemoveAll(static t => t.IsCompleted);
+            _pendingTtsTasks.Add(task);
+        }
+    }
+
+    /// <summary>
+    /// Create a snapshot of currently tracked pending TTS generation tasks after pruning completed tasks.
+    /// </summary>
+    /// <returns>An array of pending TTS <see cref="Task"/> instances with completed tasks removed.</returns>
+    /// <remarks>
+    /// This method is thread-safe: it prunes completed tasks and captures the remaining tasks while holding the internal pending-task lock.
+    /// It does not await, start, cancel, or otherwise modify the returned tasks beyond removing completed entries from the internal tracker.
+    /// </remarks>
+    internal Task[] SnapshotPendingTtsTasks()
+    {
+        lock (_pendingTtsTasksLock)
+        {
+            _pendingTtsTasks.RemoveAll(static t => t.IsCompleted);
+            return _pendingTtsTasks.ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Processes an updated container probe result: records the probe state, updates runtime warmup text when the probe matches the current GPU service URL, updates bootstrap diagnostics and inference mode if any container-related diagnostics changed, and emits a readiness signal.
+    /// </summary>
+    /// <param name="probeResult">The latest probe result for a containerized inference service (URL, state, CUDA availability/version, and staleness).</param>
+    /// <remarks>
+    /// Side effects:
+    /// - Updates the coordinator's probe-state cache for the probe's normalized base URL.
+    /// - May update <see cref="RuntimeWarmupStatusText"/> when the probe URL matches the coordinator's effective GPU service URL and a non-empty warmup description is available.
+    /// - Updates <see cref="BootstrapDiagnostics"/> container-related fields and recalculates <see cref="InferenceMode"/> when those diagnostics change.
+    /// - Emits a readiness signal of kind <see cref="ReadinessSignalKind.ProbeResultUpdated"/>; <c>forceRefresh</c> is true when the probe URL is new, the probe state changed, or the probe state is not <see cref="ContainerizedProbeState.Checking"/>.
+    /// </remarks>
     private void OnProbeResultUpdated(ContainerizedProbeResult probeResult)
     {
         var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(probeResult.ServiceUrl);
