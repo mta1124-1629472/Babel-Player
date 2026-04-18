@@ -106,6 +106,14 @@ public sealed class LocalizationService : INotifyPropertyChanged
         return "en";
     }
 
+    /// <summary>
+    /// Applies the current culture's flow direction (LTR / RTL) to all open windows.
+    /// Safe to call after a window is created later in startup, e.g. once
+    /// <see cref="IClassicDesktopStyleApplicationLifetime.MainWindow"/> has been assigned,
+    /// to catch any window that didn't exist when <see cref="SetCulture"/> first ran.
+    /// </summary>
+    public void ApplyFlowDirectionToOpenWindows() => ApplyFlowDirection(_currentCulture);
+
     private static void ApplyFlowDirection(CultureInfo culture)
     {
         var direction = IsRtlCulture(culture) ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;

@@ -153,6 +153,10 @@ public partial class App : Application
                 logFilePath: _logFilePath);
 
             desktop.MainWindow = new MainWindow { DataContext = mainVm };
+            // SetCulture above ran before the main window existed, so re-apply
+            // flow direction now that desktop.MainWindow is assigned.  This is
+            // what makes first-launch RTL cultures (e.g. Arabic) lay out right-to-left.
+            LocalizationService.Instance.ApplyFlowDirectionToOpenWindows();
             var coordinator = _sessionWorkflowCoordinator;
 
             // Wire live bootstrap progress into the status bar.
