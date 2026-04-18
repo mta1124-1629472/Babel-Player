@@ -73,12 +73,18 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 return;
             }
 
+            var transcriptionStartMessage = BuildInfo.IsDevBuild
+                ? $"Starting transcription with {_c.CurrentSettings.TranscriptionProvider} / {_c.CurrentSettings.TranscriptionModel}. Translation will begin as segments arrive."
+                : "Starting streaming transcription. Translation will begin as segments arrive.";
+            var transcriptionStreamingStatus = BuildInfo.IsDevBuild
+                ? "Downstream translation and dubbing will overlap with ASR output."
+                : "Translation and dubbing will start as transcript segments arrive.";
             ReportStage(
                 transcriptionStageContext,
-                $"Starting transcription with {_c.CurrentSettings.TranscriptionProvider} / {_c.CurrentSettings.TranscriptionModel}. Translation will begin as segments arrive.",
+                transcriptionStartMessage,
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: "Downstream translation and dubbing will overlap with ASR output.");
+                streamingStatus: transcriptionStreamingStatus);
 
             var transcriptPath = BuildTranscriptArtifactPath(transcriptionSourcePath);
             var transcriptPartialPath = TranscriptArtifactStreamingWriter.GetPartialPath(transcriptPath);
@@ -135,18 +141,30 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             await _c.EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken).ConfigureAwait(false);
             await _c.EnsureMultiSpeakerReferenceClipsAsync(cancellationToken).ConfigureAwait(false);
 
+            var translationStartMessage = BuildInfo.IsDevBuild
+                ? $"Streaming translation to {targetLanguage} with {_c.CurrentSettings.TranslationProvider} / {_c.CurrentSettings.TranslationModel}."
+                : $"Streaming translation into {targetLanguage}.";
+            var translationStreamingStatus = BuildInfo.IsDevBuild
+                ? "Dub generation will start as translated segments arrive."
+                : "Dub generation will start as segments finish translating.";
             ReportStage(
                 translationStageContext,
-                $"Streaming translation to {targetLanguage} with {_c.CurrentSettings.TranslationProvider} / {_c.CurrentSettings.TranslationModel}.",
+                translationStartMessage,
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: "Dub generation will start as translated segments arrive.");
+                streamingStatus: translationStreamingStatus);
+            var ttsStartMessage = BuildInfo.IsDevBuild
+                ? $"Streaming TTS synthesis with {_c.CurrentSettings.TtsProvider} / {voice}."
+                : $"Streaming TTS synthesis with voice {voice}.";
+            var ttsStreamingStatus = BuildInfo.IsDevBuild
+                ? "Segment clips are generated as translation continues."
+                : "Segment clips are generated while translation continues.";
             ReportStage(
                 ttsStageContext,
-                $"Streaming TTS synthesis with {_c.CurrentSettings.TtsProvider} / {voice}.",
+                ttsStartMessage,
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: "Segment clips are generated as translation continues.");
+                streamingStatus: ttsStreamingStatus);
 
             using var pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var pipelineToken = pipelineCts.Token;
@@ -189,9 +207,12 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 await transcriptArtifactWriter.CompleteAsync(transcriptionResult, transcriptPath, pipelineToken).ConfigureAwait(false);
                 await _c.CommitTranscriptionSessionStateAsync(transcriptionResult, transcriptPath).ConfigureAwait(false);
+                var transcriptionCompleteMessage = BuildInfo.IsDevBuild
+                    ? $"Transcription complete. {transcriptionResult.Segments.Count} segments were detected in {transcriptionResult.Language}."
+                    : $"Transcription complete. {transcriptionResult.Segments.Count} segments detected.";
                 ReportStage(
                     transcriptionStageContext,
-                    $"Transcription complete. {transcriptionResult.Segments.Count} segments were detected in {transcriptionResult.Language}.",
+                    transcriptionCompleteMessage,
                     progress01: 1,
                     isIndeterminate: false);
 
@@ -202,9 +223,12 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     translationPath,
                     translationResult.SourceLanguage,
                     translationResult.TargetLanguage).ConfigureAwait(false);
+                var translationCompleteMessage = BuildInfo.IsDevBuild
+                    ? $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}."
+                    : $"Translation complete. {translationResult.Segments.Count} segments are ready for dubbing.";
                 ReportStage(
                     translationStageContext,
-                    $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
+                    translationCompleteMessage,
                     progress01: 1,
                     isIndeterminate: false);
 
@@ -330,18 +354,30 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 targetLanguage);
             await translationWriter.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
+            var transcriptTranslationStartMessage = BuildInfo.IsDevBuild
+                ? $"Streaming translation to {targetLanguage} with {_c.CurrentSettings.TranslationProvider} / {_c.CurrentSettings.TranslationModel}."
+                : $"Streaming translation into {targetLanguage}.";
+            var transcriptTranslationStatus = BuildInfo.IsDevBuild
+                ? "Dub generation will start as translated segments arrive."
+                : "Dub generation will start as segments finish translating.";
             ReportStage(
                 translationStageContext,
-                $"Streaming translation to {targetLanguage} with {_c.CurrentSettings.TranslationProvider} / {_c.CurrentSettings.TranslationModel}.",
+                transcriptTranslationStartMessage,
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: "Dub generation will start as translated segments arrive.");
+                streamingStatus: transcriptTranslationStatus);
+            var transcriptTtsStartMessage = BuildInfo.IsDevBuild
+                ? $"Streaming TTS synthesis with {_c.CurrentSettings.TtsProvider} / {voice}."
+                : $"Streaming TTS synthesis with voice {voice}.";
+            var transcriptTtsStatus = BuildInfo.IsDevBuild
+                ? "Segment clips are generated as translation continues."
+                : "Segment clips are generated while translation continues.";
             ReportStage(
                 ttsStageContext,
-                $"Streaming TTS synthesis with {_c.CurrentSettings.TtsProvider} / {voice}.",
+                transcriptTtsStartMessage,
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: "Segment clips are generated as translation continues.");
+                streamingStatus: transcriptTtsStatus);
 
             var translationChannel = Channel.CreateBounded<TranslationChannelItem>(new BoundedChannelOptions(8)
             {
@@ -387,9 +423,12 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     translationPath,
                     translationResult.SourceLanguage,
                     translationResult.TargetLanguage).ConfigureAwait(false);
+                var translatedFromTranscriptMessage = BuildInfo.IsDevBuild
+                    ? $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}."
+                    : $"Translation complete. {translationResult.Segments.Count} segments are ready for dubbing.";
                 ReportStage(
                     translationStageContext,
-                    $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
+                    translatedFromTranscriptMessage,
                     progress01: 1,
                     isIndeterminate: false);
 

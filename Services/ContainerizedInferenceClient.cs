@@ -140,7 +140,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
             if (!File.Exists(audioFilePath))
                 throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
 
-            _log.Info($"Transcribing with containerized service: {audioFilePath}");
+            _log.Debug($"Transcribing with containerized service: {audioFilePath}");
 
             using var content = new MultipartFormDataContent();
             await using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
@@ -169,7 +169,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
                     segments.Add(new TranscriptSegment(seg.Start, seg.End, seg.Text));
             }
 
-            _log.Info($"Transcription complete: {segments.Count} segments");
+            _log.Debug($"Transcription complete: {segments.Count} segments");
 
             return new TranscriptionResult(
                 true,
@@ -204,7 +204,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
             if (!File.Exists(audioFilePath))
                 throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
 
-            _log.Info($"Streaming transcription with containerized service: {audioFilePath}");
+            _log.Debug($"Streaming transcription with containerized service: {audioFilePath}");
 
             using var content = new MultipartFormDataContent();
             await using var fileStream = new FileStream(audioFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, FileOptions.Asynchronous);
@@ -295,7 +295,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
             }
 
             stopwatch.Stop();
-            _log.Info($"Streaming transcription complete: {segments.Count} segments");
+            _log.Debug($"Streaming transcription complete: {segments.Count} segments");
 
             return new TranscriptionResult(
                 true,
@@ -395,7 +395,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
         {
             using var lease = AcquireLease(ContainerizedRequestKind.Translation);
 
-            _log.Info($"Translating {sourceLanguage} -> {targetLanguage}");
+            _log.Debug($"Translating {sourceLanguage} -> {targetLanguage}");
 
             using var content = new FormUrlEncodedContent(
             [
@@ -425,7 +425,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
                     SpeakerId: string.IsNullOrWhiteSpace(seg.SpeakerId) ? null : seg.SpeakerId));
             }
 
-            _log.Info($"Translation complete: {translatedSegments.Count} segments");
+            _log.Debug($"Translation complete: {translatedSegments.Count} segments");
 
             return new TranslationResult(
                 true,
@@ -457,7 +457,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
         {
             using var lease = AcquireLease(ContainerizedRequestKind.Tts);
 
-            _log.Info($"Generating TTS with voice: {voice}");
+            _log.Debug($"Generating TTS with voice: {voice}");
 
             using var content = new FormUrlEncodedContent(
             [
@@ -474,7 +474,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
             if (!result.Success)
                 throw new InvalidOperationException($"TTS error: {result.ErrorMessage}");
 
-            _log.Info($"TTS generation complete: {result.FileSizeBytes} bytes");
+            _log.Debug($"TTS generation complete: {result.FileSizeBytes} bytes");
 
             return new TtsResult(true, result.AudioPath ?? "", result.Voice ?? "", result.FileSizeBytes, null);
         }

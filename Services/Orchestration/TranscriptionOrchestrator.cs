@@ -70,9 +70,12 @@ internal sealed class TranscriptionOrchestrator
                     cancellationToken)
                 .ConfigureAwait(false);
 
+            var stageStartMessage = BuildInfo.IsDevBuild
+                ? $"Starting transcription with {_session.CurrentSettings.TranscriptionProvider} / {_session.CurrentSettings.TranscriptionModel}. Audio will be segmented and the spoken language will be detected before translation."
+                : "Starting transcription. Detecting speech segments and spoken language.";
             PipelineStageReporter.ReportStage(
                 stageContext,
-                $"Starting transcription with {_session.CurrentSettings.TranscriptionProvider} / {_session.CurrentSettings.TranscriptionModel}. Audio will be segmented and the spoken language will be detected before translation.",
+                stageStartMessage,
                 progress01: 0,
                 isIndeterminate: true);
 
@@ -108,9 +111,9 @@ internal sealed class TranscriptionOrchestrator
                 $"phys_cores={(_session.HardwareSnapshot.CpuPhysicalCores?.ToString() ?? "?")}";
 
             if (cpuParams.ResolutionNotes.Count > 0)
-                _log.Info($"CPU transcription policy: {string.Join("; ", cpuParams.ResolutionNotes)}");
+                _log.Debug($"CPU transcription policy: {string.Join("; ", cpuParams.ResolutionNotes)}");
 
-            _log.Info(
+            _log.Debug(
                 $"Starting transcription: {transcriptionSourcePath} " +
                 $"[{_session.CurrentSettings.TranscriptionProvider}/{_session.CurrentSettings.TranscriptionModel}] " +
                 $"route=({routeSummary}) hw=({hwSummary})");
@@ -157,15 +160,18 @@ internal sealed class TranscriptionOrchestrator
             await _committer.CommitTranscriptionSessionStateAsync(result, transcriptPath).ConfigureAwait(false);
             stageSucceeded = true;
 
+            var completionMessage = BuildInfo.IsDevBuild
+                ? $"Transcription complete. {result.Segments.Count} segments were detected in {result.Language}."
+                : $"Transcription complete. {result.Segments.Count} segments detected.";
             PipelineStageReporter.ReportStage(
                 stageContext,
-                $"Transcription complete. {result.Segments.Count} segments were detected in {result.Language}.",
+                completionMessage,
                 progress01: 1,
                 isIndeterminate: false);
         }
         finally
         {
-            _log.Info(
+            _log.Debug(
                 $"Stage telemetry stage=transcription success={(stageSucceeded ? "true" : "false")} " +
                 $"provider={stagePlan.ProviderId} runtime={stagePlan.Runtime} role={stagePlan.Role} " +
                 $"elapsed_ms={stageTimer.ElapsedMilliseconds}");
