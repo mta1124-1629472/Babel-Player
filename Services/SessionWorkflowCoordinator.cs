@@ -491,30 +491,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
             lock (_sessionLock)
             {
-                CurrentSession = CurrentSession with
-                {
-                    SessionId = newSessionId,
-                    Stage = SessionWorkflowStage.MediaLoaded,
-                    SourceMediaPath = sourceMediaPath,
-                    IngestedMediaPath = ingestedPath,
-                    VocalsAudioPath = null,
-                    AmbianceAudioPath = null,
-                    InstrumentalAudioPath = null,
-                    MediaLoadedAtUtc = nowUtc,
-                    TranscriptPath = null,
-                    SourceLanguage = null,
-                    TranscribedAtUtc = null,
-                    TranscriptionLanguageHint = null,
-                    TranslationPath = null,
-                    TargetLanguage = null,
-                    TranslatedAtUtc = null,
-                    TtsPath = null,
-                    TtsVoice = null,
-                    TtsGeneratedAtUtc = null,
-                    TtsSegmentsPath = null,
-                    TtsSegmentAudioPaths = null,
-                    StatusMessage = "Media loaded.",
-                };
+                CurrentSession = CreateMediaLoadedSession(
+                    newSessionId,
+                    sourceMediaPath,
+                    ingestedPath,
+                    nowUtc);
             }
         }
 
@@ -576,40 +557,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
         lock (_sessionLock)
         {
-            CurrentSession = CurrentSession with
-            {
-                Stage = SessionWorkflowStage.MediaLoaded,
-                VocalsAudioPath = null,
-                AmbianceAudioPath = null,
-                InstrumentalAudioPath = null,
-                TranscriptPath = null,
-                TranslationPath = null,
-                TtsPath = null,
-                MixedDubAudioPath = null,
-                TtsVoice = null,
-                TtsSegmentsPath = null,
-                TtsSegmentAudioPaths = null,
-                SourceLanguage = null,
-                TargetLanguage = null,
-                TranscribedAtUtc = null,
-                TranslatedAtUtc = null,
-                TtsGeneratedAtUtc = null,
-                TranscriptionRuntime = null,
-                TranscriptionProvider = null,
-                TranscriptionModel = null,
-                TranscriptionLanguageHint = null,
-                TranslationRuntime = null,
-                TranslationProvider = null,
-                TranslationModel = null,
-                TtsRuntime = null,
-                TtsProvider = null,
-                SpeakerVoiceAssignments = null,
-                SpeakerReferenceAudioPaths = null,
-                DefaultTtsVoiceFallback = null,
-                DiarizationProvider = null,
-                SpeakersDetectedAtUtc = null,
-                StatusMessage = "Ready.",
-            };
+            CurrentSession = ResetToMediaLoadedSession(CurrentSession);
         }
     }
 

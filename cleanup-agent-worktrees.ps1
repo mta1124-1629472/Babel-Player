@@ -62,12 +62,15 @@ if (-not (Test-Path -LiteralPath $environmentPath)) {
 }
 
 $environmentToml = Get-Content -LiteralPath $environmentPath -Raw
-$cleanupMatch = [regex]::Match(
-    $environmentToml,
-    "(?s)\[cleanup\]\s*script = '''\r?\n(.*?)\r?\n'''")
+$cleanupPattern = "(?s)\[cleanup\].*?script\s*=\s*'''\s*(.*?)\s*'''"
+$cleanupMatch = [regex]::Match($environmentToml, $cleanupPattern)
 
 if (-not $cleanupMatch.Success) {
-    throw "Could not locate [cleanup].script in $environmentPath"
+    $cleanupIndex = $environmentToml.IndexOf("[cleanup]", [System.StringComparison]::Ordinal)
+    $snippetStart = if ($cleanupIndex -ge 0) { $cleanupIndex } else { 0 }
+    $snippetLength = [Math]::Min(400, $environmentToml.Length - $snippetStart)
+    $environmentSnippet = $environmentToml.Substring($snippetStart, $snippetLength)
+    throw "Could not locate [cleanup].script in $environmentPath using pattern $cleanupPattern. Snippet:`n$environmentSnippet"
 }
 
 $cleanupScript = [scriptblock]::Create($cleanupMatch.Groups[1].Value)
