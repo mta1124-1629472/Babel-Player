@@ -23,7 +23,9 @@ fi
 if [[ $needs_install -eq 1 ]]; then
   tmp_script="$(mktemp)"
   trap 'rm -f "$tmp_script"' EXIT
-  curl -sSL https://dot.net/v1/dotnet-install.sh -o "$tmp_script"
+  curl --fail --silent --show-error --location \
+    --retry 5 --retry-delay 2 --retry-connrefused \
+    https://dot.net/v1/dotnet-install.sh -o "$tmp_script"
   chmod +x "$tmp_script"
   "$tmp_script" --channel "$DOTNET_CHANNEL" --install-dir "$DOTNET_INSTALL_DIR"
 fi

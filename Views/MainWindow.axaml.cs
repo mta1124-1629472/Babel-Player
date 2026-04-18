@@ -33,8 +33,8 @@ public partial class MainWindow : Window
     private EventHandler<PixelPointEventArgs>? _windowPositionChangedHandler;
     private EventHandler? _windowScalingChangedHandler;
     private EventHandler? _screensChangedHandler;
-    private EventHandler<SizeChangedEventArgs>? _videoSegmentsChromeHostSizeChangedHandler;
-    private bool _videoSegmentsChromeHostSizeHooked;
+    private EventHandler<SizeChangedEventArgs>? _playerChromeWidthHostSizeChangedHandler;
+    private bool _playerChromeWidthHostSizeHooked;
     private Screens? _subscribedScreens;
     private long _lastControlsActivityTickMs;
     private bool _isApplyingWindowStateFromViewModel;
@@ -187,9 +187,9 @@ public partial class MainWindow : Window
                 videoView.NativePointerActivity -= _videoNativePointerActivityHandler;
         }
 
-        var chromeHost = this.FindControl<Control>("VideoSegmentsChromeHost");
-        if (chromeHost is not null && _videoSegmentsChromeHostSizeChangedHandler is not null)
-            chromeHost.SizeChanged -= _videoSegmentsChromeHostSizeChangedHandler;
+        var playerChromeWidthHost = this.FindControl<Control>("PlayerChromeWidthHost");
+        if (playerChromeWidthHost is not null && _playerChromeWidthHostSizeChangedHandler is not null)
+            playerChromeWidthHost.SizeChanged -= _playerChromeWidthHostSizeChangedHandler;
 
         _playbackPropertyChangedHandler = null;
         _coordinatorPropertyChangedHandler = null;
@@ -200,26 +200,26 @@ public partial class MainWindow : Window
         _windowScalingChangedHandler = null;
         _screensChangedHandler = null;
         _subscribedScreens = null;
-        _videoSegmentsChromeHostSizeChangedHandler = null;
+        _playerChromeWidthHostSizeChangedHandler = null;
     }
 
     private void WireVideoChromeCompactState()
     {
-        var host = this.FindControl<Control>("VideoSegmentsChromeHost");
-        if (host is null)
+        var playerChromeWidthHost = this.FindControl<Control>("PlayerChromeWidthHost");
+        if (playerChromeWidthHost is null)
             return;
 
-        _videoSegmentsChromeHostSizeChangedHandler ??= OnVideoSegmentsChromeHostSizeChanged;
-        if (!_videoSegmentsChromeHostSizeHooked)
+        _playerChromeWidthHostSizeChangedHandler ??= OnPlayerChromeWidthHostSizeChanged;
+        if (!_playerChromeWidthHostSizeHooked)
         {
-            host.SizeChanged += _videoSegmentsChromeHostSizeChangedHandler;
-            _videoSegmentsChromeHostSizeHooked = true;
+            playerChromeWidthHost.SizeChanged += _playerChromeWidthHostSizeChangedHandler;
+            _playerChromeWidthHostSizeHooked = true;
         }
 
-        UpdateVideoChromeCompactState(host);
+        UpdateVideoChromeCompactState(playerChromeWidthHost);
     }
 
-    private void OnVideoSegmentsChromeHostSizeChanged(object? sender, SizeChangedEventArgs e)
+    private void OnPlayerChromeWidthHostSizeChanged(object? sender, SizeChangedEventArgs e)
     {
         if (sender is Control c)
             UpdateVideoChromeCompactState(c);
@@ -951,7 +951,7 @@ public partial class MainWindow : Window
 #if BABEL_DEV
     private void WireDevToolbarClick(string name, EventHandler<RoutedEventArgs> handler)
     {
-        var b = FindControl<Button>(name);
+        var b = this.FindControl<Button>(name);
         if (b is not null)
             b.Click += handler;
     }
