@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
@@ -73,7 +74,7 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
 
     [Fact]
     [Trait("Category", "Smoke")]
-    public void Initialize_WithMissingTranscript_DowngradesToMediaLoaded()
+    public async Task Initialize_WithMissingTranscript_DowngradesToMediaLoaded()
     {
         var sessionDir = Path.Combine(_dir, "sessions", Guid.NewGuid().ToString("N"));
         var mediaDir = Path.Combine(sessionDir, "media");
@@ -82,6 +83,7 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         var sourcePath = CreateMediaFile("source-missing-transcript.mp4");
         var ingestedPath = Path.Combine(mediaDir, "source-missing-transcript.mp4");
         File.Copy(sourcePath, ingestedPath, overwrite: true);
+        await WriteMediaCopyManifestAsync(ingestedPath).ConfigureAwait(false);
 
         var snapshot = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
@@ -465,18 +467,47 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         var coordinator = CreateCoordinator();
         coordinator.Initialize();
 
-        var translationPath = WriteTranslationArtifact(
-            new TranslationSegmentArtifact
-            {
-                Id = "segment_0.0",
-                Start = 0.0,
-                End = 2.0,
-                Text = "hola",
-                TranslatedText = "old",
-            });
+        var sourcePath = CreateMediaFile("regen-translation-source.mp4");
+        var ingestedPath = Path.Combine(_dir, "regen-translation-ingested.mp4");
+        File.Copy(sourcePath, ingestedPath, overwrite: true);
+        await WriteMediaCopyManifestAsync(ingestedPath).ConfigureAwait(false);
+
+        var transcriptPath = Path.Combine(_dir, "regen-translation-transcript.json");
+        var transcript = new TranscriptArtifact
+        {
+            Language = "es",
+            Segments =
+            [
+                new TranscriptSegmentArtifact { Start = 0.0, End = 2.0, Text = "hola" },
+            ],
+        };
+        await WriteTranscriptBundleAsync(transcriptPath, ingestedPath, transcript).ConfigureAwait(false);
+
+        var translationPath = Path.Combine(_dir, $"regen-translation-{Guid.NewGuid():N}.json");
+        var translation = new TranslationArtifact
+        {
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            Segments =
+            [
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_0.0",
+                    Start = 0.0,
+                    End = 2.0,
+                    Text = "hola",
+                    TranslatedText = "old",
+                },
+            ],
+        };
+        await WriteTranslationBundleAsync(translationPath, transcriptPath, translation).ConfigureAwait(false);
+
         coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Translated,
+            SourceMediaPath = sourcePath,
+            IngestedMediaPath = ingestedPath,
+            TranscriptPath = transcriptPath,
             SourceLanguage = "es",
             TargetLanguage = "en",
             TranslationPath = translationPath,
@@ -498,10 +529,48 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         var coordinator = CreateCoordinator(audioProcessing);
         coordinator.Initialize();
 
+        var sourcePath = CreateMediaFile("tts-ambiance-source.mp4");
+        var ingestedPath = Path.Combine(_dir, "tts-ambiance-ingested.mp4");
+        File.Copy(sourcePath, ingestedPath, overwrite: true);
+        await WriteMediaCopyManifestAsync(ingestedPath).ConfigureAwait(false);
+
+        var transcriptPath = Path.Combine(_dir, "tts-ambiance-transcript.json");
+        var transcript = new TranscriptArtifact
+        {
+            Language = "es",
+            Segments =
+            [
+                new TranscriptSegmentArtifact { Start = 0.0, End = 2.0, Text = "hola" },
+            ],
+        };
+        await WriteTranscriptBundleAsync(transcriptPath, ingestedPath, transcript).ConfigureAwait(false);
+
+        var translationPath = Path.Combine(_dir, $"tts-ambiance-translation-{Guid.NewGuid():N}.json");
+        var translation = new TranslationArtifact
+        {
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            Segments =
+            [
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_0.0",
+                    Start = 0.0,
+                    End = 2.0,
+                    Text = "hola",
+                    TranslatedText = "hello",
+                },
+            ],
+        };
+        await WriteTranslationBundleAsync(translationPath, transcriptPath, translation).ConfigureAwait(false);
+
         coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Translated,
-            TranslationPath = WriteTranslationArtifact(),
+            SourceMediaPath = sourcePath,
+            IngestedMediaPath = ingestedPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
             SourceLanguage = "es",
             TargetLanguage = "en",
             AmbianceAudioPath = WriteAudioFile("ambiance.wav"),
@@ -595,5 +664,76 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
 
         File.WriteAllText(path, ArtifactJson.SerializeTranslation(artifact));
         return path;
+    }
+
+    private static Task WriteMediaCopyManifestAsync(string mediaPath, CancellationToken cancellationToken = default) =>
+        ArtifactIntegrity.WriteFileManifestAsync(
+            mediaPath,
+            "media_copy",
+            artifactSchemaVersion: null,
+            probedDurationSeconds: null,
+            segmentCount: null,
+            segmentIds: null,
+            segmentTiming: null,
+            upstreamArtifactHashes: null,
+            provenanceDigest: ArtifactIntegrity.ComputeCompositeSha256(["stage=media_copy"]),
+            cancellationToken);
+
+    private async Task WriteTranscriptBundleAsync(
+        string transcriptPath,
+        string ingestedMediaPath,
+        TranscriptArtifact artifact,
+        CancellationToken cancellationToken = default)
+    {
+        var dir = Path.GetDirectoryName(transcriptPath);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        await File.WriteAllTextAsync(transcriptPath, ArtifactJson.SerializeTranscript(artifact), cancellationToken)
+            .ConfigureAwait(false);
+        var upstream = ArtifactIntegrity.BuildUpstreamHashes(("media_copy", ingestedMediaPath));
+        upstream.TryGetValue("media_copy", out var mediaHash);
+        var provenance = ArtifactIntegrity.ComputeTranscriptionProvenanceDigest(mediaHash, vocalSeparationEnabled: false, _settings);
+        await ArtifactIntegrity.WriteFileManifestAsync(
+                transcriptPath,
+                "transcript",
+                artifact.SchemaVersion,
+                probedDurationSeconds: null,
+                segmentCount: artifact.Segments?.Count ?? 0,
+                segmentIds: ArtifactIntegrity.BuildTranscriptSegmentIds(artifact.Segments),
+                segmentTiming: ArtifactIntegrity.BuildTranscriptTimingSummary(artifact.Segments),
+                upstreamArtifactHashes: upstream,
+                provenanceDigest: provenance,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task WriteTranslationBundleAsync(
+        string translationPath,
+        string transcriptPath,
+        TranslationArtifact artifact,
+        CancellationToken cancellationToken = default)
+    {
+        await File.WriteAllTextAsync(translationPath, ArtifactJson.SerializeTranslation(artifact), cancellationToken)
+            .ConfigureAwait(false);
+        var upstream = ArtifactIntegrity.BuildUpstreamHashes(("transcript", transcriptPath));
+        upstream.TryGetValue("transcript", out var transcriptHash);
+        var provenance = ArtifactIntegrity.ComputeTranslationProvenanceDigest(
+            transcriptHash,
+            _settings,
+            artifact.SourceLanguage ?? "es",
+            artifact.TargetLanguage ?? "en");
+        await ArtifactIntegrity.WriteFileManifestAsync(
+                translationPath,
+                "translation",
+                artifact.SchemaVersion,
+                probedDurationSeconds: null,
+                segmentCount: artifact.Segments?.Count ?? 0,
+                segmentIds: ArtifactIntegrity.BuildTranslationSegmentIds(artifact.Segments),
+                segmentTiming: ArtifactIntegrity.BuildTranslationTimingSummary(artifact.Segments),
+                upstreamArtifactHashes: upstream,
+                provenanceDigest: provenance,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 }
