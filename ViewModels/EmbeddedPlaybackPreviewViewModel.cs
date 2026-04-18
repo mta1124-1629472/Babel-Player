@@ -871,4 +871,630 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private string BuildPaneTooltip(bool isLeftSide, string roleLabel, string hotkey) =>
         string.Format(
             LocalizationService.Instance.CurrentCulture,
-            GetLocalize
+            GetLocalized("Tooltip_PaneSideFormat"),
+            GetLocalized(isLeftSide ? "Common_Left" : "Common_Right"),
+            roleLabel,
+            hotkey);
+
+    private static string GetLocalized(string key) => LocalizationService.Instance[key];
+
+    private void OnLocalizationCultureChanged(object? sender, CultureInfo culture)
+    {
+        NotifyPaneLayoutProjectionChanged();
+        OnPropertyChanged(nameof(SegmentCountLabel));
+    }
+
+    private void OnSegmentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        OnPropertyChanged(nameof(SegmentCountLabel));
+
+    private void OnPositionTimerTick(object? sender, EventArgs e)
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        if (player is null || player.Duration == 0)
+            return;
+
+        _isUpdatingPositionFromTimer = true;
+        var newDurationMs = player.Duration;
+        if (Math.Abs(SourceDurationMs - newDurationMs) > PositionUpdateThresholdMs)
+            SourceDurationMs = newDurationMs;
+
+        var newPositionMs = player.CurrentTime;
+        if (Math.Abs(SourcePositionMs - newPositionMs) > PositionUpdateThresholdMs)
+            SourcePositionMs = newPositionMs;
+        _isUpdatingPositionFromTimer = false;
+
+        if (player.HasEnded)
+            PauseAmbiancePreview();
+
+        UpdateActiveSegment();
+        if (IsDubModeOn)
+            UpdateDubMode();
+    }
+
+    private void UpdateActiveSegment()
+    {
+        var currentSegment = FindSegmentAt(SourcePositionMs / 1000.0);
+        if (currentSegment?.SegmentId == SelectedSegment?.SegmentId)
+            return;
+
+        _isUpdatingActiveSegment = true;
+        SelectedSegment = currentSegment;
+        _isUpdatingActiveSegment = false;
+    }
+
+    private Task SeekAndPlayAsync(WorkflowSegmentState segment) =>
+        SeekAndPlayAsync(segment, seekVideoToSegmentStart: false, previewTimingOverride: null);
+
+    /// <summary>
+    /// Previews the selected segment with <see cref="SegmentTimingMode.Pause"/> timing (source pauses during TTS) without persisting a segment override.
+    /// </summary>
+    public Task PreviewSelectedSegmentWithPauseAsync()
+    {
+        if (SelectedSegment is null || !SelectedSegment.HasTtsAudio || !IsSourceMediaLoaded)
+            return Task.CompletedTask;
+
+        return SeekAndPlayAsync(SelectedSegment, seekVideoToSegmentStart: false, previewTimingOverride: SegmentTimingMode.Pause);
+    }
+
+    private async Task SeekAndPlayAsync(
+        WorkflowSegmentState segment,
+        bool seekVideoToSegmentStart,
+        SegmentTimingMode? previewTimingOverride = null)
+    {
+        var player = _coordinator.SourceMediaPlayer;
+        var needsDubOrTimingPreview = previewTimingOverride.HasValue || IsDubModeOn;
+        if (player is null)
+        {
+            await PlaySourceAtSegmentAsync(segment);
+            if (needsDubOrTimingPreview && !IsSourcePaused)
+                ApplyDubForSegment(segment, seekVideoToSegmentStart, previewTimingOverride);
+            return;
+        }
+
+        player.Seek((long)(segment.StartSeconds * 1000));
+
+        var appliedDubBeforeSourcePlay = false;
+        if (IsSourcePaused || player.HasEnded)
+        {
+            try
+            {
+                if (IsDubModeOn)
+                {
+                    ApplyDubForSegment(segment, seekVideoToSegmentStart, previewTimingOverride);
+                    appliedDubBeforeSourcePlay = true;
+                }
+
+                await Task.Run(player.Play);
+                IsSourcePaused = false;
+                _parent.ClearStatusErrorDetail();
+            }
+            catch (Exception ex)
+            {
+                _parent.StatusText = $"Play failed: {ex.Message}";
+                _parent.SetStatusErrorDetail("Source Playback failed", ex);
+                return;
+            }
+        }
+
+        if (needsDubOrTimingPreview && !IsSourcePaused && !appliedDubBeforeSourcePlay)
+            ApplyDubForSegment(segment, seekVideoToSegmentStart, previewTimingOverride);
+    }
+
+    private async Task PlaySourceAtSegmentAsync(WorkflowSegmentState? segment)
+    {
+        if (segment is null)
+            return;
+
+        try
+        {
+            _parent.StatusText = $"Playing source at {segment.StartSeconds:F1}s…";
+            await _coordinator.PlaySourceMediaAtSegmentAsync(segment.SegmentId);
+            IsSourcePaused = false;
+            _parent.ClearStatusErrorDetail();
+        }
+        catch (Exception ex)
+        {
+            _parent.StatusText = $"Source playback failed: {ex.Message}";
+            _parent.SetStatusErrorDetail("Source Playback failed", ex);
+        }
+    }
+
+    private void RecalculateOutputVolumes()
+    {
+        var masterGain = IsMuted ? 0.0 : SourceVolume;
+        var previewMode = ResolveDubPreviewAudioMode();
+        var duckingDb = previewMode == DubPreviewAudioMode.SeparatedAmbiance
+            ? _coordinator.CurrentSettings.AmbianceMixDb
+            : AudioDuckingDb;
+        var sourceGain = IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance
+            ? 0.0
+            : _isDucked
+                ? masterGain * Math.Pow(10.0, duckingDb / 20.0)
+                : masterGain;
+        var ambianceGain = IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance
+            ? masterGain * Math.Pow(10.0, _coordinator.CurrentSettings.AmbianceMixDb / 20.0)
+            : 0.0;
+
+        _coordinator.SourceMediaPlayer?.Volume = sourceGain;
+        if (_coordinator.AmbiancePlayer is { } ambiancePlayer)
+            ambiancePlayer.Volume = ambianceGain;
+        _coordinator.TtsVolume = masterGain;
+    }
+
+    private void ApplyDucking()
+    {
+        if (_isDucked)
+            return;
+
+        _isDucked = true;
+        RecalculateOutputVolumes();
+    }
+
+    private void RestoreDucking()
+    {
+        if (!_isDucked)
+            return;
+
+        _isDucked = false;
+        RecalculateOutputVolumes();
+    }
+
+    private WorkflowSegmentState? FindSegmentAt(double positionSeconds)
+    {
+        if (_sortedSegments.Length == 0)
+            return null;
+
+        var low = 0;
+        var high = _sortedSegments.Length - 1;
+        var candidate = -1;
+        while (low <= high)
+        {
+            var middle = (low + high) >> 1;
+            if (_sortedSegments[middle].StartSeconds <= positionSeconds)
+            {
+                candidate = middle;
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle - 1;
+            }
+        }
+
+        if (candidate < 0)
+            return null;
+
+        var segment = _sortedSegments[candidate];
+        return positionSeconds < segment.EndSeconds ? segment : null;
+    }
+
+    private static string FormatSegmentCount(int count)
+    {
+        var culture = LocalizationService.Instance.CurrentCulture;
+        var key = count == 1 ? "Label_SegmentCount_One" : "Label_SegmentCount_Many";
+        var format = Strings.ResourceManager.GetString(key, culture)
+            ?? (count == 1 ? "{0} segment" : "{0} segments");
+        return string.Format(culture, format, count);
+    }
+
+    private WorkflowSegmentState? FindPreviousSegmentEndingBefore(double positionSeconds)
+    {
+        if (_sortedSegments.Length == 0)
+            return null;
+
+        var low = 0;
+        var high = _sortedSegments.Length - 1;
+        var candidate = -1;
+        while (low <= high)
+        {
+            var middle = (low + high) >> 1;
+            if (_sortedSegments[middle].EndSeconds <= positionSeconds)
+            {
+                candidate = middle;
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle - 1;
+            }
+        }
+
+        return candidate >= 0 ? _sortedSegments[candidate] : null;
+    }
+
+    private WorkflowSegmentState? FindNextSegmentStartingAfter(double positionSeconds)
+    {
+        if (_sortedSegments.Length == 0)
+            return null;
+
+        var low = 0;
+        var high = _sortedSegments.Length - 1;
+        var candidate = -1;
+        while (low <= high)
+        {
+            var middle = (low + high) >> 1;
+            if (_sortedSegments[middle].StartSeconds > positionSeconds)
+            {
+                candidate = middle;
+                high = middle - 1;
+            }
+            else
+            {
+                low = middle + 1;
+            }
+        }
+
+        return candidate >= 0 ? _sortedSegments[candidate] : null;
+    }
+
+    private void ApplyDubForSegment(
+        WorkflowSegmentState? segment,
+        bool seekVideoToSegmentStart = false,
+        SegmentTimingMode? previewTimingOverride = null)
+    {
+        RestoreDucking();
+        _coordinator.StopTtsPlayback();
+        _lastDubbedSegment = segment;
+        var previewMode = ResolveDubPreviewAudioMode();
+        if (!IsDubModeOn)
+        {
+            PauseAmbiancePreview();
+            RecalculateOutputVolumes();
+            if (segment is null)
+                return;
+        }
+
+        if (seekVideoToSegmentStart && segment is not null)
+            _coordinator.SourceMediaPlayer?.Seek((long)(segment.StartSeconds * 1000));
+
+        if (IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance)
+        {
+            SyncSeparatedAmbiancePreview(shouldPlay: !IsSourcePaused, forceSeek: seekVideoToSegmentStart);
+        }
+        else
+        {
+            PauseAmbiancePreview();
+            if (IsDubModeOn)
+                AnnounceDubPreviewMode(DubPreviewAudioMode.DuckSource, null);
+        }
+
+        RecalculateOutputVolumes();
+
+        if (segment is null)
+            return;
+
+        if (segment.HasTtsAudio)
+        {
+            // Non-null segment while global dub is off is intentional for TTS preview flows (e.g. coordinator pause-preview).
+            // Resolve effective timing mode: one-shot preview override, then per-segment override, then session setting.
+            var effectiveMode = previewTimingOverride
+                ?? segment.TimingModeOverride
+                ?? _coordinator.CurrentSettings.DubTimingMode;
+            if (previewMode == DubPreviewAudioMode.DuckSource && IsDubModeOn)
+                ApplyDucking();
+            else if (previewMode == DubPreviewAudioMode.SeparatedAmbiance && !IsDubModeOn)
+                ApplyDucking();
+            _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId, segment, effectiveMode);
+        }
+    }
+
+    private void UpdateDubMode()
+    {
+        if (IsSourcePaused)
+            return;
+
+        var currentSegment = FindSegmentAt(SourcePositionMs / 1000.0);
+        if (currentSegment?.SegmentId == _lastDubbedSegment?.SegmentId)
+            return;
+
+        ApplyDubForSegment(currentSegment);
+    }
+
+    private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart) =>
+        ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
+
+    private string? TryGetAmbiancePreviewPath()
+        => _resolvedAmbiancePreviewPath;
+
+    private void InvalidateAmbiancePreviewPathCache()
+    {
+        var path = _coordinator.CurrentSession.AmbianceAudioPath;
+        _resolvedAmbiancePreviewPath = !string.IsNullOrWhiteSpace(path) && File.Exists(path)
+            ? path
+            : null;
+    }
+
+    private DubPreviewAudioMode ResolveDubPreviewAudioMode() =>
+        TryGetAmbiancePreviewPath() is not null
+            ? DubPreviewAudioMode.SeparatedAmbiance
+            : DubPreviewAudioMode.DuckSource;
+
+    private void AnnounceDubPreviewMode(DubPreviewAudioMode mode, string? ambiancePath)
+    {
+        if (!IsDubModeOn)
+            return;
+
+        if (_lastReportedDubPreviewMode == mode &&
+            string.Equals(_lastReportedAmbiancePath, ambiancePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastReportedDubPreviewMode = mode;
+        _lastReportedAmbiancePath = ambiancePath;
+
+        if (mode == DubPreviewAudioMode.SeparatedAmbiance)
+        {
+            _coordinator.Log.Debug(
+                $"Dub preview mode: real-ambiance-preview, path='{ambiancePath}', gainDb={_coordinator.CurrentSettings.AmbianceMixDb:F1}");
+            _parent.StatusText = "Dub preview uses separated ambience.";
+            return;
+        }
+
+        _coordinator.Log.Debug(
+            $"Dub preview mode: ducked-source-fallback, gainDb={AudioDuckingDb:F1}");
+        _parent.StatusText = "Dub preview uses source audio fallback.";
+    }
+
+    private void PauseAmbiancePreview(bool resetLoadedPath = false)
+    {
+        Interlocked.Increment(ref _ambiancePlayRequestVersion);
+        _isStartingAmbiancePlayback = false;
+        lock (_ambianceTransportGate)
+        {
+            try
+            {
+                _coordinator.AmbiancePlayer?.Pause();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Shutdown/race path: ambiance transport was disposed during pause.
+            }
+
+            if (resetLoadedPath)
+                _loadedAmbiancePath = null;
+        }
+    }
+
+    private void SyncSeparatedAmbiancePreview(bool shouldPlay, bool forceSeek = false)
+    {
+        var sourcePlayer = _coordinator.SourceMediaPlayer;
+        var ambiancePath = TryGetAmbiancePreviewPath();
+        if (sourcePlayer is null || ambiancePath is null)
+        {
+            PauseAmbiancePreview(resetLoadedPath: ambiancePath is null);
+            return;
+        }
+
+        IMediaTransport? ambiancePlayerForPlay = null;
+        var requestVersion = 0;
+        var ambientSyncFailed = false;
+
+        lock (_ambianceTransportGate)
+        {
+            var ambiancePlayer = _coordinator.GetOrCreateAmbiancePlayer();
+            try
+            {
+                if (!string.Equals(_loadedAmbiancePath, ambiancePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    ambiancePlayer.Load(ambiancePath);
+                    _loadedAmbiancePath = ambiancePath;
+                    forceSeek = true;
+                }
+
+                ambiancePlayer.PlaybackRate = sourcePlayer.PlaybackRate;
+                ambiancePlayer.Volume = (IsMuted ? 0.0 : SourceVolume) *
+                    Math.Pow(10.0, _coordinator.CurrentSettings.AmbianceMixDb / 20.0);
+
+                var sourcePositionMs = sourcePlayer.CurrentTime;
+                if (forceSeek || Math.Abs(ambiancePlayer.CurrentTime - sourcePositionMs) > AmbianceSyncThresholdMs)
+                    ambiancePlayer.Seek(sourcePositionMs);
+            }
+            catch (Exception ex)
+            {
+                _coordinator.Log.Warning($"Ambience preview sync failed (load/seek): {ex.Message}");
+                Interlocked.Increment(ref _ambiancePlayRequestVersion);
+                _isStartingAmbiancePlayback = false;
+                _loadedAmbiancePath = null;
+                try
+                {
+                    ambiancePlayer.Pause();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Shutdown/race path: ambiance transport was disposed during pause.
+                }
+
+                InvalidateAmbiancePreviewPathCache();
+                ambientSyncFailed = true;
+            }
+
+            if (ambientSyncFailed)
+            {
+                // Skip announce/play; post-lock path restores volumes and UI hint.
+            }
+            else
+            {
+                AnnounceDubPreviewMode(DubPreviewAudioMode.SeparatedAmbiance, ambiancePath);
+
+                if (shouldPlay)
+                {
+                    if (_isStartingAmbiancePlayback || ambiancePlayer.IsPlaying)
+                        return;
+
+                    _isStartingAmbiancePlayback = true;
+                    requestVersion = Interlocked.Increment(ref _ambiancePlayRequestVersion);
+                    ambiancePlayerForPlay = ambiancePlayer;
+                }
+                else
+                {
+                    Interlocked.Increment(ref _ambiancePlayRequestVersion);
+                    _isStartingAmbiancePlayback = false;
+                    try
+                    {
+                        ambiancePlayer.Pause();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Shutdown/race path: ambiance transport was disposed during pause.
+                    }
+
+                    return;
+                }
+            }
+        }
+
+        if (ambientSyncFailed)
+        {
+            RecalculateOutputVolumes();
+            if (IsDubModeOn)
+            {
+                _coordinator.Log.Debug("Dub preview mode: ducked-source-fallback after ambience load/seek failure.");
+                _parent.StatusText = "Dub preview uses source audio fallback.";
+            }
+
+            return;
+        }
+
+        var capturedPlayer = ambiancePlayerForPlay;
+        if (capturedPlayer is null)
+            return;
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                lock (_ambianceTransportGate)
+                {
+                    if (requestVersion != Volatile.Read(ref _ambiancePlayRequestVersion))
+                        return;
+
+                    capturedPlayer.Play();
+                }
+            }
+            catch (Exception ex)
+            {
+                _coordinator.Log.Warning($"Failed to start ambiance preview playback: {ex.Message}");
+            }
+            finally
+            {
+                _isStartingAmbiancePlayback = false;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Applies a per-segment timing mode override through the coordinator (session state owner),
+    /// then mirrors the result into the preview list and sorted cache.
+    /// </summary>
+    public void ApplySegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
+    {
+        _coordinator.SetSegmentTimingOverride(segmentId, mode);
+
+        for (int i = 0; i < Segments.Count; i++)
+        {
+            if (Segments[i].SegmentId == segmentId)
+            {
+                Segments[i] = Segments[i] with { TimingModeOverride = mode };
+                // Rebuild sorted cache so playback lookup picks up the change.
+                _sortedSegments = [.. Segments.OrderBy(s => s.StartSeconds)];
+                // Refresh the SelectedSegment reference so the inspection VM re-reads it.
+                if (SelectedSegment?.SegmentId == segmentId)
+                    SelectedSegment = Segments[i];
+                return;
+            }
+        }
+    }
+
+    private void OnControlsHideTimerTick(object? sender, EventArgs e)
+    {
+        _controlsHideTimer.Stop();
+        IsControlsVisible = false;
+    }
+
+    private void DeleteActiveSubtitleFile()
+    {
+        if (string.IsNullOrEmpty(_activeSrtPath))
+            return;
+
+        try
+        {
+            if (File.Exists(_activeSrtPath))
+                File.Delete(_activeSrtPath);
+        }
+        catch
+        {
+            // Best-effort cleanup only.
+        }
+        finally
+        {
+            _activeSrtPath = null;
+        }
+    }
+
+    private void ApplySubtitleState()
+    {
+        if (_coordinator.SourceMediaPlayer is not LibMpvEmbeddedTransport player)
+            return;
+
+        if (IsSubtitleModeOn)
+        {
+            var srt = SrtGenerator.Generate(Segments, IsBilingualSubtitlesOn);
+            DeleteActiveSubtitleFile();
+            _activeSrtPath = Path.Combine(Path.GetTempPath(), $"subs_{Guid.NewGuid():N}.srt");
+            File.WriteAllText(_activeSrtPath, srt, Encoding.UTF8);
+            player.RemoveAllSubtitleTracks();
+            player.LoadSubtitleTrack(_activeSrtPath);
+            player.SubtitlesVisible = true;
+        }
+        else
+        {
+            player.SubtitlesVisible = false;
+            DeleteActiveSubtitleFile();
+        }
+    }
+
+    private static string FormatMs(double milliseconds) =>
+        milliseconds <= 0 ? "0:00" : TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss");
+
+    private static void WriteDebugLog(string runId, string hypothesisId, string location, string message, object data)
+    {
+        var payload = new
+        {
+            sessionId = "f76224",
+            runId,
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        try
+        {
+            var line = JsonSerializer.Serialize(payload);
+            File.AppendAllText(DebugLogPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Swallow debug log failures.
+        }
+    }
+
+    private static string ResolveDebugLogPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("BABEL_DEBUG_LOG_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return Path.Combine(dir.FullName, "debug-f76224.log");
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
+    }
+}
