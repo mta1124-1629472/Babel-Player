@@ -1,19 +1,21 @@
 using System;
+using Avalonia.Data;
 using Avalonia.Markup.Xaml;
-using Babel.Player.Resources;
+using Babel.Player.Services;
 
 namespace Babel.Player.Converters;
 
 /// <summary>
-/// XAML markup extension that resolves a localization key against the
-/// embedded <c>Strings</c> resource file at load time.  Usage:
+/// XAML markup extension that creates a <em>live</em> binding to the
+/// <see cref="LocalizationService"/> indexer so UI text refreshes when the
+/// user switches language at runtime.  Usage:
 /// <code>&lt;TextBlock Text="{local:Localize Section_Translation}" /&gt;</code>
 /// <para>
-/// This extension produces a <em>static</em> string (the value at the time
-/// the view is loaded).  For strings that should refresh when the user
-/// switches language at runtime, bind against
-/// <c>{Binding [KeyName], Source={x:Static local:LocalizationService.Instance}}</c>
-/// instead.
+/// Under the hood this returns a <see cref="Binding"/> targeting
+/// <c>[KeyName]</c> on <see cref="LocalizationService.Instance"/>.
+/// When <see cref="LocalizationService.SetCulture"/> fires
+/// <c>PropertyChanged("Item[]")</c>, every bound property re-evaluates
+/// through the indexer and picks up the new culture's string.
 /// </para>
 /// </summary>
 public sealed class LocalizeExtension : MarkupExtension
@@ -38,6 +40,13 @@ public sealed class LocalizeExtension : MarkupExtension
         if (string.IsNullOrEmpty(Key))
             return string.Empty;
 
-        return Strings.ResourceManager.GetString(Key, Strings.Culture) ?? $"[{Key}]";
+        var binding = new Binding
+        {
+            Source = LocalizationService.Instance,
+            Path = $"[{Key}]",
+            Mode = BindingMode.OneWay,
+        };
+
+        return binding.ProvideValue(serviceProvider);
     }
 }
