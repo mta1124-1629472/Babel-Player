@@ -235,6 +235,263 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
 
     [Fact]
     [Trait("Category", "Smoke")]
+    public void ResetPipelineToTranscribed_ClearsPerSegmentTimingState()
+    {
+        var coordinator = CreateCoordinator();
+        coordinator.Initialize();
+
+        var mediaPath = CreateMediaFile("transcribed-reset-source.mp4");
+        var ingestedPath = CreateMediaFile("transcribed-reset-ingested.mp4");
+        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            SourceMediaPath = mediaPath,
+            IngestedMediaPath = ingestedPath,
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TranscriptPath = "/session/transcript.json",
+            TranslationPath = "/session/translation.json",
+            TtsPath = "/session/tts.mp3",
+            TtsSegmentsPath = "/session/tts/segments",
+            TtsSegmentAudioPaths = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = "/session/tts/segments/segment_0.0.mp3",
+            },
+            TtsSegmentDurations = new Dictionary<string, double>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = 1.5,
+            },
+            SegmentTimingModeOverrides = new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = SegmentTimingMode.Stretch,
+            },
+            TranslationProvider = "fake-translation",
+            TranslationModel = "default",
+            TtsProvider = "fake-tts",
+            TtsRuntime = InferenceRuntime.Cloud,
+            TtsVoice = "default",
+            SpeakerVoiceAssignments = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["speaker_0"] = "default",
+            },
+            SpeakerReferenceAudioPaths = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["speaker_0"] = "/session/ref.wav",
+            },
+            DefaultTtsVoiceFallback = "fallback",
+            DiarizationProvider = "fake-diarization",
+            SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+        };
+
+        coordinator.ResetPipelineToTranscribed();
+
+        var session = coordinator.CurrentSession;
+        Assert.Equal(SessionWorkflowStage.Transcribed, session.Stage);
+        Assert.Null(session.TranslationPath);
+        Assert.Null(session.TtsPath);
+        Assert.Null(session.MixedDubAudioPath);
+        Assert.Null(session.TtsSegmentsPath);
+        Assert.Null(session.TtsSegmentAudioPaths);
+        Assert.Null(session.TtsSegmentDurations);
+        Assert.Null(session.SegmentTimingModeOverrides);
+        Assert.Null(session.TranslationProvider);
+        Assert.Null(session.TranslationModel);
+        Assert.Null(session.TtsProvider);
+        Assert.Null(session.TtsRuntime);
+        Assert.Null(session.TtsVoice);
+        Assert.Null(session.SpeakerVoiceAssignments);
+        Assert.Null(session.SpeakerReferenceAudioPaths);
+        Assert.Null(session.DefaultTtsVoiceFallback);
+        Assert.Null(session.DiarizationProvider);
+        Assert.Null(session.SpeakersDetectedAtUtc);
+        Assert.Equal("Reset to transcription.", session.StatusMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
+    public void ResetPipelineToDiarized_ClearsPerSegmentTimingState()
+    {
+        var coordinator = CreateCoordinator();
+        coordinator.Initialize();
+
+        var mediaPath = CreateMediaFile("diarized-reset-source.mp4");
+        var ingestedPath = CreateMediaFile("diarized-reset-ingested.mp4");
+        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Diarized,
+            SourceMediaPath = mediaPath,
+            IngestedMediaPath = ingestedPath,
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TranslationPath = "/session/translation.json",
+            TtsPath = "/session/tts.mp3",
+            TtsSegmentsPath = "/session/tts/segments",
+            TtsSegmentAudioPaths = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = "/session/tts/segments/segment_0.0.mp3",
+            },
+            TtsSegmentDurations = new Dictionary<string, double>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = 1.5,
+            },
+            SegmentTimingModeOverrides = new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = SegmentTimingMode.Stretch,
+            },
+            TtsProvider = "fake-tts",
+            TtsRuntime = InferenceRuntime.Cloud,
+            TtsVoice = "default",
+            SpeakerVoiceAssignments = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["speaker_0"] = "default",
+            },
+            SpeakerReferenceAudioPaths = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["speaker_0"] = "/session/ref.wav",
+            },
+            DiarizationProvider = "fake-diarization",
+            SpeakersDetectedAtUtc = DateTimeOffset.UtcNow,
+            TranslationProvider = "fake-translation",
+            TranslationModel = "default",
+            TranscriptionProvider = "fake-transcription",
+            TranscriptionModel = "default",
+        };
+
+        coordinator.ResetPipelineToDiarized();
+
+        var session = coordinator.CurrentSession;
+        Assert.Equal(SessionWorkflowStage.Diarized, session.Stage);
+        Assert.Null(session.TranslationPath);
+        Assert.Null(session.TtsPath);
+        Assert.Null(session.MixedDubAudioPath);
+        Assert.Null(session.TtsSegmentsPath);
+        Assert.Null(session.TtsSegmentAudioPaths);
+        Assert.Null(session.TtsSegmentDurations);
+        Assert.Null(session.TtsProvider);
+        Assert.Null(session.TtsRuntime);
+        Assert.Null(session.TtsVoice);
+        Assert.Equal("Reset to speaker analysis.", session.StatusMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
+    public void ResetPipelineToTranslated_ClearsPerSegmentTimingState()
+    {
+        var coordinator = CreateCoordinator();
+        coordinator.Initialize();
+
+        var mediaPath = CreateMediaFile("translated-reset-source.mp4");
+        var ingestedPath = CreateMediaFile("translated-reset-ingested.mp4");
+        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            SourceMediaPath = mediaPath,
+            IngestedMediaPath = ingestedPath,
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TtsPath = "/session/tts.mp3",
+            MixedDubAudioPath = "/session/mixed.mp3",
+            TtsSegmentsPath = "/session/tts/segments",
+            TtsSegmentAudioPaths = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = "/session/tts/segments/segment_0.0.mp3",
+            },
+            TtsSegmentDurations = new Dictionary<string, double>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = 1.5,
+            },
+            TtsProvider = "fake-tts",
+            TtsRuntime = InferenceRuntime.Cloud,
+            TtsVoice = "default",
+            StatusMessage = "Before reset",
+        };
+
+        coordinator.ResetPipelineToTranslated();
+
+        var session = coordinator.CurrentSession;
+        Assert.Equal(SessionWorkflowStage.Translated, session.Stage);
+        Assert.Null(session.TtsPath);
+        Assert.Null(session.MixedDubAudioPath);
+        Assert.Null(session.TtsSegmentsPath);
+        Assert.Null(session.TtsSegmentAudioPaths);
+        Assert.Null(session.TtsSegmentDurations);
+        Assert.Null(session.SegmentTimingModeOverrides);
+        Assert.Null(session.TtsProvider);
+        Assert.Null(session.TtsRuntime);
+        Assert.Null(session.TtsVoice);
+        Assert.Equal("Reset to translation.", session.StatusMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
+    public async Task RegenerateSegmentTtsAsync_UpdatesSegmentAudioMap()
+    {
+        var coordinator = CreateCoordinator();
+        coordinator.Initialize();
+
+        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TranslationPath = WriteTranslationArtifact(
+                new TranslationSegmentArtifact
+                {
+                    Id = "segment_0.0",
+                    Start = 0.0,
+                    End = 2.0,
+                    Text = "hola",
+                    TranslatedText = "hello",
+                }),
+            TtsSegmentAudioPaths = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = "/session/preexisting/segment_0.0.mp3",
+            },
+        };
+
+        await coordinator.RegenerateSegmentTtsAsync("segment_0.0");
+
+        var session = coordinator.CurrentSession;
+        Assert.NotNull(session.TtsSegmentAudioPaths);
+        Assert.True(session.TtsSegmentAudioPaths.ContainsKey("segment_0.0"));
+        Assert.True(File.Exists(session.TtsSegmentAudioPaths["segment_0.0"]));
+        Assert.Contains("Regenerated TTS for segment segment_0.0.", session.StatusMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
+    public async Task RegenerateSegmentTranslationAsync_UpdatesTranslatedSegmentText()
+    {
+        var coordinator = CreateCoordinator();
+        coordinator.Initialize();
+
+        var translationPath = WriteTranslationArtifact(
+            new TranslationSegmentArtifact
+            {
+                Id = "segment_0.0",
+                Start = 0.0,
+                End = 2.0,
+                Text = "hola",
+                TranslatedText = "old",
+            });
+        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TranslationPath = translationPath,
+        };
+
+        await coordinator.RegenerateSegmentTranslationAsync("segment_0.0");
+
+        var refreshed = await ArtifactJson.LoadTranslationAsync(translationPath);
+        var segment = Assert.Single(refreshed.Segments!);
+        Assert.Equal("hola (en)", segment.TranslatedText);
+        Assert.Equal("Regenerated translation for segment segment_0.0.", coordinator.CurrentSession.StatusMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
     public async Task GenerateTtsAsync_WithAmbiance_PersistsMixedDub()
     {
         var audioProcessing = new FakeAudioProcessingService();
@@ -318,24 +575,22 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         return path;
     }
 
-    private string WriteTranslationArtifact()
+    private string WriteTranslationArtifact(TranslationSegmentArtifact? firstSegment = null)
     {
         var path = Path.Combine(_dir, $"translation-{Guid.NewGuid():N}.json");
+        var segment = firstSegment ?? new TranslationSegmentArtifact
+        {
+            Id = "segment_0.0",
+            Start = 0.0,
+            End = 2.0,
+            Text = "hola",
+            TranslatedText = "hello",
+        };
         var artifact = new TranslationArtifact
         {
             SourceLanguage = "es",
             TargetLanguage = "en",
-            Segments =
-            [
-                new TranslationSegmentArtifact
-                {
-                    Id = "segment_0.0",
-                    Start = 0.0,
-                    End = 2.0,
-                    Text = "hola",
-                    TranslatedText = "hello",
-                },
-            ],
+            Segments = [segment],
         };
 
         File.WriteAllText(path, ArtifactJson.SerializeTranslation(artifact));
