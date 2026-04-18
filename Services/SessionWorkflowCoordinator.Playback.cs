@@ -328,7 +328,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="diarizedSegments">List of diarized speaker segments used to assign speaker IDs to transcript segments.</param>
     /// <param name="ct">Cancellation token to observe during I/O operations.</param>
     /// <returns>`true` if the transcript file was modified and written back to disk, `false` if no speaker assignments changed or the transcript had no segments.</returns>
-    private static async Task<bool> MergeDiarizationIntoTranscriptAsync(
+    private async Task<bool> MergeDiarizationIntoTranscriptAsync(
         string transcriptPath,
         IReadOnlyList<DiarizedSegment> diarizedSegments,
         CancellationToken ct)
@@ -349,8 +349,12 @@ public sealed partial class SessionWorkflowCoordinator
         artifact.Segments.Clear();
         artifact.Segments.AddRange(result);
 
-        var json = ArtifactJson.SerializeTranscript(artifact);
-        await File.WriteAllTextAsync(transcriptPath, json, ct);
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                transcriptPath,
+                ArtifactJson.SerializeTranscript(artifact),
+                ct)
+            .ConfigureAwait(false);
+        await WriteTranscriptManifestAsync(transcriptPath, artifact, ct).ConfigureAwait(false);
         return true;
     }
 
@@ -418,7 +422,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="translationPath">Filesystem path to the translation JSON artifact to update.</param>
     /// <param name="ct">Cancellation token for the asynchronous file and I/O operations.</param>
     /// <returns>`true` if one or more translation segments had their `SpeakerId` changed and the translation file was written; `false` if no changes were made or either artifact had no segments.</returns>
-    private static async Task<bool> MergeSpeakerIdsIntoTranslationAsync(
+    private async Task<bool> MergeSpeakerIdsIntoTranslationAsync(
         string transcriptPath,
         string translationPath,
         CancellationToken ct)
@@ -450,8 +454,18 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (!anyChanged) return false;
 
-        var json = ArtifactJson.SerializeTranslation(translation);
-        await File.WriteAllTextAsync(translationPath, json, ct);
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                translationPath,
+                ArtifactJson.SerializeTranslation(translation),
+                ct)
+            .ConfigureAwait(false);
+        await WriteTranslationManifestAsync(
+                translationPath,
+                translation,
+                translation.SourceLanguage ?? CurrentSession.SourceLanguage ?? string.Empty,
+                translation.TargetLanguage ?? CurrentSession.TargetLanguage ?? string.Empty,
+                ct)
+            .ConfigureAwait(false);
         return true;
     }
 

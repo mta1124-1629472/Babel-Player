@@ -62,40 +62,29 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task TranslateSingleSegmentAsync_UpdatesRequestedSegment()
+    public async Task TranslateSingleSegmentTextAsync_ReturnsTranslatedText()
     {
-        var translationPath = Path.Combine(_dir, "translation.json");
-        await File.WriteAllTextAsync(
-            translationPath,
-            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"},{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"adios\",\"translatedText\":\"bye\"}]}");
-
         var provider = new TestCTranslate2TranslationProvider(_log, "nllb-200-distilled-600M")
         {
             OnRun = (arguments, _, standardInput) =>
             {
                 Assert.Equal("hola", standardInput);
-                File.WriteAllText(
-                    arguments[2],
-                    "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"greetings\"},{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"adios\",\"translatedText\":\"bye\"}]}");
+                File.WriteAllText(arguments[1], "{\"translatedText\":\"greetings\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\"}");
                 return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
             }
         };
 
-        var result = await provider.TranslateSingleSegmentAsync(new SingleSegmentTranslationRequest(
+        var result = await provider.TranslateSingleSegmentTextAsync(new SingleSegmentTranslationTextRequest(
             "hola",
             "segment_0.0",
-            translationPath,
-            translationPath,
             "es",
             "en",
             "nllb-200-distilled-600M"));
 
         Assert.True(result.Success);
-        var artifact = await ArtifactJson.LoadTranslationAsync(translationPath, CancellationToken.None);
-        var updated = Assert.Single(artifact.Segments!, s => s.Id == "segment_0.0");
-        var untouched = Assert.Single(artifact.Segments!, s => s.Id == "segment_1.0");
-        Assert.Equal("greetings", updated.TranslatedText);
-        Assert.Equal("bye", untouched.TranslatedText);
+        Assert.Equal("greetings", result.TranslatedText);
+        Assert.Equal("es", result.SourceLanguage);
+        Assert.Equal("en", result.TargetLanguage);
     }
 
     private sealed class TestCTranslate2TranslationProvider(AppLog log, string model) : CTranslate2TranslationProvider(log, model)

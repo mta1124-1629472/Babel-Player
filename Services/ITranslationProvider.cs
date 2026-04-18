@@ -24,11 +24,11 @@ public interface ITranslationProvider
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Translates a single segment and writes the updated translation JSON artifact.
-    /// Used for on-demand regeneration.
+    /// Translates a single segment and returns translated text without mutating artifact files.
+    /// Used for streaming and on-demand regeneration where the coordinator owns persistence.
     /// </summary>
-    Task<TranslationResult> TranslateSingleSegmentAsync(
-        SingleSegmentTranslationRequest request,
+    Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+        SingleSegmentTranslationTextRequest request,
         CancellationToken cancellationToken = default);
 
     /// <summary>

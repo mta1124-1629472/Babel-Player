@@ -247,7 +247,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     segmentsDir,
                     segmentAudioPaths,
                     null,
-                    translationWriter.OrderedSegments.Count,
+                    translationWriter.OrderedSegments,
                     ttsStageContext).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -447,7 +447,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     segmentsDir,
                     segmentAudioPaths,
                     null,
-                    translationWriter.OrderedSegments.Count,
+                    translationWriter.OrderedSegments,
                     ttsStageContext).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -505,13 +505,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     if (segmentIndex < 0)
                         throw new InvalidOperationException($"Pending segment '{item.SegmentId}' was not found in the streaming translation artifact.");
 
-                    var result = await _c._inferenceEngine.TranslateSingleSegmentAsync(
+                    var result = await _c._inferenceEngine.TranslateSingleSegmentTextAsync(
                         _c._translationService!,
-                        new SingleSegmentTranslationRequest(
+                        new SingleSegmentTranslationTextRequest(
                             item.Segment.Text ?? string.Empty,
                             item.SegmentId,
-                            artifactWriter.PartialPath,
-                            artifactWriter.PartialPath,
                             item.SourceLanguage,
                             targetLanguage,
                             _c.CurrentSettings.TranslationModel),
@@ -524,14 +522,9 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         throw new InvalidOperationException($"Translation failed: {errorMsg}");
                     }
 
-                    var translatedText = ResolveTranslatedText(
-                        result,
-                        segmentIndex,
-                        item.Segment.Text ?? string.Empty,
-                        item.SegmentId);
                     var translatedSegment = await artifactWriter.ApplyTranslatedTextAsync(
                         item.SegmentId,
-                        translatedText,
+                        result.TranslatedText,
                         result.SourceLanguage,
                         result.TargetLanguage,
                         cancellationToken).ConfigureAwait(false);
@@ -838,35 +831,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 sourceLanguage,
                 targetLanguage,
                 null);
-
-        private static string ResolveTranslatedText(
-            TranslationResult result,
-            int segmentIndex,
-            string sourceText,
-            string segmentId)
-        {
-            if (result.Segments.Count == 0)
-                throw new InvalidOperationException($"Translation result for segment '{segmentId}' did not contain any segments.");
-
-            if (segmentIndex >= 0 && segmentIndex < result.Segments.Count)
-            {
-                var indexed = result.Segments[segmentIndex];
-                if (!string.IsNullOrWhiteSpace(indexed.TranslatedText))
-                    return indexed.TranslatedText;
-            }
-
-            if (result.Segments.Count == 1 && !string.IsNullOrWhiteSpace(result.Segments[0].TranslatedText))
-                return result.Segments[0].TranslatedText;
-
-            var byText = result.Segments.FirstOrDefault(segment =>
-                string.Equals(segment.Text, sourceText, StringComparison.Ordinal) &&
-                !string.IsNullOrWhiteSpace(segment.TranslatedText));
-            if (byText is not null)
-                return byText.TranslatedText;
-
-            throw new InvalidOperationException(
-                $"Translation result did not contain a translated value for segment '{segmentId}'.");
-        }
 
         /// <summary>
         /// Create a copy of the provided transcript segment artifact.

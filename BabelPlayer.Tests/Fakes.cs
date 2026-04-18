@@ -42,24 +42,21 @@ public sealed class FakeTranscriptionProvider : ITranscriptionProvider
         };
 
         var result = new TranscriptionResult(true, segments, "en", 1.0, null);
-
-        var json = JsonSerializer.Serialize(new
+        var artifact = new TranscriptArtifact
         {
-            success = true,
-            segments = segments.Select(s => new
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
+            Language = "en",
+            LanguageProbability = 1.0,
+            Segments = segments.Select(s => new TranscriptSegmentArtifact
             {
-                id = $"segment_{s.StartSeconds:G}",
-                startSeconds = s.StartSeconds,
-                endSeconds = s.EndSeconds,
-                text = s.Text,
-                speakerId = s.SpeakerId
-            }),
-            language = "en",
-            languageProbability = 1.0,
-            errorMessage = (string?)null
-        });
+                Start = s.StartSeconds,
+                End = s.EndSeconds,
+                Text = s.Text,
+                SpeakerId = s.SpeakerId,
+            }).ToList(),
+        };
 
-        await File.WriteAllTextAsync(request.OutputJsonPath, json, ct);
+        await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(artifact), ct);
         return result;
     }
 
@@ -97,52 +94,35 @@ public sealed class FakeTranslationProvider : ITranslationProvider
 
         var result = new TranslationResult(true, resultSegments, request.SourceLanguage, request.TargetLanguage, null);
 
-        var json = JsonSerializer.Serialize(new
+        var artifact = new TranslationArtifact
         {
-            success = true,
-            segments = resultSegments.Select(s => new
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
+            SourceLanguage = request.SourceLanguage,
+            TargetLanguage = request.TargetLanguage,
+            Segments = resultSegments.Select(s => new TranslationSegmentArtifact
             {
-                id = $"segment_{s.StartSeconds:G}",
-                startSeconds = s.StartSeconds,
-                endSeconds = s.EndSeconds,
-                text = s.Text,
-                translatedText = s.TranslatedText,
-                speakerId = s.SpeakerId
-            }),
-            sourceLanguage = request.SourceLanguage,
-            targetLanguage = request.TargetLanguage,
-            errorMessage = (string?)null
-        });
+                Id = SessionWorkflowCoordinator.SegmentId(s.StartSeconds),
+                Start = s.StartSeconds,
+                End = s.EndSeconds,
+                Text = s.Text,
+                TranslatedText = s.TranslatedText,
+                SpeakerId = s.SpeakerId,
+            }).ToList(),
+        };
 
-        await File.WriteAllTextAsync(request.OutputJsonPath, json, ct);
+        await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranslation(artifact), ct);
         return result;
     }
 
-    public async Task<TranslationResult> TranslateSingleSegmentAsync(SingleSegmentTranslationRequest request, CancellationToken ct = default)
-    {
-        var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, ct);
-        foreach (var segment in translation.Segments ?? [])
-        {
-            if (segment.Id == request.SegmentId)
-                segment.TranslatedText = $"{request.SourceText} (en)";
-        }
-
-        var json = ArtifactJson.SerializeTranslation(translation);
-        await File.WriteAllTextAsync(request.OutputJsonPath, json, ct);
-
-        return new TranslationResult(
+    public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+        SingleSegmentTranslationTextRequest request,
+        CancellationToken ct = default) =>
+        Task.FromResult(new SingleSegmentTranslationTextResult(
             true,
-            (translation.Segments ?? [])
-                .Select(segment => new TranslatedSegment(
-                    segment.Start,
-                    segment.End,
-                    segment.Text ?? string.Empty,
-                    segment.TranslatedText ?? string.Empty))
-                .ToList(),
-            translation.SourceLanguage ?? request.SourceLanguage,
-            translation.TargetLanguage ?? request.TargetLanguage,
-            null);
-    }
+            $"{request.SourceText} (en)",
+            request.SourceLanguage,
+            request.TargetLanguage,
+            null));
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) => new(true, "Ready");
     public Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default) => Task.FromResult(true);
