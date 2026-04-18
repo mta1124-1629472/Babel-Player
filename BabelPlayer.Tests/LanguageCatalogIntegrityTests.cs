@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Babel.Player.Models;
 using Babel.Player.Models.LanguageSupport;
+using Babel.Player.Services;
 
 namespace BabelPlayer.Tests;
 
@@ -92,5 +93,37 @@ public sealed class LanguageCatalogIntegrityTests
 
         Assert.Equal("Auto-detect", SpokenLanguageOption.All[0].DisplayName);
         Assert.Null(SpokenLanguageOption.All[0].Code);
+    }
+
+    [Fact]
+    public void SupportedUiLanguageCatalog_IncludesBaseEnglishAndGermanSatellite()
+    {
+        Assert.Contains("en", SupportedUiLanguageCatalog.IsoCodes);
+        Assert.Contains("de", SupportedUiLanguageCatalog.IsoCodes);
+        Assert.True(SupportedUiLanguageCatalog.IsSupported("EN"));
+        Assert.True(SupportedUiLanguageCatalog.IsSupported("de"));
+        Assert.False(SupportedUiLanguageCatalog.IsSupported("fr"));
+        Assert.False(SupportedUiLanguageCatalog.IsSupported(null));
+        Assert.False(SupportedUiLanguageCatalog.IsSupported(""));
+    }
+
+    [Fact]
+    public void ResolveAppLanguage_FallsBackToEnglishForPipelineOnlyLanguages()
+    {
+        // Languages in the NLLB pipeline catalog that have no shipping Strings.*.resx
+        // must not be treated as valid UI languages — picking them would silently fall
+        // back to English strings with no user feedback.
+        Assert.Equal("en", LocalizationService.ResolveAppLanguage("fr"));
+        Assert.Equal("en", LocalizationService.ResolveAppLanguage("ja"));
+        Assert.Equal("en", LocalizationService.ResolveAppLanguage("zh"));
+        Assert.Equal("en", LocalizationService.ResolveAppLanguage("not-a-code"));
+    }
+
+    [Fact]
+    public void ResolveAppLanguage_AcceptsShippingUiLanguages()
+    {
+        Assert.Equal("en", LocalizationService.ResolveAppLanguage("en"));
+        Assert.Equal("de", LocalizationService.ResolveAppLanguage("de"));
+        Assert.Equal("de", LocalizationService.ResolveAppLanguage("DE"));
     }
 }

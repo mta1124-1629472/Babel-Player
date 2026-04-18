@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="480" d:DesignHeight="360"
         x:Class="Babel.Player.Views.ApiKeysDialog"
         x:DataType="vm:ApiKeysViewModel"
-        Title="API Keys"
+        Title="{local:Localize Window_Title_ApiKeys}"
         Width="480" SizeToContent="Height"
         MinWidth="420"
         MinHeight="320"
@@ -15,7 +15,8 @@
         CanResize="True"
         WindowDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        xmlns:local="using:Babel.Player.Converters">
 
     <Window.Styles>
         <Style Selector="Border.top-chrome">
@@ -37,7 +38,7 @@
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <TextBlock Grid.Column="0"
                            Classes="text-title"
-                           Text="API Keys"
+                           Text="{local:Localize Window_Title_ApiKeys}"
                            Foreground="{DynamicResource PrimaryTextBrush}"
                            VerticalAlignment="Center" />
                 <StackPanel Grid.Column="2"
@@ -52,7 +53,7 @@
                             Background="{DynamicResource ButtonBackgroundBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
                             Click="OnMinimizeWindowClick"
-                            AutomationProperties.Name="Minimize window">
+                            AutomationProperties.Name="{local:Localize Chrome_Minimize}">
                         <Viewbox Width="14" Height="14">
                             <Canvas Width="24" Height="24">
                                 <Border Canvas.Left="4"
@@ -70,7 +71,7 @@
                             Background="{DynamicResource ButtonBackgroundBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
                             Click="OnToggleMaximizeWindowClick"
-                            AutomationProperties.Name="Maximize or restore window">
+                            AutomationProperties.Name="{local:Localize Chrome_MaximizeRestore}">
                         <Grid Width="24" Height="24">
                             <Viewbox x:Name="ChromeMaximizeIcon"
                                      Width="14"
@@ -118,7 +119,7 @@
                             Background="{DynamicResource DestructiveBrush}"
                             Foreground="{DynamicResource PrimaryTextBrush}"
                             Click="OnCloseClick"
-                            AutomationProperties.Name="Close window">
+                            AutomationProperties.Name="{local:Localize Chrome_Close}">
                         <Viewbox Width="14" Height="14">
                             <Canvas Width="24" Height="24">
                                 <Path Stroke="{DynamicResource PrimaryTextBrush}"
@@ -185,11 +186,11 @@
                                                 Padding="8,6" Margin="6,0,0,0"
                                                 Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                                 CornerRadius="4"
-                                                ToolTip.Tip="Show / hide key" />
+                                                ToolTip.Tip="{local:Localize Api_Tooltip_ToggleReveal}" />
 
                                         <Button Grid.Column="2"
                                                 Command="{Binding SaveKeyCommand}"
-                                                Content="Save"
+                                                Content="{local:Localize Common_Save}"
                                                 Padding="10,6" Margin="4,0,0,0"
                                                 Background="{DynamicResource PositiveBrush}" Foreground="{DynamicResource PositiveFgBrush}"
                                                 CornerRadius="4" />
@@ -204,7 +205,7 @@
 
                                         <Button Grid.Column="4"
                                                 Command="{Binding ClearKeyCommand}"
-                                                Content="Clear"
+                                                Content="{local:Localize Common_Clear}"
                                                 Padding="10,6" Margin="4,0,0,0"
                                                 Background="{DynamicResource DestructiveBrush}" Foreground="{DynamicResource DestructiveFgBrush}"
                                                 CornerRadius="4" />
@@ -225,7 +226,7 @@
                 <!-- Future providers placeholder -->
                 <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="8"
                         Padding="14,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                    <TextBlock Text="More providers can be added in future updates."
+                    <TextBlock Text="{local:Localize Api_Footer_MoreProviders}"
                                Classes="text-caption" Foreground="#4A4A62"
                                HorizontalAlignment="Center" />
                 </Border>
@@ -239,7 +240,7 @@
                 Background="{DynamicResource WindowBackgroundBrush}">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="Storage Security:"
+                    <TextBlock Text="{local:Localize Api_Footer_StorageSecurity}"
                                Classes="text-label" Foreground="#545470" />
                     <TextBlock Text="{Binding SecurityStatusDetail}"
                                Classes="text-caption" Foreground="#686885"
@@ -247,7 +248,7 @@
                 </StackPanel>
                 <Button Grid.Column="1"
                         Click="OnCloseClick"
-                        Content="Close"
+                        Content="{local:Localize Common_Close}"
                         Padding="16,7" Margin="12,0,0,0"
                         Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                         CornerRadius="4" />
