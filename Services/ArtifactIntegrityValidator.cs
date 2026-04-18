@@ -17,6 +17,18 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
+        if (!File.Exists(snapshot.IngestedMediaPath))
+        {
+            error = $"Artifact file was missing: {snapshot.IngestedMediaPath}";
+            return false;
+        }
+
+        if (!ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath, out _, out _))
+        {
+            error = null;
+            return true;
+        }
+
         return ValidateFileArtifact(
             snapshot.IngestedMediaPath,
             "media_copy",
@@ -48,7 +60,22 @@ internal static class ArtifactIntegrityValidator
         if (!ValidateMedia(snapshot, out error))
             return false;
 
-        var mediaManifest = ArtifactIntegrity.LoadManifest(snapshot.IngestedMediaPath!);
+        if (!File.Exists(snapshot.VocalsAudioPath!) || !File.Exists(snapshot.AmbianceAudioPath!))
+        {
+            error = "Vocal separation audio file was missing.";
+            return false;
+        }
+
+        var vocalsHasManifest = ArtifactIntegrity.TryLoadManifest(snapshot.VocalsAudioPath!, out _, out _);
+        var ambianceHasManifest = ArtifactIntegrity.TryLoadManifest(snapshot.AmbianceAudioPath!, out _, out _);
+        var mediaHasManifest = ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath!, out _, out _);
+
+        if (!vocalsHasManifest || !ambianceHasManifest || !mediaHasManifest)
+        {
+            error = null;
+            return true;
+        }
+
         var upstream = ArtifactIntegrity.BuildUpstreamHashes(("media_copy", snapshot.IngestedMediaPath));
 
         if (!ValidateFileArtifact(
@@ -79,18 +106,24 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        var vocalsManifest = ArtifactIntegrity.LoadManifest(snapshot.VocalsAudioPath!);
-        if (!ArtifactIntegrity.DurationsMatch(vocalsManifest.ProbedDurationSeconds, mediaManifest.ProbedDurationSeconds))
+        if (ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath!, out var mediaManifest, out _)
+            && mediaManifest is not null
+            && ArtifactIntegrity.TryLoadManifest(snapshot.VocalsAudioPath!, out var vocalsManifest, out _)
+            && vocalsManifest is not null
+            && ArtifactIntegrity.TryLoadManifest(snapshot.AmbianceAudioPath!, out var ambianceManifest, out _)
+            && ambianceManifest is not null)
         {
-            error = "Vocals stem duration did not match the ingested media duration.";
-            return false;
-        }
+            if (!ArtifactIntegrity.DurationsMatch(vocalsManifest.ProbedDurationSeconds, mediaManifest.ProbedDurationSeconds))
+            {
+                error = "Vocals stem duration did not match the ingested media duration.";
+                return false;
+            }
 
-        var ambianceManifest = ArtifactIntegrity.LoadManifest(snapshot.AmbianceAudioPath!);
-        if (!ArtifactIntegrity.DurationsMatch(ambianceManifest.ProbedDurationSeconds, mediaManifest.ProbedDurationSeconds))
-        {
-            error = "Ambiance stem duration did not match the ingested media duration.";
-            return false;
+            if (!ArtifactIntegrity.DurationsMatch(ambianceManifest.ProbedDurationSeconds, mediaManifest.ProbedDurationSeconds))
+            {
+                error = "Ambiance stem duration did not match the ingested media duration.";
+                return false;
+            }
         }
 
         error = null;
@@ -109,13 +142,29 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
+        if (!File.Exists(snapshot.TranscriptPath))
+        {
+            error = $"Transcript file was missing: {snapshot.TranscriptPath}";
+            return false;
+        }
+
+        var transcriptManifestPath = ArtifactPersistence.GetManifestPath(snapshot.TranscriptPath);
+        if (!File.Exists(transcriptManifestPath))
+        {
+            error = null;
+            return true;
+        }
+
         var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath), snapshot.TranscriptPath);
         var expectedTiming = ArtifactIntegrity.BuildTranscriptTimingSummary(transcript.Segments);
         var expectedSegmentIds = ArtifactIntegrity.BuildTranscriptSegmentIds(transcript.Segments);
         var upstream = ArtifactIntegrity.BuildUpstreamHashes(
             ("media_copy", snapshot.IngestedMediaPath),
             ("vocals_stem", snapshot.VocalsAudioPath));
-        var mediaDuration = ArtifactIntegrity.LoadManifest(snapshot.IngestedMediaPath!).ProbedDurationSeconds;
+        double? mediaDuration = null;
+        if (ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath!, out var mediaManifestForDuration, out _)
+            && mediaManifestForDuration is not null)
+            mediaDuration = mediaManifestForDuration.ProbedDurationSeconds;
         var provenance = ArtifactIntegrity.ComputeTranscriptionProvenanceDigest(
             upstream.TryGetValue("media_copy", out var mediaHash) ? mediaHash : null,
             !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath),
@@ -135,8 +184,10 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        var transcriptManifest = ArtifactIntegrity.LoadManifest(snapshot.TranscriptPath);
-        if (!ArtifactIntegrity.DurationsMatch(
+        if (mediaDuration.HasValue
+            && ArtifactIntegrity.TryLoadManifest(snapshot.TranscriptPath, out var transcriptManifest, out _)
+            && transcriptManifest is not null
+            && !ArtifactIntegrity.DurationsMatch(
                 transcriptManifest.SegmentTiming?.DurationSeconds,
                 mediaDuration))
         {
@@ -158,9 +209,21 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
+        if (!File.Exists(snapshot.TranslationPath))
+        {
+            error = $"Translation file was missing: {snapshot.TranslationPath}";
+            return false;
+        }
+
+        var translationManifestPath = ArtifactPersistence.GetManifestPath(snapshot.TranslationPath);
+        if (!File.Exists(translationManifestPath))
+        {
+            error = null;
+            return true;
+        }
+
         var translation = ArtifactJson.DeserializeTranslation(File.ReadAllText(snapshot.TranslationPath), snapshot.TranslationPath);
         var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath!), snapshot.TranscriptPath!);
-        var transcriptManifest = ArtifactIntegrity.LoadManifest(snapshot.TranscriptPath!);
         var expectedTiming = ArtifactIntegrity.BuildTranslationTimingSummary(translation.Segments);
         var expectedSegmentIds = ArtifactIntegrity.BuildTranslationSegmentIds(translation.Segments);
         var transcriptSegmentIds = ArtifactIntegrity.BuildTranscriptSegmentIds(transcript.Segments);
@@ -176,6 +239,7 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
+        ArtifactIntegrity.TryLoadManifest(snapshot.TranscriptPath!, out var transcriptManifest, out _);
         var upstream = ArtifactIntegrity.BuildUpstreamHashes(("transcript", snapshot.TranscriptPath));
         var provenance = ArtifactIntegrity.ComputeTranslationProvenanceDigest(
             upstream.TryGetValue("transcript", out var transcriptHash) ? transcriptHash : null,
@@ -197,8 +261,10 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        var translationManifest = ArtifactIntegrity.LoadManifest(snapshot.TranslationPath);
-        if (!ArtifactIntegrity.SegmentTimingMatches(
+        if (transcriptManifest is not null
+            && ArtifactIntegrity.TryLoadManifest(snapshot.TranslationPath, out var translationManifest, out _)
+            && translationManifest is not null
+            && !ArtifactIntegrity.SegmentTimingMatches(
                 translationManifest.SegmentTiming,
                 transcriptManifest.SegmentTiming))
         {
@@ -214,6 +280,31 @@ internal static class ArtifactIntegrityValidator
     {
         if (!ValidateTranslation(snapshot, out error))
             return false;
+        if (string.IsNullOrWhiteSpace(snapshot.TtsPath) || !File.Exists(snapshot.TtsPath))
+        {
+            error = "TTS timeline output was missing.";
+            return false;
+        }
+
+        var ttsManifestPath = ArtifactPersistence.GetManifestPath(snapshot.TtsPath);
+        var segmentsManifestPath = string.IsNullOrWhiteSpace(snapshot.TtsSegmentsPath)
+            ? null
+            : ArtifactPersistence.GetManifestPath(snapshot.TtsSegmentsPath);
+        var hasTtsManifest = File.Exists(ttsManifestPath);
+        var hasSegmentsManifest = segmentsManifestPath is not null && File.Exists(segmentsManifestPath);
+
+        if (!hasTtsManifest && !hasSegmentsManifest)
+        {
+            if (snapshot.TtsSegmentAudioPaths is { Count: > 0 })
+            {
+                error = "TTS segment clips require integrity manifests.";
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
+
         if (string.IsNullOrWhiteSpace(snapshot.TtsSegmentsPath) || string.IsNullOrWhiteSpace(snapshot.TtsPath))
         {
             error = "TTS artifact paths were incomplete.";

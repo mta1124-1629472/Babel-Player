@@ -69,8 +69,8 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             OnRun = (arguments, _, standardInput) =>
             {
                 Assert.Equal("hola", standardInput);
-                File.WriteAllText(arguments[1], "{\"translatedText\":\"greetings\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\"}");
-                return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
+                var json = "{\"translatedText\":\"greetings\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\"}";
+                return Task.FromResult(new PythonSubprocessServiceBase.ScriptResult(0, json, string.Empty));
             }
         };
 

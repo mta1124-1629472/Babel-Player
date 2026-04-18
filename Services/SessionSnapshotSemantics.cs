@@ -59,12 +59,21 @@ public static class SessionSnapshotSemantics
             cleared.Add("diarization");
         }
 
-        if (stage >= SessionWorkflowStage.Transcribed
-            && !ArtifactIntegrityValidator.ValidateTranscript(snapshot, out _))
+        if (stage >= SessionWorkflowStage.Transcribed)
         {
-            stage = SessionWorkflowStage.MediaLoaded;
-            snapshot = ClearTranscriptionOutputs(snapshot);
-            cleared.Add("transcription");
+            if (!ArtifactIntegrityValidator.ValidateStemPair(snapshot, out _))
+            {
+                stage = SessionWorkflowStage.MediaLoaded;
+                snapshot = ClearTranscriptionOutputs(snapshot);
+                cleared.Add("vocal_separation");
+                cleared.Add("transcription");
+            }
+            else if (!ArtifactIntegrityValidator.ValidateTranscript(snapshot, out _))
+            {
+                stage = SessionWorkflowStage.MediaLoaded;
+                snapshot = ClearTranscriptionOutputs(snapshot);
+                cleared.Add("transcription");
+            }
         }
 
         if (!ArtifactIntegrityValidator.ValidateStemPair(snapshot, out _))

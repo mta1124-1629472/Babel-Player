@@ -453,6 +453,30 @@
   <data name="Settings_Check_AutoSave" xml:space="preserve">
     <value>Sitzung beim Beenden automatisch speichern</value>
   </data>
+  <data name="Automation_RerunTranscription" xml:space="preserve">
+    <value>Transkription erneut ausführen</value>
+  </data>
+  <data name="Automation_RerunDiarization" xml:space="preserve">
+    <value>Sprecherzuordnung erneut ausführen</value>
+  </data>
+  <data name="Automation_RerunTranslation" xml:space="preserve">
+    <value>Übersetzung erneut ausführen</value>
+  </data>
+  <data name="Automation_RerunDub" xml:space="preserve">
+    <value>Dub-Audio neu erzeugen</value>
+  </data>
+  <data name="Automation_ExpandErrorDetails" xml:space="preserve">
+    <value>Fehlerdetails erweitern</value>
+  </data>
+  <data name="Label_SegmentCount_One" xml:space="preserve">
+    <value>{0} Segment</value>
+  </data>
+  <data name="Label_SegmentCount_Many" xml:space="preserve">
+    <value>{0} Segmente</value>
+  </data>
+  <data name="Automation_RefreshSegments" xml:space="preserve">
+    <value>Segmente aktualisieren</value>
+  </data>
   <data name="Settings_Group_AppLanguage" xml:space="preserve">
     <value>App-Sprache</value>
   </data>
@@ -943,5 +967,3 @@
     <value>Chinesisch (vereinfacht)</value>
   </data>
 </root>
-
-

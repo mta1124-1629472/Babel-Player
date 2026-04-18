@@ -301,7 +301,8 @@
                                         IsEnabled="{Binding Playback.Pipeline.CanRefreshTranscription}"
                                         Background="Transparent" Padding="6,2"
                                         Foreground="{DynamicResource StatusTextBrush}"
-                                        ToolTip.Tip="{local:Localize Tooltip_RerunTranscription}">
+                                        ToolTip.Tip="{local:Localize Tooltip_RerunTranscription}"
+                                        AutomationProperties.Name="{local:Localize Automation_RerunTranscription}">
                                     <TextBlock Text="↻" FontSize="16" />
                                     <Button.Styles>
                                         <Style Selector="Button:pointerover /template/ ContentPresenter">
@@ -388,7 +389,8 @@
                                             IsEnabled="{Binding Playback.Pipeline.CanRefreshDiarization}"
                                             Background="Transparent" Padding="6,2"
                                             Foreground="{DynamicResource StatusTextBrush}"
-                                            ToolTip.Tip="{local:Localize Tooltip_RerunDiarization}">
+                                            ToolTip.Tip="{local:Localize Tooltip_RerunDiarization}"
+                                            AutomationProperties.Name="{local:Localize Automation_RerunDiarization}">
                                         <TextBlock Text="↻" FontSize="16" />
                                         <Button.Styles>
                                             <Style Selector="Button:pointerover /template/ ContentPresenter">
@@ -456,7 +458,8 @@
                                             IsEnabled="{Binding Playback.Pipeline.CanRefreshTranslation}"
                                             Background="Transparent" Padding="6,2"
                                             Foreground="{DynamicResource StatusTextBrush}"
-                                            ToolTip.Tip="{local:Localize Tooltip_RerunTranslation}">
+                                            ToolTip.Tip="{local:Localize Tooltip_RerunTranslation}"
+                                            AutomationProperties.Name="{local:Localize Automation_RerunTranslation}">
                                         <TextBlock Text="↻" FontSize="16" />
                                         <Button.Styles>
                                             <Style Selector="Button:pointerover /template/ ContentPresenter">
@@ -524,7 +527,8 @@
                                             IsEnabled="{Binding Playback.Pipeline.CanRefreshDub}"
                                             Background="Transparent" Padding="6,2"
                                             Foreground="{DynamicResource StatusTextBrush}"
-                                            ToolTip.Tip="{local:Localize Tooltip_RerunDub}">
+                                            ToolTip.Tip="{local:Localize Tooltip_RerunDub}"
+                                            AutomationProperties.Name="{local:Localize Automation_RerunDub}">
                                         <TextBlock Text="↻" FontSize="16" />
                                         <Button.Styles>
                                             <Style Selector="Button:pointerover /template/ ContentPresenter">
@@ -831,7 +835,8 @@
                                         Background="{DynamicResource ButtonBackgroundBrush}"
                                         Foreground="{DynamicResource PrimaryTextBrush}"
                                         CornerRadius="4"
-                                        ToolTip.Tip="{local:Localize Tooltip_ExpandErrorDetails}">
+                                        ToolTip.Tip="{local:Localize Tooltip_ExpandErrorDetails}"
+                                        AutomationProperties.Name="{local:Localize Automation_ExpandErrorDetails}">
                                     <TextBlock Text="↗" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                 </Button>
                             </Grid>
@@ -929,7 +934,7 @@
                                 <Border Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="4" Padding="8,2"
                                         VerticalAlignment="Center">
                                     <TextBlock FontSize="11" Foreground="#8888A0" VerticalAlignment="Center"
-                                               Text="{Binding Playback.Preview.Segments.Count, StringFormat='{}{0} items'}" />
+                                               Text="{Binding Playback.Preview.SegmentCountLabel}" />
                                 </Border>
                             </StackPanel>
 
@@ -953,7 +958,8 @@
                             <Button Grid.Column="2"
                                     Command="{Binding Playback.Preview.RefreshSegmentsCommand}"
                                     Classes="console-button"
-                                    ToolTip.Tip="{local:Localize Tooltip_RefreshSegments}">
+                                    ToolTip.Tip="{local:Localize Tooltip_RefreshSegments}"
+                                    AutomationProperties.Name="{local:Localize Automation_RefreshSegments}">
                                 <TextBlock Text="↻" FontSize="14" />
                             </Button>
 
