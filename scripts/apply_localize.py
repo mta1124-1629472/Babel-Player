@@ -77,7 +77,8 @@ def ensure_namespace(content: bytes) -> bytes:
     head, tail = m.group(1), m.group(2)
     if b"xmlns:local" in head:
         return content
-    injected = head + b"\r\n        " + NAMESPACE.encode() + tail
+    newline = b"\r\n" if b"\r\n" in content else b"\n"
+    injected = head + newline + b"        " + NAMESPACE.encode() + tail
     return content[: m.start()] + injected + content[m.end():]
 
 
