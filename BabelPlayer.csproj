@@ -45,9 +45,6 @@
       <LastGenOutput>Strings.Designer.cs</LastGenOutput>
       <ManifestResourceName>Babel.Player.Resources.Strings</ManifestResourceName>
     </EmbeddedResource>
-    <EmbeddedResource Update="Resources\Strings.*.resx">
-      <ManifestResourceName>Babel.Player.Resources.Strings.%(Culture)</ManifestResourceName>
-    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
