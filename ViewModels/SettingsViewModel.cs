@@ -67,6 +67,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         var current = _coordinator.CurrentSettings;
         SelectedVoice          = current.TtsVoice;
         SelectedTheme          = current.Theme;
+        AppLanguageOptions     = BuildAppLanguageOptions();
+        SelectedAppLanguage    = AppLanguageOptions.FirstOrDefault(o =>
+            string.Equals(o.Code, current.AppLanguage, StringComparison.OrdinalIgnoreCase))
+            ?? AppLanguageOptions[0];
         MaxRecentSessions      = current.MaxRecentSessions;
         AutoSaveEnabled        = current.AutoSaveEnabled;
         BilingualSubtitlesEnabled = current.BilingualSubtitlesEnabled;
@@ -320,6 +324,48 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     }
 
     public string[] ThemeOptions { get; }
+
+    // ── App UI language ───────────────────────────────────────────────────────
+
+    /// <summary>A single selectable UI language in the settings combo box.</summary>
+    public sealed record AppLanguageOption(string Code, string DisplayName)
+    {
+        public override string ToString() => DisplayName;
+    }
+
+    public AppLanguageOption[] AppLanguageOptions { get; }
+
+    [ObservableProperty]
+    private AppLanguageOption _selectedAppLanguage = null!;
+
+    partial void OnSelectedAppLanguageChanged(AppLanguageOption value)
+    {
+        if (value is null) return;
+        var effective = LocalizationService.ResolveAppLanguage(value.Code);
+        try
+        {
+            LocalizationService.Instance.SetCulture(new CultureInfo(effective));
+        }
+        catch (CultureNotFoundException)
+        {
+            LocalizationService.Instance.SetCulture(new CultureInfo("en"));
+        }
+    }
+
+    private static AppLanguageOption[] BuildAppLanguageOptions()
+    {
+        var options = new System.Collections.Generic.List<AppLanguageOption>
+        {
+            new("auto", Babel.Player.Resources.Strings.ResourceManager
+                .GetString("Settings_Option_AutoSystem", LocalizationService.Instance.CurrentCulture)
+                ?? "Auto (system)"),
+        };
+        foreach (var code in NllbLanguageCatalog.IsoToFloresToken.Keys.OrderBy(c => c, StringComparer.Ordinal))
+        {
+            options.Add(new AppLanguageOption(code, LanguageDisplayNames.ForIso639(code)));
+        }
+        return options.ToArray();
+    }
 
     // ── TTS Voice ─────────────────────────────────────────────────────────────
 
@@ -678,6 +724,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         settings.TtsVoice           = SelectedVoice ?? settings.TtsVoice;
         settings.Theme              = SelectedTheme ?? settings.Theme;
+        settings.AppLanguage        = string.IsNullOrWhiteSpace(SelectedAppLanguage?.Code)
+            ? settings.AppLanguage
+            : SelectedAppLanguage.Code;
         settings.MaxRecentSessions  = MaxRecentSessions;
         settings.AutoSaveEnabled    = AutoSaveEnabled;
         settings.BilingualSubtitlesEnabled = BilingualSubtitlesEnabled;

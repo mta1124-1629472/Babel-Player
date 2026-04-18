@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Styling;
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Markup.Xaml;
@@ -82,6 +83,19 @@ public partial class App : Application
             {
                 appLog.Info(
                     $"Environment override active: {AppSettings.InferenceServiceUrlEnvVar}={appSettings.EffectiveContainerizedServiceUrl}");
+            }
+
+            // Resolve and apply saved UI language.  "auto" tracks the OS locale each launch,
+            // mirroring the Theme = "System" sentinel pattern.
+            var effectiveLang = LocalizationService.ResolveAppLanguage(appSettings.AppLanguage);
+            try
+            {
+                LocalizationService.Instance.SetCulture(new CultureInfo(effectiveLang));
+            }
+            catch (CultureNotFoundException)
+            {
+                appLog.Warning($"Unknown UI culture '{effectiveLang}', falling back to 'en'.");
+                LocalizationService.Instance.SetCulture(new CultureInfo("en"));
             }
 
             // Apply saved theme preference — forced to Dark in App.axaml
