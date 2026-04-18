@@ -162,6 +162,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 OnPropertyChanged(nameof(HwRamLine));
                 OnPropertyChanged(nameof(HwNpuLine));
                 OnPropertyChanged(nameof(HwLibsLine));
+                RefreshRuntimeAvailabilityFromHardware();
                 break;
             case nameof(SessionWorkflowCoordinator.RuntimeWarmupStatusText):
                 StatusText = string.IsNullOrWhiteSpace(_coordinator.RuntimeWarmupStatusText)

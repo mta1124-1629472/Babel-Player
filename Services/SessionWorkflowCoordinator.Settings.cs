@@ -6,6 +6,71 @@ namespace Babel.Player.Services;
 
 public sealed partial class SessionWorkflowCoordinator
 {
+    private bool ApplyPipelineSelectionSettings(PipelineSettingsSelection selection)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranscriptionProvider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranscriptionModel);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranslationProvider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranslationModel);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TtsProvider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TtsVoice);
+
+        var transcriptionProviderChanged =
+            CurrentSettings.TranscriptionProfile != selection.TranscriptionRuntime ||
+            !string.Equals(CurrentSettings.TranscriptionProvider, selection.TranscriptionProvider, StringComparison.Ordinal) ||
+            !string.Equals(CurrentSettings.TranscriptionModel, selection.TranscriptionModel, StringComparison.Ordinal) ||
+            !SessionSnapshotSemantics.TranscriptionLanguageHintsMatch(
+                CurrentSettings.TranscriptionLanguageHint,
+                selection.TranscriptionLanguageHint);
+        var translationProviderChanged =
+            CurrentSettings.TranslationProfile != selection.TranslationRuntime ||
+            !string.Equals(CurrentSettings.TranslationProvider, selection.TranslationProvider, StringComparison.Ordinal) ||
+            !string.Equals(CurrentSettings.TranslationModel, selection.TranslationModel, StringComparison.Ordinal) ||
+            (!string.IsNullOrWhiteSpace(selection.TargetLanguage) &&
+             !LanguageCode.TargetLanguagesMatch(CurrentSettings.TargetLanguage, selection.TargetLanguage));
+        var ttsProviderChanged =
+            CurrentSettings.TtsProfile != selection.TtsRuntime ||
+            !string.Equals(CurrentSettings.TtsProvider, selection.TtsProvider, StringComparison.Ordinal) ||
+            !string.Equals(CurrentSettings.TtsVoice, selection.TtsVoice, StringComparison.Ordinal);
+
+        var settingsChanged = transcriptionProviderChanged || translationProviderChanged || ttsProviderChanged;
+        if (!settingsChanged)
+            return false;
+
+        CurrentSettings.TranscriptionProfile = selection.TranscriptionRuntime;
+        CurrentSettings.TranscriptionProvider = selection.TranscriptionProvider;
+        CurrentSettings.TranscriptionModel = selection.TranscriptionModel;
+        CurrentSettings.TranslationProfile = selection.TranslationRuntime;
+        CurrentSettings.TranslationProvider = selection.TranslationProvider;
+        CurrentSettings.TranslationModel = selection.TranslationModel;
+        CurrentSettings.TtsProfile = selection.TtsRuntime;
+        CurrentSettings.TtsProvider = selection.TtsProvider;
+        CurrentSettings.TtsVoice = selection.TtsVoice;
+        if (!string.IsNullOrWhiteSpace(selection.TargetLanguage))
+        {
+            CurrentSettings.TargetLanguage = LanguageCode.NormalizeForPersistence(selection.TargetLanguage)
+                ?? selection.TargetLanguage.Trim();
+        }
+
+        CurrentSettings.TranscriptionLanguageHint =
+            SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(selection.TranscriptionLanguageHint);
+
+        if (transcriptionProviderChanged)
+            _transcriptionService = null;
+        if (translationProviderChanged)
+            _translationService = null;
+        if (ttsProviderChanged)
+        {
+            // Match UpdateSettings: invalidate the cached provider here without disposing it
+            // because in-flight segment generation may still be holding the old instance.
+            _ttsService = null;
+        }
+
+        // Pipeline selections do not change the vocal-separation service endpoint, so keep
+        // the cached provider until UpdateSettings changes the backing container URL.
+        return true;
+    }
+
     public void UpdateSettings(AppSettings settings)
     {
         settings.NormalizeLegacyInferenceSettings();
