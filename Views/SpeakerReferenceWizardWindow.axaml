@@ -10,7 +10,7 @@
         x:Class="Babel.Player.Views.SpeakerReferenceWizardWindow"
         x:Name="WizardRoot"
         x:DataType="vm:SpeakerReferenceWizardViewModel"
-        Title="Speaker Reference Wizard"
+        Title="{local:Localize Window_Title_Wizard}"
         Width="1100"
         Height="800"
         MinWidth="900"
@@ -19,7 +19,8 @@
         WindowDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource PanelBackgroundBrush}">
+        Background="{DynamicResource PanelBackgroundBrush}"
+        xmlns:local="using:Babel.Player.Converters">
 
     <Window.Styles>
         <Style Selector="Border.top-chrome">
@@ -86,7 +87,7 @@
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                     <TextBlock Grid.Column="0"
                                Classes="text-title"
-                               Text="Speaker Reference Wizard"
+                               Text="{local:Localize Window_Title_Wizard}"
                                Foreground="{DynamicResource PrimaryTextBrush}"
                                VerticalAlignment="Center" />
                     <StackPanel Grid.Column="2"
@@ -101,7 +102,7 @@
                                 Background="{DynamicResource ButtonBackgroundBrush}"
                                 Foreground="{DynamicResource PrimaryTextBrush}"
                                 Click="OnMinimizeWindowClick"
-                                AutomationProperties.Name="Minimize window">
+                                AutomationProperties.Name="{local:Localize Chrome_Minimize}">
                             <Viewbox Width="14" Height="14">
                                 <Canvas Width="24" Height="24">
                                     <Border Canvas.Left="4"
@@ -119,7 +120,7 @@
                                 Background="{DynamicResource ButtonBackgroundBrush}"
                                 Foreground="{DynamicResource PrimaryTextBrush}"
                                 Click="OnToggleMaximizeWindowClick"
-                                AutomationProperties.Name="Maximize or restore window">
+                                AutomationProperties.Name="{local:Localize Chrome_MaximizeRestore}">
                             <Grid Width="24" Height="24">
                                 <Viewbox x:Name="ChromeMaximizeIcon"
                                          Width="14"
@@ -167,8 +168,8 @@
                                 Background="{DynamicResource DestructiveBrush}"
                                 Foreground="{DynamicResource PrimaryTextBrush}"
                                 Click="OnCancelClick"
-                                ToolTip.Tip="Close wizard (discard changes)"
-                                AutomationProperties.Name="Close wizard">
+                                ToolTip.Tip="{local:Localize Wizard_Tooltip_CloseDiscard}"
+                                AutomationProperties.Name="{local:Localize Wizard_Tooltip_Close}">
                             <Viewbox Width="14" Height="14">
                                 <Canvas Width="24" Height="24">
                                     <Path Stroke="{DynamicResource PrimaryTextBrush}"
@@ -193,7 +194,7 @@
 
         <!-- Intro -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
-            <TextBlock Text="Assign voices to speakers and set reference audio clips. Use the preview to find good clips, then click 'Use Playhead' to grab the current moment." Classes="text-secondary" Opacity="0.6" TextWrapping="Wrap"/>
+            <TextBlock Text="{local:Localize Wizard_Hint_TopBanner}" Classes="text-secondary" Opacity="0.6" TextWrapping="Wrap"/>
         </StackPanel>
 
         <!-- Progress & Quick Actions -->
@@ -214,17 +215,17 @@
 
                 <CheckBox Grid.Column="1"
                           IsChecked="{Binding ShowLowConfidenceOnly, Mode=TwoWay}"
-                          Content="Show needs attention"
+                          Content="{local:Localize Wizard_Toggle_NeedsAttention}"
                           VerticalAlignment="Center"
                           Margin="16,0,0,0"
-                          ToolTip.Tip="Only show speakers that need review or have poor reference"/>
+                          ToolTip.Tip="{local:Localize Wizard_Tooltip_NeedsAttention}"/>
 
                 <Button Grid.Column="2"
                         Command="{Binding ResetAllCommand}"
-                        Content="Reset All"
+                        Content="{local:Localize Wizard_Button_ResetAll}"
                         Padding="10,6"
                         Margin="12,0,0,0"
-                        ToolTip.Tip="Clear all draft changes and start fresh"/>
+                        ToolTip.Tip="{local:Localize Wizard_Tooltip_ResetAll}"/>
 
                 <TextBlock Grid.Column="4"
                            Text="{Binding StatusText}"
@@ -246,8 +247,8 @@
                 <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
                     <!-- Header with instructions -->
                     <StackPanel Grid.Row="0" Margin="12,12,12,8">
-                        <TextBlock Text="Preview" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                        <TextBlock Text="Scrub through the video to find good audio clips. Click 'Use Playhead' on a speaker to grab the current moment as their reference." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Text="{local:Localize Wizard_Preview_Header}" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="{local:Localize Wizard_Hint_ScrubPreview}" Classes="text-micro" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
 
                     <!-- Video Surface (Windows) -->
@@ -270,8 +271,8 @@
                             Margin="8,0"
                             IsVisible="{Binding MiniPreview.ShowNonWindowsHint}">
                         <StackPanel Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="Preview not available on this platform" Classes="text-emphasis" HorizontalAlignment="Center"/>
-                            <TextBlock Text="On Linux/macOS, use the main window to scrub through video. When you find a good moment, come back here and click 'Use Playhead' for that speaker." Classes="text-micro" Opacity="0.6" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{local:Localize Wizard_Preview_Unavailable}" Classes="text-emphasis" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{local:Localize Wizard_Hint_LinuxMacFallback}" Classes="text-micro" Opacity="0.6" TextWrapping="Wrap" HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
@@ -289,7 +290,7 @@
                                 Value="{Binding MiniPreview.PositionMs, Mode=TwoWay}"
                                 IsEnabled="{Binding MiniPreview.HasLoadedMedia}"
                                 VerticalAlignment="Center"
-                                ToolTip.Tip="Drag to seek through the video"/>
+                                ToolTip.Tip="{local:Localize Wizard_Tooltip_SeekSlider}"/>
                         <TextBlock Grid.Column="2"
                                    Text="{Binding MiniPreview.DurationFormatted}"
                                    Classes="text-caption"
@@ -302,7 +303,7 @@
                                 Content="{Binding MiniPreview.MiniPlayPauseLabel}"
                                 Padding="12,6"
                                 FontWeight="Medium"
-                                ToolTip.Tip="Play or pause the preview"/>
+                                ToolTip.Tip="{local:Localize Wizard_Tooltip_PlayPause}"/>
                     </Grid>
 
                     <!-- Status Hint -->
@@ -317,7 +318,7 @@
                     <!-- Playhead Clip Settings -->
                     <Border Grid.Row="3" Classes="card" Margin="8,8,8,12" IsVisible="{Binding MiniPreview.ShowVideoSurface}">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="Playhead Clip Duration" Classes="text-label" ToolTip.Tip="How much audio to grab before and after the playhead position"/>
+                            <TextBlock Text="{local:Localize Wizard_Label_ClipDuration}" Classes="text-label" ToolTip.Tip="{local:Localize Wizard_Tooltip_ClipDuration}"/>
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                 <Slider Grid.Column="0"
                                         Width="100"
@@ -327,9 +328,9 @@
                                         IsSnapToTickEnabled="True"
                                         Value="{Binding PlayheadClipWindowSeconds, Mode=TwoWay}"
                                         VerticalAlignment="Center"
-                                        ToolTip.Tip="Length of audio clip in seconds (3-15 seconds)"/>
+                                        ToolTip.Tip="{local:Localize Wizard_Playhead_Clip_Tooltip}"/>
                                 <TextBlock Grid.Column="1" Text="{Binding PlayheadClipWindowSeconds, StringFormat='{}{0:F0} seconds'}" VerticalAlignment="Center" Classes="text-caption" Opacity="0.7"/>
-                                <Button Grid.Column="2" Command="{Binding StopReferencePreviewCommand}" Content="Stop" Padding="8,4" Classes="control-pill"/>
+                                <Button Grid.Column="2" Command="{Binding StopReferencePreviewCommand}" Content="{local:Localize Wizard_Button_Stop}" Padding="8,4" Classes="control-pill"/>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -344,8 +345,8 @@
                 <Grid RowDefinitions="Auto,*">
                     <!-- Header -->
                     <StackPanel Grid.Row="0" Margin="14,14,14,8">
-                        <TextBlock Text="Speakers" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                        <TextBlock Text="Select a voice for each speaker. For Qwen, also set a reference audio clip from the video." Classes="text-micro" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Text="{local:Localize Wizard_Assign_Header}" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        <TextBlock Text="{local:Localize Wizard_Assign_Hint}" Classes="text-micro" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
 
                     <!-- Speaker List -->
@@ -359,65 +360,65 @@
                                             <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
                                                 <TextBlock Text="{Binding SpeakerId}" Classes="text-display" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
                                                 <Border Background="{DynamicResource InfoBrush}" CornerRadius="4" Padding="8,3" VerticalAlignment="Center"
-                                                        ToolTip.Tip="Quality of the reference clip for this speaker">
+                                                        ToolTip.Tip="{local:Localize Wizard_Tooltip_ConfidenceTier}">
                                                     <TextBlock Text="{Binding ConfidenceTier}" Classes="text-micro" FontWeight="Medium" Foreground="{DynamicResource InfoFgBrush}"/>
                                                 </Border>
                                                 <TextBlock Text="{Binding LastActionLabel}" Classes="text-caption" Opacity="0.5" VerticalAlignment="Center"
-                                                           ToolTip.Tip="Last action taken on this speaker"/>
+                                                           ToolTip.Tip="{local:Localize Wizard_Tooltip_LastAction}"/>
                                             </StackPanel>
 
                                             <!-- Voice Assignment -->
                                             <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Spacing="8" Margin="0,0,0,10">
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <TextBlock Text="Voice" Classes="text-label" Opacity="0.7"/>
-                                                    <TextBlock Text="(for TTS generation)" Classes="text-micro" Opacity="0.4" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{local:Localize Wizard_Label_Voice}" Classes="text-label" Opacity="0.7"/>
+                                                    <TextBlock Text="{local:Localize Wizard_Label_VoiceHelp}" Classes="text-micro" Opacity="0.4" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                                 <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
                                                     <TextBlock Grid.Column="0" Text="{Binding EffectiveAssignedVoice, TargetNullValue='None'}" Classes="text-secondary" VerticalAlignment="Center"/>
-                                                    <Button Grid.Column="1" Classes="action-btn" Tag="{Binding}" Click="OnKeepAutoClick" Content="Auto"
-                                                            ToolTip.Tip="Use automatically detected voice for this speaker"/>
-                                                    <Button Grid.Column="2" Classes="action-btn" Tag="{Binding}" Click="OnUseActiveTtsVoiceClick" Content="Use Active"
-                                                            ToolTip.Tip="Use the currently active TTS voice setting"/>
-                                                    <Button Grid.Column="3" Classes="action-btn" Tag="{Binding}" Click="OnClearVoiceClick" Content="Clear"
-                                                            ToolTip.Tip="Clear the voice assignment, will use auto-detect"/>
+                                                    <Button Grid.Column="1" Classes="action-btn" Tag="{Binding}" Click="OnKeepAutoClick" Content="{local:Localize Wizard_Button_Auto}"
+                                                            ToolTip.Tip="{local:Localize Wizard_Tooltip_Auto}"/>
+                                                    <Button Grid.Column="2" Classes="action-btn" Tag="{Binding}" Click="OnUseActiveTtsVoiceClick" Content="{local:Localize Wizard_Button_UseActive}"
+                                                            ToolTip.Tip="{local:Localize Wizard_Tooltip_UseActive}"/>
+                                                    <Button Grid.Column="3" Classes="action-btn" Tag="{Binding}" Click="OnClearVoiceClick" Content="{local:Localize Common_Clear}"
+                                                            ToolTip.Tip="{local:Localize Wizard_Tooltip_ClearVoice}"/>
                                                 </Grid>
                                                 <ComboBox IsVisible="{Binding ShowPiperVoiceRow}"
                                                           IsEditable="True"
                                                           ItemsSource="{Binding $parent[Window].DataContext.PiperVoices}"
                                                           SelectedItem="{Binding DraftAssignedVoice, Mode=TwoWay}"
                                                           MinWidth="200"
-                                                          PlaceholderText="Or select a downloaded Piper voice..."
-                                                          ToolTip.Tip="Choose from downloaded Piper voices, or type a custom voice ID"/>
+                                                          PlaceholderText="{local:Localize Wizard_Placeholder_PiperVoice}"
+                                                          ToolTip.Tip="{local:Localize Wizard_Tooltip_PiperVoice}"/>
                                             </StackPanel>
 
                                             <!-- Reference Clip (Qwen) -->
                                             <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding ReferenceActionsEnabled}">
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <TextBlock Text="Reference Clip" Classes="text-label" Opacity="0.7"/>
-                                                    <TextBlock Text="(for voice cloning - Qwen only)" Classes="text-micro" Opacity="0.4" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{local:Localize Wizard_Label_ReferenceClip}" Classes="text-label" Opacity="0.7"/>
+                                                    <TextBlock Text="{local:Localize Wizard_Label_ReferenceClipHelp}" Classes="text-micro" Opacity="0.4" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding EffectiveReferencePath, TargetNullValue='No clip selected - Qwen voice cloning will use default'}" 
                                                            TextWrapping="Wrap" Classes="text-micro" Opacity="0.6" FontFamily="{DynamicResource UiMonoFontFamily}"
-                                                           ToolTip.Tip="Audio clip used as reference for Qwen voice cloning"/>
+                                                           ToolTip.Tip="{local:Localize Wizard_Tooltip_RefPath}"/>
 
                                                 <!-- Reference Actions -->
                                                 <WrapPanel Orientation="Horizontal">
-                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnPlayReferenceClick" Content="Play" Margin="0,0,4,4"/>
-                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnRevealReferenceClick" Content="Show" Margin="0,0,4,4"/>
-                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnBrowseFileClick" Content="Browse" Margin="0,0,4,4"/>
-                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnUseSelectedSegmentClick" Content="Use Segment" Margin="0,0,4,4"
-                                                            ToolTip.Tip="Use the selected segment as reference (click a timestamp below first)"/>
-                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnUsePlayheadClipClick" Content="Use Playhead" Margin="0,0,4,4"
-                                                            ToolTip.Tip="Grab the current playhead position from the preview - easiest way to set reference!"/>
-                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnAutoPickAnotherClick" Content="Auto-Pick" Margin="0,0,4,4"
-                                                            ToolTip.Tip="Automatically find a good clip from this speaker's segments"/>
+                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnPlayReferenceClick" Content="{local:Localize Wizard_Button_Play}" Margin="0,0,4,4"/>
+                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnRevealReferenceClick" Content="{local:Localize Wizard_Button_Show}" Margin="0,0,4,4"/>
+                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnBrowseFileClick" Content="{local:Localize Common_Browse}" Margin="0,0,4,4"/>
+                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnUseSelectedSegmentClick" Content="{local:Localize Wizard_Button_UseSegment}" Margin="0,0,4,4"
+                                                            ToolTip.Tip="{local:Localize Wizard_Tooltip_UseSegment}"/>
+                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnUsePlayheadClipClick" Content="{local:Localize Wizard_Button_UsePlayhead}" Margin="0,0,4,4"
+                                                            ToolTip.Tip="{local:Localize Wizard_Tooltip_UsePlayhead}"/>
+                                                    <Button Classes="action-btn" Tag="{Binding}" Click="OnAutoPickAnotherClick" Content="{local:Localize Wizard_Button_AutoPick}" Margin="0,0,4,4"
+                                                            ToolTip.Tip="{local:Localize Wizard_Tooltip_AutoPick}"/>
                                                 </WrapPanel>
                                             </StackPanel>
 
                                             <!-- Segments -->
                                             <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Spacing="4" Margin="0,0,0,4">
-                                                <TextBlock Text="Jump to speaker's segments" Classes="text-micro" Opacity="0.6"
-                                                          ToolTip.Tip="Click a timestamp to jump to that point in the video, then use 'Use Playhead'"/>
+                                                <TextBlock Text="{local:Localize Wizard_Hint_JumpToSegments}" Classes="text-micro" Opacity="0.6"
+                                                          ToolTip.Tip="{local:Localize Wizard_Tooltip_JumpToSegments}"/>
                                                 <WrapPanel Orientation="Horizontal">
                                                     <ItemsControl ItemsSource="{Binding SourceSegments}">
                                                         <ItemsControl.ItemsPanel>
@@ -445,7 +446,7 @@
                                                        Opacity="0.5"
                                                        IsVisible="{Binding ReferenceActionsEnabled}"
                                                        Margin="0,0,0,4"
-                                                       ToolTip.Tip="Why this clip was rated as good/poor"/>
+                                                       ToolTip.Tip="{local:Localize Wizard_Tooltip_ConfidenceReason}"/>
 
                                             <!-- Error -->
                                             <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
@@ -466,25 +467,25 @@
 
         <!-- Footer -->
         <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,14,0,0" ColumnSpacing="12">
-            <Expander Grid.Column="0" Header="Advanced">
+            <Expander Grid.Column="0" Header="{local:Localize Wizard_Expander_Advanced}">
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,0">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="Merge speakers" Classes="text-micro" Opacity="0.6"/>
+                        <TextBlock Text="{local:Localize Wizard_Label_MergeSpeakers}" Classes="text-micro" Opacity="0.6"/>
                         <StackPanel Orientation="Horizontal" Spacing="4">
                             <ComboBox ItemsSource="{Binding SpeakerIdOptions}" SelectedItem="{Binding MergeSourceSpeakerId, Mode=TwoWay}" Width="100"
-                                      ToolTip.Tip="Select source speaker to merge"/>
+                                      ToolTip.Tip="{local:Localize Wizard_Tooltip_MergeSource}"/>
                             <TextBlock Text="→" VerticalAlignment="Center" Classes="text-secondary" Opacity="0.5"/>
                             <ComboBox ItemsSource="{Binding SpeakerIdOptions}" SelectedItem="{Binding MergeTargetSpeakerId, Mode=TwoWay}" Width="100"
-                                      ToolTip.Tip="Select target speaker (will receive the merged segments)"/>
-                            <Button Command="{Binding MergeSpeakersCommand}" Content="Merge" Padding="10,6"
-                                    ToolTip.Tip="Merge source into target - this updates the transcript permanently"/>
+                                      ToolTip.Tip="{local:Localize Wizard_Tooltip_MergeTarget}"/>
+                            <Button Command="{Binding MergeSpeakersCommand}" Content="{local:Localize Wizard_Button_Merge}" Padding="10,6"
+                                    ToolTip.Tip="{local:Localize Wizard_Tooltip_Merge}"/>
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </Expander>
             
             <TextBlock Grid.Column="1"
-                       Text="Finish saves voice and reference changes. Cancel discards all edits."
+                       Text="{local:Localize Wizard_Footer_Hint}"
                        VerticalAlignment="Center"
                        Classes="text-caption"
                        Opacity="0.5"
@@ -493,16 +494,16 @@
             
             <Button Grid.Column="2"
                     Click="OnCancelClick"
-                    Content="Cancel"
+                    Content="{local:Localize Common_Cancel}"
                     Padding="16,8"
-                    ToolTip.Tip="Discard all changes and close"/>
+                    ToolTip.Tip="{local:Localize Wizard_Tooltip_Cancel}"/>
             
             <Button Grid.Column="3"
                     Click="OnFinishClick"
-                    Content="Finish"
+                    Content="{local:Localize Wizard_Button_Finish}"
                     Padding="16,8"
                     FontWeight="Medium"
-                    ToolTip.Tip="Apply voice and reference changes to the session"/>
+                    ToolTip.Tip="{local:Localize Wizard_Tooltip_Finish}"/>
         </Grid>
     </Grid>
         </Grid>

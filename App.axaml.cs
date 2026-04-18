@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Styling;
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Markup.Xaml;
@@ -84,6 +85,19 @@ public partial class App : Application
                     $"Environment override active: {AppSettings.InferenceServiceUrlEnvVar}={appSettings.EffectiveContainerizedServiceUrl}");
             }
 
+            // Resolve and apply saved UI language.  "auto" tracks the OS locale each launch,
+            // mirroring the Theme = "System" sentinel pattern.
+            var effectiveLang = LocalizationService.ResolveAppLanguage(appSettings.AppLanguage);
+            try
+            {
+                LocalizationService.Instance.SetCulture(new CultureInfo(effectiveLang));
+            }
+            catch (CultureNotFoundException)
+            {
+                appLog.Warning($"Unknown UI culture '{effectiveLang}', falling back to 'en'.");
+                LocalizationService.Instance.SetCulture(new CultureInfo("en"));
+            }
+
             // Apply saved theme preference — forced to Dark in App.axaml
             if (Application.Current is { } app)
             {
@@ -139,6 +153,10 @@ public partial class App : Application
                 logFilePath: _logFilePath);
 
             desktop.MainWindow = new MainWindow { DataContext = mainVm };
+            // SetCulture above ran before the main window existed, so re-apply
+            // flow direction now that desktop.MainWindow is assigned.  This is
+            // what makes first-launch RTL cultures (e.g. Arabic) lay out right-to-left.
+            LocalizationService.Instance.ApplyFlowDirectionToOpenWindows();
             var coordinator = _sessionWorkflowCoordinator;
 
             // Wire live bootstrap progress into the status bar.

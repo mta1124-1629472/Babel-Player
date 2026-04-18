@@ -273,4 +273,11 @@ public sealed class AppSettings
 
     /// <summary>When false, the app may show a one-time notice about managed GPU host warm-up time.</summary>
     public bool ShownManagedBackendWarmupNotice { get; set; }
+
+    /// <summary>
+    /// UI language.  <c>"auto"</c> means "follow the OS locale on each launch" (mirrors the
+    /// <see cref="Theme"/> <c>"System"</c> sentinel); otherwise a lowercase ISO 639-1 code
+    /// supported by the app's localization catalog (e.g. <c>"de"</c>, <c>"ja"</c>).
+    /// </summary>
+    public string AppLanguage { get; set; } = "auto";
 }
