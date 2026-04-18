@@ -1,5 +1,6 @@
 version: 2.1
 
+# Use the Windows Orb to simplify environment setup
 orbs:
   win: circleci/windows@5.0
 
@@ -14,25 +15,33 @@ jobs:
       - run:
           name: Install .NET 10
           command: |
+            # Download and run the official .NET install script
             Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile dotnet-install.ps1
             ./dotnet-install.ps1 -Channel 10.0 -InstallDir 'C:\Program Files\dotnet'
+            
+            # Ensure the new .NET path is active in the current session
+            $env:Path = "C:\Program Files\dotnet;" + $env:Path
+            [Environment]::SetEnvironmentVariable("PATH", $env:Path, [EnvironmentVariableTarget]::Machine)
 
       - run:
           name: Restore Dependencies
-          # Explicitly pointing to the .sln to fix the ambiguity error
+          # Explicitly target the .sln to avoid ambiguity
           command: dotnet restore Babel-Player.sln
 
       - run:
           name: Build Babel Player
+          # Building in Release mode to match production/distribution
           command: dotnet build Babel-Player.sln --configuration Release --no-restore
 
       - run:
           name: Run Unit Tests
-          # This will run tests found in BabelPlayer.Tests.csproj via the solution
-          command: dotnet test Babel-Player.sln --no-build --verbosity normal
+          # Use --no-build and --configuration Release to ensure it 
+          # tests the exact artifacts created in the previous step
+          command: dotnet test Babel-Player.sln --configuration Release --no-build --verbosity normal
 
 workflows:
   version: 2
-  build_and_test_workflow:
+  # This workflow name replaces 'compile_test_deploy' to match the new job
+  primary_pipeline:
     jobs:
       - build-and-test
