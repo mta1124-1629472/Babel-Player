@@ -25,6 +25,9 @@ public static class ArtifactJson
         var artifact = JsonSerializer.Deserialize<TranscriptArtifact>(json, ReadOptions)
             ?? throw CreateInvalidArtifactException("transcript", contextLabel, "JSON deserialized to null.");
 
+        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
+            artifact.SchemaVersion = CurrentSchemaVersion;
+
         ValidateTranscript(artifact, contextLabel);
         return artifact;
     }
@@ -33,6 +36,9 @@ public static class ArtifactJson
     {
         var artifact = JsonSerializer.Deserialize<TranslationArtifact>(json, ReadOptions)
             ?? throw CreateInvalidArtifactException("translation", contextLabel, "JSON deserialized to null.");
+
+        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
+            artifact.SchemaVersion = CurrentSchemaVersion;
 
         ValidateTranslation(artifact, contextLabel);
         return artifact;
