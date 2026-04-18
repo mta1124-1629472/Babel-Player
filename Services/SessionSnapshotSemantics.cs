@@ -71,7 +71,15 @@ public static class SessionSnapshotSemantics
             else if (!ArtifactIntegrityValidator.ValidateTranscript(snapshot, out _))
             {
                 stage = SessionWorkflowStage.MediaLoaded;
+                // Detect if vocal separation artifacts exist before clearing
+                var hadVocals = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
+                var hadAmbiance = !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath);
                 snapshot = ClearTranscriptionOutputs(snapshot);
+                // ClearTranscriptionOutputs also nulls VocalsAudioPath and AmbianceAudioPath
+                if (hadVocals || hadAmbiance)
+                {
+                    cleared.Add("vocal_separation");
+                }
                 cleared.Add("transcription");
             }
         }

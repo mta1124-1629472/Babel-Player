@@ -25,6 +25,24 @@ internal static class ArtifactIntegrityValidator
 
         if (!ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath, out _, out _))
         {
+            // Missing manifest - warn if this is a recently ingested artifact
+            if (snapshot.MediaLoadedAtUtc.HasValue)
+            {
+                var age = DateTimeOffset.UtcNow - snapshot.MediaLoadedAtUtc.Value;
+                if (age.TotalDays < 30) // Consider artifacts from the last 30 days as "recent"
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[WARN] Missing integrity manifest for recently ingested artifact: " +
+                        $"path={snapshot.IngestedMediaPath}, ingestedAt={snapshot.MediaLoadedAtUtc.Value:O}, age={age.TotalDays:F1} days");
+                }
+            }
+            else
+            {
+                // No timestamp available - log at lower level
+                System.Diagnostics.Debug.WriteLine(
+                    $"[DEBUG] Missing integrity manifest for artifact (no timestamp available): path={snapshot.IngestedMediaPath}");
+            }
+
             error = null;
             return true;
         }
