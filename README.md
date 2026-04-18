@@ -174,7 +174,46 @@ python scripts/check-architecture.py
 python -m py_compile inference/main.py
 ```
 
-If you are touching smoke-covered seams, also run:
+The architecture linter (`scripts/check-architecture.py`) enforces structural rules and maintained-test hygiene: provider string constants, ViewModel pipeline call discipline, coordinator line limits, `PLACEHOLDER` requirements on unimplemented stubs, and the no-slow-tests policy described in [docs/testing-requirements.md](docs/testing-requirements.md).
+
+### Regenerate UI translations
+
+The English base `Resources/Strings.resx` is maintained by `scripts/build_strings_resx.py`. After adding or editing a key there, regenerate the 15 satellite `Resources/Strings.<lang>.resx` files with the DeepL-backed console tool:
+
+```powershell
+$env:DEEPL_API_KEY = "<your-deepl-key>"
+dotnet run --project Tools/LocaleGenerator -c Release -- --languages de,fr,ja
+```
+
+Pass LocaleGenerator flags after `--` so `dotnet run` does not consume them first. For example:
+
+```powershell
+dotnet run --project Tools/LocaleGenerator -c Release -- --api-key "<your-deepl-key>" --languages ar,de,fr --source Resources/Strings.resx --out Resources
+```
+
+`--api-key <KEY>`, `--languages ar,de,...`, `--source`, and `--out` override the defaults. The tool skips any language that is not in DeepL's v2 catalog and prints it in the summary for manual review.
+
+---
+
+## License
+
+Babel Player is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+
+Third-party libraries and pre-trained models are used under their respective licenses. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for the full list.
+
+### Non-commercial model restrictions
+
+The **NLLB-200** translation model (Meta, CC-BY-NC-4.0) is licensed for **non-commercial use only**. If you intend to use Babel Player commercially, you must replace this model with a commercially-licensed alternative or obtain a separate license from Meta.
+
+### Bundled binaries
+
+Babel Player bundles **libmpv** (GPL-2.0-or-later) and **ffmpeg** (LGPL-2.1-or-later / GPL-2.0-or-later depending on build). Source code for these is available at their respective upstream repositories linked in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+---
+
+## Dependencies
+
+### Runtime (bundled in release)
 
 ```powershell
 dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Category=Smoke"
