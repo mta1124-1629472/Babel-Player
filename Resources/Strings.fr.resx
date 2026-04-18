@@ -64,178 +64,178 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="Common_Cancel" xml:space="preserve">
-    <value>Abbrechen</value>
+    <value>Annuler</value>
   </data>
   <data name="Common_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>Fermer</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
-    <value>Speichern Sie</value>
+    <value>Économiser</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
-    <value>Klar</value>
+    <value>Clair</value>
   </data>
   <data name="Common_Ok" xml:space="preserve">
     <value>OK</value>
   </data>
   <data name="Common_Apply" xml:space="preserve">
-    <value>Bewerbung</value>
+    <value>Appliquer</value>
   </data>
   <data name="Common_Browse" xml:space="preserve">
-    <value>Durchsuchen Sie</value>
+    <value>Parcourir</value>
   </data>
   <data name="Common_Download" xml:space="preserve">
-    <value>Herunterladen</value>
+    <value>Télécharger</value>
   </data>
   <data name="Common_Restart" xml:space="preserve">
-    <value>Neustart</value>
+    <value>Redémarrage</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>Babel-Spieler</value>
+    <value>Joueur de Babel</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
-    <value>Babel Player - Einstellungen</value>
+    <value>Babel Player - Paramètres</value>
   </data>
   <data name="Window_Title_ApiKeys" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>Clés API</value>
   </data>
   <data name="Window_Title_Crash" xml:space="preserve">
-    <value>Babel Player - Unbehandelter Fehler</value>
+    <value>Babel Player - Erreur non gérée</value>
   </data>
   <data name="Window_Title_Wizard" xml:space="preserve">
-    <value>Lautsprecher-Referenz-Assistent</value>
+    <value>Assistant de référence de haut-parleur</value>
   </data>
   <data name="Chrome_Minimize" xml:space="preserve">
-    <value>Fenster minimieren</value>
+    <value>Réduire la fenêtre</value>
   </data>
   <data name="Chrome_MaximizeRestore" xml:space="preserve">
-    <value>Fenster maximieren oder wiederherstellen</value>
+    <value>Agrandir ou restaurer la fenêtre</value>
   </data>
   <data name="Chrome_Close" xml:space="preserve">
-    <value>Fenster schließen</value>
+    <value>Fermer la fenêtre</value>
   </data>
   <data name="Menu_File_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>Fermer</value>
   </data>
   <data name="Menu_File_ForceClose" xml:space="preserve">
-    <value>Schließen erzwingen</value>
+    <value>Fermeture forcée</value>
   </data>
   <data name="Section_Pipeline" xml:space="preserve">
     <value>Pipeline</value>
   </data>
   <data name="Tooltip_ClearPipeline" xml:space="preserve">
-    <value>Pipeline löschen und neu beginnen</value>
+    <value>Vider le pipeline et repartir sur de nouvelles bases</value>
   </data>
   <data name="Section_TargetLanguage" xml:space="preserve">
-    <value>ZIELSPRACHE</value>
+    <value>LANGUE CIBLE</value>
   </data>
   <data name="Label_Output" xml:space="preserve">
-    <value>Ausgabe (Synchronisation / Untertitel)</value>
+    <value>Sortie (dub / subs)</value>
   </data>
   <data name="Section_AudioAndDub" xml:space="preserve">
     <value>AUDIO &amp; DUB</value>
   </data>
   <data name="Label_SeparateVocals" xml:space="preserve">
-    <value>Getrennter Gesang vor der Transkription</value>
+    <value>Séparer les voix avant la transcription</value>
   </data>
   <data name="Section_Transcription" xml:space="preserve">
     <value>TRANSCRIPTION</value>
   </data>
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
-    <value>Transkription wiederholen (nur diesen Schritt wählen oder nachgelagerte Schritte einbeziehen)</value>
+    <value>Répétition de la transcription (choisir cette étape uniquement ou l'inclure en aval)</value>
   </data>
   <data name="Label_Compute" xml:space="preserve">
-    <value>Berechnen Sie</value>
+    <value>Calculer</value>
   </data>
   <data name="Label_Provider" xml:space="preserve">
-    <value>Anbieter</value>
+    <value>Fournisseur</value>
   </data>
   <data name="Label_Model" xml:space="preserve">
-    <value>Modell</value>
+    <value>Modèle</value>
   </data>
   <data name="Status_NeedsDownload" xml:space="preserve">
-    <value>⬇ Braucht Download</value>
+    <value>⬇ Besoins Télécharger</value>
   </data>
   <data name="Status_Ready" xml:space="preserve">
-    <value>✓ Bereit</value>
+    <value>✓ Prêt</value>
   </data>
   <data name="Label_SpokenLanguage" xml:space="preserve">
-    <value>Gesprochene Sprache (ASR-Hinweis)</value>
+    <value>Langue parlée (indice ASR)</value>
   </data>
   <data name="Section_Diarization" xml:space="preserve">
-    <value>DIARISIERUNG / SPRECHER</value>
+    <value>DIARISATION / INTERVENANTS</value>
   </data>
   <data name="Tooltip_RerunDiarization" xml:space="preserve">
-    <value>Wiederholen Sie die Zuordnung von Lautsprechern (wählen Sie nur diese Phase oder auch die nachgelagerte)</value>
+    <value>Reprendre la cartographie du locuteur (choisir cette étape uniquement ou l'inclure en aval)</value>
   </data>
   <data name="Label_MultiSpeakerAudio" xml:space="preserve">
-    <value>Audio mit mehreren Lautsprechern</value>
+    <value>Système audio à haut-parleurs multiples</value>
   </data>
   <data name="Hint_MultiSpeakerAudio" xml:space="preserve">
-    <value>Schalten Sie diese Option ein, wenn die Aufnahme mehr als einen Sprecher hat, damit die Zeilen separat beschriftet und nachvertont werden können. Bei einem einzelnen Sprecher oder einer Sprecherin lassen Sie diese Option ausgeschaltet, um zusätzliche Bearbeitung zu vermeiden.</value>
+    <value>Activez cette option lorsque l'enregistrement comporte plus d'un locuteur distinct afin que les lignes puissent être étiquetées et doublées séparément. Pour un seul narrateur ou un seul locuteur, ne l'activez pas afin d'éviter un traitement supplémentaire.</value>
   </data>
   <data name="Check_DetectSpeakers" xml:space="preserve">
-    <value>Separate Lautsprecher erkennen und kennzeichnen</value>
+    <value>Détecter et étiqueter les haut-parleurs séparés</value>
   </data>
   <data name="Hint_EnableMultiSpeakerForIds" xml:space="preserve">
-    <value>Aktivieren Sie die Erkennung mehrerer Sprecher (siehe oben) und transkribieren Sie dann, um Sprecher-IDs zuzuweisen.</value>
+    <value>Activez la détection des locuteurs multiples ci-dessus, puis transcrivez, pour attribuer des identifiants aux locuteurs.</value>
   </data>
   <data name="Hint_SpeakerAssignmentsInWizard" xml:space="preserve">
-    <value>Die Zuweisung von Lautsprechern wird mit dem Assistenten für die Lautsprechereinrichtung verwaltet.</value>
+    <value>L'affectation des enceintes est gérée dans l'assistant de configuration des enceintes.</value>
   </data>
   <data name="Tooltip_OpenSpeakerWizard" xml:space="preserve">
-    <value>Öffnet den Assistenten für die Lautsprechereinrichtung: Stimme pro Lautsprecher und (für Qwen) Referenzclips. Beenden im Assistenten speichert die Änderungen.</value>
+    <value>Ouvre l'assistant de configuration du haut-parleur : voix par haut-parleur et (pour Qwen) clips de référence. Terminer dans l'assistant enregistre les modifications.</value>
   </data>
   <data name="Button_SpeakerSetupWizard" xml:space="preserve">
-    <value>Lautsprecher-Einrichtungsassistent...</value>
+    <value>Assistant de configuration des enceintes...</value>
   </data>
   <data name="Section_Translation" xml:space="preserve">
-    <value>TRANSLATION</value>
+    <value>TRADUCTION</value>
   </data>
   <data name="Tooltip_RerunTranslation" xml:space="preserve">
-    <value>Wiederholung der Übersetzung (nur diese Phase oder auch Synchronisation)</value>
+    <value>Répétition de la traduction (choisir cette étape uniquement ou inclure le doublage)</value>
   </data>
   <data name="Section_Dub" xml:space="preserve">
     <value>DUB</value>
   </data>
   <data name="Tooltip_RerunDub" xml:space="preserve">
-    <value>Synchronisation aus der aktuellen Übersetzung neu generieren</value>
+    <value>Re-générer le doublage audio à partir de la traduction actuelle</value>
   </data>
   <data name="Label_VoiceAssignment" xml:space="preserve">
-    <value>Zuordnung der Stimme</value>
+    <value>Attribution de la voix</value>
   </data>
   <data name="Check_AssignPerSpeakerInWizard" xml:space="preserve">
-    <value>Zuweisung pro Lautsprecher im Assistenten für Lautsprecherreferenzen (Fallback-Stimme unten)</value>
+    <value>Affectation par enceinte dans l'assistant de référence des enceintes (voix de secours ci-dessous)</value>
   </data>
   <data name="Hint_VoiceAssignment" xml:space="preserve">
-    <value>Verwenden Sie eine Stimme für jeden Sprecher, oder aktivieren Sie die obige Option und legen Sie im Assistenten eine Ersatzstimme sowie Stimmen pro Sprecher fest.</value>
+    <value>Utilisez une voix pour chaque locuteur ou activez l'option ci-dessus et définissez une solution de repli plus des voix par locuteur dans l'assistant.</value>
   </data>
   <data name="Section_ApiKeys" xml:space="preserve">
-    <value>API-SCHLÜSSEL</value>
+    <value>CLÉS DE L'API</value>
   </data>
   <data name="Hint_ConfigureCredentials" xml:space="preserve">
-    <value>Konfigurieren Sie die Anmeldedaten für die oben ausgewählten Anbieter.</value>
+    <value>Configurez les informations d'identification pour les fournisseurs sélectionnés ci-dessus.</value>
   </data>
   <data name="Button_ApiKeys" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>Clés API</value>
   </data>
   <data name="Section_LanguageRouting" xml:space="preserve">
-    <value>SPRACHROUTING</value>
+    <value>ROUTAGE LINGUISTIQUE</value>
   </data>
   <data name="Label_SourceAudio" xml:space="preserve">
-    <value>Quelle Audio</value>
+    <value>Source Audio</value>
   </data>
   <data name="Label_TargetSubDub" xml:space="preserve">
-    <value>Ziel Sub/Dub</value>
+    <value>Cible Sub/Dub</value>
   </data>
   <data name="Section_ActiveConfig" xml:space="preserve">
-    <value>AKTIVE KONFIG</value>
+    <value>ACTIVE CONFIG</value>
   </data>
   <data name="Label_ActiveAsr" xml:space="preserve">
     <value>ASR</value>
   </data>
   <data name="Label_ActiveCpu" xml:space="preserve">
-    <value>CPU</value>
+    <value>UNITÉ CENTRALE</value>
   </data>
   <data name="Label_ActiveGpu" xml:space="preserve">
     <value>GPU</value>
@@ -250,696 +250,696 @@
     <value>RAM</value>
   </data>
   <data name="Section_ProviderDiagnostics" xml:space="preserve">
-    <value>ANBIETERDIAGNOSTIK</value>
+    <value>DIAGNOSTIC DU FOURNISSEUR</value>
   </data>
   <data name="Status_Stale" xml:space="preserve">
-    <value>schal</value>
+    <value>rassis</value>
   </data>
   <data name="Automation_PipelineProgress" xml:space="preserve">
-    <value>Fortschritte in der Pipeline</value>
+    <value>Progression du pipeline</value>
   </data>
   <data name="Button_RunPipeline" xml:space="preserve">
-    <value>Pipeline ausführen</value>
+    <value>Pipeline en cours d'exécution</value>
   </data>
   <data name="Button_CancelPipeline" xml:space="preserve">
-    <value>Pipeline abbrechen</value>
+    <value>Annuler le pipeline</value>
   </data>
   <data name="Tooltip_ExpandErrorDetails" xml:space="preserve">
-    <value>Fehlerdetails erweitern</value>
+    <value>Développer les détails de l'erreur</value>
   </data>
   <data name="Section_Segments" xml:space="preserve">
-    <value>Segmente</value>
+    <value>Segments</value>
   </data>
   <data name="Tooltip_ExportSegments" xml:space="preserve">
-    <value>Exportieren Sie Untertitel (.srt), nur den synchronisierten Ton (.mp3) oder das Video mit Synchronisation und weichen Untertiteln (.mp4) - der Ton entspricht dem aktuellen Timing und Mix.</value>
+    <value>Exportation des sous-titres (.srt), de l'audio doublé uniquement (.mp3), ou de la vidéo avec doublage + sous-titres doux (.mp4) - l'audio correspond à la synchronisation et au mixage actuels.</value>
   </data>
   <data name="Button_Export" xml:space="preserve">
-    <value>Exportieren</value>
+    <value>Exportation</value>
   </data>
   <data name="Menu_Export_Srt" xml:space="preserve">
-    <value>zu .srt</value>
+    <value>vers .srt</value>
   </data>
   <data name="Menu_Export_Mp3" xml:space="preserve">
-    <value>zu .mp3</value>
+    <value>en .mp3</value>
   </data>
   <data name="Menu_Export_Mp4" xml:space="preserve">
-    <value>zu .mp4</value>
+    <value>en .mp4</value>
   </data>
   <data name="Tooltip_RefreshSegments" xml:space="preserve">
-    <value>Segmente aktualisieren</value>
+    <value>Rafraîchir les segments</value>
   </data>
   <data name="Message_NoSegmentsTitle" xml:space="preserve">
-    <value>Noch keine Segmente</value>
+    <value>Pas encore de segments</value>
   </data>
   <data name="Message_NoSegmentsHint" xml:space="preserve">
-    <value>Öffnen Sie Medien und führen Sie die Pipeline aus, um Segmente zu erzeugen.</value>
+    <value>Ouvrez les médias et exécutez le pipeline pour générer des segments.</value>
   </data>
   <data name="Label_RenderTiming" xml:space="preserve">
-    <value>Rendering-Zeitplan</value>
+    <value>Temps de rendu</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Gilt für generierte Synchronisationen und den Export. Pause ist nur für die Vorschau.</value>
+    <value>S'applique au doublage audio généré et à l'exportation. La pause n'est qu'une prévisualisation.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
-    <value>Ausgewähltes Segment</value>
+    <value>Segment sélectionné</value>
   </data>
   <data name="Option_Inherit" xml:space="preserve">
-    <value>Erben Sie</value>
+    <value>Hériter</value>
   </data>
   <data name="Tooltip_Inherit" xml:space="preserve">
-    <value>Verwenden Sie das Session-Rendering-Timing für dieses Segment</value>
+    <value>Utiliser le temps de rendu de la session pour ce segment</value>
   </data>
   <data name="Option_Off" xml:space="preserve">
-    <value>Aus</value>
+    <value>Arrêt</value>
   </data>
   <data name="Tooltip_TimingOff" xml:space="preserve">
-    <value>TTS für dieses Segment in der gerenderten Nachvertonung/im Export unverändert abspielen</value>
+    <value>Jouer le TTS tel quel pour ce segment dans le rendu du doublage/exportation</value>
   </data>
   <data name="Option_Stretch" xml:space="preserve">
-    <value>Dehnen</value>
+    <value>Étirer</value>
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
-    <value>TTS zeitlich strecken, damit dieses Segmentfenster in die gerenderte Synchronisation/den Export passt</value>
+    <value>Etirer le temps du TTS pour qu'il s'adapte à la fenêtre de ce segment dans le doublage/exportation rendu.</value>
   </data>
   <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Vorschau-Pause</value>
+    <value>Pause de prévisualisation</value>
   </data>
   <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Hält die Wiedergabe der Quelle während der Vorschau des ausgewählten Segments an und setzt sie am Ende des Segments fort.</value>
+    <value>Interrompt la lecture de la source pendant la prévisualisation du segment sélectionné, puis reprend à la fin du segment.</value>
   </data>
   <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Vorschau mit Pause</value>
+    <value>Prévisualisation avec pause</value>
   </data>
   <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Vorschau dieses Segments mit Pausenverhalten ohne Änderung des gerenderten Synchronisationszeitpunkts</value>
+    <value>Prévisualiser ce segment en utilisant le comportement de pause sans modifier la synchronisation du rendu.</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
-    <value>Mediendatei öffnen</value>
+    <value>Ouvrir un fichier multimédia</value>
   </data>
   <data name="Automation_OpenMedia" xml:space="preserve">
-    <value>Offene Medien</value>
+    <value>Média ouvert</value>
   </data>
   <data name="Tooltip_ToggleSubtitles" xml:space="preserve">
-    <value>Untertitel umschalten (C)</value>
+    <value>Basculer les sous-titres (C)</value>
   </data>
   <data name="Automation_ToggleSubtitles" xml:space="preserve">
-    <value>Untertitel umschalten</value>
+    <value>Afficher les sous-titres</value>
   </data>
   <data name="Tooltip_ToggleDubMode" xml:space="preserve">
-    <value>Umschalten des Dub-Modus (D)</value>
+    <value>Basculer en mode Dub (D)</value>
   </data>
   <data name="Automation_ToggleDubMode" xml:space="preserve">
-    <value>Umschalten des Dub-Modus</value>
+    <value>Basculer le mode Dub</value>
   </data>
   <data name="Tooltip_SkipPrevious" xml:space="preserve">
-    <value>Zum vorherigen Segment springen</value>
+    <value>Passer au segment précédent</value>
   </data>
   <data name="Automation_SkipPrevious" xml:space="preserve">
-    <value>Zum vorherigen Segment springen</value>
+    <value>Passer au segment précédent</value>
   </data>
   <data name="Tooltip_Rewind10" xml:space="preserve">
-    <value>10 Sekunden zurückspulen</value>
+    <value>Rembobinage 10 secondes</value>
   </data>
   <data name="Automation_Rewind10" xml:space="preserve">
-    <value>10 Sekunden zurückspulen</value>
+    <value>Rembobinage 10 secondes</value>
   </data>
   <data name="Tooltip_PlayPause" xml:space="preserve">
-    <value>Wiedergabe/Pause (Leertaste)</value>
+    <value>Lecture / Pause (Espace)</value>
   </data>
   <data name="Automation_PlayPause" xml:space="preserve">
-    <value>Abspielen oder Anhalten</value>
+    <value>Lecture ou pause</value>
   </data>
   <data name="Tooltip_Forward10" xml:space="preserve">
-    <value>10 Sekunden vorspulen</value>
+    <value>Avance rapide de 10 secondes</value>
   </data>
   <data name="Automation_Forward10" xml:space="preserve">
-    <value>10 Sekunden vorspulen</value>
+    <value>Avance rapide de 10 secondes</value>
   </data>
   <data name="Tooltip_SkipNext" xml:space="preserve">
-    <value>Zum nächsten Segment springen</value>
+    <value>Passer au segment suivant</value>
   </data>
   <data name="Automation_SkipNext" xml:space="preserve">
-    <value>Zum nächsten Segment springen</value>
+    <value>Passer au segment suivant</value>
   </data>
   <data name="Tooltip_ToggleMute" xml:space="preserve">
-    <value>Stummschaltung umschalten</value>
+    <value>Commutation de la sourdine</value>
   </data>
   <data name="Automation_ToggleMute" xml:space="preserve">
-    <value>Stummschaltung umschalten</value>
+    <value>Basculer vers la sourdine</value>
   </data>
   <data name="Tooltip_Volume" xml:space="preserve">
-    <value>Band</value>
+    <value>Volume</value>
   </data>
   <data name="Tooltip_ToggleSidePanes" xml:space="preserve">
-    <value>Seitenwände umklappen (S)</value>
+    <value>Panneaux latéraux à bascule (S)</value>
   </data>
   <data name="Automation_ToggleSidePanes" xml:space="preserve">
-    <value>Seitenscheiben umschalten</value>
+    <value>Basculer les vitres latérales</value>
   </data>
   <data name="Tooltip_ToggleFullscreen" xml:space="preserve">
-    <value>Vollbildmodus umschalten (F11)</value>
+    <value>Basculer en plein écran (F11)</value>
   </data>
   <data name="Automation_ToggleFullscreen" xml:space="preserve">
-    <value>Vollbild umschalten</value>
+    <value>Basculer en plein écran</value>
   </data>
   <data name="Tooltip_OpenSettings" xml:space="preserve">
-    <value>Einstellungen öffnen</value>
+    <value>Ouvrir les paramètres</value>
   </data>
   <data name="Automation_Settings" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>Paramètres</value>
   </data>
   <data name="Dev_Button_DevLog" xml:space="preserve">
-    <value>📋 Entwicklungsprotokoll</value>
+    <value>📋 Dev Log</value>
   </data>
   <data name="Dev_Tooltip_DevLog" xml:space="preserve">
-    <value>In-App-Entwicklungsprotokoll-Viewer öffnen</value>
+    <value>Ouvrir la visionneuse de logs de développement in-app</value>
   </data>
   <data name="Dev_Button_FreshStart" xml:space="preserve">
-    <value>🔄 Neuanfang</value>
+    <value>🔄 Fresh Start</value>
   </data>
   <data name="Dev_Tooltip_FreshStart" xml:space="preserve">
-    <value>Pipeline abbrechen, temporäre Sitzungsdateien löschen, Benutzeroberfläche zurücksetzen</value>
+    <value>Annuler le pipeline, effacer les fichiers temporaires de la session, réinitialiser l'interface utilisateur</value>
   </data>
   <data name="Settings_Title" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>Paramètres</value>
   </data>
   <data name="Settings_Nav_General" xml:space="preserve">
-    <value>Allgemein</value>
+    <value>Général</value>
   </data>
   <data name="Settings_Nav_Hotkeys" xml:space="preserve">
-    <value>Tastenkombinationen</value>
+    <value>Touches de raccourci</value>
   </data>
   <data name="Settings_Nav_Video" xml:space="preserve">
-    <value>Video</value>
+    <value>Vidéo</value>
   </data>
   <data name="Settings_Nav_Models" xml:space="preserve">
-    <value>Modelle</value>
+    <value>Modèles</value>
   </data>
   <data name="Settings_Nav_About" xml:space="preserve">
-    <value>Über</value>
+    <value>A propos de</value>
   </data>
   <data name="Settings_Nav_Diagnostics" xml:space="preserve">
-    <value>Diagnostik</value>
+    <value>Diagnostics</value>
   </data>
   <data name="Settings_Group_Session" xml:space="preserve">
-    <value>Sitzung</value>
+    <value>Session</value>
   </data>
   <data name="Settings_Label_RecentLimit" xml:space="preserve">
-    <value>Grenzwert für den Verlauf der letzten Sitzung</value>
+    <value>Limite de l'historique des sessions récentes</value>
   </data>
   <data name="Settings_Hint_RecentLimit" xml:space="preserve">
-    <value>Maximale Anzahl der letzten Sitzungen, die im Dateimenü gespeichert sind (1-20).</value>
+    <value>Nombre maximal de sessions récentes conservées dans le menu des fichiers (1-20).</value>
   </data>
   <data name="Settings_Check_AutoSave" xml:space="preserve">
-    <value>Sitzung beim Beenden automatisch speichern</value>
+    <value>Sauvegarde automatique de la session à la sortie</value>
   </data>
   <data name="Settings_Group_AppLanguage" xml:space="preserve">
-    <value>App-Sprache</value>
+    <value>Langue de l'application</value>
   </data>
   <data name="Settings_Hint_AppLanguage" xml:space="preserve">
-    <value>Ändert die Sprache der Benutzeroberfläche des Babel Players. Auto (System) folgt bei jedem Start dem Gebietsschema Ihres Betriebssystems.</value>
+    <value>Change la langue de l'interface du lecteur Babel. Auto (système) suit les paramètres locaux de votre système d'exploitation à chaque lancement.</value>
   </data>
   <data name="Settings_Option_AutoSystem" xml:space="preserve">
-    <value>Auto (System)</value>
+    <value>Auto (système)</value>
   </data>
   <data name="Settings_Group_Gpu" xml:space="preserve">
-    <value>GPU-Backend</value>
+    <value>GPU Backend</value>
   </data>
   <data name="Settings_Label_PreferredGpu" xml:space="preserve">
-    <value>Bevorzugtes lokales GPU-Backend</value>
+    <value>Backend GPU local préféré</value>
   </data>
   <data name="Settings_Hint_Gpu" xml:space="preserve">
-    <value>Die verwaltete lokale GPU ist der Standardpfad mit geringer Reibung. Der Docker-GPU-Host ist als erweitertes Backend verfügbar.</value>
+    <value>La gestion d'un GPU local est la solution par défaut pour éviter les frictions. L'hôte GPU Docker est disponible en tant que backend avancé.</value>
   </data>
   <data name="Settings_Group_BackendStatus" xml:space="preserve">
-    <value>Backend-Status</value>
+    <value>Statut du backend</value>
   </data>
   <data name="Settings_Group_DockerGpu" xml:space="preserve">
-    <value>Docker GPU-Dienst</value>
+    <value>Service Docker GPU</value>
   </data>
   <data name="Settings_Label_AdvancedGpuUrl" xml:space="preserve">
-    <value>Erweiterte GPU-Dienst-URL</value>
+    <value>URL du service GPU avancé</value>
   </data>
   <data name="Settings_Hint_AdvancedGpuUrl" xml:space="preserve">
-    <value>Nur bearbeitbar, wenn das Docker-GPU-Backend ausgewählt ist.</value>
+    <value>Uniquement modifiable lorsque le backend Docker GPU est sélectionné.</value>
   </data>
   <data name="Settings_Check_AlwaysStartGpu" xml:space="preserve">
-    <value>Lokale GPU-Laufzeit immer beim Start der Anwendung starten</value>
+    <value>Toujours lancer l'exécution locale du GPU au démarrage de l'application</value>
   </data>
   <data name="Settings_Group_PipelineAudio" xml:space="preserve">
-    <value>Pipeline-Audio und Vertonung</value>
+    <value>Pipeline audio et doublage</value>
   </data>
   <data name="Settings_Hint_PipelineAudio" xml:space="preserve">
-    <value>Vocal-Separation und Segment-Timing (Dub) werden im Hauptfenster → Pipeline-Panel konfiguriert, so dass sie neben den Laufkontrollen bleiben.</value>
+    <value>La séparation vocale et la synchronisation des segments (dub) sont configurées dans la fenêtre principale → panneau Pipeline, de sorte qu'elles restent à côté des commandes d'exécution.</value>
   </data>
   <data name="Settings_Expander_AdvancedCpu" xml:space="preserve">
-    <value>Fortgeschrittene: CPU-Transkription</value>
+    <value>Avancé : Transcription par l'unité centrale</value>
   </data>
   <data name="Settings_Hint_AdvancedCpu" xml:space="preserve">
-    <value>Diese Optionen stellen die reine CPU-Transkription ein. 0 Threads bedeutet automatische Auswahl. Die Anzahl der Worker kann der Hardware (Kerne + RAM) oder einem manuellen Wert (geklemmt) folgen.</value>
+    <value>Ces options permettent de régler la transcription sur le processeur uniquement. 0 threads signifie une sélection automatique. Le nombre de travailleurs peut suivre le matériel (cœurs + RAM) ou une valeur manuelle (clampée).</value>
   </data>
   <data name="Settings_Label_CpuComputeType" xml:space="preserve">
-    <value>CPU-Rechenleistungstyp:</value>
+    <value>Type de calcul CPU :</value>
   </data>
   <data name="Settings_Label_CpuThreads" xml:space="preserve">
-    <value>CPU-Threads (0=auto):</value>
+    <value>Threads de l'unité centrale (0=auto) :</value>
   </data>
   <data name="Settings_Check_AutoWorkers" xml:space="preserve">
-    <value>Automatische Zählung der Arbeiter (von CPU-Kernen und RAM)</value>
+    <value>Comptage automatique des travailleurs (à partir des cœurs de l'unité centrale et de la mémoire vive)</value>
   </data>
   <data name="Settings_Label_WorkersManual" xml:space="preserve">
-    <value>Arbeiter (manuell):</value>
+    <value>Travailleurs (manuels) :</value>
   </data>
   <data name="Settings_Group_Hotkeys" xml:space="preserve">
-    <value>Tastaturkurzbefehle</value>
+    <value>Raccourcis clavier</value>
   </data>
   <data name="Settings_Hint_Hotkeys" xml:space="preserve">
-    <value>Die Anpassung der Hotkeys ist noch nicht möglich. Die angezeigten Werte sind die aktuellen Standardwerte.</value>
+    <value>La personnalisation des touches de raccourci n'est pas encore disponible. Les valeurs affichées sont les valeurs par défaut actuelles.</value>
   </data>
   <data name="Settings_Label_PlayPauseHotkey" xml:space="preserve">
-    <value>Wiedergabe/Pause:</value>
+    <value>Lecture/Pause :</value>
   </data>
   <data name="Settings_Label_ToggleSegmentsHotkey" xml:space="preserve">
-    <value>Toggle Segment Panel:</value>
+    <value>Panneau de segment basculant :</value>
   </data>
   <data name="Settings_Label_ToggleDubHotkey" xml:space="preserve">
-    <value>Umschalten des Dub-Modus:</value>
+    <value>Basculer le mode Dub :</value>
   </data>
   <data name="Settings_Label_ToggleFullscreenHotkey" xml:space="preserve">
-    <value>Vollbildmodus umschalten:</value>
+    <value>Basculer en plein écran :</value>
   </data>
   <data name="Settings_Group_EmbeddedPlayback" xml:space="preserve">
-    <value>Eingebettete Wiedergabe</value>
+    <value>Lecture intégrée</value>
   </data>
   <data name="Settings_Check_BilingualSubs" xml:space="preserve">
-    <value>Zweisprachige Untertitel (Quelle + Übersetzung in Exporten und eingebetteter Vorschau)</value>
+    <value>Sous-titres bilingues (source + traduction dans les exportations et la prévisualisation intégrée)</value>
   </data>
   <data name="Settings_Hint_BilingualSubs" xml:space="preserve">
-    <value>Wenn diese Option aktiviert ist, enthalten der Untertitelexport und die CC-Spur im Player beide Sprachen, wenn Segmente verfügbar sind.</value>
+    <value>Lorsque cette option est activée, l'exportation des sous-titres et la piste CC du lecteur incluent les deux langues lorsque des segments sont disponibles.</value>
   </data>
   <data name="Settings_Group_HardwareDecode" xml:space="preserve">
-    <value>Hardware-Dekodierung</value>
+    <value>Décodage matériel</value>
   </data>
   <data name="Settings_Label_HardwareDecoder" xml:space="preserve">
-    <value>Hardware-Decoder:</value>
+    <value>Décodeur matériel :</value>
   </data>
   <data name="Settings_Label_GpuRenderApi" xml:space="preserve">
-    <value>GPU-Rendering-API:</value>
+    <value>API de rendu GPU :</value>
   </data>
   <data name="Settings_Label_ExportEncoder" xml:space="preserve">
-    <value>Encoder exportieren:</value>
+    <value>Export Encoder :</value>
   </data>
   <data name="Settings_Group_GpuNext" xml:space="preserve">
-    <value>GPU-Next Backend</value>
+    <value>Backend GPU-Next</value>
   </data>
   <data name="Settings_Check_UseGpuNext" xml:space="preserve">
-    <value>Verwenden Sie den gpu-next-Videoausgang (erforderlich für RTX-Verbesserungen)</value>
+    <value>Utiliser la sortie vidéo gpu-next (nécessaire pour les améliorations RTX)</value>
   </data>
   <data name="Settings_Hint_GpuNext" xml:space="preserve">
-    <value>gpu-next ist der neuere mpv-Renderer. Aktivieren Sie diesen, bevor Sie die Modi RTX Video Super Resolution oder HDR aktivieren.</value>
+    <value>gpu-next est le nouveau moteur de rendu mpv. Activez-le avant d'activer les modes RTX Video Super Resolution ou HDR.</value>
   </data>
   <data name="Settings_Group_RtxVideo" xml:space="preserve">
-    <value>RTX-Videoverbesserung</value>
+    <value>Amélioration de la vidéo RTX</value>
   </data>
   <data name="Settings_Check_Vsr" xml:space="preserve">
     <value>RTX Video Super Resolution (VSR)</value>
   </data>
   <data name="Settings_Hint_Vsr" xml:space="preserve">
-    <value>AI-Upscaling über NVIDIA d3d11vpp. Erfordert eine erkannte GeForce RTX GPU, Treiber ≥ 551.23, gpu-next und "RTX Video Enhancement" in der NVIDIA Systemsteuerung.</value>
+    <value>Mise à l'échelle AI via NVIDIA d3d11vpp. Requiert un GPU GeForce RTX détecté, un pilote ≥ 551.23, gpu-next, et 'RTX Video Enhancement' dans le panneau de configuration NVIDIA.</value>
   </data>
   <data name="Settings_Label_VsrSupport" xml:space="preserve">
-    <value>Unterstützung:</value>
+    <value>Soutien :</value>
   </data>
   <data name="Settings_Label_VsrRequested" xml:space="preserve">
-    <value>Ersucht:</value>
+    <value>Demandé :</value>
   </data>
   <data name="Settings_Label_VsrResolved" xml:space="preserve">
-    <value>Gelöst:</value>
+    <value>Résolu :</value>
   </data>
   <data name="Settings_Label_VsrReason" xml:space="preserve">
-    <value>Letzter Grund:</value>
+    <value>Dernière raison :</value>
   </data>
   <data name="Settings_Label_VsrFilter" xml:space="preserve">
-    <value>Letzter Filter:</value>
+    <value>Dernier filtre :</value>
   </data>
   <data name="Settings_Group_Hdr" xml:space="preserve">
-    <value>HDR-Wiedergabe</value>
+    <value>Lecture HDR</value>
   </data>
   <data name="Settings_Hint_Hdr" xml:space="preserve">
-    <value>Wählen Sie einen Modus. RTX HDR folgt dem NVIDIA Control Panel. HDR Passthrough konfiguriert mpv. Erfordert gpu-next und Windows HDR.</value>
+    <value>Choisissez un mode. RTX HDR suit le panneau de contrôle NVIDIA. HDR passthrough configure mpv. Requiert gpu-next et Windows HDR.</value>
   </data>
   <data name="Settings_Radio_HdrOff" xml:space="preserve">
-    <value>Aus</value>
+    <value>Arrêt</value>
   </data>
   <data name="Settings_Radio_HdrRtx" xml:space="preserve">
     <value>RTX HDR</value>
   </data>
   <data name="Settings_Radio_HdrPassthrough" xml:space="preserve">
-    <value>HDR-Passthrough</value>
+    <value>Passage HDR</value>
   </data>
   <data name="Settings_Label_MpvPassthrough" xml:space="preserve">
-    <value>mpv-Passthrough-Optionen</value>
+    <value>options de passage mpv</value>
   </data>
   <data name="Settings_Label_ToneMapping" xml:space="preserve">
-    <value>Tone Mapping:</value>
+    <value>Cartographie des tons :</value>
   </data>
   <data name="Settings_Label_TargetPeak" xml:space="preserve">
-    <value>Zielgipfel:</value>
+    <value>Ciblez le pic :</value>
   </data>
   <data name="Settings_Placeholder_TargetPeak" xml:space="preserve">
-    <value>Auto oder Nissen</value>
+    <value>auto ou nits</value>
   </data>
   <data name="Settings_Label_HdrComputePeak" xml:space="preserve">
-    <value>HDR-Berechnungsspitze:</value>
+    <value>Pic de calcul HDR :</value>
   </data>
   <data name="Settings_Check_HdrComputePeak" xml:space="preserve">
-    <value>Dynamischer Spitzenwert pro Bild (mpv)</value>
+    <value>Pic dynamique par image (mpv)</value>
   </data>
   <data name="Settings_Hint_VideoRestart" xml:space="preserve">
-    <value>Alle Videoeinstellungen werden nach dem Neustart der App wirksam.</value>
+    <value>Tous les paramètres vidéo prennent effet après le redémarrage de l'application.</value>
   </data>
   <data name="Settings_Group_Models" xml:space="preserve">
-    <value>Modelle</value>
+    <value>Modèles</value>
   </data>
   <data name="Settings_Hint_Models" xml:space="preserve">
-    <value>Verwalten Sie lokal gehostete Modelle. Bei Cloud-Anbietern sind keine Downloads erforderlich.</value>
+    <value>Gérer les modèles hébergés localement. Les fournisseurs de services en nuage n'exigent pas de téléchargements.</value>
   </data>
   <data name="Settings_About_AppName" xml:space="preserve">
-    <value>Babel-Spieler</value>
+    <value>Joueur de Babel</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>AGPL-3.0-Lizenz</value>
+    <value>Licence AGPL-3.0</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
-    <value>Unterstützen Sie das Projekt:</value>
+    <value>Soutenir le projet :</value>
   </data>
   <data name="Settings_About_Kofi" xml:space="preserve">
     <value>Ko-fi</value>
   </data>
   <data name="Settings_About_GitHubSponsors" xml:space="preserve">
-    <value>GitHub-Sponsoren</value>
+    <value>Sponsors de GitHub</value>
   </data>
   <data name="Api_Title" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>Clés API</value>
   </data>
   <data name="Api_Button_Save" xml:space="preserve">
-    <value>Speichern Sie</value>
+    <value>Économiser</value>
   </data>
   <data name="Api_Button_Clear" xml:space="preserve">
-    <value>Klar</value>
+    <value>Clair</value>
   </data>
   <data name="Api_Tooltip_ToggleReveal" xml:space="preserve">
-    <value>Taste ein-/ausblenden</value>
+    <value>Afficher / masquer la touche</value>
   </data>
   <data name="Api_Footer_StorageSecurity" xml:space="preserve">
-    <value>Sicherheit der Speicherung:</value>
+    <value>Sécurité du stockage :</value>
   </data>
   <data name="Api_Footer_MoreProviders" xml:space="preserve">
-    <value>Weitere Anbieter können in zukünftigen Updates hinzugefügt werden.</value>
+    <value>D'autres fournisseurs pourront être ajoutés dans les prochaines mises à jour.</value>
   </data>
   <data name="Crash_Header" xml:space="preserve">
-    <value>Ein unbehandelter Fehler ist aufgetreten</value>
+    <value>Une erreur non gérée s'est produite</value>
   </data>
   <data name="Crash_Subtitle" xml:space="preserve">
-    <value>Die vollständigen Fehlerdetails sind unten aufgeführt. Der Fehler wurde auch in die Protokolldatei geschrieben.</value>
+    <value>Les détails complets de l'erreur sont indiqués ci-dessous. L'erreur a également été enregistrée dans le fichier journal.</value>
   </data>
   <data name="Crash_Button_Copy" xml:space="preserve">
-    <value>In die Zwischenablage kopieren</value>
+    <value>Copier dans le presse-papiers</value>
   </data>
   <data name="Crash_Button_OpenLogFolder" xml:space="preserve">
-    <value>Log-Ordner öffnen</value>
+    <value>Ouvrir le dossier d'enregistrement</value>
   </data>
   <data name="Crash_Button_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>Fermer</value>
   </data>
   <data name="Wizard_Title" xml:space="preserve">
-    <value>Lautsprecher-Referenz-Assistent</value>
+    <value>Assistant de référence de haut-parleur</value>
   </data>
   <data name="Wizard_Assign_Header" xml:space="preserve">
-    <value>Redner</value>
+    <value>Intervenants</value>
   </data>
   <data name="Wizard_Assign_Hint" xml:space="preserve">
-    <value>Wählen Sie für jeden Sprecher eine Stimme aus. Für Qwen legen Sie außerdem einen Referenz-Audioclip aus dem Video fest.</value>
+    <value>Sélectionnez une voix pour chaque locuteur. Pour Qwen, définissez également un clip audio de référence à partir de la vidéo.</value>
   </data>
   <data name="Wizard_Preview_Header" xml:space="preserve">
-    <value>Vorschau</value>
+    <value>Avant-première</value>
   </data>
   <data name="Wizard_Preview_Hint" xml:space="preserve">
-    <value>Durchsuchen Sie das Video, um gute Audioclips für jeden Sprecher zu finden, und ordnen Sie diese dann unten zu.</value>
+    <value>Parcourez la vidéo pour trouver de bons clips audio pour chaque orateur, puis attribuez-les ci-dessous.</value>
   </data>
   <data name="Wizard_Preview_Unavailable" xml:space="preserve">
-    <value>Vorschau nicht verfügbar auf dieser Plattform</value>
+    <value>L'aperçu n'est pas disponible sur cette plateforme</value>
   </data>
   <data name="Wizard_Playhead_Clip_Tooltip" xml:space="preserve">
-    <value>Länge des Audioclips in Sekunden (3-15 Sekunden)</value>
+    <value>Durée du clip audio en secondes (3-15 secondes)</value>
   </data>
   <data name="Wizard_Button_Stop" xml:space="preserve">
-    <value>Stopp</value>
+    <value>Arrêter</value>
   </data>
   <data name="Wizard_Label_Voice" xml:space="preserve">
-    <value>Stimme</value>
+    <value>Voix</value>
   </data>
   <data name="Wizard_Label_VoiceHelp" xml:space="preserve">
-    <value>(für die TTS-Erzeugung)</value>
+    <value>(pour la génération de TTS)</value>
   </data>
   <data name="Wizard_Button_Auto" xml:space="preserve">
     <value>Auto</value>
   </data>
   <data name="Wizard_Tooltip_Auto" xml:space="preserve">
-    <value>Automatisch erkannte Stimme für diesen Lautsprecher verwenden</value>
+    <value>Utiliser la voix détectée automatiquement pour ce haut-parleur</value>
   </data>
   <data name="Wizard_Button_UseActive" xml:space="preserve">
-    <value>Aktiv verwenden</value>
+    <value>Utiliser Active</value>
   </data>
   <data name="Wizard_Tooltip_UseActive" xml:space="preserve">
-    <value>Verwenden Sie die derzeit aktive TTS-Spracheinstellung</value>
+    <value>Utiliser le paramètre vocal TTS actuellement actif</value>
   </data>
   <data name="Wizard_Button_ClearVoice" xml:space="preserve">
-    <value>Klar</value>
+    <value>Clair</value>
   </data>
   <data name="Wizard_Tooltip_ClearVoice" xml:space="preserve">
-    <value>Löschen Sie die Sprachzuweisung, verwenden Sie die automatische Erkennung</value>
+    <value>Efface l'affectation vocale, utilisera la détection automatique</value>
   </data>
   <data name="Wizard_Placeholder_PiperVoice" xml:space="preserve">
-    <value>Oder wählen Sie eine heruntergeladene Piper-Stimme...</value>
+    <value>Ou sélectionnez une voix de Piper téléchargée...</value>
   </data>
   <data name="Wizard_Tooltip_PiperVoice" xml:space="preserve">
-    <value>Wählen Sie eine der heruntergeladenen Piper-Stimmen oder geben Sie eine eigene Sprach-ID ein.</value>
+    <value>Choisissez parmi les voix Piper téléchargées ou saisissez un identifiant vocal personnalisé.</value>
   </data>
   <data name="Wizard_Label_ReferenceClip" xml:space="preserve">
-    <value>Referenz-Clip</value>
+    <value>Clip de référence</value>
   </data>
   <data name="Wizard_Label_ReferenceClipHelp" xml:space="preserve">
-    <value>(für das Klonen von Stimmen - nur Qwen)</value>
+    <value>(pour le clonage de la voix - Qwen uniquement)</value>
   </data>
   <data name="Wizard_NoClipSelected" xml:space="preserve">
-    <value>Kein Clip ausgewählt - Qwen Voice Cloning verwendet die Standardeinstellung</value>
+    <value>Aucun clip n'est sélectionné - le clonage vocal de Qwen utilisera le clip par défaut.</value>
   </data>
   <data name="Wizard_Tooltip_RefPath" xml:space="preserve">
-    <value>Audioclip, der als Referenz für das Klonen der Qwen-Stimme verwendet wurde</value>
+    <value>Clip audio utilisé comme référence pour le clonage de la voix de Qwen</value>
   </data>
   <data name="Wizard_Button_Play" xml:space="preserve">
-    <value>Spielen</value>
+    <value>Jouer</value>
   </data>
   <data name="Wizard_Button_Show" xml:space="preserve">
-    <value>anzeigen</value>
+    <value>Afficher</value>
   </data>
   <data name="Wizard_Button_Browse" xml:space="preserve">
-    <value>Durchsuchen Sie</value>
+    <value>Parcourir</value>
   </data>
   <data name="Wizard_Button_UseSegment" xml:space="preserve">
-    <value>Segment verwenden</value>
+    <value>Segment d'utilisation</value>
   </data>
   <data name="Wizard_Tooltip_UseSegment" xml:space="preserve">
-    <value>Verwenden Sie das ausgewählte Segment als Referenz (klicken Sie zuerst auf einen Zeitstempel darunter)</value>
+    <value>Utiliser le segment sélectionné comme référence (cliquer d'abord sur un horodatage ci-dessous)</value>
   </data>
   <data name="Wizard_Button_UsePlayhead" xml:space="preserve">
-    <value>Abspielkopf verwenden</value>
+    <value>Utiliser la tête de lecture</value>
   </data>
   <data name="Wizard_Tooltip_UsePlayhead" xml:space="preserve">
-    <value>Übernehmen Sie die aktuelle Position des Abspielkopfes aus der Vorschau - der einfachste Weg, eine Referenz zu setzen!</value>
+    <value>Saisir la position actuelle de la tête de lecture à partir de l'aperçu - c'est le moyen le plus simple de définir une référence !</value>
   </data>
   <data name="Wizard_Button_AutoPick" xml:space="preserve">
     <value>Auto-Pick</value>
   </data>
   <data name="Wizard_Tooltip_AutoPick" xml:space="preserve">
-    <value>Automatisch einen guten Clip aus den Segmenten dieses Sprechers finden</value>
+    <value>Trouver automatiquement un bon extrait des segments de cet orateur</value>
   </data>
   <data name="Wizard_Hint_JumpToSegments" xml:space="preserve">
-    <value>Zu den Segmenten des Sprechers springen</value>
+    <value>Aller aux segments de l'orateur</value>
   </data>
   <data name="Wizard_Tooltip_JumpToSegments" xml:space="preserve">
-    <value>Klicken Sie auf einen Zeitstempel, um zu diesem Punkt im Video zu springen, und verwenden Sie dann "Abspielkopf verwenden".</value>
+    <value>Cliquez sur un horodatage pour passer à ce point de la vidéo, puis utilisez la fonction "Use Playhead" (utiliser la tête de lecture)</value>
   </data>
   <data name="Wizard_Tooltip_ConfidenceReason" xml:space="preserve">
-    <value>Warum dieser Clip als gut/schlecht bewertet wurde</value>
+    <value>Pourquoi ce clip a été jugé bon/mauvais</value>
   </data>
   <data name="Wizard_Tooltip_ConfidenceTier" xml:space="preserve">
-    <value>Qualität des Referenzclips für diesen Lautsprecher</value>
+    <value>Qualité du clip de référence pour ce haut-parleur</value>
   </data>
   <data name="Wizard_Tooltip_LastAction" xml:space="preserve">
-    <value>Letzte Aktion für diesen Redner</value>
+    <value>Dernière action effectuée sur cet intervenant</value>
   </data>
   <data name="Wizard_Expander_Advanced" xml:space="preserve">
-    <value>Fortgeschrittene</value>
+    <value>Avancé</value>
   </data>
   <data name="Wizard_Label_MergeSpeakers" xml:space="preserve">
-    <value>Lautsprecher zusammenführen</value>
+    <value>Fusionner les enceintes</value>
   </data>
   <data name="Wizard_Tooltip_MergeSource" xml:space="preserve">
-    <value>Quelllautsprecher für die Zusammenführung auswählen</value>
+    <value>Sélectionner le haut-parleur source à fusionner</value>
   </data>
   <data name="Wizard_Tooltip_MergeTarget" xml:space="preserve">
-    <value>Zielsprecher auswählen (der die zusammengeführten Segmente erhält)</value>
+    <value>Sélectionner le locuteur cible (qui recevra les segments fusionnés)</value>
   </data>
   <data name="Wizard_Button_Merge" xml:space="preserve">
-    <value>Zusammenführen</value>
+    <value>Fusionner</value>
   </data>
   <data name="Wizard_Tooltip_Merge" xml:space="preserve">
-    <value>Quelle in Ziel zusammenführen - dadurch wird die Abschrift permanent aktualisiert</value>
+    <value>Fusionner la source dans la cible - cette opération met à jour la transcription de manière permanente</value>
   </data>
   <data name="Wizard_Footer_Hint" xml:space="preserve">
-    <value>Beenden speichert die Änderungen an Stimme und Referenz. Abbrechen verwirft alle Bearbeitungen.</value>
+    <value>Terminer enregistre les modifications de la voix et de la référence. Annuler annule toutes les modifications.</value>
   </data>
   <data name="Wizard_Button_Cancel" xml:space="preserve">
-    <value>Abbrechen</value>
+    <value>Annuler</value>
   </data>
   <data name="Wizard_Tooltip_Cancel" xml:space="preserve">
-    <value>Alle Änderungen verwerfen und schließen</value>
+    <value>Rejeter toutes les modifications et fermer</value>
   </data>
   <data name="Wizard_Button_Finish" xml:space="preserve">
-    <value>Oberfläche</value>
+    <value>Finition</value>
   </data>
   <data name="Wizard_Tooltip_Finish" xml:space="preserve">
-    <value>Sprach- und Referenzänderungen auf die Sitzung anwenden</value>
+    <value>Appliquer les changements de voix et de référence à la session</value>
   </data>
   <data name="Wizard_Tooltip_Close" xml:space="preserve">
-    <value>Assistenten schließen</value>
+    <value>Fermer l'assistant</value>
   </data>
   <data name="Wizard_Tooltip_CloseDiscard" xml:space="preserve">
-    <value>Assistenten schließen (Änderungen verwerfen)</value>
+    <value>Fermer l'assistant (rejeter les modifications)</value>
   </data>
   <data name="Wizard_Hint_TopBanner" xml:space="preserve">
-    <value>Weisen Sie den Lautsprechern Stimmen zu und legen Sie Referenz-Audioclips fest. Verwenden Sie die Vorschau, um gute Clips zu finden, und klicken Sie dann auf "Abspielkopf verwenden", um den aktuellen Moment zu erfassen.</value>
+    <value>Attribuez les voix aux haut-parleurs et définissez des clips audio de référence. Utilisez la prévisualisation pour trouver les bons clips, puis cliquez sur "Utiliser la tête de lecture" pour saisir l'instant présent.</value>
   </data>
   <data name="Wizard_Toggle_NeedsAttention" xml:space="preserve">
-    <value>Show braucht Aufmerksamkeit</value>
+    <value>Le spectacle a besoin d'attention</value>
   </data>
   <data name="Wizard_Tooltip_NeedsAttention" xml:space="preserve">
-    <value>Zeigen Sie nur Lautsprecher, die überarbeitet werden müssen oder schlechte Referenzen haben</value>
+    <value>Ne montrer que les orateurs qui ont besoin d'être révisés ou dont les références sont médiocres</value>
   </data>
   <data name="Wizard_Button_ResetAll" xml:space="preserve">
-    <value>Alle zurücksetzen</value>
+    <value>Réinitialiser tout</value>
   </data>
   <data name="Wizard_Tooltip_ResetAll" xml:space="preserve">
-    <value>Alle Entwurfsänderungen löschen und neu beginnen</value>
+    <value>Effacer toutes les modifications apportées au projet et repartir à zéro</value>
   </data>
   <data name="Wizard_Hint_ScrubPreview" xml:space="preserve">
-    <value>Durchsuchen Sie das Video, um gute Audioclips zu finden. Klicken Sie auf "Abspielkopf verwenden" bei einem Sprecher, um den aktuellen Moment als Referenz zu verwenden.</value>
+    <value>Parcourez la vidéo pour trouver de bons clips audio. Cliquez sur "Use Playhead" (utiliser la tête de lecture) sur un haut-parleur pour prendre le moment présent comme référence.</value>
   </data>
   <data name="Wizard_Hint_LinuxMacFallback" xml:space="preserve">
-    <value>Unter Linux/MacOS verwenden Sie das Hauptfenster, um durch das Video zu blättern. Wenn Sie einen guten Moment gefunden haben, kommen Sie hierher zurück und klicken Sie auf "Abspielkopf verwenden" für diesen Lautsprecher.</value>
+    <value>Sous Linux/macOS, utilisez la fenêtre principale pour parcourir la vidéo. Lorsque vous trouvez un bon moment, revenez ici et cliquez sur "Utiliser la tête de lecture" pour ce haut-parleur.</value>
   </data>
   <data name="Wizard_Tooltip_SeekSlider" xml:space="preserve">
-    <value>Ziehen, um das Video zu durchsuchen</value>
+    <value>Glisser pour chercher dans la vidéo</value>
   </data>
   <data name="Wizard_Tooltip_PlayPause" xml:space="preserve">
-    <value>Abspielen oder Anhalten der Vorschau</value>
+    <value>Lecture ou pause de l'aperçu</value>
   </data>
   <data name="Wizard_Label_ClipDuration" xml:space="preserve">
-    <value>Abspielkopf Clip Dauer</value>
+    <value>Durée du clip de la tête de lecture</value>
   </data>
   <data name="Wizard_Tooltip_ClipDuration" xml:space="preserve">
-    <value>Wie viel Audio vor und nach der Abspielposition aufgenommen werden soll</value>
+    <value>Quantité d'audio à capturer avant et après la position de la tête de lecture</value>
   </data>
   <data name="Diag_HardwareSnapshot" xml:space="preserve">
-    <value>Hardware-Schnappschuss</value>
+    <value>Aperçu du matériel</value>
   </data>
   <data name="Diag_Cpu" xml:space="preserve">
-    <value>CPU:</value>
+    <value>CPU :</value>
   </data>
   <data name="Diag_Gpu" xml:space="preserve">
-    <value>GPU:</value>
+    <value>GPU :</value>
   </data>
   <data name="Diag_Ram" xml:space="preserve">
-    <value>System-RAM:</value>
+    <value>RAM du système :</value>
   </data>
   <data name="Diag_RuntimeRouting" xml:space="preserve">
-    <value>Laufzeit-Routing</value>
+    <value>Routage en cours d'exécution</value>
   </data>
   <data name="Diag_InferenceHost" xml:space="preserve">
-    <value>Inference Host:</value>
+    <value>Hôte d'inférence :</value>
   </data>
   <data name="Diag_WarmupStatus" xml:space="preserve">
-    <value>Aufwärmstatus:</value>
+    <value>État d'échauffement :</value>
   </data>
   <data name="Diag_NmtFallback" xml:space="preserve">
-    <value>NMT Fallback:</value>
+    <value>NMT Fallback :</value>
   </data>
   <data name="Diag_GpuProbeStreak" xml:space="preserve">
-    <value>GPU-Probe-Streifen:</value>
+    <value>Trajectoire de la sonde GPU :</value>
   </data>
   <data name="Diag_Environment" xml:space="preserve">
-    <value>Umwelt</value>
+    <value>Environnement</value>
   </data>
   <data name="Diag_PythonPath" xml:space="preserve">
-    <value>Python-Pfad:</value>
+    <value>Python Path :</value>
   </data>
   <data name="Diag_FfmpegPath" xml:space="preserve">
-    <value>ffmpeg Pfad:</value>
+    <value>ffmpeg Chemin :</value>
   </data>
   <data name="Diag_Button_Refresh" xml:space="preserve">
-    <value>Diagnostik aktualisieren</value>
+    <value>Rafraîchir les diagnostics</value>
   </data>
   <data name="Settings_Button_SaveClose" xml:space="preserve">
-    <value>Speichern &amp; Schließen</value>
+    <value>Enregistrer et fermer</value>
   </data>
   <data name="Language_ar" xml:space="preserve">
-    <value>Arabisch</value>
+    <value>L'arabe</value>
   </data>
   <data name="Language_de" xml:space="preserve">
-    <value>Deutsch</value>
+    <value>Allemand</value>
   </data>
   <data name="Language_en" xml:space="preserve">
-    <value>Englisch</value>
+    <value>Anglais</value>
   </data>
   <data name="Language_es" xml:space="preserve">
-    <value>Spanisch</value>
+    <value>Espagnol</value>
   </data>
   <data name="Language_fr" xml:space="preserve">
-    <value>Französisch</value>
+    <value>Français</value>
   </data>
   <data name="Language_hi" xml:space="preserve">
     <value>Hindi</value>
   </data>
   <data name="Language_it" xml:space="preserve">
-    <value>Italienisch</value>
+    <value>Italien</value>
   </data>
   <data name="Language_ja" xml:space="preserve">
-    <value>Japanisch</value>
+    <value>Japonais</value>
   </data>
   <data name="Language_ko" xml:space="preserve">
-    <value>Koreanisch</value>
+    <value>Coréen</value>
   </data>
   <data name="Language_nl" xml:space="preserve">
-    <value>Niederländisch</value>
+    <value>Néerlandais</value>
   </data>
   <data name="Language_pl" xml:space="preserve">
-    <value>Polnisch</value>
+    <value>Polonais</value>
   </data>
   <data name="Language_pt" xml:space="preserve">
-    <value>Portugiesisch</value>
+    <value>Portugais</value>
   </data>
   <data name="Language_ru" xml:space="preserve">
-    <value>Russisch</value>
+    <value>Russie</value>
   </data>
   <data name="Language_sv" xml:space="preserve">
-    <value>Schwedisch</value>
+    <value>Suédois</value>
   </data>
   <data name="Language_tr" xml:space="preserve">
-    <value>Türkisch</value>
+    <value>Turc</value>
   </data>
   <data name="Language_zh" xml:space="preserve">
-    <value>Chinesisch (vereinfacht)</value>
+    <value>Chinois (simplifié)</value>
   </data>
 </root>

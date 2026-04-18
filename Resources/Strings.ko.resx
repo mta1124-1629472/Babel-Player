@@ -64,172 +64,172 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="Common_Cancel" xml:space="preserve">
-    <value>Abbrechen</value>
+    <value>취소</value>
   </data>
   <data name="Common_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>닫기</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
-    <value>Speichern Sie</value>
+    <value>저장</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
-    <value>Klar</value>
+    <value>지우기</value>
   </data>
   <data name="Common_Ok" xml:space="preserve">
-    <value>OK</value>
+    <value>확인</value>
   </data>
   <data name="Common_Apply" xml:space="preserve">
-    <value>Bewerbung</value>
+    <value>신청하기</value>
   </data>
   <data name="Common_Browse" xml:space="preserve">
-    <value>Durchsuchen Sie</value>
+    <value>찾아보기</value>
   </data>
   <data name="Common_Download" xml:space="preserve">
-    <value>Herunterladen</value>
+    <value>다운로드</value>
   </data>
   <data name="Common_Restart" xml:space="preserve">
-    <value>Neustart</value>
+    <value>다시 시작</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>Babel-Spieler</value>
+    <value>바벨 플레이어</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
-    <value>Babel Player - Einstellungen</value>
+    <value>바벨 플레이어 - 설정</value>
   </data>
   <data name="Window_Title_ApiKeys" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>API 키</value>
   </data>
   <data name="Window_Title_Crash" xml:space="preserve">
-    <value>Babel Player - Unbehandelter Fehler</value>
+    <value>바벨 플레이어 - 처리되지 않은 오류</value>
   </data>
   <data name="Window_Title_Wizard" xml:space="preserve">
-    <value>Lautsprecher-Referenz-Assistent</value>
+    <value>화자 참조 마법사</value>
   </data>
   <data name="Chrome_Minimize" xml:space="preserve">
-    <value>Fenster minimieren</value>
+    <value>창 최소화</value>
   </data>
   <data name="Chrome_MaximizeRestore" xml:space="preserve">
-    <value>Fenster maximieren oder wiederherstellen</value>
+    <value>창 최대화 또는 복원</value>
   </data>
   <data name="Chrome_Close" xml:space="preserve">
-    <value>Fenster schließen</value>
+    <value>창 닫기</value>
   </data>
   <data name="Menu_File_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>닫기</value>
   </data>
   <data name="Menu_File_ForceClose" xml:space="preserve">
-    <value>Schließen erzwingen</value>
+    <value>강제 종료</value>
   </data>
   <data name="Section_Pipeline" xml:space="preserve">
-    <value>Pipeline</value>
+    <value>파이프라인</value>
   </data>
   <data name="Tooltip_ClearPipeline" xml:space="preserve">
-    <value>Pipeline löschen und neu beginnen</value>
+    <value>파이프라인을 정리하고 새롭게 시작하기</value>
   </data>
   <data name="Section_TargetLanguage" xml:space="preserve">
-    <value>ZIELSPRACHE</value>
+    <value>대상 언어</value>
   </data>
   <data name="Label_Output" xml:space="preserve">
-    <value>Ausgabe (Synchronisation / Untertitel)</value>
+    <value>출력(더빙/서브)</value>
   </data>
   <data name="Section_AudioAndDub" xml:space="preserve">
-    <value>AUDIO &amp; DUB</value>
+    <value>오디오 및 더빙</value>
   </data>
   <data name="Label_SeparateVocals" xml:space="preserve">
-    <value>Getrennter Gesang vor der Transkription</value>
+    <value>전사 전 보컬 분리</value>
   </data>
   <data name="Section_Transcription" xml:space="preserve">
-    <value>TRANSCRIPTION</value>
+    <value>번역</value>
   </data>
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
-    <value>Transkription wiederholen (nur diesen Schritt wählen oder nachgelagerte Schritte einbeziehen)</value>
+    <value>트랜스 크립 션 다시 실행 (이 단계만 선택하거나 다운스트림 포함)</value>
   </data>
   <data name="Label_Compute" xml:space="preserve">
-    <value>Berechnen Sie</value>
+    <value>계산</value>
   </data>
   <data name="Label_Provider" xml:space="preserve">
-    <value>Anbieter</value>
+    <value>공급자</value>
   </data>
   <data name="Label_Model" xml:space="preserve">
-    <value>Modell</value>
+    <value>모델</value>
   </data>
   <data name="Status_NeedsDownload" xml:space="preserve">
-    <value>⬇ Braucht Download</value>
+    <value>⬇ 다운로드 필요</value>
   </data>
   <data name="Status_Ready" xml:space="preserve">
-    <value>✓ Bereit</value>
+    <value>준비됨</value>
   </data>
   <data name="Label_SpokenLanguage" xml:space="preserve">
-    <value>Gesprochene Sprache (ASR-Hinweis)</value>
+    <value>음성 언어(ASR 힌트)</value>
   </data>
   <data name="Section_Diarization" xml:space="preserve">
-    <value>DIARISIERUNG / SPRECHER</value>
+    <value>일기 / 스피커</value>
   </data>
   <data name="Tooltip_RerunDiarization" xml:space="preserve">
-    <value>Wiederholen Sie die Zuordnung von Lautsprechern (wählen Sie nur diese Phase oder auch die nachgelagerte)</value>
+    <value>스피커 매핑 다시 실행(이 단계만 선택하거나 다운스트림 포함)</value>
   </data>
   <data name="Label_MultiSpeakerAudio" xml:space="preserve">
-    <value>Audio mit mehreren Lautsprechern</value>
+    <value>멀티 스피커 오디오</value>
   </data>
   <data name="Hint_MultiSpeakerAudio" xml:space="preserve">
-    <value>Schalten Sie diese Option ein, wenn die Aufnahme mehr als einen Sprecher hat, damit die Zeilen separat beschriftet und nachvertont werden können. Bei einem einzelnen Sprecher oder einer Sprecherin lassen Sie diese Option ausgeschaltet, um zusätzliche Bearbeitung zu vermeiden.</value>
+    <value>녹음에 화자가 두 명 이상인 경우 이 옵션을 켜면 대사에 라벨을 지정하고 별도로 더빙할 수 있습니다. 내레이터가 한 명 또는 화자가 한 명인 경우 추가 처리를 피하려면 이 기능을 끄세요.</value>
   </data>
   <data name="Check_DetectSpeakers" xml:space="preserve">
-    <value>Separate Lautsprecher erkennen und kennzeichnen</value>
+    <value>별도의 스피커 감지 및 레이블 지정</value>
   </data>
   <data name="Hint_EnableMultiSpeakerForIds" xml:space="preserve">
-    <value>Aktivieren Sie die Erkennung mehrerer Sprecher (siehe oben) und transkribieren Sie dann, um Sprecher-IDs zuzuweisen.</value>
+    <value>위에서 다중 화자 감지를 활성화한 다음 트랜스크립트하여 화자 ID를 할당합니다.</value>
   </data>
   <data name="Hint_SpeakerAssignmentsInWizard" xml:space="preserve">
-    <value>Die Zuweisung von Lautsprechern wird mit dem Assistenten für die Lautsprechereinrichtung verwaltet.</value>
+    <value>스피커 할당은 스피커 설정 마법사에서 관리합니다.</value>
   </data>
   <data name="Tooltip_OpenSpeakerWizard" xml:space="preserve">
-    <value>Öffnet den Assistenten für die Lautsprechereinrichtung: Stimme pro Lautsprecher und (für Qwen) Referenzclips. Beenden im Assistenten speichert die Änderungen.</value>
+    <value>화자 설정 마법사를 엽니다: 화자별 음성 및 (Qwen의 경우) 참조 클립. 마법사에서 완료를 클릭하면 변경 사항이 저장됩니다.</value>
   </data>
   <data name="Button_SpeakerSetupWizard" xml:space="preserve">
-    <value>Lautsprecher-Einrichtungsassistent...</value>
+    <value>스피커 설정 마법사...</value>
   </data>
   <data name="Section_Translation" xml:space="preserve">
-    <value>TRANSLATION</value>
+    <value>번역</value>
   </data>
   <data name="Tooltip_RerunTranslation" xml:space="preserve">
-    <value>Wiederholung der Übersetzung (nur diese Phase oder auch Synchronisation)</value>
+    <value>번역 다시 실행(이 단계만 선택하거나 더빙 포함)</value>
   </data>
   <data name="Section_Dub" xml:space="preserve">
     <value>DUB</value>
   </data>
   <data name="Tooltip_RerunDub" xml:space="preserve">
-    <value>Synchronisation aus der aktuellen Übersetzung neu generieren</value>
+    <value>현재 번역에서 더빙 오디오 다시 생성하기</value>
   </data>
   <data name="Label_VoiceAssignment" xml:space="preserve">
-    <value>Zuordnung der Stimme</value>
+    <value>음성 할당</value>
   </data>
   <data name="Check_AssignPerSpeakerInWizard" xml:space="preserve">
-    <value>Zuweisung pro Lautsprecher im Assistenten für Lautsprecherreferenzen (Fallback-Stimme unten)</value>
+    <value>화자 참조 마법사에서 화자별로 할당(아래 대체 음성)</value>
   </data>
   <data name="Hint_VoiceAssignment" xml:space="preserve">
-    <value>Verwenden Sie eine Stimme für jeden Sprecher, oder aktivieren Sie die obige Option und legen Sie im Assistenten eine Ersatzstimme sowie Stimmen pro Sprecher fest.</value>
+    <value>모든 화자마다 하나의 음성을 사용하거나 위의 옵션을 켜고 마법사에서 대체 음성 및 화자별 음성을 설정합니다.</value>
   </data>
   <data name="Section_ApiKeys" xml:space="preserve">
-    <value>API-SCHLÜSSEL</value>
+    <value>API 키</value>
   </data>
   <data name="Hint_ConfigureCredentials" xml:space="preserve">
-    <value>Konfigurieren Sie die Anmeldedaten für die oben ausgewählten Anbieter.</value>
+    <value>위에서 선택한 공급자에 대한 자격 증명을 구성합니다.</value>
   </data>
   <data name="Button_ApiKeys" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>API 키</value>
   </data>
   <data name="Section_LanguageRouting" xml:space="preserve">
-    <value>SPRACHROUTING</value>
+    <value>언어 라우팅</value>
   </data>
   <data name="Label_SourceAudio" xml:space="preserve">
-    <value>Quelle Audio</value>
+    <value>소스 오디오</value>
   </data>
   <data name="Label_TargetSubDub" xml:space="preserve">
-    <value>Ziel Sub/Dub</value>
+    <value>타겟 자막/더빙</value>
   </data>
   <data name="Section_ActiveConfig" xml:space="preserve">
-    <value>AKTIVE KONFIG</value>
+    <value>활성 구성</value>
   </data>
   <data name="Label_ActiveAsr" xml:space="preserve">
     <value>ASR</value>
@@ -250,610 +250,610 @@
     <value>RAM</value>
   </data>
   <data name="Section_ProviderDiagnostics" xml:space="preserve">
-    <value>ANBIETERDIAGNOSTIK</value>
+    <value>공급자 진단</value>
   </data>
   <data name="Status_Stale" xml:space="preserve">
-    <value>schal</value>
+    <value>stale</value>
   </data>
   <data name="Automation_PipelineProgress" xml:space="preserve">
-    <value>Fortschritte in der Pipeline</value>
+    <value>파이프라인 진행 상황</value>
   </data>
   <data name="Button_RunPipeline" xml:space="preserve">
-    <value>Pipeline ausführen</value>
+    <value>파이프라인 실행</value>
   </data>
   <data name="Button_CancelPipeline" xml:space="preserve">
-    <value>Pipeline abbrechen</value>
+    <value>파이프라인 취소</value>
   </data>
   <data name="Tooltip_ExpandErrorDetails" xml:space="preserve">
-    <value>Fehlerdetails erweitern</value>
+    <value>오류 세부 정보 확장</value>
   </data>
   <data name="Section_Segments" xml:space="preserve">
-    <value>Segmente</value>
+    <value>세그먼트</value>
   </data>
   <data name="Tooltip_ExportSegments" xml:space="preserve">
-    <value>Exportieren Sie Untertitel (.srt), nur den synchronisierten Ton (.mp3) oder das Video mit Synchronisation und weichen Untertiteln (.mp4) - der Ton entspricht dem aktuellen Timing und Mix.</value>
+    <value>자막(.srt), 더빙된 오디오만(.mp3) 또는 더빙 + 소프트 자막이 포함된 비디오(.mp4) - 오디오는 현재 타이밍과 믹스에 맞게 내보냅니다.</value>
   </data>
   <data name="Button_Export" xml:space="preserve">
-    <value>Exportieren</value>
+    <value>내보내기</value>
   </data>
   <data name="Menu_Export_Srt" xml:space="preserve">
-    <value>zu .srt</value>
+    <value>.srt로</value>
   </data>
   <data name="Menu_Export_Mp3" xml:space="preserve">
-    <value>zu .mp3</value>
+    <value>.mp3로</value>
   </data>
   <data name="Menu_Export_Mp4" xml:space="preserve">
-    <value>zu .mp4</value>
+    <value>.mp4로</value>
   </data>
   <data name="Tooltip_RefreshSegments" xml:space="preserve">
-    <value>Segmente aktualisieren</value>
+    <value>세그먼트 새로 고침</value>
   </data>
   <data name="Message_NoSegmentsTitle" xml:space="preserve">
-    <value>Noch keine Segmente</value>
+    <value>아직 세그먼트 없음</value>
   </data>
   <data name="Message_NoSegmentsHint" xml:space="preserve">
-    <value>Öffnen Sie Medien und führen Sie die Pipeline aus, um Segmente zu erzeugen.</value>
+    <value>미디어를 열고 파이프라인을 실행하여 세그먼트를 생성합니다.</value>
   </data>
   <data name="Label_RenderTiming" xml:space="preserve">
-    <value>Rendering-Zeitplan</value>
+    <value>렌더링 타이밍</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Gilt für generierte Synchronisationen und den Export. Pause ist nur für die Vorschau.</value>
+    <value>생성된 더빙 오디오 및 내보내기에 적용됩니다. 일시 중지는 미리보기 전용입니다.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
-    <value>Ausgewähltes Segment</value>
+    <value>선택한 세그먼트</value>
   </data>
   <data name="Option_Inherit" xml:space="preserve">
-    <value>Erben Sie</value>
+    <value>상속</value>
   </data>
   <data name="Tooltip_Inherit" xml:space="preserve">
-    <value>Verwenden Sie das Session-Rendering-Timing für dieses Segment</value>
+    <value>이 세그먼트에 세션 렌더링 타이밍 사용</value>
   </data>
   <data name="Option_Off" xml:space="preserve">
-    <value>Aus</value>
+    <value>꺼짐</value>
   </data>
   <data name="Tooltip_TimingOff" xml:space="preserve">
-    <value>TTS für dieses Segment in der gerenderten Nachvertonung/im Export unverändert abspielen</value>
+    <value>렌더링된 더빙/내보내기에서 이 세그먼트의 TTS를 그대로 재생합니다.</value>
   </data>
   <data name="Option_Stretch" xml:space="preserve">
-    <value>Dehnen</value>
+    <value>Stretch</value>
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
-    <value>TTS zeitlich strecken, damit dieses Segmentfenster in die gerenderte Synchronisation/den Export passt</value>
+    <value>렌더링된 더빙/내보내기에서 이 세그먼트 창에 맞게 TTS 시간 늘이기</value>
   </data>
   <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Vorschau-Pause</value>
+    <value>미리보기 일시 중지</value>
   </data>
   <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Hält die Wiedergabe der Quelle während der Vorschau des ausgewählten Segments an und setzt sie am Ende des Segments fort.</value>
+    <value>선택한 세그먼트를 미리 보는 동안 소스 재생을 일시 중지했다가 세그먼트 끝에서 다시 시작합니다.</value>
   </data>
   <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Vorschau mit Pause</value>
+    <value>일시정지로 미리보기</value>
   </data>
   <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Vorschau dieses Segments mit Pausenverhalten ohne Änderung des gerenderten Synchronisationszeitpunkts</value>
+    <value>렌더링된 더빙 타이밍을 변경하지 않고 일시정지 동작을 사용하여 이 세그먼트 미리보기</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
-    <value>Mediendatei öffnen</value>
+    <value>미디어 파일 열기</value>
   </data>
   <data name="Automation_OpenMedia" xml:space="preserve">
-    <value>Offene Medien</value>
+    <value>오픈 미디어</value>
   </data>
   <data name="Tooltip_ToggleSubtitles" xml:space="preserve">
-    <value>Untertitel umschalten (C)</value>
+    <value>자막 토글(C)</value>
   </data>
   <data name="Automation_ToggleSubtitles" xml:space="preserve">
-    <value>Untertitel umschalten</value>
+    <value>자막 토글</value>
   </data>
   <data name="Tooltip_ToggleDubMode" xml:space="preserve">
-    <value>Umschalten des Dub-Modus (D)</value>
+    <value>더빙 모드 토글(D)</value>
   </data>
   <data name="Automation_ToggleDubMode" xml:space="preserve">
-    <value>Umschalten des Dub-Modus</value>
+    <value>더빙 모드 전환</value>
   </data>
   <data name="Tooltip_SkipPrevious" xml:space="preserve">
-    <value>Zum vorherigen Segment springen</value>
+    <value>이전 세그먼트로 건너뛰기</value>
   </data>
   <data name="Automation_SkipPrevious" xml:space="preserve">
-    <value>Zum vorherigen Segment springen</value>
+    <value>이전 세그먼트로 건너뛰기</value>
   </data>
   <data name="Tooltip_Rewind10" xml:space="preserve">
-    <value>10 Sekunden zurückspulen</value>
+    <value>10초 되감기</value>
   </data>
   <data name="Automation_Rewind10" xml:space="preserve">
-    <value>10 Sekunden zurückspulen</value>
+    <value>10초 되감기</value>
   </data>
   <data name="Tooltip_PlayPause" xml:space="preserve">
-    <value>Wiedergabe/Pause (Leertaste)</value>
+    <value>재생/일시 정지(스페이스)</value>
   </data>
   <data name="Automation_PlayPause" xml:space="preserve">
-    <value>Abspielen oder Anhalten</value>
+    <value>재생 또는 일시 중지</value>
   </data>
   <data name="Tooltip_Forward10" xml:space="preserve">
-    <value>10 Sekunden vorspulen</value>
+    <value>10초 빨리 감기</value>
   </data>
   <data name="Automation_Forward10" xml:space="preserve">
-    <value>10 Sekunden vorspulen</value>
+    <value>10초 빨리 감기</value>
   </data>
   <data name="Tooltip_SkipNext" xml:space="preserve">
-    <value>Zum nächsten Segment springen</value>
+    <value>다음 세그먼트로 건너뛰기</value>
   </data>
   <data name="Automation_SkipNext" xml:space="preserve">
-    <value>Zum nächsten Segment springen</value>
+    <value>다음 세그먼트로 건너뛰기</value>
   </data>
   <data name="Tooltip_ToggleMute" xml:space="preserve">
-    <value>Stummschaltung umschalten</value>
+    <value>음소거 토글</value>
   </data>
   <data name="Automation_ToggleMute" xml:space="preserve">
-    <value>Stummschaltung umschalten</value>
+    <value>음소거 토글</value>
   </data>
   <data name="Tooltip_Volume" xml:space="preserve">
-    <value>Band</value>
+    <value>볼륨</value>
   </data>
   <data name="Tooltip_ToggleSidePanes" xml:space="preserve">
-    <value>Seitenwände umklappen (S)</value>
+    <value>측면 패널 토글(S)</value>
   </data>
   <data name="Automation_ToggleSidePanes" xml:space="preserve">
-    <value>Seitenscheiben umschalten</value>
+    <value>측면 창 토글</value>
   </data>
   <data name="Tooltip_ToggleFullscreen" xml:space="preserve">
-    <value>Vollbildmodus umschalten (F11)</value>
+    <value>전체 화면 전환(F11)</value>
   </data>
   <data name="Automation_ToggleFullscreen" xml:space="preserve">
-    <value>Vollbild umschalten</value>
+    <value>전체 화면 토글</value>
   </data>
   <data name="Tooltip_OpenSettings" xml:space="preserve">
-    <value>Einstellungen öffnen</value>
+    <value>설정 열기</value>
   </data>
   <data name="Automation_Settings" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>설정</value>
   </data>
   <data name="Dev_Button_DevLog" xml:space="preserve">
-    <value>📋 Entwicklungsprotokoll</value>
+    <value>📋 개발 로그</value>
   </data>
   <data name="Dev_Tooltip_DevLog" xml:space="preserve">
-    <value>In-App-Entwicklungsprotokoll-Viewer öffnen</value>
+    <value>인앱 개발 로그 뷰어 열기</value>
   </data>
   <data name="Dev_Button_FreshStart" xml:space="preserve">
-    <value>🔄 Neuanfang</value>
+    <value>🔄 새로운 시작</value>
   </data>
   <data name="Dev_Tooltip_FreshStart" xml:space="preserve">
-    <value>Pipeline abbrechen, temporäre Sitzungsdateien löschen, Benutzeroberfläche zurücksetzen</value>
+    <value>파이프라인 취소, 세션 임시 파일 삭제, UI 재설정</value>
   </data>
   <data name="Settings_Title" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>설정</value>
   </data>
   <data name="Settings_Nav_General" xml:space="preserve">
-    <value>Allgemein</value>
+    <value>일반</value>
   </data>
   <data name="Settings_Nav_Hotkeys" xml:space="preserve">
-    <value>Tastenkombinationen</value>
+    <value>단축키</value>
   </data>
   <data name="Settings_Nav_Video" xml:space="preserve">
-    <value>Video</value>
+    <value>비디오</value>
   </data>
   <data name="Settings_Nav_Models" xml:space="preserve">
-    <value>Modelle</value>
+    <value>모델</value>
   </data>
   <data name="Settings_Nav_About" xml:space="preserve">
-    <value>Über</value>
+    <value>정보</value>
   </data>
   <data name="Settings_Nav_Diagnostics" xml:space="preserve">
-    <value>Diagnostik</value>
+    <value>진단</value>
   </data>
   <data name="Settings_Group_Session" xml:space="preserve">
-    <value>Sitzung</value>
+    <value>세션</value>
   </data>
   <data name="Settings_Label_RecentLimit" xml:space="preserve">
-    <value>Grenzwert für den Verlauf der letzten Sitzung</value>
+    <value>최근 세션 기록 제한</value>
   </data>
   <data name="Settings_Hint_RecentLimit" xml:space="preserve">
-    <value>Maximale Anzahl der letzten Sitzungen, die im Dateimenü gespeichert sind (1-20).</value>
+    <value>파일 메뉴에 보관할 수 있는 최대 최근 세션 수(1~20개).</value>
   </data>
   <data name="Settings_Check_AutoSave" xml:space="preserve">
-    <value>Sitzung beim Beenden automatisch speichern</value>
+    <value>종료 시 세션 자동 저장</value>
   </data>
   <data name="Settings_Group_AppLanguage" xml:space="preserve">
-    <value>App-Sprache</value>
+    <value>앱 언어</value>
   </data>
   <data name="Settings_Hint_AppLanguage" xml:space="preserve">
-    <value>Ändert die Sprache der Benutzeroberfläche des Babel Players. Auto (System) folgt bei jedem Start dem Gebietsschema Ihres Betriebssystems.</value>
+    <value>바벨 플레이어 인터페이스의 언어를 변경합니다. 자동(시스템)은 실행할 때마다 OS 로캘을 따릅니다.</value>
   </data>
   <data name="Settings_Option_AutoSystem" xml:space="preserve">
-    <value>Auto (System)</value>
+    <value>자동(시스템)</value>
   </data>
   <data name="Settings_Group_Gpu" xml:space="preserve">
-    <value>GPU-Backend</value>
+    <value>GPU 백엔드</value>
   </data>
   <data name="Settings_Label_PreferredGpu" xml:space="preserve">
-    <value>Bevorzugtes lokales GPU-Backend</value>
+    <value>기본 로컬 GPU 백엔드</value>
   </data>
   <data name="Settings_Hint_Gpu" xml:space="preserve">
-    <value>Die verwaltete lokale GPU ist der Standardpfad mit geringer Reibung. Der Docker-GPU-Host ist als erweitertes Backend verfügbar.</value>
+    <value>관리형 로컬 GPU는 마찰이 적은 기본 경로입니다. Docker GPU 호스트는 고급 백엔드로 사용할 수 있습니다.</value>
   </data>
   <data name="Settings_Group_BackendStatus" xml:space="preserve">
-    <value>Backend-Status</value>
+    <value>백엔드 상태</value>
   </data>
   <data name="Settings_Group_DockerGpu" xml:space="preserve">
-    <value>Docker GPU-Dienst</value>
+    <value>Docker GPU 서비스</value>
   </data>
   <data name="Settings_Label_AdvancedGpuUrl" xml:space="preserve">
-    <value>Erweiterte GPU-Dienst-URL</value>
+    <value>고급 GPU 서비스 URL</value>
   </data>
   <data name="Settings_Hint_AdvancedGpuUrl" xml:space="preserve">
-    <value>Nur bearbeitbar, wenn das Docker-GPU-Backend ausgewählt ist.</value>
+    <value>Docker GPU 백엔드를 선택한 경우에만 편집할 수 있습니다.</value>
   </data>
   <data name="Settings_Check_AlwaysStartGpu" xml:space="preserve">
-    <value>Lokale GPU-Laufzeit immer beim Start der Anwendung starten</value>
+    <value>앱 시작 시 항상 로컬 GPU 런타임 시작</value>
   </data>
   <data name="Settings_Group_PipelineAudio" xml:space="preserve">
-    <value>Pipeline-Audio und Vertonung</value>
+    <value>파이프라인 오디오 및 더빙</value>
   </data>
   <data name="Settings_Hint_PipelineAudio" xml:space="preserve">
-    <value>Vocal-Separation und Segment-Timing (Dub) werden im Hauptfenster → Pipeline-Panel konfiguriert, so dass sie neben den Laufkontrollen bleiben.</value>
+    <value>보컬 분리 및 세그먼트 타이밍(더빙)은 메인 창 → 파이프라인 패널에서 구성되므로 실행 컨트롤 옆에 유지됩니다.</value>
   </data>
   <data name="Settings_Expander_AdvancedCpu" xml:space="preserve">
-    <value>Fortgeschrittene: CPU-Transkription</value>
+    <value>고급: CPU 전사</value>
   </data>
   <data name="Settings_Hint_AdvancedCpu" xml:space="preserve">
-    <value>Diese Optionen stellen die reine CPU-Transkription ein. 0 Threads bedeutet automatische Auswahl. Die Anzahl der Worker kann der Hardware (Kerne + RAM) oder einem manuellen Wert (geklemmt) folgen.</value>
+    <value>이 옵션은 CPU 전용 트랜스크립션을 조정합니다. 0 스레드는 자동 선택을 의미합니다. 작업자 수는 하드웨어(코어 + RAM) 또는 수동 값(고정)을 따를 수 있습니다.</value>
   </data>
   <data name="Settings_Label_CpuComputeType" xml:space="preserve">
-    <value>CPU-Rechenleistungstyp:</value>
+    <value>CPU 컴퓨팅 유형:</value>
   </data>
   <data name="Settings_Label_CpuThreads" xml:space="preserve">
-    <value>CPU-Threads (0=auto):</value>
+    <value>CPU 스레드(0=자동):</value>
   </data>
   <data name="Settings_Check_AutoWorkers" xml:space="preserve">
-    <value>Automatische Zählung der Arbeiter (von CPU-Kernen und RAM)</value>
+    <value>자동 작업자 수(CPU 코어 및 RAM에서)</value>
   </data>
   <data name="Settings_Label_WorkersManual" xml:space="preserve">
-    <value>Arbeiter (manuell):</value>
+    <value>작업자(수동):</value>
   </data>
   <data name="Settings_Group_Hotkeys" xml:space="preserve">
-    <value>Tastaturkurzbefehle</value>
+    <value>키보드 단축키</value>
   </data>
   <data name="Settings_Hint_Hotkeys" xml:space="preserve">
-    <value>Die Anpassung der Hotkeys ist noch nicht möglich. Die angezeigten Werte sind die aktuellen Standardwerte.</value>
+    <value>단축키 사용자 지정은 아직 사용할 수 없습니다. 표시된 값은 현재 기본값입니다.</value>
   </data>
   <data name="Settings_Label_PlayPauseHotkey" xml:space="preserve">
-    <value>Wiedergabe/Pause:</value>
+    <value>재생/일시 정지:</value>
   </data>
   <data name="Settings_Label_ToggleSegmentsHotkey" xml:space="preserve">
-    <value>Toggle Segment Panel:</value>
+    <value>세그먼트 패널을 토글합니다:</value>
   </data>
   <data name="Settings_Label_ToggleDubHotkey" xml:space="preserve">
-    <value>Umschalten des Dub-Modus:</value>
+    <value>더빙 모드를 토글합니다:</value>
   </data>
   <data name="Settings_Label_ToggleFullscreenHotkey" xml:space="preserve">
-    <value>Vollbildmodus umschalten:</value>
+    <value>전체 화면으로 전환합니다:</value>
   </data>
   <data name="Settings_Group_EmbeddedPlayback" xml:space="preserve">
-    <value>Eingebettete Wiedergabe</value>
+    <value>임베디드 재생</value>
   </data>
   <data name="Settings_Check_BilingualSubs" xml:space="preserve">
-    <value>Zweisprachige Untertitel (Quelle + Übersetzung in Exporten und eingebetteter Vorschau)</value>
+    <value>이중 언어 자막(소스 + 내보내기 및 임베디드 미리 보기의 번역)</value>
   </data>
   <data name="Settings_Hint_BilingualSubs" xml:space="preserve">
-    <value>Wenn diese Option aktiviert ist, enthalten der Untertitelexport und die CC-Spur im Player beide Sprachen, wenn Segmente verfügbar sind.</value>
+    <value>활성화하면 자막 내보내기 및 플레이어 내 CC 트랙은 세그먼트를 사용할 수 있는 경우 두 언어를 모두 포함합니다.</value>
   </data>
   <data name="Settings_Group_HardwareDecode" xml:space="preserve">
-    <value>Hardware-Dekodierung</value>
+    <value>하드웨어 디코딩</value>
   </data>
   <data name="Settings_Label_HardwareDecoder" xml:space="preserve">
-    <value>Hardware-Decoder:</value>
+    <value>하드웨어 디코더:</value>
   </data>
   <data name="Settings_Label_GpuRenderApi" xml:space="preserve">
-    <value>GPU-Rendering-API:</value>
+    <value>GPU 렌더링 API:</value>
   </data>
   <data name="Settings_Label_ExportEncoder" xml:space="preserve">
-    <value>Encoder exportieren:</value>
+    <value>인코더 내보내기:</value>
   </data>
   <data name="Settings_Group_GpuNext" xml:space="preserve">
-    <value>GPU-Next Backend</value>
+    <value>GPU-Next 백엔드</value>
   </data>
   <data name="Settings_Check_UseGpuNext" xml:space="preserve">
-    <value>Verwenden Sie den gpu-next-Videoausgang (erforderlich für RTX-Verbesserungen)</value>
+    <value>GPU-NEXT 비디오 출력 사용(RTX 향상에 필요)</value>
   </data>
   <data name="Settings_Hint_GpuNext" xml:space="preserve">
-    <value>gpu-next ist der neuere mpv-Renderer. Aktivieren Sie diesen, bevor Sie die Modi RTX Video Super Resolution oder HDR aktivieren.</value>
+    <value>GPU-NEXT는 최신 MPV 렌더러입니다. RTX 비디오 슈퍼 해상도 또는 HDR 모드를 켜기 전에 이 옵션을 활성화하세요.</value>
   </data>
   <data name="Settings_Group_RtxVideo" xml:space="preserve">
-    <value>RTX-Videoverbesserung</value>
+    <value>RTX 비디오 향상</value>
   </data>
   <data name="Settings_Check_Vsr" xml:space="preserve">
-    <value>RTX Video Super Resolution (VSR)</value>
+    <value>RTX 비디오 초고해상도(VSR)</value>
   </data>
   <data name="Settings_Hint_Vsr" xml:space="preserve">
-    <value>AI-Upscaling über NVIDIA d3d11vpp. Erfordert eine erkannte GeForce RTX GPU, Treiber ≥ 551.23, gpu-next und "RTX Video Enhancement" in der NVIDIA Systemsteuerung.</value>
+    <value>NVIDIA d3d11vpp를 통한 AI 업스케일링. 감지된 GeForce RTX GPU, 드라이버 551.23 이상, gpu-next 및 NVIDIA 제어판의 'RTX 비디오 향상'이 필요합니다.</value>
   </data>
   <data name="Settings_Label_VsrSupport" xml:space="preserve">
-    <value>Unterstützung:</value>
+    <value>지원:</value>
   </data>
   <data name="Settings_Label_VsrRequested" xml:space="preserve">
-    <value>Ersucht:</value>
+    <value>요청되었습니다:</value>
   </data>
   <data name="Settings_Label_VsrResolved" xml:space="preserve">
-    <value>Gelöst:</value>
+    <value>해결되었습니다:</value>
   </data>
   <data name="Settings_Label_VsrReason" xml:space="preserve">
-    <value>Letzter Grund:</value>
+    <value>마지막 이유:</value>
   </data>
   <data name="Settings_Label_VsrFilter" xml:space="preserve">
-    <value>Letzter Filter:</value>
+    <value>마지막 필터:</value>
   </data>
   <data name="Settings_Group_Hdr" xml:space="preserve">
-    <value>HDR-Wiedergabe</value>
+    <value>HDR 재생</value>
   </data>
   <data name="Settings_Hint_Hdr" xml:space="preserve">
-    <value>Wählen Sie einen Modus. RTX HDR folgt dem NVIDIA Control Panel. HDR Passthrough konfiguriert mpv. Erfordert gpu-next und Windows HDR.</value>
+    <value>한 가지 모드를 선택합니다. RTX HDR은 NVIDIA 제어판을 따릅니다. HDR 패스스루는 mpv를 구성합니다. GPU-NEXT 및 Windows HDR이 필요합니다.</value>
   </data>
   <data name="Settings_Radio_HdrOff" xml:space="preserve">
-    <value>Aus</value>
+    <value>꺼짐</value>
   </data>
   <data name="Settings_Radio_HdrRtx" xml:space="preserve">
     <value>RTX HDR</value>
   </data>
   <data name="Settings_Radio_HdrPassthrough" xml:space="preserve">
-    <value>HDR-Passthrough</value>
+    <value>HDR 패스스루</value>
   </data>
   <data name="Settings_Label_MpvPassthrough" xml:space="preserve">
-    <value>mpv-Passthrough-Optionen</value>
+    <value>MPV 패스스루 옵션</value>
   </data>
   <data name="Settings_Label_ToneMapping" xml:space="preserve">
-    <value>Tone Mapping:</value>
+    <value>톤 매핑:</value>
   </data>
   <data name="Settings_Label_TargetPeak" xml:space="preserve">
-    <value>Zielgipfel:</value>
+    <value>목표 피크:</value>
   </data>
   <data name="Settings_Placeholder_TargetPeak" xml:space="preserve">
-    <value>Auto oder Nissen</value>
+    <value>자동 또는 니트</value>
   </data>
   <data name="Settings_Label_HdrComputePeak" xml:space="preserve">
-    <value>HDR-Berechnungsspitze:</value>
+    <value>HDR 컴퓨팅 피크:</value>
   </data>
   <data name="Settings_Check_HdrComputePeak" xml:space="preserve">
-    <value>Dynamischer Spitzenwert pro Bild (mpv)</value>
+    <value>동적 프레임당 피크(MPV)</value>
   </data>
   <data name="Settings_Hint_VideoRestart" xml:space="preserve">
-    <value>Alle Videoeinstellungen werden nach dem Neustart der App wirksam.</value>
+    <value>모든 동영상 설정은 앱을 다시 시작하면 적용됩니다.</value>
   </data>
   <data name="Settings_Group_Models" xml:space="preserve">
-    <value>Modelle</value>
+    <value>모델</value>
   </data>
   <data name="Settings_Hint_Models" xml:space="preserve">
-    <value>Verwalten Sie lokal gehostete Modelle. Bei Cloud-Anbietern sind keine Downloads erforderlich.</value>
+    <value>로컬로 호스팅된 모델을 관리합니다. 클라우드 제공업체는 다운로드가 필요하지 않습니다.</value>
   </data>
   <data name="Settings_About_AppName" xml:space="preserve">
-    <value>Babel-Spieler</value>
+    <value>바벨 플레이어</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>AGPL-3.0-Lizenz</value>
+    <value>AGPL-3.0 라이선스</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
-    <value>Unterstützen Sie das Projekt:</value>
+    <value>프로젝트를 지원하세요:</value>
   </data>
   <data name="Settings_About_Kofi" xml:space="preserve">
     <value>Ko-fi</value>
   </data>
   <data name="Settings_About_GitHubSponsors" xml:space="preserve">
-    <value>GitHub-Sponsoren</value>
+    <value>GitHub 스폰서</value>
   </data>
   <data name="Api_Title" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>API 키</value>
   </data>
   <data name="Api_Button_Save" xml:space="preserve">
-    <value>Speichern Sie</value>
+    <value>저장</value>
   </data>
   <data name="Api_Button_Clear" xml:space="preserve">
-    <value>Klar</value>
+    <value>지우기</value>
   </data>
   <data name="Api_Tooltip_ToggleReveal" xml:space="preserve">
-    <value>Taste ein-/ausblenden</value>
+    <value>키 표시/숨기기</value>
   </data>
   <data name="Api_Footer_StorageSecurity" xml:space="preserve">
-    <value>Sicherheit der Speicherung:</value>
+    <value>스토리지 보안:</value>
   </data>
   <data name="Api_Footer_MoreProviders" xml:space="preserve">
-    <value>Weitere Anbieter können in zukünftigen Updates hinzugefügt werden.</value>
+    <value>향후 업데이트에서 더 많은 제공업체를 추가할 수 있습니다.</value>
   </data>
   <data name="Crash_Header" xml:space="preserve">
-    <value>Ein unbehandelter Fehler ist aufgetreten</value>
+    <value>처리되지 않은 오류가 발생했습니다.</value>
   </data>
   <data name="Crash_Subtitle" xml:space="preserve">
-    <value>Die vollständigen Fehlerdetails sind unten aufgeführt. Der Fehler wurde auch in die Protokolldatei geschrieben.</value>
+    <value>전체 오류 세부 정보는 아래에 나와 있습니다. 오류는 로그 파일에도 기록되었습니다.</value>
   </data>
   <data name="Crash_Button_Copy" xml:space="preserve">
-    <value>In die Zwischenablage kopieren</value>
+    <value>클립보드에 복사</value>
   </data>
   <data name="Crash_Button_OpenLogFolder" xml:space="preserve">
-    <value>Log-Ordner öffnen</value>
+    <value>로그 폴더 열기</value>
   </data>
   <data name="Crash_Button_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>닫기</value>
   </data>
   <data name="Wizard_Title" xml:space="preserve">
-    <value>Lautsprecher-Referenz-Assistent</value>
+    <value>화자 참조 마법사</value>
   </data>
   <data name="Wizard_Assign_Header" xml:space="preserve">
-    <value>Redner</value>
+    <value>스피커</value>
   </data>
   <data name="Wizard_Assign_Hint" xml:space="preserve">
-    <value>Wählen Sie für jeden Sprecher eine Stimme aus. Für Qwen legen Sie außerdem einen Referenz-Audioclip aus dem Video fest.</value>
+    <value>각 화자에 대한 음성을 선택합니다. Qwen의 경우 비디오에서 참조 오디오 클립도 설정합니다.</value>
   </data>
   <data name="Wizard_Preview_Header" xml:space="preserve">
-    <value>Vorschau</value>
+    <value>미리 보기</value>
   </data>
   <data name="Wizard_Preview_Hint" xml:space="preserve">
-    <value>Durchsuchen Sie das Video, um gute Audioclips für jeden Sprecher zu finden, und ordnen Sie diese dann unten zu.</value>
+    <value>비디오를 스크러빙하여 각 화자에게 적합한 오디오 클립을 찾은 다음 아래에 할당합니다.</value>
   </data>
   <data name="Wizard_Preview_Unavailable" xml:space="preserve">
-    <value>Vorschau nicht verfügbar auf dieser Plattform</value>
+    <value>이 플랫폼에서는 미리 보기를 사용할 수 없습니다.</value>
   </data>
   <data name="Wizard_Playhead_Clip_Tooltip" xml:space="preserve">
-    <value>Länge des Audioclips in Sekunden (3-15 Sekunden)</value>
+    <value>오디오 클립 길이(초)(3~15초)</value>
   </data>
   <data name="Wizard_Button_Stop" xml:space="preserve">
-    <value>Stopp</value>
+    <value>중지</value>
   </data>
   <data name="Wizard_Label_Voice" xml:space="preserve">
-    <value>Stimme</value>
+    <value>음성</value>
   </data>
   <data name="Wizard_Label_VoiceHelp" xml:space="preserve">
-    <value>(für die TTS-Erzeugung)</value>
+    <value>(TTS 생성용)</value>
   </data>
   <data name="Wizard_Button_Auto" xml:space="preserve">
-    <value>Auto</value>
+    <value>자동</value>
   </data>
   <data name="Wizard_Tooltip_Auto" xml:space="preserve">
-    <value>Automatisch erkannte Stimme für diesen Lautsprecher verwenden</value>
+    <value>이 스피커에 자동으로 감지된 음성 사용</value>
   </data>
   <data name="Wizard_Button_UseActive" xml:space="preserve">
-    <value>Aktiv verwenden</value>
+    <value>활성 사용</value>
   </data>
   <data name="Wizard_Tooltip_UseActive" xml:space="preserve">
-    <value>Verwenden Sie die derzeit aktive TTS-Spracheinstellung</value>
+    <value>현재 활성화된 TTS 음성 설정 사용</value>
   </data>
   <data name="Wizard_Button_ClearVoice" xml:space="preserve">
-    <value>Klar</value>
+    <value>지우기</value>
   </data>
   <data name="Wizard_Tooltip_ClearVoice" xml:space="preserve">
-    <value>Löschen Sie die Sprachzuweisung, verwenden Sie die automatische Erkennung</value>
+    <value>음성 할당을 지우면 자동 감지를 사용합니다.</value>
   </data>
   <data name="Wizard_Placeholder_PiperVoice" xml:space="preserve">
-    <value>Oder wählen Sie eine heruntergeladene Piper-Stimme...</value>
+    <value>또는 다운로드한 파이퍼 음성을 선택하세요...</value>
   </data>
   <data name="Wizard_Tooltip_PiperVoice" xml:space="preserve">
-    <value>Wählen Sie eine der heruntergeladenen Piper-Stimmen oder geben Sie eine eigene Sprach-ID ein.</value>
+    <value>다운로드한 Piper 음성 중에서 선택하거나 사용자 지정 음성 ID를 입력하세요.</value>
   </data>
   <data name="Wizard_Label_ReferenceClip" xml:space="preserve">
-    <value>Referenz-Clip</value>
+    <value>참조 클립</value>
   </data>
   <data name="Wizard_Label_ReferenceClipHelp" xml:space="preserve">
-    <value>(für das Klonen von Stimmen - nur Qwen)</value>
+    <value>(음성 복제의 경우 - Qwen 전용)</value>
   </data>
   <data name="Wizard_NoClipSelected" xml:space="preserve">
-    <value>Kein Clip ausgewählt - Qwen Voice Cloning verwendet die Standardeinstellung</value>
+    <value>클립이 선택되지 않음 - Qwen 음성 복제는 기본값을 사용합니다.</value>
   </data>
   <data name="Wizard_Tooltip_RefPath" xml:space="preserve">
-    <value>Audioclip, der als Referenz für das Klonen der Qwen-Stimme verwendet wurde</value>
+    <value>Qwen 음성 복제에 참조로 사용되는 오디오 클립</value>
   </data>
   <data name="Wizard_Button_Play" xml:space="preserve">
-    <value>Spielen</value>
+    <value>플레이</value>
   </data>
   <data name="Wizard_Button_Show" xml:space="preserve">
-    <value>anzeigen</value>
+    <value>표시</value>
   </data>
   <data name="Wizard_Button_Browse" xml:space="preserve">
-    <value>Durchsuchen Sie</value>
+    <value>찾아보기</value>
   </data>
   <data name="Wizard_Button_UseSegment" xml:space="preserve">
-    <value>Segment verwenden</value>
+    <value>세그먼트 사용</value>
   </data>
   <data name="Wizard_Tooltip_UseSegment" xml:space="preserve">
-    <value>Verwenden Sie das ausgewählte Segment als Referenz (klicken Sie zuerst auf einen Zeitstempel darunter)</value>
+    <value>선택한 세그먼트를 참조로 사용하세요(먼저 아래 타임스탬프를 클릭하세요).</value>
   </data>
   <data name="Wizard_Button_UsePlayhead" xml:space="preserve">
-    <value>Abspielkopf verwenden</value>
+    <value>재생 헤드 사용</value>
   </data>
   <data name="Wizard_Tooltip_UsePlayhead" xml:space="preserve">
-    <value>Übernehmen Sie die aktuelle Position des Abspielkopfes aus der Vorschau - der einfachste Weg, eine Referenz zu setzen!</value>
+    <value>미리보기에서 현재 재생 위치 가져오기 - 가장 쉽게 참조할 수 있는 방법!</value>
   </data>
   <data name="Wizard_Button_AutoPick" xml:space="preserve">
-    <value>Auto-Pick</value>
+    <value>자동 선택</value>
   </data>
   <data name="Wizard_Tooltip_AutoPick" xml:space="preserve">
-    <value>Automatisch einen guten Clip aus den Segmenten dieses Sprechers finden</value>
+    <value>이 스피커의 세그먼트에서 좋은 클립을 자동으로 찾습니다.</value>
   </data>
   <data name="Wizard_Hint_JumpToSegments" xml:space="preserve">
-    <value>Zu den Segmenten des Sprechers springen</value>
+    <value>발표자의 세그먼트로 이동</value>
   </data>
   <data name="Wizard_Tooltip_JumpToSegments" xml:space="preserve">
-    <value>Klicken Sie auf einen Zeitstempel, um zu diesem Punkt im Video zu springen, und verwenden Sie dann "Abspielkopf verwenden".</value>
+    <value>타임스탬프를 클릭하여 동영상의 해당 지점으로 이동한 다음 '재생 헤드 사용'을 사용합니다.</value>
   </data>
   <data name="Wizard_Tooltip_ConfidenceReason" xml:space="preserve">
-    <value>Warum dieser Clip als gut/schlecht bewertet wurde</value>
+    <value>이 클립이 좋음/나쁨으로 평가된 이유</value>
   </data>
   <data name="Wizard_Tooltip_ConfidenceTier" xml:space="preserve">
-    <value>Qualität des Referenzclips für diesen Lautsprecher</value>
+    <value>이 스피커의 레퍼런스 클립 품질</value>
   </data>
   <data name="Wizard_Tooltip_LastAction" xml:space="preserve">
-    <value>Letzte Aktion für diesen Redner</value>
+    <value>이 스피커에 대해 마지막으로 수행한 작업</value>
   </data>
   <data name="Wizard_Expander_Advanced" xml:space="preserve">
-    <value>Fortgeschrittene</value>
+    <value>고급</value>
   </data>
   <data name="Wizard_Label_MergeSpeakers" xml:space="preserve">
-    <value>Lautsprecher zusammenführen</value>
+    <value>스피커 병합</value>
   </data>
   <data name="Wizard_Tooltip_MergeSource" xml:space="preserve">
-    <value>Quelllautsprecher für die Zusammenführung auswählen</value>
+    <value>병합할 소스 스피커 선택</value>
   </data>
   <data name="Wizard_Tooltip_MergeTarget" xml:space="preserve">
-    <value>Zielsprecher auswählen (der die zusammengeführten Segmente erhält)</value>
+    <value>대상 화자 선택(병합된 세그먼트가 수신됨)</value>
   </data>
   <data name="Wizard_Button_Merge" xml:space="preserve">
-    <value>Zusammenführen</value>
+    <value>병합</value>
   </data>
   <data name="Wizard_Tooltip_Merge" xml:space="preserve">
-    <value>Quelle in Ziel zusammenführen - dadurch wird die Abschrift permanent aktualisiert</value>
+    <value>소스를 대상에 병합 - 영구적으로 기록이 업데이트됩니다.</value>
   </data>
   <data name="Wizard_Footer_Hint" xml:space="preserve">
-    <value>Beenden speichert die Änderungen an Stimme und Referenz. Abbrechen verwirft alle Bearbeitungen.</value>
+    <value>마침은 음성 및 참조 변경 내용을 저장합니다. 취소는 모든 편집 내용을 삭제합니다.</value>
   </data>
   <data name="Wizard_Button_Cancel" xml:space="preserve">
-    <value>Abbrechen</value>
+    <value>취소</value>
   </data>
   <data name="Wizard_Tooltip_Cancel" xml:space="preserve">
-    <value>Alle Änderungen verwerfen und schließen</value>
+    <value>모든 변경 사항을 삭제하고 닫습니다.</value>
   </data>
   <data name="Wizard_Button_Finish" xml:space="preserve">
-    <value>Oberfläche</value>
+    <value>완료</value>
   </data>
   <data name="Wizard_Tooltip_Finish" xml:space="preserve">
-    <value>Sprach- und Referenzänderungen auf die Sitzung anwenden</value>
+    <value>세션에 음성 및 참조 변경 사항 적용</value>
   </data>
   <data name="Wizard_Tooltip_Close" xml:space="preserve">
-    <value>Assistenten schließen</value>
+    <value>닫기 마법사</value>
   </data>
   <data name="Wizard_Tooltip_CloseDiscard" xml:space="preserve">
-    <value>Assistenten schließen (Änderungen verwerfen)</value>
+    <value>마법사 닫기(변경 내용 삭제)</value>
   </data>
   <data name="Wizard_Hint_TopBanner" xml:space="preserve">
-    <value>Weisen Sie den Lautsprechern Stimmen zu und legen Sie Referenz-Audioclips fest. Verwenden Sie die Vorschau, um gute Clips zu finden, und klicken Sie dann auf "Abspielkopf verwenden", um den aktuellen Moment zu erfassen.</value>
+    <value>스피커에 음성을 할당하고 참조 오디오 클립을 설정합니다. 미리 보기를 사용하여 좋은 클립을 찾은 다음 '재생 헤드 사용'을 클릭하여 현재 순간을 포착하세요.</value>
   </data>
   <data name="Wizard_Toggle_NeedsAttention" xml:space="preserve">
-    <value>Show braucht Aufmerksamkeit</value>
+    <value>주의가 필요한 쇼</value>
   </data>
   <data name="Wizard_Tooltip_NeedsAttention" xml:space="preserve">
-    <value>Zeigen Sie nur Lautsprecher, die überarbeitet werden müssen oder schlechte Referenzen haben</value>
+    <value>검토가 필요하거나 참조가 부족한 스피커만 표시합니다.</value>
   </data>
   <data name="Wizard_Button_ResetAll" xml:space="preserve">
-    <value>Alle zurücksetzen</value>
+    <value>모두 초기화</value>
   </data>
   <data name="Wizard_Tooltip_ResetAll" xml:space="preserve">
-    <value>Alle Entwurfsänderungen löschen und neu beginnen</value>
+    <value>모든 초안 변경 사항을 지우고 새로 시작</value>
   </data>
   <data name="Wizard_Hint_ScrubPreview" xml:space="preserve">
-    <value>Durchsuchen Sie das Video, um gute Audioclips zu finden. Klicken Sie auf "Abspielkopf verwenden" bei einem Sprecher, um den aktuellen Moment als Referenz zu verwenden.</value>
+    <value>동영상을 스크러빙하여 좋은 오디오 클립을 찾습니다. 스피커에서 '재생 헤드 사용'을 클릭하면 현재 순간을 기준으로 삼을 수 있습니다.</value>
   </data>
   <data name="Wizard_Hint_LinuxMacFallback" xml:space="preserve">
-    <value>Unter Linux/MacOS verwenden Sie das Hauptfenster, um durch das Video zu blättern. Wenn Sie einen guten Moment gefunden haben, kommen Sie hierher zurück und klicken Sie auf "Abspielkopf verwenden" für diesen Lautsprecher.</value>
+    <value>Linux/macOS에서는 메인 창을 사용하여 동영상을 스크러빙합니다. 좋은 순간을 찾으면 여기로 돌아와서 해당 스피커에 대해 '재생 헤드 사용'을 클릭합니다.</value>
   </data>
   <data name="Wizard_Tooltip_SeekSlider" xml:space="preserve">
-    <value>Ziehen, um das Video zu durchsuchen</value>
+    <value>드래그하여 동영상 탐색</value>
   </data>
   <data name="Wizard_Tooltip_PlayPause" xml:space="preserve">
-    <value>Abspielen oder Anhalten der Vorschau</value>
+    <value>미리 보기 재생 또는 일시 중지</value>
   </data>
   <data name="Wizard_Label_ClipDuration" xml:space="preserve">
-    <value>Abspielkopf Clip Dauer</value>
+    <value>재생 헤드 클립 길이</value>
   </data>
   <data name="Wizard_Tooltip_ClipDuration" xml:space="preserve">
-    <value>Wie viel Audio vor und nach der Abspielposition aufgenommen werden soll</value>
+    <value>재생 헤드 위치 전후에 잡을 오디오의 양</value>
   </data>
   <data name="Diag_HardwareSnapshot" xml:space="preserve">
-    <value>Hardware-Schnappschuss</value>
+    <value>하드웨어 스냅샷</value>
   </data>
   <data name="Diag_Cpu" xml:space="preserve">
     <value>CPU:</value>
@@ -862,84 +862,84 @@
     <value>GPU:</value>
   </data>
   <data name="Diag_Ram" xml:space="preserve">
-    <value>System-RAM:</value>
+    <value>시스템 RAM:</value>
   </data>
   <data name="Diag_RuntimeRouting" xml:space="preserve">
-    <value>Laufzeit-Routing</value>
+    <value>런타임 라우팅</value>
   </data>
   <data name="Diag_InferenceHost" xml:space="preserve">
-    <value>Inference Host:</value>
+    <value>추론 호스트:</value>
   </data>
   <data name="Diag_WarmupStatus" xml:space="preserve">
-    <value>Aufwärmstatus:</value>
+    <value>워밍업 상태:</value>
   </data>
   <data name="Diag_NmtFallback" xml:space="preserve">
-    <value>NMT Fallback:</value>
+    <value>NMT 폴백:</value>
   </data>
   <data name="Diag_GpuProbeStreak" xml:space="preserve">
-    <value>GPU-Probe-Streifen:</value>
+    <value>GPU 프로브 스트릭:</value>
   </data>
   <data name="Diag_Environment" xml:space="preserve">
-    <value>Umwelt</value>
+    <value>환경</value>
   </data>
   <data name="Diag_PythonPath" xml:space="preserve">
-    <value>Python-Pfad:</value>
+    <value>파이썬 경로:</value>
   </data>
   <data name="Diag_FfmpegPath" xml:space="preserve">
-    <value>ffmpeg Pfad:</value>
+    <value>ffmpeg 경로:</value>
   </data>
   <data name="Diag_Button_Refresh" xml:space="preserve">
-    <value>Diagnostik aktualisieren</value>
+    <value>진단 새로 고침</value>
   </data>
   <data name="Settings_Button_SaveClose" xml:space="preserve">
-    <value>Speichern &amp; Schließen</value>
+    <value>저장 및 닫기</value>
   </data>
   <data name="Language_ar" xml:space="preserve">
-    <value>Arabisch</value>
+    <value>아랍어</value>
   </data>
   <data name="Language_de" xml:space="preserve">
-    <value>Deutsch</value>
+    <value>독일어</value>
   </data>
   <data name="Language_en" xml:space="preserve">
-    <value>Englisch</value>
+    <value>영어</value>
   </data>
   <data name="Language_es" xml:space="preserve">
-    <value>Spanisch</value>
+    <value>스페인어</value>
   </data>
   <data name="Language_fr" xml:space="preserve">
-    <value>Französisch</value>
+    <value>프랑스어</value>
   </data>
   <data name="Language_hi" xml:space="preserve">
-    <value>Hindi</value>
+    <value>힌디어</value>
   </data>
   <data name="Language_it" xml:space="preserve">
-    <value>Italienisch</value>
+    <value>이탈리아어</value>
   </data>
   <data name="Language_ja" xml:space="preserve">
-    <value>Japanisch</value>
+    <value>일본어</value>
   </data>
   <data name="Language_ko" xml:space="preserve">
-    <value>Koreanisch</value>
+    <value>한국어</value>
   </data>
   <data name="Language_nl" xml:space="preserve">
-    <value>Niederländisch</value>
+    <value>네덜란드어</value>
   </data>
   <data name="Language_pl" xml:space="preserve">
-    <value>Polnisch</value>
+    <value>폴란드어</value>
   </data>
   <data name="Language_pt" xml:space="preserve">
-    <value>Portugiesisch</value>
+    <value>포르투갈어</value>
   </data>
   <data name="Language_ru" xml:space="preserve">
-    <value>Russisch</value>
+    <value>러시아어</value>
   </data>
   <data name="Language_sv" xml:space="preserve">
-    <value>Schwedisch</value>
+    <value>스웨덴어</value>
   </data>
   <data name="Language_tr" xml:space="preserve">
-    <value>Türkisch</value>
+    <value>터키어</value>
   </data>
   <data name="Language_zh" xml:space="preserve">
-    <value>Chinesisch (vereinfacht)</value>
+    <value>중국어(간체)</value>
   </data>
 </root>

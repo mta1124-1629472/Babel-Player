@@ -312,6 +312,17 @@ python -m py_compile inference/main.py
 
 The architecture linter (`scripts/check-architecture.py`) enforces structural rules and maintained-test hygiene: provider string constants, ViewModel pipeline call discipline, coordinator line limits, `PLACEHOLDER` requirements on unimplemented stubs, and the no-slow-tests policy described in [docs/testing-requirements.md](docs/testing-requirements.md).
 
+### Regenerate UI translations
+
+The English base `Resources/Strings.resx` is maintained by `scripts/build_strings_resx.py`. After adding or editing a key there, regenerate the 15 satellite `Resources/Strings.<lang>.resx` files with the DeepL-backed console tool:
+
+```powershell
+$env:DEEPL_API_KEY = "<your-deepl-key>"
+dotnet run --project Tools/LocaleGenerator -c Release
+```
+
+`--api-key <KEY>`, `--languages ar,de,...`, `--source`, and `--out` override the defaults. The tool skips any language that is not in DeepL's v2 catalog and prints it in the summary for manual review.
+
 ---
 
 ## License
