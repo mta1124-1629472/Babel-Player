@@ -89,16 +89,26 @@ def make_replacement_re(attrs: Iterable[str]) -> re.Pattern[bytes]:
     return re.compile(pattern)
 
 
-def apply_replacements(content: bytes, inverse: Dict[str, str]) -> Tuple[bytes, Dict[str, int]]:
+def choose_key(attr_name: str, decoded: str, inverse: Dict[str, str], strings: Dict[str, str]) -> str | None:
+    if attr_name == "AutomationProperties.Name":
+        tooltip_key = inverse.get(decoded)
+        if tooltip_key and tooltip_key.startswith("Tooltip_"):
+            automation_key = "Automation_" + tooltip_key[len("Tooltip_"):]
+            return automation_key if automation_key in strings else tooltip_key
+    return inverse.get(decoded)
+
+
+def apply_replacements(content: bytes, inverse: Dict[str, str], strings: Dict[str, str]) -> Tuple[bytes, Dict[str, int]]:
     regex = make_replacement_re(ATTR_NAMES)
     stats = {"replaced": 0, "skipped": 0}
     unmatched: Dict[str, int] = {}
 
     def repl(match: re.Match[bytes]) -> bytes:
         attr = match.group(1)
+        attr_name = attr.decode("utf-8")
         raw = match.group(2).decode("utf-8")
         decoded = html.unescape(raw)
-        key = inverse.get(decoded)
+        key = choose_key(attr_name, decoded, inverse, strings)
         if key is None:
             unmatched[decoded] = unmatched.get(decoded, 0) + 1
             stats["skipped"] += 1
@@ -127,7 +137,7 @@ def main() -> None:
             content = f.read()
         original = content
         content = ensure_namespace(content)
-        content, stats = apply_replacements(content, inverse)
+        content, stats = apply_replacements(content, inverse, strings)
         if content != original:
             with open(path, "wb") as f:
                 f.write(content)

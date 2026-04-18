@@ -47,6 +47,6 @@ public sealed class LocalizeExtension : MarkupExtension
             Mode = BindingMode.OneWay,
         };
 
-        return binding.ProvideValue(serviceProvider);
+        return binding;
     }
 }
