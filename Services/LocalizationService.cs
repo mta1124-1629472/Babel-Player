@@ -81,14 +81,20 @@ public sealed class LocalizationService : INotifyPropertyChanged
             Dispatcher.UIThread.Post(Apply);
     }
 
-    /// <summary>Resolves the effective app language from a saved setting.</summary>
+    /// <summary>Resolves the effective app UI language from a saved setting.</summary>
     /// <remarks>
     /// <para>
     /// <paramref name="configuredLanguage"/> is either <c>"auto"</c> (track OS locale on
     /// each launch, matching the <c>Theme = "System"</c> sentinel pattern) or an
-    /// ISO 639-1 code that appears in <see cref="NllbLanguageCatalog.IsoToFloresToken"/>.
+    /// ISO 639-1 code that appears in <see cref="SupportedUiLanguageCatalog.IsoCodes"/>.
     /// </para>
-    /// <para>When auto-detection doesn't land on a supported code, falls back to <c>"en"</c>.</para>
+    /// <para>
+    /// Validation is against <see cref="SupportedUiLanguageCatalog"/> — languages that
+    /// actually ship a translated <c>Strings.*.resx</c> — not the larger pipeline
+    /// translation catalog.  If a persisted setting or OS locale is a pipeline-only
+    /// language (for example <c>"fr"</c> or <c>"ja"</c>), it falls back to <c>"en"</c>
+    /// so the UI doesn't silently mix an unsupported locale's formatting with English strings.
+    /// </para>
     /// </remarks>
     public static string ResolveAppLanguage(string? configuredLanguage)
     {
@@ -97,11 +103,11 @@ public sealed class LocalizationService : INotifyPropertyChanged
             !string.Equals(trimmed, "auto", StringComparison.OrdinalIgnoreCase))
         {
             var canonical = trimmed.ToLowerInvariant();
-            return NllbLanguageCatalog.IsoToFloresToken.ContainsKey(canonical) ? canonical : "en";
+            return SupportedUiLanguageCatalog.IsSupported(canonical) ? canonical : "en";
         }
 
         var osIso = _osCulture.TwoLetterISOLanguageName?.ToLowerInvariant();
-        if (!string.IsNullOrEmpty(osIso) && NllbLanguageCatalog.IsoToFloresToken.ContainsKey(osIso))
+        if (!string.IsNullOrEmpty(osIso) && SupportedUiLanguageCatalog.IsSupported(osIso))
             return osIso;
 
         return "en";

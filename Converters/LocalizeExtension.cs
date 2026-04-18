@@ -40,13 +40,14 @@ public sealed class LocalizeExtension : MarkupExtension
         if (string.IsNullOrEmpty(Key))
             return string.Empty;
 
-        var binding = new Binding
+        // Avalonia binds the returned IBinding to the target property the extension
+        // was applied to.  Since LocalizationService raises PropertyChanged("Item[]")
+        // on culture switch, every UI element using {local:Localize ...} refreshes live.
+        return new Binding
         {
             Source = LocalizationService.Instance,
             Path = $"[{Key}]",
             Mode = BindingMode.OneWay,
         };
-
-        return binding.ProvideValue(serviceProvider);
     }
 }
