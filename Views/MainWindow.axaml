@@ -850,6 +850,13 @@
               RowDefinitions="Auto,*,Auto,Auto"
               Background="{DynamicResource WindowBackgroundBrush}">
 
+            <Grid x:Name="PlayerChromeWidthHost"
+                  Grid.Row="0"
+                  Grid.RowSpan="4"
+                  Grid.Column="0"
+                  Background="Transparent"
+                  IsHitTestVisible="False" />
+
             <!-- Diagnostics warning bar (hidden when all deps available) -->
             <Border Grid.Row="0" Grid.Column="0" Background="{DynamicResource WarningBackgroundBrush}" Padding="10,5"
                     BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="0,0,0,1"
@@ -1134,10 +1141,9 @@
 
             <!-- Controls bar: bottom overlay spanning video + segments -->
             <Border x:Name="ControlsBarContainer"
-                    Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                    Grid.Row="3" Grid.Column="0"
                     Padding="12,7"
                     ZIndex="2"
-                    Margin="0,0,8,0"
                     IsVisible="{Binding Playback.Preview.IsControlsVisible}">
                 <Border.Styles>
                     <!-- Dev toolbar pill style: amber tint so it's visually distinct -->
