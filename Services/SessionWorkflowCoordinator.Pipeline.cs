@@ -86,6 +86,12 @@ public sealed partial class SessionWorkflowCoordinator
         if (!File.Exists(result.AmbianceAudioPath))
             throw new InvalidOperationException($"Vocal separation completed but ambiance artifact was not found: {result.AmbianceAudioPath}");
 
+        await WriteStemManifestsAsync(
+                result.VocalsAudioPath,
+                result.AmbianceAudioPath,
+                cancellationToken)
+            .ConfigureAwait(false);
+
         lock (_sessionLock)
         {
             CurrentSession = CurrentSession with
@@ -282,31 +288,39 @@ public sealed partial class SessionWorkflowCoordinator
 
     private async Task CommitTranscriptionSessionStateAsync(TranscriptionResult result, string transcriptPath)
     {
+        transcriptPath = await ArtifactIntegrity.FinalizeWorkingArtifactAsync(transcriptPath).ConfigureAwait(false);
+        var transcriptArtifact = await ArtifactJson.LoadTranscriptAsync(transcriptPath).ConfigureAwait(false);
+        await WriteTranscriptManifestAsync(transcriptPath, transcriptArtifact, CancellationToken.None).ConfigureAwait(false);
+
         var nowUtc = DateTimeOffset.UtcNow;
         // When vocal separation is disabled, clear any stale stem paths from a previous run that
         // had separation enabled. When separation is enabled, SeparateVocalsAsync already wrote
         // fresh stem paths into CurrentSession before this method is called, so we preserve them.
         var vocalsPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.VocalsAudioPath : null;
         var ambiancePath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.AmbianceAudioPath : null;
+        var candidate = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = result.Language,
+            VocalsAudioPath = vocalsPath,
+            AmbianceAudioPath = ambiancePath,
+            TranscribedAtUtc = nowUtc,
+            TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
+            TranscriptionProvider = CurrentSettings.TranscriptionProvider,
+            TranscriptionModel = CurrentSettings.TranscriptionModel,
+            TranscriptionLanguageHint = SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
+                CurrentSettings.TranscriptionLanguageHint),
+            StatusMessage = ShouldRunDiarization()
+                ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
+                : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
+        };
+        if (!ArtifactIntegrityValidator.ValidateTranscript(candidate, out var integrityError))
+            throw new InvalidOperationException($"Transcript integrity validation failed after commit: {integrityError}");
+
         lock (_sessionLock)
         {
-            CurrentSession = CurrentSession with
-            {
-                Stage = SessionWorkflowStage.Transcribed,
-                TranscriptPath = transcriptPath,
-                SourceLanguage = result.Language,
-                VocalsAudioPath = vocalsPath,
-                AmbianceAudioPath = ambiancePath,
-                TranscribedAtUtc = nowUtc,
-                TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
-                TranscriptionProvider = CurrentSettings.TranscriptionProvider,
-                TranscriptionModel = CurrentSettings.TranscriptionModel,
-                TranscriptionLanguageHint = SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
-                    CurrentSettings.TranscriptionLanguageHint),
-                StatusMessage = ShouldRunDiarization()
-                    ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
-                    : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
-            };
+            CurrentSession = candidate;
         }
 
         _log.Debug($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
@@ -319,21 +333,35 @@ public sealed partial class SessionWorkflowCoordinator
         string sourceLanguage,
         string targetLanguage)
     {
+        translationPath = await ArtifactIntegrity.FinalizeWorkingArtifactAsync(translationPath).ConfigureAwait(false);
+        var translationArtifact = await ArtifactJson.LoadTranslationAsync(translationPath).ConfigureAwait(false);
+        await WriteTranslationManifestAsync(
+                translationPath,
+                translationArtifact,
+                sourceLanguage,
+                targetLanguage,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
         var nowUtc = DateTimeOffset.UtcNow;
+        var candidate = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranslationPath = translationPath,
+            SourceLanguage = sourceLanguage,
+            TargetLanguage = targetLanguage,
+            TranslatedAtUtc = nowUtc,
+            TranslationRuntime = CurrentSettings.TranslationRuntime,
+            TranslationProvider = CurrentSettings.TranslationProvider,
+            TranslationModel = CurrentSettings.TranslationModel,
+            StatusMessage = "Translation complete. Ready for dubbing.",
+        };
+        if (!ArtifactIntegrityValidator.ValidateTranslation(candidate, out var integrityError))
+            throw new InvalidOperationException($"Translation integrity validation failed after commit: {integrityError}");
+
         lock (_sessionLock)
         {
-            CurrentSession = CurrentSession with
-            {
-                Stage = SessionWorkflowStage.Translated,
-                TranslationPath = translationPath,
-                SourceLanguage = sourceLanguage,
-                TargetLanguage = targetLanguage,
-                TranslatedAtUtc = nowUtc,
-                TranslationRuntime = CurrentSettings.TranslationRuntime,
-                TranslationProvider = CurrentSettings.TranslationProvider,
-                TranslationModel = CurrentSettings.TranslationModel,
-                StatusMessage = "Translation complete. Ready for dubbing.",
-            };
+            CurrentSession = candidate;
         }
 
         _log.Debug($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
@@ -653,9 +681,10 @@ public sealed partial class SessionWorkflowCoordinator
         string segmentsDir,
         ConcurrentDictionary<string, string> segmentAudioPaths,
         ConcurrentDictionary<string, double>? segmentDurations,
-        int totalSegments,
+        IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         PipelineStageContext? stageContext)
     {
+        int totalSegments = orderedSegments.Count;
         int succeeded = segmentAudioPaths.Count;
 
         if (totalSegments > 0 && succeeded == 0)
@@ -665,28 +694,72 @@ public sealed partial class SessionWorkflowCoordinator
                 "TTS stage completed but no segments were generated. Check provider configuration and logs.");
         }
 
+        if (succeeded != totalSegments)
+        {
+            lock (_sessionLock)
+            {
+                CurrentSession = CurrentSession with
+                {
+                    Stage = SessionWorkflowStage.Translated,
+                    TtsPath = null,
+                    MixedDubAudioPath = null,
+                    TtsGeneratedAtUtc = null,
+                    TtsSegmentsPath = segmentsDir,
+                    TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
+                    TtsSegmentDurations = segmentDurations is { Count: > 0 }
+                        ? new Dictionary<string, double>(segmentDurations)
+                        : null,
+                    TtsVoice = voice,
+                    TtsRuntime = CurrentSettings.TtsRuntime,
+                    TtsProvider = CurrentSettings.TtsProvider,
+                    DubTimingMode = CurrentSettings.DubTimingMode,
+                    AmbianceMixDb = CurrentSettings.AmbianceMixDb,
+                    StatusMessage = $"Dub incomplete. {succeeded}/{totalSegments} segment clips are ready; regenerate the failed clips before finalizing the dub.",
+                };
+            }
+
+            await SaveCurrentSessionAsync().ConfigureAwait(false);
+            throw new InvalidOperationException(
+                $"TTS stage produced partial segment output ({succeeded}/{totalSegments}). The session remains at Translated until every segment clip and the final dub validate.");
+        }
+
         string statusMessage = succeeded == totalSegments
             ? $"TTS generated ({voice}). Dubbing complete."
             : $"TTS generated ({voice}). {succeeded}/{totalSegments} segments ready — {totalSegments - succeeded} failed.";
+        var nowUtc = DateTimeOffset.UtcNow;
+        var candidate = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            TtsPath = ttsPath,
+            MixedDubAudioPath = renderResult.AmbianceMixed ? renderResult.MixedWithAmbiancePath : null,
+            TtsVoice = voice,
+            TtsGeneratedAtUtc = nowUtc,
+            TtsSegmentsPath = segmentsDir,
+            TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
+            TtsSegmentDurations = segmentDurations is { Count: > 0 }
+                ? new Dictionary<string, double>(segmentDurations)
+                : null,
+            TtsRuntime = CurrentSettings.TtsRuntime,
+            TtsProvider = CurrentSettings.TtsProvider,
+            DubTimingMode = CurrentSettings.DubTimingMode,
+            AmbianceMixDb = CurrentSettings.AmbianceMixDb,
+            StatusMessage = statusMessage,
+        };
+        await WriteTtsIntegrityArtifactsAsync(
+                candidate,
+                ttsPath,
+                renderResult,
+                segmentsDir,
+                segmentAudioPaths,
+                orderedSegments,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+        if (!ArtifactIntegrityValidator.ValidateTts(candidate, out var integrityError))
+            throw new InvalidOperationException($"TTS integrity validation failed after commit: {integrityError}");
 
         lock (_sessionLock)
         {
-            CurrentSession = CurrentSession with
-            {
-                Stage = SessionWorkflowStage.TtsGenerated,
-                TtsPath = ttsPath,
-                MixedDubAudioPath = renderResult.AmbianceMixed ? renderResult.MixedWithAmbiancePath : null,
-                TtsVoice = voice,
-                TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
-                TtsSegmentsPath = segmentsDir,
-                TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
-                TtsSegmentDurations = segmentDurations is { Count: > 0 }
-                    ? new Dictionary<string, double>(segmentDurations)
-                    : null,
-                TtsRuntime = CurrentSettings.TtsRuntime,
-                TtsProvider = CurrentSettings.TtsProvider,
-                StatusMessage = statusMessage,
-            };
+            CurrentSession = candidate;
         }
 
         await SaveCurrentSessionAsync().ConfigureAwait(false);

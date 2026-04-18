@@ -1,211 +1,131 @@
 ## Contributor Rules
 
-### Project posture
+### Start Here
 
-This project is built as a sequence of vertical slices around one core product chain:
+Read these before non-trivial work:
 
-`source media -> timed transcript -> translated/adapted dialogue -> spoken dubbed output -> in-context preview and refinement`
+- [AGENTS.md](AGENTS.md)
+- [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md)
+- [docs/architecture.md](docs/architecture.md)
+- [docs/PLAN.md](docs/PLAN.md)
+- [docs/Engineering-Plan.md](docs/Engineering-Plan.md)
+- [docs/testing-requirements.md](docs/testing-requirements.md)
 
-Contributors should protect that center of gravity.
-This repo should not drift into a shell-first, framework-first, or abstraction-first project.
+Use `docs/PLAN.md` as the document map. Dated plan and milestone files are historical unless that file says otherwise.
 
-### Before you start
+### Project Posture
 
-Read:
+The repo is built around one real user outcome:
 
-- [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md) for the full project context (tech stack, architecture, commands, conventions)
-- `docs/PLAN.md` for milestone order and gates
-- `docs/architecture.md` for the current structural map and major boundaries
-- `AGENTS.md` for repo behavior rules
-- any milestone-specific docs relevant to the area you are touching
+```text
+load media -> transcript -> translated dialogue -> spoken output -> preview/refine -> resume later
+```
 
-If your intended work does not clearly support the current milestone, it is probably out of scope.
+Contributions should strengthen that path.
 
-### Naming conventions
+Do not drift the project into shell-first polish, framework-first cleanup, or speculative architecture work that does not help the workflow above.
 
-For naming conventions, see [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#naming-conventions).
+### Scope Discipline
 
-### Scope discipline
+Do:
 
-Contributors are expected to work one milestone at a time.
+- keep changes tightly scoped
+- prefer real vertical slices over speculative extension points
+- fix the blocker in front of you, not every adjacent imperfection
+- preserve truthful runtime behavior and readiness states
 
 Do not:
 
-- start downstream features early
-- add optional enhancements before the current milestone is proven
-- refactor broadly just because a cleaner architecture is possible
-- add speculative extension points for future providers, runtimes, or workflows
+- mix unrelated refactors into milestone or bug-fix work
+- add fake surfaces or silent fallbacks
+- document or present incomplete work as shipped
+- start downstream feature work just because the shape seems obvious
 
-A narrower real feature is preferred over a broader partial one.
+### Truthful Behavior Only
 
-### Truthful behavior only
-
-Do not merge code that gives a false impression of readiness.
+If something is incomplete, the UI and docs should say so plainly.
 
 That includes:
 
-- fake buttons or surfaces that look functional but are not
-- silent fallback paths
-- “coming soon” behavior disguised as completed implementation
-- runtime or local-model claims that have not been verified
+- no fake buttons
+- no pretend-ready provider paths
+- no hidden fallback behavior that changes compute path or provider choice without making it obvious
+- no stale status docs claiming work is still open after the code has moved on
 
-If something is incomplete, it should be obviously incomplete.
+### Verification Requirements
 
-### Verification requirements
+Baseline verification before opening a PR:
 
-Before opening or merging a PR, contributors should verify changes at the appropriate level.
+```powershell
+dotnet build Babel-Player.sln -c Release
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release
+python scripts/check-architecture.py
+```
 
-See [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#build--test-commands) for the full verification sequence.
+Also run this when you touched smoke-covered seams:
 
-If the change affects behavior that can be manually exercised, also run the relevant smoke path for the current milestone and note what was verified.
+```powershell
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Category=Smoke"
+```
 
-A change is not done because it compiles.
-It is done when the milestone gate it touches is actually demonstrated.
+If the change affects UI or workflow behavior, include a short manual verification note.
 
-### Troubleshooting script (`/troubleshoot`)
+### Testing Policy
 
-For the standard diagnostic sequence, see [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#build--test-commands).
+`BabelPlayer.Tests` is the maintained suite.
 
-Treat this output as required evidence in bug reports and fix PRs:
+Keep it:
 
-- failing step
-- first concrete error
-- impacted files/symbols
+- deterministic
+- fast enough for routine local and CI use
+- free of real Python, ffmpeg, container, libmpv, network, manual, or performance-dependent dependencies
 
-This keeps troubleshooting repeatable and prevents vague "it failed" reports.
+Before adding or modifying tests, read [docs/testing-requirements.md](docs/testing-requirements.md).
 
-### Smoke notes
+### Smoke Notes and Historical Evidence
 
-For milestone work, include a short smoke note in the PR description or related notes.
+Milestone smoke notes live under `docs/history/smoke/`.
 
-A good smoke note says:
+Rules:
 
-- what was tested
-- on what kind of input
-- what exact gate was verified
-- anything still missing or fragile
+- use milestone-based filenames
+- keep status honest
+- treat them as timeline evidence, not current status authority
 
-### Smoke note conventions
+Current status belongs in:
 
-Store milestone smoke notes under `docs/history/smoke/` using this naming pattern:
-
-- `milestone-01-foundation.md`
-- `milestone-02-headless-libmpv.md`
-
-Conventions:
-- lowercase
-- hyphen-separated
-- two-digit milestone number
-- no root-level milestone files
-- no separate `*_COMPLETE.md` file if the smoke note already records gate status
-
-Allowed status values:
-- `complete`
-- `partial`
-- `failed`
-
-A smoke note must include:
-- metadata
-- gate summary
-- verified items
-- unverified items
-- concrete evidence
-- conclusion
-- deferred items
-
-If any gate item remains unverified, the smoke note must not say `complete`.
-
-### Smoke note location
-
-Store milestone smoke notes under `docs/history/smoke/` using milestone-based filenames.
-Avoid root-level smoke-note files and avoid separate completion-note files unless there is a specific reason they add information not already present in the smoke note.
-
-Example:
-
-“Loaded sample media, generated transcript, persisted artifacts, restarted app, and confirmed transcript reopened correctly. This verifies the ingest/transcript persistence gate.”
+- `docs/Engineering-Plan.md`
+- `docs/Next-Priorities-2026-04-16.md`
 
 ### Refactors
 
-Refactors are allowed only when they do at least one of these:
+Refactors are justified when they:
 
-- unblock the current milestone
-- reduce real complexity in code being actively changed
+- unblock current work
+- reduce real complexity in the path being changed
 - remove a proven source of instability
 
-Refactors are not justified by:
+They are not justified by:
 
-- aesthetic preference
 - architectural purity
 - future-proofing alone
-- desire to align the whole repo to a new pattern mid-milestone
+- a desire to make the entire repo uniform mid-change
 
-### UI work
-
-Do not prioritize shell polish over core workflow progress.
-
-UI additions should generally serve one of these purposes:
-
-- make the current milestone usable
-- expose truthful state
-- improve debugging or inspection
-- support transcript/translation/TTS/preview flow directly
-
-Avoid prestige UI work before the product loop is real.
-
-- **Avoid UI Verbosity:** Adhere to the verbosity audit (April 2026): avoid over-explaining how the "sausage is made" in user-facing status messages. Prefer concise, professional labels (e.g., "Ready", "Reset to [Stage]") over internal technical descriptions. Do not include instructional filler for standard UI elements (e.g., explaining how "OK" buttons work).
-
-### New abstractions
-
-Before adding a new service, coordinator, factory, interface, or subsystem, ask:
-
-- is this needed right now for the current milestone?
-- does it model a real current behavior?
-- is there a smaller honest version that works?
-
-If the abstraction mainly serves imagined future needs, do not add it yet.
-
-### Python and inference environment hygiene
-
-For Python/C# serialization contracts and inference conventions, see [docs/AI-CONTEXT.md](docs/AI-CONTEXT.md#pythonc-serialization-contracts).
-
-### Historical preservation
-
-Do not delete prior working code or experiments without preserving them somewhere recoverable.
-If you are replacing something, archive the old path first.
-
-The repo has already lost useful working history before. Do not repeat that.
-
-### PR expectations
+### Review Expectations
 
 A good PR is:
 
-- tightly scoped
-- aligned to one milestone or one blocker
-- honest about what it does and does not complete
-- accompanied by build/test results
-- accompanied by smoke results when relevant
+- narrow
+- honest about what it completes
+- verified
+- accompanied by smoke or manual notes when relevant
 
 A bad PR:
 
-- mixes milestone work with opportunistic polish
-- introduces large unrelated refactors
-- adds fake scaffolding
-- claims completion without verifying behavior
+- mixes unrelated cleanup with feature work
+- expands scope after the core task is already solved
+- introduces stale or contradictory docs
 
-### When you find a blocker
+### Definition of a Good Contribution
 
-If you hit a real blocker:
-
-- document it clearly
-- fix only what is needed to remove the blocker
-- avoid expanding into adjacent cleanup unless it is necessary
-
-Known infrastructure risks may deserve early attention, but they should not become an excuse for sideways expansion.
-
-### Definition of good contribution
-
-A good contribution moves the repo closer to this real user outcome:
-
-load media -> get transcript -> get translated/adapted dialogue -> generate spoken output -> preview/refine in context -> save and resume later
-
-If your change does not strengthen that path, it needs a strong reason to exist.
+A good contribution leaves the repo more truthful, more verifiable, and more usable for the actual dubbing workflow.

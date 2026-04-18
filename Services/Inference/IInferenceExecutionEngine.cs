@@ -73,16 +73,16 @@ public interface IInferenceExecutionEngine
         /// <param name="provider">The translation provider to execute the single-segment translation.</param>
         /// <param name="request">The single-segment translation request containing text, language targets, and any provider-specific options.</param>
         /// <param name="cancellationToken">Token to observe for cancellation of the translation operation.</param>
-        /// <returns>A <see cref="TranslationResult"/> containing the translated segment and metadata about the operation.</returns>
+        /// <returns>A <see cref="SingleSegmentTranslationTextResult"/> containing translated text and normalized language metadata.</returns>
         /// <remarks>
         /// Entry state: caller must have a prepared segment and any necessary provider credentials available.
         /// Exit state on success: returns with a completed translation result for the requested segment; no session state is persisted by this call.
         /// Cancellation: operation honors <paramref name="cancellationToken"/> and will attempt to stop work promptly if cancellation is requested.
         /// Failure: provider-specific errors are surfaced via the returned <see cref="TranslationResult"/> or by exceptions thrown by the provider implementation.
         /// </remarks>
-        Task<TranslationResult> TranslateSingleSegmentAsync(
+        Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
         ITranslationProvider provider,
-        SingleSegmentTranslationRequest request,
+        SingleSegmentTranslationTextRequest request,
         CancellationToken cancellationToken = default);
 
     /// <summary>

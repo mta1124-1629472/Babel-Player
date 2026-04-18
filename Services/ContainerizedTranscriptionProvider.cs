@@ -61,6 +61,7 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider,
 
         var transcript = new TranscriptArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             Language = result.Language,
             LanguageProbability = result.LanguageProbability,
             Segments =
@@ -74,7 +75,11 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider,
             ],
         };
 
-        await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(transcript), cancellationToken);
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                request.OutputJsonPath,
+                ArtifactJson.SerializeTranscript(transcript),
+                cancellationToken)
+            .ConfigureAwait(false);
 
         _log.Debug($"[ContainerizedTranscription] Complete: {result.Segments.Count} segments, lang={result.Language}");
 

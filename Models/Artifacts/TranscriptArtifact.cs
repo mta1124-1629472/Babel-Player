@@ -5,6 +5,9 @@ namespace Babel.Player.Models;
 
 public sealed class TranscriptArtifact
 {
+    [JsonPropertyName("schema_version")]
+    public string? SchemaVersion { get; set; }
+
     [JsonPropertyName("language")]
     public string? Language { get; set; }
 

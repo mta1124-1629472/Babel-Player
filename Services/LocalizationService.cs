@@ -106,12 +106,12 @@ public sealed class LocalizationService : INotifyPropertyChanged
         if (!string.IsNullOrEmpty(trimmed) &&
             !string.Equals(trimmed, "auto", StringComparison.OrdinalIgnoreCase))
         {
-            var canonical = trimmed.ToLowerInvariant();
-            return SupportedUiLanguageCatalog.IsSupported(canonical) ? canonical : "en";
+            return TryGetSupportedLanguage(trimmed) ?? "en";
         }
 
-        var osIso = _osCulture.TwoLetterISOLanguageName?.ToLowerInvariant();
-        if (!string.IsNullOrEmpty(osIso) && SupportedUiLanguageCatalog.IsSupported(osIso))
+        var osIso = TryGetSupportedLanguage(_osCulture.Name)
+            ?? TryGetSupportedLanguage(_osCulture.TwoLetterISOLanguageName);
+        if (!string.IsNullOrEmpty(osIso))
             return osIso;
 
         return "en";
@@ -141,4 +141,29 @@ public sealed class LocalizationService : INotifyPropertyChanged
 
     private static bool IsRtlCulture(CultureInfo culture) =>
         string.Equals(culture.TwoLetterISOLanguageName, "ar", StringComparison.OrdinalIgnoreCase);
+
+    private static string? TryGetSupportedLanguage(string? languageCode)
+    {
+        var canonical = CanonicalizeLanguageCode(languageCode);
+        return canonical is not null && SupportedUiLanguageCatalog.IsSupported(canonical)
+            ? canonical
+            : null;
+    }
+
+    private static string? CanonicalizeLanguageCode(string? languageCode)
+    {
+        if (string.IsNullOrWhiteSpace(languageCode))
+            return null;
+
+        var trimmed = languageCode.Trim().Replace('_', '-');
+        try
+        {
+            return CultureInfo.GetCultureInfo(trimmed).TwoLetterISOLanguageName.ToLowerInvariant();
+        }
+        catch (CultureNotFoundException)
+        {
+            var separator = trimmed.IndexOf('-');
+            return (separator > 0 ? trimmed[..separator] : trimmed).ToLowerInvariant();
+        }
+    }
 }

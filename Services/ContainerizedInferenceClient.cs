@@ -808,16 +808,17 @@ public sealed class ContainerizedInferenceClient : IDisposable
         ContainerizedRequestKind requestKind = ContainerizedRequestKind.Tts)
     {
         using var lease = AcquireLease(requestKind);
+        var normalizedFilename = ExtractServerFilename(filename);
 
         using var response = await _httpClient.GetAsync(
-            $"{_inferenceServiceUrl}/tts/audio/{Uri.EscapeDataString(filename)}",
+            $"{_inferenceServiceUrl}/tts/audio/{Uri.EscapeDataString(normalizedFilename)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new InvalidOperationException($"Failed to download TTS audio '{filename}': {error}");
+            throw new InvalidOperationException($"Failed to download TTS audio '{normalizedFilename}': {error}");
         }
 
         using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -829,6 +830,21 @@ public sealed class ContainerizedInferenceClient : IDisposable
             bufferSize: 81920,
             useAsync: true);
         await contentStream.CopyToAsync(fileStream, cancellationToken);
+    }
+
+    private static string ExtractServerFilename(string pathOrFilename)
+    {
+        if (string.IsNullOrWhiteSpace(pathOrFilename))
+            throw new InvalidOperationException("Cannot download TTS audio without a server filename.");
+
+        var trimmed = pathOrFilename.Trim();
+        var lastSlash = Math.Max(trimmed.LastIndexOf('/'), trimmed.LastIndexOf('\\'));
+        var filename = lastSlash >= 0 ? trimmed[(lastSlash + 1)..] : trimmed;
+
+        if (string.IsNullOrWhiteSpace(filename))
+            throw new InvalidOperationException($"Cannot extract filename from server audio path: '{pathOrFilename}'");
+
+        return filename;
     }
 
     /// <summary>

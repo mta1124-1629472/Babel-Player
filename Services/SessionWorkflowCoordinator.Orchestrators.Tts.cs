@@ -92,7 +92,7 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                     segmentsDir,
                     segmentAudioPaths,
                     segmentDurations,
-                    totalSegments,
+                    orderedSegments,
                     stageContext).ConfigureAwait(false);
                 stageSucceeded = true;
             }

@@ -71,8 +71,8 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         return result;
     }
 
-    public async Task<TranslationResult> TranslateSingleSegmentAsync(
-        SingleSegmentTranslationRequest request,
+    public async Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+        SingleSegmentTranslationTextRequest request,
         CancellationToken cancellationToken = default)
     {
         _log.Debug($"[ContainerizedTranslation] Single-segment regen: {request.SegmentId}");
@@ -81,6 +81,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         // Start/end are not meaningful for translation; we only need the translated text.
         var singleSegmentTranscript = ArtifactJson.SerializeTranscript(new TranscriptArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             Language = request.SourceLanguage,
             LanguageProbability = 1.0,
             Segments =
@@ -105,44 +106,14 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
             throw new InvalidOperationException(
                 $"Containerized single-segment translation failed: {result.ErrorMessage}");
 
-        var translatedText = result.Segments[0].TranslatedText;
-
-        // Read existing translation JSON, update the target segment, write back.
-        if (!File.Exists(request.TranslationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
-
-        var existing = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
-
-        var updated = false;
-        if (existing.Segments != null)
-        {
-            foreach (var seg in existing.Segments)
-            {
-                if (seg.Id == request.SegmentId)
-                {
-                    seg.TranslatedText = translatedText;
-                    updated = true;
-                    break;
-                }
-            }
-        }
-
-        if (!updated)
-            throw new InvalidOperationException(
-                $"Segment '{request.SegmentId}' not found in translation JSON.");
-
-        var sourceLanguage = existing.SourceLanguage ?? request.SourceLanguage;
-        var targetLanguage = existing.TargetLanguage ?? request.TargetLanguage;
-
-        var updatedSegments = BuildTranslatedSegments(existing.Segments ?? []);
-        var updatedResult = new TranslationResult(
-            true, updatedSegments, sourceLanguage, targetLanguage, null);
-
-        await WriteTranslationArtifactAsync(existing, request.OutputJsonPath, cancellationToken);
-
         _log.Debug($"[ContainerizedTranslation] Single-segment regen complete: {request.SegmentId}");
 
-        return updatedResult;
+        return new SingleSegmentTranslationTextResult(
+            true,
+            result.Segments[0].TranslatedText,
+            request.SourceLanguage,
+            request.TargetLanguage,
+            null);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -176,6 +147,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
     {
         var artifact = new TranslationArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             SourceLanguage = sourceLanguage,
             TargetLanguage = targetLanguage,
             Segments =
