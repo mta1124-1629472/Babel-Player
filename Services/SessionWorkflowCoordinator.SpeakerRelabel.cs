@@ -10,10 +10,6 @@ namespace Babel.Player.Services;
 public sealed partial class SessionWorkflowCoordinator
 {
     /// <summary>
-    /// Rewrites every segment with <paramref name="fromSpeakerId"/> to <paramref name="toSpeakerId"/> in the transcript
-    /// and translation (if present), then remaps per-speaker reference and voice dictionaries on the session.
-    /// </summary>
-    /// <summary>
     /// Relabels all diarized transcript (and translation) segments from one speaker ID to another and updates session speaker mappings.
     /// </summary>
     /// <param name="fromSpeakerId">The speaker ID to replace; leading/trailing whitespace is trimmed and must not be null or empty.</param>
@@ -101,30 +97,16 @@ public sealed partial class SessionWorkflowCoordinator
             var voices = CurrentSession.SpeakerVoiceAssignments is null
                 ? new Dictionary<string, string>(StringComparer.Ordinal)
                 : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
-            if (voices.TryGetValue(from, out var voicePath) && !string.IsNullOrWhiteSpace(voicePath))
-            {
-                if (!voices.ContainsKey(to))
-                    voices[to] = voicePath;
-                voices.Remove(from);
-            }
-            else
-            {
-                voices.Remove(from);
-            }
+            if (voices.TryGetValue(from, out var voicePath) && !string.IsNullOrWhiteSpace(voicePath) && !voices.ContainsKey(to))
+                voices[to] = voicePath;
+            voices.Remove(from);
 
             var refs = CurrentSession.SpeakerReferenceAudioPaths is null
                 ? new Dictionary<string, string>(StringComparer.Ordinal)
                 : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
-            if (refs.TryGetValue(from, out var refPath) && !string.IsNullOrWhiteSpace(refPath))
-            {
-                if (!refs.ContainsKey(to))
-                    refs[to] = refPath;
-                refs.Remove(from);
-            }
-            else
-            {
-                refs.Remove(from);
-            }
+            if (refs.TryGetValue(from, out var refPath) && !string.IsNullOrWhiteSpace(refPath) && !refs.ContainsKey(to))
+                refs[to] = refPath;
+            refs.Remove(from);
 
             CurrentSession = CurrentSession with
             {
