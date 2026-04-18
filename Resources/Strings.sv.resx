@@ -67,7 +67,7 @@
     <value>Avbryt</value>
   </data>
   <data name="Common_Close" xml:space="preserve">
-    <value>Nära</value>
+    <value>Stäng</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
     <value>Spara</value>
@@ -91,7 +91,7 @@
     <value>Omstart</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>Babel-spelare</value>
+    <value>Babel Player</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
     <value>Babel Player - Inställningar</value>
@@ -115,13 +115,13 @@
     <value>Stäng fönstret</value>
   </data>
   <data name="Menu_File_Close" xml:space="preserve">
-    <value>Nära</value>
+    <value>Stäng</value>
   </data>
   <data name="Menu_File_ForceClose" xml:space="preserve">
-    <value>Force Close</value>
+    <value>Tvångsstäng</value>
   </data>
   <data name="Section_Pipeline" xml:space="preserve">
-    <value>Rörledning</value>
+    <value>PIPELINE</value>
   </data>
   <data name="Tooltip_ClearPipeline" xml:space="preserve">
     <value>Rensa pipeline och börja om på nytt</value>
@@ -139,7 +139,7 @@
     <value>Separera sång före transkribering</value>
   </data>
   <data name="Section_Transcription" xml:space="preserve">
-    <value>ÖVERFÖRING</value>
+    <value>TRANSKRIBERING</value>
   </data>
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
     <value>Ny transkribering (välj endast detta steg eller inkludera nedströms)</value>
@@ -193,7 +193,7 @@
     <value>ÖVERSÄTTNING</value>
   </data>
   <data name="Tooltip_RerunTranslation" xml:space="preserve">
-    <value>Re-run översättning (välj endast detta steg eller inkludera dubbning)</value>
+    <value>Kör översättningen igen (välj bara det här steget eller inkludera dubbning)</value>
   </data>
   <data name="Section_Dub" xml:space="preserve">
     <value>DUB</value>
@@ -625,7 +625,7 @@
     <value>Hantera lokalt hostade modeller. Molnleverantörer kräver inga nedladdningar.</value>
   </data>
   <data name="Settings_About_AppName" xml:space="preserve">
-    <value>Babel-spelare</value>
+    <value>Babel Player</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
     <value>AGPL-3.0-licens</value>
@@ -670,7 +670,7 @@
     <value>Öppna loggmapp</value>
   </data>
   <data name="Crash_Button_Close" xml:space="preserve">
-    <value>Nära</value>
+    <value>Stäng</value>
   </data>
   <data name="Wizard_Title" xml:space="preserve">
     <value>Guide för högtalarreferens</value>
@@ -943,3 +943,5 @@
     <value>Kinesiska (förenklad)</value>
   </data>
 </root>
+
+

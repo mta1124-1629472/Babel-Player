@@ -67,10 +67,10 @@
     <value>Abbrechen</value>
   </data>
   <data name="Common_Close" xml:space="preserve">
-    <value>Schließen</value>
+    <value>Schließen Sie</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
-    <value>Speichern</value>
+    <value>Speichern Sie</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
     <value>Leeren</value>
@@ -82,7 +82,7 @@
     <value>Anwenden</value>
   </data>
   <data name="Common_Browse" xml:space="preserve">
-    <value>Durchsuchen</value>
+    <value>Durchsuchen Sie</value>
   </data>
   <data name="Common_Download" xml:space="preserve">
     <value>Herunterladen</value>
@@ -139,7 +139,7 @@
     <value>Getrennter Gesang vor der Transkription</value>
   </data>
   <data name="Section_Transcription" xml:space="preserve">
-    <value>TRANSCRIPTION</value>
+    <value>TRANSKRIPTION</value>
   </data>
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
     <value>Transkription wiederholen (nur diesen Schritt wählen oder nachgelagerte Schritte einbeziehen)</value>
@@ -190,7 +190,7 @@
     <value>Lautsprecher-Einrichtungsassistent...</value>
   </data>
   <data name="Section_Translation" xml:space="preserve">
-    <value>TRANSLATION</value>
+    <value>ÜBERSETZUNG</value>
   </data>
   <data name="Tooltip_RerunTranslation" xml:space="preserve">
     <value>Wiederholung der Übersetzung (nur diese Phase oder auch Synchronisation)</value>
@@ -253,7 +253,7 @@
     <value>ANBIETERDIAGNOSTIK</value>
   </data>
   <data name="Status_Stale" xml:space="preserve">
-    <value>schal</value>
+    <value>veraltet</value>
   </data>
   <data name="Automation_PipelineProgress" xml:space="preserve">
     <value>Fortschritte in der Pipeline</value>
@@ -388,7 +388,7 @@
     <value>Stummschaltung umschalten</value>
   </data>
   <data name="Tooltip_Volume" xml:space="preserve">
-    <value>Band</value>
+    <value>Lautstärke</value>
   </data>
   <data name="Tooltip_ToggleSidePanes" xml:space="preserve">
     <value>Seitenwände umklappen (S)</value>
@@ -607,7 +607,7 @@
     <value>Zielgipfel:</value>
   </data>
   <data name="Settings_Placeholder_TargetPeak" xml:space="preserve">
-    <value>Auto oder Nissen</value>
+    <value>Auto oder Nits</value>
   </data>
   <data name="Settings_Label_HdrComputePeak" xml:space="preserve">
     <value>HDR-Berechnungsspitze:</value>
@@ -808,7 +808,7 @@
     <value>Alle Änderungen verwerfen und schließen</value>
   </data>
   <data name="Wizard_Button_Finish" xml:space="preserve">
-    <value>Oberfläche</value>
+    <value>Fertigstellen</value>
   </data>
   <data name="Wizard_Tooltip_Finish" xml:space="preserve">
     <value>Sprach- und Referenzänderungen auf die Sitzung anwenden</value>
@@ -943,3 +943,5 @@
     <value>Chinesisch (vereinfacht)</value>
   </data>
 </root>
+
+

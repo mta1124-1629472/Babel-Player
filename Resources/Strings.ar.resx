@@ -118,7 +118,7 @@
     <value>إغلاق</value>
   </data>
   <data name="Menu_File_ForceClose" xml:space="preserve">
-    <value>إغلاق القوة</value>
+    <value>إغلاق إجباري</value>
   </data>
   <data name="Section_Pipeline" xml:space="preserve">
     <value>خط الأنابيب</value>
@@ -424,7 +424,7 @@
     <value>الإعدادات</value>
   </data>
   <data name="Settings_Nav_General" xml:space="preserve">
-    <value>جنرال لواء</value>
+    <value>عام</value>
   </data>
   <data name="Settings_Nav_Hotkeys" xml:space="preserve">
     <value>مفاتيح التشغيل السريع</value>
@@ -475,7 +475,7 @@
     <value>حالة الواجهة الخلفية</value>
   </data>
   <data name="Settings_Group_DockerGpu" xml:space="preserve">
-    <value>خدمة Docker GPU Docker GPU</value>
+    <value>خدمة Docker لوحدة معالجة الرسومات</value>
   </data>
   <data name="Settings_Label_AdvancedGpuUrl" xml:space="preserve">
     <value>عنوان URL لخدمة وحدة معالجة الرسومات المتقدمة</value>
@@ -739,7 +739,7 @@
     <value>المقطع الصوتي المستخدم كمرجع لاستنساخ صوت كوين</value>
   </data>
   <data name="Wizard_Button_Play" xml:space="preserve">
-    <value>اللعب</value>
+    <value>تشغيل</value>
   </data>
   <data name="Wizard_Button_Show" xml:space="preserve">
     <value>عرض</value>
@@ -769,7 +769,7 @@
     <value>الانتقال إلى مقاطع المتحدثين</value>
   </data>
   <data name="Wizard_Tooltip_JumpToSegments" xml:space="preserve">
-    <value>انقر فوق الطابع الزمني للانتقال إلى تلك النقطة في الفيديو، ثم استخدم "استخدام رأس التشغيل</value>
+    <value>انقر فوق الطابع الزمني للانتقال إلى تلك النقطة في الفيديو، ثم استخدم &quot;استخدام رأس التشغيل&quot;.</value>
   </data>
   <data name="Wizard_Tooltip_ConfidenceReason" xml:space="preserve">
     <value>سبب تصنيف هذا المقطع على أنه جيد/ضعيف</value>
@@ -919,10 +919,10 @@
     <value>ياباني</value>
   </data>
   <data name="Language_ko" xml:space="preserve">
-    <value>كوري</value>
+    <value>الكورية</value>
   </data>
   <data name="Language_nl" xml:space="preserve">
-    <value>اللغة الهولندية</value>
+    <value>الهولندية</value>
   </data>
   <data name="Language_pl" xml:space="preserve">
     <value>البولندية</value>
@@ -943,3 +943,4 @@
     <value>الصينية (المبسطة)</value>
   </data>
 </root>
+

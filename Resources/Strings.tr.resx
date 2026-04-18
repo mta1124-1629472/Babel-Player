@@ -79,7 +79,7 @@
     <value>TAMAM.</value>
   </data>
   <data name="Common_Apply" xml:space="preserve">
-    <value>Başvurmak</value>
+    <value>Uygula</value>
   </data>
   <data name="Common_Browse" xml:space="preserve">
     <value>Gözat</value>
@@ -91,7 +91,7 @@
     <value>Yeniden Başlat</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>Babel Oyuncu</value>
+    <value>Babel Player</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
     <value>Babel Player - Ayarlar</value>
@@ -139,7 +139,7 @@
     <value>Transkripsiyondan önce vokalleri ayırın</value>
   </data>
   <data name="Section_Transcription" xml:space="preserve">
-    <value>ÇEVİRİ</value>
+    <value>TRANSKRİPSİYON</value>
   </data>
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
     <value>Transkripsiyonu yeniden çalıştırın (yalnızca bu aşamayı seçin veya aşağı akışı dahil edin)</value>
@@ -403,7 +403,7 @@
     <value>Tam ekranı aç / kapat</value>
   </data>
   <data name="Tooltip_OpenSettings" xml:space="preserve">
-    <value>Açık ayarlar</value>
+    <value>Ayarları aç</value>
   </data>
   <data name="Automation_Settings" xml:space="preserve">
     <value>Ayarlar</value>
@@ -625,7 +625,7 @@
     <value>Yerel olarak barındırılan modelleri yönetin. Bulut sağlayıcıları indirme gerektirmez.</value>
   </data>
   <data name="Settings_About_AppName" xml:space="preserve">
-    <value>Babel Oyuncu</value>
+    <value>Babel Player</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
     <value>AGPL-3.0 Lisansı</value>
@@ -739,7 +739,7 @@
     <value>Qwen ses klonlaması için referans olarak kullanılan ses klibi</value>
   </data>
   <data name="Wizard_Button_Play" xml:space="preserve">
-    <value>Oyun</value>
+    <value>Oynat</value>
   </data>
   <data name="Wizard_Button_Show" xml:space="preserve">
     <value>Göster</value>
@@ -898,7 +898,7 @@
     <value>Arapça</value>
   </data>
   <data name="Language_de" xml:space="preserve">
-    <value>Alman</value>
+    <value>Almanca</value>
   </data>
   <data name="Language_en" xml:space="preserve">
     <value>İngilizce</value>
@@ -913,7 +913,7 @@
     <value>Hintçe</value>
   </data>
   <data name="Language_it" xml:space="preserve">
-    <value>İtalyan</value>
+    <value>İtalyanca</value>
   </data>
   <data name="Language_ja" xml:space="preserve">
     <value>Japonca</value>
@@ -934,7 +934,7 @@
     <value>Rusça</value>
   </data>
   <data name="Language_sv" xml:space="preserve">
-    <value>İsveç</value>
+    <value>İsveççe</value>
   </data>
   <data name="Language_tr" xml:space="preserve">
     <value>Türkçe</value>
@@ -943,3 +943,4 @@
     <value>Çince (Basitleştirilmiş)</value>
   </data>
 </root>
+

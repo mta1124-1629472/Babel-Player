@@ -118,7 +118,7 @@
     <value>Zamknij</value>
   </data>
   <data name="Menu_File_ForceClose" xml:space="preserve">
-    <value>Force Close</value>
+    <value>Wymuś zamknięcie</value>
   </data>
   <data name="Section_Pipeline" xml:space="preserve">
     <value>Rurociąg</value>
@@ -226,7 +226,7 @@
     <value>Źródło Audio</value>
   </data>
   <data name="Label_TargetSubDub" xml:space="preserve">
-    <value>Target Sub/Dub</value>
+    <value>Docelowe napisy/dubbing</value>
   </data>
   <data name="Section_ActiveConfig" xml:space="preserve">
     <value>AKTYWNA KONFIGURACJA</value>
@@ -259,7 +259,7 @@
     <value>Postęp prac nad rurociągiem</value>
   </data>
   <data name="Button_RunPipeline" xml:space="preserve">
-    <value>Run Pipeline</value>
+    <value>Uruchom pipeline</value>
   </data>
   <data name="Button_CancelPipeline" xml:space="preserve">
     <value>Anuluj rurociąg</value>
@@ -544,13 +544,13 @@
     <value>Dekoder sprzętowy:</value>
   </data>
   <data name="Settings_Label_GpuRenderApi" xml:space="preserve">
-    <value>GPU Rendering API:</value>
+    <value>Interfejs renderowania GPU:</value>
   </data>
   <data name="Settings_Label_ExportEncoder" xml:space="preserve">
     <value>Export Encoder:</value>
   </data>
   <data name="Settings_Group_GpuNext" xml:space="preserve">
-    <value>GPU-Next Backend</value>
+    <value>Backend GPU-Next</value>
   </data>
   <data name="Settings_Check_UseGpuNext" xml:space="preserve">
     <value>Użyj wyjścia wideo gpu-next (wymagane dla ulepszeń RTX)</value>
@@ -943,3 +943,5 @@
     <value>Chiński (uproszczony)</value>
   </data>
 </root>
+
+

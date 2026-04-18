@@ -70,10 +70,10 @@
     <value>关闭</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
-    <value>节省</value>
+    <value>保存</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
-    <value>清晰</value>
+    <value>清空</value>
   </data>
   <data name="Common_Ok" xml:space="preserve">
     <value>好的</value>
@@ -91,7 +91,7 @@
     <value>重新启动</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>巴别球员</value>
+    <value>Babel Player</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
     <value>巴别播放器 - 设置</value>
@@ -274,7 +274,7 @@
     <value>导出字幕（.srt）、仅配音的音频（.mp3）或带配音和软字幕的视频（.mp4）--音频与当前的时序和混音相匹配。</value>
   </data>
   <data name="Button_Export" xml:space="preserve">
-    <value>出口</value>
+    <value>导出</value>
   </data>
   <data name="Menu_Export_Srt" xml:space="preserve">
     <value>到 .srt</value>
@@ -898,7 +898,7 @@
     <value>阿拉伯语</value>
   </data>
   <data name="Language_de" xml:space="preserve">
-    <value>德国</value>
+    <value>德语</value>
   </data>
   <data name="Language_en" xml:space="preserve">
     <value>英语</value>
@@ -931,7 +931,7 @@
     <value>葡萄牙语</value>
   </data>
   <data name="Language_ru" xml:space="preserve">
-    <value>俄罗斯</value>
+    <value>俄语</value>
   </data>
   <data name="Language_sv" xml:space="preserve">
     <value>瑞典语</value>
@@ -943,3 +943,5 @@
     <value>简体中文</value>
   </data>
 </root>
+
+

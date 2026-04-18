@@ -91,7 +91,7 @@
     <value>リスタート</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>バベル選手</value>
+    <value>Babel Player</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
     <value>バベルプレーヤー - 設定</value>
@@ -232,7 +232,7 @@
     <value>アクティブ設定</value>
   </data>
   <data name="Label_ActiveAsr" xml:space="preserve">
-    <value>海難救助</value>
+    <value>使用中のASR:</value>
   </data>
   <data name="Label_ActiveCpu" xml:space="preserve">
     <value>CPU</value>
@@ -274,7 +274,7 @@
     <value>キャプション(.srt)、吹き替え音声のみ(.mp3)、または吹き替え+ソフトサブ付きビデオ(.mp4)をエクスポート - 音声は現在のタイミングとミックスに一致します。</value>
   </data>
   <data name="Button_Export" xml:space="preserve">
-    <value>輸出</value>
+    <value>エクスポート</value>
   </data>
   <data name="Menu_Export_Srt" xml:space="preserve">
     <value>を .srt に変換する。</value>
@@ -625,7 +625,7 @@
     <value>ローカルでホストされたモデルを管理。クラウドプロバイダーはダウンロードを必要としません。</value>
   </data>
   <data name="Settings_About_AppName" xml:space="preserve">
-    <value>バベル選手</value>
+    <value>Babel Player</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
     <value>AGPL-3.0ライセンス</value>
@@ -934,7 +934,7 @@
     <value>ロシア語</value>
   </data>
   <data name="Language_sv" xml:space="preserve">
-    <value>スウェーデン</value>
+    <value>スウェーデン語</value>
   </data>
   <data name="Language_tr" xml:space="preserve">
     <value>トルコ語</value>
@@ -943,3 +943,5 @@
     <value>中国語（簡体字）</value>
   </data>
 </root>
+
+

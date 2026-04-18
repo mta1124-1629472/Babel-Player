@@ -70,10 +70,10 @@
     <value>Chiudere</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
-    <value>Risparmiare</value>
+    <value>Salva</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
-    <value>Libero</value>
+    <value>Cancella</value>
   </data>
   <data name="Common_Ok" xml:space="preserve">
     <value>OK</value>
@@ -121,7 +121,7 @@
     <value>Forza di chiusura</value>
   </data>
   <data name="Section_Pipeline" xml:space="preserve">
-    <value>Condotte</value>
+    <value>PIPELINE</value>
   </data>
   <data name="Tooltip_ClearPipeline" xml:space="preserve">
     <value>Cancellare la pipeline e ricominciare da capo</value>
@@ -226,7 +226,7 @@
     <value>Fonte Audio</value>
   </data>
   <data name="Label_TargetSubDub" xml:space="preserve">
-    <value>Target Sub/Dub</value>
+    <value>Sottotitoli/Doppiaggio di destinazione</value>
   </data>
   <data name="Section_ActiveConfig" xml:space="preserve">
     <value>CONFIG ATTIVA</value>
@@ -259,10 +259,10 @@
     <value>Progressi della pipeline</value>
   </data>
   <data name="Button_RunPipeline" xml:space="preserve">
-    <value>Eseguire il gasdotto</value>
+    <value>Esegui pipeline</value>
   </data>
   <data name="Button_CancelPipeline" xml:space="preserve">
-    <value>Annullamento del gasdotto</value>
+    <value>Annulla pipeline</value>
   </data>
   <data name="Tooltip_ExpandErrorDetails" xml:space="preserve">
     <value>Espandere i dettagli dell'errore</value>
@@ -739,7 +739,7 @@
     <value>Clip audio utilizzata come riferimento per la clonazione della voce di Qwen</value>
   </data>
   <data name="Wizard_Button_Play" xml:space="preserve">
-    <value>Gioco</value>
+    <value>Riproduci</value>
   </data>
   <data name="Wizard_Button_Show" xml:space="preserve">
     <value>Mostra</value>
@@ -808,7 +808,7 @@
     <value>Scartare tutte le modifiche e chiudere</value>
   </data>
   <data name="Wizard_Button_Finish" xml:space="preserve">
-    <value>Finitura</value>
+    <value>Completa</value>
   </data>
   <data name="Wizard_Tooltip_Finish" xml:space="preserve">
     <value>Applicare le modifiche alla voce e ai riferimenti alla sessione</value>
@@ -943,3 +943,5 @@
     <value>Cinese (semplificato)</value>
   </data>
 </root>
+
+
