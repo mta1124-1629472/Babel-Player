@@ -20,7 +20,8 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
         await harness.Playback.Preview.SelectSegmentAndSeekAsync(harness.Segment, playSource: true);
         harness.Playback.Preview.IsDubModeOn = true;
 
-        await WaitForAsync(() => harness.SegmentPlayer.LastLoadedFile is not null);
+        await harness.SegmentPlayer.WaitForLoadCountAsync();
+        await harness.AmbiancePlayer.WaitForPlayCountAsync();
 
         Assert.Equal(harness.AmbiancePath, harness.AmbiancePlayer.LastLoadedFile);
         Assert.True(harness.AmbiancePlayer.PlayCallCount > 0);
@@ -37,7 +38,7 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
 
         await harness.Playback.Preview.SelectSegmentAndSeekAsync(harness.Segment, playSource: true);
         harness.Playback.Preview.IsDubModeOn = true;
-        await WaitForAsync(() => harness.AmbiancePlayer.PlayCallCount > 0);
+        await harness.AmbiancePlayer.WaitForPlayCountAsync();
 
         await harness.Playback.Preview.PlayPauseSourceCommand.ExecuteAsync(null);
         Assert.True(harness.AmbiancePlayer.PauseCallCount > 0);
@@ -47,6 +48,7 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
 
         var playCallCountAfterInitialStart = harness.AmbiancePlayer.PlayCallCount;
         await harness.Playback.Preview.PlayPauseSourceCommand.ExecuteAsync(null);
+        await harness.AmbiancePlayer.WaitForPlayCountAsync(playCallCountAfterInitialStart + 1);
 
         Assert.True(harness.AmbiancePlayer.PlayCallCount > playCallCountAfterInitialStart);
     }
@@ -58,7 +60,7 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
 
         await harness.Playback.Preview.SelectSegmentAndSeekAsync(harness.Segment, playSource: true);
         harness.Playback.Preview.IsDubModeOn = true;
-        await WaitForAsync(() => harness.AmbiancePlayer.PlayCallCount > 0);
+        await harness.AmbiancePlayer.WaitForPlayCountAsync();
 
         harness.Playback.Preview.DubMixControlDb = -6.0;
 
@@ -68,13 +70,27 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
     }
 
     [Fact]
+    public async Task PausePreview_WithAmbianceStem_UsesSeparatedPreviewAudioWhenDubModeIsOff()
+    {
+        using var harness = new PreviewHarness(includeAmbiance: true);
+
+        await harness.Playback.Preview.SelectSegmentAndSeekAsync(harness.Segment, playSource: false);
+        await harness.Playback.Preview.PreviewSelectedSegmentWithPauseAsync();
+        await harness.AmbiancePlayer.WaitForPlayCountAsync();
+
+        Assert.False(harness.Playback.Preview.IsDubModeOn);
+        Assert.Equal(harness.AmbiancePath, harness.AmbiancePlayer.LastLoadedFile);
+        Assert.Equal(0.0, harness.SourcePlayer.Volume);
+    }
+
+    [Fact]
     public async Task DubPreview_WithoutAmbianceStem_UsesDuckedSourceFallback()
     {
         using var harness = new PreviewHarness(includeAmbiance: false);
 
         await harness.Playback.Preview.SelectSegmentAndSeekAsync(harness.Segment, playSource: true);
         harness.Playback.Preview.IsDubModeOn = true;
-        await WaitForAsync(() => harness.SegmentPlayer.LastLoadedFile is not null);
+        await harness.SegmentPlayer.WaitForLoadCountAsync();
 
         var expectedGain = Math.Pow(10.0, -15.0 / 20.0);
         Assert.Null(harness.AmbiancePlayer.LastLoadedFile);
@@ -82,19 +98,6 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
         Assert.Equal("Duck", harness.Playback.Preview.DubMixControlLabel);
         Assert.Contains("Approximate", harness.Playback.Preview.DubMixControlTooltip, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Dub preview uses source audio fallback.", harness.Playback.StatusText);
-    }
-
-    private static async Task WaitForAsync(Func<bool> condition)
-    {
-        for (var attempt = 0; attempt < 100; attempt++)
-        {
-            if (condition())
-                return;
-
-            await Task.Delay(10);
-        }
-
-        Assert.True(condition(), "Timed out waiting for the expected preview side effect.");
     }
 
     private sealed class PreviewHarness : IDisposable
@@ -219,6 +222,9 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
 
     private sealed class FakeMediaTransport : IMediaTransport
     {
+        private readonly object _sync = new();
+        private TaskCompletionSource<int> _loadObserved = CreateSignal();
+        private TaskCompletionSource<int> _playObserved = CreateSignal();
         public string? LastLoadedFile { get; private set; }
         public int PlayCallCount { get; private set; }
         public int PauseCallCount { get; private set; }
@@ -244,17 +250,33 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
 
         public void Load(string filePath)
         {
-            LastLoadedFile = filePath;
-            LoadCallCount++;
-            CurrentTime = 0;
-            HasEnded = false;
+            TaskCompletionSource<int> signal;
+            lock (_sync)
+            {
+                LastLoadedFile = filePath;
+                LoadCallCount++;
+                CurrentTime = 0;
+                HasEnded = false;
+                signal = _loadObserved;
+                _loadObserved = CreateSignal();
+            }
+
+            signal.TrySetResult(LoadCallCount);
         }
 
         public void Play()
         {
-            PlayCallCount++;
-            IsPlaying = true;
-            HasEnded = false;
+            TaskCompletionSource<int> signal;
+            lock (_sync)
+            {
+                PlayCallCount++;
+                IsPlaying = true;
+                HasEnded = false;
+                signal = _playObserved;
+                _playObserved = CreateSignal();
+            }
+
+            signal.TrySetResult(PlayCallCount);
         }
 
         public void Pause()
@@ -276,5 +298,36 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
         public void RemoveAllSubtitleTracks()
         {
         }
+
+        public Task WaitForLoadCountAsync(int expectedCount = 1) =>
+            WaitForCountAsync(expectedCount, () => LoadCallCount, () => _loadObserved);
+
+        public Task WaitForPlayCountAsync(int expectedCount = 1) =>
+            WaitForCountAsync(expectedCount, () => PlayCallCount, () => _playObserved);
+
+        private async Task WaitForCountAsync(
+            int expectedCount,
+            Func<int> countSelector,
+            Func<TaskCompletionSource<int>> signalSelector)
+        {
+            while (true)
+            {
+                TaskCompletionSource<int> signal;
+                lock (_sync)
+                {
+                    if (countSelector() >= expectedCount)
+                        return;
+
+                    signal = signalSelector();
+                }
+
+                var observedCount = await signal.Task.WaitAsync(TimeSpan.FromSeconds(1));
+                if (observedCount >= expectedCount)
+                    return;
+            }
+        }
+
+        private static TaskCompletionSource<int> CreateSignal() =>
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }

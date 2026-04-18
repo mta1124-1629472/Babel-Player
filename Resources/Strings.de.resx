@@ -67,22 +67,22 @@
     <value>Abbrechen</value>
   </data>
   <data name="Common_Close" xml:space="preserve">
-    <value>Schließen Sie</value>
+    <value>Schließen</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
-    <value>Speichern Sie</value>
+    <value>Speichern</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
-    <value>Klar</value>
+    <value>Leeren</value>
   </data>
   <data name="Common_Ok" xml:space="preserve">
     <value>OK</value>
   </data>
   <data name="Common_Apply" xml:space="preserve">
-    <value>Bewerbung</value>
+    <value>Anwenden</value>
   </data>
   <data name="Common_Browse" xml:space="preserve">
-    <value>Durchsuchen Sie</value>
+    <value>Durchsuchen</value>
   </data>
   <data name="Common_Download" xml:space="preserve">
     <value>Herunterladen</value>
@@ -91,7 +91,7 @@
     <value>Neustart</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>Babel-Spieler</value>
+    <value>Babel Player</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
     <value>Babel Player - Einstellungen</value>

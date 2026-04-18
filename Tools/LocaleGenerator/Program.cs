@@ -31,6 +31,8 @@ namespace Babel.Player.Tools.LocaleGenerator;
 
 internal static class Program
 {
+    private const int DeepLTranslateBatchSize = 50;
+
     // Canonical set of Babel Player UI target languages (lowercase ISO 639-1).
     // Must match the NLLB catalog minus "en".
     private static readonly string[] DefaultTargets =
@@ -152,13 +154,25 @@ internal static class Program
     {
         Console.Write($"[{lang}] Translating {entries.Count} strings via DeepL ({deepLTargetCode})... ");
 
-        var texts = entries.Select(e => e.Value).ToList();
-        var translations = await client.TranslateTextsAsync(
-                texts,
-                deepLTargetCode,
-                sourceLanguage: "EN",
-                cancellationToken)
-            .ConfigureAwait(false);
+        var translations = new List<DeepLTranslationItem>(entries.Count);
+        foreach (var batch in entries.Chunk(DeepLTranslateBatchSize))
+        {
+            var batchTexts = batch.Select(entry => entry.Value).ToList();
+            var batchTranslations = await client.TranslateTextsAsync(
+                    batchTexts,
+                    deepLTargetCode,
+                    sourceLanguage: "EN",
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (batchTranslations.Count != batch.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Expected {batch.Length} translations in batch, got {batchTranslations.Count}.");
+            }
+
+            translations.AddRange(batchTranslations);
+        }
 
         if (translations.Count != entries.Count)
         {
