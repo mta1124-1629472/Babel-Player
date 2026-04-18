@@ -88,10 +88,10 @@
     <value>Descargar</value>
   </data>
   <data name="Common_Restart" xml:space="preserve">
-    <value>Reinicie</value>
+    <value>Reiniciar</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>Jugador de Babel</value>
+    <value>Babel Player</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
     <value>Babel Player - Configuración</value>
@@ -145,7 +145,7 @@
     <value>Reejecutar la transcripción (elija sólo esta etapa o incluya las etapas posteriores)</value>
   </data>
   <data name="Label_Compute" xml:space="preserve">
-    <value>Compute</value>
+    <value>Calcular</value>
   </data>
   <data name="Label_Provider" xml:space="preserve">
     <value>Proveedor</value>
@@ -310,7 +310,7 @@
     <value>Utiliza el tiempo de renderizado de la sesión para este segmento</value>
   </data>
   <data name="Option_Off" xml:space="preserve">
-    <value>Fuera de</value>
+    <value>Desactivado</value>
   </data>
   <data name="Tooltip_TimingOff" xml:space="preserve">
     <value>Reproducir TTS tal cual para este segmento en doblaje renderizado/exportación</value>
@@ -625,7 +625,7 @@
     <value>Gestione modelos alojados localmente. Los proveedores en la nube no requieren descargas.</value>
   </data>
   <data name="Settings_About_AppName" xml:space="preserve">
-    <value>Jugador de Babel</value>
+    <value>Babel Player</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
     <value>Licencia AGPL-3.0</value>

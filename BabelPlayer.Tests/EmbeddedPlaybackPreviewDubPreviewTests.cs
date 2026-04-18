@@ -10,6 +10,7 @@ using Babel.Player.ViewModels;
 
 namespace BabelPlayer.Tests;
 
+[Trait("Category", "Integration")]
 public sealed class EmbeddedPlaybackPreviewDubPreviewTests
 {
     [Fact]
