@@ -64,12 +64,16 @@ public sealed class LocalizationService : INotifyPropertyChanged
             return;
 
         _currentCulture = culture;
-        Thread.CurrentThread.CurrentUICulture = culture;
         CultureInfo.DefaultThreadCurrentUICulture = culture;
         Strings.Culture = culture;
 
         void Apply()
         {
+            // Set thread cultures inside Apply() so they always target the UI
+            // thread.  DefaultThreadCurrentUICulture (set above) only affects
+            // *new* threads — it does not change an already-running thread.
+            Thread.CurrentThread.CurrentCulture = culture;
+            Thread.CurrentThread.CurrentUICulture = culture;
             ApplyFlowDirection(culture);
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
             CultureChanged?.Invoke(this, culture);
